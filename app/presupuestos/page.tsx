@@ -33,7 +33,7 @@ export default async function PresupuestosPage() {
     try {
       const source = await loadValidatedSource();
       latestMonth = source.latestMonth;
-      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [] };
+      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
       try {
         privateState = await getPrivateState();
       } catch {

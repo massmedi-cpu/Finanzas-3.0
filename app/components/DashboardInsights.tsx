@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { buildForecast, detectRecurringPatterns } from '../../src/domain/forecast-engine';
+import { buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
+import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
 import { getPrivateState } from '../../src/private-data/client';
 import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
 import { loadValidatedSource } from '../../src/sync/import-source';
@@ -11,19 +12,26 @@ export default async function DashboardInsights() {
     const source = await loadValidatedSource();
     let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
     let goals: Awaited<ReturnType<typeof getPrivateState>>['goals'] = [];
+    let futureEvents: Awaited<ReturnType<typeof getPrivateState>>['futureEvents'] = [];
     try {
       const state = await getPrivateState();
       overrides = state.overrides;
       goals = state.goals;
+      futureEvents = state.futureEvents;
     } catch {
       overrides = [];
       goals = [];
+      futureEvents = [];
     }
 
     const analyticsRows = rowsForAnalytics(source.rows, overrides);
     const patterns = detectRecurringPatterns(analyticsRows);
     const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
-    const upcoming = latestDate ? buildForecast(patterns, latestDate, 90).slice(0, 4) : [];
+    const forecast = latestDate
+      ? combineForecasts(buildForecast(patterns, latestDate, 120), expandPlannedEvents(futureEvents, latestDate, 120))
+      : [];
+    const upcoming = forecast.slice(0, 4);
+    const liquidity = getLiquidityRisk(forecast, getNetWorthFromKnownBalances(source.rows));
     const overrideMap = indexOverrides(overrides);
     const pending = source.rows.filter((row) => !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length;
     const activeGoals = goals.filter((goal) => goal.active).slice(0, 3);
@@ -40,14 +48,14 @@ export default async function DashboardInsights() {
               <Link href="/prevision" className="text-link">Ver previsión</Link>
             </div>
             {upcoming.length === 0 ? (
-              <div className="empty compact-empty">Aún no hay recurrencias suficientemente fiables.</div>
+              <div className="empty compact-empty">Aún no hay movimientos futuros suficientemente fiables.</div>
             ) : (
               <div className="stack dashboard-list">
                 {upcoming.map((movement) => (
                   <div className="row" key={movement.id}>
                     <div>
                       <div className="row-title">{movement.description}</div>
-                      <div className="row-meta">{movement.expectedDate} · confianza {Math.round(movement.confidence * 100)}%</div>
+                      <div className="row-meta">{movement.expectedDate} · {movement.source === 'planned' ? 'planificado' : `confianza ${Math.round(movement.confidence * 100)}%`}</div>
                     </div>
                     <div className={`amount ${movement.amount < 0 ? 'amount-negative' : 'amount-positive'}`}>{euro.format(movement.amount)}</div>
                   </div>
@@ -62,13 +70,14 @@ export default async function DashboardInsights() {
                 <div className="eyebrow">Control</div>
                 <h2 className="section-title">Alertas financieras</h2>
               </div>
-              <Link href="/movimientos" className="text-link">Revisar</Link>
+              <Link href={liquidity.firstNegativeDate ? '/prevision' : '/movimientos'} className="text-link">Revisar</Link>
             </div>
-            <div className="alert-summary">
+            <div className="alert-summary alert-summary-3">
               <div className="alert-stat"><strong>{pending}</strong><span>pendientes de revisar</span></div>
               <div className="alert-stat"><strong>{source.duplicateGroups}</strong><span>grupos de posibles duplicados</span></div>
+              <div className={`alert-stat${liquidity.firstNegativeDate ? ' alert-stat-risk' : ''}`}><strong>{liquidity.firstNegativeDate ? '!' : '✓'}</strong><span>{liquidity.firstNegativeDate ? `riesgo de liquidez ${liquidity.firstNegativeDate}` : 'sin riesgo de saldo negativo a 120 días'}</span></div>
             </div>
-            <p className="metric-note">Las alertas se calculan sobre la fuente real y respetan tus exclusiones internas.</p>
+            <p className="metric-note">El control combina movimientos reales, correcciones internas y planificación futura sin modificar la fuente bancaria.</p>
           </article>
         </section>
 

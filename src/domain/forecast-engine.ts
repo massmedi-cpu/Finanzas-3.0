@@ -12,6 +12,8 @@ export interface RecurringPattern {
   confidence: number;
 }
 
+export type ForecastSource = 'detected' | 'planned';
+
 export interface ForecastMovement {
   id: string;
   description: string;
@@ -19,6 +21,47 @@ export interface ForecastMovement {
   expectedDate: string;
   amount: number;
   confidence: number;
+  source: ForecastSource;
+}
+
+export interface PlannedEventInput {
+  id: string;
+  title: string;
+  expected_date: string;
+  amount: number | string;
+  category: string | null;
+  recurrence: 'once' | 'monthly' | 'yearly';
+  recurrence_end: string | null;
+  active: boolean;
+}
+
+export interface ScenarioInput {
+  id: string;
+  name: string;
+  income_change_pct: number | string;
+  expense_change_pct: number | string;
+  monthly_net_adjustment: number | string;
+  monthly_savings_allocation: number | string;
+  starting_balance_adjustment: number | string;
+  horizon_months: number | string;
+  active: boolean;
+}
+
+export interface ScenarioProjection {
+  scenarioId: string;
+  name: string;
+  horizonDate: string;
+  projectedBalance: number;
+  freeAfterSavings: number;
+  baselineBalance: number;
+  differenceVsBaseline: number;
+  savingsAllocated: number;
+}
+
+export interface LiquidityRisk {
+  lowestBalance: number;
+  lowestDate: string | null;
+  firstNegativeDate: string | null;
 }
 
 function normalize(value: string): string {
@@ -36,11 +79,30 @@ function toDate(value: string): Date | null {
   return Number.isNaN(parsed.valueOf()) ? null : parsed;
 }
 
+function formatDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 function addDays(value: string, days: number): string {
   const date = toDate(value);
   if (!date) return value;
   date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return formatDate(date);
+}
+
+export function addMonths(value: string, months: number): string {
+  const date = toDate(value);
+  if (!date) return value;
+  const originalDay = date.getUTCDate();
+  date.setUTCDate(1);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  const lastDay = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0, 12)).getUTCDate();
+  date.setUTCDate(Math.min(originalDay, lastDay));
+  return formatDate(date);
+}
+
+function addYears(value: string, years: number): string {
+  return addMonths(value, years * 12);
 }
 
 function daysBetween(a: string, b: string): number {
@@ -120,7 +182,7 @@ export function buildForecast(patterns: RecurringPattern[], fromDate: string, da
     while (expectedDate <= fromDate) expectedDate = addDays(expectedDate, pattern.intervalDays);
 
     let sequence = 0;
-    while (expectedDate <= horizon && sequence < 12) {
+    while (expectedDate <= horizon && sequence < 24) {
       movements.push({
         id: `${pattern.key}|${expectedDate}`,
         description: pattern.description,
@@ -128,6 +190,7 @@ export function buildForecast(patterns: RecurringPattern[], fromDate: string, da
         expectedDate,
         amount: pattern.averageAmount,
         confidence: pattern.confidence,
+        source: 'detected',
       });
       expectedDate = addDays(expectedDate, pattern.intervalDays);
       sequence += 1;
@@ -137,8 +200,128 @@ export function buildForecast(patterns: RecurringPattern[], fromDate: string, da
   return movements.sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
 }
 
+export function expandPlannedEvents(events: PlannedEventInput[], fromDate: string, days = 365): ForecastMovement[] {
+  const horizon = addDays(fromDate, days);
+  const movements: ForecastMovement[] = [];
+
+  for (const event of events) {
+    if (!event.active || !toDate(event.expected_date)) continue;
+    const amount = Number(event.amount);
+    if (!Number.isFinite(amount) || amount === 0) continue;
+
+    let date = event.expected_date;
+    const effectiveEnd = event.recurrence_end && event.recurrence_end < horizon ? event.recurrence_end : horizon;
+
+    if (event.recurrence === 'once') {
+      if (date > fromDate && date <= horizon) {
+        movements.push({
+          id: `planned:${event.id}:${date}`,
+          description: event.title,
+          category: event.category || 'Planificado',
+          expectedDate: date,
+          amount,
+          confidence: 1,
+          source: 'planned',
+        });
+      }
+      continue;
+    }
+
+    while (date <= fromDate) {
+      date = event.recurrence === 'monthly' ? addMonths(date, 1) : addYears(date, 1);
+    }
+
+    let sequence = 0;
+    while (date <= effectiveEnd && sequence < 72) {
+      movements.push({
+        id: `planned:${event.id}:${date}`,
+        description: event.title,
+        category: event.category || 'Planificado',
+        expectedDate: date,
+        amount,
+        confidence: 1,
+        source: 'planned',
+      });
+      date = event.recurrence === 'monthly' ? addMonths(date, 1) : addYears(date, 1);
+      sequence += 1;
+    }
+  }
+
+  return movements.sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
+}
+
+function plannedMatchesDetected(planned: ForecastMovement, detected: ForecastMovement): boolean {
+  if (planned.source !== 'planned' || detected.source !== 'detected') return false;
+  if (Math.abs(daysBetween(planned.expectedDate, detected.expectedDate)) > 3) return false;
+  const amountTolerance = Math.max(1, Math.abs(planned.amount) * 0.03);
+  if (Math.abs(planned.amount - detected.amount) > amountTolerance) return false;
+  const plannedName = normalize(planned.description);
+  const detectedName = normalize(detected.description);
+  return plannedName === detectedName || plannedName.includes(detectedName) || detectedName.includes(plannedName);
+}
+
+export function combineForecasts(detected: ForecastMovement[], planned: ForecastMovement[]): ForecastMovement[] {
+  const filteredDetected = detected.filter((candidate) => !planned.some((explicit) => plannedMatchesDetected(explicit, candidate)));
+  return [...filteredDetected, ...planned].sort((a, b) => a.expectedDate.localeCompare(b.expectedDate) || a.description.localeCompare(b.description, 'es'));
+}
+
 export function projectedNetChange(forecast: ForecastMovement[], throughDate: string): number {
   return forecast
     .filter((movement) => movement.expectedDate <= throughDate)
     .reduce((sum, movement) => sum + movement.amount, 0);
+}
+
+export function getLiquidityRisk(forecast: ForecastMovement[], startingBalance: number): LiquidityRisk {
+  let runningBalance = startingBalance;
+  let lowestBalance = startingBalance;
+  let lowestDate: string | null = null;
+  let firstNegativeDate: string | null = startingBalance < 0 ? forecast[0]?.expectedDate ?? null : null;
+
+  for (const movement of [...forecast].sort((a, b) => a.expectedDate.localeCompare(b.expectedDate))) {
+    runningBalance += movement.amount;
+    if (runningBalance < lowestBalance) {
+      lowestBalance = runningBalance;
+      lowestDate = movement.expectedDate;
+    }
+    if (runningBalance < 0 && !firstNegativeDate) firstNegativeDate = movement.expectedDate;
+  }
+
+  return { lowestBalance, lowestDate, firstNegativeDate };
+}
+
+export function simulateScenario(
+  forecast: ForecastMovement[],
+  startingBalance: number,
+  fromDate: string,
+  scenario: ScenarioInput,
+): ScenarioProjection {
+  const horizonMonths = Math.min(60, Math.max(1, Math.trunc(Number(scenario.horizon_months) || 12)));
+  const horizonDate = addMonths(fromDate, horizonMonths);
+  const incomeMultiplier = 1 + (Number(scenario.income_change_pct) || 0) / 100;
+  const expenseMultiplier = 1 + (Number(scenario.expense_change_pct) || 0) / 100;
+  const startingAdjustment = Number(scenario.starting_balance_adjustment) || 0;
+  const monthlyNetAdjustment = Number(scenario.monthly_net_adjustment) || 0;
+  const monthlySavings = Math.max(0, Number(scenario.monthly_savings_allocation) || 0);
+
+  const relevant = forecast.filter((movement) => movement.expectedDate <= horizonDate);
+  const baselineNet = relevant.reduce((sum, movement) => sum + movement.amount, 0);
+  const adjustedNet = relevant.reduce((sum, movement) => {
+    if (movement.amount > 0) return sum + movement.amount * incomeMultiplier;
+    return sum + movement.amount * expenseMultiplier;
+  }, 0) + monthlyNetAdjustment * horizonMonths;
+
+  const baselineBalance = startingBalance + baselineNet;
+  const projectedBalance = startingBalance + startingAdjustment + adjustedNet;
+  const savingsAllocated = monthlySavings * horizonMonths;
+
+  return {
+    scenarioId: scenario.id,
+    name: scenario.name,
+    horizonDate,
+    projectedBalance,
+    freeAfterSavings: projectedBalance - savingsAllocated,
+    baselineBalance,
+    differenceVsBaseline: projectedBalance - baselineBalance,
+    savingsAllocated,
+  };
 }

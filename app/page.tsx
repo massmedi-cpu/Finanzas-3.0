@@ -16,7 +16,7 @@ export default function Home() {
             Controla movimientos, presupuestos, objetivos y previsiones desde una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V1.3.0</span>
+        <span className="badge">V1.4.0</span>
       </section>
 
       <SourceHealth />
@@ -39,7 +39,7 @@ export default function Home() {
         <Link href="/prevision" className="card action-card">
           <div className="metric-label">Previsión</div>
           <div className="action-title">Mirar hacia delante</div>
-          <p className="metric-note">Calendario financiero, saldo futuro y recurrencias.</p>
+          <p className="metric-note">Calendario futuro, riesgo de liquidez y simulador de escenarios.</p>
           <span className="action-arrow" aria-hidden="true">→</span>
         </Link>
         <Link href="/objetivos" className="card action-card">
