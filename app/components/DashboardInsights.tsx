@@ -13,18 +13,18 @@ export default async function DashboardInsights() {
   try {
     const [source, state, preferences] = await Promise.all([
       loadValidatedSource(),
-      getPrivateState().catch(() => null),
-      getRecurringPreferences().catch(() => null),
+      getPrivateState(),
+      getRecurringPreferences(),
     ]);
 
-    const overrides = state?.overrides ?? [];
-    const goals = state?.goals ?? [];
-    const futureEvents = state?.futureEvents ?? [];
+    const overrides = state.overrides;
+    const goals = state.goals;
+    const futureEvents = state.futureEvents;
     const analyticsRows = rowsForAnalytics(source.rows, overrides);
     const detectedPatterns = detectRecurringPatterns(analyticsRows);
-    const patterns = preferences ? applyRecurringPreferences(detectedPatterns, preferences) : detectedPatterns;
-    const recurringConfirmed = preferences?.filter((preference) => preference.status === 'confirmed').length ?? 0;
-    const recurringIgnored = preferences?.filter((preference) => preference.status === 'ignored').length ?? 0;
+    const patterns = applyRecurringPreferences(detectedPatterns, preferences);
+    const recurringConfirmed = preferences.filter((preference) => preference.status === 'confirmed').length;
+    const recurringIgnored = preferences.filter((preference) => preference.status === 'ignored').length;
 
     const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
     const forecast = latestDate
@@ -122,7 +122,7 @@ export default async function DashboardInsights() {
   } catch {
     return (
       <section className="card section-gap">
-        <div className="empty compact-empty">Los análisis avanzados volverán a mostrarse cuando la fuente esté disponible.</div>
+        <div className="empty compact-empty">Los análisis avanzados quedan ocultos hasta recuperar todas las capas de datos necesarias.</div>
       </section>
     );
   }

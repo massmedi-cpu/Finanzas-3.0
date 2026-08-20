@@ -29,9 +29,9 @@ export default async function FinancialSummary() {
     try {
       const [source, state] = await Promise.all([
         loadValidatedSource(),
-        getPrivateState().catch(() => null),
+        getPrivateState(),
       ]);
-      const overrides = state?.overrides ?? [];
+      const overrides = state.overrides;
 
       const analyticsRows = rowsForAnalytics(source.rows, overrides);
       const latestMonth = source.latestMonth;
@@ -55,7 +55,7 @@ export default async function FinancialSummary() {
         {
           label: 'Gastos del mes',
           value: summary ? euro.format(summary.expenses) : '—',
-          note: summary ? `${summary.transactionCount} movimientos incluidos` : 'Sin movimientos',
+          note: summary ? `${summary.transactionCount} movimientos del periodo` : 'Sin movimientos',
         },
         {
           label: 'Flujo neto del mes',
@@ -64,7 +64,7 @@ export default async function FinancialSummary() {
         },
       ];
     } catch {
-      items = emptyItems.map((item) => ({ ...item, note: 'La fuente está configurada pero no se pudo validar' }));
+      items = emptyItems.map((item) => ({ ...item, note: 'No se pudo validar la fuente y la capa privada completa' }));
     }
   }
 
