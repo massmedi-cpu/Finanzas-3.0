@@ -16,7 +16,7 @@ export default function Home() {
             Controla movimientos, presupuestos, recurrentes, objetivos y previsiones desde una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V1.5.0</span>
+        <span className="badge">V1.6.0</span>
       </section>
 
       <SourceHealth />
@@ -32,8 +32,8 @@ export default function Home() {
         </Link>
         <Link href="/presupuestos" className="card action-card">
           <div className="metric-label">Presupuestos</div>
-          <div className="action-title">Controlar el mes</div>
-          <p className="metric-note">Asigna dinero y compara presupuesto con gasto real.</p>
+          <div className="action-title">Dar trabajo a cada euro</div>
+          <p className="metric-note">Asigna ingresos por sobres, controla lo libre y arrastra remanentes.</p>
           <span className="action-arrow" aria-hidden="true">→</span>
         </Link>
         <Link href="/recurrentes" className="card action-card">
