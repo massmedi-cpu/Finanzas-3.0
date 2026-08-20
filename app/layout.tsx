@@ -9,6 +9,7 @@ import './review.css';
 import './reports.css';
 import './splits.css';
 import './plan.css';
+import './loading.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata: Metadata = {
