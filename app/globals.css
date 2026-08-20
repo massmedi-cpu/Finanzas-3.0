@@ -107,6 +107,8 @@ h2, h3, p { margin-top: 0; }
 .row-title { font-weight: 700; }
 .row-meta { color: var(--muted); font-size: 14px; }
 .amount { font-weight: 800; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.amount-negative { color: var(--danger); }
+.amount-positive { color: var(--success); }
 .empty {
   padding: 30px 20px;
   border: 1px dashed #cbd3dd;
@@ -176,6 +178,32 @@ h2, h3, p { margin-top: 0; }
 .action-title { margin-top: 8px; font-size: 21px; font-weight: 800; letter-spacing: -.02em; }
 .action-arrow { position: absolute; right: 18px; bottom: 14px; color: var(--accent); font-size: 24px; }
 
+.table-card { padding-bottom: 10px; }
+.table-summary-row { padding-top: 0; }
+.table-scroll { width: 100%; overflow-x: auto; }
+.data-table { width: 100%; min-width: 940px; border-collapse: collapse; font-size: 14px; }
+.data-table th {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: .03em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.data-table td { padding: 13px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+.data-table tbody tr:last-child td { border-bottom: 0; }
+.data-table tbody tr:hover { background: var(--surface-soft); }
+.numeric { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.date-cell { white-space: nowrap; }
+.table-primary { font-weight: 700; }
+.table-secondary { margin-top: 2px; color: var(--muted); font-size: 12px; max-width: 360px; }
+.state { display: inline-flex; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 750; white-space: nowrap; }
+.state-review { background: var(--warning-soft); color: var(--warning); }
+.state-ok { background: var(--success-soft); color: var(--success); }
+
 @media (max-width: 900px) {
   .grid-4, .grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .topbar-inner { align-items: flex-start; flex-direction: column; gap: 10px; }
@@ -191,4 +219,6 @@ h2, h3, p { margin-top: 0; }
   .metric-value { font-size: 25px; }
   .card-heading-row { align-items: flex-start; }
   .action-card { min-height: 145px; }
+  .control { width: 100%; }
+  .table-card { margin-left: -4px; margin-right: -4px; padding-left: 14px; padding-right: 14px; }
 }
