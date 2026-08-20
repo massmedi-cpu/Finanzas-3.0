@@ -22,19 +22,14 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
-      let splits: MovementSplitRecord[] = [];
-      try {
-        privateState = await getPrivateState();
-      } catch {
-        editLayerError = true;
-      }
-      try {
-        splits = await getMovementSplits();
-      } catch {
-        splits = [];
-      }
+      const [source, privateState, splits] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState().catch(() => {
+          editLayerError = true;
+          return { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
+        }),
+        getMovementSplits().catch(() => [] as MovementSplitRecord[]),
+      ]);
 
       const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
       availableMonths = getAvailableMonths(budgetRows);
@@ -72,7 +67,7 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
 
       {availableMonths.length > 0 && (
         <nav className="month-selector" aria-label="Seleccionar mes del presupuesto">
-          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
+          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} prefetch={false} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
         </nav>
       )}
 
