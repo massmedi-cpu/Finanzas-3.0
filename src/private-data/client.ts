@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '../security/session';
 
@@ -67,7 +68,7 @@ export async function privateDataRequest<T>(path: string, init: RequestInit = {}
   return { status: response.status, data };
 }
 
-export async function getPrivateState(): Promise<PrivateState> {
+export const getPrivateState = cache(async (): Promise<PrivateState> => {
   const response = await privateDataRequest<{ ok?: boolean; overrides?: MovementOverride[]; budgets?: BudgetRecord[]; goals?: GoalRecord[]; error?: string }>('/state');
   if (response.status !== 200 || !response.data.ok) throw new Error(response.data.error || `private-data-${response.status}`);
   return {
@@ -75,4 +76,4 @@ export async function getPrivateState(): Promise<PrivateState> {
     budgets: Array.isArray(response.data.budgets) ? response.data.budgets : [],
     goals: Array.isArray(response.data.goals) ? response.data.goals : [],
   };
-}
+});
