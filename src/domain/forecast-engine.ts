@@ -1,0 +1,144 @@
+import { isTransfer } from './finance-engine';
+import type { BankingSourceRow } from './source-schema';
+
+export interface RecurringPattern {
+  key: string;
+  description: string;
+  category: string;
+  averageAmount: number;
+  intervalDays: number;
+  occurrences: number;
+  lastDate: string;
+  confidence: number;
+}
+
+export interface ForecastMovement {
+  id: string;
+  description: string;
+  category: string;
+  expectedDate: string;
+  amount: number;
+  confidence: number;
+}
+
+function normalize(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase('es-ES')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function toDate(value: string): Date | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return Number.isNaN(parsed.valueOf()) ? null : parsed;
+}
+
+function addDays(value: string, days: number): string {
+  const date = toDate(value);
+  if (!date) return value;
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function daysBetween(a: string, b: string): number {
+  const first = toDate(a);
+  const second = toDate(b);
+  if (!first || !second) return 0;
+  return Math.round((second.valueOf() - first.valueOf()) / 86_400_000);
+}
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
+}
+
+function patternKey(row: BankingSourceRow): string {
+  const description = normalize(row.merchantOrCounterparty || row.normalizedConcept || row.originalConcept);
+  const direction = (row.amount ?? 0) < 0 ? 'expense' : 'income';
+  return `${direction}|${normalize(row.productOrAccount)}|${description}`;
+}
+
+export function detectRecurringPatterns(rows: BankingSourceRow[]): RecurringPattern[] {
+  const groups = new Map<string, BankingSourceRow[]>();
+
+  for (const row of rows) {
+    if (isTransfer(row) || row.amount === null || row.amount === 0 || !row.date) continue;
+    const key = patternKey(row);
+    if (!key.endsWith('|')) {
+      const group = groups.get(key) ?? [];
+      group.push(row);
+      groups.set(key, group);
+    }
+  }
+
+  const patterns: RecurringPattern[] = [];
+
+  for (const [key, group] of groups) {
+    const sorted = [...group].sort((a, b) => a.date.localeCompare(b.date));
+    if (sorted.length < 3) continue;
+
+    const intervals = sorted.slice(1).map((row, index) => daysBetween(sorted[index].date, row.date)).filter((days) => days > 0);
+    const intervalDays = Math.round(median(intervals));
+    if (intervalDays < 20 || intervalDays > 40) continue;
+
+    const amounts = sorted.map((row) => row.amount as number);
+    const averageAmount = amounts.reduce((sum, amount) => sum + amount, 0) / amounts.length;
+    const typical = Math.max(Math.abs(averageAmount), 1);
+    const meanDeviation = amounts.reduce((sum, amount) => sum + Math.abs(amount - averageAmount), 0) / amounts.length;
+    const amountStability = Math.max(0, 1 - meanDeviation / typical);
+    const intervalDeviation = intervals.reduce((sum, days) => sum + Math.abs(days - intervalDays), 0) / Math.max(intervals.length, 1);
+    const intervalStability = Math.max(0, 1 - intervalDeviation / Math.max(intervalDays, 1));
+    const confidence = Math.min(0.99, 0.55 + Math.min(sorted.length, 8) * 0.04 + amountStability * 0.2 + intervalStability * 0.1);
+
+    const last = sorted[sorted.length - 1];
+    patterns.push({
+      key,
+      description: last.merchantOrCounterparty || last.normalizedConcept || last.originalConcept,
+      category: last.category,
+      averageAmount,
+      intervalDays,
+      occurrences: sorted.length,
+      lastDate: last.date,
+      confidence,
+    });
+  }
+
+  return patterns.sort((a, b) => Math.abs(b.averageAmount) - Math.abs(a.averageAmount));
+}
+
+export function buildForecast(patterns: RecurringPattern[], fromDate: string, days = 90): ForecastMovement[] {
+  const horizon = addDays(fromDate, days);
+  const movements: ForecastMovement[] = [];
+
+  for (const pattern of patterns) {
+    let expectedDate = addDays(pattern.lastDate, pattern.intervalDays);
+    while (expectedDate <= fromDate) expectedDate = addDays(expectedDate, pattern.intervalDays);
+
+    let sequence = 0;
+    while (expectedDate <= horizon && sequence < 12) {
+      movements.push({
+        id: `${pattern.key}|${expectedDate}`,
+        description: pattern.description,
+        category: pattern.category,
+        expectedDate,
+        amount: pattern.averageAmount,
+        confidence: pattern.confidence,
+      });
+      expectedDate = addDays(expectedDate, pattern.intervalDays);
+      sequence += 1;
+    }
+  }
+
+  return movements.sort((a, b) => a.expectedDate.localeCompare(b.expectedDate));
+}
+
+export function projectedNetChange(forecast: ForecastMovement[], throughDate: string): number {
+  return forecast
+    .filter((movement) => movement.expectedDate <= throughDate)
+    .reduce((sum, movement) => sum + movement.amount, 0);
+}
