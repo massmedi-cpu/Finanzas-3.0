@@ -35,6 +35,7 @@ export default function Navigation() {
           <Link
             key={href}
             href={href}
+            prefetch={false}
             className={`nav-link${active ? ' nav-link-active' : ''}`}
             aria-current={active ? 'page' : undefined}
           >
