@@ -4,6 +4,7 @@ import { getPrivateState, type MovementOverride } from '../../src/private-data/c
 import { applyOverride, indexOverrides, sourceBoolean, sourceReviewStatus } from '../../src/private-data/merge';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
+import { APP_VERSION_LABEL } from '../../src/version';
 import ReviewCenter, { type ReviewIssueView, type ReviewMovement } from './ReviewCenter';
 
 export const dynamic = 'force-dynamic';
@@ -33,14 +34,14 @@ export default async function RevisionPage() {
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let overrides = new Map<string, MovementOverride>();
-      try {
-        const state = await getPrivateState();
-        overrides = indexOverrides(state.overrides);
-      } catch {
-        privateLayerError = true;
-      }
+      const [source, privateState] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState().catch(() => {
+          privateLayerError = true;
+          return { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
+        }),
+      ]);
+      const overrides = indexOverrides(privateState.overrides);
 
       const rowsById = new Map<string, BankingSourceRow>(source.rows.map((row) => [row.sourceId, row]));
       issues = detectQualityIssues(source.rows).flatMap((issue) => {
@@ -76,7 +77,7 @@ export default async function RevisionPage() {
           <h1>Centro de revisión</h1>
           <p className="subtitle">Comprueba duplicados, movimientos pendientes, categorías vacías e importes poco habituales. Todas las decisiones son reversibles y se guardan fuera de la fuente bancaria.</p>
         </div>
-        <span className="badge">V1.7.0</span>
+        <span className="badge">{APP_VERSION_LABEL}</span>
       </section>
 
       {sourceError ? (
