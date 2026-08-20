@@ -12,6 +12,7 @@ import { getRecurringPreferences } from '../../src/private-data/recurring';
 import { getMovementSplits } from '../../src/private-data/splits';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
+import { APP_VERSION_LABEL } from '../../src/version';
 import NetWorthChart from './NetWorthChart';
 
 export const dynamic = 'force-dynamic';
@@ -33,21 +34,19 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   if (!isGoogleSheetsConfigured()) {
     return (
       <main className="page">
-        <section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1><p className="subtitle">El plan se activará cuando exista una fuente bancaria válida.</p></div><span className="badge">V2.0.0</span></section>
+        <section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1><p className="subtitle">El plan se activará cuando exista una fuente bancaria válida.</p></div><span className="badge">{APP_VERSION_LABEL}</span></section>
         <section className="card"><div className="empty">Conecta la fuente bancaria para construir el plan con datos reales.</div></section>
       </main>
     );
   }
 
   try {
-    const source = await loadValidatedSource();
-    let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
-    let splits: Awaited<ReturnType<typeof getMovementSplits>> = [];
-    let recurringPreferences: Awaited<ReturnType<typeof getRecurringPreferences>> = [];
-
-    try { privateState = await getPrivateState(); } catch { privateState = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] }; }
-    try { splits = await getMovementSplits(); } catch { splits = []; }
-    try { recurringPreferences = await getRecurringPreferences(); } catch { recurringPreferences = []; }
+    const [source, privateState, splits, recurringPreferences] = await Promise.all([
+      loadValidatedSource(),
+      getPrivateState().catch(() => ({ overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] })),
+      getMovementSplits().catch(() => []),
+      getRecurringPreferences().catch(() => []),
+    ]);
 
     const baseAnalyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
     const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
@@ -110,11 +109,11 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
             <h1>Control mensual 360º</h1>
             <p className="subtitle">Presupuesto, cash flow, patrimonio, previsión y alertas en una única vista construida únicamente con tus datos reales y tus ajustes privados.</p>
           </div>
-          <span className="badge">V2.0.0 · {selectedMonth}</span>
+          <span className="badge">{APP_VERSION_LABEL} · {selectedMonth}</span>
         </section>
 
         <nav className="month-selector" aria-label="Seleccionar mes del plan">
-          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/plan?month=${month}`} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
+          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/plan?month=${month}`} prefetch={false} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
         </nav>
 
         <section className="grid grid-4">
@@ -126,7 +125,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
         <section className="grid grid-2 section-gap">
           <article className="card">
-            <div className="card-heading-row"><div><div className="eyebrow">Presupuesto</div><h2 className="section-title">Estado de los sobres</h2></div><Link href={`/presupuestos?month=${selectedMonth}`} className="text-link">Gestionar</Link></div>
+            <div className="card-heading-row"><div><div className="eyebrow">Presupuesto</div><h2 className="section-title">Estado de los sobres</h2></div><Link href={`/presupuestos?month=${selectedMonth}`} prefetch={false} className="text-link">Gestionar</Link></div>
             <div className="plan-budget-grid">
               <div><span>Asignado</span><strong>{euro.format(budgetSummary.assigned)}</strong></div>
               <div><span>Gastado</span><strong>{euro.format(budgetSummary.spent)}</strong></div>
@@ -137,7 +136,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
           </article>
 
           <article className="card">
-            <div className="card-heading-row"><div><div className="eyebrow">Próximos 120 días</div><h2 className="section-title">Liquidez prevista</h2></div><Link href="/prevision" className="text-link">Abrir previsión</Link></div>
+            <div className="card-heading-row"><div><div className="eyebrow">Próximos 120 días</div><h2 className="section-title">Liquidez prevista</h2></div><Link href="/prevision" prefetch={false} className="text-link">Abrir previsión</Link></div>
             <div className={`liquidity-banner${liquidity.firstNegativeDate ? ' liquidity-banner-risk' : ''}`}>
               <span>{liquidity.firstNegativeDate ? 'Primera fecha bajo cero' : 'Mínimo proyectado'}</span>
               <strong>{liquidity.firstNegativeDate || euro.format(liquidity.lowestBalance)}</strong>
@@ -147,7 +146,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
         </section>
 
         <section className="card section-gap">
-          <div className="card-heading-row"><div><div className="eyebrow">Patrimonio</div><h2 className="section-title">Evolución de los saldos conocidos</h2></div><Link href="/cuentas" className="text-link">Ver cuentas</Link></div>
+          <div className="card-heading-row"><div><div className="eyebrow">Patrimonio</div><h2 className="section-title">Evolución de los saldos conocidos</h2></div><Link href="/cuentas" prefetch={false} className="text-link">Ver cuentas</Link></div>
           <div className="plan-networth-head">
             <div><span>Último patrimonio conocido</span><strong>{latestNetWorth ? euro.format(latestNetWorth.netWorth) : '—'}</strong></div>
             <div><span>Cambio frente al cierre anterior</span><strong className={netWorthChange !== null && netWorthChange < 0 ? 'amount-negative' : 'amount-positive'}>{netWorthChange === null ? '—' : `${netWorthChange >= 0 ? '+' : ''}${euro.format(netWorthChange)}`}</strong></div>
@@ -170,7 +169,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
           </article>
 
           <article className="card">
-            <div className="card-heading-row"><div><div className="eyebrow">Objetivos y calidad</div><h2 className="section-title">Cierre del mes</h2></div><Link href="/revision" className="text-link">Revisar datos</Link></div>
+            <div className="card-heading-row"><div><div className="eyebrow">Objetivos y calidad</div><h2 className="section-title">Cierre del mes</h2></div><Link href="/revision" prefetch={false} className="text-link">Revisar datos</Link></div>
             <div className="alert-summary alert-summary-3">
               <div className="alert-stat"><strong>{pendingReview}</strong><span>pendientes</span></div>
               <div className="alert-stat"><strong>{duplicateGroups}</strong><span>posibles duplicados</span></div>
@@ -184,7 +183,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
                 return <div className="plan-goal" key={goal.id}><div className="row"><div><div className="row-title">{goal.name}</div><div className="row-meta">{euro.format(current)} de {euro.format(target)}{goal.target_date ? ` · ${goal.target_date}` : ''}</div></div><strong>{Math.round(progress)}%</strong></div><div className="progress"><span style={{ width: `${progress}%` }} /></div></div>;
               })}
             </div>
-            <Link href="/objetivos" className="text-link plan-goal-link">Gestionar objetivos →</Link>
+            <Link href="/objetivos" prefetch={false} className="text-link plan-goal-link">Gestionar objetivos →</Link>
           </article>
         </section>
       </main>
@@ -195,7 +194,7 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
   return (
     <main className="page">
-      <section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1></div><span className="badge">V2.0.0</span></section>
+      <section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1></div><span className="badge">{APP_VERSION_LABEL}</span></section>
       {sourceError && <div className="status-panel status-danger"><div><div className="status-title">No se puede construir el plan con garantías</div><div className="status-copy">La vista se detiene antes de mostrar cifras parciales o incoherentes.</div></div></div>}
     </main>
   );
