@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import './globals.css';
-import Navigation from './components/Navigation';
+import './extras.css';
+import AppHeader from './components/AppHeader';
 
 export const metadata = {
   title: 'Finanzas 3.0',
@@ -12,12 +13,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
     <html lang="es">
       <body>
         <div className="shell">
-          <header className="topbar">
-            <div className="topbar-inner">
-              <div className="brand">Finanzas 3.0</div>
-              <Navigation />
-            </div>
-          </header>
+          <AppHeader />
           {children}
         </div>
       </body>
