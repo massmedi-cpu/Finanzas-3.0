@@ -70,32 +70,35 @@ export default async function PrevisionPage() {
   let recurringIgnored = 0;
 
   if (isGoogleSheetsConfigured()) {
-    try {
-      const source = await loadValidatedSource();
-      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-      try {
-        const state = await getPrivateState();
-        overrides = state.overrides;
-        futureEvents = state.futureEvents;
-        scenarios = state.scenarios;
-      } catch {
-        overrides = [];
-        futureEvents = [];
-        scenarios = [];
-      }
+    const [sourceResult, stateResult, recurringResult] = await Promise.allSettled([
+      loadValidatedSource(),
+      getPrivateState(),
+      getRecurringPreferences(),
+    ]);
 
-      const analyticsRows = rowsForAnalytics(source.rows, overrides);
+    if (sourceResult.status === 'rejected') {
+      sourceError = true;
+    } else {
+      const source = sourceResult.value;
+      const state = stateResult.status === 'fulfilled'
+        ? stateResult.value
+        : { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
+      const analyticsRows = rowsForAnalytics(source.rows, state.overrides);
+      futureEvents = state.futureEvents;
+      scenarios = state.scenarios;
       baseDate = source.rows.reduce<string>((latest, row) => (row.date > latest ? row.date : latest), '');
       knownBalance = getNetWorthFromKnownBalances(source.rows);
       const detectedPatterns = detectRecurringPatterns(analyticsRows);
-      try {
-        const recurringPreferences = await getRecurringPreferences();
+
+      if (recurringResult.status === 'fulfilled') {
+        const recurringPreferences = recurringResult.value;
         recurringConfirmed = recurringPreferences.filter((preference) => preference.status === 'confirmed').length;
         recurringIgnored = recurringPreferences.filter((preference) => preference.status === 'ignored').length;
         patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
-      } catch {
+      } else {
         patterns = detectedPatterns;
       }
+
       categories = [...new Set(analyticsRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
       accounts = [...new Set(source.rows.map((row) => row.productOrAccount).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 
@@ -104,8 +107,6 @@ export default async function PrevisionPage() {
         const planned = expandPlannedEvents(futureEvents, baseDate, 365);
         forecast = combineForecasts(detected, planned);
       }
-    } catch {
-      sourceError = true;
     }
   }
 
