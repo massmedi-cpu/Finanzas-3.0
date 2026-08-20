@@ -6,6 +6,7 @@ import { usePathname, useRouter } from 'next/navigation';
 const links = [
   ['/', 'Inicio'],
   ['/movimientos', 'Movimientos'],
+  ['/revision', 'Revisión'],
   ['/cuentas', 'Cuentas'],
   ['/presupuestos', 'Presupuestos'],
   ['/recurrentes', 'Recurrentes'],
