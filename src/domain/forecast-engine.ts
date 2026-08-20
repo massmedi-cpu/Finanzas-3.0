@@ -10,6 +10,16 @@ export interface RecurringPattern {
   occurrences: number;
   lastDate: string;
   confidence: number;
+  nextExpectedDate?: string;
+}
+
+export interface RecurringPreferenceInput {
+  pattern_key: string;
+  status: 'auto' | 'confirmed' | 'ignored';
+  display_name: string | null;
+  expected_amount: number | string | null;
+  category: string | null;
+  next_expected_date: string | null;
 }
 
 export type ForecastSource = 'detected' | 'planned';
@@ -173,12 +183,33 @@ export function detectRecurringPatterns(rows: BankingSourceRow[]): RecurringPatt
   return patterns.sort((a, b) => Math.abs(b.averageAmount) - Math.abs(a.averageAmount));
 }
 
+export function applyRecurringPreferences(patterns: RecurringPattern[], preferences: RecurringPreferenceInput[]): RecurringPattern[] {
+  const byKey = new Map(preferences.map((preference) => [preference.pattern_key, preference]));
+
+  return patterns.flatMap((pattern) => {
+    const preference = byKey.get(pattern.key);
+    if (preference?.status === 'ignored') return [];
+
+    const expectedAmount = preference?.expected_amount == null ? null : Number(preference.expected_amount);
+    return [{
+      ...pattern,
+      description: preference?.display_name || pattern.description,
+      category: preference?.category || pattern.category,
+      averageAmount: expectedAmount !== null && Number.isFinite(expectedAmount) ? expectedAmount : pattern.averageAmount,
+      nextExpectedDate: preference?.next_expected_date || undefined,
+      confidence: preference?.status === 'confirmed' ? Math.max(pattern.confidence, 0.98) : pattern.confidence,
+    }];
+  });
+}
+
 export function buildForecast(patterns: RecurringPattern[], fromDate: string, days = 90): ForecastMovement[] {
   const horizon = addDays(fromDate, days);
   const movements: ForecastMovement[] = [];
 
   for (const pattern of patterns) {
-    let expectedDate = addDays(pattern.lastDate, pattern.intervalDays);
+    let expectedDate = pattern.nextExpectedDate && toDate(pattern.nextExpectedDate)
+      ? pattern.nextExpectedDate
+      : addDays(pattern.lastDate, pattern.intervalDays);
     while (expectedDate <= fromDate) expectedDate = addDays(expectedDate, pattern.intervalDays);
 
     let sequence = 0;
