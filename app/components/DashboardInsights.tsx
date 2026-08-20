@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { applyRecurringPreferences, buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
 import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
+import { detectQualityIssues } from '../../src/domain/quality-engine';
 import { getPrivateState } from '../../src/private-data/client';
 import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
 import { getRecurringPreferences } from '../../src/private-data/recurring';
@@ -47,6 +48,9 @@ export default async function DashboardInsights() {
     const liquidity = getLiquidityRisk(forecast, getNetWorthFromKnownBalances(source.rows));
     const overrideMap = indexOverrides(overrides);
     const pending = source.rows.filter((row) => !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length;
+    const qualityIssues = detectQualityIssues(source.rows);
+    const duplicates = qualityIssues.filter((issue) => issue.type === 'duplicate').length;
+    const uncategorized = qualityIssues.filter((issue) => issue.type === 'uncategorized').length;
     const activeGoals = goals.filter((goal) => goal.active).slice(0, 3);
 
     return (
@@ -85,16 +89,17 @@ export default async function DashboardInsights() {
             <div className="card-heading-row">
               <div>
                 <div className="eyebrow">Control</div>
-                <h2 className="section-title">Alertas financieras</h2>
+                <h2 className="section-title">Calidad y alertas</h2>
               </div>
-              <Link href={liquidity.firstNegativeDate ? '/prevision' : '/movimientos'} className="text-link">Revisar</Link>
+              <Link href="/revision" className="text-link">Centro de revisión</Link>
             </div>
             <div className="alert-summary alert-summary-3">
               <div className="alert-stat"><strong>{pending}</strong><span>pendientes de revisar</span></div>
-              <div className="alert-stat"><strong>{source.duplicateGroups}</strong><span>grupos de posibles duplicados</span></div>
-              <div className={`alert-stat${liquidity.firstNegativeDate ? ' alert-stat-risk' : ''}`}><strong>{liquidity.firstNegativeDate ? '!' : '✓'}</strong><span>{liquidity.firstNegativeDate ? `riesgo de liquidez ${liquidity.firstNegativeDate}` : 'sin riesgo de saldo negativo a 120 días'}</span></div>
+              <div className="alert-stat"><strong>{duplicates}</strong><span>grupos de posibles duplicados</span></div>
+              <div className="alert-stat"><strong>{uncategorized}</strong><span>movimientos sin categoría</span></div>
             </div>
-            <p className="metric-note">El control combina movimientos reales, correcciones internas, recurrentes validados y planificación futura sin modificar la fuente bancaria.</p>
+            {liquidity.firstNegativeDate && <div className="status-panel status-danger dashboard-risk"><div><div className="status-title">Riesgo de liquidez</div><div className="status-copy">Saldo negativo previsto desde {liquidity.firstNegativeDate}. Revisa la previsión.</div></div><Link href="/prevision" className="text-link">Ver</Link></div>}
+            <p className="metric-note">El centro de revisión permite confirmar o excluir incidencias sin borrar ni modificar movimientos de la fuente bancaria.</p>
           </article>
         </section>
 
