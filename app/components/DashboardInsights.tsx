@@ -34,7 +34,7 @@ export default async function DashboardInsights() {
     const liquidity = getLiquidityRisk(forecast, getNetWorthFromKnownBalances(source.rows));
     const overrideMap = indexOverrides(overrides);
     const pending = source.rows.filter((row) => !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length;
-    const qualityIssues = detectQualityIssues(source.rows);
+    const qualityIssues = detectQualityIssues(analyticsRows);
     const duplicates = qualityIssues.filter((issue) => issue.type === 'duplicate').length;
     const uncategorized = qualityIssues.filter((issue) => issue.type === 'uncategorized').length;
     const activeGoals = goals.filter((goal) => goal.active).slice(0, 3);

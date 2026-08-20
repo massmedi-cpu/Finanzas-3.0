@@ -1,7 +1,7 @@
 import { detectQualityIssues } from '../../src/domain/quality-engine';
 import type { BankingSourceRow } from '../../src/domain/source-schema';
 import { getPrivateState, type MovementOverride } from '../../src/private-data/client';
-import { applyOverride, indexOverrides, sourceBoolean, sourceReviewStatus } from '../../src/private-data/merge';
+import { applyOverride, indexOverrides, rowsForAnalytics, sourceBoolean, sourceReviewStatus } from '../../src/private-data/merge';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import { APP_VERSION_LABEL } from '../../src/version';
@@ -42,9 +42,10 @@ export default async function RevisionPage() {
         }),
       ]);
       const overrides = indexOverrides(privateState.overrides);
+      const effectiveRows = rowsForAnalytics(source.rows, privateState.overrides);
+      const rowsById = new Map<string, BankingSourceRow>(effectiveRows.map((row) => [row.sourceId, row]));
 
-      const rowsById = new Map<string, BankingSourceRow>(source.rows.map((row) => [row.sourceId, row]));
-      issues = detectQualityIssues(source.rows).flatMap((issue) => {
+      issues = detectQualityIssues(effectiveRows).flatMap((issue) => {
         const movements = issue.sourceIds
           .map((sourceId) => rowsById.get(sourceId))
           .filter((row): row is BankingSourceRow => Boolean(row))

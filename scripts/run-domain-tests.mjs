@@ -5,6 +5,9 @@ import {
   findDuplicateCandidates,
   getLatestAccountBalances,
 } from '../src/domain/finance-engine.ts';
+import { detectQualityIssues } from '../src/domain/quality-engine.ts';
+import { rowsForAnalytics } from '../src/private-data/merge.ts';
+import { hasUsableSessionToken } from '../src/security/session.ts';
 
 function row(patch = {}) {
   return {
@@ -30,6 +33,23 @@ function row(patch = {}) {
     review: 'No',
     notes: '',
     source: 'test',
+    ...patch,
+  };
+}
+
+function override(sourceId, patch = {}) {
+  return {
+    source_id: sourceId,
+    category: null,
+    subcategory: null,
+    merchant: null,
+    notes: null,
+    tags: [],
+    review_status: 'pending',
+    reconciled: false,
+    excluded_from_analytics: false,
+    created_at: '2026-08-20T00:00:00Z',
+    updated_at: '2026-08-20T00:00:00Z',
     ...patch,
   };
 }
@@ -63,5 +83,22 @@ const balances = getLatestAccountBalances([
 ]);
 assert.equal(balances.length, 1);
 assert.equal(balances[0].balance, 900, 'La fuente llega en orden descendente y debe conservar el primer saldo del día más reciente');
+
+const uncategorizedSource = row({ sourceId: 'uncategorized', category: '' });
+assert.equal(detectQualityIssues([uncategorizedSource]).some((issue) => issue.type === 'uncategorized'), true);
+const categorizedEffective = rowsForAnalytics([uncategorizedSource], [override('uncategorized', { category: 'Tecnología' })]);
+assert.equal(detectQualityIssues(categorizedEffective).some((issue) => issue.type === 'uncategorized'), false, 'Una categoría privada debe cerrar la incidencia de categoría vacía');
+
+const duplicateSource = [
+  row({ sourceId: 'duplicate-a' }),
+  row({ sourceId: 'duplicate-b' }),
+];
+assert.equal(detectQualityIssues(duplicateSource).some((issue) => issue.type === 'duplicate'), true);
+const duplicateEffective = rowsForAnalytics(duplicateSource, [override('duplicate-b', { excluded_from_analytics: true, review_status: 'reviewed' })]);
+assert.equal(detectQualityIssues(duplicateEffective).some((issue) => issue.type === 'duplicate'), false, 'Una copia excluida no debe seguir generando la misma alerta de duplicado');
+
+assert.equal(hasUsableSessionToken('2000000000.firebase.signature', 1900000000), true);
+assert.equal(hasUsableSessionToken('1800000000.firebase.signature', 1900000000), false, 'Una sesión expirada debe rechazarse antes del shell');
+assert.equal(hasUsableSessionToken('malformed', 1900000000), false);
 
 console.log('Finance domain regression tests: OK');
