@@ -6,7 +6,7 @@ export function GET() {
   return NextResponse.json({
     ok: true,
     application: 'Finanzas 3.0',
-    version: '1.2.0',
+    version: '1.3.0',
     timestamp: new Date().toISOString(),
   });
 }

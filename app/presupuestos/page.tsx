@@ -1,31 +1,54 @@
 import { getCategorySpending } from '../../src/domain/category-analysis';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
+import { getPrivateState, type BudgetRecord } from '../../src/private-data/client';
+import { rowsForAnalytics } from '../../src/private-data/merge';
+import BudgetEditor, { type BudgetCategoryView } from './BudgetEditor';
 
 export const dynamic = 'force-dynamic';
 
-const euro = new Intl.NumberFormat('es-ES', {
-  style: 'currency',
-  currency: 'EUR',
-});
+function buildBudgetRows(
+  spending: ReturnType<typeof getCategorySpending>,
+  budgets: BudgetRecord[],
+): BudgetCategoryView[] {
+  const map = new Map<string, BudgetCategoryView>();
+  for (const item of spending) {
+    map.set(item.category, { category: item.category, spent: item.amount, transactions: item.transactions, assigned: 0 });
+  }
+  for (const budget of budgets) {
+    const current = map.get(budget.category) ?? { category: budget.category, spent: 0, transactions: 0, assigned: 0 };
+    current.assigned = Number(budget.assigned) || 0;
+    map.set(budget.category, current);
+  }
+  return [...map.values()].sort((a, b) => (b.assigned > 0 ? 1 : 0) - (a.assigned > 0 ? 1 : 0) || b.spent - a.spent || a.category.localeCompare(b.category, 'es'));
+}
 
 export default async function PresupuestosPage() {
-  let categories: ReturnType<typeof getCategorySpending> = [];
+  let rows: BudgetCategoryView[] = [];
   let latestMonth: string | null = null;
   let sourceError = false;
+  let editLayerError = false;
 
   if (isGoogleSheetsConfigured()) {
     try {
       const source = await loadValidatedSource();
       latestMonth = source.latestMonth;
-      categories = latestMonth ? getCategorySpending(source.rows, latestMonth) : [];
+      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [] };
+      try {
+        privateState = await getPrivateState();
+      } catch {
+        editLayerError = true;
+      }
+
+      if (latestMonth) {
+        const spending = getCategorySpending(rowsForAnalytics(source.rows, privateState.overrides), latestMonth);
+        const monthBudgets = privateState.budgets.filter((budget) => budget.year_month === latestMonth);
+        rows = buildBudgetRows(spending, monthBudgets);
+      }
     } catch {
       sourceError = true;
     }
   }
-
-  const spent = categories.reduce((sum, category) => sum + category.amount, 0);
-  const maxAmount = categories[0]?.amount ?? 0;
 
   return (
     <main className="page">
@@ -33,7 +56,7 @@ export default async function PresupuestosPage() {
         <div>
           <div className="eyebrow">Presupuestos</div>
           <h1>Decide qué puede hacer cada euro</h1>
-          <p className="subtitle">Primero se mide el gasto real por categoría. La asignación de presupuesto se guardará en la capa interna, nunca en la hoja maestra.</p>
+          <p className="subtitle">Asigna dinero por categoría y compáralo con el gasto real. Los traspasos y movimientos excluidos no distorsionan el presupuesto.</p>
         </div>
         {latestMonth && <span className="badge">Periodo {latestMonth}</span>}
       </section>
@@ -45,46 +68,19 @@ export default async function PresupuestosPage() {
             <div className="status-copy">El análisis se detiene antes de mostrar cifras incompletas.</div>
           </div>
         </div>
-      ) : categories.length === 0 ? (
-        <section className="card"><div className="empty">La estructura de presupuestos está lista y se completará al conectar los movimientos.</div></section>
+      ) : !latestMonth ? (
+        <section className="card"><div className="empty">Los presupuestos se activarán cuando exista histórico bancario sincronizado.</div></section>
       ) : (
         <>
-          <section className="grid grid-3">
-            <article className="card">
-              <div className="metric-label">Gasto del periodo</div>
-              <div className="metric-value">{euro.format(spent)}</div>
-              <p className="metric-note">Traspasos excluidos del cálculo</p>
-            </article>
-            <article className="card">
-              <div className="metric-label">Categorías con gasto</div>
-              <div className="metric-value">{categories.length}</div>
-              <p className="metric-note">Detectadas en los movimientos reales</p>
-            </article>
-            <article className="card">
-              <div className="metric-label">Presupuesto asignado</div>
-              <div className="metric-value">—</div>
-              <p className="metric-note">Pendiente de activar la capa editable</p>
-            </article>
-          </section>
-
-          <section className="card section-gap">
-            <h2 className="section-title">Gasto por categoría</h2>
-            <div className="stack">
-              {categories.map((category) => {
-                const width = maxAmount > 0 ? Math.max(3, (category.amount / maxAmount) * 100) : 0;
-                return (
-                  <div className="row" key={category.category}>
-                    <div className="category-main">
-                      <div className="row-title">{category.category}</div>
-                      <div className="row-meta">{category.transactions} movimientos · sin presupuesto asignado</div>
-                      <div className="progress category-progress"><span style={{ width: `${width}%` }} /></div>
-                    </div>
-                    <div className="amount">{euro.format(category.amount)}</div>
-                  </div>
-                );
-              })}
+          {editLayerError && (
+            <div className="status-panel status-warning">
+              <div>
+                <div className="status-title">No se han podido cargar las asignaciones guardadas</div>
+                <div className="status-copy">El gasto real sigue visible, pero la edición queda temporalmente limitada.</div>
+              </div>
             </div>
-          </section>
+          )}
+          {rows.length > 0 ? <BudgetEditor yearMonth={latestMonth} rows={rows} /> : <section className="card"><div className="empty">No hay gastos ni presupuestos en este periodo.</div></section>}
         </>
       )}
     </main>

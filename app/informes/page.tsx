@@ -1,4 +1,6 @@
 import { getMonthlyReport, getYearlyReport } from '../../src/domain/report-engine';
+import { getPrivateState } from '../../src/private-data/client';
+import { rowsForAnalytics } from '../../src/private-data/merge';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 
@@ -14,9 +16,12 @@ export default async function InformesPage() {
   if (isGoogleSheetsConfigured()) {
     try {
       const source = await loadValidatedSource();
-      monthly = getMonthlyReport(source.rows, 12);
+      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
+      try { overrides = (await getPrivateState()).overrides; } catch { overrides = []; }
+      const rows = rowsForAnalytics(source.rows, overrides);
+      monthly = getMonthlyReport(rows, 12);
       const year = monthly[0]?.month.slice(0, 4);
-      yearly = year ? getYearlyReport(source.rows, year) : null;
+      yearly = year ? getYearlyReport(rows, year) : null;
     } catch {
       sourceError = true;
     }
@@ -28,15 +33,13 @@ export default async function InformesPage() {
         <div>
           <div className="eyebrow">Informes</div>
           <h1>Entiende cómo evoluciona tu dinero</h1>
-          <p className="subtitle">Resumen mensual y anual calculado sobre movimientos reales, con traspasos internos excluidos del cash flow.</p>
+          <p className="subtitle">Resumen mensual y anual sobre movimientos reales, con traspasos y exclusiones internas fuera del cash flow.</p>
         </div>
         {yearly && <span className="badge">Año {yearly.year}</span>}
       </section>
 
       {sourceError ? (
-        <div className="status-panel status-danger">
-          <div><div className="status-title">No se han podido generar los informes</div><div className="status-copy">Se evita mostrar un informe parcial o incoherente.</div></div>
-        </div>
+        <div className="status-panel status-danger"><div><div className="status-title">No se han podido generar los informes</div><div className="status-copy">Se evita mostrar un informe parcial o incoherente.</div></div></div>
       ) : !yearly ? (
         <section className="card"><div className="empty">Los informes se activarán al conectar el histórico bancario.</div></section>
       ) : (
@@ -54,15 +57,7 @@ export default async function InformesPage() {
               <table className="data-table report-table">
                 <thead><tr><th>Mes</th><th className="numeric">Ingresos</th><th className="numeric">Gastos</th><th className="numeric">Cash flow</th><th className="numeric">Movimientos</th></tr></thead>
                 <tbody>
-                  {monthly.map((item) => (
-                    <tr key={item.month}>
-                      <td className="table-primary">{item.month}</td>
-                      <td className="numeric amount-positive">{euro.format(item.income)}</td>
-                      <td className="numeric amount-negative">{euro.format(item.expenses)}</td>
-                      <td className={`numeric amount ${item.net < 0 ? 'amount-negative' : 'amount-positive'}`}>{euro.format(item.net)}</td>
-                      <td className="numeric">{item.transactions}</td>
-                    </tr>
-                  ))}
+                  {monthly.map((item) => <tr key={item.month}><td className="table-primary">{item.month}</td><td className="numeric amount-positive">{euro.format(item.income)}</td><td className="numeric amount-negative">{euro.format(item.expenses)}</td><td className={`numeric amount ${item.net < 0 ? 'amount-negative' : 'amount-positive'}`}>{euro.format(item.net)}</td><td className="numeric">{item.transactions}</td></tr>)}
                 </tbody>
               </table>
             </div>
