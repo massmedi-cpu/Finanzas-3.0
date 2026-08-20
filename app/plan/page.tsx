@@ -51,11 +51,11 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
 
     const baseAnalyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
     const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
-    const availableMonths = getAvailableMonths(budgetRows);
+    const availableMonths = getAvailableMonths(baseAnalyticsRows);
     const selectedMonth = params.month && availableMonths.includes(params.month) ? params.month : (availableMonths[0] || source.latestMonth || '');
     const previous = previousMonth(selectedMonth);
-    const currentSummary = getMonthlySummary(budgetRows, selectedMonth);
-    const previousSummary = getMonthlySummary(budgetRows, previous);
+    const currentSummary = getMonthlySummary(baseAnalyticsRows, selectedMonth);
+    const previousSummary = getMonthlySummary(baseAnalyticsRows, previous);
     const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === selectedMonth);
     const previousBudgets = privateState.budgets.filter((budget) => budget.year_month === previous);
     const envelopes = buildBudgetEnvelopes(budgetRows, selectedMonth, currentBudgets, previousBudgets);
