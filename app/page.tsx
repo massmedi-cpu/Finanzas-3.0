@@ -11,20 +11,17 @@ export default function Home() {
 
         <FinancialSummary />
 
-        <div className="grid gap-4 md:grid-cols-3">
-          <article className="rounded-xl bg-white p-5 shadow">
-            <h2 className="text-sm text-slate-500">Patrimonio</h2>
-            <p className="mt-2 text-2xl font-semibold">0,00 €</p>
-          </article>
-          <article className="rounded-xl bg-white p-5 shadow">
-            <h2 className="text-sm text-slate-500">Ingresos del mes</h2>
-            <p className="mt-2 text-2xl font-semibold">0,00 €</p>
-          </article>
-          <article className="rounded-xl bg-white p-5 shadow">
-            <h2 className="text-sm text-slate-500">Gastos del mes</h2>
-            <p className="mt-2 text-2xl font-semibold">0,00 €</p>
-          </article>
-        </div>
+        <nav className="grid gap-4 md:grid-cols-4">
+          <button className="rounded-xl bg-white p-5 text-left shadow">Movimientos</button>
+          <button className="rounded-xl bg-white p-5 text-left shadow">Cuentas</button>
+          <button className="rounded-xl bg-white p-5 text-left shadow">Presupuestos</button>
+          <button className="rounded-xl bg-white p-5 text-left shadow">Previsiones</button>
+        </nav>
+
+        <section className="rounded-xl bg-white p-5 shadow">
+          <h2 className="text-xl font-semibold">Estado financiero</h2>
+          <p className="mt-2 text-slate-600">Base preparada para conectar datos reales de cuentas y movimientos.</p>
+        </section>
       </section>
     </main>
   );
