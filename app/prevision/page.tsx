@@ -71,31 +71,21 @@ export default async function PrevisionPage() {
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-      try {
-        const state = await getPrivateState();
-        overrides = state.overrides;
-        futureEvents = state.futureEvents;
-        scenarios = state.scenarios;
-      } catch {
-        overrides = [];
-        futureEvents = [];
-        scenarios = [];
-      }
+      const [source, state, recurringPreferences] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState().catch(() => ({ overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] })),
+        getRecurringPreferences().catch(() => []),
+      ]);
 
-      const analyticsRows = rowsForAnalytics(source.rows, overrides);
+      futureEvents = state.futureEvents;
+      scenarios = state.scenarios;
+      const analyticsRows = rowsForAnalytics(source.rows, state.overrides);
       baseDate = source.rows.reduce<string>((latest, row) => (row.date > latest ? row.date : latest), '');
       knownBalance = getNetWorthFromKnownBalances(source.rows);
       const detectedPatterns = detectRecurringPatterns(analyticsRows);
-      try {
-        const recurringPreferences = await getRecurringPreferences();
-        recurringConfirmed = recurringPreferences.filter((preference) => preference.status === 'confirmed').length;
-        recurringIgnored = recurringPreferences.filter((preference) => preference.status === 'ignored').length;
-        patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
-      } catch {
-        patterns = detectedPatterns;
-      }
+      recurringConfirmed = recurringPreferences.filter((preference) => preference.status === 'confirmed').length;
+      recurringIgnored = recurringPreferences.filter((preference) => preference.status === 'ignored').length;
+      patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
       categories = [...new Set(analyticsRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
       accounts = [...new Set(source.rows.map((row) => row.productOrAccount).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 
