@@ -13,25 +13,16 @@ export default async function RecurrentesPage() {
   let categories: string[] = [];
 
   try {
-    const source = await loadValidatedSource();
-    let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-    try {
-      overrides = (await getPrivateState()).overrides;
-    } catch {
-      overrides = [];
-    }
+    const [source, privateState, preferences] = await Promise.all([
+      loadValidatedSource(),
+      getPrivateState().catch(() => ({ overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] })),
+      getRecurringPreferences().catch(() => []),
+    ]);
 
-    const analyticsRows = rowsForAnalytics(source.rows, overrides);
+    const analyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
     const patterns = detectRecurringPatterns(analyticsRows);
     const latestDate = source.rows.reduce<string>((latest, row) => (row.date > latest ? row.date : latest), '');
     categories = [...new Set(analyticsRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-
-    let preferences: Awaited<ReturnType<typeof getRecurringPreferences>> = [];
-    try {
-      preferences = await getRecurringPreferences();
-    } catch {
-      preferences = [];
-    }
     const preferenceMap = new Map(preferences.map((preference) => [preference.pattern_key, preference]));
 
     rows = patterns.map((pattern) => {
