@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "googleapis": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
