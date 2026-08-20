@@ -1,4 +1,6 @@
-import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
+import { getMonthlySummary, getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
+import { getPrivateState } from '../../src/private-data/client';
+import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 
@@ -26,7 +28,19 @@ export default async function FinancialSummary() {
   if (isGoogleSheetsConfigured()) {
     try {
       const source = await loadValidatedSource();
-      const summary = source.latestMonthSummary;
+      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
+      try {
+        overrides = (await getPrivateState()).overrides;
+      } catch {
+        overrides = [];
+      }
+
+      const analyticsRows = rowsForAnalytics(source.rows, overrides);
+      const summary = source.latestMonth ? getMonthlySummary(analyticsRows, source.latestMonth) : null;
+      const overrideMap = indexOverrides(overrides);
+      const pendingReview = source.latestMonth
+        ? source.rows.filter((row) => row.date.startsWith(source.latestMonth) && !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length
+        : 0;
 
       items = [
         {
@@ -42,12 +56,12 @@ export default async function FinancialSummary() {
         {
           label: 'Gastos del mes',
           value: summary ? euro.format(summary.expenses) : '—',
-          note: summary ? `${summary.transactionCount} movimientos en el periodo` : 'Sin movimientos',
+          note: summary ? `${summary.transactionCount} movimientos incluidos` : 'Sin movimientos',
         },
         {
           label: 'Flujo neto del mes',
           value: summary ? euro.format(summary.netCashFlow) : '—',
-          note: `${source.needsReview} movimientos pendientes de revisar`,
+          note: `${pendingReview} movimientos pendientes de revisar`,
         },
       ];
     } catch {
