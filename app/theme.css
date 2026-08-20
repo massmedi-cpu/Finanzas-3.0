@@ -42,6 +42,7 @@ html[data-theme='dark'] .login-notice { background: var(--warning-soft); border-
 html[data-theme='dark'] .status-chip { background: rgba(15,21,29,.55); }
 html[data-theme='dark'] .skeleton { background: linear-gradient(90deg, #202a35 25%, #2a3745 50%, #202a35 75%); background-size: 200% 100%; }
 
+.topbar-actions { display: flex; align-items: center; gap: 10px; min-width: 0; }
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -56,6 +57,7 @@ html[data-theme='dark'] .skeleton { background: linear-gradient(90deg, #202a35 2
   font-size: 13px;
   font-weight: 750;
   cursor: pointer;
+  flex: 0 0 auto;
 }
 .theme-toggle:hover { border-color: var(--accent); }
 
@@ -80,6 +82,10 @@ html[data-theme='dark'] .skeleton { background: linear-gradient(90deg, #202a35 2
   html:not([data-theme]) .topbar { background: rgba(23,31,41,.96); }
 }
 
+@media (max-width: 900px) {
+  .topbar-actions { width: 100%; }
+  .topbar-actions .nav { flex: 1; }
+}
 @media (max-width: 620px) {
   .theme-toggle-label { display: none; }
   .theme-toggle { min-width: 36px; justify-content: center; padding-inline: 8px; }
