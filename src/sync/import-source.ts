@@ -1,3 +1,4 @@
+import { cache } from 'react';
 import { findDuplicateCandidates, getLatestAccountBalances, getMonthlySummary } from '../domain/finance-engine';
 import { parseSourceRow, validateSourceHeader, type BankingSourceRow } from '../domain/source-schema';
 import { readGoogleSheet } from './google-sheets';
@@ -12,7 +13,7 @@ export interface SourcePreview {
   latestMonthSummary: ReturnType<typeof getMonthlySummary> | null;
 }
 
-export async function loadValidatedSource(): Promise<SourcePreview> {
+export const loadValidatedSource = cache(async (): Promise<SourcePreview> => {
   const source = await readGoogleSheet();
   const [header, ...dataRows] = source.values;
 
@@ -43,4 +44,4 @@ export async function loadValidatedSource(): Promise<SourcePreview> {
     latestMonth,
     latestMonthSummary: latestMonth ? getMonthlySummary(rows, latestMonth) : null,
   };
-}
+});
