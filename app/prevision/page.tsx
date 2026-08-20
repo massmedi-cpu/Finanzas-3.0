@@ -1,4 +1,5 @@
 import {
+  applyRecurringPreferences,
   buildForecast,
   combineForecasts,
   detectRecurringPatterns,
@@ -10,6 +11,7 @@ import {
 import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
 import { getPrivateState, type FutureEventRecord, type ScenarioRecord } from '../../src/private-data/client';
 import { rowsForAnalytics } from '../../src/private-data/merge';
+import { getRecurringPreferences } from '../../src/private-data/recurring';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import PlanningManager, { type FutureEventView, type ScenarioView } from './PlanningManager';
@@ -64,6 +66,8 @@ export default async function PrevisionPage() {
   let scenarios: ScenarioRecord[] = [];
   let categories: string[] = [];
   let accounts: string[] = [];
+  let recurringConfirmed = 0;
+  let recurringIgnored = 0;
 
   if (isGoogleSheetsConfigured()) {
     try {
@@ -83,7 +87,15 @@ export default async function PrevisionPage() {
       const analyticsRows = rowsForAnalytics(source.rows, overrides);
       baseDate = source.rows.reduce<string>((latest, row) => (row.date > latest ? row.date : latest), '');
       knownBalance = getNetWorthFromKnownBalances(source.rows);
-      patterns = detectRecurringPatterns(analyticsRows);
+      const detectedPatterns = detectRecurringPatterns(analyticsRows);
+      try {
+        const recurringPreferences = await getRecurringPreferences();
+        recurringConfirmed = recurringPreferences.filter((preference) => preference.status === 'confirmed').length;
+        recurringIgnored = recurringPreferences.filter((preference) => preference.status === 'ignored').length;
+        patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
+      } catch {
+        patterns = detectedPatterns;
+      }
       categories = [...new Set(analyticsRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
       accounts = [...new Set(source.rows.map((row) => row.productOrAccount).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
 
@@ -113,10 +125,11 @@ export default async function PrevisionPage() {
         <div>
           <div className="eyebrow">Previsión</div>
           <h1>Anticipa los próximos meses</h1>
-          <p className="subtitle">Combina recurrencias detectadas en tu histórico con pagos e ingresos que tú ya conoces. Después puedes probar escenarios sin modificar ningún dato bancario original.</p>
+          <p className="subtitle">Combina recurrencias detectadas y validadas por ti con pagos e ingresos que ya conoces. Después puedes probar escenarios sin modificar ningún dato bancario original.</p>
         </div>
         <div className="planning-counters">
-          {patterns.length > 0 && <span className="badge">{patterns.length} recurrencias</span>}
+          {patterns.length > 0 && <span className="badge">{patterns.length} recurrencias activas</span>}
+          {recurringConfirmed > 0 && <span className="badge">{recurringConfirmed} confirmadas</span>}
           {plannedCount > 0 && <span className="badge">{plannedCount} planificados</span>}
         </div>
       </section>
@@ -130,7 +143,7 @@ export default async function PrevisionPage() {
           <section className="grid grid-4">
             {horizons.map(([label, date]) => {
               const projected = knownBalance + projectedNetChange(forecast, date);
-              return <article className="card" key={label}><div className="metric-label">Saldo proyectado · {label}</div><div className={`metric-value ${projected < 0 ? 'amount-negative' : ''}`}>{euro.format(projected)}</div><p className="metric-note">Hasta {date} · recurrencias + planificación explícita</p></article>;
+              return <article className="card" key={label}><div className="metric-label">Saldo proyectado · {label}</div><div className={`metric-value ${projected < 0 ? 'amount-negative' : ''}`}>{euro.format(projected)}</div><p className="metric-note">Hasta {date} · recurrentes validados + planificación explícita</p></article>;
             })}
             <article className={`card${risk?.firstNegativeDate ? ' risk-card' : ''}`}>
               <div className="metric-label">Punto mínimo previsto</div>
@@ -171,10 +184,10 @@ export default async function PrevisionPage() {
             <article className="card">
               <div className="eyebrow">Modelo</div><h2 className="section-title">Cómo se está calculando</h2>
               <div className="stack">
-                <div className="row"><div><div className="row-title">Recurrencias detectadas</div><div className="row-meta">Se exigen al menos tres apariciones y una frecuencia mensual compatible.</div></div><strong>{patterns.length}</strong></div>
-                <div className="row"><div><div className="row-title">Movimientos explícitos</div><div className="row-meta">Tienen prioridad sobre una recurrencia detectada equivalente para evitar doble conteo.</div></div><strong>{plannedCount}</strong></div>
+                <div className="row"><div><div className="row-title">Recurrencias activas</div><div className="row-meta">Tus confirmaciones y correcciones tienen prioridad; las ignoradas salen de la previsión.</div></div><strong>{patterns.length}</strong></div>
+                <div className="row"><div><div className="row-title">Recurrencias ignoradas</div><div className="row-meta">Patrones detectados que has decidido no proyectar.</div></div><strong>{recurringIgnored}</strong></div>
+                <div className="row"><div><div className="row-title">Movimientos explícitos</div><div className="row-meta">Tienen prioridad sobre una recurrencia equivalente para evitar doble conteo.</div></div><strong>{plannedCount}</strong></div>
                 <div className="row"><div><div className="row-title">Traspasos y exclusiones</div><div className="row-meta">No se consideran ingreso ni gasto en la previsión.</div></div><span className="state state-ok">Excluidos</span></div>
-                <div className="row"><div><div className="row-title">Horizonte principal</div><div className="row-meta">Proyección de doce meses desde el último dato real.</div></div><strong>365 días</strong></div>
               </div>
             </article>
           </section>
