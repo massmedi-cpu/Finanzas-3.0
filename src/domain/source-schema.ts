@@ -55,6 +55,8 @@ function clean(value: unknown): string {
 }
 
 export function parseEuro(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+
   const raw = clean(value);
   if (!raw) return null;
 

@@ -9,7 +9,6 @@ export default function LoginForm() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const setupRequired = searchParams.get('setup') === '1';
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -25,7 +24,11 @@ export default function LoginForm() {
 
       const body = (await response.json()) as { ok?: boolean; status?: string };
       if (!response.ok || !body.ok) {
-        setError(body.status === 'access-not-configured' ? 'La protección privada todavía no está configurada.' : 'Contraseña incorrecta.');
+        if (body.status === 'bridge-unavailable') {
+          setError('No se ha podido conectar con el servicio financiero.');
+        } else {
+          setError('La clave no es correcta.');
+        }
         return;
       }
 
@@ -43,13 +46,9 @@ export default function LoginForm() {
     <form className="login-card" onSubmit={submit}>
       <div className="eyebrow">Acceso privado</div>
       <h1 className="login-title">Finanzas 3.0</h1>
-      <p className="subtitle">Tus datos financieros quedan protegidos antes de activar la sincronización.</p>
+      <p className="subtitle">Usa la misma clave privada de acceso de Finanzas Alberto.</p>
 
-      {setupRequired && (
-        <div className="login-notice">La aplicación está bloqueada hasta configurar la contraseña y el secreto de sesión.</div>
-      )}
-
-      <label className="field-label" htmlFor="password">Contraseña</label>
+      <label className="field-label" htmlFor="password">Clave de acceso</label>
       <input
         id="password"
         className="control login-input"
