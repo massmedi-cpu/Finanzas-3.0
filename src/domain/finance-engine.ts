@@ -27,7 +27,7 @@ function normalize(value: string): string {
 
 export function isTransfer(row: BankingSourceRow): boolean {
   const type = normalize(row.movementType);
-  return type.includes('traspas') || type.includes('transfer');
+  return type.includes('traspas') || (type.includes('transfer') && type.includes('intern'));
 }
 
 export function isIncome(row: BankingSourceRow): boolean {
