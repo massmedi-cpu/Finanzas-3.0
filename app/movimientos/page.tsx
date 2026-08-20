@@ -1,39 +1,65 @@
-export default function MovimientosPage() {
+import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
+import { loadValidatedSource } from '../../src/sync/import-source';
+import MovementsExplorer, { type MovementView } from './MovementsExplorer';
+
+export const dynamic = 'force-dynamic';
+
+function toView(row: Awaited<ReturnType<typeof loadValidatedSource>>['rows'][number]): MovementView {
+  return {
+    id: row.sourceId,
+    date: row.date,
+    account: row.productOrAccount,
+    type: row.movementType,
+    category: row.category,
+    subcategory: row.subcategory,
+    concept: row.normalizedConcept || row.originalConcept,
+    merchant: row.merchantOrCounterparty,
+    amount: row.amount,
+    balance: row.balance,
+    channel: row.channel,
+    reconciled: row.reconciled,
+    review: row.review,
+  };
+}
+
+export default async function MovimientosPage() {
+  let movements: MovementView[] = [];
+  let sourceError = false;
+
+  if (isGoogleSheetsConfigured()) {
+    try {
+      const source = await loadValidatedSource();
+      movements = source.rows.map(toView).sort((a, b) => b.date.localeCompare(a.date));
+    } catch {
+      sourceError = true;
+    }
+  }
+
   return (
     <main className="page">
       <section className="page-header">
         <div>
           <div className="eyebrow">Movimientos</div>
           <h1>Operaciones bancarias</h1>
-          <p className="subtitle">Consulta y revisa los movimientos importados sin modificar nunca la fuente original.</p>
+          <p className="subtitle">Busca y revisa tus operaciones desde una copia de trabajo; la fuente original se mantiene siempre en solo lectura.</p>
         </div>
+        {movements.length > 0 && <span className="badge">{movements.length.toLocaleString('es-ES')} movimientos</span>}
       </section>
 
-      <div className="toolbar">
-        <input className="control search" aria-label="Buscar movimientos" placeholder="Buscar por descripción, importe o categoría" />
-        <select className="control" aria-label="Filtrar por cuenta" defaultValue="all">
-          <option value="all">Todas las cuentas</option>
-        </select>
-        <select className="control" aria-label="Filtrar por estado" defaultValue="all">
-          <option value="all">Todos los estados</option>
-          <option value="confirmed">Confirmados</option>
-          <option value="pending">Pendientes</option>
-          <option value="review">Revisar</option>
-        </select>
-      </div>
-
-      <section className="card">
-        <div className="row">
+      {sourceError ? (
+        <div className="status-panel status-danger">
           <div>
-            <div className="row-title">Movimientos disponibles</div>
-            <div className="row-meta">La lista se rellenará con la sincronización de la fuente maestra.</div>
+            <div className="status-title">La fuente no ha superado la validación</div>
+            <div className="status-copy">No se muestra información parcial para evitar resultados incoherentes.</div>
           </div>
-          <span className="badge">0 movimientos</span>
         </div>
-        <div className="empty" style={{ marginTop: 16 }}>
-          No hay datos bancarios sincronizados todavía. No se muestran movimientos ficticios.
-        </div>
-      </section>
+      ) : movements.length > 0 ? (
+        <MovementsExplorer rows={movements} />
+      ) : (
+        <section className="card">
+          <div className="empty">La pantalla está lista. Los movimientos aparecerán al conectar de forma segura la hoja maestra.</div>
+        </section>
+      )}
     </main>
   );
 }
