@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export type RecurringStatus = 'auto' | 'confirmed' | 'ignored';
 
@@ -39,7 +38,6 @@ function statusLabel(status: RecurringStatus): string {
 }
 
 export default function RecurringManager({ initialRows, categories }: { initialRows: RecurringView[]; categories: string[] }) {
-  const router = useRouter();
   const [rows, setRows] = useState(initialRows);
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<'active' | 'all' | 'confirmed' | 'ignored'>('active');
@@ -118,7 +116,6 @@ export default function RecurringManager({ initialRows, categories }: { initialR
       customized: true,
     };
     setRows((current) => current.map((item) => item.key === row.key ? updated : item));
-    router.refresh();
     return updated;
   }
 
@@ -175,7 +172,6 @@ export default function RecurringManager({ initialRows, categories }: { initialR
         customized: false,
       } : item));
       if (editingKey === row.key) closeEditor();
-      router.refresh();
     } catch {
       setError('No se ha podido restaurar la detección automática.');
     }
