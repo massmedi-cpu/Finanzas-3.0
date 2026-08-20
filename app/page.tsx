@@ -13,10 +13,10 @@ export default function Home() {
           <div className="eyebrow">Centro de control</div>
           <h1>Tu dinero, organizado para decidir mejor</h1>
           <p className="subtitle">
-            Controla movimientos, calidad de datos, presupuestos, recurrentes, objetivos y previsiones desde una copia privada sin modificar nunca la fuente bancaria original.
+            Controla movimientos, calidad de datos, presupuestos, recurrentes, objetivos, previsiones e informes desde una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V1.7.0</span>
+        <span className="badge">V1.8.0</span>
       </section>
 
       <SourceHealth />
@@ -63,7 +63,7 @@ export default function Home() {
         <Link href="/informes" className="card action-card">
           <div className="metric-label">Informes</div>
           <div className="action-title">Entender la evolución</div>
-          <p className="metric-note">Compara ingresos, gastos y cash flow por mes y año.</p>
+          <p className="metric-note">Cash flow anual, trimestres, categorías y comparativas entre años.</p>
           <span className="action-arrow" aria-hidden="true">→</span>
         </Link>
       </section>

@@ -1,0 +1,38 @@
+.report-header { align-items: flex-start; }
+.year-selector { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 16px; }
+.year-chip { padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--muted); font-size: 14px; font-weight: 750; }
+.year-chip:hover { background: var(--surface-soft); color: var(--text); }
+.year-chip-active { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.cashflow-chart-wrap { margin-top: 4px; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 8px; color: var(--muted); font-size: 12px; font-weight: 700; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.chart-legend i { display: inline-block; width: 11px; height: 11px; border-radius: 3px; }
+.legend-income { background: var(--success); }
+.legend-expense { background: var(--danger); }
+.legend-line { width: 18px !important; height: 3px !important; border-radius: 999px !important; background: var(--accent); }
+.cashflow-chart { display: block; width: 100%; height: auto; min-height: 260px; overflow: visible; }
+.chart-axis { stroke: #aab3bf; stroke-width: 1.2; }
+.chart-grid-line { stroke: var(--line); stroke-width: 1; stroke-dasharray: 4 5; }
+.chart-income-bar { fill: var(--success); opacity: .88; }
+.chart-expense-bar { fill: var(--danger); opacity: .80; }
+.chart-cumulative-line { stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.chart-cumulative-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 2.5; }
+.chart-month-label { fill: var(--muted); font-size: 12px; font-weight: 700; }
+.chart-note { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+.quarter-card { min-height: 154px; }
+.quarter-net { margin-top: 12px; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+.quarter-meta { display: grid; gap: 4px; margin-top: 10px; color: var(--muted); font-size: 12px; }
+.quarter-meta span { display: flex; justify-content: space-between; gap: 10px; }
+.quarter-meta strong { color: var(--text); }
+.quarter-empty { display: grid; place-items: center; min-height: 70px; color: var(--muted); font-size: 26px; }
+.category-report-list { display: grid; gap: 16px; }
+.category-report-row { display: grid; gap: 8px; }
+.category-report-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
+.category-report-head > strong { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.dashboard-risk { margin-top: 14px; margin-bottom: 0; }
+
+@media (max-width: 760px) {
+  .cashflow-chart { min-width: 720px; }
+  .cashflow-chart-wrap { overflow-x: auto; padding-bottom: 4px; }
+  .category-report-head { align-items: flex-start; }
+}
