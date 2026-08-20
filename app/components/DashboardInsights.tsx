@@ -11,34 +11,20 @@ const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR'
 
 export default async function DashboardInsights() {
   try {
-    const source = await loadValidatedSource();
-    let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-    let goals: Awaited<ReturnType<typeof getPrivateState>>['goals'] = [];
-    let futureEvents: Awaited<ReturnType<typeof getPrivateState>>['futureEvents'] = [];
-    try {
-      const state = await getPrivateState();
-      overrides = state.overrides;
-      goals = state.goals;
-      futureEvents = state.futureEvents;
-    } catch {
-      overrides = [];
-      goals = [];
-      futureEvents = [];
-    }
+    const [source, state, preferences] = await Promise.all([
+      loadValidatedSource(),
+      getPrivateState().catch(() => null),
+      getRecurringPreferences().catch(() => null),
+    ]);
 
+    const overrides = state?.overrides ?? [];
+    const goals = state?.goals ?? [];
+    const futureEvents = state?.futureEvents ?? [];
     const analyticsRows = rowsForAnalytics(source.rows, overrides);
     const detectedPatterns = detectRecurringPatterns(analyticsRows);
-    let patterns = detectedPatterns;
-    let recurringConfirmed = 0;
-    let recurringIgnored = 0;
-    try {
-      const preferences = await getRecurringPreferences();
-      patterns = applyRecurringPreferences(detectedPatterns, preferences);
-      recurringConfirmed = preferences.filter((preference) => preference.status === 'confirmed').length;
-      recurringIgnored = preferences.filter((preference) => preference.status === 'ignored').length;
-    } catch {
-      patterns = detectedPatterns;
-    }
+    const patterns = preferences ? applyRecurringPreferences(detectedPatterns, preferences) : detectedPatterns;
+    const recurringConfirmed = preferences?.filter((preference) => preference.status === 'confirmed').length ?? 0;
+    const recurringIgnored = preferences?.filter((preference) => preference.status === 'ignored').length ?? 0;
 
     const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
     const forecast = latestDate
@@ -62,7 +48,7 @@ export default async function DashboardInsights() {
                 <div className="eyebrow">Previsión</div>
                 <h2 className="section-title">Próximos movimientos</h2>
               </div>
-              <Link href="/prevision" className="text-link">Ver previsión</Link>
+              <Link href="/prevision" prefetch={false} className="text-link">Ver previsión</Link>
             </div>
             {upcoming.length === 0 ? (
               <div className="empty compact-empty">Aún no hay movimientos futuros suficientemente fiables.</div>
@@ -80,7 +66,7 @@ export default async function DashboardInsights() {
               </div>
             )}
             <div className="dashboard-recurring-footer">
-              <Link href="/recurrentes" className="text-link">Gestionar recurrentes</Link>
+              <Link href="/recurrentes" prefetch={false} className="text-link">Gestionar recurrentes</Link>
               <span className="row-meta">{recurringConfirmed} confirmados · {recurringIgnored} ignorados</span>
             </div>
           </article>
@@ -91,14 +77,14 @@ export default async function DashboardInsights() {
                 <div className="eyebrow">Control</div>
                 <h2 className="section-title">Calidad y alertas</h2>
               </div>
-              <Link href="/revision" className="text-link">Centro de revisión</Link>
+              <Link href="/revision" prefetch={false} className="text-link">Centro de revisión</Link>
             </div>
             <div className="alert-summary alert-summary-3">
               <div className="alert-stat"><strong>{pending}</strong><span>pendientes de revisar</span></div>
               <div className="alert-stat"><strong>{duplicates}</strong><span>grupos de posibles duplicados</span></div>
               <div className="alert-stat"><strong>{uncategorized}</strong><span>movimientos sin categoría</span></div>
             </div>
-            {liquidity.firstNegativeDate && <div className="status-panel status-danger dashboard-risk"><div><div className="status-title">Riesgo de liquidez</div><div className="status-copy">Saldo negativo previsto desde {liquidity.firstNegativeDate}. Revisa la previsión.</div></div><Link href="/prevision" className="text-link">Ver</Link></div>}
+            {liquidity.firstNegativeDate && <div className="status-panel status-danger dashboard-risk"><div><div className="status-title">Riesgo de liquidez</div><div className="status-copy">Saldo negativo previsto desde {liquidity.firstNegativeDate}. Revisa la previsión.</div></div><Link href="/prevision" prefetch={false} className="text-link">Ver</Link></div>}
             <p className="metric-note">El centro de revisión permite confirmar o excluir incidencias sin borrar ni modificar movimientos de la fuente bancaria.</p>
           </article>
         </section>
@@ -109,7 +95,7 @@ export default async function DashboardInsights() {
               <div className="eyebrow">Objetivos</div>
               <h2 className="section-title">Metas financieras</h2>
             </div>
-            <Link href="/objetivos" className="text-link">Gestionar objetivos</Link>
+            <Link href="/objetivos" prefetch={false} className="text-link">Gestionar objetivos</Link>
           </div>
           {activeGoals.length === 0 ? (
             <div className="empty compact-empty">Crea tu primer objetivo para seguir su progreso desde el panel.</div>
