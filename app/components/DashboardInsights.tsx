@@ -1,8 +1,9 @@
 import Link from 'next/link';
-import { buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
+import { applyRecurringPreferences, buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
 import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
 import { getPrivateState } from '../../src/private-data/client';
 import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
+import { getRecurringPreferences } from '../../src/private-data/recurring';
 import { loadValidatedSource } from '../../src/sync/import-source';
 
 const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
@@ -25,7 +26,19 @@ export default async function DashboardInsights() {
     }
 
     const analyticsRows = rowsForAnalytics(source.rows, overrides);
-    const patterns = detectRecurringPatterns(analyticsRows);
+    const detectedPatterns = detectRecurringPatterns(analyticsRows);
+    let patterns = detectedPatterns;
+    let recurringConfirmed = 0;
+    let recurringIgnored = 0;
+    try {
+      const preferences = await getRecurringPreferences();
+      patterns = applyRecurringPreferences(detectedPatterns, preferences);
+      recurringConfirmed = preferences.filter((preference) => preference.status === 'confirmed').length;
+      recurringIgnored = preferences.filter((preference) => preference.status === 'ignored').length;
+    } catch {
+      patterns = detectedPatterns;
+    }
+
     const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
     const forecast = latestDate
       ? combineForecasts(buildForecast(patterns, latestDate, 120), expandPlannedEvents(futureEvents, latestDate, 120))
@@ -62,6 +75,10 @@ export default async function DashboardInsights() {
                 ))}
               </div>
             )}
+            <div className="dashboard-recurring-footer">
+              <Link href="/recurrentes" className="text-link">Gestionar recurrentes</Link>
+              <span className="row-meta">{recurringConfirmed} confirmados · {recurringIgnored} ignorados</span>
+            </div>
           </article>
 
           <article className="card">
@@ -77,7 +94,7 @@ export default async function DashboardInsights() {
               <div className="alert-stat"><strong>{source.duplicateGroups}</strong><span>grupos de posibles duplicados</span></div>
               <div className={`alert-stat${liquidity.firstNegativeDate ? ' alert-stat-risk' : ''}`}><strong>{liquidity.firstNegativeDate ? '!' : '✓'}</strong><span>{liquidity.firstNegativeDate ? `riesgo de liquidez ${liquidity.firstNegativeDate}` : 'sin riesgo de saldo negativo a 120 días'}</span></div>
             </div>
-            <p className="metric-note">El control combina movimientos reales, correcciones internas y planificación futura sin modificar la fuente bancaria.</p>
+            <p className="metric-note">El control combina movimientos reales, correcciones internas, recurrentes validados y planificación futura sin modificar la fuente bancaria.</p>
           </article>
         </section>
 
