@@ -2,6 +2,7 @@
 
 import { usePathname } from 'next/navigation';
 import Navigation from './Navigation';
+import ThemeToggle from './ThemeToggle';
 
 export default function AppHeader() {
   const pathname = usePathname();
@@ -11,7 +12,10 @@ export default function AppHeader() {
     <header className="topbar">
       <div className="topbar-inner">
         <div className="brand">Finanzas 3.0</div>
-        <Navigation />
+        <div className="topbar-actions">
+          <Navigation />
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
