@@ -1,4 +1,5 @@
 import { detectQualityIssues } from '../../src/domain/quality-engine';
+import type { BankingSourceRow } from '../../src/domain/source-schema';
 import { getPrivateState, type MovementOverride } from '../../src/private-data/client';
 import { applyOverride, indexOverrides, sourceBoolean, sourceReviewStatus } from '../../src/private-data/merge';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
@@ -7,10 +8,7 @@ import ReviewCenter, { type ReviewIssueView, type ReviewMovement } from './Revie
 
 export const dynamic = 'force-dynamic';
 
-function movementView(
-  row: Awaited<ReturnType<typeof loadValidatedSource>>['rows'][number],
-  override?: MovementOverride,
-): ReviewMovement {
+function movementView(row: BankingSourceRow, override?: MovementOverride): ReviewMovement {
   const merged = applyOverride(row, override);
   return {
     id: row.sourceId,
@@ -44,11 +42,11 @@ export default async function RevisionPage() {
         privateLayerError = true;
       }
 
-      const rowsById = new Map(source.rows.map((row) => [row.sourceId, row]));
+      const rowsById = new Map<string, BankingSourceRow>(source.rows.map((row) => [row.sourceId, row]));
       issues = detectQualityIssues(source.rows).flatMap((issue) => {
         const movements = issue.sourceIds
           .map((sourceId) => rowsById.get(sourceId))
-          .filter((row): row is NonNullable<typeof row> => Boolean(row))
+          .filter((row): row is BankingSourceRow => Boolean(row))
           .map((row) => movementView(row, overrides.get(row.sourceId)));
 
         if (!movements.length) return [];
