@@ -29,6 +29,15 @@
   border-top: 1px solid var(--line);
 }
 .recurring-small { padding: 7px 10px; font-size: 13px; }
+.dashboard-recurring-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
 
 @media (max-width: 620px) {
   .recurring-main { flex-direction: column; gap: 10px; }
@@ -36,4 +45,5 @@
   .recurring-amount-block .state { justify-self: end; }
   .recurring-actions { justify-content: flex-start; }
   .recurring-actions > button { flex: 1 1 calc(50% - 8px); }
+  .dashboard-recurring-footer { align-items: flex-start; flex-direction: column; }
 }
