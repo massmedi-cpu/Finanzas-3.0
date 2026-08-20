@@ -3,7 +3,8 @@ import { getMonthlySummary } from '../../src/domain/finance-engine';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import { getPrivateState } from '../../src/private-data/client';
-import { rowsForAnalytics } from '../../src/private-data/merge';
+import { rowsForAnalytics, rowsForBudgetAndReports } from '../../src/private-data/merge';
+import { getMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
 import BudgetEditor, { type BudgetCategoryView } from './BudgetEditor';
 
 export const dynamic = 'force-dynamic';
@@ -20,19 +21,26 @@ export default async function PresupuestosPage() {
       const source = await loadValidatedSource();
       latestMonth = source.latestMonth;
       let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
+      let splits: MovementSplitRecord[] = [];
       try {
         privateState = await getPrivateState();
       } catch {
         editLayerError = true;
       }
+      try {
+        splits = await getMovementSplits();
+      } catch {
+        splits = [];
+      }
 
       if (latestMonth) {
         const analyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
+        const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
         monthlyIncome = getMonthlySummary(analyticsRows, latestMonth).income;
         const previous = previousMonth(latestMonth);
         const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === latestMonth);
         const previousBudgets = privateState.budgets.filter((budget) => budget.year_month === previous);
-        rows = buildBudgetEnvelopes(analyticsRows, latestMonth, currentBudgets, previousBudgets).map((envelope) => ({
+        rows = buildBudgetEnvelopes(budgetRows, latestMonth, currentBudgets, previousBudgets).map((envelope) => ({
           category: envelope.category,
           spent: envelope.spent,
           transactions: envelope.transactions,
@@ -52,7 +60,7 @@ export default async function PresupuestosPage() {
         <div>
           <div className="eyebrow">Presupuestos</div>
           <h1>Da un trabajo a cada euro</h1>
-          <p className="subtitle">Asigna tus ingresos del mes por categoría, arrastra remanentes cuando tenga sentido y controla el dinero libre antes de gastarlo.</p>
+          <p className="subtitle">Asigna tus ingresos del mes por categoría, arrastra remanentes cuando tenga sentido y controla el dinero libre antes de gastarlo. Los movimientos divididos se reparten entre sus categorías reales.</p>
         </div>
         {latestMonth && <span className="badge">Periodo {latestMonth}</span>}
       </section>
