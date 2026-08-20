@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import './globals.css';
 import './extras.css';
+import './planning.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata = {
