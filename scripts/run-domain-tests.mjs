@@ -1,23 +1,10 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import vm from 'node:vm';
-import * as ts from 'typescript';
-
-function loadFinanceEngine() {
-  const source = fs.readFileSync(new URL('../src/domain/finance-engine.ts', import.meta.url), 'utf8');
-  const compiled = ts.transpileModule(source, {
-    compilerOptions: {
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-      esModuleInterop: true,
-    },
-  }).outputText;
-
-  const module = { exports: {} };
-  const sandbox = { module, exports: module.exports };
-  vm.runInNewContext(compiled, sandbox, { filename: 'finance-engine.js' });
-  return module.exports;
-}
+import {
+  isTransfer,
+  getMonthlySummary,
+  findDuplicateCandidates,
+  getLatestAccountBalances,
+} from '../src/domain/finance-engine.ts';
 
 function row(patch = {}) {
   return {
@@ -46,13 +33,6 @@ function row(patch = {}) {
     ...patch,
   };
 }
-
-const {
-  isTransfer,
-  getMonthlySummary,
-  findDuplicateCandidates,
-  getLatestAccountBalances,
-} = loadFinanceEngine();
 
 assert.equal(isTransfer(row({ movementType: 'Traspaso interno' })), true, 'Traspaso interno debe excluirse del cash flow');
 assert.equal(isTransfer(row({ movementType: 'Transferencia interna' })), true, 'Transferencia interna debe excluirse del cash flow');
