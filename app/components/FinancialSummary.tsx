@@ -1,17 +1,60 @@
+import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
+import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
+import { loadValidatedSource } from '../../src/sync/import-source';
+
 type SummaryItem = {
   label: string;
   value: string;
   note: string;
 };
 
-const items: SummaryItem[] = [
-  { label: 'Dinero disponible', value: '—', note: 'Pendiente de sincronizar datos' },
-  { label: 'Ingresos del mes', value: '—', note: 'Sin datos importados todavía' },
-  { label: 'Gastos del mes', value: '—', note: 'Sin datos importados todavía' },
-  { label: 'Ahorro del mes', value: '—', note: 'Se calculará automáticamente' },
+const euro = new Intl.NumberFormat('es-ES', {
+  style: 'currency',
+  currency: 'EUR',
+});
+
+const emptyItems: SummaryItem[] = [
+  { label: 'Patrimonio conocido', value: '—', note: 'Fuente pendiente de conectar' },
+  { label: 'Ingresos del mes', value: '—', note: 'Sin datos sincronizados' },
+  { label: 'Gastos del mes', value: '—', note: 'Sin datos sincronizados' },
+  { label: 'Flujo neto del mes', value: '—', note: 'Sin datos sincronizados' },
 ];
 
-export default function FinancialSummary() {
+export default async function FinancialSummary() {
+  let items = emptyItems;
+
+  if (isGoogleSheetsConfigured()) {
+    try {
+      const source = await loadValidatedSource();
+      const summary = source.latestMonthSummary;
+
+      items = [
+        {
+          label: 'Patrimonio conocido',
+          value: euro.format(getNetWorthFromKnownBalances(source.rows)),
+          note: `${source.accounts} cuentas con saldo conocido`,
+        },
+        {
+          label: 'Ingresos del mes',
+          value: summary ? euro.format(summary.income) : '—',
+          note: source.latestMonth ? `Periodo ${source.latestMonth}` : 'Sin periodo disponible',
+        },
+        {
+          label: 'Gastos del mes',
+          value: summary ? euro.format(summary.expenses) : '—',
+          note: summary ? `${summary.transactionCount} movimientos en el periodo` : 'Sin movimientos',
+        },
+        {
+          label: 'Flujo neto del mes',
+          value: summary ? euro.format(summary.netCashFlow) : '—',
+          note: `${source.needsReview} movimientos pendientes de revisar`,
+        },
+      ];
+    } catch {
+      items = emptyItems.map((item) => ({ ...item, note: 'La fuente está configurada pero no se pudo validar' }));
+    }
+  }
+
   return (
     <section className="grid grid-4" aria-label="Resumen financiero">
       {items.map((item) => (
