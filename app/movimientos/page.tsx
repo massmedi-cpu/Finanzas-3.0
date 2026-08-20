@@ -2,7 +2,8 @@ import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import { getPrivateState, type MovementOverride } from '../../src/private-data/client';
 import { indexOverrides, sourceBoolean, sourceReviewStatus } from '../../src/private-data/merge';
-import MovementsExplorer, { type MovementView } from './MovementsExplorer';
+import { getMovementSplits, indexMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
+import MovementsExplorer, { type MovementView, type MovementSplitView } from './MovementsExplorer';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,8 +39,19 @@ function toView(
   };
 }
 
+function splitView(record: MovementSplitRecord): MovementSplitView {
+  return {
+    lineNo: Number(record.line_no),
+    amount: Number(record.amount),
+    category: record.category,
+    subcategory: record.subcategory || '',
+    notes: record.notes || '',
+  };
+}
+
 export default async function MovimientosPage() {
   let movements: MovementView[] = [];
+  let initialSplits: Record<string, MovementSplitView[]> = {};
   let sourceError = false;
   let editLayerError = false;
 
@@ -53,6 +65,16 @@ export default async function MovimientosPage() {
       } catch {
         editLayerError = true;
       }
+
+      try {
+        const splits = indexMovementSplits(await getMovementSplits());
+        initialSplits = Object.fromEntries(
+          [...splits.entries()].map(([sourceId, lines]) => [sourceId, lines.map(splitView)]),
+        );
+      } catch {
+        editLayerError = true;
+      }
+
       movements = source.rows.map((row) => toView(row, overrides.get(row.sourceId))).sort((a, b) => b.date.localeCompare(a.date));
     } catch {
       sourceError = true;
@@ -65,7 +87,7 @@ export default async function MovimientosPage() {
         <div>
           <div className="eyebrow">Movimientos</div>
           <h1>Operaciones bancarias</h1>
-          <p className="subtitle">Busca, categoriza, anota y concilia en tu copia de trabajo. La hoja bancaria original permanece siempre intacta.</p>
+          <p className="subtitle">Busca, categoriza, divide, anota y concilia en tu copia de trabajo. La hoja bancaria original permanece siempre intacta.</p>
         </div>
         {movements.length > 0 && <span className="badge">{movements.length.toLocaleString('es-ES')} movimientos</span>}
       </section>
@@ -83,12 +105,12 @@ export default async function MovimientosPage() {
             <div className="status-panel status-warning">
               <div>
                 <div className="status-title">La capa editable no está disponible temporalmente</div>
-                <div className="status-copy">Puedes consultar la fuente, pero los ajustes internos no se mostrarán hasta recuperar la conexión.</div>
+                <div className="status-copy">Puedes consultar la fuente, pero algunos ajustes internos no se mostrarán hasta recuperar la conexión.</div>
               </div>
             </div>
           )}
           {movements.length > 0 ? (
-            <MovementsExplorer rows={movements} />
+            <MovementsExplorer rows={movements} initialSplits={initialSplits} />
           ) : (
             <section className="card">
               <div className="empty">Los movimientos aparecerán cuando exista una fuente bancaria válida.</div>
