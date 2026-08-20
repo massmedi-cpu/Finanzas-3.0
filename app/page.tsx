@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { APP_VERSION_LABEL } from '../src/version';
 import DashboardInsights from './components/DashboardInsights';
 import FinancialSummary from './components/FinancialSummary';
 import SourceHealth from './components/SourceHealth';
@@ -16,7 +17,7 @@ export default function Home() {
             Finanzas 3.0 reúne control mensual, movimientos, presupuestos, patrimonio, previsiones, objetivos e informes sobre una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V2.0.1</span>
+        <span className="badge">{APP_VERSION_LABEL}</span>
       </section>
 
       <SourceHealth />
