@@ -1,6 +1,6 @@
 {
   "name": "finanzas-3-0",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,7 +9,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "googleapis": "latest",
     "next": "latest",
     "react": "latest",
     "react-dom": "latest"
