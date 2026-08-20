@@ -5,6 +5,7 @@ import './planning.css';
 import './recurring.css';
 import './budget.css';
 import './review.css';
+import './reports.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata = {
