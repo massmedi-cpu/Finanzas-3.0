@@ -1,18 +1,26 @@
-export default function FinancialSummary() {
-  const items = [
-    ['Dinero disponible', '0,00 €'],
-    ['Ahorro mensual', '0,00 €'],
-    ['Previsión 30 días', '0,00 €'],
-  ];
+type SummaryItem = {
+  label: string;
+  value: string;
+  note: string;
+};
 
+const items: SummaryItem[] = [
+  { label: 'Dinero disponible', value: '—', note: 'Pendiente de sincronizar datos' },
+  { label: 'Ingresos del mes', value: '—', note: 'Sin datos importados todavía' },
+  { label: 'Gastos del mes', value: '—', note: 'Sin datos importados todavía' },
+  { label: 'Ahorro del mes', value: '—', note: 'Se calculará automáticamente' },
+];
+
+export default function FinancialSummary() {
   return (
-    <div className="grid gap-4 md:grid-cols-3">
-      {items.map(([title, value]) => (
-        <article key={title} className="rounded-xl bg-white p-5 shadow">
-          <h3 className="text-sm text-slate-500">{title}</h3>
-          <p className="mt-2 text-2xl font-semibold">{value}</p>
+    <section className="grid grid-4" aria-label="Resumen financiero">
+      {items.map((item) => (
+        <article key={item.label} className="card">
+          <div className="metric-label">{item.label}</div>
+          <div className="metric-value">{item.value}</div>
+          <p className="metric-note">{item.note}</p>
         </article>
       ))}
-    </div>
+    </section>
   );
 }
