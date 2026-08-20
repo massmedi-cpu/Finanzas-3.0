@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import ts from 'typescript';
+import * as ts from 'typescript';
 
 function loadFinanceEngine() {
   const source = fs.readFileSync(new URL('../src/domain/finance-engine.ts', import.meta.url), 'utf8');
