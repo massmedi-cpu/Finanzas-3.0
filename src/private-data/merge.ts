@@ -25,8 +25,8 @@ export function applyOverride(row: BankingSourceRow, override?: MovementOverride
     category: override.category || row.category,
     subcategory: override.subcategory || row.subcategory,
     merchantOrCounterparty: override.merchant || row.merchantOrCounterparty,
-    notes: override.notes || row.notes,
-    reconciled: override.reconciled ? 'Sí' : row.reconciled,
+    notes: override.notes ?? row.notes,
+    reconciled: override.reconciled ? 'Sí' : 'No',
     review: override.review_status === 'pending' ? 'Sí' : 'No',
   };
 }
