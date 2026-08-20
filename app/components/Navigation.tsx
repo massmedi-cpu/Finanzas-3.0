@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 
 const links = [
   ['/', 'Inicio'],
@@ -13,6 +13,13 @@ const links = [
 
 export default function Navigation() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function logout() {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.replace('/login');
+    router.refresh();
+  }
 
   return (
     <nav className="nav" aria-label="Navegación principal">
@@ -30,6 +37,7 @@ export default function Navigation() {
           </Link>
         );
       })}
+      <button type="button" className="nav-link nav-button" onClick={logout}>Salir</button>
     </nav>
   );
 }
