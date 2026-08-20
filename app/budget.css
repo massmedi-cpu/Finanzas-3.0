@@ -1,0 +1,33 @@
+.budget-values-v2 {
+  grid-template-columns: minmax(130px, 1fr) minmax(130px, .85fr) minmax(150px, auto) auto;
+}
+
+.budget-rollover {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.budget-rollover input {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--accent);
+}
+
+@media (max-width: 1100px) {
+  .budget-values-v2 { grid-template-columns: repeat(2, minmax(130px, 1fr)); }
+  .budget-save { width: 100%; }
+}
+
+@media (max-width: 620px) {
+  .budget-values-v2 { grid-template-columns: 1fr; }
+}
