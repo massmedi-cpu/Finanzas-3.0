@@ -1,27 +1,54 @@
+import Link from 'next/link';
 import FinancialSummary from './components/FinancialSummary';
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-slate-50 p-6 text-slate-900">
-      <section className="mx-auto max-w-6xl space-y-6">
-        <header>
-          <h1 className="text-3xl font-bold">Finanzas Alberto</h1>
-          <p className="mt-2 text-slate-600">Centro de control financiero personal</p>
-        </header>
+    <main className="page">
+      <section className="page-header">
+        <div>
+          <div className="eyebrow">Centro de control</div>
+          <h1>Tu situación financiera, clara y útil</h1>
+          <p className="subtitle">
+            Esta pantalla mostrará tus datos reales en cuanto la fuente bancaria quede sincronizada. No se usan cifras inventadas.
+          </p>
+        </div>
+        <span className="badge">V1.1.0 · En construcción</span>
+      </section>
 
-        <FinancialSummary />
+      <FinancialSummary />
 
-        <nav className="grid gap-4 md:grid-cols-4">
-          <button className="rounded-xl bg-white p-5 text-left shadow">Movimientos</button>
-          <button className="rounded-xl bg-white p-5 text-left shadow">Cuentas</button>
-          <button className="rounded-xl bg-white p-5 text-left shadow">Presupuestos</button>
-          <button className="rounded-xl bg-white p-5 text-left shadow">Previsiones</button>
-        </nav>
+      <section className="grid grid-2" style={{ marginTop: 16 }}>
+        <article className="card">
+          <h2 className="section-title">Próximos movimientos</h2>
+          <div className="empty">
+            Todavía no hay movimientos futuros disponibles. La previsión se activará cuando existan datos sincronizados.
+          </div>
+        </article>
 
-        <section className="rounded-xl bg-white p-5 shadow">
-          <h2 className="text-xl font-semibold">Estado financiero</h2>
-          <p className="mt-2 text-slate-600">Base preparada para conectar datos reales de cuentas y movimientos.</p>
-        </section>
+        <article className="card">
+          <h2 className="section-title">Alertas</h2>
+          <div className="empty">
+            Sin alertas por ahora. Aquí aparecerán duplicados, gastos anómalos y riesgos de liquidez.
+          </div>
+        </article>
+      </section>
+
+      <section className="grid grid-3" style={{ marginTop: 16 }}>
+        <Link href="/movimientos" className="card">
+          <div className="metric-label">Movimientos</div>
+          <div className="metric-value" style={{ fontSize: 22 }}>Revisar operaciones</div>
+          <p className="metric-note">Buscar, filtrar, categorizar y revisar.</p>
+        </Link>
+        <Link href="/presupuestos" className="card">
+          <div className="metric-label">Presupuestos</div>
+          <div className="metric-value" style={{ fontSize: 22 }}>Control mensual</div>
+          <p className="metric-note">Asignación, límites y dinero restante.</p>
+        </Link>
+        <Link href="/prevision" className="card">
+          <div className="metric-label">Previsión</div>
+          <div className="metric-value" style={{ fontSize: 22 }}>Mirar hacia delante</div>
+          <p className="metric-note">Pagos, ingresos y saldo futuro.</p>
+        </Link>
       </section>
     </main>
   );
