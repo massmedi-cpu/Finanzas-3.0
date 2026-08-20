@@ -27,13 +27,11 @@ export default async function FinancialSummary() {
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-      try {
-        overrides = (await getPrivateState()).overrides;
-      } catch {
-        overrides = [];
-      }
+      const [source, state] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState().catch(() => null),
+      ]);
+      const overrides = state?.overrides ?? [];
 
       const analyticsRows = rowsForAnalytics(source.rows, overrides);
       const latestMonth = source.latestMonth;
