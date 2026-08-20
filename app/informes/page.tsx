@@ -9,7 +9,8 @@ import {
   type YearComparison,
 } from '../../src/domain/report-engine';
 import { getPrivateState } from '../../src/private-data/client';
-import { rowsForAnalytics } from '../../src/private-data/merge';
+import { rowsForBudgetAndReports } from '../../src/private-data/merge';
+import { getMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import CashFlowChart from './CashFlowChart';
@@ -37,13 +38,17 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
   let comparison: YearComparison | null = null;
   let previousYear = '';
   let sourceError = false;
+  let splitCount = 0;
 
   if (isGoogleSheetsConfigured()) {
     try {
       const source = await loadValidatedSource();
       let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
+      let splits: MovementSplitRecord[] = [];
       try { overrides = (await getPrivateState()).overrides; } catch { overrides = []; }
-      const rows = rowsForAnalytics(source.rows, overrides);
+      try { splits = await getMovementSplits(); } catch { splits = []; }
+      splitCount = new Set(splits.map((split) => split.source_id)).size;
+      const rows = rowsForBudgetAndReports(source.rows, overrides, splits);
       availableYears = getAvailableYears(rows);
       selectedYear = params.year && availableYears.includes(params.year) ? params.year : (availableYears[0] || '');
 
@@ -77,9 +82,9 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
         <div>
           <div className="eyebrow">Informes</div>
           <h1>Entiende cómo evoluciona tu dinero</h1>
-          <p className="subtitle">Cash flow mensual, acumulado, trimestres y categorías sobre movimientos reales. Traspasos y exclusiones internas quedan fuera del análisis.</p>
+          <p className="subtitle">Cash flow mensual, acumulado, trimestres y categorías sobre movimientos reales. Traspasos y exclusiones internas quedan fuera del análisis; las compras divididas se imputan a sus categorías correctas.</p>
         </div>
-        {selectedYear && <span className="badge">V1.8.0 · {selectedYear}</span>}
+        {selectedYear && <span className="badge">V1.9.0 · {selectedYear}</span>}
       </section>
 
       {sourceError ? (
@@ -92,6 +97,7 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
             {availableYears.map((year) => (
               <Link key={year} href={`/informes?year=${year}`} className={`year-chip${year === selectedYear ? ' year-chip-active' : ''}`}>{year}</Link>
             ))}
+            {splitCount > 0 && <span className="badge">{splitCount} movimientos divididos aplicados</span>}
           </nav>
 
           <section className="grid grid-4">
@@ -146,7 +152,7 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
                 <div className="category-report-list">
                   {categories.map((item) => (
                     <div className="category-report-row" key={item.category}>
-                      <div className="category-report-head"><div><div className="row-title">{item.category}</div><div className="row-meta">{item.transactions} movimientos · {percent.format(item.share)}%</div></div><strong>{euro.format(item.amount)}</strong></div>
+                      <div className="category-report-head"><div><div className="row-title">{item.category}</div><div className="row-meta">{item.transactions} imputaciones · {percent.format(item.share)}%</div></div><strong>{euro.format(item.amount)}</strong></div>
                       <div className="progress"><span style={{ width: `${Math.max(2, (item.amount / maxCategory) * 100)}%` }} /></div>
                     </div>
                   ))}

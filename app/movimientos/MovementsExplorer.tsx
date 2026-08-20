@@ -5,6 +5,14 @@ import { useRouter } from 'next/navigation';
 
 export type ReviewStatus = 'pending' | 'reviewed' | 'ignored';
 
+export interface MovementSplitView {
+  lineNo: number;
+  amount: number;
+  category: string;
+  subcategory: string;
+  notes: string;
+}
+
 export interface MovementView {
   id: string;
   date: string;
@@ -29,6 +37,13 @@ export interface MovementView {
   hasOverride: boolean;
 }
 
+interface SplitDraft {
+  amount: string;
+  category: string;
+  subcategory: string;
+  notes: string;
+}
+
 const euro = new Intl.NumberFormat('es-ES', {
   style: 'currency',
   currency: 'EUR',
@@ -38,9 +53,35 @@ function normalize(value: string): string {
   return value.toLocaleLowerCase('es-ES').normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
+function parseAmount(value: string): number {
+  const normalized = value.trim().replace(/\s/g, '').replace(',', '.');
+  const number = Number(normalized);
+  return Number.isFinite(number) ? Math.abs(number) : 0;
+}
+
+function createSplitDraft(row: MovementView, existing: MovementSplitView[]): SplitDraft[] {
+  if (existing.length >= 2) {
+    return existing.map((line) => ({
+      amount: Math.abs(line.amount).toFixed(2).replace('.', ','),
+      category: line.category,
+      subcategory: line.subcategory,
+      notes: line.notes,
+    }));
+  }
+
+  const total = Math.abs(row.amount ?? 0);
+  const first = Math.round((total / 2) * 100) / 100;
+  const second = Math.round((total - first) * 100) / 100;
+  return [
+    { amount: first.toFixed(2).replace('.', ','), category: row.category, subcategory: row.subcategory, notes: '' },
+    { amount: second.toFixed(2).replace('.', ','), category: '', subcategory: '', notes: '' },
+  ];
+}
+
+export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: MovementView[]; initialSplits?: Record<string, MovementSplitView[]> }) {
   const router = useRouter();
   const [localRows, setLocalRows] = useState(rows);
+  const [splits, setSplits] = useState<Record<string, MovementSplitView[]>>(initialSplits);
   const [query, setQuery] = useState('');
   const [account, setAccount] = useState('all');
   const [status, setStatus] = useState('all');
@@ -54,16 +95,21 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
   const [excluded, setExcluded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [splitSelected, setSplitSelected] = useState<MovementView | null>(null);
+  const [splitLines, setSplitLines] = useState<SplitDraft[]>([]);
+  const [splitSaving, setSplitSaving] = useState(false);
+  const [splitError, setSplitError] = useState('');
 
   const accounts = useMemo(
     () => [...new Set(localRows.map((row) => row.account).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
     [localRows],
   );
 
-  const categories = useMemo(
-    () => [...new Set(localRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es')),
-    [localRows],
-  );
+  const categories = useMemo(() => {
+    const values = new Set(localRows.map((row) => row.category).filter(Boolean));
+    Object.values(splits).flat().forEach((line) => line.category && values.add(line.category));
+    return [...values].sort((a, b) => a.localeCompare(b, 'es'));
+  }, [localRows, splits]);
 
   const filtered = useMemo(() => {
     const needle = normalize(query.trim());
@@ -74,6 +120,7 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
       if (status === 'ok' && row.reviewStatus === 'pending') return false;
 
       if (!needle) return true;
+      const splitText = (splits[row.id] || []).map((line) => `${line.category} ${line.subcategory} ${line.amount}`).join(' ');
       const haystack = normalize([
         row.date,
         row.account,
@@ -84,11 +131,12 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
         row.merchant,
         row.channel,
         row.notes,
+        splitText,
         row.amount === null ? '' : String(row.amount).replace('.', ','),
       ].join(' '));
       return haystack.includes(needle);
     });
-  }, [account, localRows, query, status]);
+  }, [account, localRows, query, splits, status]);
 
   function openEditor(row: MovementView) {
     setSelected(row);
@@ -183,6 +231,115 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
     }
   }
 
+  function openSplitEditor(row: MovementView) {
+    if (row.amount === null || row.amount === 0) return;
+    setSplitSelected(row);
+    setSplitLines(createSplitDraft(row, splits[row.id] || []));
+    setSplitError('');
+  }
+
+  function closeSplitEditor() {
+    if (splitSaving) return;
+    setSplitSelected(null);
+    setSplitError('');
+  }
+
+  function updateSplitLine(index: number, patch: Partial<SplitDraft>) {
+    setSplitLines((current) => current.map((line, lineIndex) => lineIndex === index ? { ...line, ...patch } : line));
+  }
+
+  function addSplitLine() {
+    if (splitLines.length >= 12) return;
+    setSplitLines((current) => [...current, { amount: '', category: '', subcategory: '', notes: '' }]);
+  }
+
+  function removeSplitLine(index: number) {
+    if (splitLines.length <= 2) return;
+    setSplitLines((current) => current.filter((_, lineIndex) => lineIndex !== index));
+  }
+
+  async function saveSplit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!splitSelected || splitSelected.amount === null) return;
+
+    const target = Math.abs(splitSelected.amount);
+    const total = splitLines.reduce((sum, line) => sum + parseAmount(line.amount), 0);
+    if (splitLines.some((line) => !line.category.trim() || parseAmount(line.amount) <= 0)) {
+      setSplitError('Cada parte necesita una categoría y un importe mayor que cero.');
+      return;
+    }
+    if (Math.abs(total - target) > 0.01) {
+      setSplitError(`Las partes suman ${euro.format(total)}, pero el movimiento es de ${euro.format(target)}.`);
+      return;
+    }
+
+    setSplitSaving(true);
+    setSplitError('');
+    const sign = Math.sign(splitSelected.amount) || 1;
+
+    try {
+      const response = await fetch('/api/private/split', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          sourceId: splitSelected.id,
+          sourceAmount: splitSelected.amount,
+          lines: splitLines.map((line) => ({
+            amount: Math.round(parseAmount(line.amount) * sign * 100) / 100,
+            category: line.category.trim(),
+            subcategory: line.subcategory.trim(),
+            notes: line.notes.trim(),
+          })),
+        }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.ok) throw new Error(body.error || 'split-save-failed');
+
+      const saved: MovementSplitView[] = splitLines.map((line, index) => ({
+        lineNo: index + 1,
+        amount: Math.round(parseAmount(line.amount) * sign * 100) / 100,
+        category: line.category.trim(),
+        subcategory: line.subcategory.trim(),
+        notes: line.notes.trim(),
+      }));
+      setSplits((current) => ({ ...current, [splitSelected.id]: saved }));
+      setSplitSelected(null);
+      router.refresh();
+    } catch {
+      setSplitError('No se ha podido guardar la división. El movimiento original sigue intacto.');
+    } finally {
+      setSplitSaving(false);
+    }
+  }
+
+  async function removeSplit() {
+    if (!splitSelected || splitSaving || !(splits[splitSelected.id]?.length >= 2)) return;
+    if (!window.confirm('¿Eliminar esta división? El movimiento volverá a analizarse con su categoría principal.')) return;
+    setSplitSaving(true);
+    setSplitError('');
+
+    try {
+      const response = await fetch(`/api/private/split?sourceId=${encodeURIComponent(splitSelected.id)}`, { method: 'DELETE' });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok || !body.ok) throw new Error('split-delete-failed');
+      setSplits((current) => {
+        const next = { ...current };
+        delete next[splitSelected.id];
+        return next;
+      });
+      setSplitSelected(null);
+      router.refresh();
+    } catch {
+      setSplitError('No se ha podido eliminar la división.');
+    } finally {
+      setSplitSaving(false);
+    }
+  }
+
+  const splitTotal = splitLines.reduce((sum, line) => sum + parseAmount(line.amount), 0);
+  const splitTarget = Math.abs(splitSelected?.amount ?? 0);
+  const splitDifference = Math.round((splitTarget - splitTotal) * 100) / 100;
+
   return (
     <>
       <div className="toolbar">
@@ -231,30 +388,39 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((row) => (
-                  <tr key={row.id || `${row.date}-${row.account}-${row.concept}-${row.amount}`}>
-                    <td className="date-cell">{row.date}</td>
-                    <td>
-                      <div className="table-primary">{row.merchant || row.concept || 'Sin concepto'} {row.hasOverride && <span className="edited-dot" title="Con ajustes internos">●</span>}</div>
-                      <div className="table-secondary">{row.merchant && row.concept !== row.merchant ? row.concept : row.channel}</div>
-                    </td>
-                    <td>
-                      <div className="table-primary">{row.category || 'Sin categoría'}</div>
-                      <div className="table-secondary">{row.subcategory}</div>
-                    </td>
-                    <td>{row.account}</td>
-                    <td className={`numeric amount ${row.amount !== null && row.amount < 0 ? 'amount-negative' : 'amount-positive'}`}>
-                      {row.amount === null ? '—' : euro.format(row.amount)}
-                    </td>
-                    <td className="numeric">{row.balance === null ? '—' : euro.format(row.balance)}</td>
-                    <td>
-                      {row.reviewStatus === 'pending'
-                        ? <span className="state state-review">Revisar</span>
-                        : <span className="state state-ok">{row.reviewStatus === 'ignored' ? 'Ignorado' : 'Revisado'}</span>}
-                    </td>
-                    <td className="numeric"><button type="button" className="small-button" onClick={() => openEditor(row)}>Editar</button></td>
-                  </tr>
-                ))}
+                {filtered.map((row) => {
+                  const rowSplits = splits[row.id] || [];
+                  return (
+                    <tr key={row.id || `${row.date}-${row.account}-${row.concept}-${row.amount}`}>
+                      <td className="date-cell">{row.date}</td>
+                      <td>
+                        <div className="table-primary">{row.merchant || row.concept || 'Sin concepto'} {row.hasOverride && <span className="edited-dot" title="Con ajustes internos">●</span>}</div>
+                        <div className="table-secondary">{row.merchant && row.concept !== row.merchant ? row.concept : row.channel}</div>
+                      </td>
+                      <td>
+                        {rowSplits.length >= 2 ? (
+                          <><div className="table-primary split-label">Dividido en {rowSplits.length} partes</div><div className="table-secondary">{rowSplits.map((line) => line.category).join(' · ')}</div></>
+                        ) : (
+                          <><div className="table-primary">{row.category || 'Sin categoría'}</div><div className="table-secondary">{row.subcategory}</div></>
+                        )}
+                      </td>
+                      <td>{row.account}</td>
+                      <td className={`numeric amount ${row.amount !== null && row.amount < 0 ? 'amount-negative' : 'amount-positive'}`}>
+                        {row.amount === null ? '—' : euro.format(row.amount)}
+                      </td>
+                      <td className="numeric">{row.balance === null ? '—' : euro.format(row.balance)}</td>
+                      <td>
+                        {row.reviewStatus === 'pending'
+                          ? <span className="state state-review">Revisar</span>
+                          : <span className="state state-ok">{row.reviewStatus === 'ignored' ? 'Ignorado' : 'Revisado'}</span>}
+                      </td>
+                      <td className="numeric movement-actions">
+                        {row.amount !== null && row.amount !== 0 && <button type="button" className="small-button" onClick={() => openSplitEditor(row)}>{rowSplits.length >= 2 ? 'División' : 'Dividir'}</button>}
+                        <button type="button" className="small-button" onClick={() => openEditor(row)}>Editar</button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -319,6 +485,55 @@ export default function MovementsExplorer({ rows }: { rows: MovementView[] }) {
                 <div className="editor-actions-right">
                   <button type="button" className="secondary-button" onClick={closeEditor} disabled={saving}>Cancelar</button>
                   <button type="submit" className="primary-inline-button" disabled={saving}>{saving ? 'Guardando…' : 'Guardar cambios'}</button>
+                </div>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {splitSelected && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && closeSplitEditor()}>
+          <section className="editor-panel split-editor-panel" role="dialog" aria-modal="true" aria-labelledby="split-editor-title">
+            <div className="editor-header">
+              <div>
+                <div className="eyebrow">División de movimiento</div>
+                <h2 id="split-editor-title" className="editor-title">Repartir entre categorías</h2>
+                <div className="row-meta">{splitSelected.date} · {splitSelected.merchant || splitSelected.concept} · {euro.format(Math.abs(splitSelected.amount ?? 0))}</div>
+              </div>
+              <button type="button" className="icon-button" onClick={closeSplitEditor} aria-label="Cerrar">×</button>
+            </div>
+
+            <div className="editor-source-note">La suma de las partes debe coincidir exactamente con el movimiento. El importe y el saldo bancario originales no se modifican.</div>
+
+            <form onSubmit={saveSplit} className="form-stack">
+              <div className="split-summary">
+                <div><span>Movimiento</span><strong>{euro.format(splitTarget)}</strong></div>
+                <div><span>Asignado</span><strong>{euro.format(splitTotal)}</strong></div>
+                <div className={Math.abs(splitDifference) <= 0.01 ? 'split-balanced' : 'split-unbalanced'}><span>Por repartir</span><strong>{euro.format(splitDifference)}</strong></div>
+              </div>
+
+              <div className="split-lines">
+                {splitLines.map((line, index) => (
+                  <div className="split-line" key={index}>
+                    <div className="split-line-number">{index + 1}</div>
+                    <label className="form-field split-amount-field"><span>Importe</span><input className="control" inputMode="decimal" value={line.amount} onChange={(event) => updateSplitLine(index, { amount: event.target.value })} /></label>
+                    <label className="form-field"><span>Categoría</span><input className="control" list="split-categories" value={line.category} onChange={(event) => updateSplitLine(index, { category: event.target.value })} /></label>
+                    <label className="form-field"><span>Subcategoría</span><input className="control" value={line.subcategory} onChange={(event) => updateSplitLine(index, { subcategory: event.target.value })} /></label>
+                    <button type="button" className="icon-button split-remove" onClick={() => removeSplitLine(index)} disabled={splitLines.length <= 2 || splitSaving} aria-label={`Eliminar parte ${index + 1}`}>×</button>
+                  </div>
+                ))}
+              </div>
+              <datalist id="split-categories">{categories.map((item) => <option value={item} key={item} />)}</datalist>
+
+              <button type="button" className="secondary-button split-add" onClick={addSplitLine} disabled={splitLines.length >= 12 || splitSaving}>+ Añadir otra parte</button>
+              {splitError && <div className="form-error" role="alert">{splitError}</div>}
+
+              <div className="editor-actions">
+                {(splits[splitSelected.id]?.length || 0) >= 2 && <button type="button" className="danger-ghost-button" onClick={removeSplit} disabled={splitSaving}>Eliminar división</button>}
+                <div className="editor-actions-right">
+                  <button type="button" className="secondary-button" onClick={closeSplitEditor} disabled={splitSaving}>Cancelar</button>
+                  <button type="submit" className="primary-inline-button" disabled={splitSaving || Math.abs(splitDifference) > 0.01}>{splitSaving ? 'Guardando…' : 'Guardar división'}</button>
                 </div>
               </div>
             </form>
