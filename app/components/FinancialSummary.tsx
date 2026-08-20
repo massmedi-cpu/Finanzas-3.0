@@ -36,10 +36,11 @@ export default async function FinancialSummary() {
       }
 
       const analyticsRows = rowsForAnalytics(source.rows, overrides);
-      const summary = source.latestMonth ? getMonthlySummary(analyticsRows, source.latestMonth) : null;
+      const latestMonth = source.latestMonth;
+      const summary = latestMonth ? getMonthlySummary(analyticsRows, latestMonth) : null;
       const overrideMap = indexOverrides(overrides);
-      const pendingReview = source.latestMonth
-        ? source.rows.filter((row) => row.date.startsWith(source.latestMonth) && !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length
+      const pendingReview = latestMonth
+        ? source.rows.filter((row) => row.date.startsWith(latestMonth) && !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length
         : 0;
 
       items = [
@@ -51,7 +52,7 @@ export default async function FinancialSummary() {
         {
           label: 'Ingresos del mes',
           value: summary ? euro.format(summary.income) : '—',
-          note: source.latestMonth ? `Periodo ${source.latestMonth}` : 'Sin periodo disponible',
+          note: latestMonth ? `Periodo ${latestMonth}` : 'Sin periodo disponible',
         },
         {
           label: 'Gastos del mes',
