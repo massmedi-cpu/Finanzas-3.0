@@ -13,10 +13,10 @@ export default function Home() {
           <div className="eyebrow">Centro de control</div>
           <h1>Tu dinero, organizado para decidir mejor</h1>
           <p className="subtitle">
-            Controla movimientos, divisiones por categoría, calidad de datos, presupuestos, recurrentes, objetivos, previsiones e informes desde una copia privada sin modificar nunca la fuente bancaria original.
+            Finanzas 3.0 reúne control mensual, movimientos, presupuestos, patrimonio, previsiones, objetivos e informes sobre una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V1.9.0</span>
+        <span className="badge">V2.0.0</span>
       </section>
 
       <SourceHealth />
@@ -24,6 +24,12 @@ export default function Home() {
       <DashboardInsights />
 
       <section className="grid grid-3 section-gap">
+        <Link href="/plan" className="card action-card action-card-primary">
+          <div className="metric-label">Plan financiero</div>
+          <div className="action-title">Control mensual 360º</div>
+          <p className="metric-note">Presupuesto, cash flow, patrimonio, previsión, objetivos y análisis explicable en una sola vista.</p>
+          <span className="action-arrow" aria-hidden="true">→</span>
+        </Link>
         <Link href="/movimientos" className="card action-card">
           <div className="metric-label">Movimientos</div>
           <div className="action-title">Editar y dividir operaciones</div>
@@ -39,7 +45,7 @@ export default function Home() {
         <Link href="/presupuestos" className="card action-card">
           <div className="metric-label">Presupuestos</div>
           <div className="action-title">Dar trabajo a cada euro</div>
-          <p className="metric-note">Asigna ingresos por sobres, controla lo libre y arrastra remanentes.</p>
+          <p className="metric-note">Elige mes, asigna ingresos por sobres, controla lo libre y arrastra remanentes.</p>
           <span className="action-arrow" aria-hidden="true">→</span>
         </Link>
         <Link href="/recurrentes" className="card action-card">

@@ -1,17 +1,21 @@
+import Link from 'next/link';
 import { buildBudgetEnvelopes, previousMonth } from '../../src/domain/budget-engine';
 import { getMonthlySummary } from '../../src/domain/finance-engine';
+import { getAvailableMonths } from '../../src/domain/report-engine';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import { getPrivateState } from '../../src/private-data/client';
-import { rowsForAnalytics, rowsForBudgetAndReports } from '../../src/private-data/merge';
+import { rowsForBudgetAndReports } from '../../src/private-data/merge';
 import { getMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
 import BudgetEditor, { type BudgetCategoryView } from './BudgetEditor';
 
 export const dynamic = 'force-dynamic';
 
-export default async function PresupuestosPage() {
+export default async function PresupuestosPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
+  const params = await searchParams;
   let rows: BudgetCategoryView[] = [];
-  let latestMonth: string | null = null;
+  let selectedMonth: string | null = null;
+  let availableMonths: string[] = [];
   let monthlyIncome = 0;
   let sourceError = false;
   let editLayerError = false;
@@ -19,7 +23,6 @@ export default async function PresupuestosPage() {
   if (isGoogleSheetsConfigured()) {
     try {
       const source = await loadValidatedSource();
-      latestMonth = source.latestMonth;
       let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
       let splits: MovementSplitRecord[] = [];
       try {
@@ -33,14 +36,16 @@ export default async function PresupuestosPage() {
         splits = [];
       }
 
-      if (latestMonth) {
-        const analyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
-        const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
-        monthlyIncome = getMonthlySummary(analyticsRows, latestMonth).income;
-        const previous = previousMonth(latestMonth);
-        const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === latestMonth);
+      const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
+      availableMonths = getAvailableMonths(budgetRows);
+      selectedMonth = params.month && availableMonths.includes(params.month) ? params.month : (availableMonths[0] || source.latestMonth);
+
+      if (selectedMonth) {
+        monthlyIncome = getMonthlySummary(budgetRows, selectedMonth).income;
+        const previous = previousMonth(selectedMonth);
+        const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === selectedMonth);
         const previousBudgets = privateState.budgets.filter((budget) => budget.year_month === previous);
-        rows = buildBudgetEnvelopes(budgetRows, latestMonth, currentBudgets, previousBudgets).map((envelope) => ({
+        rows = buildBudgetEnvelopes(budgetRows, selectedMonth, currentBudgets, previousBudgets).map((envelope) => ({
           category: envelope.category,
           spent: envelope.spent,
           transactions: envelope.transactions,
@@ -60,10 +65,16 @@ export default async function PresupuestosPage() {
         <div>
           <div className="eyebrow">Presupuestos</div>
           <h1>Da un trabajo a cada euro</h1>
-          <p className="subtitle">Asigna tus ingresos del mes por categoría, arrastra remanentes cuando tenga sentido y controla el dinero libre antes de gastarlo. Los movimientos divididos se reparten entre sus categorías reales.</p>
+          <p className="subtitle">Asigna tus ingresos por categoría, revisa meses anteriores y controla remanentes y dinero libre. Los movimientos divididos se reparten entre sus categorías reales.</p>
         </div>
-        {latestMonth && <span className="badge">Periodo {latestMonth}</span>}
+        {selectedMonth && <span className="badge">Periodo {selectedMonth}</span>}
       </section>
+
+      {availableMonths.length > 0 && (
+        <nav className="month-selector" aria-label="Seleccionar mes del presupuesto">
+          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
+        </nav>
+      )}
 
       {sourceError ? (
         <div className="status-panel status-danger">
@@ -72,7 +83,7 @@ export default async function PresupuestosPage() {
             <div className="status-copy">El análisis se detiene antes de mostrar cifras incompletas.</div>
           </div>
         </div>
-      ) : !latestMonth ? (
+      ) : !selectedMonth ? (
         <section className="card"><div className="empty">Los presupuestos se activarán cuando exista histórico bancario sincronizado.</div></section>
       ) : (
         <>
@@ -85,7 +96,7 @@ export default async function PresupuestosPage() {
             </div>
           )}
           {rows.length > 0 ? (
-            <BudgetEditor yearMonth={latestMonth} rows={rows} monthlyIncome={monthlyIncome} />
+            <BudgetEditor yearMonth={selectedMonth} rows={rows} monthlyIncome={monthlyIncome} />
           ) : (
             <section className="card"><div className="empty">No hay gastos ni presupuestos en este periodo.</div></section>
           )}

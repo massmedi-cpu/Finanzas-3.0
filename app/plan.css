@@ -1,0 +1,116 @@
+.action-card-primary {
+  border-color: rgba(19, 43, 70, .22);
+  background: linear-gradient(145deg, var(--surface) 0%, #f3f7fb 100%);
+}
+.action-card-primary .metric-label,
+.action-card-primary .action-arrow { color: var(--accent); }
+.month-selector {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 14px;
+  scrollbar-width: thin;
+}
+.month-chip {
+  flex: 0 0 auto;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  text-decoration: none;
+  background: var(--surface);
+  font-size: 13px;
+  font-weight: 750;
+}
+.month-chip:hover { border-color: var(--accent); color: var(--accent); }
+.month-chip-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.plan-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 16px;
+}
+.plan-budget-grid > div,
+.plan-networth-head > div {
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-2, #f8fafc);
+}
+.plan-budget-grid span,
+.plan-networth-head span {
+  display: block;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 750;
+  margin-bottom: 5px;
+}
+.plan-budget-grid strong,
+.plan-networth-head strong { font-size: 17px; }
+.plan-risk strong { color: var(--danger); }
+.plan-envelope-list,
+.plan-upcoming-list,
+.plan-goal-list { margin-top: 14px; }
+.liquidity-banner {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  margin: 16px 0 10px;
+  padding: 14px;
+  border-radius: 12px;
+  background: var(--success-soft, #eaf7f0);
+  border: 1px solid rgba(35,122,87,.18);
+}
+.liquidity-banner span { color: var(--muted); font-size: 13px; }
+.liquidity-banner strong { color: var(--success); }
+.liquidity-banner-risk { background: #fff3f0; border-color: #f0c4b9; }
+.liquidity-banner-risk strong { color: var(--danger); }
+.plan-networth-head {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 15px 0 8px;
+}
+.networth-chart-wrap { overflow-x: auto; }
+.networth-chart { width: 100%; min-width: 680px; height: auto; }
+.networth-line { stroke: var(--accent); stroke-width: 3; stroke-linejoin: round; stroke-linecap: round; }
+.networth-dot { fill: var(--surface); stroke: var(--accent); stroke-width: 3; }
+.chart-axis-label { fill: var(--muted); font-size: 11px; }
+.insight-list { display: grid; gap: 10px; margin-top: 14px; }
+.insight {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-left-width: 4px;
+  border-radius: 12px;
+  background: var(--surface);
+}
+.insight-positive { border-left-color: var(--success); }
+.insight-info { border-left-color: var(--accent); }
+.insight-warning { border-left-color: #d49a2f; }
+.insight-critical { border-left-color: var(--danger); background: #fff8f6; }
+.insight-top { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.insight-top span {
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--surface-2, #f1f5f9);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.insight p { margin: 7px 0 5px; }
+.insight small { display: block; color: var(--muted); line-height: 1.45; }
+.plan-goal { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.plan-goal:last-child { border-bottom: 0; }
+.plan-goal .progress { margin-top: 8px; }
+.plan-goal-link { display: inline-block; margin-top: 12px; }
+
+@media (max-width: 860px) {
+  .plan-budget-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 620px) {
+  .plan-budget-grid, .plan-networth-head { grid-template-columns: 1fr; }
+  .liquidity-banner { align-items: flex-start; flex-direction: column; }
+}

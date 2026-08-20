@@ -41,6 +41,16 @@ export interface YearComparison {
   netDelta: number;
 }
 
+function baseSourceId(sourceId: string): string {
+  const marker = '::split:';
+  const index = sourceId.indexOf(marker);
+  return index >= 0 ? sourceId.slice(0, index) : sourceId;
+}
+
+function uniqueTransactions(rows: BankingSourceRow[]): number {
+  return new Set(rows.map((row) => baseSourceId(row.sourceId))).size;
+}
+
 export function getAvailableMonths(rows: BankingSourceRow[]): string[] {
   return [...new Set(rows.map((row) => row.date.slice(0, 7)).filter((value) => /^\d{4}-\d{2}$/.test(value)))]
     .sort((a, b) => b.localeCompare(a));
@@ -54,6 +64,7 @@ function monthlyRows(rows: BankingSourceRow[], months: string[]): MonthlyReportR
   let cumulativeNet = 0;
   return months.map((month) => {
     const summary = getMonthlySummary(rows, month);
+    const monthRows = rows.filter((row) => row.date.startsWith(month));
     cumulativeNet += summary.netCashFlow;
     return {
       month,
@@ -61,7 +72,7 @@ function monthlyRows(rows: BankingSourceRow[], months: string[]): MonthlyReportR
       expenses: summary.expenses,
       net: summary.netCashFlow,
       cumulativeNet,
-      transactions: summary.transactionCount,
+      transactions: uniqueTransactions(monthRows),
     };
   });
 }
@@ -79,12 +90,13 @@ export function getMonthlyReportForYear(rows: BankingSourceRow[], year: string):
 }
 
 export function getYearlyReport(rows: BankingSourceRow[], year: string): YearlyReport {
-  const months = getAvailableMonths(rows).filter((month) => month.startsWith(`${year}-`));
-  const summaries = months.map((month) => getMonthlySummary(rows, month));
   const yearRows = rows.filter((row) => row.date.startsWith(`${year}-`));
+  const months = getAvailableMonths(yearRows);
+  const summaries = months.map((month) => getMonthlySummary(yearRows, month));
   const income = summaries.reduce((sum, item) => sum + item.income, 0);
   const expenses = summaries.reduce((sum, item) => sum + item.expenses, 0);
   const net = income - expenses;
+  const transferRows = yearRows.filter(isTransfer);
 
   return {
     year,
@@ -92,8 +104,8 @@ export function getYearlyReport(rows: BankingSourceRow[], year: string): YearlyR
     expenses,
     net,
     savingsRate: income > 0 ? (net / income) * 100 : 0,
-    transactions: summaries.reduce((sum, item) => sum + item.transactionCount, 0),
-    transfersExcluded: yearRows.filter(isTransfer).length,
+    transactions: uniqueTransactions(yearRows),
+    transfersExcluded: uniqueTransactions(transferRows),
   };
 }
 
@@ -120,16 +132,16 @@ export function getQuarterlyReport(rows: BankingSourceRow[], year: string): Quar
 }
 
 export function getCategoryReport(rows: BankingSourceRow[], year: string, limit = 10): CategoryReportRow[] {
-  const totals = new Map<string, { amount: number; transactions: number }>();
+  const totals = new Map<string, { amount: number; transactionIds: Set<string> }>();
 
   for (const row of rows) {
     if (!row.date.startsWith(`${year}-`) || !isExpense(row) || isTransfer(row)) continue;
     const amount = Math.abs(Math.min(row.amount ?? 0, 0));
     if (amount <= 0) continue;
     const category = row.category.trim() || 'Sin categoría';
-    const current = totals.get(category) ?? { amount: 0, transactions: 0 };
+    const current = totals.get(category) ?? { amount: 0, transactionIds: new Set<string>() };
     current.amount += amount;
-    current.transactions += 1;
+    current.transactionIds.add(baseSourceId(row.sourceId));
     totals.set(category, current);
   }
 
@@ -138,7 +150,7 @@ export function getCategoryReport(rows: BankingSourceRow[], year: string, limit 
     .map(([category, value]) => ({
       category,
       amount: value.amount,
-      transactions: value.transactions,
+      transactions: value.transactionIds.size,
       share: total > 0 ? (value.amount / total) * 100 : 0,
     }))
     .sort((a, b) => b.amount - a.amount)
