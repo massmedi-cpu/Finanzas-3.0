@@ -13,6 +13,7 @@ import { rowsForBudgetAndReports } from '../../src/private-data/merge';
 import { getMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
+import { APP_VERSION_LABEL } from '../../src/version';
 import CashFlowChart from './CashFlowChart';
 
 export const dynamic = 'force-dynamic';
@@ -42,13 +43,13 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let overrides: Awaited<ReturnType<typeof getPrivateState>>['overrides'] = [];
-      let splits: MovementSplitRecord[] = [];
-      try { overrides = (await getPrivateState()).overrides; } catch { overrides = []; }
-      try { splits = await getMovementSplits(); } catch { splits = []; }
+      const [source, privateState, splits] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState().catch(() => ({ overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] })),
+        getMovementSplits().catch(() => [] as MovementSplitRecord[]),
+      ]);
       splitCount = new Set(splits.map((split) => split.source_id)).size;
-      const rows = rowsForBudgetAndReports(source.rows, overrides, splits);
+      const rows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
       availableYears = getAvailableYears(rows);
       selectedYear = params.year && availableYears.includes(params.year) ? params.year : (availableYears[0] || '');
 
@@ -84,7 +85,7 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
           <h1>Entiende cómo evoluciona tu dinero</h1>
           <p className="subtitle">Cash flow mensual, acumulado, trimestres y categorías sobre movimientos reales. Traspasos y exclusiones internas quedan fuera del análisis; las compras divididas se imputan a sus categorías correctas.</p>
         </div>
-        {selectedYear && <span className="badge">V1.9.0 · {selectedYear}</span>}
+        {selectedYear && <span className="badge">{APP_VERSION_LABEL} · {selectedYear}</span>}
       </section>
 
       {sourceError ? (
@@ -95,7 +96,7 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
         <>
           <nav className="year-selector" aria-label="Seleccionar año del informe">
             {availableYears.map((year) => (
-              <Link key={year} href={`/informes?year=${year}`} className={`year-chip${year === selectedYear ? ' year-chip-active' : ''}`}>{year}</Link>
+              <Link key={year} href={`/informes?year=${year}`} prefetch={false} className={`year-chip${year === selectedYear ? ' year-chip-active' : ''}`}>{year}</Link>
             ))}
             {splitCount > 0 && <span className="badge">{splitCount} movimientos divididos aplicados</span>}
           </nav>
