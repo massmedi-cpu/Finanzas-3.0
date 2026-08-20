@@ -5,6 +5,7 @@ import { SESSION_COOKIE } from '../security/session';
 const PRIVATE_DATA_URL = 'https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-data';
 
 export type ReviewStatus = 'pending' | 'reviewed' | 'ignored';
+export type FutureEventRecurrence = 'once' | 'monthly' | 'yearly';
 
 export interface MovementOverride {
   source_id: string;
@@ -43,10 +44,42 @@ export interface GoalRecord {
   updated_at: string;
 }
 
+export interface FutureEventRecord {
+  id: string;
+  title: string;
+  expected_date: string;
+  amount: number | string;
+  category: string | null;
+  account: string | null;
+  recurrence: FutureEventRecurrence;
+  recurrence_end: string | null;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScenarioRecord {
+  id: string;
+  name: string;
+  income_change_pct: number | string;
+  expense_change_pct: number | string;
+  monthly_net_adjustment: number | string;
+  monthly_savings_allocation: number | string;
+  starting_balance_adjustment: number | string;
+  horizon_months: number | string;
+  active: boolean;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface PrivateState {
   overrides: MovementOverride[];
   budgets: BudgetRecord[];
   goals: GoalRecord[];
+  futureEvents: FutureEventRecord[];
+  scenarios: ScenarioRecord[];
 }
 
 export async function privateDataRequest<T>(path: string, init: RequestInit = {}): Promise<{ status: number; data: T }> {
@@ -69,11 +102,21 @@ export async function privateDataRequest<T>(path: string, init: RequestInit = {}
 }
 
 export const getPrivateState = cache(async (): Promise<PrivateState> => {
-  const response = await privateDataRequest<{ ok?: boolean; overrides?: MovementOverride[]; budgets?: BudgetRecord[]; goals?: GoalRecord[]; error?: string }>('/state');
+  const response = await privateDataRequest<{
+    ok?: boolean;
+    overrides?: MovementOverride[];
+    budgets?: BudgetRecord[];
+    goals?: GoalRecord[];
+    futureEvents?: FutureEventRecord[];
+    scenarios?: ScenarioRecord[];
+    error?: string;
+  }>('/state');
   if (response.status !== 200 || !response.data.ok) throw new Error(response.data.error || `private-data-${response.status}`);
   return {
     overrides: Array.isArray(response.data.overrides) ? response.data.overrides : [],
     budgets: Array.isArray(response.data.budgets) ? response.data.budgets : [],
     goals: Array.isArray(response.data.goals) ? response.data.goals : [],
+    futureEvents: Array.isArray(response.data.futureEvents) ? response.data.futureEvents : [],
+    scenarios: Array.isArray(response.data.scenarios) ? response.data.scenarios : [],
   };
 });
