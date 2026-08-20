@@ -56,28 +56,34 @@ export default async function MovimientosPage() {
   let editLayerError = false;
 
   if (isGoogleSheetsConfigured()) {
-    try {
-      const source = await loadValidatedSource();
+    const [sourceResult, stateResult, splitsResult] = await Promise.allSettled([
+      loadValidatedSource(),
+      getPrivateState(),
+      getMovementSplits(),
+    ]);
+
+    if (sourceResult.status === 'rejected') {
+      sourceError = true;
+    } else {
+      const source = sourceResult.value;
       let overrides = new Map<string, MovementOverride>();
-      try {
-        const privateState = await getPrivateState();
-        overrides = indexOverrides(privateState.overrides);
-      } catch {
+
+      if (stateResult.status === 'fulfilled') {
+        overrides = indexOverrides(stateResult.value.overrides);
+      } else {
         editLayerError = true;
       }
 
-      try {
-        const splits = indexMovementSplits(await getMovementSplits());
+      if (splitsResult.status === 'fulfilled') {
+        const splits = indexMovementSplits(splitsResult.value);
         initialSplits = Object.fromEntries(
           [...splits.entries()].map(([sourceId, lines]) => [sourceId, lines.map(splitView)]),
         );
-      } catch {
+      } else {
         editLayerError = true;
       }
 
       movements = source.rows.map((row) => toView(row, overrides.get(row.sourceId))).sort((a, b) => b.date.localeCompare(a.date));
-    } catch {
-      sourceError = true;
     }
   }
 
