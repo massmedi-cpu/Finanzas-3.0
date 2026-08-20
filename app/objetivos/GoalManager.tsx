@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export interface GoalView {
   id: string;
@@ -21,7 +20,6 @@ function numberFromInput(value: string): number {
 }
 
 export default function GoalManager({ initialGoals }: { initialGoals: GoalView[] }) {
-  const router = useRouter();
   const [goals, setGoals] = useState(initialGoals);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -107,7 +105,6 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
       };
       setGoals((currentGoals) => editingId ? currentGoals.map((goal) => goal.id === editingId ? next : goal) : [...currentGoals, next]);
       resetForm();
-      router.refresh();
     } catch {
       setError('No se ha podido guardar el objetivo.');
     } finally {
@@ -124,7 +121,6 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
       if (!response.ok || !body.ok) throw new Error('delete-failed');
       setGoals((current) => current.filter((item) => item.id !== goal.id));
       if (editingId === goal.id) resetForm();
-      router.refresh();
     } catch {
       setError('No se ha podido eliminar el objetivo.');
     }
