@@ -1,7 +1,6 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export type ReviewStatus = 'pending' | 'reviewed' | 'ignored';
 
@@ -44,6 +43,7 @@ interface SplitDraft {
   notes: string;
 }
 
+const PAGE_SIZE = 100;
 const euro = new Intl.NumberFormat('es-ES', {
   style: 'currency',
   currency: 'EUR',
@@ -79,12 +79,12 @@ function createSplitDraft(row: MovementView, existing: MovementSplitView[]): Spl
 }
 
 export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: MovementView[]; initialSplits?: Record<string, MovementSplitView[]> }) {
-  const router = useRouter();
   const [localRows, setLocalRows] = useState(rows);
   const [splits, setSplits] = useState<Record<string, MovementSplitView[]>>(initialSplits);
   const [query, setQuery] = useState('');
   const [account, setAccount] = useState('all');
   const [status, setStatus] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [selected, setSelected] = useState<MovementView | null>(null);
   const [category, setCategory] = useState('');
   const [subcategory, setSubcategory] = useState('');
@@ -137,6 +137,12 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
       return haystack.includes(needle);
     });
   }, [account, localRows, query, splits, status]);
+
+  const visibleRows = useMemo(() => filtered.slice(0, visibleCount), [filtered, visibleCount]);
+
+  function resetVisibleRows() {
+    setVisibleCount(PAGE_SIZE);
+  }
 
   function openEditor(row: MovementView) {
     setSelected(row);
@@ -192,7 +198,6 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
         hasOverride: true,
       } : row));
       setSelected(null);
-      router.refresh();
     } catch {
       setError('No se ha podido guardar el cambio. La fuente original no se ha modificado.');
     } finally {
@@ -223,7 +228,6 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
         hasOverride: false,
       } : row));
       setSelected(null);
-      router.refresh();
     } catch {
       setError('No se ha podido restaurar el movimiento.');
     } finally {
@@ -304,7 +308,6 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
       }));
       setSplits((current) => ({ ...current, [splitSelected.id]: saved }));
       setSplitSelected(null);
-      router.refresh();
     } catch {
       setSplitError('No se ha podido guardar la división. El movimiento original sigue intacto.');
     } finally {
@@ -328,7 +331,6 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
         return next;
       });
       setSplitSelected(null);
-      router.refresh();
     } catch {
       setSplitError('No se ha podido eliminar la división.');
     } finally {
@@ -348,13 +350,13 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
           aria-label="Buscar movimientos"
           placeholder="Buscar concepto, comercio, importe o categoría"
           value={query}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => { setQuery(event.target.value); resetVisibleRows(); }}
         />
-        <select className="control" aria-label="Filtrar por cuenta" value={account} onChange={(event) => setAccount(event.target.value)}>
+        <select className="control" aria-label="Filtrar por cuenta" value={account} onChange={(event) => { setAccount(event.target.value); resetVisibleRows(); }}>
           <option value="all">Todas las cuentas</option>
           {accounts.map((name) => <option value={name} key={name}>{name}</option>)}
         </select>
-        <select className="control" aria-label="Filtrar por estado" value={status} onChange={(event) => setStatus(event.target.value)}>
+        <select className="control" aria-label="Filtrar por estado" value={status} onChange={(event) => { setStatus(event.target.value); resetVisibleRows(); }}>
           <option value="all">Todos los estados</option>
           <option value="review">Pendientes de revisar</option>
           <option value="ok">Sin revisión pendiente</option>
@@ -373,57 +375,65 @@ export default function MovementsExplorer({ rows, initialSplits = {} }: { rows: 
         {filtered.length === 0 ? (
           <div className="empty section-gap">No hay movimientos que coincidan con los filtros.</div>
         ) : (
-          <div className="table-scroll">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Concepto</th>
-                  <th>Categoría</th>
-                  <th>Cuenta</th>
-                  <th className="numeric">Importe</th>
-                  <th className="numeric">Saldo</th>
-                  <th>Estado</th>
-                  <th aria-label="Acciones" />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((row) => {
-                  const rowSplits = splits[row.id] || [];
-                  return (
-                    <tr key={row.id || `${row.date}-${row.account}-${row.concept}-${row.amount}`}>
-                      <td className="date-cell">{row.date}</td>
-                      <td>
-                        <div className="table-primary">{row.merchant || row.concept || 'Sin concepto'} {row.hasOverride && <span className="edited-dot" title="Con ajustes internos">●</span>}</div>
-                        <div className="table-secondary">{row.merchant && row.concept !== row.merchant ? row.concept : row.channel}</div>
-                      </td>
-                      <td>
-                        {rowSplits.length >= 2 ? (
-                          <><div className="table-primary split-label">Dividido en {rowSplits.length} partes</div><div className="table-secondary">{rowSplits.map((line) => line.category).join(' · ')}</div></>
-                        ) : (
-                          <><div className="table-primary">{row.category || 'Sin categoría'}</div><div className="table-secondary">{row.subcategory}</div></>
-                        )}
-                      </td>
-                      <td>{row.account}</td>
-                      <td className={`numeric amount ${row.amount !== null && row.amount < 0 ? 'amount-negative' : 'amount-positive'}`}>
-                        {row.amount === null ? '—' : euro.format(row.amount)}
-                      </td>
-                      <td className="numeric">{row.balance === null ? '—' : euro.format(row.balance)}</td>
-                      <td>
-                        {row.reviewStatus === 'pending'
-                          ? <span className="state state-review">Revisar</span>
-                          : <span className="state state-ok">{row.reviewStatus === 'ignored' ? 'Ignorado' : 'Revisado'}</span>}
-                      </td>
-                      <td className="numeric movement-actions">
-                        {row.amount !== null && row.amount !== 0 && <button type="button" className="small-button" onClick={() => openSplitEditor(row)}>{rowSplits.length >= 2 ? 'División' : 'Dividir'}</button>}
-                        <button type="button" className="small-button" onClick={() => openEditor(row)}>Editar</button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            <div className="table-scroll">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Fecha</th>
+                    <th>Concepto</th>
+                    <th>Categoría</th>
+                    <th>Cuenta</th>
+                    <th className="numeric">Importe</th>
+                    <th className="numeric">Saldo</th>
+                    <th>Estado</th>
+                    <th aria-label="Acciones" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleRows.map((row) => {
+                    const rowSplits = splits[row.id] || [];
+                    return (
+                      <tr key={row.id || `${row.date}-${row.account}-${row.concept}-${row.amount}`}>
+                        <td className="date-cell">{row.date}</td>
+                        <td>
+                          <div className="table-primary">{row.merchant || row.concept || 'Sin concepto'} {row.hasOverride && <span className="edited-dot" title="Con ajustes internos">●</span>}</div>
+                          <div className="table-secondary">{row.merchant && row.concept !== row.merchant ? row.concept : row.channel}</div>
+                        </td>
+                        <td>
+                          {rowSplits.length >= 2 ? (
+                            <><div className="table-primary split-label">Dividido en {rowSplits.length} partes</div><div className="table-secondary">{rowSplits.map((line) => line.category).join(' · ')}</div></>
+                          ) : (
+                            <><div className="table-primary">{row.category || 'Sin categoría'}</div><div className="table-secondary">{row.subcategory}</div></>
+                          )}
+                        </td>
+                        <td>{row.account}</td>
+                        <td className={`numeric amount ${row.amount !== null && row.amount < 0 ? 'amount-negative' : 'amount-positive'}`}>
+                          {row.amount === null ? '—' : euro.format(row.amount)}
+                        </td>
+                        <td className="numeric">{row.balance === null ? '—' : euro.format(row.balance)}</td>
+                        <td>
+                          {row.reviewStatus === 'pending'
+                            ? <span className="state state-review">Revisar</span>
+                            : <span className="state state-ok">{row.reviewStatus === 'ignored' ? 'Ignorado' : 'Revisado'}</span>}
+                        </td>
+                        <td className="numeric movement-actions">
+                          {row.amount !== null && row.amount !== 0 && <button type="button" className="small-button" onClick={() => openSplitEditor(row)}>{rowSplits.length >= 2 ? 'División' : 'Dividir'}</button>}
+                          <button type="button" className="small-button" onClick={() => openEditor(row)}>Editar</button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {visibleRows.length < filtered.length && (
+              <div className="row table-summary-row">
+                <div className="row-meta">Mostrando {visibleRows.length.toLocaleString('es-ES')} de {filtered.length.toLocaleString('es-ES')}</div>
+                <button type="button" className="secondary-button" onClick={() => setVisibleCount((count) => Math.min(count + PAGE_SIZE, filtered.length))}>Mostrar 100 más</button>
+              </div>
+            )}
+          </>
         )}
       </section>
 
