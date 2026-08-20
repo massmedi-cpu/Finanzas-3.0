@@ -1,17 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { expectedSessionToken, SESSION_COOKIE } from './src/security/session';
+import { SESSION_COOKIE } from './src/security/session';
 
-export async function middleware(request: NextRequest) {
-  const expected = await expectedSessionToken();
-
-  if (!expected) {
-    const url = new URL('/login', request.url);
-    url.searchParams.set('setup', '1');
-    return NextResponse.redirect(url);
-  }
-
-  const current = request.cookies.get(SESSION_COOKIE)?.value;
-  if (current === expected) return NextResponse.next();
+export function middleware(request: NextRequest) {
+  const token = request.cookies.get(SESSION_COOKIE)?.value;
+  if (token) return NextResponse.next();
 
   const url = new URL('/login', request.url);
   const next = `${request.nextUrl.pathname}${request.nextUrl.search}`;
