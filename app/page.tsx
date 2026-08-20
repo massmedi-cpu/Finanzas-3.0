@@ -13,10 +13,10 @@ export default function Home() {
           <div className="eyebrow">Centro de control</div>
           <h1>Tu dinero, organizado para decidir mejor</h1>
           <p className="subtitle">
-            Controla movimientos, calidad de datos, presupuestos, recurrentes, objetivos, previsiones e informes desde una copia privada sin modificar nunca la fuente bancaria original.
+            Controla movimientos, divisiones por categoría, calidad de datos, presupuestos, recurrentes, objetivos, previsiones e informes desde una copia privada sin modificar nunca la fuente bancaria original.
           </p>
         </div>
-        <span className="badge">V1.8.0</span>
+        <span className="badge">V1.9.0</span>
       </section>
 
       <SourceHealth />
@@ -26,8 +26,8 @@ export default function Home() {
       <section className="grid grid-3 section-gap">
         <Link href="/movimientos" className="card action-card">
           <div className="metric-label">Movimientos</div>
-          <div className="action-title">Revisar operaciones</div>
-          <p className="metric-note">Busca, edita, categoriza y concilia sin alterar la fuente.</p>
+          <div className="action-title">Editar y dividir operaciones</div>
+          <p className="metric-note">Busca, categoriza, divide una compra entre varias categorías y concilia sin alterar la fuente.</p>
           <span className="action-arrow" aria-hidden="true">→</span>
         </Link>
         <Link href="/revision" className="card action-card">
