@@ -73,9 +73,13 @@
 .scenario-meta strong { color: var(--text); text-align: right; }
 .risk-card { border-color: #f0c9c4; background: linear-gradient(180deg, var(--surface), var(--danger-soft)); }
 .forecast-list { max-height: 690px; overflow-y: auto; padding-right: 3px; }
+.alert-summary-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.alert-stat-risk { border-color: #f0c9c4; background: var(--danger-soft); }
+.alert-stat-risk strong { color: var(--danger); }
 
 @media (max-width: 1020px) {
   .planning-grid, .scenario-grid { grid-template-columns: 1fr; }
+  .alert-summary-3 { grid-template-columns: 1fr 1fr; }
 }
 
 @media (max-width: 620px) {
@@ -85,4 +89,5 @@
   .planning-item-actions { justify-content: flex-start; }
   .scenario-card { padding: 15px; }
   .forecast-list { max-height: none; }
+  .alert-summary-3 { grid-template-columns: 1fr; }
 }
