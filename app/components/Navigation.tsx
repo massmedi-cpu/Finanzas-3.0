@@ -9,6 +9,7 @@ const links = [
   ['/cuentas', 'Cuentas'],
   ['/presupuestos', 'Presupuestos'],
   ['/prevision', 'Previsión'],
+  ['/informes', 'Informes'],
 ] as const;
 
 export default function Navigation() {
