@@ -8,6 +8,7 @@ const links = [
   ['/movimientos', 'Movimientos'],
   ['/cuentas', 'Cuentas'],
   ['/presupuestos', 'Presupuestos'],
+  ['/recurrentes', 'Recurrentes'],
   ['/prevision', 'Previsión'],
   ['/objetivos', 'Objetivos'],
   ['/informes', 'Informes'],
