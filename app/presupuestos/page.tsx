@@ -21,20 +21,21 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
   let editLayerError = false;
 
   if (isGoogleSheetsConfigured()) {
-    try {
-      const source = await loadValidatedSource();
-      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
-      let splits: MovementSplitRecord[] = [];
-      try {
-        privateState = await getPrivateState();
-      } catch {
-        editLayerError = true;
-      }
-      try {
-        splits = await getMovementSplits();
-      } catch {
-        splits = [];
-      }
+    const [sourceResult, stateResult, splitsResult] = await Promise.allSettled([
+      loadValidatedSource(),
+      getPrivateState(),
+      getMovementSplits(),
+    ]);
+
+    if (sourceResult.status === 'rejected') {
+      sourceError = true;
+    } else {
+      const source = sourceResult.value;
+      const privateState = stateResult.status === 'fulfilled'
+        ? stateResult.value
+        : { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
+      const splits: MovementSplitRecord[] = splitsResult.status === 'fulfilled' ? splitsResult.value : [];
+      if (stateResult.status === 'rejected') editLayerError = true;
 
       const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
       availableMonths = getAvailableMonths(budgetRows);
@@ -54,8 +55,6 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
           rollover: envelope.rollover,
         }));
       }
-    } catch {
-      sourceError = true;
     }
   }
 
@@ -72,7 +71,7 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
 
       {availableMonths.length > 0 && (
         <nav className="month-selector" aria-label="Seleccionar mes del presupuesto">
-          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
+          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} prefetch={false} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
         </nav>
       )}
 
