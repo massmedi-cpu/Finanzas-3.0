@@ -53,6 +53,9 @@ jobs:
       - name: System audit regression tests
         run: npx tsx scripts/system-audit-tests.mjs
 
+      - name: Backup portability regression tests
+        run: npx tsx scripts/backup-portability-tests.mjs
+
       - name: Typecheck
         run: npm run typecheck
 
