@@ -84,6 +84,7 @@ for (const path of [
   '/revision',
   '/cierre?month=2026-07',
   '/reglas',
+  '/explicabilidad',
   '/api/private/budget',
   '/api/private/future-event',
   '/api/private/goal',
