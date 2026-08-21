@@ -17,10 +17,10 @@ const requiredFiles = [
   'docs/RELEASE_GATE_V2.0.1.md','docs/RELEASE_GATE_V2.1.0.md','docs/RELEASE_GATE_V2.2.0.md','docs/V2.4.0_LONG_HORIZON.md','docs/V2.6.0_CLASSIFICATION_RULES.md','docs/V2.7.0_EXPLAINABILITY.md','docs/RELEASE_GATE_V2.7.0.md','docs/V2.8.0_CONTROL_CENTER.md','docs/RELEASE_GATE_V2.8.0.md',
   'database/schema-v2.0.1.sql','database/V2.1.0_NORMALIZED_MIGRATIONS.md','database/V2.2.0_ANALYTICS_MIGRATIONS.md','database/V2.6.0_RULES_MIGRATIONS.md','database/V2.7.0_EXPLAINABILITY_MIGRATIONS.md','database/V2.8.0_CONTROL_MIGRATIONS.md',
   'src/domain/long-horizon-engine.ts','src/domain/forecast-calendar-engine.ts','src/domain/month-close-engine.ts','src/domain/classification-rule-engine.ts','src/domain/classification-origin.ts','src/domain/system-audit-engine.ts',
-  'src/private-data/month-closure.ts','src/private-data/rules.ts','src/private-data/explainability.ts','src/private-data/system-audit.ts',
+  'src/private-data/month-closure.ts','src/private-data/rules.ts','src/private-data/explainability.ts','src/private-data/control-center.ts',
   'scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs',
   'app/forecast-calendar.css','app/close.css','app/rules.css','app/explainability.css','app/control.css',
-  'app/cierre/page.tsx','app/reglas/page.tsx','app/reglas/RulesManager.tsx','app/explicabilidad/page.tsx','app/explicabilidad/SuggestionManager.tsx','app/control/page.tsx','app/control/SystemAuditPanel.tsx',
+  'app/cierre/page.tsx','app/reglas/page.tsx','app/reglas/RulesManager.tsx','app/explicabilidad/page.tsx','app/explicabilidad/SuggestionManager.tsx','app/control/page.tsx','app/control/AuditCaptureButton.tsx',
   'app/api/private/rule/route.ts','app/api/private/rule-preview/route.ts','app/api/private/system-audit/route.ts',
   'supabase/functions/finanzas-v3-bridge/index.ts','supabase/functions/finanzas-v3-data/index.ts','supabase/functions/finanzas-v3-recurring/index.ts','supabase/functions/finanzas-v3-splits/index.ts','supabase/functions/finanzas-v3-normalized/index.ts','supabase/functions/finanzas-v3-analytics/index.ts','supabase/functions/finanzas-v3-closure/index.ts','supabase/functions/finanzas-v3-rules/index.ts','supabase/functions/finanzas-v3-explainability/index.ts','supabase/functions/finanzas-v3-control/index.ts',
 ];
@@ -43,8 +43,10 @@ assert.equal(rulesPage.includes('previewValid'), true, 'V2.6 no puede permitir g
 const explainabilityPage = readFileSync('app/explicabilidad/SuggestionManager.tsx', 'utf8');
 assert.equal(explainabilityPage.includes('rule-preview'), true, 'V2.7 debe previsualizar una sugerencia antes de crear su regla');
 assert.equal(explainabilityPage.includes('Crear regla validada'), true, 'V2.7 debe exigir una segunda acción explícita tras el preview');
-const controlPage = readFileSync('app/control/SystemAuditPanel.tsx', 'utf8');
-assert.equal(controlPage.includes('Guardar auditoría'), true, 'V2.8 debe permitir persistir un checkpoint de auditoría');
+const controlPage = readFileSync('app/control/page.tsx', 'utf8');
+assert.equal(controlPage.includes('Guardar auditoría'), false, 'El texto de acción debe vivir en el componente cliente, no duplicarse en la página');
+const auditButton = readFileSync('app/control/AuditCaptureButton.tsx', 'utf8');
+assert.equal(auditButton.includes('Guardar auditoría'), true, 'V2.8 debe permitir persistir un checkpoint de auditoría');
 
 const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
 for (const script of ['scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs']) assert.equal(ci.includes(script), true, `CI debe ejecutar ${script}`);
