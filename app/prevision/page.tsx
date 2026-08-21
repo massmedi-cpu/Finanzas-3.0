@@ -2,18 +2,16 @@ import {
   applyRecurringPreferences,
   buildForecast,
   combineForecasts,
-  detectRecurringPatterns,
   expandPlannedEvents,
   getLiquidityRisk,
   projectedNetChange,
   simulateScenario,
+  type RecurringPattern,
 } from '../../src/domain/forecast-engine';
-import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
 import { getPrivateState, type FutureEventRecord, type ScenarioRecord } from '../../src/private-data/client';
-import { rowsForAnalytics } from '../../src/private-data/merge';
 import { getRecurringPreferences } from '../../src/private-data/recurring';
+import { getNormalizedForecastInputs } from '../../src/normalized/analytics-client';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
 import PlanningManager, { type FutureEventView, type ScenarioView } from './PlanningManager';
 
 export const dynamic = 'force-dynamic';
@@ -28,7 +26,7 @@ export default async function PrevisionPage() {
   let dataError = false;
   let baseDate: string | null = null;
   let knownBalance = 0;
-  let patterns: ReturnType<typeof detectRecurringPatterns> = [];
+  let patterns: RecurringPattern[] = [];
   let forecast: ReturnType<typeof combineForecasts> = [];
   let futureEvents: FutureEventRecord[] = [];
   let scenarios: ScenarioRecord[] = [];
@@ -39,18 +37,20 @@ export default async function PrevisionPage() {
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const [source, state, recurringPreferences] = await Promise.all([loadValidatedSource(), getPrivateState(), getRecurringPreferences()]);
+      const [forecastInputs, state, recurringPreferences] = await Promise.all([
+        getNormalizedForecastInputs(),
+        getPrivateState(),
+        getRecurringPreferences(),
+      ]);
       futureEvents = state.futureEvents;
       scenarios = state.scenarios;
-      const analyticsRows = rowsForAnalytics(source.rows, state.overrides);
-      baseDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
-      knownBalance = getNetWorthFromKnownBalances(source.rows);
-      const detectedPatterns = detectRecurringPatterns(analyticsRows);
+      baseDate = forecastInputs.baseDate || forecastInputs.state.maxDate;
+      knownBalance = forecastInputs.state.accounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
       recurringConfirmed = recurringPreferences.filter((preference) => preference.status === 'confirmed').length;
       recurringIgnored = recurringPreferences.filter((preference) => preference.status === 'ignored').length;
-      patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
-      categories = [...new Set(analyticsRows.map((row) => row.category).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
-      accounts = [...new Set(source.rows.map((row) => row.productOrAccount).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
+      patterns = applyRecurringPreferences(forecastInputs.patterns, recurringPreferences);
+      categories = forecastInputs.categories;
+      accounts = forecastInputs.state.accounts.map((account) => account.name).filter(Boolean).sort((a, b) => a.localeCompare(b, 'es'));
       if (baseDate) forecast = combineForecasts(buildForecast(patterns, baseDate, 365), expandPlannedEvents(futureEvents, baseDate, 365));
     } catch {
       dataError = true;
