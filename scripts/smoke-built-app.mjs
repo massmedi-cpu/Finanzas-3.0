@@ -60,8 +60,8 @@ assert(healthBody.version === expectedVersion, `/api/health: versión ${healthBo
 
 await assertPrivateRedirect('/');
 for (const path of [
-  '/movimientos?smoke=1','/informes?year=2026','/presupuestos?month=2026-08','/revision','/cierre?month=2026-07','/reglas','/explicabilidad','/control',
-  '/api/private/budget','/api/private/future-event','/api/private/goal','/api/private/month-closure','/api/private/movement','/api/private/recurring','/api/private/rule','/api/private/rule-preview','/api/private/system-audit','/api/private/scenario','/api/private/split','/api/sync/status',
+  '/movimientos?smoke=1','/informes?year=2026','/presupuestos?month=2026-08','/revision','/cierre?month=2026-07','/reglas','/explicabilidad','/control','/copias',
+  '/api/private/backup','/api/private/budget','/api/private/future-event','/api/private/goal','/api/private/month-closure','/api/private/movement','/api/private/recurring','/api/private/rule','/api/private/rule-preview','/api/private/system-audit','/api/private/scenario','/api/private/split','/api/sync/status',
 ]) await assertPrivateRedirect(path);
 
 const login = await request('/login');
