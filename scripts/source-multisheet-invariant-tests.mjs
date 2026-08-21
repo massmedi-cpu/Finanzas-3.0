@@ -11,11 +11,10 @@ if (!parser.includes('const sheetNames: string[] = []')) throw new Error('multi-
 if (!parser.includes('bySourceId.set(parsed.sourceId, parsed)')) throw new Error('sourceId merge missing');
 if (!parser.includes('source_duplicate_id_conflict')) throw new Error('duplicate conflict guard missing');
 if (parser.includes('parsedRows = rows.slice(1); break')) throw new Error('legacy first-sheet break still present');
-if (!parser.includes(String.raw`/(?:<)(?:\w+:)?row\b`.slice(5))) {
-  // The parser must contain the normal XML row regex with a single regex escape.
-  if (!parser.includes(String.raw`(?:\w+:)?row\b`)) throw new Error('row regex invalid');
-}
-if (!parser.includes(String.raw`(?:\w+:)?c\b`)) throw new Error('cell regex invalid');
+if (!parser.includes('(?:\\w+:)?row\\b')) throw new Error('row regex invalid');
+if (!parser.includes('(?:\\w+:)?c\\b')) throw new Error('cell regex invalid');
+if (parser.includes('(?:\\\\w+:)?row')) throw new Error('row regex double-escaped');
+if (parser.includes('(?:\\\\w+:)?c')) throw new Error('cell regex double-escaped');
 if (!source.includes('grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer"')) throw new Error('Google OAuth grant changed');
 
 console.log('source multisheet invariants: OK');
