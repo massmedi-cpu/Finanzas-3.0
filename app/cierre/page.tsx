@@ -50,10 +50,10 @@ export default async function CierrePage({ searchParams }: { searchParams: Promi
   try {
     const bootstrap = await getNormalizedPlan(selectedMonth || undefined);
     if (!selectedMonth) {
-      selectedMonth = bootstrap.selectedMonth || '';
+      selectedMonth = bootstrap.core.selectedMonth || '';
       if (selectedMonth >= today.slice(0, 7) && bootstrap.core.previousMonth) selectedMonth = bootstrap.core.previousMonth;
     }
-    plan = selectedMonth && selectedMonth !== bootstrap.selectedMonth ? await getNormalizedPlan(selectedMonth) : bootstrap;
+    plan = selectedMonth && selectedMonth !== bootstrap.core.selectedMonth ? await getNormalizedPlan(selectedMonth) : bootstrap;
   } catch {
     dataError = true;
   }
