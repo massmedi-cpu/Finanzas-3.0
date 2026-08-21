@@ -8,6 +8,7 @@ const versionSource = readFileSync('src/version.ts', 'utf8');
 assert.equal(lock.lockfileVersion, 3, 'El lockfile debe ser npm lockfileVersion 3');
 assert.equal(lock.packages?.['']?.version, pkg.version, 'package-lock y package.json deben compartir versión');
 assert.ok(versionSource.includes(`APP_VERSION = '${pkg.version}'`) || versionSource.includes(`APP_VERSION = "${pkg.version}"`), 'src/version.ts debe coincidir con package.json');
+assert.ok(versionSource.includes('APP_VERSION_LABEL = `V${APP_VERSION}`'), 'La etiqueta visible debe derivarse de APP_VERSION');
 
 for (const [name, value] of Object.entries({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) })) {
   assert.notEqual(value, 'latest', `La dependencia ${name} no puede volver a usar latest`);
@@ -22,13 +23,16 @@ const requiredFiles = [
   'docs/TEST_MATRIX.md',
   'docs/RELEASE_GATE_V2.0.1.md',
   'docs/RELEASE_GATE_V2.1.0.md',
+  'docs/RELEASE_GATE_V2.2.0.md',
   'database/schema-v2.0.1.sql',
   'database/V2.1.0_NORMALIZED_MIGRATIONS.md',
+  'database/V2.2.0_ANALYTICS_MIGRATIONS.md',
   'supabase/functions/finanzas-v3-bridge/index.ts',
   'supabase/functions/finanzas-v3-data/index.ts',
   'supabase/functions/finanzas-v3-recurring/index.ts',
   'supabase/functions/finanzas-v3-splits/index.ts',
   'supabase/functions/finanzas-v3-normalized/index.ts',
+  'supabase/functions/finanzas-v3-analytics/index.ts',
 ];
 
 for (const file of requiredFiles) assert.equal(existsSync(file), true, `Falta artefacto canónico: ${file}`);
@@ -40,6 +44,9 @@ const normalizedSurfaces = [
   'app/cuentas/page.tsx',
   'app/components/FinancialSummary.tsx',
   'app/components/SourceHealth.tsx',
+  'app/informes/page.tsx',
+  'app/presupuestos/page.tsx',
+  'app/revision/page.tsx',
 ];
 for (const file of normalizedSurfaces) {
   const content = readFileSync(file, 'utf8');
