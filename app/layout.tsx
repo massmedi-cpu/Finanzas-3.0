@@ -1,43 +1,12 @@
-import type { Metadata } from 'next';
-import type { ReactNode } from 'react';
-import './globals.css';
-import './extras.css';
-import './planning.css';
-import './recurring.css';
-import './budget.css';
-import './review.css';
-import './reports.css';
-import './splits.css';
-import './plan.css';
-import './intelligence.css';
-import './forecast-calendar.css';
-import './close.css';
-import './rules.css';
-import './explainability.css';
-import './control.css';
-import './backup.css';
-import AppHeader from './components/AppHeader';
+import type { Metadata } from "next";
+import "./globals.css";
+import { APP_NAME } from "@/lib/version";
 
 export const metadata: Metadata = {
-  title: 'Finanzas 3.0',
-  description: 'Centro privado de control y planificación financiera personal',
-  applicationName: 'Finanzas 3.0',
-  manifest: '/manifest.webmanifest',
-  icons: { icon: '/icon.svg' },
-  referrer: 'no-referrer',
-  robots: { index: false, follow: false, nocache: true },
-  appleWebApp: { capable: true, title: 'Finanzas 3.0', statusBarStyle: 'default' },
+  title: { default: APP_NAME, template: `%s · ${APP_NAME}` },
+  description: "Control, análisis, presupuesto y planificación financiera personal.",
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
-  return (
-    <html lang="es">
-      <body>
-        <div className="shell">
-          <AppHeader />
-          {children}
-        </div>
-      </body>
-    </html>
-  );
+export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  return <html lang="es"><body>{children}</body></html>;
 }

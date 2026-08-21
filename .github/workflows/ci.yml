@@ -1,76 +1,29 @@
-name: Finanzas 3.0 CI
-
+name: CI
 on:
   pull_request:
-    branches:
-      - main
-      - 'develop/**'
-      - 'release/**'
   push:
-    branches:
-      - 'develop/**'
-      - 'audit/**'
-      - 'release/**'
-
+    branches: [main]
 permissions:
   contents: read
-
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
-          cache: npm
-
-      - name: Install locked dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Project invariants
-        run: npm run audit:invariants
-
-      - name: Finance regression tests
-        run: npm test
-
-      - name: Long-horizon regression tests
-        run: npx tsx scripts/long-horizon-tests.mjs
-
-      - name: Month-close regression tests
-        run: npx tsx scripts/month-close-tests.mjs
-
-      - name: Classification rule regression tests
-        run: npx tsx scripts/classification-rule-tests.mjs
-
-      - name: Explainability regression tests
-        run: npx tsx scripts/explainability-tests.mjs
-
-      - name: System audit regression tests
-        run: npx tsx scripts/system-audit-tests.mjs
-
-      - name: Backup portability regression tests
-        run: npx tsx scripts/backup-portability-tests.mjs
-
-      - name: V3 security regression tests
-        run: npx tsx scripts/v300-security-tests.mjs
-
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Production build
-        run: npm run build
-
-      - name: Built app smoke test
-        run: |
-          npm run start -- -H 127.0.0.1 -p 3000 > /tmp/finanzas-next.log 2>&1 &
-          APP_PID=$!
-          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
-          if ! npm run test:smoke; then
-            cat /tmp/finanzas-next.log
-            exit 1
-          fi
+          package-manager-cache: false
+      - run: npm install --no-audit --no-fund
+      - uses: actions/upload-artifact@v7
+        with:
+          name: generated-package-lock
+          path: package-lock.json
+          retention-days: 1
+      - run: npm run check
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: sb_publishable_placeholder
+          FINANCIAL_APP_ALLOWED_EMAILS: massmedi@gmail.com
+          GOOGLE_SHEETS_ID: 1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8
