@@ -39,3 +39,13 @@ jobs:
 
       - name: Production build
         run: npm run build
+
+      - name: Built app smoke test
+        run: |
+          npm run start -- -H 127.0.0.1 -p 3000 > /tmp/finanzas-next.log 2>&1 &
+          APP_PID=$!
+          trap 'kill "$APP_PID" 2>/dev/null || true' EXIT
+          if ! npm run test:smoke; then
+            cat /tmp/finanzas-next.log
+            exit 1
+          fi

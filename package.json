@@ -1,6 +1,6 @@
 {
   "name": "finanzas-3-0",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "private": true,
   "type": "module",
   "engines": {
@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx scripts/run-domain-tests.mjs",
+    "test:smoke": "node scripts/smoke-built-app.mjs",
     "audit:invariants": "node scripts/check-project-invariants.mjs",
     "typecheck": "tsc --noEmit"
   },
