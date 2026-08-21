@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from 'react';
 import { projectGoal, type GoalProjection } from '../../src/domain/goal-engine';
+import { assessGoalFundingCapacity } from '../../src/domain/planning-capacity-engine';
 
 export interface GoalView {
   id: string;
@@ -46,7 +47,7 @@ function projectionClass(projection: GoalProjection | null, active: boolean): st
   return 'state state-ok';
 }
 
-export default function GoalManager({ initialGoals, asOfDate }: { initialGoals: GoalView[]; asOfDate: string | null }) {
+export default function GoalManager({ initialGoals, asOfDate, projectedMonthlyNet }: { initialGoals: GoalView[]; asOfDate: string | null; projectedMonthlyNet: number | null }) {
   const [goals, setGoals] = useState(initialGoals);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -58,6 +59,11 @@ export default function GoalManager({ initialGoals, asOfDate }: { initialGoals: 
   const [active, setActive] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  const activeProjections = useMemo(() => goals
+    .filter((goal) => goal.active)
+    .map((goal) => projectionFor(goal, asOfDate))
+    .filter((projection): projection is GoalProjection => projection !== null), [goals, asOfDate]);
 
   const totals = useMemo(() => {
     const activeGoals = goals.filter((goal) => goal.active);
@@ -72,6 +78,10 @@ export default function GoalManager({ initialGoals, asOfDate }: { initialGoals: 
       return result;
     }, { target: 0, current: 0, requiredMonthly: 0, atRisk: 0 });
   }, [goals, asOfDate]);
+
+  const fundingCapacity = useMemo(() => projectedMonthlyNet == null
+    ? null
+    : assessGoalFundingCapacity(activeProjections, projectedMonthlyNet), [activeProjections, projectedMonthlyNet]);
 
   function resetForm() {
     setEditingId(null);
@@ -186,6 +196,15 @@ export default function GoalManager({ initialGoals, asOfDate }: { initialGoals: 
           <p className="metric-note">Para metas activas con fecha · base {asOfDate || 'no disponible'}</p>
         </article>
       </section>
+
+      {fundingCapacity && fundingCapacity.status !== 'no_due_goals' && (
+        <section className={`goal-capacity section-gap${fundingCapacity.status === 'shortfall' ? ' goal-capacity-risk' : fundingCapacity.status === 'tight' ? ' goal-capacity-tight' : ''}`}>
+          <div><span>Cash flow medio previsto · 6 meses</span><strong>{euro.format(fundingCapacity.projectedMonthlyNet)}/mes</strong></div>
+          <div><span>Necesidad mensual de objetivos</span><strong>{euro.format(fundingCapacity.requiredMonthly)}/mes</strong></div>
+          <div><span>Margen después de objetivos</span><strong className={fundingCapacity.monthlyMargin < 0 ? 'amount-negative' : 'amount-positive'}>{euro.format(fundingCapacity.monthlyMargin)}/mes</strong></div>
+          <div><span>Cobertura</span><strong>{fundingCapacity.coveragePct == null ? '—' : `${Math.round(fundingCapacity.coveragePct)}%`}</strong></div>
+        </section>
+      )}
 
       <section className="grid goal-layout section-gap">
         <form className="card goal-form" onSubmit={save}>
