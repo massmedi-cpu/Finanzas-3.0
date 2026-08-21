@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const VERSION = 1;
+const VERSION = 2;
 const NORMALIZED_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-normalized";
 const PRINCIPAL_KEY = "private-session-owner";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -49,15 +49,15 @@ async function rpc<T>(name: string, body: Record<string, unknown>): Promise<T> {
   return data as T;
 }
 
-async function requireFreshNormalized(token: string) {
-  if (!token) return false;
+async function requireFreshNormalized(token: string): Promise<Record<string, unknown> | null> {
+  if (!token) return null;
   const response = await fetch(`${NORMALIZED_API}/state`, {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
     cache: "no-store",
   });
-  if (!response.ok) return false;
+  if (!response.ok) return null;
   const state = await response.json().catch(() => null);
-  return Boolean(state?.ok && state?.inSync);
+  return state?.ok && state?.inSync ? state : null;
 }
 
 function pathOf(req: Request) {
@@ -75,7 +75,8 @@ Deno.serve(async (req: Request) => {
     }
 
     const token = bearer(req);
-    if (!(await requireFreshNormalized(token))) return json({ ok: false, error: "unauthorized_or_stale" }, 401);
+    const normalizedState = await requireFreshNormalized(token);
+    if (!normalizedState) return json({ ok: false, error: "unauthorized_or_stale" }, 401);
 
     const url = new URL(req.url);
     if (path === "/reports" && req.method === "GET") {
@@ -92,6 +93,11 @@ Deno.serve(async (req: Request) => {
 
     if (path === "/review" && req.method === "GET") {
       return json(await rpc("finance_v220_review", { p_principal_key: PRINCIPAL_KEY }));
+    }
+
+    if (path === "/forecast-inputs" && req.method === "GET") {
+      const inputs = await rpc<Record<string, unknown>>("finance_v220_forecast_inputs", { p_principal_key: PRINCIPAL_KEY });
+      return json({ ...inputs, state: normalizedState });
     }
 
     return json({ ok: false, error: "not_found" }, 404);
