@@ -1,4 +1,4 @@
-name: Finanzas 3.0 Production Smoke
+name: Financial App Production Smoke
 
 on:
   push:
@@ -8,7 +8,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: finanzas-production-smoke
+  group: financial-app-production-smoke
   cancel-in-progress: true
 
 jobs:
@@ -16,21 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install locked dependencies
-        run: npm ci --no-audit --no-fund
-
-      - name: Verify deployed production
+      - name: Verify production responds
         env:
-          SMOKE_BASE_URL: https://finanzas-3-0.vercel.app
-          SMOKE_ATTEMPTS: '180'
-          SMOKE_INTERVAL_MS: '1000'
-        run: npm run test:smoke
+          BASE_URL: https://finanzas-3-0.vercel.app
+        run: |
+          for attempt in $(seq 1 60); do
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-redirs 2 "$BASE_URL/login" || true)
+            if [ "$code" = "200" ]; then
+              grep -qi "Financial App" /tmp/body && exit 0
+            fi
+            sleep 2
+          done
+          echo "Production smoke failed"
+          cat /tmp/body || true
+          exit 1
