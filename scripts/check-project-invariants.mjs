@@ -44,7 +44,7 @@ const explainabilityPage = readFileSync('app/explicabilidad/SuggestionManager.ts
 assert.equal(explainabilityPage.includes('rule-preview'), true, 'V2.7 debe previsualizar una sugerencia antes de crear su regla');
 assert.equal(explainabilityPage.includes('Crear regla validada'), true, 'V2.7 debe exigir una segunda acción explícita tras el preview');
 const controlPage = readFileSync('app/control/page.tsx', 'utf8');
-assert.equal(controlPage.includes('Guardar auditoría'), false, 'El texto de acción debe vivir en el componente cliente, no duplicarse en la página');
+assert.equal(controlPage.includes('AuditCaptureButton'), true, 'V2.8 debe integrar el capturador de auditorías');
 const auditButton = readFileSync('app/control/AuditCaptureButton.tsx', 'utf8');
 assert.equal(auditButton.includes('Guardar auditoría'), true, 'V2.8 debe permitir persistir un checkpoint de auditoría');
 
