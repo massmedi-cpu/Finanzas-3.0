@@ -2,7 +2,9 @@ name: Finanzas 3.0 CI
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'develop/**'
   push:
     branches:
       - 'develop/**'
