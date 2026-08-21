@@ -4,6 +4,7 @@ import "./auth.css";
 import "./movements.css";
 import "./accounts.css";
 import "./cash-flow.css";
+import "./budget.css";
 
 export const metadata: Metadata = {
   title: { default: "Financial App", template: "%s · Financial App" },
