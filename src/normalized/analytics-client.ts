@@ -99,6 +99,20 @@ export interface NormalizedForecastInputs extends NormalizedForecastCoreInputs {
   state: NormalizedState;
 }
 
+export interface NormalizedQualitySummary {
+  ok: boolean;
+  pending: number;
+  duplicates: number;
+  uncategorized: number;
+}
+
+export interface NormalizedDashboardInputs {
+  ok: boolean;
+  forecastInputs: NormalizedForecastCoreInputs;
+  quality: NormalizedQualitySummary;
+  state: NormalizedState;
+}
+
 export interface NormalizedPlanCore {
   ok: boolean;
   selectedMonth: string | null;
@@ -136,6 +150,10 @@ export function getNormalizedReview() {
 
 export function getNormalizedForecastInputs() {
   return analyticsRequest<NormalizedForecastInputs>('/forecast-inputs');
+}
+
+export function getNormalizedDashboardInputs() {
+  return analyticsRequest<NormalizedDashboardInputs>('/dashboard-inputs');
 }
 
 export function getNormalizedPlan(month?: string) {
