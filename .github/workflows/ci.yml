@@ -36,6 +36,9 @@ jobs:
       - name: Finance regression tests
         run: npm test
 
+      - name: Long-horizon regression tests
+        run: npx tsx scripts/long-horizon-tests.mjs
+
       - name: Typecheck
         run: npm run typecheck
 
