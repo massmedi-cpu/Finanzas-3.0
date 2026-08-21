@@ -7,7 +7,8 @@
       "develop/v2.3.0-intelligence": false,
       "develop/v2.4.0-long-horizon": false,
       "develop/v2.5.0-month-close": false,
-      "develop/v2.6.0-rules": false
+      "develop/v2.6.0-rules": false,
+      "develop/v2.7.0-explainability": false
     }
   }
 }
