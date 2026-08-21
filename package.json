@@ -11,6 +11,7 @@
     "build": "next build",
     "start": "next start",
     "test": "tsx scripts/run-domain-tests.mjs",
+    "audit:invariants": "node scripts/check-project-invariants.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
