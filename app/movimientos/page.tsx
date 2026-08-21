@@ -87,7 +87,7 @@ export default async function MovimientosPage() {
         <div className="status-panel status-danger">
           <div>
             <div className="status-title">No se puede construir la vista normalizada de movimientos</div>
-            <div className="status-copy">La pantalla se detiene antes de mostrar datos parciales. La V2.0.2 estable y la fuente bancaria original no se modifican.</div>
+            <div className="status-copy">La pantalla se detiene antes de mostrar datos parciales. La versión estable y la fuente bancaria original no se modifican.</div>
           </div>
         </div>
       ) : movements.length > 0 ? (
