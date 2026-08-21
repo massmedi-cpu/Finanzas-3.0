@@ -39,6 +39,9 @@ jobs:
       - name: Long-horizon regression tests
         run: npx tsx scripts/long-horizon-tests.mjs
 
+      - name: Month-close regression tests
+        run: npx tsx scripts/month-close-tests.mjs
+
       - name: Typecheck
         run: npm run typecheck
 

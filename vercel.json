@@ -5,7 +5,8 @@
     "deploymentEnabled": {
       "develop/v2.2.0-analytics": false,
       "develop/v2.3.0-intelligence": false,
-      "develop/v2.4.0-long-horizon": false
+      "develop/v2.4.0-long-horizon": false,
+      "develop/v2.5.0-month-close": false
     }
   }
 }
