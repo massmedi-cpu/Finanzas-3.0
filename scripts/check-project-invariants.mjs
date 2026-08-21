@@ -44,9 +44,11 @@ const normalizedSurfaces = [
   'app/cuentas/page.tsx',
   'app/components/FinancialSummary.tsx',
   'app/components/SourceHealth.tsx',
+  'app/components/DashboardInsights.tsx',
   'app/informes/page.tsx',
   'app/presupuestos/page.tsx',
   'app/revision/page.tsx',
+  'app/recurrentes/page.tsx',
   'app/plan/page.tsx',
   'app/prevision/page.tsx',
 ];
