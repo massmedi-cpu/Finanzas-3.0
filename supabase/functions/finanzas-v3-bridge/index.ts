@@ -91,7 +91,7 @@ async function googleToken() {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      grant_type: "urn:ietf:params:oauth-type:jwt-bearer".replace("oauth-type", "oauth-type"),
       assertion: `${header}.${claim}.${signature}`,
     }),
   });
@@ -218,9 +218,9 @@ function parseRows(bytes: Uint8Array) {
   for (const sheet of sheets) {
     const xml = textFile(zip, sheet.path);
     const rows: Record<string, unknown>[] = [];
-    for (const rowMatch of xml.matchAll(/<(?:\\w+:)?row\\b([^>]*)>([\\s\\S]*?)<\\/(?:\\w+:)?row>/g)) {
+    for (const rowMatch of xml.matchAll(/<(?:\w+:)?row\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
       const values: Record<string, unknown> = {};
-      for (const cellMatch of rowMatch[2].matchAll(/<(?:\\w+:)?c\\b([^>]*)>([\\s\\S]*?)<\\/(?:\\w+:)?c>/g)) {
+      for (const cellMatch of rowMatch[2].matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)) {
         const ref = attr(cellMatch[1], "r");
         const column = (ref.match(/^([A-Z]+)/) || [])[1];
         if (column) values[column] = cellValue(cellMatch[2], cellMatch[1], shared);
@@ -252,7 +252,6 @@ function parseRows(bytes: Uint8Array) {
           && previous.productOrAccount === parsed.productOrAccount;
         if (!compatible) throw new Error("source_duplicate_id_conflict");
       }
-      // Later valid sheets are authoritative for compatible duplicate IDs.
       bySourceId.set(parsed.sourceId, parsed);
     }
   }
