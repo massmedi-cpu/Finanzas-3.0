@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const VERSION = 3;
+const VERSION = 4;
 const NORMALIZED_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-normalized";
 const PRINCIPAL_KEY = "private-session-owner";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -102,6 +102,14 @@ Deno.serve(async (req: Request) => {
     if (path === "/forecast-inputs" && req.method === "GET") {
       const inputs = await rpc<Record<string, unknown>>("finance_v220_forecast_inputs", { p_principal_key: PRINCIPAL_KEY });
       return json({ ...inputs, state: normalizedState });
+    }
+
+    if (path === "/dashboard-inputs" && req.method === "GET") {
+      const [forecastInputs, quality] = await Promise.all([
+        rpc<Record<string, unknown>>("finance_v220_forecast_inputs", { p_principal_key: PRINCIPAL_KEY }),
+        rpc<Record<string, unknown>>("finance_v220_quality_summary", { p_principal_key: PRINCIPAL_KEY }),
+      ]);
+      return json({ ok: true, forecastInputs, quality, state: normalizedState });
     }
 
     if (path === "/plan" && req.method === "GET") {
