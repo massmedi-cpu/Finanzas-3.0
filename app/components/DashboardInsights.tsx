@@ -1,42 +1,35 @@
 import Link from 'next/link';
-import { applyRecurringPreferences, buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
-import { getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
-import { detectQualityIssues } from '../../src/domain/quality-engine';
+import { applyRecurringPreferences, buildForecast, combineForecasts, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
 import { getPrivateState } from '../../src/private-data/client';
-import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
 import { getRecurringPreferences } from '../../src/private-data/recurring';
-import { loadValidatedSource } from '../../src/sync/import-source';
+import { getNormalizedDashboardInputs } from '../../src/normalized/analytics-client';
 
 const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 
 export default async function DashboardInsights() {
   try {
-    const [source, state, preferences] = await Promise.all([
-      loadValidatedSource(),
+    const [dashboard, privateState, preferences] = await Promise.all([
+      getNormalizedDashboardInputs(),
       getPrivateState(),
       getRecurringPreferences(),
     ]);
 
-    const overrides = state.overrides;
-    const goals = state.goals;
-    const futureEvents = state.futureEvents;
-    const analyticsRows = rowsForAnalytics(source.rows, overrides);
-    const detectedPatterns = detectRecurringPatterns(analyticsRows);
-    const patterns = applyRecurringPreferences(detectedPatterns, preferences);
+    const goals = privateState.goals;
+    const futureEvents = privateState.futureEvents;
+    const patterns = applyRecurringPreferences(dashboard.forecastInputs.patterns, preferences);
     const recurringConfirmed = preferences.filter((preference) => preference.status === 'confirmed').length;
     const recurringIgnored = preferences.filter((preference) => preference.status === 'ignored').length;
 
-    const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
+    const latestDate = dashboard.forecastInputs.baseDate || dashboard.state.maxDate || '';
     const forecast = latestDate
       ? combineForecasts(buildForecast(patterns, latestDate, 120), expandPlannedEvents(futureEvents, latestDate, 120))
       : [];
     const upcoming = forecast.slice(0, 4);
-    const liquidity = getLiquidityRisk(forecast, getNetWorthFromKnownBalances(source.rows));
-    const overrideMap = indexOverrides(overrides);
-    const pending = source.rows.filter((row) => !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length;
-    const qualityIssues = detectQualityIssues(analyticsRows);
-    const duplicates = qualityIssues.filter((issue) => issue.type === 'duplicate').length;
-    const uncategorized = qualityIssues.filter((issue) => issue.type === 'uncategorized').length;
+    const knownBalance = dashboard.state.accounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
+    const liquidity = getLiquidityRisk(forecast, knownBalance);
+    const pending = dashboard.quality.pending;
+    const duplicates = dashboard.quality.duplicates;
+    const uncategorized = dashboard.quality.uncategorized;
     const activeGoals = goals.filter((goal) => goal.active).slice(0, 3);
 
     return (
