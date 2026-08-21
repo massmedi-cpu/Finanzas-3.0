@@ -1,3 +1,8 @@
+.status-warning {
+  border-color: #f2ddb0;
+  background: var(--warning-soft);
+}
+
 .state-warning {
   background: var(--warning-soft);
   color: #755000;
