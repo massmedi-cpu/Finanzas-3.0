@@ -2,6 +2,7 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
+import { SplitEditor } from "./split-editor";
 
 type Filters = { search:string; account:string; type:string; category:string; review:boolean; sort:string };
 type EditState = {
@@ -213,6 +214,8 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
         <div className="editor-actions"><button className="primary-action" type="submit" disabled={saving}>{saving?"Guardando…":"Guardar cambios"}</button><button className="ghost" type="button" onClick={restoreSource} disabled={saving}>Restaurar origen</button></div>
       </form>
 
+      <SplitEditor transactionId={selected.id} sourceAmount={Number(selected.source["Importe (€)"]??0)} categories={pageData.facets.categories}/>
+
       <details className="trace-panel"><summary>Dato original</summary><dl>{Object.entries(selected.source).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{display(value)}</dd></div>)}</dl></details>
       <details className="trace-panel" open={selected.history.length>0}><summary>Historial de cambios · {selected.history.length}</summary>{selected.history.length?<ol className="history-list">{selected.history.map(entry=><li key={entry.id}><div><strong>{entry.field.replace(/^app\./,"App · ").replace(/^source\./,"Origen · ")}</strong><time>{new Date(entry.changedAt).toLocaleString("es-ES")}</time></div><p><span>{display(entry.before)}</span><b>→</b><span>{display(entry.after)}</span></p><small>{entry.changeOrigin==="source_sync"?"Cambio detectado en la fuente":`Edición · ${entry.changedBy||"usuario"}`}</small></li>)}</ol>:<p className="muted-copy">Este movimiento aún no tiene cambios registrados.</p>}</details>
     </aside></div>}
@@ -221,6 +224,7 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
 
 function Status({item}:{item:MovementItem}) {
   if(item.sourceMissing) return <span className="status-badge warning">Origen ausente</span>;
+  if(item.status==="new") return <span className="status-badge new">Nuevo</span>;
   if(item.needsReview) return <span className="status-badge warning">Revisar</span>;
   if(item.hasOverrides) return <span className="status-badge edited">Editado</span>;
   if(item.isInternalTransfer) return <span className="status-badge muted">Traspaso</span>;

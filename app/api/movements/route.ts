@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
+import type { MovementsResponse } from "@/lib/financial/movements";
 
 async function authorizedClient() {
   const supabase = await createClient();
@@ -39,5 +40,8 @@ export async function GET(request: NextRequest) {
   });
 
   if (error || !data) return NextResponse.json({ ok: false, error: error?.message || "movements_unavailable" }, { status: 400 });
-  return NextResponse.json(data, { headers: { "Cache-Control": "private, no-store" } });
+  const response = data as MovementsResponse;
+  const newIds = response.items.filter(item=>item.status==="new").map(item=>item.id);
+  if (newIds.length) await supabase.rpc("financial_app_mark_new_seen", { p_ids: newIds });
+  return NextResponse.json(response, { headers: { "Cache-Control": "private, no-store" } });
 }

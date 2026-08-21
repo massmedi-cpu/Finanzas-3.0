@@ -50,6 +50,7 @@ export type MovementFacets = {
 
 export type MovementsResponse = {
   ok: true;
+  version?: string;
   page: number;
   pageSize: number;
   total: number;
@@ -114,6 +115,12 @@ export type TransactionDetail = {
 
 export type TransactionDetailResponse = { ok: true; transaction: TransactionDetail };
 
+async function markReturnedNewAsSeen(supabase: Awaited<ReturnType<typeof createClient>>, response: MovementsResponse) {
+  const ids = response.items.filter(item=>item.status==="new").map(item=>item.id);
+  if (!ids.length) return;
+  await supabase.rpc("financial_app_mark_new_seen", { p_ids: ids });
+}
+
 export async function getMovements(filters: MovementFilters = {}): Promise<MovementsResponse> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("financial_app_movements", {
@@ -131,7 +138,9 @@ export async function getMovements(filters: MovementFilters = {}): Promise<Movem
     p_sort: filters.sort ?? "date_desc",
   });
   if (error || !data) throw new Error(error?.message || "movements_unavailable");
-  return data as MovementsResponse;
+  const response = data as MovementsResponse;
+  await markReturnedNewAsSeen(supabase, response);
+  return response;
 }
 
 export async function getTransactionDetail(id: string): Promise<TransactionDetailResponse> {
