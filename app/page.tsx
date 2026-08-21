@@ -2,8 +2,8 @@ import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getFinancialDashboard } from "@/lib/financial/dashboard";
 import { SyncButton } from "@/components/sync-button";
+import { AppSidebar } from "@/components/app-sidebar";
 
-const sections = [["Inicio","/"],["Cuentas","/cuentas"],["Movimientos","/movimientos"],["Cash Flow","/cash-flow"],["Presupuesto","/presupuesto"],["Previsión","/prevision"],["Patrimonio","/patrimonio"],["Análisis","/analisis"],["Archivo","/archivo"],["Configuración","/configuracion"]] as const;
 const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
 const date = new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
 export const dynamic = "force-dynamic";
@@ -12,15 +12,11 @@ export default async function Home() {
   await requireAuthorizedUser();
   const dashboard = await getFinancialDashboard();
   return <main className="app-shell">
-    <aside className="sidebar">
-      <div className="brand"><span className="brand-mark">F</span><div><strong>Financial App</strong><small>Control financiero personal</small></div></div>
-      <nav>{sections.map(([label,href])=><Link key={href} className={href==="/"?"active":""} href={href}>{label}</Link>)}</nav>
-      <div className="sidebar-foot"><span className="status-dot" /> Datos reales · fuente solo lectura</div>
-    </aside>
+    <AppSidebar active="/" />
     <section className="workspace">
       <header className="topbar"><div><p className="eyebrow">INICIO · {dashboard.month}</p><h1>Tu situación financiera</h1><p>Datos reales consolidados desde la fuente bancaria.</p></div><SyncButton /></header>
       <div className="account-grid">
-        {dashboard.accounts.map((account)=><article key={account.id} className={`account-card ${account.role==="operating"?"primary":""}`}><div><span>{account.name}</span><small>{account.identifier}</small></div><strong>{account.balance==null?"—":money.format(account.balance)}</strong><p>{account.cashFlowEnabled?"Incluida en Cash Flow":"Excluida del Cash Flow"}{account.balanceDate?` · saldo ${date.format(new Date(account.balanceDate+"T12:00:00"))}`:""}</p></article>)}
+        {dashboard.accounts.map(account=><Link key={account.id} className={`account-card account-card-link ${account.role==="operating"?"primary":""}`} href={`/cuentas/${account.id}`}><div><span>{account.name}</span><small>{account.identifier}</small></div><strong>{account.balance==null?"—":money.format(account.balance)}</strong><p>{account.cashFlowEnabled?"Incluida en Cash Flow":"Excluida del Cash Flow"}{account.balanceDate?` · saldo ${date.format(new Date(account.balanceDate+"T12:00:00"))}`:""}</p></Link>)}
         <article className="account-card total"><div><span>Total disponible</span><small>Patrimonio financiero</small></div><strong>{money.format(dashboard.totalAvailable)}</strong><p>{dashboard.accounts.length} cuentas activas</p></article>
       </div>
       <div className="metric-grid">
@@ -30,8 +26,8 @@ export default async function Home() {
         <article><span>Pendientes de revisar</span><strong>{dashboard.needsReview}</strong><small>{dashboard.reviewSource} por cambios en origen</small></article>
       </div>
       <div className="content-grid">
-        <article className="panel"><div className="panel-head"><div><p className="eyebrow">EVOLUCIÓN</p><h2>Saldo y patrimonio</h2></div><span className="pill">{dashboard.movementsTotal.toLocaleString("es-ES")} movimientos</span></div><div className="chart-placeholder"><div className="chart-line" /><span>Datos reales conectados. La serie histórica se incorporará en la siguiente fase visual.</span></div></article>
-        <article className="panel"><div className="panel-head"><div><p className="eyebrow">CONTROL</p><h2>Estado del sistema</h2></div></div><ul className="health-list"><li><b>Autenticación</b><span>Google OAuth · server-side</span></li><li><b>Fuente</b><span>Google Drive XLSX · solo lectura</span></li><li><b>Última sincronización</b><span>{dashboard.sync?.status==="success"?"Correcta":"Pendiente"}</span></li><li><b>Último movimiento</b><span>{dashboard.lastMovementDate?date.format(new Date(dashboard.lastMovementDate+"T12:00:00")):"—"}</span></li><li><b>Versión</b><span>{dashboard.version} · Movimientos reales</span></li></ul></article>
+        <article className="panel"><div className="panel-head"><div><p className="eyebrow">CUENTAS</p><h2>Saldos y evolución</h2></div><Link className="pill pill-link" href="/cuentas">Abrir Cuentas</Link></div><div className="chart-placeholder"><div className="chart-line" /><span>La evolución real por cuenta ya está disponible en Cuentas.</span></div></article>
+        <article className="panel"><div className="panel-head"><div><p className="eyebrow">CONTROL</p><h2>Estado del sistema</h2></div></div><ul className="health-list"><li><b>Autenticación</b><span>Google OAuth · server-side</span></li><li><b>Fuente</b><span>Google Drive XLSX · solo lectura</span></li><li><b>Última sincronización</b><span>{dashboard.sync?.status==="success"?"Correcta":"Pendiente"}</span></li><li><b>Último movimiento</b><span>{dashboard.lastMovementDate?date.format(new Date(dashboard.lastMovementDate+"T12:00:00")):"—"}</span></li><li><b>Versión</b><span>{dashboard.version} · Cuentas reales</span></li></ul></article>
       </div>
     </section>
   </main>;

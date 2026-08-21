@@ -1,16 +1,15 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
+import { AppSidebar } from "@/components/app-sidebar";
 
-const sections: Record<string,{title:string;description:string;items:string[]}> = {
-  cuentas:{title:"Cuentas",description:"Saldos, evolución y detalle de cada producto financiero.",items:["Cuenta corriente Openbank · 3967","Cuenta ahorro Openbank · 2504","Arquitectura preparada para nuevas cuentas y productos"]},
-  "cash-flow":{title:"Cash Flow",description:"Ingresos reales computables menos gastos reales computables.",items:["Cuenta ahorro excluida siempre","Traspasos entre cuentas excluidos","Duplicados y exclusiones explícitas fuera del cálculo"]},
-  presupuesto:{title:"Presupuesto",description:"Límites y objetivos de gasto por categoría y periodo.",items:["Mensual, trimestral, anual o personalizado","Seguimiento del disponible","Previsión de cierre"]},
-  prevision:{title:"Previsión",description:"Calendario financiero y proyección de dinero futuro.",items:["Recurrencias","Confianza y explicación de predicciones","Consolidación con movimientos reales"]},
-  patrimonio:{title:"Patrimonio",description:"Evolución del patrimonio financiero actual y futuro.",items:["Cuenta corriente","Cuenta ahorro","Base extensible a inversiones, deudas y otros activos"]},
-  analisis:{title:"Análisis",description:"Panel configurable de tendencias, comparativas y desviaciones.",items:["Ingresos y gastos","Categorías y comercios","Comparativas interanuales y tendencias"]},
-  archivo:{title:"Archivo",description:"Repositorio documental financiero con OCR y asociaciones.",items:["PDF e imágenes","OCR indexable","Vinculación con movimientos"]},
-  configuracion:{title:"Configuración",description:"Aplicación, datos, cuenta, apariencia, preferencias y sistema.",items:["Versión 0.3.0","Google OAuth como único acceso","Fuente Google Drive XLSX solo lectura"]},
+const sections: Record<string,{title:string;description:string;items:string[];href:string}> = {
+  "cash-flow":{title:"Cash Flow",href:"/cash-flow",description:"Ingresos reales computables menos gastos reales computables.",items:["Cuenta ahorro excluida siempre","Traspasos entre cuentas excluidos","Duplicados y exclusiones explícitas fuera del cálculo"]},
+  presupuesto:{title:"Presupuesto",href:"/presupuesto",description:"Límites y objetivos de gasto por categoría y periodo.",items:["Mensual, trimestral, anual o personalizado","Seguimiento del disponible","Previsión de cierre"]},
+  prevision:{title:"Previsión",href:"/prevision",description:"Calendario financiero y proyección de dinero futuro.",items:["Recurrencias","Confianza y explicación de predicciones","Consolidación con movimientos reales"]},
+  patrimonio:{title:"Patrimonio",href:"/patrimonio",description:"Evolución del patrimonio financiero actual y futuro.",items:["Cuenta corriente","Cuenta ahorro","Base extensible a inversiones, deudas y otros activos"]},
+  analisis:{title:"Análisis",href:"/analisis",description:"Panel configurable de tendencias, comparativas y desviaciones.",items:["Ingresos y gastos","Categorías y comercios","Comparativas interanuales y tendencias"]},
+  archivo:{title:"Archivo",href:"/archivo",description:"Repositorio documental financiero con OCR y asociaciones.",items:["PDF e imágenes","OCR indexable","Vinculación con movimientos"]},
+  configuracion:{title:"Configuración",href:"/configuracion",description:"Aplicación, datos, cuenta, apariencia, preferencias y sistema.",items:["Versión 0.4.0","Google OAuth como único acceso","Fuente Google Drive XLSX solo lectura"]},
 };
 
 export const dynamic = "force-dynamic";
@@ -20,5 +19,5 @@ export default async function SectionPage({params}:{params:Promise<{section:stri
   const {section}=await params;
   const data=sections[section];
   if(!data) notFound();
-  return <main className="section-page"><Link href="/">← Volver a Inicio</Link><h1>{data.title}</h1><p>{data.description}</p><article className="section-card"><h2>Base funcional definida</h2><ul>{data.items.map(item=><li key={item}>{item}</li>)}</ul><p>Esta sección se conectará progresivamente al núcleo de datos sin modificar las reglas ya validadas.</p>{section==="configuracion"&&<form action="/auth/signout" method="post"><button className="signout-button" type="submit">Cerrar sesión</button></form>}</article></main>;
+  return <main className="app-shell"><AppSidebar active={data.href} /><section className="workspace section-workspace"><header className="topbar"><div><p className="eyebrow">{data.title.toUpperCase()} · 0.4.0</p><h1>{data.title}</h1><p>{data.description}</p></div></header><article className="section-card"><h2>Base funcional definida</h2><ul>{data.items.map(item=><li key={item}>{item}</li>)}</ul><p>Esta sección se conectará progresivamente al núcleo de datos sin modificar las reglas ya validadas.</p>{section==="configuracion"&&<form action="/auth/signout" method="post"><button className="signout-button" type="submit">Cerrar sesión</button></form>}</article></section></main>;
 }
