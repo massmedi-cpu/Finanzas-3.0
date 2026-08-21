@@ -31,14 +31,20 @@ const requiredFiles = [
   'database/V2.2.0_ANALYTICS_MIGRATIONS.md',
   'src/domain/long-horizon-engine.ts',
   'src/domain/forecast-calendar-engine.ts',
+  'src/domain/month-close-engine.ts',
+  'src/private-data/month-closure.ts',
   'scripts/long-horizon-tests.mjs',
+  'scripts/month-close-tests.mjs',
   'app/forecast-calendar.css',
+  'app/close.css',
+  'app/cierre/page.tsx',
   'supabase/functions/finanzas-v3-bridge/index.ts',
   'supabase/functions/finanzas-v3-data/index.ts',
   'supabase/functions/finanzas-v3-recurring/index.ts',
   'supabase/functions/finanzas-v3-splits/index.ts',
   'supabase/functions/finanzas-v3-normalized/index.ts',
   'supabase/functions/finanzas-v3-analytics/index.ts',
+  'supabase/functions/finanzas-v3-closure/index.ts',
 ];
 
 for (const file of requiredFiles) assert.equal(existsSync(file), true, `Falta artefacto canónico: ${file}`);
@@ -57,6 +63,7 @@ const normalizedSurfaces = [
   'app/recurrentes/page.tsx',
   'app/plan/page.tsx',
   'app/prevision/page.tsx',
+  'app/cierre/page.tsx',
 ];
 for (const file of normalizedSurfaces) {
   const content = readFileSync(file, 'utf8');
@@ -67,11 +74,16 @@ const forecastPage = readFileSync('app/prevision/page.tsx', 'utf8');
 assert.equal(forecastPage.includes('buildLongHorizonForecast'), true, 'Previsión debe mantener el motor de horizonte largo V2.4+');
 assert.equal(forecastPage.includes('buildForecastYearlyOutlook'), true, 'Previsión debe mantener el resumen anual de horizonte largo V2.4+');
 
+const closePage = readFileSync('app/cierre/page.tsx', 'utf8');
+assert.equal(closePage.includes('assessMonthClose'), true, 'Cierre debe usar el motor determinista V2.5+');
+assert.equal(closePage.includes('getMonthClosureSummary'), true, 'Cierre debe usar el resumen efectivo de Supabase');
+
 const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
 assert.equal(ci.includes('scripts/long-horizon-tests.mjs'), true, 'CI debe ejecutar las regresiones de horizonte largo');
+assert.equal(ci.includes('scripts/month-close-tests.mjs'), true, 'CI debe ejecutar las regresiones de cierre mensual');
 
 const deploymentEnabled = vercel.git?.deploymentEnabled || {};
-for (const branch of ['develop/v2.2.0-analytics', 'develop/v2.3.0-intelligence', 'develop/v2.4.0-long-horizon']) {
+for (const branch of ['develop/v2.2.0-analytics', 'develop/v2.3.0-intelligence', 'develop/v2.4.0-long-horizon', 'develop/v2.5.0-month-close']) {
   assert.equal(deploymentEnabled[branch], false, `${branch} debe permanecer fuera de previews automáticos de Vercel durante el desarrollo`);
 }
 
