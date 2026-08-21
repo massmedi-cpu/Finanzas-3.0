@@ -45,6 +45,7 @@ console.log("source multisheet invariants: OK");
 ''')
           PY
           rm .github/workflows/fix-multisheet-regex.yml
+          rm -f .hotfix-trigger
       - name: Commit correction
         run: |
           node scripts/source-multisheet-invariant-tests.mjs
