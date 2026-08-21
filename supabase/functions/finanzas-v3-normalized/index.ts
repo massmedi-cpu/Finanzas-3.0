@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const VERSION = 1;
+const VERSION = 2;
 const LEGACY_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-alberto-api";
 const PRINCIPAL_KEY = "private-session-owner";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -50,8 +50,7 @@ async function authorized(token: string) {
   if (!token) return false;
   const key = await sha256Hex(token);
   const now = Date.now();
-  const cachedUntil = authCache.get(key) || 0;
-  if (cachedUntil > now) return true;
+  if ((authCache.get(key) || 0) > now) return true;
 
   const response = await fetch(`${LEGACY_API}/api/__finanzas_v3_token_probe__`, {
     headers: { authorization: `Bearer ${token}`, accept: "application/json" },
@@ -61,9 +60,7 @@ async function authorized(token: string) {
   if (ok) {
     authCache.set(key, now + AUTH_TTL_MS);
     if (authCache.size > 64) {
-      for (const [cacheKey, expiry] of authCache) {
-        if (expiry <= now) authCache.delete(cacheKey);
-      }
+      for (const [cacheKey, expiry] of authCache) if (expiry <= now) authCache.delete(cacheKey);
     }
   }
   return ok;
@@ -146,6 +143,27 @@ function nullableUuid(value: string | null) {
   return text && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? text : null;
 }
 
+function transactionArgs(url: URL) {
+  const status = nullableText(url.searchParams.get("status"), 20) || "all";
+  if (!["all", "review", "ok"].includes(status)) throw new Error("invalid_status");
+  return {
+    p_principal_key: PRINCIPAL_KEY,
+    p_limit: Math.min(200, positiveInt(url.searchParams.get("limit"), 100)),
+    p_before_date: nullableDate(url.searchParams.get("cursorDate")),
+    p_before_position: url.searchParams.get("cursorPosition") == null ? null : positiveInt(url.searchParams.get("cursorPosition"), 1),
+    p_before_id: nullableUuid(url.searchParams.get("cursorId")),
+    p_year_month: nullableText(url.searchParams.get("month"), 7),
+    p_account_key: nullableText(url.searchParams.get("accountKey"), 180),
+    p_search: nullableText(url.searchParams.get("q"), 250),
+    p_review_mode: status,
+    p_include_total: url.searchParams.get("includeTotal") !== "0",
+  };
+}
+
+async function transactions(url: URL) {
+  return rpc<Record<string, unknown>>("finance_v210_transactions_page", transactionArgs(url));
+}
+
 function pathOf(req: Request) {
   const url = new URL(req.url);
   const marker = "/finanzas-v3-normalized";
@@ -183,30 +201,17 @@ Deno.serve(async (req: Request) => {
       return json(req, { ok: true, sync: result, state: current });
     }
 
-    if (path === "/transactions" && req.method === "GET") {
-      await ensureNormalized();
-      const url = new URL(req.url);
-      const status = nullableText(url.searchParams.get("status"), 20) || "all";
-      if (!["all", "review", "ok"].includes(status)) return json(req, { ok: false, error: "invalid_status" }, 400);
-
-      const result = await rpc<Record<string, unknown>>("finance_v210_transactions_page", {
-        p_principal_key: PRINCIPAL_KEY,
-        p_limit: Math.min(200, positiveInt(url.searchParams.get("limit"), 100)),
-        p_before_date: nullableDate(url.searchParams.get("cursorDate")),
-        p_before_position: url.searchParams.get("cursorPosition") == null ? null : positiveInt(url.searchParams.get("cursorPosition"), 1),
-        p_before_id: nullableUuid(url.searchParams.get("cursorId")),
-        p_year_month: nullableText(url.searchParams.get("month"), 7),
-        p_account_key: nullableText(url.searchParams.get("accountKey"), 180),
-        p_search: nullableText(url.searchParams.get("q"), 250),
-        p_review_mode: status,
-        p_include_total: url.searchParams.get("includeTotal") !== "0",
-      });
-      return json(req, result);
+    if ((path === "/transactions" || path === "/bootstrap") && req.method === "GET") {
+      const current = await ensureNormalized();
+      const result = await transactions(new URL(req.url));
+      return json(req, path === "/bootstrap" ? { ok: true, state: current, page: result } : result);
     }
 
     return json(req, { ok: false, error: "not_found" }, 404);
   } catch (error) {
-    console.error("finanzas_v3_normalized_error", String((error as Error)?.message || error));
-    return json(req, { ok: false, error: String((error as Error)?.message || error) }, 500);
+    const message = String((error as Error)?.message || error);
+    if (message === "invalid_status") return json(req, { ok: false, error: message }, 400);
+    console.error("finanzas_v3_normalized_error", message);
+    return json(req, { ok: false, error: message }, 500);
   }
 });
