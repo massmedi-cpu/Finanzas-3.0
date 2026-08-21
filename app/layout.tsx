@@ -8,6 +8,8 @@ import "./budget.css";
 import "./forecast.css";
 import "./net-worth.css";
 import "./analysis.css";
+import "./archive.css";
+import "./settings.css";
 
 export const metadata: Metadata = {
   title: { default: "Financial App", template: "%s · Financial App" },
@@ -22,7 +24,8 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = { themeColor: "#0b72ff", colorScheme: "light dark" };
+const themeBootstrap = `try{const t=localStorage.getItem('financial-app-theme');if(t==='light'||t==='dark')document.documentElement.dataset.theme=t}catch{}`;
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="es"><body>{children}</body></html>;
+  return <html lang="es" suppressHydrationWarning><head><script dangerouslySetInnerHTML={{__html:themeBootstrap}} /></head><body>{children}</body></html>;
 }
