@@ -13,7 +13,7 @@ export interface GoalFundingCapacity {
 }
 
 export function averageMonthlyForecastNet(forecast: ForecastMovement[], fromDate: string, months = 6): number {
-  const safeMonths = Math.max(1, Math.min(24, Math.trunc(months) || 6));
+  const safeMonths = Math.max(1, Math.min(60, Math.trunc(months) || 6));
   const horizonDate = addMonths(fromDate, safeMonths);
   const net = forecast
     .filter((movement) => movement.expectedDate > fromDate && movement.expectedDate <= horizonDate)
@@ -22,11 +22,7 @@ export function averageMonthlyForecastNet(forecast: ForecastMovement[], fromDate
 }
 
 export function scenarioAverageMonthlyNet(forecast: ForecastMovement[], fromDate: string, scenario: ScenarioInput): number {
-  // Previsión genera actualmente 12 meses de movimientos. No extrapolamos más allá
-  // de la evidencia disponible: los escenarios largos conservan su horizonte visual,
-  // pero la capacidad mensual para objetivos se calcula sobre un máximo de 12 meses.
-  const requestedMonths = Math.min(60, Math.max(1, Math.trunc(Number(scenario.horizon_months) || 12)));
-  const horizonMonths = Math.min(12, requestedMonths);
+  const horizonMonths = Math.min(60, Math.max(1, Math.trunc(Number(scenario.horizon_months) || 12)));
   const horizonDate = addMonths(fromDate, horizonMonths);
   const incomeMultiplier = 1 + (Number(scenario.income_change_pct) || 0) / 100;
   const expenseMultiplier = 1 + (Number(scenario.expense_change_pct) || 0) / 100;
