@@ -47,6 +47,8 @@ const normalizedSurfaces = [
   'app/informes/page.tsx',
   'app/presupuestos/page.tsx',
   'app/revision/page.tsx',
+  'app/plan/page.tsx',
+  'app/prevision/page.tsx',
 ];
 for (const file of normalizedSurfaces) {
   const content = readFileSync(file, 'utf8');
