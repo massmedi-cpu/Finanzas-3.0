@@ -1,6 +1,8 @@
 import { readFile } from 'node:fs/promises';
 
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
+const smokeAttempts = Number(process.env.SMOKE_ATTEMPTS || 40);
+const smokeIntervalMs = Number(process.env.SMOKE_INTERVAL_MS || 250);
 const packageJson = JSON.parse(
   await readFile(new URL('../package.json', import.meta.url), 'utf8'),
 );
@@ -35,16 +37,33 @@ function assertSecurity(response, path) {
 
 async function waitForServer() {
   let lastError;
-  for (let attempt = 1; attempt <= 40; attempt += 1) {
+  for (let attempt = 1; attempt <= smokeAttempts; attempt += 1) {
     try {
       const response = await request('/api/health');
-      if (response.ok) return;
+      if (response.ok) {
+        const body = await response.json();
+        if (body.version === expectedVersion) return;
+        lastError = new Error(`La aplicación responde como ${body.version}; esperando ${expectedVersion}`);
+      }
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 250));
+    await new Promise((resolve) => setTimeout(resolve, smokeIntervalMs));
   }
   throw lastError || new Error('El servidor compilado no respondió a tiempo');
+}
+
+async function assertPrivateRedirect(path) {
+  const response = await request(path);
+  assert([307, 308].includes(response.status), `${path}: esperado redirect 307/308 sin sesión; recibido ${response.status}`);
+  assertSecurity(response, path);
+  const location = response.headers.get('location');
+  assert(location, `${path}: redirect sin cabecera Location`);
+  const redirect = new URL(location, baseUrl);
+  assert(redirect.pathname === '/login', `${path}: debe redirigir a /login, recibido ${redirect.pathname}`);
+  if (path !== '/') {
+    assert(redirect.searchParams.get('next') === path, `${path}: parámetro next incorrecto: ${redirect.searchParams.get('next')}`);
+  }
 }
 
 await waitForServer();
@@ -57,22 +76,20 @@ assert(healthBody.ok === true, '/api/health: ok debe ser true');
 assert(healthBody.application === 'Finanzas 3.0', '/api/health: aplicación inesperada');
 assert(healthBody.version === expectedVersion, `/api/health: versión ${healthBody.version}; esperada ${expectedVersion}`);
 
-const root = await request('/');
-assert([307, 308].includes(root.status), `/: esperado redirect 307/308 sin sesión; recibido ${root.status}`);
-assertSecurity(root, '/');
-const rootLocation = root.headers.get('location');
-assert(rootLocation, '/: redirect sin cabecera Location');
-const rootRedirect = new URL(rootLocation, baseUrl);
-assert(rootRedirect.pathname === '/login', `/: debe redirigir a /login, recibido ${rootRedirect.pathname}`);
-
-const privateRoute = await request('/movimientos?smoke=1');
-assert([307, 308].includes(privateRoute.status), `/movimientos: esperado redirect 307/308 sin sesión; recibido ${privateRoute.status}`);
-assertSecurity(privateRoute, '/movimientos');
-const privateLocation = privateRoute.headers.get('location');
-assert(privateLocation, '/movimientos: redirect sin cabecera Location');
-const privateRedirect = new URL(privateLocation, baseUrl);
-assert(privateRedirect.pathname === '/login', `/movimientos: debe redirigir a /login, recibido ${privateRedirect.pathname}`);
-assert(privateRedirect.searchParams.get('next') === '/movimientos?smoke=1', `/movimientos: parámetro next incorrecto: ${privateRedirect.searchParams.get('next')}`);
+await assertPrivateRedirect('/');
+for (const path of [
+  '/movimientos?smoke=1',
+  '/api/private/budget',
+  '/api/private/future-event',
+  '/api/private/goal',
+  '/api/private/movement',
+  '/api/private/recurring',
+  '/api/private/scenario',
+  '/api/private/split',
+  '/api/sync/status',
+]) {
+  await assertPrivateRedirect(path);
+}
 
 const login = await request('/login');
 assert(login.status === 200, `/login: esperado 200, recibido ${login.status}`);
@@ -80,6 +97,7 @@ assertSecurity(login, '/login');
 const loginHtml = await login.text();
 assert(loginHtml.includes('Finanzas 3.0'), '/login: falta identidad de aplicación');
 assert(loginHtml.includes('Clave de acceso'), '/login: falta el campo de acceso esperado');
+assert(!loginHtml.includes('BAILOUT_TO_CLIENT_SIDE_RENDERING'), '/login: no debe depender de bailout a renderizado cliente');
 
 const manifest = await request('/manifest.webmanifest');
 assert(manifest.status === 200, `/manifest.webmanifest: esperado 200, recibido ${manifest.status}`);
