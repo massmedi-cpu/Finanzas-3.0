@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { unzipSync } from "npm:fflate@0.8.2";
 
-const VERSION = 5;
+const VERSION = 7;
 const LEGACY_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-alberto-api";
 const FILE_ID = "1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8";
 const FILE_NAME = "Movimientos bancarios - fuente";
@@ -220,10 +220,10 @@ function parseRows(bytes: Uint8Array) {
     const rows: Record<string, unknown>[] = [];
     for (const rowMatch of xml.matchAll(/<(?:\w+:)?row\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
       const values: Record<string, unknown> = {};
-      for (const cellMatch of rowMatch[2].matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)) {
+      for (const cellMatch of rowMatch[2].matchAll(/<(?:\w+:)?c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?c>)/g)) {
         const ref = attr(cellMatch[1], "r");
         const column = (ref.match(/^([A-Z]+)/) || [])[1];
-        if (column) values[column] = cellValue(cellMatch[2], cellMatch[1], shared);
+        if (column) values[column] = cellValue(cellMatch[2] || "", cellMatch[1], shared);
       }
       rows.push(values);
     }
@@ -328,13 +328,6 @@ async function persistSource(meta: any, parsed: { sheetName: string; sheetNames?
   const contentHash = await sha256Hex(JSON.stringify(parsed.rows));
   const now = new Date().toISOString();
   const payload = { rows: parsed.rows };
-  if (!current || current.content_hash !== contentHash) {
-    const snapshot = await fetch(`${url}/rest/v1/finance_v3_snapshots`, {
-      method: "POST", headers: serviceHeaders({ "content-type": "application/json", prefer: "return=minimal" }),
-      body: JSON.stringify({ source_file_id: meta.id, source_name: meta.name, source_modified_at: meta.modifiedTime || null, sheet_name: parsed.sheetName, row_count: parsed.rows.length, content_hash: contentHash, payload, captured_at: now }),
-    });
-    if (!snapshot.ok && snapshot.status !== 409) throw new Error(`snapshot_insert_${snapshot.status}`);
-  }
   const upsert = await fetch(`${url}/rest/v1/finance_v3_current?on_conflict=id`, {
     method: "POST", headers: serviceHeaders({ "content-type": "application/json", prefer: "resolution=merge-duplicates,return=minimal" }),
     body: JSON.stringify({ id: CURRENT_ID, source_file_id: meta.id, source_name: meta.name, source_modified_at: meta.modifiedTime || null, sheet_name: parsed.sheetName, row_count: parsed.rows.length, content_hash: contentHash, payload, synced_at: now, updated_at: now }),
