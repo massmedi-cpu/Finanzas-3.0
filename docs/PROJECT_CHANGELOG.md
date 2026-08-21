@@ -1,5 +1,31 @@
 # Changelog canónico — Finanzas 3.0
 
+## V3.0.0 — release integral
+
+### Arquitectura y rendimiento
+- Consolidada la capa normalizada y analítica introducida desde V2.1/V2.2.
+- Movimientos conserva paginación keyset y las superficies principales quedan protegidas contra la reintroducción de `loadValidatedSource()`.
+- Previsión soporta horizonte real de hasta 60 meses con calendario mensual y resumen anual.
+
+### Inteligencia y control
+- Objetivos inteligentes, capacidad mensual y prioridades predictivas.
+- Cierre mensual persistente/reabrible con drift y auditoría.
+- Reglas privadas reversibles con preview, precedencia manual y sugerencias explicables.
+- Centro de Control con auditorías persistentes de checksum, sincronización y calidad.
+
+### Portabilidad y recuperación
+- Exportación JSON de la capa privada sin duplicar la fuente bancaria.
+- Checkpoints internos y restauración atómica con preview, checksum, referencias y confirmación explícita.
+
+### Seguridad
+- `finanzas-v3-data`, `finanzas-v3-recurring` y `finanzas-v3-splits` endurecidas a autorización fail-closed.
+- CI prohíbe la regresión al patrón fail-open.
+- RLS deny-by-default preservado para las tablas privadas.
+- Añadido índice de cobertura a la FK de eventos de reglas tras el advisory de rendimiento final.
+
+### Release
+- Gate V3.0 exige integridad financiera, seguridad, recuperación, CI completo, preview exacto de Vercel y verificación de producción antes de declarar publicación completada.
+
 ## V2.1.0 — arquitectura normalizada y escalabilidad
 
 ### Datos y sincronización

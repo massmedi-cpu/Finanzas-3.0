@@ -2,11 +2,15 @@ name: Finanzas 3.0 CI
 
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'develop/**'
+      - 'release/**'
   push:
     branches:
       - 'develop/**'
       - 'audit/**'
+      - 'release/**'
 
 permissions:
   contents: read
@@ -33,6 +37,27 @@ jobs:
 
       - name: Finance regression tests
         run: npm test
+
+      - name: Long-horizon regression tests
+        run: npx tsx scripts/long-horizon-tests.mjs
+
+      - name: Month-close regression tests
+        run: npx tsx scripts/month-close-tests.mjs
+
+      - name: Classification rule regression tests
+        run: npx tsx scripts/classification-rule-tests.mjs
+
+      - name: Explainability regression tests
+        run: npx tsx scripts/explainability-tests.mjs
+
+      - name: System audit regression tests
+        run: npx tsx scripts/system-audit-tests.mjs
+
+      - name: Backup portability regression tests
+        run: npx tsx scripts/backup-portability-tests.mjs
+
+      - name: V3 security regression tests
+        run: npx tsx scripts/v300-security-tests.mjs
 
       - name: Typecheck
         run: npm run typecheck

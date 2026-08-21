@@ -9,6 +9,13 @@ import './review.css';
 import './reports.css';
 import './splits.css';
 import './plan.css';
+import './intelligence.css';
+import './forecast-calendar.css';
+import './close.css';
+import './rules.css';
+import './explainability.css';
+import './control.css';
+import './backup.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata: Metadata = {

@@ -1,17 +1,12 @@
 import Link from 'next/link';
-import { buildBudgetEnvelopes, previousMonth, summarizeBudget } from '../../src/domain/budget-engine';
-import { getCategorySpending } from '../../src/domain/category-analysis';
-import { findDuplicateCandidates, getMonthlySummary, getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
-import { applyRecurringPreferences, buildForecast, combineForecasts, detectRecurringPatterns, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
+import { summarizeBudget, type BudgetEnvelope } from '../../src/domain/budget-engine';
+import type { CategorySpending } from '../../src/domain/category-analysis';
+import { applyRecurringPreferences, buildForecast, combineForecasts, expandPlannedEvents, getLiquidityRisk } from '../../src/domain/forecast-engine';
 import { buildFinancialInsights } from '../../src/domain/insight-engine';
-import { getNetWorthHistory } from '../../src/domain/net-worth-engine';
-import { getAvailableMonths } from '../../src/domain/report-engine';
 import { getPrivateState } from '../../src/private-data/client';
-import { indexOverrides, rowsForAnalytics, rowsForBudgetAndReports, sourceReviewStatus } from '../../src/private-data/merge';
 import { getRecurringPreferences } from '../../src/private-data/recurring';
-import { getMovementSplits } from '../../src/private-data/splits';
+import { getNormalizedPlan } from '../../src/normalized/analytics-client';
 import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
 import { APP_VERSION_LABEL } from '../../src/version';
 import NetWorthChart from './NetWorthChart';
 
@@ -36,46 +31,46 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
   }
 
   try {
-    const [source, privateState, splits, recurringPreferences] = await Promise.all([
-      loadValidatedSource(),
+    const [planData, privateState, recurringPreferences] = await Promise.all([
+      getNormalizedPlan(params.month),
       getPrivateState(),
-      getMovementSplits(),
       getRecurringPreferences(),
     ]);
 
-    const baseAnalyticsRows = rowsForAnalytics(source.rows, privateState.overrides);
-    const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
-    const availableMonths = getAvailableMonths(baseAnalyticsRows);
-    const selectedMonth = params.month && availableMonths.includes(params.month) ? params.month : (availableMonths[0] || source.latestMonth || '');
-    const previous = previousMonth(selectedMonth);
-    const currentSummary = getMonthlySummary(baseAnalyticsRows, selectedMonth);
-    const previousSummary = getMonthlySummary(baseAnalyticsRows, previous);
-    const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === selectedMonth);
-    const previousBudgets = privateState.budgets.filter((budget) => budget.year_month === previous);
-    const envelopes = buildBudgetEnvelopes(budgetRows, selectedMonth, currentBudgets, previousBudgets);
+    const selectedMonth = planData.core.selectedMonth || planData.budget.selectedMonth || '';
+    const availableMonths = planData.budget.availableMonths;
+    const currentSummary = planData.core.current || { income: 0, expenses: 0, netCashFlow: 0, transactionCount: 0, needsReview: 0 };
+    const previousSummary = planData.core.previous || { income: 0, expenses: 0, netCashFlow: 0, transactionCount: 0, needsReview: 0 };
+    const envelopes: BudgetEnvelope[] = planData.budget.rows.map((row) => {
+      const spent = Number(row.spent) || 0;
+      const assigned = Number(row.assigned) || 0;
+      const carryIn = Number(row.carryIn) || 0;
+      return {
+        category: row.category,
+        spent,
+        transactions: row.transactions || 0,
+        assigned,
+        carryIn,
+        available: assigned + carryIn - spent,
+        rollover: row.rollover,
+      };
+    });
     const budgetSummary = summarizeBudget(envelopes);
     const unassigned = currentSummary.income - budgetSummary.assigned;
-    const topCategory = getCategorySpending(budgetRows, selectedMonth)[0] ?? null;
+    const topEnvelope = envelopes.reduce<BudgetEnvelope | null>((top, envelope) => !top || envelope.spent > top.spent ? envelope : top, null);
+    const topCategory: CategorySpending | null = topEnvelope && topEnvelope.spent > 0 ? { category: topEnvelope.category, amount: topEnvelope.spent, transactions: topEnvelope.transactions } : null;
 
-    const overrideMap = indexOverrides(privateState.overrides);
-    const monthSourceRows = source.rows.filter((row) => row.date.startsWith(selectedMonth));
-    const monthAnalyticsRows = baseAnalyticsRows.filter((row) => row.date.startsWith(selectedMonth));
-    const pendingReview = monthSourceRows.filter((row) => {
-      const override = overrideMap.get(row.sourceId);
-      if (override?.excluded_from_analytics) return false;
-      return (override?.review_status || sourceReviewStatus(row.review)) === 'pending';
-    }).length;
-    const duplicateGroups = findDuplicateCandidates(monthAnalyticsRows).length;
+    const pendingReview = planData.core.pendingReview;
+    const duplicateGroups = planData.core.duplicateGroups;
 
-    const latestDate = source.rows.reduce<string>((latest, row) => row.date > latest ? row.date : latest, '');
-    const detectedPatterns = detectRecurringPatterns(baseAnalyticsRows);
-    const patterns = applyRecurringPreferences(detectedPatterns, recurringPreferences);
+    const latestDate = planData.forecastInputs.baseDate || planData.state.maxDate || '';
+    const patterns = applyRecurringPreferences(planData.forecastInputs.patterns, recurringPreferences);
     const forecast = latestDate ? combineForecasts(buildForecast(patterns, latestDate, 120), expandPlannedEvents(privateState.futureEvents, latestDate, 120)) : [];
-    const startingBalance = getNetWorthFromKnownBalances(source.rows);
+    const startingBalance = planData.state.accounts.reduce((sum, account) => sum + (Number(account.balance) || 0), 0);
     const liquidity = getLiquidityRisk(forecast, startingBalance);
     const upcoming = forecast.slice(0, 6);
 
-    const netWorthHistory = getNetWorthHistory(source.rows, 18);
+    const netWorthHistory = planData.core.netWorthHistory;
     const latestNetWorth = netWorthHistory.at(-1) ?? null;
     const previousNetWorth = netWorthHistory.length > 1 ? netWorthHistory.at(-2) ?? null : null;
     const netWorthChange = latestNetWorth && previousNetWorth ? latestNetWorth.netWorth - previousNetWorth.netWorth : null;
@@ -109,5 +104,5 @@ export default async function PlanPage({ searchParams }: { searchParams: Promise
     sourceError = true;
   }
 
-  return <main className="page"><section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1></div><span className="badge">{APP_VERSION_LABEL}</span></section>{sourceError && <div className="status-panel status-danger"><div><div className="status-title">No se puede construir el plan con garantías</div><div className="status-copy">La vista se detiene si falta la fuente, tus ajustes privados, divisiones o preferencias recurrentes.</div></div></div>}</main>;
+  return <main className="page"><section className="page-header"><div><div className="eyebrow">Plan financiero</div><h1>Control mensual 360º</h1></div><span className="badge">{APP_VERSION_LABEL}</span></section>{sourceError && <div className="status-panel status-danger"><div><div className="status-title">No se puede construir el plan con garantías</div><div className="status-copy">La vista se detiene si falta la fuente, tus ajustes privados o las preferencias recurrentes.</div></div></div>}</main>;
 }

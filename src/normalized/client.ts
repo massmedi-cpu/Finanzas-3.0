@@ -78,6 +78,9 @@ export interface NormalizedMovement {
   excludedFromAnalytics: boolean;
   notes: string;
   hasOverride: boolean;
+  appliedRuleId?: string | null;
+  appliedRuleName?: string | null;
+  ruleApplied?: boolean;
   splits: NormalizedMovementSplit[];
   cursorPosition: number;
 }

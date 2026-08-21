@@ -24,11 +24,15 @@ function bearer(req: Request) {
 
 async function authorized(token: string) {
   if (!token) return false;
-  const response = await fetch(`${LEGACY_API}/api/__finanzas_v3_token_probe__`, {
-    headers: { authorization: `Bearer ${token}`, accept: "application/json" },
-    cache: "no-store",
-  });
-  return response.status !== 401 && response.status !== 403;
+  try {
+    const response = await fetch(`${LEGACY_API}/api/__finanzas_v3_token_probe__`, {
+      headers: { authorization: `Bearer ${token}`, accept: "application/json" },
+      cache: "no-store",
+    });
+    return response.ok || response.status === 404;
+  } catch {
+    return false;
+  }
 }
 
 async function rest(path: string, init: RequestInit = {}) {
@@ -70,7 +74,7 @@ function pathOf(req: Request) {
 
 Deno.serve(async (req: Request) => {
   const path = pathOf(req);
-  if (path === "/health") return json({ ok: true, version: 2 });
+  if (path === "/health") return json({ ok: true, version: 3 });
 
   const token = bearer(req);
   if (!(await authorized(token))) return json({ ok: false, error: "unauthorized" }, 401);

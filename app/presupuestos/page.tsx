@@ -1,15 +1,13 @@
 import Link from 'next/link';
-import { buildBudgetEnvelopes, previousMonth } from '../../src/domain/budget-engine';
-import { getMonthlySummary } from '../../src/domain/finance-engine';
-import { getAvailableMonths } from '../../src/domain/report-engine';
-import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
-import { getPrivateState } from '../../src/private-data/client';
-import { rowsForBudgetAndReports } from '../../src/private-data/merge';
-import { getMovementSplits } from '../../src/private-data/splits';
+import { getNormalizedBudget } from '../../src/normalized/analytics-client';
 import BudgetEditor, { type BudgetCategoryView } from './BudgetEditor';
 
 export const dynamic = 'force-dynamic';
+
+function money(value: number | string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
 
 export default async function PresupuestosPage({ searchParams }: { searchParams: Promise<{ month?: string }> }) {
   const params = await searchParams;
@@ -19,35 +17,21 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
   let monthlyIncome = 0;
   let dataError = false;
 
-  if (isGoogleSheetsConfigured()) {
-    try {
-      const [source, privateState, splits] = await Promise.all([
-        loadValidatedSource(),
-        getPrivateState(),
-        getMovementSplits(),
-      ]);
-
-      const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
-      availableMonths = getAvailableMonths(budgetRows);
-      selectedMonth = params.month && availableMonths.includes(params.month) ? params.month : (availableMonths[0] || source.latestMonth);
-
-      if (selectedMonth) {
-        monthlyIncome = getMonthlySummary(budgetRows, selectedMonth).income;
-        const previous = previousMonth(selectedMonth);
-        const currentBudgets = privateState.budgets.filter((budget) => budget.year_month === selectedMonth);
-        const previousBudgets = privateState.budgets.filter((budget) => budget.year_month === previous);
-        rows = buildBudgetEnvelopes(budgetRows, selectedMonth, currentBudgets, previousBudgets).map((envelope) => ({
-          category: envelope.category,
-          spent: envelope.spent,
-          transactions: envelope.transactions,
-          assigned: envelope.assigned,
-          carryIn: envelope.carryIn,
-          rollover: envelope.rollover,
-        }));
-      }
-    } catch {
-      dataError = true;
-    }
+  try {
+    const budget = await getNormalizedBudget(params.month);
+    availableMonths = budget.availableMonths;
+    selectedMonth = budget.selectedMonth;
+    monthlyIncome = money(budget.monthlyIncome);
+    rows = budget.rows.map((row) => ({
+      category: row.category,
+      spent: money(row.spent),
+      transactions: row.transactions,
+      assigned: money(row.assigned),
+      carryIn: money(row.carryIn),
+      rollover: row.rollover,
+    }));
+  } catch {
+    dataError = true;
   }
 
   return (
@@ -71,7 +55,7 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
         <div className="status-panel status-danger">
           <div>
             <div className="status-title">No se ha podido calcular el presupuesto con garantías</div>
-            <div className="status-copy">Se detiene el cálculo si falta la fuente, tus ajustes privados o las divisiones de movimientos.</div>
+            <div className="status-copy">Se detiene el cálculo si el snapshot y el motor analítico normalizado no coinciden.</div>
           </div>
         </div>
       ) : !selectedMonth ? (
