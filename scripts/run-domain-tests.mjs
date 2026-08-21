@@ -7,7 +7,7 @@ import {
 } from '../src/domain/finance-engine.ts';
 import { buildFinancialAlerts } from '../src/domain/financial-alert-engine.ts';
 import { projectGoal } from '../src/domain/goal-engine.ts';
-import { assessGoalFundingCapacity, averageMonthlyForecastNet } from '../src/domain/planning-capacity-engine.ts';
+import { assessGoalFundingCapacity, averageMonthlyForecastNet, scenarioAverageMonthlyNet } from '../src/domain/planning-capacity-engine.ts';
 import { detectQualityIssues } from '../src/domain/quality-engine.ts';
 import { rowsForAnalytics } from '../src/private-data/merge.ts';
 import { hasUsableSessionToken } from '../src/security/session.ts';
@@ -123,10 +123,11 @@ const unplannedGoal = projectGoal({ targetAmount: 900, currentAmount: 300, targe
 assert.equal(unplannedGoal.status, 'at_risk');
 assert.equal(Math.round(unplannedGoal.requiredMonthlyContribution ?? 0), 120);
 
-const projectedMonthlyNet = averageMonthlyForecastNet([
+const forecastFixture = [
   { id: 'income-future', description: 'Ingreso', category: 'Ingresos', expectedDate: '2026-09-01', amount: 1000, confidence: 1, source: 'planned' },
   { id: 'expense-future', description: 'Gasto', category: 'Vivienda', expectedDate: '2026-10-01', amount: -200, confidence: 1, source: 'planned' },
-], '2026-08-21', 2);
+];
+const projectedMonthlyNet = averageMonthlyForecastNet(forecastFixture, '2026-08-21', 2);
 assert.equal(projectedMonthlyNet, 400);
 
 const coveredCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], projectedMonthlyNet);
@@ -138,6 +139,20 @@ const tightCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], 300);
 assert.equal(tightCapacity.status, 'tight');
 const shortCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], 150);
 assert.equal(shortCapacity.status, 'shortfall');
+
+const scenarioMonthlyNet = scenarioAverageMonthlyNet(forecastFixture, '2026-08-21', {
+  id: 'scenario',
+  name: 'Escenario prueba',
+  income_change_pct: -10,
+  expense_change_pct: 10,
+  monthly_net_adjustment: 50,
+  monthly_savings_allocation: 25,
+  starting_balance_adjustment: 0,
+  horizon_months: 2,
+  active: true,
+});
+assert.equal(scenarioMonthlyNet, 365, 'El escenario debe ajustar ingresos, gastos, ajuste mensual y ahorro reservado sin usar el saldo inicial');
+assert.equal(assessGoalFundingCapacity([riskyGoal, onTrackGoal], scenarioMonthlyNet).status, 'covered');
 
 const criticalAlerts = buildFinancialAlerts({
   asOfDate: '2026-08-21',
