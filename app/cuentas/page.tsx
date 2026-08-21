@@ -1,28 +1,28 @@
-import { getLatestAccountBalances } from '../../src/domain/finance-engine';
-import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
-
-export const dynamic = 'force-dynamic';
+import { getNormalizedState, type NormalizedAccountOption } from '../../src/normalized/client';
 
 const euro = new Intl.NumberFormat('es-ES', {
   style: 'currency',
   currency: 'EUR',
 });
 
+function balanceOf(account: NormalizedAccountOption) {
+  const value = Number(account.balance);
+  return Number.isFinite(value) ? value : 0;
+}
+
 export default async function CuentasPage() {
-  let accounts: ReturnType<typeof getLatestAccountBalances> = [];
+  let accounts: NormalizedAccountOption[] = [];
   let sourceError = false;
 
-  if (isGoogleSheetsConfigured()) {
-    try {
-      const source = await loadValidatedSource();
-      accounts = getLatestAccountBalances(source.rows);
-    } catch {
-      sourceError = true;
-    }
+  try {
+    const state = await getNormalizedState();
+    if (!state.inSync || state.currentRows !== state.normalizedRows) throw new Error('normalized-source-not-ready');
+    accounts = (state.accounts || []).filter((account) => account.balance !== null && Number.isFinite(Number(account.balance)));
+  } catch {
+    sourceError = true;
   }
 
-  const total = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const total = accounts.reduce((sum, account) => sum + balanceOf(account), 0);
 
   return (
     <main className="page">
@@ -30,7 +30,7 @@ export default async function CuentasPage() {
         <div>
           <div className="eyebrow">Cuentas</div>
           <h1>Todo tu dinero, por cuenta</h1>
-          <p className="subtitle">Último saldo conocido de cada producto, calculado desde la fuente maestra sin alterar el histórico.</p>
+          <p className="subtitle">Último saldo conocido de cada producto, leído desde el modelo normalizado sin cargar todo el histórico.</p>
         </div>
         {accounts.length > 0 && <span className="badge">{accounts.length} cuentas</span>}
       </section>
@@ -39,7 +39,7 @@ export default async function CuentasPage() {
         <div className="status-panel status-danger">
           <div>
             <div className="status-title">No se han podido validar las cuentas</div>
-            <div className="status-copy">No se muestran saldos parciales mientras exista un error en la fuente.</div>
+            <div className="status-copy">No se muestran saldos parciales mientras el snapshot y la capa normalizada no coincidan.</div>
           </div>
         </div>
       ) : accounts.length === 0 ? (
@@ -57,7 +57,7 @@ export default async function CuentasPage() {
             <article className="card">
               <div className="metric-label">Productos con saldo</div>
               <div className="metric-value">{accounts.length}</div>
-              <p className="metric-note">Detectados en la fuente</p>
+              <p className="metric-note">Consultados sin recorrer miles de movimientos</p>
             </article>
             <article className="card">
               <div className="metric-label">Fuente</div>
@@ -70,14 +70,14 @@ export default async function CuentasPage() {
             <h2 className="section-title">Detalle de cuentas</h2>
             <div className="stack">
               {accounts.map((account) => (
-                <div className="row" key={account.identifier || account.account}>
+                <div className="row" key={account.accountKey}>
                   <div>
-                    <div className="row-title">{account.account}</div>
+                    <div className="row-title">{account.name}</div>
                     <div className="row-meta">
-                      {[account.institution, account.identifier, `Actualizado ${account.date}`].filter(Boolean).join(' · ')}
+                      {[account.institution, account.type, account.balanceDate ? `Actualizado ${account.balanceDate}` : null].filter(Boolean).join(' · ')}
                     </div>
                   </div>
-                  <div className="amount">{euro.format(account.balance)}</div>
+                  <div className="amount">{euro.format(balanceOf(account))}</div>
                 </div>
               ))}
             </div>
