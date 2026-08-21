@@ -30,7 +30,19 @@ jobs:
           p.write_text(text)
 
           test = Path('scripts/source-multisheet-invariant-tests.mjs')
-          test.write_text('''import fs from "node:fs";\nconst source = fs.readFileSync("supabase/functions/finanzas-v3-bridge/index.ts", "utf8");\nconst start = source.indexOf("function parseRows(bytes: Uint8Array) {");\nconst end = source.indexOf("\\nfunction bearer(req: Request)", start);\nconst parser = source.slice(start, end);\nif (!parser.includes("const sheetNames: string[] = []")) throw new Error("multi-sheet aggregation missing");\nif (!parser.includes("bySourceId.set(parsed.sourceId, parsed)")) throw new Error("sourceId merge missing");\nif (!parser.includes("source_duplicate_id_conflict")) throw new Error("duplicate conflict guard missing");\nif (parser.includes("parsedRows = rows.slice(1); break")) throw new Error("legacy first-sheet break still present");\nif (parser.includes("(?:\\\\w+:)?row")) throw new Error("row regex double-escaped");\nif (parser.includes("(?:\\\\w+:)?c")) throw new Error("cell regex double-escaped");\nconsole.log("source multisheet invariants: OK");\n''')
+          test.write_text(r'''import fs from "node:fs";
+const source = fs.readFileSync("supabase/functions/finanzas-v3-bridge/index.ts", "utf8");
+const start = source.indexOf("function parseRows(bytes: Uint8Array) {");
+const end = source.indexOf("\nfunction bearer(req: Request)", start);
+const parser = source.slice(start, end);
+if (!parser.includes("const sheetNames: string[] = []")) throw new Error("multi-sheet aggregation missing");
+if (!parser.includes("bySourceId.set(parsed.sourceId, parsed)")) throw new Error("sourceId merge missing");
+if (!parser.includes("source_duplicate_id_conflict")) throw new Error("duplicate conflict guard missing");
+if (parser.includes("parsedRows = rows.slice(1); break")) throw new Error("legacy first-sheet break still present");
+if (parser.includes(String.raw`(?:\\w+:)?row`)) throw new Error("row regex double-escaped");
+if (parser.includes(String.raw`(?:\\w+:)?c`)) throw new Error("cell regex double-escaped");
+console.log("source multisheet invariants: OK");
+''')
           PY
           rm .github/workflows/fix-multisheet-regex.yml
       - name: Commit correction
