@@ -7,6 +7,7 @@ import "./cash-flow.css";
 import "./budget.css";
 import "./forecast.css";
 import "./net-worth.css";
+import "./analysis.css";
 
 export const metadata: Metadata = {
   title: { default: "Financial App", template: "%s · Financial App" },
