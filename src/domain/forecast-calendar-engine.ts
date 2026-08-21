@@ -13,6 +13,19 @@ export interface ForecastCalendarMonth {
   plannedCount: number;
 }
 
+export interface ForecastYearSummary {
+  year: string;
+  income: number;
+  expenses: number;
+  netCashFlow: number;
+  startingBalance: number;
+  endingBalance: number;
+  lowestBalance: number;
+  firstNegativeDate: string | null;
+  movementCount: number;
+  plannedCount: number;
+}
+
 function monthEnd(month: string): string {
   const [year, monthNumber] = month.split('-').map(Number);
   if (!year || !monthNumber) return `${month}-31`;
@@ -69,6 +82,63 @@ export function buildForecastCalendar(
       expenses,
       netCashFlow: income - expenses,
       startingBalance: startingMonthBalance,
+      endingBalance: runningBalance,
+      lowestBalance,
+      firstNegativeDate,
+      movementCount,
+      plannedCount,
+    });
+  }
+
+  return rows;
+}
+
+export function buildForecastYearlyOutlook(
+  forecast: ForecastMovement[],
+  startingBalance: number,
+  fromDate: string,
+  horizonDate: string,
+): ForecastYearSummary[] {
+  const startYear = Number(fromDate.slice(0, 4));
+  const endYear = Number(horizonDate.slice(0, 4));
+  if (!startYear || !endYear || endYear < startYear) return [];
+
+  const movements = [...forecast]
+    .filter((movement) => movement.expectedDate > fromDate && movement.expectedDate <= horizonDate)
+    .sort((a, b) => a.expectedDate.localeCompare(b.expectedDate) || a.id.localeCompare(b.id));
+
+  let runningBalance = Number.isFinite(startingBalance) ? startingBalance : 0;
+  let pointer = 0;
+  const rows: ForecastYearSummary[] = [];
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    const yearKey = String(year);
+    const startingYearBalance = runningBalance;
+    let income = 0;
+    let expenses = 0;
+    let movementCount = 0;
+    let plannedCount = 0;
+    let lowestBalance = runningBalance;
+    let firstNegativeDate: string | null = runningBalance < 0 ? `${yearKey}-01-01` : null;
+
+    while (pointer < movements.length && movements[pointer].expectedDate.slice(0, 4) === yearKey) {
+      const movement = movements[pointer];
+      if (movement.amount > 0) income += movement.amount;
+      if (movement.amount < 0) expenses += Math.abs(movement.amount);
+      runningBalance += movement.amount;
+      movementCount += 1;
+      if (movement.source === 'planned') plannedCount += 1;
+      if (runningBalance < lowestBalance) lowestBalance = runningBalance;
+      if (runningBalance < 0 && !firstNegativeDate) firstNegativeDate = movement.expectedDate;
+      pointer += 1;
+    }
+
+    rows.push({
+      year: yearKey,
+      income,
+      expenses,
+      netCashFlow: income - expenses,
+      startingBalance: startingYearBalance,
       endingBalance: runningBalance,
       lowestBalance,
       firstNegativeDate,
