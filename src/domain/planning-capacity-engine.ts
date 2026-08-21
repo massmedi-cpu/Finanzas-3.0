@@ -22,7 +22,11 @@ export function averageMonthlyForecastNet(forecast: ForecastMovement[], fromDate
 }
 
 export function scenarioAverageMonthlyNet(forecast: ForecastMovement[], fromDate: string, scenario: ScenarioInput): number {
-  const horizonMonths = Math.min(60, Math.max(1, Math.trunc(Number(scenario.horizon_months) || 12)));
+  // Previsión genera actualmente 12 meses de movimientos. No extrapolamos más allá
+  // de la evidencia disponible: los escenarios largos conservan su horizonte visual,
+  // pero la capacidad mensual para objetivos se calcula sobre un máximo de 12 meses.
+  const requestedMonths = Math.min(60, Math.max(1, Math.trunc(Number(scenario.horizon_months) || 12)));
+  const horizonMonths = Math.min(12, requestedMonths);
   const horizonDate = addMonths(fromDate, horizonMonths);
   const incomeMultiplier = 1 + (Number(scenario.income_change_pct) || 0) / 100;
   const expenseMultiplier = 1 + (Number(scenario.expense_change_pct) || 0) / 100;
