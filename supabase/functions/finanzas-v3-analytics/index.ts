@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const VERSION = 2;
+const VERSION = 3;
 const NORMALIZED_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-normalized";
 const PRINCIPAL_KEY = "private-session-owner";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -67,6 +67,10 @@ function pathOf(req: Request) {
   return index >= 0 ? (url.pathname.slice(index + marker.length) || "/") : url.pathname;
 }
 
+function validMonth(value: string) {
+  return !value || /^\d{4}-\d{2}$/.test(value);
+}
+
 Deno.serve(async (req: Request) => {
   const path = pathOf(req);
   try {
@@ -87,7 +91,7 @@ Deno.serve(async (req: Request) => {
 
     if (path === "/budget" && req.method === "GET") {
       const month = (url.searchParams.get("month") || "").trim();
-      if (month && !/^\d{4}-\d{2}$/.test(month)) return json({ ok: false, error: "invalid_month" }, 400);
+      if (!validMonth(month)) return json({ ok: false, error: "invalid_month" }, 400);
       return json(await rpc("finance_v220_budget", { p_principal_key: PRINCIPAL_KEY, p_month: month || null }));
     }
 
@@ -98,6 +102,17 @@ Deno.serve(async (req: Request) => {
     if (path === "/forecast-inputs" && req.method === "GET") {
       const inputs = await rpc<Record<string, unknown>>("finance_v220_forecast_inputs", { p_principal_key: PRINCIPAL_KEY });
       return json({ ...inputs, state: normalizedState });
+    }
+
+    if (path === "/plan" && req.method === "GET") {
+      const month = (url.searchParams.get("month") || "").trim();
+      if (!validMonth(month)) return json({ ok: false, error: "invalid_month" }, 400);
+      const [budget, core, forecastInputs] = await Promise.all([
+        rpc<Record<string, unknown>>("finance_v220_budget", { p_principal_key: PRINCIPAL_KEY, p_month: month || null }),
+        rpc<Record<string, unknown>>("finance_v220_plan_core", { p_principal_key: PRINCIPAL_KEY, p_month: month || null }),
+        rpc<Record<string, unknown>>("finance_v220_forecast_inputs", { p_principal_key: PRINCIPAL_KEY }),
+      ]);
+      return json({ ok: true, budget, core, forecastInputs, state: normalizedState });
     }
 
     return json({ ok: false, error: "not_found" }, 404);
