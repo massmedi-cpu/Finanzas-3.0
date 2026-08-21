@@ -5,6 +5,8 @@ export function formatMoney(cents: number): string {
     style: "currency",
     currency: APP_CURRENCY,
     minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+    useGrouping: true,
   }).format(cents / 100);
 }
 
