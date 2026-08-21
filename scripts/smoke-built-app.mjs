@@ -3,9 +3,7 @@ import { readFile } from 'node:fs/promises';
 const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:3000';
 const smokeAttempts = Number(process.env.SMOKE_ATTEMPTS || 40);
 const smokeIntervalMs = Number(process.env.SMOKE_INTERVAL_MS || 250);
-const packageJson = JSON.parse(
-  await readFile(new URL('../package.json', import.meta.url), 'utf8'),
-);
+const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const expectedVersion = packageJson.version;
 
 const securityHeaders = {
@@ -16,17 +14,8 @@ const securityHeaders = {
   'x-robots-tag': 'noindex, nofollow, noarchive',
 };
 
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
-
-async function request(path, options = {}) {
-  return fetch(new URL(path, baseUrl), {
-    redirect: 'manual',
-    ...options,
-  });
-}
-
+function assert(condition, message) { if (!condition) throw new Error(message); }
+async function request(path, options = {}) { return fetch(new URL(path, baseUrl), { redirect: 'manual', ...options }); }
 function assertSecurity(response, path) {
   for (const [name, expected] of Object.entries(securityHeaders)) {
     const actual = response.headers.get(name);
@@ -34,7 +23,6 @@ function assertSecurity(response, path) {
   }
   assert(!response.headers.has('x-powered-by'), `${path}: no debe exponer X-Powered-By`);
 }
-
 async function waitForServer() {
   let lastError;
   for (let attempt = 1; attempt <= smokeAttempts; attempt += 1) {
@@ -45,14 +33,11 @@ async function waitForServer() {
         if (body.version === expectedVersion) return;
         lastError = new Error(`La aplicación responde como ${body.version}; esperando ${expectedVersion}`);
       }
-    } catch (error) {
-      lastError = error;
-    }
+    } catch (error) { lastError = error; }
     await new Promise((resolve) => setTimeout(resolve, smokeIntervalMs));
   }
   throw lastError || new Error('El servidor compilado no respondió a tiempo');
 }
-
 async function assertPrivateRedirect(path) {
   const response = await request(path);
   assert([307, 308].includes(response.status), `${path}: esperado redirect 307/308 sin sesión; recibido ${response.status}`);
@@ -61,13 +46,10 @@ async function assertPrivateRedirect(path) {
   assert(location, `${path}: redirect sin cabecera Location`);
   const redirect = new URL(location, baseUrl);
   assert(redirect.pathname === '/login', `${path}: debe redirigir a /login, recibido ${redirect.pathname}`);
-  if (path !== '/') {
-    assert(redirect.searchParams.get('next') === path, `${path}: parámetro next incorrecto: ${redirect.searchParams.get('next')}`);
-  }
+  if (path !== '/') assert(redirect.searchParams.get('next') === path, `${path}: parámetro next incorrecto: ${redirect.searchParams.get('next')}`);
 }
 
 await waitForServer();
-
 const health = await request('/api/health');
 assert(health.status === 200, `/api/health: esperado 200, recibido ${health.status}`);
 assertSecurity(health, '/api/health');
@@ -78,27 +60,9 @@ assert(healthBody.version === expectedVersion, `/api/health: versión ${healthBo
 
 await assertPrivateRedirect('/');
 for (const path of [
-  '/movimientos?smoke=1',
-  '/informes?year=2026',
-  '/presupuestos?month=2026-08',
-  '/revision',
-  '/cierre?month=2026-07',
-  '/reglas',
-  '/explicabilidad',
-  '/api/private/budget',
-  '/api/private/future-event',
-  '/api/private/goal',
-  '/api/private/month-closure',
-  '/api/private/movement',
-  '/api/private/recurring',
-  '/api/private/rule',
-  '/api/private/rule-preview',
-  '/api/private/scenario',
-  '/api/private/split',
-  '/api/sync/status',
-]) {
-  await assertPrivateRedirect(path);
-}
+  '/movimientos?smoke=1','/informes?year=2026','/presupuestos?month=2026-08','/revision','/cierre?month=2026-07','/reglas','/explicabilidad','/control',
+  '/api/private/budget','/api/private/future-event','/api/private/goal','/api/private/month-closure','/api/private/movement','/api/private/recurring','/api/private/rule','/api/private/rule-preview','/api/private/system-audit','/api/private/scenario','/api/private/split','/api/sync/status',
+]) await assertPrivateRedirect(path);
 
 const login = await request('/login');
 assert(login.status === 200, `/login: esperado 200, recibido ${login.status}`);
@@ -126,5 +90,4 @@ assert(robots.status === 200, `/robots.txt: esperado 200, recibido ${robots.stat
 assertSecurity(robots, '/robots.txt');
 const robotsText = await robots.text();
 assert(robotsText.includes('Disallow: /'), '/robots.txt: debe bloquear indexación completa');
-
 console.log(`Smoke built-app OK — Finanzas 3.0 ${expectedVersion}`);

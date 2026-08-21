@@ -11,6 +11,7 @@ const links = [
   ['/cierre', 'Cierre'],
   ['/reglas', 'Reglas'],
   ['/explicabilidad', 'Explicabilidad'],
+  ['/control', 'Control'],
   ['/cuentas', 'Cuentas'],
   ['/presupuestos', 'Presupuestos'],
   ['/recurrentes', 'Recurrentes'],

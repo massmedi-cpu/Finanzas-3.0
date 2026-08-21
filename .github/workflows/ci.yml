@@ -5,10 +5,12 @@ on:
     branches:
       - main
       - 'develop/**'
+      - 'release/**'
   push:
     branches:
       - 'develop/**'
       - 'audit/**'
+      - 'release/**'
 
 permissions:
   contents: read
@@ -47,6 +49,9 @@ jobs:
 
       - name: Explainability regression tests
         run: npx tsx scripts/explainability-tests.mjs
+
+      - name: System audit regression tests
+        run: npx tsx scripts/system-audit-tests.mjs
 
       - name: Typecheck
         run: npm run typecheck
