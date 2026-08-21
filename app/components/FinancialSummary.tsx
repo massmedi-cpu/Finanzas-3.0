@@ -1,8 +1,4 @@
-import { getMonthlySummary, getNetWorthFromKnownBalances } from '../../src/domain/finance-engine';
-import { getPrivateState } from '../../src/private-data/client';
-import { indexOverrides, rowsForAnalytics, sourceReviewStatus } from '../../src/private-data/merge';
-import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
+import { getNormalizedSummary } from '../../src/normalized/client';
 
 type SummaryItem = {
   label: string;
@@ -16,56 +12,47 @@ const euro = new Intl.NumberFormat('es-ES', {
 });
 
 const emptyItems: SummaryItem[] = [
-  { label: 'Patrimonio conocido', value: '—', note: 'Fuente pendiente de conectar' },
+  { label: 'Patrimonio conocido', value: '—', note: 'Fuente pendiente de validar' },
   { label: 'Ingresos del mes', value: '—', note: 'Sin datos sincronizados' },
   { label: 'Gastos del mes', value: '—', note: 'Sin datos sincronizados' },
   { label: 'Flujo neto del mes', value: '—', note: 'Sin datos sincronizados' },
 ];
 
+function amount(value: number | string): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
 export default async function FinancialSummary() {
   let items = emptyItems;
 
-  if (isGoogleSheetsConfigured()) {
-    try {
-      const [source, state] = await Promise.all([
-        loadValidatedSource(),
-        getPrivateState(),
-      ]);
-      const overrides = state.overrides;
-
-      const analyticsRows = rowsForAnalytics(source.rows, overrides);
-      const latestMonth = source.latestMonth;
-      const summary = latestMonth ? getMonthlySummary(analyticsRows, latestMonth) : null;
-      const overrideMap = indexOverrides(overrides);
-      const pendingReview = latestMonth
-        ? source.rows.filter((row) => row.date.startsWith(latestMonth) && !overrideMap.get(row.sourceId)?.excluded_from_analytics && (overrideMap.get(row.sourceId)?.review_status || sourceReviewStatus(row.review)) === 'pending').length
-        : 0;
-
-      items = [
-        {
-          label: 'Patrimonio conocido',
-          value: euro.format(getNetWorthFromKnownBalances(source.rows)),
-          note: `${source.accounts} cuentas con saldo conocido`,
-        },
-        {
-          label: 'Ingresos del mes',
-          value: summary ? euro.format(summary.income) : '—',
-          note: latestMonth ? `Periodo ${latestMonth}` : 'Sin periodo disponible',
-        },
-        {
-          label: 'Gastos del mes',
-          value: summary ? euro.format(summary.expenses) : '—',
-          note: summary ? `${summary.transactionCount} movimientos del periodo` : 'Sin movimientos',
-        },
-        {
-          label: 'Flujo neto del mes',
-          value: summary ? euro.format(summary.netCashFlow) : '—',
-          note: `${pendingReview} movimientos pendientes de revisar`,
-        },
-      ];
-    } catch {
-      items = emptyItems.map((item) => ({ ...item, note: 'No se pudo validar la fuente y la capa privada completa' }));
-    }
+  try {
+    const summary = await getNormalizedSummary();
+    const period = summary.yearMonth;
+    items = [
+      {
+        label: 'Patrimonio conocido',
+        value: euro.format(amount(summary.netWorth)),
+        note: `${summary.accounts.length} cuentas con saldo conocido`,
+      },
+      {
+        label: 'Ingresos del mes',
+        value: euro.format(amount(summary.income)),
+        note: period ? `Periodo ${period}` : 'Sin periodo disponible',
+      },
+      {
+        label: 'Gastos del mes',
+        value: euro.format(amount(summary.expenses)),
+        note: `${summary.transactionCount} movimientos del periodo`,
+      },
+      {
+        label: 'Flujo neto del mes',
+        value: euro.format(amount(summary.netCashFlow)),
+        note: `${summary.needsReview} movimientos pendientes de revisar`,
+      },
+    ];
+  } catch {
+    items = emptyItems.map((item) => ({ ...item, note: 'No se pudo validar el snapshot y el modelo normalizado completo' }));
   }
 
   return (

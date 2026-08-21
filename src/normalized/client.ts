@@ -29,6 +29,21 @@ export interface NormalizedState {
   accounts: NormalizedAccountOption[];
 }
 
+export interface NormalizedSummary {
+  ok: boolean;
+  yearMonth: string | null;
+  income: number | string;
+  expenses: number | string;
+  netCashFlow: number | string;
+  transactionCount: number;
+  needsReview: number;
+  accounts: NormalizedAccountOption[];
+  netWorth: number | string;
+  sourceChecksum: string | null;
+  normalizedRows: number;
+  lastNormalizedAt: string | null;
+}
+
 export interface NormalizedMovementSplit {
   lineNo: number;
   amount: number | string;
@@ -127,6 +142,10 @@ async function normalizedRequest<T>(path: string): Promise<T> {
 
 export function getNormalizedState(): Promise<NormalizedState> {
   return normalizedRequest<NormalizedState>('/state');
+}
+
+export function getNormalizedSummary(): Promise<NormalizedSummary> {
+  return normalizedRequest<NormalizedSummary>('/summary');
 }
 
 export async function getNormalizedBootstrap(limit = 100): Promise<NormalizedBootstrap> {
