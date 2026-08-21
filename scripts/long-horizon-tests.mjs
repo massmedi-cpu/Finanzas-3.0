@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildForecastCalendar } from '../src/domain/forecast-calendar-engine.ts';
+import { buildForecastCalendar, buildForecastYearlyOutlook } from '../src/domain/forecast-calendar-engine.ts';
 import { buildLongHorizonForecast, maxScenarioHorizonMonths, normalizeHorizonMonths } from '../src/domain/long-horizon-engine.ts';
 
 const pattern = {
@@ -70,5 +70,18 @@ const negativeCalendar = buildForecastCalendar([
 ], 500, '2026-08-21', 2);
 assert.equal(negativeCalendar[1].firstNegativeDate, '2026-09-04');
 assert.equal(negativeCalendar[1].lowestBalance, -200);
+
+const yearly = buildForecastYearlyOutlook([
+  { id: 'y-2026-income', description: 'Ingreso', category: 'Ingresos', expectedDate: '2026-09-01', amount: 1000, confidence: 1, source: 'planned' },
+  { id: 'y-2026-expense', description: 'Gasto', category: 'Vivienda', expectedDate: '2026-12-01', amount: -400, confidence: 1, source: 'planned' },
+  { id: 'y-2027-expense', description: 'Gasto', category: 'Vivienda', expectedDate: '2027-01-15', amount: -700, confidence: 1, source: 'detected' },
+], 500, '2026-08-21', '2027-08-21');
+assert.equal(yearly.length, 2);
+assert.equal(yearly[0].year, '2026');
+assert.equal(yearly[0].netCashFlow, 600);
+assert.equal(yearly[0].endingBalance, 1100);
+assert.equal(yearly[1].year, '2027');
+assert.equal(yearly[1].endingBalance, 400);
+assert.equal(yearly[1].movementCount, 1);
 
 console.log('Long-horizon regression tests: OK');
