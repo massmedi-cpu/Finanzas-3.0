@@ -1,0 +1,42 @@
+name: V3.0.0 atomic version
+
+on:
+  push:
+    branches:
+      - develop/v3.0.0-release
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v3.0.0-release
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set exact version
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const pkg = JSON.parse(fs.readFileSync('package.json','utf8'));
+          const lock = JSON.parse(fs.readFileSync('package-lock.json','utf8'));
+          pkg.version = '3.0.0';
+          lock.version = '3.0.0';
+          if (!lock.packages || !lock.packages['']) throw new Error('lock-root-missing');
+          lock.packages[''].version = '3.0.0';
+          fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');
+          fs.writeFileSync('package-lock.json', JSON.stringify(lock, null, 2) + '\n');
+          fs.writeFileSync('src/version.ts', "export const APP_VERSION = '3.0.0';\nexport const APP_VERSION_LABEL = `V${APP_VERSION}`;\n");
+          NODE
+          rm .github/workflows/v300-version.yml
+      - name: Commit version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src/version.ts .github/workflows/v300-version.yml
+          git commit -m "release(v3.0): set version 3.0.0"
+          git push origin HEAD:develop/v3.0.0-release
