@@ -45,6 +45,9 @@ jobs:
       - name: Classification rule regression tests
         run: npx tsx scripts/classification-rule-tests.mjs
 
+      - name: Explainability regression tests
+        run: npx tsx scripts/explainability-tests.mjs
+
       - name: Typecheck
         run: npm run typecheck
 

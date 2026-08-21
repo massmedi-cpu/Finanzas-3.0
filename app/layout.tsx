@@ -13,6 +13,7 @@ import './intelligence.css';
 import './forecast-calendar.css';
 import './close.css';
 import './rules.css';
+import './explainability.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata: Metadata = {
