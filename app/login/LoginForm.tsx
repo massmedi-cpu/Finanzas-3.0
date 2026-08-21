@@ -3,11 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 
-type LoginFormProps = {
-  destination: string;
-};
-
-export default function LoginForm({ destination }: LoginFormProps) {
+export default function LoginForm() {
   const router = useRouter();
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -35,6 +31,8 @@ export default function LoginForm({ destination }: LoginFormProps) {
         return;
       }
 
+      const next = new URLSearchParams(window.location.search).get('next');
+      const destination = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
       router.replace(destination);
     } catch {
       setError('No se ha podido iniciar sesión.');
