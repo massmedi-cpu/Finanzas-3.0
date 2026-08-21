@@ -15,6 +15,7 @@ import './close.css';
 import './rules.css';
 import './explainability.css';
 import './control.css';
+import './backup.css';
 import AppHeader from './components/AppHeader';
 
 export const metadata: Metadata = {
