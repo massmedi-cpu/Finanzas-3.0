@@ -1,4 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "regions": ["cdg1"]
+  "regions": ["cdg1"],
+  "git": {
+    "deploymentEnabled": {
+      "develop/v2.2.0-analytics": false
+    }
+  }
 }
