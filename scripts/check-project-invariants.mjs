@@ -14,11 +14,11 @@ for (const [name, value] of Object.entries({ ...(pkg.dependencies || {}), ...(pk
 
 const requiredFiles = [
   'docs/PROJECT_AXIOMS.md','docs/ARCHITECTURE.md','docs/REQUIREMENTS_TRACEABILITY.md','docs/PROJECT_CHANGELOG.md','docs/DESIGN_SYSTEM.md','docs/TEST_MATRIX.md',
-  'docs/RELEASE_GATE_V2.0.1.md','docs/RELEASE_GATE_V2.1.0.md','docs/RELEASE_GATE_V2.2.0.md','docs/V2.4.0_LONG_HORIZON.md','docs/V2.6.0_CLASSIFICATION_RULES.md','docs/V2.7.0_EXPLAINABILITY.md','docs/RELEASE_GATE_V2.7.0.md','docs/V2.8.0_CONTROL_CENTER.md','docs/RELEASE_GATE_V2.8.0.md','docs/V2.9.0_PORTABILITY.md','docs/RELEASE_GATE_V2.9.0.md',
-  'database/schema-v2.0.1.sql','database/V2.1.0_NORMALIZED_MIGRATIONS.md','database/V2.2.0_ANALYTICS_MIGRATIONS.md','database/V2.6.0_RULES_MIGRATIONS.md','database/V2.7.0_EXPLAINABILITY_MIGRATIONS.md','database/V2.8.0_CONTROL_MIGRATIONS.md','database/V2.9.0_BACKUP_MIGRATIONS.md',
+  'docs/RELEASE_GATE_V2.0.1.md','docs/RELEASE_GATE_V2.1.0.md','docs/RELEASE_GATE_V2.2.0.md','docs/V2.4.0_LONG_HORIZON.md','docs/V2.6.0_CLASSIFICATION_RULES.md','docs/V2.7.0_EXPLAINABILITY.md','docs/RELEASE_GATE_V2.7.0.md','docs/V2.8.0_CONTROL_CENTER.md','docs/RELEASE_GATE_V2.8.0.md','docs/V2.9.0_PORTABILITY.md','docs/RELEASE_GATE_V2.9.0.md','docs/V3.0.0_RELEASE.md','docs/RELEASE_GATE_V3.0.0.md',
+  'database/schema-v2.0.1.sql','database/V2.1.0_NORMALIZED_MIGRATIONS.md','database/V2.2.0_ANALYTICS_MIGRATIONS.md','database/V2.6.0_RULES_MIGRATIONS.md','database/V2.7.0_EXPLAINABILITY_MIGRATIONS.md','database/V2.8.0_CONTROL_MIGRATIONS.md','database/V2.9.0_BACKUP_MIGRATIONS.md','database/V3.0.0_HARDENING_MIGRATIONS.md',
   'src/domain/long-horizon-engine.ts','src/domain/forecast-calendar-engine.ts','src/domain/month-close-engine.ts','src/domain/classification-rule-engine.ts','src/domain/classification-origin.ts','src/domain/system-audit-engine.ts','src/domain/private-backup-engine.ts',
   'src/private-data/month-closure.ts','src/private-data/rules.ts','src/private-data/explainability.ts','src/private-data/control-center.ts','src/private-data/backup.ts',
-  'scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs','scripts/backup-portability-tests.mjs',
+  'scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs','scripts/backup-portability-tests.mjs','scripts/v300-security-tests.mjs',
   'app/forecast-calendar.css','app/close.css','app/rules.css','app/explainability.css','app/control.css','app/backup.css',
   'app/cierre/page.tsx','app/reglas/page.tsx','app/reglas/RulesManager.tsx','app/explicabilidad/page.tsx','app/explicabilidad/SuggestionManager.tsx','app/control/page.tsx','app/control/AuditCaptureButton.tsx','app/copias/page.tsx','app/copias/BackupManager.tsx',
   'app/api/private/rule/route.ts','app/api/private/rule-preview/route.ts','app/api/private/system-audit/route.ts','app/api/private/backup/route.ts',
@@ -50,8 +50,14 @@ assert.equal(backupManager.includes('RESTAURAR'), true, 'V2.9 debe exigir confir
 assert.equal(backupManager.includes('preview?.safe'), true, 'V2.9 no puede habilitar restauración sin preview seguro');
 assert.equal(backupManager.includes('5_000_000'), true, 'V2.9 debe limitar el tamaño del archivo importado en cliente');
 
+for (const file of ['supabase/functions/finanzas-v3-data/index.ts','supabase/functions/finanzas-v3-recurring/index.ts','supabase/functions/finanzas-v3-splits/index.ts']) {
+  const source = readFileSync(file, 'utf8');
+  assert.equal(source.includes('response.status !== 401 && response.status !== 403'), false, `${file} no puede volver a autorización fail-open`);
+  assert.equal(source.includes('response.ok || response.status === 404'), true, `${file} debe conservar autorización fail-closed V3.0`);
+}
+
 const ci = readFileSync('.github/workflows/ci.yml', 'utf8');
-for (const script of ['scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs','scripts/backup-portability-tests.mjs']) assert.equal(ci.includes(script), true, `CI debe ejecutar ${script}`);
+for (const script of ['scripts/long-horizon-tests.mjs','scripts/month-close-tests.mjs','scripts/classification-rule-tests.mjs','scripts/explainability-tests.mjs','scripts/system-audit-tests.mjs','scripts/backup-portability-tests.mjs','scripts/v300-security-tests.mjs']) assert.equal(ci.includes(script), true, `CI debe ejecutar ${script}`);
 const deploymentEnabled = vercel.git?.deploymentEnabled || {};
 for (const branch of ['develop/v2.2.0-analytics','develop/v2.3.0-intelligence','develop/v2.4.0-long-horizon','develop/v2.5.0-month-close','develop/v2.6.0-rules','develop/v2.7.0-explainability','develop/v2.8.0-control-center','develop/v2.9.0-portability','develop/v3.0.0-release']) assert.equal(deploymentEnabled[branch], false, `${branch} debe permanecer fuera de previews automáticos de Vercel durante el desarrollo`);
 console.log('Project invariants: OK');
