@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export type ReviewSeverity = 'high' | 'medium' | 'low';
 export type ReviewIssueType = 'duplicate' | 'review' | 'uncategorized' | 'unusual_amount';
@@ -40,7 +39,6 @@ function typeLabel(type: ReviewIssueType): string {
 }
 
 export default function ReviewCenter({ initialIssues }: { initialIssues: ReviewIssueView[] }) {
-  const router = useRouter();
   const [issues, setIssues] = useState(initialIssues);
   const [filter, setFilter] = useState<'all' | ReviewIssueType>('all');
   const [busy, setBusy] = useState<string | null>(null);
@@ -80,7 +78,6 @@ export default function ReviewCenter({ initialIssues }: { initialIssues: ReviewI
     try {
       await Promise.all(issue.movements.map((movement) => persist(movement, { reviewStatus: 'reviewed' })));
       setIssues((current) => current.filter((item) => item.id !== issue.id));
-      router.refresh();
     } catch {
       setError('No se ha podido guardar la revisión. No se ha modificado la fuente bancaria.');
     } finally {
@@ -98,7 +95,6 @@ export default function ReviewCenter({ initialIssues }: { initialIssues: ReviewI
       await persist(first, { reviewStatus: 'reviewed', excludedFromAnalytics: false });
       await Promise.all(copies.map((movement) => persist(movement, { reviewStatus: 'reviewed', excludedFromAnalytics: true })));
       setIssues((current) => current.filter((item) => item.id !== issue.id));
-      router.refresh();
     } catch {
       setError('No se ha podido completar la exclusión. La operación es segura y la fuente original sigue intacta.');
     } finally {

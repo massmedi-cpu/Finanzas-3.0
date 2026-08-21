@@ -33,8 +33,8 @@ export default function LoginForm() {
       }
 
       const next = searchParams.get('next');
-      router.replace(next && next.startsWith('/') ? next : '/');
-      router.refresh();
+      const destination = next && next.startsWith('/') && !next.startsWith('//') ? next : '/';
+      router.replace(destination);
     } catch {
       setError('No se ha podido iniciar sesión.');
     } finally {

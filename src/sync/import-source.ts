@@ -1,6 +1,6 @@
 import { cache } from 'react';
 import { findDuplicateCandidates, getLatestAccountBalances, getMonthlySummary } from '../domain/finance-engine';
-import { parseSourceRow, validateSourceHeader, type BankingSourceRow } from '../domain/source-schema';
+import type { BankingSourceRow } from '../domain/source-schema';
 import { readGoogleSheet } from './google-sheets';
 
 export interface SourcePreview {
@@ -15,15 +15,11 @@ export interface SourcePreview {
 
 export const loadValidatedSource = cache(async (): Promise<SourcePreview> => {
   const source = await readGoogleSheet();
-  const [header, ...dataRows] = source.values;
 
-  if (!header || !validateSourceHeader(header)) {
-    throw new Error('The banking source schema does not match the expected 22-column contract');
-  }
-
-  const rows = dataRows
-    .map(parseSourceRow)
-    .filter((row) => row.sourceId || row.date || row.originalConcept || row.amount !== null);
+  // The bridge already validates the canonical 22-column header before a
+  // snapshot can become current. Keep the structured rows as-is instead of
+  // converting 3k+ rows to 22-column arrays and parsing them back again.
+  const rows = source.rows.filter((row) => row.sourceId || row.date || row.originalConcept || row.amount !== null);
 
   const duplicateGroups = findDuplicateCandidates(rows).length;
   const accounts = getLatestAccountBalances(rows).length;

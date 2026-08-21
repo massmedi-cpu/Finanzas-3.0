@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 
 export interface BudgetCategoryView {
   category: string;
@@ -15,7 +14,6 @@ export interface BudgetCategoryView {
 const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 
 export default function BudgetEditor({ yearMonth, rows, monthlyIncome }: { yearMonth: string; rows: BudgetCategoryView[]; monthlyIncome: number }) {
-  const router = useRouter();
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(rows.map((row) => [row.category, row.assigned ? String(row.assigned) : ''])));
   const [saved, setSaved] = useState<Record<string, number>>(() => Object.fromEntries(rows.map((row) => [row.category, row.assigned])));
   const [rollovers, setRollovers] = useState<Record<string, boolean>>(() => Object.fromEntries(rows.map((row) => [row.category, row.rollover])));
@@ -61,7 +59,6 @@ export default function BudgetEditor({ yearMonth, rows, monthlyIncome }: { yearM
       if (!response.ok || !body.ok) throw new Error('save-failed');
       setSaved((current) => ({ ...current, [category]: assigned }));
       setValues((current) => ({ ...current, [category]: assigned ? String(assigned) : '' }));
-      router.refresh();
     } catch {
       setError('No se ha podido guardar el presupuesto.');
     } finally {

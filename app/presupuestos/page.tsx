@@ -6,7 +6,7 @@ import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
 import { loadValidatedSource } from '../../src/sync/import-source';
 import { getPrivateState } from '../../src/private-data/client';
 import { rowsForBudgetAndReports } from '../../src/private-data/merge';
-import { getMovementSplits, type MovementSplitRecord } from '../../src/private-data/splits';
+import { getMovementSplits } from '../../src/private-data/splits';
 import BudgetEditor, { type BudgetCategoryView } from './BudgetEditor';
 
 export const dynamic = 'force-dynamic';
@@ -17,24 +17,15 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
   let selectedMonth: string | null = null;
   let availableMonths: string[] = [];
   let monthlyIncome = 0;
-  let sourceError = false;
-  let editLayerError = false;
+  let dataError = false;
 
   if (isGoogleSheetsConfigured()) {
     try {
-      const source = await loadValidatedSource();
-      let privateState: Awaited<ReturnType<typeof getPrivateState>> = { overrides: [], budgets: [], goals: [], futureEvents: [], scenarios: [] };
-      let splits: MovementSplitRecord[] = [];
-      try {
-        privateState = await getPrivateState();
-      } catch {
-        editLayerError = true;
-      }
-      try {
-        splits = await getMovementSplits();
-      } catch {
-        splits = [];
-      }
+      const [source, privateState, splits] = await Promise.all([
+        loadValidatedSource(),
+        getPrivateState(),
+        getMovementSplits(),
+      ]);
 
       const budgetRows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
       availableMonths = getAvailableMonths(budgetRows);
@@ -55,7 +46,7 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
         }));
       }
     } catch {
-      sourceError = true;
+      dataError = true;
     }
   }
 
@@ -72,35 +63,23 @@ export default async function PresupuestosPage({ searchParams }: { searchParams:
 
       {availableMonths.length > 0 && (
         <nav className="month-selector" aria-label="Seleccionar mes del presupuesto">
-          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
+          {availableMonths.slice(0, 12).map((month) => <Link key={month} href={`/presupuestos?month=${month}`} prefetch={false} className={`month-chip${month === selectedMonth ? ' month-chip-active' : ''}`}>{month}</Link>)}
         </nav>
       )}
 
-      {sourceError ? (
+      {dataError ? (
         <div className="status-panel status-danger">
           <div>
-            <div className="status-title">No se ha podido calcular el presupuesto</div>
-            <div className="status-copy">El análisis se detiene antes de mostrar cifras incompletas.</div>
+            <div className="status-title">No se ha podido calcular el presupuesto con garantías</div>
+            <div className="status-copy">Se detiene el cálculo si falta la fuente, tus ajustes privados o las divisiones de movimientos.</div>
           </div>
         </div>
       ) : !selectedMonth ? (
         <section className="card"><div className="empty">Los presupuestos se activarán cuando exista histórico bancario sincronizado.</div></section>
+      ) : rows.length > 0 ? (
+        <BudgetEditor yearMonth={selectedMonth} rows={rows} monthlyIncome={monthlyIncome} />
       ) : (
-        <>
-          {editLayerError && (
-            <div className="status-panel status-warning">
-              <div>
-                <div className="status-title">No se han podido cargar las asignaciones guardadas</div>
-                <div className="status-copy">El gasto real sigue visible, pero la edición queda temporalmente limitada.</div>
-              </div>
-            </div>
-          )}
-          {rows.length > 0 ? (
-            <BudgetEditor yearMonth={selectedMonth} rows={rows} monthlyIncome={monthlyIncome} />
-          ) : (
-            <section className="card"><div className="empty">No hay gastos ni presupuestos en este periodo.</div></section>
-          )}
-        </>
+        <section className="card"><div className="empty">No hay gastos ni presupuestos en este periodo.</div></section>
       )}
     </main>
   );
