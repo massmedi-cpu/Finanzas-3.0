@@ -35,9 +35,6 @@ function movementView(row: NormalizedMovement): MovementView {
     excludedFromAnalytics: Boolean(row.excludedFromAnalytics),
     notes: row.notes,
     hasOverride: Boolean(row.hasOverride),
-    appliedRuleId: row.appliedRuleId || null,
-    appliedRuleName: row.appliedRuleName || null,
-    ruleApplied: Boolean(row.ruleApplied),
   };
 }
 
