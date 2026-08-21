@@ -56,6 +56,9 @@ jobs:
       - name: Backup portability regression tests
         run: npx tsx scripts/backup-portability-tests.mjs
 
+      - name: V3 security regression tests
+        run: npx tsx scripts/v300-security-tests.mjs
+
       - name: Typecheck
         run: npm run typecheck
 
