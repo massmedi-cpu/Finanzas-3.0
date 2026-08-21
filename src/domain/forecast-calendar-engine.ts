@@ -57,7 +57,9 @@ export function buildForecastCalendar(
     let movementCount = 0;
     let plannedCount = 0;
     let lowestBalance = runningBalance;
-    let firstNegativeDate: string | null = runningBalance < 0 ? `${month}-01` : null;
+    let firstNegativeDate: string | null = runningBalance < 0
+      ? (month === fromDate.slice(0, 7) ? fromDate : `${month}-01`)
+      : null;
     const end = monthEnd(month);
 
     while (pointer < movements.length && movements[pointer].expectedDate <= end) {
@@ -119,7 +121,9 @@ export function buildForecastYearlyOutlook(
     let movementCount = 0;
     let plannedCount = 0;
     let lowestBalance = runningBalance;
-    let firstNegativeDate: string | null = runningBalance < 0 ? `${yearKey}-01-01` : null;
+    let firstNegativeDate: string | null = runningBalance < 0
+      ? (yearKey === fromDate.slice(0, 4) ? fromDate : `${yearKey}-01-01`)
+      : null;
 
     while (pointer < movements.length && movements[pointer].expectedDate.slice(0, 4) === yearKey) {
       const movement = movements[pointer];
