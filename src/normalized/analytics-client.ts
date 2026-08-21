@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '../security/session';
 import type { CategoryReportRow, MonthlyReportRow, QuarterlyReportRow, YearComparison, YearlyReport } from '../domain/report-engine';
+import type { RecurringPattern } from '../domain/forecast-engine';
+import type { NormalizedState } from './client';
 
 const ANALYTICS_URL = 'https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-analytics';
 
@@ -83,6 +85,15 @@ export interface NormalizedReview {
   total: number;
 }
 
+export interface NormalizedForecastInputs {
+  ok: boolean;
+  baseDate: string | null;
+  patterns: RecurringPattern[];
+  patternCount: number;
+  categories: string[];
+  state: NormalizedState;
+}
+
 export function getNormalizedReports(year?: string) {
   const params = new URLSearchParams();
   if (year) params.set('year', year);
@@ -97,4 +108,8 @@ export function getNormalizedBudget(month?: string) {
 
 export function getNormalizedReview() {
   return analyticsRequest<NormalizedReview>('/review');
+}
+
+export function getNormalizedForecastInputs() {
+  return analyticsRequest<NormalizedForecastInputs>('/forecast-inputs');
 }
