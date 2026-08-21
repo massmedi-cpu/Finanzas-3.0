@@ -2,6 +2,8 @@ import { cookies } from 'next/headers';
 import { SESSION_COOKIE } from '../security/session';
 import type { CategoryReportRow, MonthlyReportRow, QuarterlyReportRow, YearComparison, YearlyReport } from '../domain/report-engine';
 import type { RecurringPattern } from '../domain/forecast-engine';
+import type { MonthlySummary } from '../domain/finance-engine';
+import type { NetWorthPoint } from '../domain/net-worth-engine';
 import type { NormalizedState } from './client';
 
 const ANALYTICS_URL = 'https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-v3-analytics';
@@ -85,12 +87,34 @@ export interface NormalizedReview {
   total: number;
 }
 
-export interface NormalizedForecastInputs {
+export interface NormalizedForecastCoreInputs {
   ok: boolean;
   baseDate: string | null;
   patterns: RecurringPattern[];
   patternCount: number;
   categories: string[];
+}
+
+export interface NormalizedForecastInputs extends NormalizedForecastCoreInputs {
+  state: NormalizedState;
+}
+
+export interface NormalizedPlanCore {
+  ok: boolean;
+  selectedMonth: string | null;
+  previousMonth: string | null;
+  current: MonthlySummary | null;
+  previous: MonthlySummary | null;
+  pendingReview: number;
+  duplicateGroups: number;
+  netWorthHistory: NetWorthPoint[];
+}
+
+export interface NormalizedPlan {
+  ok: boolean;
+  budget: NormalizedBudget;
+  core: NormalizedPlanCore;
+  forecastInputs: NormalizedForecastCoreInputs;
   state: NormalizedState;
 }
 
@@ -112,4 +136,10 @@ export function getNormalizedReview() {
 
 export function getNormalizedForecastInputs() {
   return analyticsRequest<NormalizedForecastInputs>('/forecast-inputs');
+}
+
+export function getNormalizedPlan(month?: string) {
+  const params = new URLSearchParams();
+  if (month) params.set('month', month);
+  return analyticsRequest<NormalizedPlan>(`/plan${params.size ? `?${params}` : ''}`);
 }
