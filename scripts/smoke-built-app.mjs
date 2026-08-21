@@ -79,6 +79,9 @@ assert(healthBody.version === expectedVersion, `/api/health: versión ${healthBo
 await assertPrivateRedirect('/');
 for (const path of [
   '/movimientos?smoke=1',
+  '/informes?year=2026',
+  '/presupuestos?month=2026-08',
+  '/revision',
   '/api/private/budget',
   '/api/private/future-event',
   '/api/private/goal',
