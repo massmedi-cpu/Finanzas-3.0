@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { unzipSync } from "npm:fflate@0.8.2";
 
-const VERSION = 4;
+const VERSION = 5;
 const LEGACY_API = "https://ulxsvuksrghjgcjfuegv.supabase.co/functions/v1/finanzas-alberto-api";
 const FILE_ID = "1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8";
 const FILE_NAME = "Movimientos bancarios - fuente";
@@ -210,29 +210,60 @@ function parseRows(bytes: Uint8Array) {
   const shared = sharedStrings(zip);
   const sheets = workbookSheets(zip);
   if (!sheets.length) throw new Error("xlsx_sheet_not_found");
-  let selected: { name: string; path: string } | null = null;
-  let parsedRows: Record<string, unknown>[] = [];
+
+  const sheetNames: string[] = [];
+  const bySourceId = new Map<string, any>();
+  const withoutSourceId: any[] = [];
+
   for (const sheet of sheets) {
     const xml = textFile(zip, sheet.path);
     const rows: Record<string, unknown>[] = [];
-    for (const rowMatch of xml.matchAll(/<(?:\w+:)?row\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?row>/g)) {
+    for (const rowMatch of xml.matchAll(/<(?:\\w+:)?row\\b([^>]*)>([\\s\\S]*?)<\\/(?:\\w+:)?row>/g)) {
       const values: Record<string, unknown> = {};
-      for (const cellMatch of rowMatch[2].matchAll(/<(?:\w+:)?c\b([^>]*)>([\s\S]*?)<\/(?:\w+:)?c>/g)) {
+      for (const cellMatch of rowMatch[2].matchAll(/<(?:\\w+:)?c\\b([^>]*)>([\\s\\S]*?)<\\/(?:\\w+:)?c>/g)) {
         const ref = attr(cellMatch[1], "r");
         const column = (ref.match(/^([A-Z]+)/) || [])[1];
         if (column) values[column] = cellValue(cellMatch[2], cellMatch[1], shared);
       }
       rows.push(values);
     }
+
     const header = rows[0] || {};
     const actual = Array.from({ length: 22 }, (_, index) => header[String.fromCharCode(65 + index)] ?? "").map((value) => String(value).trim());
-    if (EXPECTED_HEADER.every((value, index) => actual[index] === value)) { selected = sheet; parsedRows = rows.slice(1); break; }
+    if (!EXPECTED_HEADER.every((value, index) => actual[index] === value)) continue;
+
+    sheetNames.push(sheet.name);
+    for (const row of rows.slice(1)) {
+      const parsed = {
+        sourceId: String(row.A ?? "").trim(), date: excelDate(row.B), time: String(row.C ?? "").trim(), productOrAccount: String(row.D ?? "").trim(), institution: String(row.E ?? "").trim(), identifier: String(row.F ?? "").trim(), productType: String(row.G ?? "").trim(), movementType: String(row.H ?? "").trim(), category: String(row.I ?? "").trim(), subcategory: String(row.J ?? "").trim(), originalConcept: String(row.K ?? "").trim(), normalizedConcept: String(row.L ?? "").trim(), merchantOrCounterparty: String(row.M ?? "").trim(), amount: row.N === "" || row.N == null ? null : Number(row.N), balance: row.O === "" || row.O == null ? null : Number(row.O), channel: String(row.P ?? "").trim(), originAccount: String(row.Q ?? "").trim(), destinationAccount: String(row.R ?? "").trim(), reconciled: String(row.S ?? "").trim(), review: String(row.T ?? "").trim(), notes: String(row.U ?? "").trim(), source: String(row.V ?? "").trim(),
+      };
+      if (!(parsed.sourceId || parsed.date || parsed.originalConcept || parsed.amount !== null)) continue;
+
+      if (!parsed.sourceId) {
+        withoutSourceId.push(parsed);
+        continue;
+      }
+
+      const previous = bySourceId.get(parsed.sourceId);
+      if (previous) {
+        const compatible = previous.date === parsed.date
+          && previous.amount === parsed.amount
+          && previous.identifier === parsed.identifier
+          && previous.productOrAccount === parsed.productOrAccount;
+        if (!compatible) throw new Error("source_duplicate_id_conflict");
+      }
+      // Later valid sheets are authoritative for compatible duplicate IDs.
+      bySourceId.set(parsed.sourceId, parsed);
+    }
   }
-  if (!selected) throw new Error("source_schema_mismatch");
-  const output = parsedRows.map((row) => ({
-    sourceId: String(row.A ?? "").trim(), date: excelDate(row.B), time: String(row.C ?? "").trim(), productOrAccount: String(row.D ?? "").trim(), institution: String(row.E ?? "").trim(), identifier: String(row.F ?? "").trim(), productType: String(row.G ?? "").trim(), movementType: String(row.H ?? "").trim(), category: String(row.I ?? "").trim(), subcategory: String(row.J ?? "").trim(), originalConcept: String(row.K ?? "").trim(), normalizedConcept: String(row.L ?? "").trim(), merchantOrCounterparty: String(row.M ?? "").trim(), amount: row.N === "" || row.N == null ? null : Number(row.N), balance: row.O === "" || row.O == null ? null : Number(row.O), channel: String(row.P ?? "").trim(), originAccount: String(row.Q ?? "").trim(), destinationAccount: String(row.R ?? "").trim(), reconciled: String(row.S ?? "").trim(), review: String(row.T ?? "").trim(), notes: String(row.U ?? "").trim(), source: String(row.V ?? "").trim(),
-  })).filter((row) => row.sourceId || row.date || row.originalConcept || row.amount !== null);
-  return { sheetName: selected.name, rows: output };
+
+  if (!sheetNames.length) throw new Error("source_schema_mismatch");
+  const output = [...bySourceId.values(), ...withoutSourceId];
+  return {
+    sheetName: sheetNames.length === 1 ? sheetNames[0] : `Todas las cuentas (${sheetNames.length})`,
+    sheetNames,
+    rows: output,
+  };
 }
 
 function bearer(req: Request) {
@@ -293,7 +324,7 @@ async function touchCurrentSource(current: any, meta: any) {
   return { ...current, source_modified_at: meta.modifiedTime || current.source_modified_at || null, synced_at: now, updated_at: now };
 }
 
-async function persistSource(meta: any, parsed: { sheetName: string; rows: any[] }, current: any) {
+async function persistSource(meta: any, parsed: { sheetName: string; sheetNames?: string[]; rows: any[] }, current: any) {
   const { url } = supabaseConfig();
   const contentHash = await sha256Hex(JSON.stringify(parsed.rows));
   const now = new Date().toISOString();
