@@ -1,6 +1,7 @@
 'use client';
 
 import { FormEvent, useMemo, useState } from 'react';
+import { projectGoal, type GoalProjection } from '../../src/domain/goal-engine';
 
 export interface GoalView {
   id: string;
@@ -19,7 +20,33 @@ function numberFromInput(value: string): number {
   return Number(value.replace(',', '.'));
 }
 
-export default function GoalManager({ initialGoals }: { initialGoals: GoalView[] }) {
+function projectionFor(goal: GoalView, asOfDate: string | null): GoalProjection | null {
+  if (!asOfDate) return null;
+  return projectGoal({
+    targetAmount: goal.targetAmount,
+    currentAmount: goal.currentAmount,
+    targetDate: goal.targetDate || null,
+    monthlyContribution: goal.monthlyContribution,
+    asOfDate,
+  });
+}
+
+function projectionLabel(projection: GoalProjection | null, active: boolean): string {
+  if (!active) return 'Pausado';
+  if (!projection) return 'Sin proyección';
+  if (projection.status === 'completed') return 'Completado';
+  if (projection.status === 'on_track') return 'En plazo';
+  if (projection.status === 'at_risk') return 'En riesgo';
+  return 'Sin plan';
+}
+
+function projectionClass(projection: GoalProjection | null, active: boolean): string {
+  if (!active || !projection || projection.status === 'no_plan') return 'state state-muted';
+  if (projection.status === 'at_risk') return 'state state-warning';
+  return 'state state-ok';
+}
+
+export default function GoalManager({ initialGoals, asOfDate }: { initialGoals: GoalView[]; asOfDate: string | null }) {
   const [goals, setGoals] = useState(initialGoals);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState('');
@@ -32,10 +59,19 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  const totals = useMemo(() => goals.filter((goal) => goal.active).reduce((result, goal) => ({
-    target: result.target + goal.targetAmount,
-    current: result.current + goal.currentAmount,
-  }), { target: 0, current: 0 }), [goals]);
+  const totals = useMemo(() => {
+    const activeGoals = goals.filter((goal) => goal.active);
+    return activeGoals.reduce((result, goal) => {
+      const projection = projectionFor(goal, asOfDate);
+      result.target += goal.targetAmount;
+      result.current += goal.currentAmount;
+      if (projection?.requiredMonthlyContribution != null && projection.status !== 'completed') {
+        result.requiredMonthly += projection.requiredMonthlyContribution;
+      }
+      if (projection?.status === 'at_risk') result.atRisk += 1;
+      return result;
+    }, { target: 0, current: 0, requiredMonthly: 0, atRisk: 0 });
+  }, [goals, asOfDate]);
 
   function resetForm() {
     setEditingId(null);
@@ -128,11 +164,11 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
 
   return (
     <>
-      <section className="grid grid-3">
+      <section className="grid grid-4">
         <article className="card">
           <div className="metric-label">Objetivos activos</div>
           <div className="metric-value">{goals.filter((goal) => goal.active).length}</div>
-          <p className="metric-note">Metas que estás siguiendo ahora</p>
+          <p className="metric-note">{totals.atRisk > 0 ? `${totals.atRisk} requieren ajuste` : 'Sin alertas de ritmo'}</p>
         </article>
         <article className="card">
           <div className="metric-label">Meta total</div>
@@ -143,6 +179,11 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
           <div className="metric-label">Progreso acumulado</div>
           <div className="metric-value">{euro.format(totals.current)}</div>
           <p className="metric-note">{totals.target > 0 ? `${Math.min(100, Math.round((totals.current / totals.target) * 100))}% del total` : 'Sin meta económica todavía'}</p>
+        </article>
+        <article className="card">
+          <div className="metric-label">Necesario al mes</div>
+          <div className="metric-value">{asOfDate ? euro.format(totals.requiredMonthly) : '—'}</div>
+          <p className="metric-note">Para metas activas con fecha · base {asOfDate || 'no disponible'}</p>
         </article>
       </section>
 
@@ -172,7 +213,7 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
 
         <section className="card">
           <div className="card-heading-row">
-            <div><div className="eyebrow">Seguimiento</div><h2 className="section-title">Tus objetivos</h2></div>
+            <div><div className="eyebrow">Seguimiento inteligente</div><h2 className="section-title">Tus objetivos</h2></div>
             <span className="badge">{goals.length}</span>
           </div>
           {goals.length === 0 ? (
@@ -180,8 +221,9 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
           ) : (
             <div className="goal-list">
               {goals.map((goal) => {
-                const remaining = Math.max(0, goal.targetAmount - goal.currentAmount);
-                const progress = goal.targetAmount > 0 ? Math.min(100, (goal.currentAmount / goal.targetAmount) * 100) : 0;
+                const projection = projectionFor(goal, asOfDate);
+                const remaining = projection?.remaining ?? Math.max(0, goal.targetAmount - goal.currentAmount);
+                const progress = projection?.progressPct ?? (goal.targetAmount > 0 ? Math.min(100, (goal.currentAmount / goal.targetAmount) * 100) : 0);
                 return (
                   <article className={`goal-item${goal.active ? '' : ' goal-inactive'}`} key={goal.id}>
                     <div className="goal-item-head">
@@ -189,7 +231,7 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
                         <div className="row-title">{goal.name}</div>
                         <div className="row-meta">{goal.targetDate ? `Objetivo ${goal.targetDate}` : 'Sin fecha límite'}{goal.monthlyContribution !== null ? ` · ${euro.format(goal.monthlyContribution)}/mes` : ''}</div>
                       </div>
-                      <span className={`state ${goal.active ? 'state-ok' : 'state-muted'}`}>{goal.active ? 'Activo' : 'Pausado'}</span>
+                      <span className={projectionClass(projection, goal.active)}>{projectionLabel(projection, goal.active)}</span>
                     </div>
                     <div className="progress goal-progress"><span style={{ width: `${progress}%` }} /></div>
                     <div className="goal-numbers">
@@ -197,6 +239,13 @@ export default function GoalManager({ initialGoals }: { initialGoals: GoalView[]
                       <div><span>Meta</span><strong>{euro.format(goal.targetAmount)}</strong></div>
                       <div><span>Falta</span><strong>{euro.format(remaining)}</strong></div>
                     </div>
+                    {goal.active && projection && projection.status !== 'completed' && (
+                      <div className={`goal-projection${projection.status === 'at_risk' ? ' goal-projection-risk' : ''}`}>
+                        <div><span>Ritmo necesario</span><strong>{projection.requiredMonthlyContribution == null ? 'Sin fecha objetivo' : `${euro.format(projection.requiredMonthlyContribution)}/mes`}</strong></div>
+                        <div><span>Déficit mensual</span><strong>{projection.monthlyGap == null ? '—' : euro.format(projection.monthlyGap)}</strong></div>
+                        <div><span>Fecha estimada</span><strong>{projection.projectedCompletionDate || 'Sin aportación definida'}</strong></div>
+                      </div>
+                    )}
                     {goal.notes && <p className="goal-notes">{goal.notes}</p>}
                     <div className="goal-actions"><button type="button" className="small-button" onClick={() => edit(goal)}>Editar</button><button type="button" className="danger-ghost-button small-danger" onClick={() => remove(goal)}>Eliminar</button></div>
                   </article>
