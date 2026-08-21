@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import "./auth.css";
+import "./movements.css";
 
 export const metadata: Metadata = {
   title: "Financial App",
