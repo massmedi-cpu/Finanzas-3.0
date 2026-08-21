@@ -3,10 +3,15 @@
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 
+const oauthConfigured = Boolean(
+  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
+);
+
 export function GoogleLoginButton() {
   const [busy, setBusy] = useState(false);
 
   async function login() {
+    if (!oauthConfigured) return;
     setBusy(true);
     const supabase = createClient();
     const redirectTo = `${window.location.origin}/auth/callback`;
@@ -22,9 +27,9 @@ export function GoogleLoginButton() {
   }
 
   return (
-    <button className="primaryButton" type="button" onClick={login} disabled={busy}>
+    <button className="primaryButton" type="button" onClick={login} disabled={busy || !oauthConfigured}>
       <span aria-hidden="true">G</span>
-      {busy ? "Conectando…" : "Continuar con Google"}
+      {!oauthConfigured ? "Google OAuth pendiente" : busy ? "Conectando…" : "Continuar con Google"}
     </button>
   );
 }

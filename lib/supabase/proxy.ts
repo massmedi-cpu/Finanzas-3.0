@@ -6,8 +6,16 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
+  const pathname = request.nextUrl.pathname;
+  const publicPath = pathname === "/login" || pathname.startsWith("/auth/");
 
-  if (!url || !key) return response;
+  // Security invariant: configuration failure must fail closed. Public auth
+  // routes may still render a diagnostic login screen, but private routes are
+  // never allowed to continue without a configured identity provider.
+  if (!url || !key) {
+    if (publicPath) return response;
+    return NextResponse.redirect(new URL("/login?error=configuration", request.url));
+  }
 
   const supabase = createServerClient(url, key, {
     cookies: {
@@ -23,10 +31,8 @@ export async function updateSession(request: NextRequest) {
   });
 
   const { data, error } = await supabase.auth.getClaims();
-  const pathname = request.nextUrl.pathname;
-  const publicPath = pathname === "/login" || pathname.startsWith("/auth/");
   const email = typeof data?.claims?.email === "string" ? data.claims.email : null;
-  const authenticatedAndAllowed = !error && data?.claims?.sub && isAllowedEmail(email);
+  const authenticatedAndAllowed = !error && Boolean(data?.claims?.sub) && isAllowedEmail(email);
 
   if (!publicPath && !authenticatedAndAllowed) {
     return NextResponse.redirect(new URL("/login", request.url));
