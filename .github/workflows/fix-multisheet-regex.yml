@@ -1,0 +1,43 @@
+name: Fix multisheet parser escaping
+
+on:
+  pull_request:
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.head_ref == 'fix/v3.0.1-multi-account-source'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+      - name: Fix regex and add invariant
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('supabase/functions/finanzas-v3-bridge/index.ts')
+          text = p.read_text()
+          start = text.index('function parseRows(bytes: Uint8Array) {')
+          end = text.index('\nfunction bearer(req: Request)', start)
+          segment = text[start:end].replace(chr(92) * 2, chr(92))
+          text = text[:start] + segment + text[end:]
+          p.write_text(text)
+
+          test = Path('scripts/source-multisheet-invariant-tests.mjs')
+          test.write_text('''import fs from "node:fs";\nconst source = fs.readFileSync("supabase/functions/finanzas-v3-bridge/index.ts", "utf8");\nconst start = source.indexOf("function parseRows(bytes: Uint8Array) {");\nconst end = source.indexOf("\\nfunction bearer(req: Request)", start);\nconst parser = source.slice(start, end);\nif (!parser.includes("const sheetNames: string[] = []")) throw new Error("multi-sheet aggregation missing");\nif (!parser.includes("bySourceId.set(parsed.sourceId, parsed)")) throw new Error("sourceId merge missing");\nif (!parser.includes("source_duplicate_id_conflict")) throw new Error("duplicate conflict guard missing");\nif (parser.includes("parsedRows = rows.slice(1); break")) throw new Error("legacy first-sheet break still present");\nif (parser.includes("(?:\\\\w+:)?row")) throw new Error("row regex double-escaped");\nif (parser.includes("(?:\\\\w+:)?c")) throw new Error("cell regex double-escaped");\nconsole.log("source multisheet invariants: OK");\n''')
+          PY
+          rm .github/workflows/fix-multisheet-regex.yml
+      - name: Commit correction
+        run: |
+          node scripts/source-multisheet-invariant-tests.mjs
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "test(v3.0.1): validar parser multi-cuenta"
+          git push origin HEAD:${{ github.head_ref }}
