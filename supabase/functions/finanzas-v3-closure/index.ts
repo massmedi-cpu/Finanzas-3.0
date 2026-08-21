@@ -74,7 +74,7 @@ function safeSnapshot(value: unknown) {
 
 Deno.serve(async (req: Request) => {
   const path = pathOf(req);
-  if (path === "/health") return json({ ok: true, version: 1 });
+  if (path === "/health") return json({ ok: true, version: 2 });
 
   const token = bearer(req);
   if (!(await authorized(token))) return json({ ok: false, error: "unauthorized" }, 401);
@@ -87,7 +87,7 @@ Deno.serve(async (req: Request) => {
       if (!yearMonth) return json({ ok: false, error: "invalid_year_month" }, 400);
       const result = await rest("rpc/finance_v250_month_close_summary", {
         method: "POST",
-        body: JSON.stringify({ p_year_month: yearMonth, p_principal_key: "personal" }),
+        body: JSON.stringify({ p_year_month: yearMonth, p_principal_key: "private-session-owner" }),
       });
       return json({ ok: true, summary: Array.isArray(result) ? result[0] ?? null : result });
     }
