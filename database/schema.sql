@@ -1,32 +1,13 @@
-CREATE TABLE accounts (
- id TEXT PRIMARY KEY,
- name TEXT NOT NULL,
- type TEXT NOT NULL,
- created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE source_movements (
- id TEXT PRIMARY KEY,
- source_id TEXT,
- date TEXT,
- account_id TEXT,
- concept TEXT,
- amount NUMERIC,
- balance NUMERIC,
- raw_data JSON
-);
-
-CREATE TABLE enriched_movements (
- id TEXT PRIMARY KEY,
- source_movement_id TEXT,
- category TEXT,
- notes TEXT,
- reviewed BOOLEAN DEFAULT FALSE,
- rules JSON
-);
-
-CREATE TABLE sync_history (
- id TEXT PRIMARY KEY,
- executed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
- changes INTEGER
-);
+-- Financial App 0.1.0 — diseño inicial. NO aplicar al Supabase compartido existente.
+-- Aplicar únicamente al proyecto Supabase dedicado cuando quede creado y validado.
+create table if not exists public.authorized_users (user_id uuid primary key,email text not null unique,active boolean not null default true,created_at timestamptz not null default now());
+create table if not exists public.accounts (id uuid primary key default gen_random_uuid(),owner_id uuid not null,source_identifier text,name text not null,institution text,kind text not null check (kind in ('current','savings','other')),created_at timestamptz not null default now(),unique(owner_id,source_identifier));
+create table if not exists public.source_movements (id uuid primary key default gen_random_uuid(),owner_id uuid not null,source_id text not null,account_id uuid not null references public.accounts(id),source_hash text not null,source_payload jsonb not null,discovered_at timestamptz not null default now(),source_updated_at timestamptz,missing_from_source_at timestamptz,unique(owner_id,source_id));
+create table if not exists public.movement_overrides (id uuid primary key default gen_random_uuid(),owner_id uuid not null,source_movement_id uuid not null references public.source_movements(id) on delete restrict,field_name text not null,value jsonb,created_at timestamptz not null default now(),created_by uuid not null);
+create table if not exists public.sync_runs (id uuid primary key default gen_random_uuid(),owner_id uuid not null,started_at timestamptz not null default now(),finished_at timestamptz,status text not null check(status in ('running','success','partial','failed')),new_count integer not null default 0,updated_count integer not null default 0,missing_count integer not null default 0,error_summary text);
+alter table public.authorized_users enable row level security;alter table public.accounts enable row level security;alter table public.source_movements enable row level security;alter table public.movement_overrides enable row level security;alter table public.sync_runs enable row level security;
+create policy "authorized user can read self" on public.authorized_users for select to authenticated using ((select auth.uid())=user_id and active=true);
+create policy "owner reads accounts" on public.accounts for select to authenticated using ((select auth.uid())=owner_id);
+create policy "owner reads source movements" on public.source_movements for select to authenticated using ((select auth.uid())=owner_id);
+create policy "owner reads overrides" on public.movement_overrides for select to authenticated using ((select auth.uid())=owner_id);
+create policy "owner reads sync runs" on public.sync_runs for select to authenticated using ((select auth.uid())=owner_id);
