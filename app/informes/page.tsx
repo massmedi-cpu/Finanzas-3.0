@@ -1,18 +1,5 @@
 import Link from 'next/link';
-import {
-  compareYears,
-  getAvailableYears,
-  getCategoryReport,
-  getMonthlyReportForYear,
-  getQuarterlyReport,
-  getYearlyReport,
-  type YearComparison,
-} from '../../src/domain/report-engine';
-import { getPrivateState } from '../../src/private-data/client';
-import { rowsForBudgetAndReports } from '../../src/private-data/merge';
-import { getMovementSplits } from '../../src/private-data/splits';
-import { isGoogleSheetsConfigured } from '../../src/sync/google-sheets';
-import { loadValidatedSource } from '../../src/sync/import-source';
+import { getNormalizedReports, type NormalizedReports } from '../../src/normalized/analytics-client';
 import { APP_VERSION_LABEL } from '../../src/version';
 import CashFlowChart from './CashFlowChart';
 
@@ -32,45 +19,28 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
   const params = await searchParams;
   let availableYears: string[] = [];
   let selectedYear = '';
-  let monthly: ReturnType<typeof getMonthlyReportForYear> = [];
-  let quarterly: ReturnType<typeof getQuarterlyReport> = [];
-  let categories: ReturnType<typeof getCategoryReport> = [];
-  let yearly: ReturnType<typeof getYearlyReport> | null = null;
-  let comparison: YearComparison | null = null;
+  let monthly: NormalizedReports['monthly'] = [];
+  let quarterly: NormalizedReports['quarterly'] = [];
+  let categories: NormalizedReports['categories'] = [];
+  let yearly: NormalizedReports['yearly'] = null;
+  let comparison: NormalizedReports['comparison'] = null;
   let previousYear = '';
   let dataError = false;
   let splitCount = 0;
 
-  if (isGoogleSheetsConfigured()) {
-    try {
-      const [source, privateState, splits] = await Promise.all([
-        loadValidatedSource(),
-        getPrivateState(),
-        getMovementSplits(),
-      ]);
-      splitCount = new Set(splits.map((split) => split.source_id)).size;
-      const rows = rowsForBudgetAndReports(source.rows, privateState.overrides, splits);
-      availableYears = getAvailableYears(rows);
-      selectedYear = params.year && availableYears.includes(params.year) ? params.year : (availableYears[0] || '');
-
-      if (selectedYear) {
-        monthly = getMonthlyReportForYear(rows, selectedYear);
-        quarterly = getQuarterlyReport(rows, selectedYear);
-        categories = getCategoryReport(rows, selectedYear, 10);
-        yearly = getYearlyReport(rows, selectedYear);
-
-        const index = availableYears.indexOf(selectedYear);
-        previousYear = index >= 0 ? (availableYears[index + 1] || '') : '';
-        if (previousYear) {
-          const throughMonth = monthly.at(-1)?.month.slice(5, 7) || '12';
-          const previousComparableRows = rows.filter((row) => row.date.startsWith(`${previousYear}-`) && row.date.slice(5, 7) <= throughMonth);
-          const previousComparable = getYearlyReport(previousComparableRows, previousYear);
-          comparison = compareYears(yearly, previousComparable);
-        }
-      }
-    } catch {
-      dataError = true;
-    }
+  try {
+    const report = await getNormalizedReports(params.year);
+    availableYears = report.availableYears;
+    selectedYear = report.selectedYear || '';
+    monthly = report.monthly;
+    quarterly = report.quarterly;
+    categories = report.categories;
+    yearly = report.yearly;
+    comparison = report.comparison;
+    previousYear = report.previousYear || '';
+    splitCount = report.splitCount;
+  } catch {
+    dataError = true;
   }
 
   const incomeDelta = comparison ? deltaLabel(comparison.incomeDeltaPct, true) : null;
@@ -89,7 +59,7 @@ export default async function InformesPage({ searchParams }: { searchParams: Pro
       </section>
 
       {dataError ? (
-        <div className="status-panel status-danger"><div><div className="status-title">No se han podido generar los informes con garantías</div><div className="status-copy">Se detiene el informe si falta la fuente, tus ajustes privados o las divisiones de movimientos.</div></div></div>
+        <div className="status-panel status-danger"><div><div className="status-title">No se han podido generar los informes con garantías</div><div className="status-copy">Se detiene el informe si el snapshot y el motor analítico normalizado no coinciden.</div></div></div>
       ) : !yearly ? (
         <section className="card"><div className="empty">Los informes se activarán al conectar el histórico bancario.</div></section>
       ) : (
