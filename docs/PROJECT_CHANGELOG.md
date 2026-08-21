@@ -1,5 +1,21 @@
 # Changelog canónico — Finanzas 3.0
 
+## V2.0.2 — hardening de release y acceso inicial
+
+### Calidad y seguridad
+- El CI arranca el build real de Next.js y ejecuta un smoke HTTP después de `next build`.
+- El smoke protege health/versionado, redirecciones privadas, APIs privadas, manifest, icono, robots y cabeceras de seguridad.
+- Un workflow independiente comprueba producción después de cada merge a `main` y espera a la versión exacta desplegada.
+
+### Rendimiento
+- El login deja de depender de `useSearchParams` + Suspense para mostrar el formulario.
+- El formulario de acceso vuelve a ser visible en el primer HTML y `/login` permanece prerenderizado.
+- Se mantiene la protección contra destinos `//...` tras autenticarse.
+
+### Alcance
+- No cambia ninguna fórmula financiera, dato de origen, overlay privado ni esquema de base de datos.
+- V2.0.2 es un parche de hardening sobre la V2.0.1 estable.
+
 ## V2.0.1 — auditoría, rendimiento y protección de regresiones
 
 ### Rendimiento
