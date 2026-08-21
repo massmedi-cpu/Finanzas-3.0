@@ -5,6 +5,9 @@ import {
   findDuplicateCandidates,
   getLatestAccountBalances,
 } from '../src/domain/finance-engine.ts';
+import { buildFinancialAlerts } from '../src/domain/financial-alert-engine.ts';
+import { projectGoal } from '../src/domain/goal-engine.ts';
+import { assessGoalFundingCapacity, averageMonthlyForecastNet, scenarioAverageMonthlyNet } from '../src/domain/planning-capacity-engine.ts';
 import { detectQualityIssues } from '../src/domain/quality-engine.ts';
 import { rowsForAnalytics } from '../src/private-data/merge.ts';
 import { hasUsableSessionToken } from '../src/security/session.ts';
@@ -96,6 +99,87 @@ const duplicateSource = [
 assert.equal(detectQualityIssues(duplicateSource).some((issue) => issue.type === 'duplicate'), true);
 const duplicateEffective = rowsForAnalytics(duplicateSource, [override('duplicate-b', { excluded_from_analytics: true, review_status: 'reviewed' })]);
 assert.equal(detectQualityIssues(duplicateEffective).some((issue) => issue.type === 'duplicate'), false, 'Una copia excluida no debe seguir generando la misma alerta de duplicado');
+
+const completedGoal = projectGoal({ targetAmount: 1000, currentAmount: 1000, targetDate: '2026-12-31', monthlyContribution: 100, asOfDate: '2026-08-21' });
+assert.equal(completedGoal.status, 'completed');
+assert.equal(completedGoal.remaining, 0);
+
+const riskyGoal = projectGoal({ targetAmount: 1200, currentAmount: 0, targetDate: '2026-12-31', monthlyContribution: 100, asOfDate: '2026-08-21' });
+assert.equal(riskyGoal.status, 'at_risk');
+assert.equal(riskyGoal.monthsToTarget, 5);
+assert.equal(Math.round(riskyGoal.requiredMonthlyContribution ?? 0), 240);
+assert.equal(Math.round(riskyGoal.monthlyGap ?? 0), 140);
+
+const onTrackGoal = projectGoal({ targetAmount: 1000, currentAmount: 500, targetDate: '2026-12-31', monthlyContribution: 125, asOfDate: '2026-08-21' });
+assert.equal(onTrackGoal.status, 'on_track');
+assert.equal(onTrackGoal.projectedCompletionDate, '2026-11-21');
+
+const undatedGoal = projectGoal({ targetAmount: 900, currentAmount: 300, monthlyContribution: 200, asOfDate: '2026-08-21' });
+assert.equal(undatedGoal.status, 'on_track');
+assert.equal(undatedGoal.requiredMonthlyContribution, null);
+assert.equal(undatedGoal.projectedCompletionDate, '2026-10-21');
+
+const unplannedGoal = projectGoal({ targetAmount: 900, currentAmount: 300, targetDate: '2026-12-31', monthlyContribution: null, asOfDate: '2026-08-21' });
+assert.equal(unplannedGoal.status, 'at_risk');
+assert.equal(Math.round(unplannedGoal.requiredMonthlyContribution ?? 0), 120);
+
+const forecastFixture = [
+  { id: 'income-future', description: 'Ingreso', category: 'Ingresos', expectedDate: '2026-09-01', amount: 1000, confidence: 1, source: 'planned' },
+  { id: 'expense-future', description: 'Gasto', category: 'Vivienda', expectedDate: '2026-10-01', amount: -200, confidence: 1, source: 'planned' },
+];
+const projectedMonthlyNet = averageMonthlyForecastNet(forecastFixture, '2026-08-21', 2);
+assert.equal(projectedMonthlyNet, 400);
+
+const coveredCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], projectedMonthlyNet);
+assert.equal(coveredCapacity.status, 'covered');
+assert.equal(Math.round(coveredCapacity.requiredMonthly), 340);
+assert.equal(Math.round(coveredCapacity.monthlyMargin), 60);
+
+const tightCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], 300);
+assert.equal(tightCapacity.status, 'tight');
+const shortCapacity = assessGoalFundingCapacity([riskyGoal, onTrackGoal], 150);
+assert.equal(shortCapacity.status, 'shortfall');
+
+const scenarioMonthlyNet = scenarioAverageMonthlyNet(forecastFixture, '2026-08-21', {
+  id: 'scenario',
+  name: 'Escenario prueba',
+  income_change_pct: -10,
+  expense_change_pct: 10,
+  monthly_net_adjustment: 50,
+  monthly_savings_allocation: 25,
+  starting_balance_adjustment: 0,
+  horizon_months: 2,
+  active: true,
+});
+assert.equal(scenarioMonthlyNet, 365, 'El escenario debe ajustar ingresos, gastos, ajuste mensual y ahorro reservado sin usar el saldo inicial');
+assert.equal(assessGoalFundingCapacity([riskyGoal, onTrackGoal], scenarioMonthlyNet).status, 'covered');
+
+const criticalAlerts = buildFinancialAlerts({
+  asOfDate: '2026-08-21',
+  knownBalance: 1000,
+  liquidity: { lowestBalance: -250, lowestDate: '2026-09-04', firstNegativeDate: '2026-09-03' },
+  upcoming: [],
+  pendingReview: 0,
+  duplicateGroups: 0,
+  uncategorized: 0,
+  goalRisks: [],
+});
+assert.equal(criticalAlerts[0]?.severity, 'critical');
+assert.equal(criticalAlerts[0]?.href, '/prevision');
+
+const predictiveAlerts = buildFinancialAlerts({
+  asOfDate: '2026-08-21',
+  knownBalance: 1000,
+  liquidity: { lowestBalance: 700, lowestDate: '2026-09-01', firstNegativeDate: null },
+  upcoming: [{ id: 'rent', description: 'Alquiler', category: 'Vivienda', expectedDate: '2026-09-01', amount: -400, confidence: 0.99, source: 'detected' }],
+  pendingReview: 2,
+  duplicateGroups: 1,
+  uncategorized: 0,
+  goalRisks: [{ id: 'goal-1', name: 'Fondo', monthlyGap: 75, targetDate: '2026-12-31', projectedCompletionDate: '2027-03-21' }],
+});
+assert.equal(predictiveAlerts.some((alert) => alert.id.startsWith('large-upcoming:')), true, 'Debe avisar de un cargo próximo material');
+assert.equal(predictiveAlerts.some((alert) => alert.id === 'goal-risk:goal-1'), true, 'Debe avisar de un objetivo fuera de ritmo');
+assert.equal(predictiveAlerts.some((alert) => alert.id === 'data-quality'), true, 'Debe conservar la calidad de datos como alerta explicable');
 
 assert.equal(hasUsableSessionToken('2000000000.firebase.signature', 1900000000), true);
 assert.equal(hasUsableSessionToken('1800000000.firebase.signature', 1900000000), false, 'Una sesión expirada debe rechazarse antes del shell');
