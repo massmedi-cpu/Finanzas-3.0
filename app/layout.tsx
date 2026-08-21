@@ -3,6 +3,7 @@ import "./globals.css";
 import "./auth.css";
 import "./movements.css";
 import "./accounts.css";
+import "./cash-flow.css";
 
 export const metadata: Metadata = {
   title: { default: "Financial App", template: "%s · Financial App" },
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
   description: "Control, análisis, presupuesto y planificación financiera personal",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/favicon.ico" }, { url: "/icon.png", type: "image/png", sizes: "512x512" }],
+    icon: [{ url: "/icon.png", type: "image/png", sizes: "512x512" }],
     apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }],
   },
   appleWebApp: { capable: true, title: "Financial App", statusBarStyle: "default" },
