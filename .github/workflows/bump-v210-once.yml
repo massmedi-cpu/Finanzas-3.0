@@ -1,0 +1,35 @@
+name: Bump V2.1.0 Once
+
+on:
+  push:
+    branches:
+      - develop/v2.1.0-normalized
+    paths:
+      - .github/workflows/bump-v210-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop/v2.1.0-normalized
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Set version atomically
+        run: |
+          npm version 2.1.0 --no-git-tag-version
+          node -e "require('node:fs').writeFileSync('src/version.ts', \"export const APP_VERSION = '2.1.0';\\nexport const APP_VERSION_LABEL = `V\${APP_VERSION}`;\\n\")"
+          rm .github/workflows/bump-v210-once.yml
+      - name: Commit final version files and remove one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json src/version.ts .github/workflows/bump-v210-once.yml
+          git commit -m "chore: release V2.1.0"
+          git push origin HEAD:develop/v2.1.0-normalized
