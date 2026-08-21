@@ -1,0 +1,41 @@
+.state-warning {
+  background: var(--warning-soft);
+  color: #755000;
+}
+
+.goal-projection {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.goal-projection > div {
+  display: grid;
+  gap: 3px;
+}
+
+.goal-projection span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.goal-projection strong {
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.goal-projection-risk {
+  border-color: #f2ddb0;
+  background: var(--warning-soft);
+}
+
+@media (max-width: 620px) {
+  .goal-projection {
+    grid-template-columns: 1fr;
+  }
+}
