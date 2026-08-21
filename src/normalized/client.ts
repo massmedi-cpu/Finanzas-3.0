@@ -125,6 +125,10 @@ async function normalizedRequest<T>(path: string): Promise<T> {
   return data;
 }
 
+export function getNormalizedState(): Promise<NormalizedState> {
+  return normalizedRequest<NormalizedState>('/state');
+}
+
 export async function getNormalizedBootstrap(limit = 100): Promise<NormalizedBootstrap> {
   const params = new URLSearchParams();
   appendQuery(params, { limit, includeTotal: true });
