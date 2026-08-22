@@ -11,6 +11,7 @@ const stateLabel:Record<ControlAlertState,string>={open:"Abierta",resolved:"Resu
 function monthLabel(month:string){return monthFmt.format(new Date(`${month}-01T12:00:00`));}
 function currentMadridMonth(){const parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Europe/Madrid",year:"numeric",month:"2-digit"}).formatToParts(new Date());return `${parts.find(p=>p.type==="year")?.value}-${parts.find(p=>p.type==="month")?.value}`;}
 function shiftMonth(month:string,delta:number){const d=new Date(`${month}-01T12:00:00Z`);d.setUTCMonth(d.getUTCMonth()+delta);return d.toISOString().slice(0,7);}
+function alertHref(alert:ControlAlert,snapshot:ControlSnapshot){const range=`from=${snapshot.monthStart}&to=${snapshot.monthEnd}`;if(alert.type==="needs_review")return `/movimientos?review=1&${range}`;if(alert.type==="duplicates")return `/movimientos?duplicate=1&${range}`;if(alert.type==="reconciliation")return `/movimientos?reconciled=0&${range}`;return alert.href;}
 
 export function ControlClient({initialData}:{initialData:ControlOverview}){
   const [data,setData]=useState(initialData);const [loading,setLoading]=useState(false);const [feedback,setFeedback]=useState<string|null>(null);const [notes,setNotes]=useState("");
@@ -42,7 +43,7 @@ export function ControlClient({initialData}:{initialData:ControlOverview}){
       <section className="control-panel alerts-panel"><div className="control-panel-head"><div><p className="eyebrow">PRIORIDADES</p><h2>Avisos financieros</h2></div><span className="pill">{data.alerts.length} abiertos{data.hiddenAlertCount?` · ${data.hiddenAlertCount} ocultos`:""}</span></div>
         {!data.alerts.length?<div className="control-empty"><strong>No hay avisos abiertos para este periodo.</strong><p>El centro de control seguirá vigilando revisión, duplicados, conciliación, presupuesto, anomalías y cierres.</p></div>:<div className="alert-list">{data.alerts.map(alert=><article className={`control-alert severity-${alert.severity}`} key={alert.key}>
           <div className="alert-head"><div><span className={`severity-badge ${alert.severity}`}>{severityLabel[alert.severity]}</span><h3>{alert.title}</h3></div><span className="alert-state">{stateLabel[alert.state]}</span></div>
-          <p>{alert.detail}</p><div className="alert-actions"><Link className="text-link" href={alert.href}>Abrir origen →</Link><span/><button type="button" className="text-button" onClick={()=>alertAction(alert,"snoozed")} disabled={loading}>Posponer 7 días</button><button type="button" className="text-button" onClick={()=>alertAction(alert,"resolved")} disabled={loading}>Marcar resuelto</button><button type="button" className="text-button muted" onClick={()=>alertAction(alert,"dismissed")} disabled={loading}>Ignorar</button></div>
+          <p>{alert.detail}</p><div className="alert-actions"><Link className="text-link" href={alertHref(alert,snapshot)}>Abrir origen →</Link><span/><button type="button" className="text-button" onClick={()=>alertAction(alert,"snoozed")} disabled={loading}>Posponer 7 días</button><button type="button" className="text-button" onClick={()=>alertAction(alert,"resolved")} disabled={loading}>Marcar resuelto</button><button type="button" className="text-button muted" onClick={()=>alertAction(alert,"dismissed")} disabled={loading}>Ignorar</button></div>
         </article>)}</div>}
       </section>
 
