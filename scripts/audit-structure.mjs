@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 const required = [
   "app/page.tsx",
+  "app/control/page.tsx",
+  "app/control/control-client.tsx",
   "app/cuentas/page.tsx",
   "app/movimientos/page.tsx",
   "app/cash-flow/page.tsx",
@@ -12,15 +14,19 @@ const required = [
   "app/analisis/page.tsx",
   "app/archivo/page.tsx",
   "app/configuracion/page.tsx",
+  "app/api/control/route.ts",
   "app/api/movements/route.ts",
   "app/api/movements/[id]/route.ts",
   "app/api/movements/[id]/splits/route.ts",
   "lib/app-version.ts",
+  "lib/financial/control.ts",
   "supabase/functions/financial-app-sync/index.ts",
   "database/FINANCIAL_APP_1.0.0_RC1_AUDIT_HARDENING.sql",
   "database/FINANCIAL_APP_1.0.0_RC2_VERSION_ALIGNMENT.sql",
   "database/FINANCIAL_APP_1.0.0_STABLE_VERSION.sql",
   "database/FINANCIAL_APP_1.2.0_VERSION.sql",
+  "database/FINANCIAL_APP_1.4.0_CONTROL_CENTER.sql",
+  "database/FINANCIAL_APP_1.4.0_DUPLICATE_FILTER.sql",
 ];
 
 const forbiddenRoots = ["src"];
@@ -44,6 +50,12 @@ if (!existsSync("package-lock.json")) {
 const versionFile = readFileSync("lib/app-version.ts", "utf8");
 const appVersion = versionFile.match(/APP_VERSION\s*=\s*["']([^"']+)["']/)?.[1] ?? null;
 if (appVersion !== packageJson.version) errors.push(`lib/app-version.ts (${appVersion ?? "sin versión"}) no coincide con package.json (${packageJson.version})`);
+
+const controlApi = readFileSync("app/api/control/route.ts", "utf8");
+if (!controlApi.includes("financial_app_control_center")) errors.push("Centro de Control no usa la RPC canónica");
+if (!controlApi.includes("financial_app_close_month")) errors.push("Falta cierre mensual en la API de Control");
+const movementsLayer = readFileSync("lib/financial/movements.ts", "utf8");
+if (!movementsLayer.includes("financial_app_movements_advanced_v14")) errors.push("Movimientos no usa el motor v1.4 con filtro de duplicados");
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
