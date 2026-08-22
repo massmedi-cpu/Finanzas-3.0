@@ -38,6 +38,8 @@ jobs:
         run: npm run audit:v20
       - name: Stabilization 2.0.1 audit
         run: npm run audit:v201
+      - name: Evolution 2.1 audit
+        run: npm run audit:v210
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
