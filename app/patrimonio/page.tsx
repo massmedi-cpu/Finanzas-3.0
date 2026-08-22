@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function NetWorthPage() {
   await requireAuthorizedUser();
   const data = await getNetWorthOverview(18);
-  return <main className="app-shell"><AppSidebar active="/patrimonio" status="Patrimonio · datos reales y valoraciones trazables"/><section className="workspace nw-workspace">
+  return <main className="app-shell"><AppSidebar active="/patrimonio" status="Patrimonio · datos reales y valoraciones trazables"/><section id="main-content" tabIndex={-1} className="workspace nw-workspace">
     <header className="topbar"><div><p className="eyebrow">PATRIMONIO · {data.version}</p><h1>Patrimonio</h1><p>Activos, deudas y evolución patrimonial con cobertura histórica explícita y sin valores inventados.</p></div></header>
     <NetWorthClient initial={data}/>
   </section></main>;

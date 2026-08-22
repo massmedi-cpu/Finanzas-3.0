@@ -18,7 +18,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
 
   return <main className="app-shell">
     <AppSidebar active="/cuentas" status="Detalle de cuenta · datos reales" />
-    <section className="workspace account-detail-workspace">
+    <section id="main-content" tabIndex={-1} className="workspace account-detail-workspace">
       <header className="topbar"><div><p className="eyebrow">CUENTAS · DETALLE · {data.version}</p><h1>{account.name}</h1><p>{account.institution || "Openbank"} · {account.identifier}</p></div><Link className="ghost button-link" href="/cuentas">← Todas las cuentas</Link></header>
 
       <div className="account-detail-hero">

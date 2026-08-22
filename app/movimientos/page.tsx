@@ -15,7 +15,7 @@ export default async function MovementsPage({ searchParams }:{ searchParams:Prom
 
   return <main className="app-shell">
     <AppSidebar active="/movimientos" status="Origen protegido · edición trazable" />
-    <section className="workspace movements-workspace">
+    <section id="main-content" tabIndex={-1} className="workspace movements-workspace">
       <header className="topbar movements-heading"><div><p className="eyebrow">MOVIMIENTOS · {initialData.version||"1.0.0-rc.1"}</p><h1>Movimientos</h1><p>Busca, filtra, revisa, divide y concilia sin modificar nunca el dato bancario original.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/movimientos/conciliacion">Conciliación</Link><Link className="ghost button-link" href="/">Volver al inicio</Link></div></header>
       <MovementsClient initialData={initialData} initialFilters={initialFilters} />
     </section>

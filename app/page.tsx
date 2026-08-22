@@ -38,7 +38,7 @@ export default async function Home(){
   const upcoming=forecast?.events.slice(0,4)||[];
   const suggestions=forecast?.suggestions.slice(0,4)||[];
 
-  return <main className="app-shell"><AppSidebar active="/" status={`Inicio · ${dashboard.version}`}/><section className="workspace home-workspace">
+  return <main className="app-shell"><AppSidebar active="/" status={`Inicio · ${dashboard.version}`}/><section id="main-content" tabIndex={-1} className="workspace home-workspace">
     <header className="topbar home-topbar"><div><p className="eyebrow">INICIO · {dashboard.version}</p><h1>Tu situación financiera</h1><p>Pasado, presente y próximos movimientos en una sola vista.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(dashboard.lastMovementDate)}</span><SyncButton/></div></header>
 
     <section className="home-account-grid" aria-label="Cuentas y patrimonio">

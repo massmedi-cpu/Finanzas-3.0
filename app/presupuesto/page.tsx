@@ -11,7 +11,7 @@ export default async function BudgetPage() {
   const data = await getBudgetMonth();
   return <main className="app-shell">
     <AppSidebar active="/presupuesto" status="Presupuesto · datos reales · edición trazable" />
-    <section className="workspace budget-workspace">
+    <section id="main-content" tabIndex={-1} className="workspace budget-workspace">
       <header className="topbar"><div><p className="eyebrow">PRESUPUESTO · {data.version}</p><h1>Presupuesto</h1><p>Asigna límites por categoría y controla cuánto has gastado y cuánto te queda disponible.</p></div><Link className="ghost button-link" href="/movimientos">Ver movimientos</Link></header>
       <BudgetClient initialData={data} />
     </section>

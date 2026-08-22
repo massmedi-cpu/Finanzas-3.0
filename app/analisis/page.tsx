@@ -20,7 +20,7 @@ export default async function AnalysisPage({searchParams}:{searchParams:Promise<
   const expenseMovementsUrl=movementUrl({...baseMovements,max:"-0.01"});
   const deviationFrom=`${data.periodEnd.slice(0,7)}-01`;
 
-  return <main className="app-shell"><AppSidebar active="/analisis" status="Análisis · reglas financieras protegidas"/><section className="workspace analysis-workspace">
+  return <main className="app-shell"><AppSidebar active="/analisis" status="Análisis · reglas financieras protegidas"/><section id="main-content" tabIndex={-1} className="workspace analysis-workspace">
     <header className="topbar"><div><p className="eyebrow">ANÁLISIS · {data.version}</p><h1>Análisis financiero</h1><p>{dateFmt.format(new Date(data.periodStart+"T12:00:00"))} – {dateFmt.format(new Date(data.periodEnd+"T12:00:00"))} · comparativa homogénea con {data.comparisonYear}</p></div><form className="analysis-year" action="/analisis"><label>Año<select name="year" defaultValue={String(data.year)}>{data.years.map(year=><option key={year} value={year}>{year}</option>)}</select></label><button className="ghost" type="submit">Aplicar</button></form></header>
 
     <section className="analysis-summary">

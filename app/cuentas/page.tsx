@@ -13,7 +13,7 @@ export default async function AccountsPage() {
   const data = await getAccountsOverview();
   return <main className="app-shell">
     <AppSidebar active="/cuentas" status="2 cuentas reales · fuentes consolidadas" />
-    <section className="workspace accounts-workspace">
+    <section id="main-content" tabIndex={-1} className="workspace accounts-workspace">
       <header className="topbar"><div><p className="eyebrow">CUENTAS · {data.version}</p><h1>Cuentas</h1><p>Saldos actuales, actividad y evolución de cada producto financiero.</p></div><Link className="ghost button-link" href="/">Volver al inicio</Link></header>
 
       <section className="accounts-total" aria-label="Patrimonio financiero disponible">
