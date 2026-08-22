@@ -28,6 +28,7 @@ const required = [
   "database/FINANCIAL_APP_1.4.0_CONTROL_CENTER.sql",
   "database/FINANCIAL_APP_1.4.0_DUPLICATE_FILTER.sql",
   "database/FINANCIAL_APP_1.4.0_SECURITY_HARDENING.sql",
+  "database/FINANCIAL_APP_1.4.0_VERSION.sql",
 ];
 
 const forbiddenRoots = ["src"];
@@ -72,6 +73,7 @@ const activeFiles = [...walk("app"), ...walk("components"), ...walk("lib")].filt
 for (const file of activeFiles) {
   const text = readFileSync(file, "utf8");
   if (/finanzas-v3-|Finanzas 3\.0|V3\.0\./i.test(text)) errors.push(`Referencia heredada en ${file}`);
+  if (/1\.0\.0-rc\.1|1\.2\.0/.test(text)) errors.push(`Versión activa obsoleta escrita a mano en ${file}`);
 }
 
 if (errors.length) {
