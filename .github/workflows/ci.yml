@@ -32,8 +32,10 @@ jobs:
         run: npm run audit:v17
       - name: Recovery 1.8 audit
         run: npm run audit:v18
-      - name: Document engine 1.9 audit
+      - name: Document engine 1.9 guarantee audit
         run: npm run audit:v19
+      - name: Unified Plan 2.0 audit
+        run: npm run audit:v20
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
