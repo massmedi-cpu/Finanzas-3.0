@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { AppSidebar } from "@/components/app-sidebar";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getFinancialPlan, type PlanStatus } from "@/lib/financial/plan";
 
@@ -26,7 +25,7 @@ export default async function PlanPage({searchParams}:{searchParams:Promise<Reco
   const s=plan.summary;const d=plan.domains;const goals=d.goals.summary;const budgetProjection=s.budgetProjectedDifference;
   const budgetPercent=s.budgetAssigned>0?Math.min(100,Math.max(0,(s.budgetSpent/s.budgetAssigned)*100)):0;
   const capacityPercent=s.goalCapacityReference>0?Math.min(100,Math.max(0,(s.goalMonthlyRequired/s.goalCapacityReference)*100)):0;
-  return <main className="app-shell"><AppSidebar active="/plan" status={`Plan financiero · ${plan.version}`}/><section id="main-content" tabIndex={-1} className="workspace plan-workspace">
+  return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace plan-workspace">
     <header className="topbar plan-topbar"><div><p className="eyebrow">PLAN FINANCIERO · {plan.version}</p><h1>Control y planificación en una sola vista</h1><p>Una lectura única de presupuesto, previsión, objetivos, patrimonio y Control. Cada recomendación enlaza con el dato que la origina.</p></div><form className="plan-month" method="get" action="/plan"><label htmlFor="plan-month">Mes del plan</label><div><input id="plan-month" name="month" type="month" defaultValue={plan.month}/><button className="ghost" type="submit">Aplicar</button></div></form></header>
 
     <section className={`plan-status ${plan.status}`} aria-labelledby="plan-status-title"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="plan-status-title">{copy.title}</h2><p>{copy.detail}</p></div><div className="plan-status-count"><strong>{number.format(plan.actionSummary.total)}</strong><span>prioridades activas</span><small>{plan.actionSummary.critical} críticas · {plan.actionSummary.high} altas · {plan.actionSummary.medium} medias</small></div></section>

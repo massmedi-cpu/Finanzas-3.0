@@ -2,7 +2,6 @@ import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getCashFlowRange, type CashFlowRange } from "@/lib/financial/cash-flow";
 import { movementState, movementUrl } from "@/lib/financial/movement-query";
-import { AppSidebar } from "@/components/app-sidebar";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 
 const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
@@ -32,7 +31,7 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
   });
   const allMovementsUrl=movementUrl(movementBase);
 
-  return <main className="app-shell"><AppSidebar active="/cash-flow" status="Cash Flow · reglas centrales protegidas"/><section id="main-content" tabIndex={-1} className="workspace cf-workspace">
+  return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace cf-workspace">
     <header className="topbar"><div><p className="eyebrow">CASH FLOW · {data.version}</p><h1>Cash Flow</h1><p>{rangeLabels[data.range]} · {displayDate(data.dateFrom)} — {displayDate(data.dateTo)}. Ahorro, traspasos internos y duplicados quedan fuera siempre.</p></div><Link className="ghost button-link" href={allMovementsUrl}>Ver movimientos filtrados</Link></header>
 
     <form className="cf-filter-panel" action="/cash-flow">

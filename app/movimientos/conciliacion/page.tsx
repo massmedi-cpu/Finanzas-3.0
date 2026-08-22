@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
-import { AppSidebar } from "@/components/app-sidebar";
 import { getReconciliationOverview } from "@/lib/financial/reconciliation";
 
 const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
@@ -15,7 +14,7 @@ export default async function ReconciliationPage(){
   await requireAuthorizedUser();
   const data=await getReconciliationOverview();
   return <main className="app-shell">
-    <AppSidebar active="/movimientos" status="Conciliación · evidencia trazable" />
+    
     <section id="main-content" tabIndex={-1} className="workspace reconciliation-workspace">
       <header className="topbar"><div><p className="eyebrow">CONCILIACIÓN · {data.version}</p><h1>Conciliación</h1><p>Empareja solo operaciones con evidencia suficiente. El estado original del XLSX permanece intacto.</p></div><Link className="ghost button-link" href="/movimientos">Volver a movimientos</Link></header>
 

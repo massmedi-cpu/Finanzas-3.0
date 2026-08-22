@@ -1,50 +1,52 @@
-# Release gate — Finanzas 3.0 V2.1.0
+# Release gate — Financial App 2.1.0
 
-## Alcance
-V2.1.0 activa el modelo normalizado de PostgreSQL en paralelo al snapshot JSON. La fuente bancaria sigue siendo de solo lectura y `finance_v3_current`/snapshots se conservan como procedencia y rollback.
+Estado: CANDIDATA VALIDADA. Pendiente únicamente de promoción controlada a producción.
 
-## Migración de datos validada
-- Fuente actual: 3.135 movimientos.
-- Normalizados: 3.135/3.135.
-- IDs de origen: conjuntos idénticos.
-- Checksum de fuente: idéntico.
-- Rango: 2018-11-22 → 2026-08-21.
-- Segunda sincronización idempotente: 0 insertados, 0 actualizados, 3.135 sin cambios, 0 desaparecidos.
-- Comparación por mes: 0 diferencias en recuento/importes/ingresos/gastos/revisión.
-- Histórico sin producto explícito: se conserva mediante `__historical_unassigned__`; no se inventa una cuenta bancaria.
+## Base protegida
 
-## Exactitud de resumen
-Comparación V2.0.2 vs modelo normalizado para 2026-08, aplicando overlay privado:
-- movimientos: 24 = 24
-- pendientes: 11 = 11
-- ingresos: 20,73 € = 20,73 €
-- gastos: 728,31 € = 728,31 €
-- flujo neto: -707,58 € = -707,58 €
-- patrimonio conocido: 1.491,20 € = 1.491,20 €
+Financial App 2.0.1 permanece congelada en producción como checkpoint recuperable hasta que termine el smoke postproducción de 2.1.0. La rama de trabajo `financial-app-rebuild` mantiene Vercel bloqueado para evitar previews y consumo innecesario.
 
-## Rendimiento y escalabilidad
-- `finance_v210_transactions_page`: paginación keyset por fecha/posición/id.
-- Página SQL de referencia (75 filas, base actual): ~14 ms dentro de PostgreSQL.
-- Movimientos: 100 filas reales por página; filtros y búsqueda se ejecutan en servidor.
-- Cuentas y resumen de Inicio ya no recorren el snapshot completo.
-- Estado de fuente ya no carga el JSON completo.
-- Edge `finanzas-v3-normalized` comprueba `modifiedTime` de Drive y solo fuerza la descarga/parseo del XLSX cuando el archivo cambia.
+## Objetivo de 2.1.0
 
-## Seguridad
-- Browser nunca recibe `SUPABASE_SERVICE_ROLE_KEY` ni credenciales Google.
-- RPC V2.1: solo `service_role`.
-- RLS activo y acceso directo de cliente cerrado.
-- `pg_trgm` reside en `extensions`, no en `public`.
-- La autenticación privada existente se mantiene; no se crean usuarios ficticios de Supabase Auth.
+Evolucionar la base estable sin añadir complejidad gratuita. Las prioridades son rendimiento percibido, legibilidad, navegación coherente, reducción de trabajo redundante, Movimientos y Plan, conservando intactas las garantías financieras, de autenticación, recuperación y origen de solo lectura.
 
-## Gates antes de merge
-- [x] equivalencia de datos y resumen
-- [x] sincronización idempotente
-- [x] paginación sin solapamientos
-- [x] búsqueda SQL smoke
-- [x] CI de núcleo: invariantes, regresión, TypeScript, build y smoke
-- [x] preview exacto READY en `cdg1`
-- [ ] versionado final 2.1.0 + CI final
-- [ ] verificación post-merge producción
+## Bloques
 
-V2.0.2 permanece disponible como rollback hasta finalizar todos los gates.
+### B1 · navegación y legibilidad
+- [x] Desactivar el prefetch automático de toda la navegación privada.
+- [x] Prefetch solo por intención del usuario: hover, foco o touch.
+- [x] Elevar la navegación compacta de tablet/móvil a 13 px efectivos.
+- [x] Elevar etiquetas `eyebrow` a 12 px efectivos.
+- [x] Añadir `audit:v210` al CI.
+
+### B2 · shell y carga redundante
+- [x] Eliminar 16 sidebars duplicados renderizados dentro de páginas privadas cuando el shell persistente ya los proporciona.
+- [x] Mantener un único estado de navegación visible y accesible.
+- [x] Convertir la ausencia de sidebars internos en una garantía de `audit:v210`.
+- [x] Verificar que loading, errores, foco y build siguen pasando los gates heredados.
+
+### B3 · Movimientos
+- [x] Medir primera carga, payload y coste de facetas sobre el dataset real; baseline en `docs/PERFORMANCE_V2.1.0.md`.
+- [x] Evitar reenviar facetas globales en paginaciones, filtros y recargas posteriores; el cliente conserva las de la primera carga.
+- [x] Mantener la RPC 2.0.1 estable como fuente de verdad y descartar una RPC dinámica duplicada de mayor riesgo para esta release.
+- [x] Confirmar por CI que edición, splits, conciliación, OCR, filtros y build permanecen sin regresiones.
+
+### B4 · Plan y coherencia
+- [x] Revisar duplicidades entre Inicio, Plan, Previsión, Presupuesto y Objetivos.
+- [x] Mantener una única fuente de decisión por cifra y enlaces `sourcePath` trazables.
+- [x] Comprobar sobre la base real que las magnitudes compartidas coinciden con sus motores canónicos.
+- [x] Mantener Inicio a 30 días y Plan a 90 días como horizontes explícitamente diferenciados.
+
+### B5 · cierre 2.1.0
+- [x] Readiness previo de Supabase sin fallos, con Google, origen de solo lectura, almacenamiento privado y sincronización correcta.
+- [x] Versionado preparado en runtime, paquete y lockfile como 2.1.0.
+- [x] Migración de versión de base preparada pero no aplicada antes del despliegue para evitar desalinear la 2.0.1 que sigue en producción.
+- [ ] Ejecutar gate CI final sobre el commit candidato exacto: dependencias, auditorías, accesibilidad, typecheck y build.
+- [ ] Promocionar el mismo commit validado a `main`.
+- [ ] Esperar a que el único despliegue de producción quede READY.
+- [ ] Aplicar `FINANCIAL_APP_2.1.0_VERSION.sql` y repetir release readiness con identidad Google.
+- [ ] Smoke postproducción sobre `financialapp-home.vercel.app` y conservar rollback 2.0.1 hasta cerrar el release.
+
+## Artefactos históricos
+
+El antiguo documento V2.1.0 previo al reinicio se conserva únicamente en `docs/legacy/RELEASE_GATE_V2.1.0_PRE_REBUILD.md`. `database/V2.1.0_NORMALIZED_MIGRATIONS.md` pertenece también a aquella arquitectura histórica y **no es una migración activa ni una especificación del 2.1.0 actual**.
