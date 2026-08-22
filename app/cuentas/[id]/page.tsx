@@ -2,7 +2,6 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getAccountDetail } from "@/lib/financial/accounts";
-import { AppSidebar } from "@/components/app-sidebar";
 import { BalanceChart } from "@/components/balance-chart";
 
 const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
@@ -17,7 +16,7 @@ export default async function AccountDetailPage({ params }: { params: Promise<{ 
   const account = data.account;
 
   return <main className="app-shell">
-    <AppSidebar active="/cuentas" status="Detalle de cuenta · datos reales" />
+    
     <section id="main-content" tabIndex={-1} className="workspace account-detail-workspace">
       <header className="topbar"><div><p className="eyebrow">CUENTAS · DETALLE · {data.version}</p><h1>{account.name}</h1><p>{account.institution || "Openbank"} · {account.identifier}</p></div><Link className="ghost button-link" href="/cuentas">← Todas las cuentas</Link></header>
 
