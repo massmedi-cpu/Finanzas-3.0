@@ -4,14 +4,19 @@ import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { SplitEditor } from "./split-editor";
 
-type Filters = { search:string; account:string; type:string; category:string; review:boolean; sort:string };
+type TriFilter=""|"1"|"0";
+type Filters = {
+  search:string;account:string;type:string;category:string;subcategory:string;channel:string;tag:string;review:boolean;
+  recurring:TriFilter;internalTransfer:TriFilter;reconciled:TriFilter;documents:TriFilter;splits:TriFilter;
+  from:string;to:string;min:string;max:string;sort:string;
+};
 type EditState = {
   date:string; type:string; category:string; subcategory:string; normalizedConcept:string; counterparty:string; description:string;
   cashFlow:"inherit"|"include"|"exclude"; isInternalTransfer:boolean; isDuplicate:boolean; reconciled:"inherit"|"yes"|"no";
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
 
-const emptyFilters: Filters = { search:"", account:"", type:"", category:"", review:false, sort:"date_desc" };
+const emptyFilters: Filters = {search:"",account:"",type:"",category:"",subcategory:"",channel:"",tag:"",review:false,recurring:"",internalTransfer:"",reconciled:"",documents:"",splits:"",from:"",to:"",min:"",max:"",sort:"date_desc"};
 const money = new Intl.NumberFormat("es-ES", { style:"currency", currency:"EUR" });
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
@@ -55,6 +60,7 @@ function sourceBoolean(value:unknown):boolean|null {
   if (noValues.has(normalized)) return false;
   return null;
 }
+function boolParam(value:TriFilter){return value||null}
 
 export function MovementsClient({ initialData }:{ initialData:MovementsResponse }) {
   const [pageData,setPageData] = useState(initialData);
@@ -81,7 +87,19 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
     if(next.account) q.set("account",next.account);
     if(next.type) q.set("type",next.type);
     if(next.category) q.set("category",next.category);
+    if(next.subcategory) q.set("subcategory",next.subcategory);
+    if(next.channel) q.set("channel",next.channel);
+    if(next.tag) q.set("tag",next.tag);
     if(next.review) q.set("review","1");
+    if(boolParam(next.recurring)) q.set("recurring",next.recurring);
+    if(boolParam(next.internalTransfer)) q.set("internalTransfer",next.internalTransfer);
+    if(boolParam(next.reconciled)) q.set("reconciled",next.reconciled);
+    if(boolParam(next.documents)) q.set("documents",next.documents);
+    if(boolParam(next.splits)) q.set("splits",next.splits);
+    if(next.from) q.set("from",next.from);
+    if(next.to) q.set("to",next.to);
+    if(next.min.trim()) q.set("min",next.min.trim());
+    if(next.max.trim()) q.set("max",next.max.trim());
     try {
       const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
       const body=await response.json() as MovementsResponse & {error?:string};
@@ -164,14 +182,32 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
       <div><strong>{pageData.total.toLocaleString("es-ES")}</strong><span>movimientos</span></div>
       <div><strong>{pageData.items.filter(item=>item.needsReview).length}</strong><span>visibles por revisar</span></div>
       <div><strong>{pageData.items.filter(item=>item.hasOverrides).length}</strong><span>visibles editados</span></div>
+      <div><strong>{pageData.items.filter(item=>item.hasDocuments).length}</strong><span>visibles con documentos</span></div>
     </section>
 
     <form className="movement-filters" onSubmit={submitFilters}>
-      <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID o importe" /></label>
+      <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID, importe, etiquetas u OCR" /></label>
       <label><span>Cuenta</span><select value={filters.account} onChange={e=>setFilters({...filters,account:e.target.value})}><option value="">Todas</option>{pageData.facets.accounts.map(account=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
       <label><span>Tipo</span><select value={filters.type} onChange={e=>setFilters({...filters,type:e.target.value})}><option value="">Todos</option>{pageData.facets.types.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
       <label><span>Categoría</span><select value={filters.category} onChange={e=>setFilters({...filters,category:e.target.value})}><option value="">Todas</option>{pageData.facets.categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
       <label><span>Orden</span><select value={filters.sort} onChange={e=>setFilters({...filters,sort:e.target.value})}><option value="date_desc">Más recientes</option><option value="date_asc">Más antiguos</option><option value="amount_desc">Mayor importe</option><option value="amount_asc">Menor importe</option></select></label>
+      <details className="advanced-filter-panel">
+        <summary>Filtros avanzados</summary>
+        <div className="advanced-filter-grid">
+          <label><span>Subcategoría</span><select value={filters.subcategory} onChange={e=>setFilters({...filters,subcategory:e.target.value})}><option value="">Todas</option>{pageData.facets.subcategories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <label><span>Canal</span><select value={filters.channel} onChange={e=>setFilters({...filters,channel:e.target.value})}><option value="">Todos</option>{pageData.facets.channels.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <label><span>Recurrente</span><select value={filters.recurring} onChange={e=>setFilters({...filters,recurring:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Sí</option><option value="0">No</option></select></label>
+          <label><span>Entre cuentas</span><select value={filters.internalTransfer} onChange={e=>setFilters({...filters,internalTransfer:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Solo traspasos</option><option value="0">Excluir traspasos</option></select></label>
+          <label><span>Conciliación</span><select value={filters.reconciled} onChange={e=>setFilters({...filters,reconciled:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Conciliados</option><option value="0">No conciliados</option></select></label>
+          <label><span>Documentos</span><select value={filters.documents} onChange={e=>setFilters({...filters,documents:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Con documentos</option><option value="0">Sin documentos</option></select></label>
+          <label><span>Divisiones</span><select value={filters.splits} onChange={e=>setFilters({...filters,splits:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Divididos</option><option value="0">Sin dividir</option></select></label>
+          <label><span>Desde</span><input type="date" value={filters.from} onChange={e=>setFilters({...filters,from:e.target.value})}/></label>
+          <label><span>Hasta</span><input type="date" value={filters.to} onChange={e=>setFilters({...filters,to:e.target.value})}/></label>
+          <label><span>Importe mínimo</span><input inputMode="decimal" value={filters.min} onChange={e=>setFilters({...filters,min:e.target.value})} placeholder="-100,00"/></label>
+          <label><span>Importe máximo</span><input inputMode="decimal" value={filters.max} onChange={e=>setFilters({...filters,max:e.target.value})} placeholder="100,00"/></label>
+        </div>
+      </details>
       <label className="check-filter"><input type="checkbox" checked={filters.review} onChange={e=>setFilters({...filters,review:e.target.checked})}/><span>Solo pendientes de revisar</span></label>
       <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading}>Limpiar</button></div>
     </form>
@@ -187,7 +223,7 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
       {!pageData.items.length&&<div className="empty-state"><strong>No hay movimientos con estos filtros.</strong><span>Prueba a limpiar algún criterio de búsqueda.</span></div>}
     </div>
 
-    <div className="movement-cards">{pageData.items.map(item=><button key={item.id} className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small></div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button>)}</div>
+    <div className="movement-cards">{pageData.items.map(item=><button key={item.id} className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button>)}</div>
 
     <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||pageData.page<=1} onClick={()=>loadWith(filters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||pageData.page>=pages} onClick={()=>loadWith(filters,pageData.page+1)}>Siguiente</button></div></footer>
 
@@ -234,10 +270,10 @@ function Status({item}:{item:MovementItem}) {
 function MovementRow({item,onOpen}:{item:MovementItem;onOpen:(id:string)=>void}) {
   return <tr>
     <td><span className="date-main">{formatDate(item.date)}</span><small>{item.time?item.time.slice(0,5):""}</small></td>
-    <td><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span></button></td>
+    <td><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}</button></td>
     <td><span>{item.category||"Sin categoría"}</span>{item.subcategory&&<small>{item.subcategory}</small>}</td>
     <td><span>{item.account.name||"Sin cuenta"}</span><small>{item.account.identifier||""}</small></td>
-    <td className={`numeric amount ${item.amount!=null&&item.amount<0?"negative":"positive"}`}>{formatMoney(item.amount)}{item.balance!=null&&<small>Saldo {formatMoney(item.balance)}</small>}</td>
+    <td className={`numeric amount ${item.amount!=null&&item.amount<0?"negative":"positive"}`}>{formatMoney(item.amount)}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}{item.balance!=null&&<small>Saldo {formatMoney(item.balance)}</small>}</td>
     <td><Status item={item}/></td>
   </tr>;
 }

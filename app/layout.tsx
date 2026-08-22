@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./auth.css";
 import "./movements.css";
+import "./movements-advanced.css";
 import "./accounts.css";
 import "./cash-flow.css";
 import "./budget.css";
