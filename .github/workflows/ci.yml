@@ -36,6 +36,8 @@ jobs:
         run: npm run audit:v19
       - name: Unified Plan 2.0 audit
         run: npm run audit:v20
+      - name: Stabilization 2.0.1 audit
+        run: npm run audit:v201
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
