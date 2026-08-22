@@ -5,6 +5,7 @@ import "./movements.css";
 import "./movements-advanced.css";
 import "./accounts.css";
 import "./cash-flow.css";
+import "./cash-flow-advanced.css";
 import "./budget.css";
 import "./budget-advanced.css";
 import "./goals.css";
