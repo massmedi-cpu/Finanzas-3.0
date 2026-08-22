@@ -1,6 +1,6 @@
 import{existsSync,readFileSync,readdirSync,statSync}from"node:fs";import{join}from"node:path";
 const errors=[];
-const need=["components/intent-link.tsx","components/app-sidebar.tsx","app/loading.tsx","app/readability-v210.css","docs/RELEASE_GATE_V2.1.0.md","docs/legacy/RELEASE_GATE_V2.1.0_PRE_REBUILD.md"];
+const need=["components/intent-link.tsx","components/app-sidebar.tsx","app/loading.tsx","app/readability-v210.css","docs/RELEASE_GATE_V2.1.0.md","docs/PERFORMANCE_V2.1.0.md","docs/legacy/RELEASE_GATE_V2.1.0_PRE_REBUILD.md"];
 for(const file of need)if(!existsSync(file))errors.push(`Falta ${file}`);
 function pagesWithNestedSidebar(dir){const found=[];for(const name of readdirSync(dir)){const path=join(dir,name);const stat=statSync(path);if(stat.isDirectory())found.push(...pagesWithNestedSidebar(path));else if(name==="page.tsx"&&readFileSync(path,"utf8").includes("AppSidebar"))found.push(path)}return found}
 if(!errors.length){
@@ -8,6 +8,9 @@ if(!errors.length){
   const sidebar=readFileSync("components/app-sidebar.tsx","utf8");
   const layout=readFileSync("app/layout.tsx","utf8");
   const readability=readFileSync("app/readability-v210.css","utf8");
+  const movementsClient=readFileSync("app/movimientos/movements-client.tsx","utf8");
+  const movementsApi=readFileSync("app/api/movements/route.ts","utf8");
+  const performance=readFileSync("docs/PERFORMANCE_V2.1.0.md","utf8");
   const gate=readFileSync("docs/RELEASE_GATE_V2.1.0.md","utf8");
   if(!intent.includes("prefetch={false}"))errors.push("IntentLink no desactiva el prefetch automático");
   for(const token of ["router.prefetch(href)","onMouseEnter","onFocus","onTouchStart"])if(!intent.includes(token))errors.push(`IntentLink no contiene ${token}`);
@@ -19,6 +22,10 @@ if(!errors.length){
   if(!gate.includes("Estado: EN DESARROLLO")||!gate.includes("2.0.1 permanece congelada"))errors.push("El gate 2.1 no protege explícitamente el checkpoint 2.0.1");
   const nested=pagesWithNestedSidebar("app");
   if(nested.length)errors.push(`Quedan ${nested.length} AppSidebar redundantes: ${nested.join(", ")}`);
+  if(!movementsClient.includes('q.set("facets","0")'))errors.push("Movimientos no solicita respuestas ligeras después de la carga inicial");
+  if(!movementsClient.includes("body.facets??pageData.facets"))errors.push("Movimientos no conserva las facetas iniciales cuando la respuesta ligera las omite");
+  if(!movementsApi.includes('q.get("facets")==="0"')||!movementsApi.includes("delete page.facets"))errors.push("El API de Movimientos no elimina facetas repetidas cuando facets=0");
+  for(const token of ["81.921 bytes","11.896 bytes","~70,8 ms","~17,7 ms"])if(!performance.includes(token))errors.push(`Falta baseline de Movimientos: ${token}`);
 }
 if(errors.length){console.error("Financial App 2.1 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.1 audit OK · navegación por intención, legibilidad, shell único y checkpoint protegido");
+console.log("Financial App 2.1 audit OK · navegación por intención, legibilidad, shell único, Movimientos ligero y checkpoint protegido");
