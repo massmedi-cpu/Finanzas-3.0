@@ -26,9 +26,10 @@ Evolucionar la base estable sin añadir complejidad gratuita. Las prioridades so
 - [x] Verificar que loading, errores, foco y build siguen pasando los gates heredados.
 
 ### B3 · Movimientos
-- [ ] Auditar coste real de primera carga, filtros y paginación.
-- [ ] Evitar respuestas o facetas redundantes cuando no sean necesarias.
-- [ ] Mantener edición, splits, conciliación, OCR y filtros sin regresiones.
+- [x] Medir primera carga, payload y coste de facetas sobre el dataset real; baseline en `docs/PERFORMANCE_V2.1.0.md`.
+- [x] Evitar reenviar facetas globales en paginaciones, filtros y recargas posteriores; el cliente conserva las de la primera carga.
+- [x] Mantener la RPC 2.0.1 estable como fuente de verdad y descartar una RPC dinámica duplicada de mayor riesgo para esta release.
+- [ ] Confirmar por CI que edición, splits, conciliación, OCR, filtros y build permanecen sin regresiones.
 
 ### B4 · Plan y coherencia
 - [ ] Revisar duplicidades entre Inicio, Plan, Previsión, Presupuesto y Objetivos.
