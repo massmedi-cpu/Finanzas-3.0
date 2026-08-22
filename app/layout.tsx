@@ -6,6 +6,7 @@ import "./movements-advanced.css";
 import "./accounts.css";
 import "./cash-flow.css";
 import "./budget.css";
+import "./budget-advanced.css";
 import "./forecast.css";
 import "./forecast-scenario.css";
 import "./net-worth.css";
