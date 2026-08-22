@@ -18,6 +18,7 @@ import "./settings.css";
 import "./home.css";
 import "./system-state.css";
 import "./control.css";
+import "./rules.css";
 
 export const metadata: Metadata = {
   title: { default: "Financial App", template: "%s · Financial App" },

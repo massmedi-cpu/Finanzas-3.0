@@ -1,0 +1,46 @@
+import { NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+import { hasFinancialAppAccess,normalizeEmail } from "@/lib/auth/access";
+
+async function authorizedClient(){
+  const supabase=await createClient();
+  const {data,error}=await supabase.auth.getUser();
+  const email=normalizeEmail(data.user?.email);
+  if(error||!data.user||!(await hasFinancialAppAccess(supabase,email)))return null;
+  return supabase;
+}
+const noStore={"Cache-Control":"private, no-store"};
+export const dynamic="force-dynamic";
+
+export async function GET(){
+  const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  const {data,error}=await supabase.rpc("financial_app_rules_overview");
+  if(error||!data)return NextResponse.json({ok:false,error:error?.message||"rules_unavailable"},{status:400});
+  return NextResponse.json(data,{headers:noStore});
+}
+
+export async function POST(request:Request){
+  const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  let body:any;try{body=await request.json();}catch{return NextResponse.json({ok:false,error:"invalid_json"},{status:400});}
+  const kind=typeof body?.kind==="string"?body.kind:"";
+  let result:{data:any;error:any};
+  if(kind==="preview"){
+    if(!body.rule||typeof body.rule!=="object")return NextResponse.json({ok:false,error:"invalid_rule"},{status:400});
+    result=await supabase.rpc("financial_app_preview_rule",{p_rule:body.rule});
+  }else if(kind==="save"){
+    if(!body.rule||typeof body.rule!=="object")return NextResponse.json({ok:false,error:"invalid_rule"},{status:400});
+    const id=typeof body.id==="string"&&body.id?body.id:null;
+    result=await supabase.rpc("financial_app_upsert_rule",{p_rule_id:id,p_rule:body.rule});
+  }else if(kind==="apply"){
+    if(typeof body.id!=="string"||!body.id)return NextResponse.json({ok:false,error:"invalid_rule_id"},{status:400});
+    result=await supabase.rpc("financial_app_apply_rule",{p_rule_id:body.id});
+  }else if(kind==="deactivate"){
+    if(typeof body.id!=="string"||!body.id)return NextResponse.json({ok:false,error:"invalid_rule_id"},{status:400});
+    result=await supabase.rpc("financial_app_deactivate_rule",{p_rule_id:body.id});
+  }else if(kind==="revert"){
+    if(typeof body.id!=="string"||!body.id)return NextResponse.json({ok:false,error:"invalid_rule_id"},{status:400});
+    result=await supabase.rpc("financial_app_revert_rule",{p_rule_id:body.id});
+  }else return NextResponse.json({ok:false,error:"unsupported_action"},{status:400});
+  if(result.error||!result.data)return NextResponse.json({ok:false,error:result.error?.message||"rule_action_failed"},{status:400});
+  return NextResponse.json(result.data,{headers:noStore});
+}
