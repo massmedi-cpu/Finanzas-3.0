@@ -1,17 +1,12 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
+import { normalizeEmail } from "@/lib/auth/access";
 
-export async function requireAuthorizedUser() {
-  const supabase = await createClient();
-  const { data, error } = await supabase.auth.getUser();
-  const email = normalizeEmail(data.user?.email);
-
-  if (error || !data.user) redirect("/login");
-  if (!(await hasFinancialAppAccess(supabase, email))) {
-    await supabase.auth.signOut({ scope: "local" });
-    redirect("/login?error=unauthorized");
-  }
-
-  return { id: data.user.id, email };
+export async function requireAuthorizedUser(){
+  const supabase=await createClient();
+  const {data,error}=await supabase.auth.getClaims();
+  const id=typeof data?.claims?.sub==="string"?data.claims.sub:"";
+  const email=normalizeEmail(typeof data?.claims?.email==="string"?data.claims.email:null);
+  if(error||!id||!email)redirect("/login");
+  return{id,email};
 }
