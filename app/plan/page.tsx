@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getFinancialPlan, type PlanStatus } from "@/lib/financial/plan";
+import { getAnalysisOverview } from "@/lib/financial/analysis";
+import { buildAnalysisInsights } from "@/lib/financial/analysis-insights";
+import { buildDecisionIntelligence } from "@/lib/financial/intelligence";
+import { PlanIntelligence } from "@/components/plan-intelligence";
 
 export const dynamic="force-dynamic";
 const MONTH_RE=/^\d{4}-\d{2}$/;
@@ -20,7 +24,12 @@ export default async function PlanPage({searchParams}:{searchParams:Promise<Reco
   await requireAuthorizedUser();
   const params=await searchParams;
   const requested=MONTH_RE.test(params.month||"")?params.month!:null;
-  const plan=await getFinancialPlan(requested);
+  const currentMonth=new Date().toISOString().slice(0,7);
+  const useCurrentAnalytics=requested==null||requested===currentMonth;
+  const [plan,analysis]=useCurrentAnalytics
+    ?await Promise.all([getFinancialPlan(requested),getAnalysisOverview(Number(currentMonth.slice(0,4)))])
+    :[await getFinancialPlan(requested),null];
+  const intelligence=buildDecisionIntelligence(plan,analysis?buildAnalysisInsights(analysis):null);
   const copy=statusCopy(plan.status);
   const s=plan.summary;const d=plan.domains;const goals=d.goals.summary;const budgetProjection=s.budgetProjectedDifference;
   const budgetPercent=s.budgetAssigned>0?Math.min(100,Math.max(0,(s.budgetSpent/s.budgetAssigned)*100)):0;
@@ -29,6 +38,8 @@ export default async function PlanPage({searchParams}:{searchParams:Promise<Reco
     <header className="topbar plan-topbar"><div><p className="eyebrow">PLAN FINANCIERO · {plan.version}</p><h1>Control y planificación en una sola vista</h1><p>Una lectura única de presupuesto, previsión, objetivos, patrimonio y Control. Cada recomendación enlaza con el dato que la origina.</p></div><form className="plan-month" method="get" action="/plan"><label htmlFor="plan-month">Mes del plan</label><div><input id="plan-month" name="month" type="month" defaultValue={plan.month}/><button className="ghost" type="submit">Aplicar</button></div></form></header>
 
     <section className={`plan-status ${plan.status}`} aria-labelledby="plan-status-title"><div><p className="eyebrow">{copy.eyebrow}</p><h2 id="plan-status-title">{copy.title}</h2><p>{copy.detail}</p></div><div className="plan-status-count"><strong>{number.format(plan.actionSummary.total)}</strong><span>prioridades activas</span><small>{plan.actionSummary.critical} críticas · {plan.actionSummary.high} altas · {plan.actionSummary.medium} medias</small></div></section>
+
+    <PlanIntelligence data={intelligence}/>
 
     <section className="plan-kpis" aria-label="Magnitudes principales del plan">
       <article><span>Resultado del mes</span><strong className={s.monthlyNet<0?"negative":"positive"}>{signed(s.monthlyNet)}</strong><small>{money.format(s.monthlyIncome)} ingresos · {money.format(s.monthlyExpenses)} gastos</small><Link href={`/cash-flow?from=${plan.month}-01`}>Ver Cash Flow →</Link></article>
@@ -51,6 +62,6 @@ export default async function PlanPage({searchParams}:{searchParams:Promise<Reco
       <Link href={d.control.href}><span>Control</span><strong>{d.control.visibleAlertCount}</strong><small>alertas visibles · {d.control.snapshot.closeBlockers} bloqueos</small><em>{d.control.snapshot.closeReady?"Mes listo para cerrar":"Revisión pendiente"}</em></Link>
     </div></section>
 
-    <details className="plan-method"><summary>Cómo se construye este plan</summary><p>Es una capa de decisión de solo lectura. No cambia movimientos, presupuestos, previsiones, objetivos ni patrimonio. Reutiliza las reglas canónicas ya validadas de cada módulo y las reúne en una sola respuesta.</p><ul>{plan.rules.sourceFunctions.map(source=><li key={source}><code>{source}</code></li>)}</ul><p>Las sugerencias automáticas de previsión siguen sin alterar el saldo proyectado hasta que se confirman.</p></details>
+    <details className="plan-method"><summary>Cómo se construye este plan</summary><p>Es una capa de decisión de solo lectura. No cambia movimientos, presupuestos, previsiones, objetivos ni patrimonio. Reutiliza las reglas canónicas ya validadas de cada módulo y las reúne en una sola respuesta.</p><ul>{plan.rules.sourceFunctions.map(source=><li key={source}><code>{source}</code></li>)}</ul><p>La lectura inteligente de 2.3 combina únicamente estas salidas canónicas y, en el mes actual, el contexto analítico de meses completos. No usa un modelo externo ni ejecuta cambios automáticos.</p><p>Las sugerencias automáticas de previsión siguen sin alterar el saldo proyectado hasta que se confirman.</p></details>
   </section></main>;
 }

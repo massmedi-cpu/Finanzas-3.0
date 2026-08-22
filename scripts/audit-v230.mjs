@@ -1,0 +1,22 @@
+import{existsSync,readFileSync}from"node:fs";
+const errors=[];
+const required=["lib/financial/intelligence.ts","components/plan-intelligence.tsx","app/plan-v230.css","scripts/intelligence-v230-tests.ts","docs/RELEASE_GATE_V2.3.0.md"];
+for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
+const read=file=>existsSync(file)?readFileSync(file,"utf8"):"";
+const intelligence=read("lib/financial/intelligence.ts");
+const page=read("app/plan/page.tsx");
+const component=read("components/plan-intelligence.tsx");
+const ci=read(".github/workflows/ci.yml");
+const pkg=JSON.parse(read("package.json")||"{}");
+for(const token of ["liquidity-negative","deficit-persists","budget-projection-negative","goals-over-capacity","close-blockers","net-worth-coverage","available-capacity"])if(!intelligence.includes(token))errors.push(`Falta señal 2.3 ${token}`);
+if(!intelligence.includes("sourcePath"))errors.push("Las señales 2.3 no conservan trazabilidad sourcePath");
+if(/openai|anthropic|gemini|fetch\(|axios/i.test(intelligence))errors.push("La inteligencia 2.3 introduce una dependencia externa no autorizada");
+if(/insert\s+into|update\s+financial_app|delete\s+from/i.test(intelligence))errors.push("La inteligencia 2.3 contiene escrituras financieras");
+if(!page.includes("buildDecisionIntelligence")||!page.includes("<PlanIntelligence"))errors.push("Plan no integra la capa inteligente 2.3");
+if(!page.includes("useCurrentAnalytics")||!page.includes("requested==null||requested===currentMonth"))errors.push("El contexto analítico no está limitado al mes actual");
+if(!component.includes("Motor determinista y explicable"))errors.push("La UI no explica el carácter determinista de 2.3");
+if(pkg.scripts?.["audit:v230"]!=="node scripts/audit-v230.mjs")errors.push("Falta audit:v230 en package.json");
+if(pkg.scripts?.["test:intelligence"]!=="tsx scripts/intelligence-v230-tests.ts")errors.push("Falta test:intelligence en package.json");
+if(!ci.includes("npm run audit:v230")||!ci.includes("npm run test:intelligence"))errors.push("CI no ejecuta el gate 2.3");
+if(errors.length){console.error("Financial App 2.3 intelligence audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
+console.log("Financial App 2.3 audit OK · inteligencia determinista, trazable, temporalmente coherente y sin escrituras");
