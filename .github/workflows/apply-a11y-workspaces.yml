@@ -1,0 +1,46 @@
+name: Apply Financial App accessible workspaces
+
+on:
+  push:
+    branches: [financial-app-rebuild]
+    paths:
+      - '.github/workflows/apply-a11y-workspaces.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+
+      - name: Apply main-content target
+        run: |
+          node --input-type=module <<'NODE'
+          import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+          import { join } from 'node:path';
+          function walk(dir){return readdirSync(dir).flatMap(name=>{const p=join(dir,name);return statSync(p).isDirectory()?walk(p):[p]})}
+          const files=walk('app').filter(p=>p.endsWith('page.tsx'));
+          let changed=0;
+          for(const file of files){
+            const before=readFileSync(file,'utf8');
+            if(!before.includes('<AppSidebar')||!before.includes('<section className="workspace')||before.includes('id="main-content"')) continue;
+            const after=before.replace('<section className="workspace','<section id="main-content" tabIndex={-1} className="workspace');
+            if(after!==before){writeFileSync(file,after);changed++}
+          }
+          console.log(`Accessible workspaces updated: ${changed}`);
+          NODE
+
+      - name: Commit accessibility targets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(financial-app): add skip targets to app workspaces"
+          git push origin HEAD:financial-app-rebuild
