@@ -1,0 +1,33 @@
+name: Cleanup redundant 2.1 sidebars
+on:
+  push:
+    branches: [financial-app-rebuild]
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    if: ${{ !contains(github.event.head_commit.message, 'remove redundant page sidebars') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Remove nested page sidebars only
+        run: |
+          node <<'NODE'
+          const fs=require('fs');const path=require('path');
+          const changed=[];
+          function walk(dir){for(const name of fs.readdirSync(dir)){const file=path.join(dir,name);const stat=fs.statSync(file);if(stat.isDirectory())walk(file);else if(name==='page.tsx'){const before=fs.readFileSync(file,'utf8');let after=before.replace(/import\s*\{\s*AppSidebar\s*\}\s*from\s*["']@\/components\/app-sidebar["'];?\s*/g,'').replace(/<AppSidebar\b[^>]*\/>/g,'');if(after!==before){fs.writeFileSync(file,after);changed.push(file)}}}}
+          walk('app');
+          if(changed.length!==16)throw new Error(`Esperaba 16 páginas redundantes y encontré ${changed.length}: ${changed.join(', ')}`);
+          console.log(`Limpieza exacta: ${changed.length} páginas`);
+          NODE
+      - name: Commit cleanup
+        run: |
+          git config user.name "financial-app-2.1-bot"
+          git config user.email "financial-app-2.1-bot@users.noreply.github.com"
+          git add app
+          git diff --cached --quiet && exit 0
+          git commit -m "perf(2.1): remove redundant page sidebars [skip ci]"
+          git push origin HEAD:financial-app-rebuild
