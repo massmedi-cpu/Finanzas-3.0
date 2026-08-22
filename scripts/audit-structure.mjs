@@ -34,6 +34,8 @@ const required = [
   "database/FINANCIAL_APP_1.4.0_SECURITY_HARDENING.sql",
   "database/FINANCIAL_APP_1.4.0_VERSION.sql",
   "database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql",
+  "database/FINANCIAL_APP_1.6.0_RULES_PERFORMANCE.sql",
+  "database/FINANCIAL_APP_1.6.0_VERSION.sql",
 ];
 
 const forbiddenRoots = ["src"];
@@ -74,6 +76,8 @@ if(!rulesSql.includes("security invoker"))errors.push("Los wrappers públicos de
 if(!rulesSql.includes("transactions_apply_rules_after_insert"))errors.push("Falta el trigger automático para movimientos nuevos");
 if(!rulesSql.includes("rule_field_has_later_user_edit"))errors.push("Falta la protección de ediciones manuales al deshacer reglas");
 if(!rulesSql.includes("revoke all on function financial_app.apply_rule_to_transaction_internal"))errors.push("Los helpers SECURITY DEFINER de reglas no están cerrados al cliente");
+const rulesPerf=readFileSync("database/FINANCIAL_APP_1.6.0_RULES_PERFORMANCE.sql","utf8");
+if(!rulesPerf.includes("transaction_rules_match_account_id_idx"))errors.push("Falta el índice de cobertura de cuenta para reglas");
 const sidebar=readFileSync("components/app-sidebar.tsx","utf8");
 if(!sidebar.includes('["Reglas", "/reglas"]'))errors.push("Reglas no está integrada en la navegación principal");
 
@@ -88,7 +92,7 @@ const activeFiles = [...walk("app"), ...walk("components"), ...walk("lib")].filt
 for (const file of activeFiles) {
   const text = readFileSync(file, "utf8");
   if (/finanzas-v3-|Finanzas 3\.0|V3\.0\./i.test(text)) errors.push(`Referencia heredada en ${file}`);
-  if (/1\.0\.0-rc\.1|1\.2\.0/.test(text)) errors.push(`Versión activa obsoleta escrita a mano en ${file}`);
+  if (/1\.0\.0-rc\.1|1\.2\.0|1\.4\.0/.test(text)) errors.push(`Versión activa obsoleta escrita a mano en ${file}`);
 }
 
 if (errors.length) {
