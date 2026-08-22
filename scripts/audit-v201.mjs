@@ -23,9 +23,12 @@ const vercel=read("vercel.json");
 const readme=read("README.md");
 const pkg=JSON.parse(read("package.json")||"{}");
 
-if(!appVersion.includes('APP_VERSION = "2.0.1"'))errors.push("APP_VERSION no está sellada en 2.0.1");
-if(!versionSql.includes("'app_version', to_jsonb('2.0.1'::text)"))errors.push("La migración no fija app_version 2.0.1");
-if(!versionSql.includes("'target_version', to_jsonb('2.0.1'::text)"))errors.push("La migración no fija target_version 2.0.1");
+const semver=(value)=>String(value||"").split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){const x=a[i]||0,y=b[i]||0;if(x!==y)return x>y}return true};
+if(!atLeast(pkg.version,"2.0.1"))errors.push("La versión actual es anterior a 2.0.1");
+if(!appVersion.includes(`APP_VERSION = "${pkg.version}"`))errors.push("APP_VERSION no coincide con package.json");
+if(!versionSql.includes("'app_version', to_jsonb('2.0.1'::text)"))errors.push("La migración histórica no fija app_version 2.0.1");
+if(!versionSql.includes("'target_version', to_jsonb('2.0.1'::text)"))errors.push("La migración histórica no fija target_version 2.0.1");
 
 if(!hotfix.includes("forecast_refresh_call_not_found"))errors.push("El hotfix de Previsión no verifica la retirada del refresh en lectura");
 if(!hotfix.includes("alter function financial_app.forecast_overview_core(date, integer) stable"))errors.push("Previsión no queda protegida como STABLE");
@@ -61,11 +64,11 @@ if(pkg.scripts?.["audit:v201"]!=="node scripts/audit-v201.mjs")errors.push("Falt
 if(!ci.includes("npm run audit:v201"))errors.push("CI no ejecuta la auditoría 2.0.1");
 if(!vercel.includes('"financial-app-rebuild": false'))errors.push("La rama de estabilización puede gastar previews de Vercel");
 if(!readme.includes("financialapp-home.vercel.app"))errors.push("README no refleja el dominio público actual");
-if(!readme.includes("Financial App 2.0.1"))errors.push("README no identifica la release 2.0.1");
+if(!readme.includes("## 2.0.1 — estabilización"))errors.push("README ya no documenta las garantías de la release 2.0.1");
 
 if(errors.length){
   console.error("Financial App 2.0.1 stabilization audit FAILED");
   errors.forEach(error=>console.error(`- ${error}`));
   process.exit(1);
 }
-console.log("Financial App 2.0.1 audit OK · versión sellada, lecturas puras, RPC STABLE, OAuth visible y rama sin previews");
+console.log(`Financial App 2.0.1 audit OK · garantías preservadas en ${pkg.version}, lecturas puras, RPC STABLE, OAuth visible y rama sin previews`);
