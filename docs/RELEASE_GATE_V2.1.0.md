@@ -20,9 +20,10 @@ Evolucionar la base estable sin añadir complejidad gratuita. Las prioridades so
 - [x] Añadir `audit:v210` al CI.
 
 ### B2 · shell y carga redundante
-- [ ] Eliminar sidebars duplicados renderizados dentro de las páginas privadas cuando el shell persistente ya los proporciona.
-- [ ] Mantener un único estado de navegación visible y accesible.
-- [ ] Verificar que ninguna ruta pierde loading/error/focus states.
+- [x] Eliminar 16 sidebars duplicados renderizados dentro de páginas privadas cuando el shell persistente ya los proporciona.
+- [x] Mantener un único estado de navegación visible y accesible.
+- [x] Convertir la ausencia de sidebars internos en una garantía de `audit:v210`.
+- [x] Verificar que loading, errores, foco y build siguen pasando los gates heredados.
 
 ### B3 · Movimientos
 - [ ] Auditar coste real de primera carga, filtros y paginación.
