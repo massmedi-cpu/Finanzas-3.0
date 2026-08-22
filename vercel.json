@@ -3,7 +3,7 @@
   "regions": ["cdg1"],
   "git": {
     "deploymentEnabled": {
-      "financial-app-rebuild": true,
+      "financial-app-rebuild": false,
       "release/1.0.0": false,
       "develop/v2.2.0-analytics": false,
       "develop/v2.3.0-intelligence": false,
