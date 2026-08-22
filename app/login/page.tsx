@@ -15,8 +15,9 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
         {error === "unauthorized" && <div className="auth-alert" role="alert">Esta cuenta de Google no está autorizada para acceder a Financial App.</div>}
         {error === "oauth" && <div className="auth-alert" role="alert">No se ha podido completar el acceso con Google. Inténtalo de nuevo.</div>}
         {error === "configuration" && <div className="auth-alert" role="alert">La autenticación todavía no está configurada en este entorno.</div>}
+        {error === "preview" && <div className="auth-alert" role="alert">El acceso temporal a esta Preview ha caducado o ya fue utilizado. Genera un nuevo enlace de un solo uso.</div>}
         <GoogleLoginButton />
-        <small className="login-note">El acceso se realiza exclusivamente mediante Google OAuth. Financial App no utiliza contraseñas propias.</small>
+        <small className="login-note">El acceso definitivo se realiza mediante Google OAuth. Las Preview pueden usar un enlace temporal de un solo uso durante la validación.</small>
       </section>
     </main>
   );
