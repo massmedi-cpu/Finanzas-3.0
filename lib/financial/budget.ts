@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 
 export type BudgetStatus="correct"|"attention"|"exceeded";
@@ -27,7 +28,7 @@ export async function getBudgetMonth(month?:string):Promise<BudgetMonth>{
   if(error||!data)throw new Error(error?.message||"budget_unavailable");
   const raw=data as any;
   return {
-    version:String(raw.version||"1.0.0-rc.1"),month:String(raw.month||pMonth.slice(0,7)),assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),available:asNumber(raw.available),overBudgetCount:asNumber(raw.overBudgetCount),unbudgetedSpent:asNumber(raw.unbudgetedSpent),
+    version:String(raw.version||APP_VERSION),month:String(raw.month||pMonth.slice(0,7)),assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),available:asNumber(raw.available),overBudgetCount:asNumber(raw.overBudgetCount),unbudgetedSpent:asNumber(raw.unbudgetedSpent),
     budgets:Array.isArray(raw.budgets)?raw.budgets.map(normalizeBudget):[],
     unbudgeted:Array.isArray(raw.unbudgeted)?raw.unbudgeted.map((item:any)=>({category:String(item.category||"Sin categoría"),subcategory:item.subcategory||null,spent:asNumber(item.spent),suggestion:asNumber(item.suggestion),movements:asNumber(item.movements)})):[],
     categories:Array.isArray(raw.categories)?raw.categories.map(String):[],
