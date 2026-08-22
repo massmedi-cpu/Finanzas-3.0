@@ -14,6 +14,7 @@ Este documento actualiza la auditoría inicial de RC1 sin sustituirla. La versi�
 - Tema claro/oscuro/sistema aplicado globalmente y restaurado antes del primer pintado.
 - Simulador de escenarios y módulo de Objetivos disponibles en RC1.
 - Acceso temporal seguro de Preview mediante ticket de un solo uso, sin rebajar la protección de producción.
+- Auditoría y optimización de rendimiento de las consultas financieras principales con `pg_stat_statements` y `EXPLAIN (ANALYZE, BUFFERS)`.
 
 ## Regresión detectada en uso real de Preview y corregida
 
@@ -28,6 +29,26 @@ Corrección aplicada y validada:
 - Validación con sesión `authenticated` y usuario allowlisted: resumen de Objetivos ejecutado correctamente; no se crearon ni modificaron objetivos reales.
 - Auditoría preventiva de todos los wrappers `public.financial_app_*` que llaman a `financial_app.*_core`: no se detectaron otros desajustes equivalentes.
 
+## Rendimiento validado en RC1
+
+La medición histórica de `pg_stat_statements` mostró como cuellos de botella principales Conciliación, Análisis, Cash Flow y Presupuesto. Se optimizaron sin introducir caché de datos financieros y sin cambiar reglas de negocio.
+
+Validaciones realizadas:
+
+- `personal_financial_lines()`: de ~23,6 ms a ~8,0 ms; 0 filas distintas frente a la implementación anterior y eliminación de temporales en disco.
+- Conciliación: de ~214 ms en benchmark equivalente a ~29,8 ms tras la corrección; el JSON de prueba fue exactamente igual al anterior.
+- Cash Flow anual: de ~206 ms tras la primera mejora común a ~26,8 ms; JSON exactamente igual antes de aplicar la sustitución. Frente al histórico de uso real (~307 ms de media), la reducción es superior al 90 % en el benchmark actual.
+- Análisis anual: de ~118,7 ms tras la primera mejora común a ~30,1 ms; JSON exactamente igual antes de aplicar la sustitución. El histórico previo rondaba ~365 ms de media.
+- Presupuesto mensual + proyección anual: de ~124,5 ms a ~49,1 ms tras optimizar el cálculo mensual; la parte mensual fue validada con igualdad JSON exacta. El histórico previo rondaba ~297 ms de media.
+- Inicio (`financial_app_dashboard()`): ~20,5 ms en la medición posterior a las optimizaciones.
+
+Principios mantenidos:
+
+- No se cachean saldos, presupuestos ni movimientos para ocultar latencia.
+- No se altera el origen bancario ni la lógica de divisiones personales.
+- No se eliminan comprobaciones de autorización.
+- Las sustituciones se prueban primero dentro de transacciones revertidas y se aplican solo tras verificar equivalencia.
+
 ## Higiene HTTP
 
 El uso real de Preview mostró un único 404 explícito para `/favicon.ico`. Se redirige ahora al icono canónico `/icon.png` para evitar peticiones fallidas sin duplicar activos.
@@ -38,8 +59,7 @@ El uso real de Preview mostró un único 404 explícito para `/favicon.ico`. Se 
 2. `package-lock.json` reproducible y cambio del CI a `npm ci`. No se fabricará manualmente: debe generarse con acceso válido al registro de npm.
 3. Drill-down coherente desde gráficos y paneles hacia Movimientos con filtros URL reutilizables.
 4. Validación formal WCAG 2.2 AA, además de la accesibilidad ya incorporada en componentes y navegación.
-5. Medición formal de rendimiento/observabilidad sobre rutas reales y corrección de los cuellos de botella que aparezcan.
-6. Limpieza controlada de documentación, migraciones y Edge Functions heredadas, solo después de comprobar dependencias para evitar regresiones.
+5. Limpieza controlada de documentación, migraciones y Edge Functions heredadas, solo después de comprobar dependencias para evitar regresiones.
 
 ## Regla de avance
 
