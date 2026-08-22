@@ -17,6 +17,7 @@ La 1.8.0 convierte la copia privada portable de 1.7 en un mecanismo de recuperac
 - Restauración por `upsert` y desactivación/archivo controlado para no destruir historiales relacionados.
 - Cobertura de ediciones de movimientos, splits, presupuestos, previsiones y sus ocurrencias, patrimonio, objetivos, reglas, conciliaciones, preferencias, alertas, cierres, documentos y vínculos documento-movimiento.
 - Conservación del texto OCR existente de los documentos durante una recuperación portable: la copia no necesita transportar el texto OCR completo.
+- Protección expresa de los movimientos bancarios incorporados después del backup: sus overrides, splits, vínculos documentales y conciliaciones no son barridos al restaurar un snapshot anterior.
 
 ## Compatibilidad
 
@@ -26,7 +27,7 @@ Una copia 1.8 no queda invalidada porque la fuente bancaria haya añadido movimi
 
 ## Protección de historial
 
-No se realiza un `delete all` de entidades que tienen historiales dependientes. Los elementos que ya no pertenecen al snapshot se desactivan, cancelan o archivan según su dominio. Los hijos operativos sin historial propio (por ejemplo splits, ocurrencias y vínculos) se reconcilian exactamente con la copia.
+No se realiza un `delete all` de entidades que tienen historiales dependientes. Los elementos que ya no pertenecen al snapshot se desactivan, cancelan o archivan según su dominio. Los hijos operativos sin historial propio se reconcilian con la copia únicamente cuando pertenecen a movimientos que ya existían en el snapshot; los movimientos posteriores quedan fuera de esa limpieza.
 
 ## Pruebas ejecutadas contra la base real
 
@@ -40,6 +41,7 @@ Casos comprobados:
 4. Rechazo de una ancla de origen manipulada.
 5. Aceptación de una copia anterior cuando la única diferencia es que la fuente contiene movimientos posteriores.
 6. Validación de referencias y claves duplicadas antes de habilitar la restauración.
+7. Prueba de regresión de movimiento posterior: se creó dentro de `ROLLBACK` un movimiento nuevo con categoría privada, revisión, recurrencia, etiqueta, split, documento y conciliación. Después de restaurar el snapshot anterior, todos esos elementos posteriores permanecieron intactos.
 
 ## OCR y privacidad
 
