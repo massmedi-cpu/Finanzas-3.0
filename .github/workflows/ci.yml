@@ -38,6 +38,9 @@ jobs:
       - name: Structural Axioma audit
         run: npm run audit:structure
 
+      - name: Accessibility regression audit
+        run: npm run audit:a11y
+
       - name: Typecheck
         run: npm run typecheck
 
