@@ -17,6 +17,14 @@ function numberParam(value: string | null) {
   return Number.isFinite(number) ? number : null;
 }
 
+function booleanParam(value: string | null): boolean | null {
+  if (value == null || value === "") return null;
+  const normalized = value.toLowerCase();
+  if (["1", "true", "yes", "si", "sí"].includes(normalized)) return true;
+  if (["0", "false", "no"].includes(normalized)) return false;
+  return null;
+}
+
 export const dynamic = "force-dynamic";
 
 export async function GET(request: NextRequest) {
@@ -24,14 +32,22 @@ export async function GET(request: NextRequest) {
   if (!supabase) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const q = request.nextUrl.searchParams;
-  const { data, error } = await supabase.rpc("financial_app_movements", {
+  const { data, error } = await supabase.rpc("financial_app_movements_advanced", {
     p_page: Math.max(1, Number(q.get("page") || 1)),
     p_page_size: Math.min(200, Math.max(1, Number(q.get("pageSize") || 50))),
     p_search: q.get("search") || null,
     p_account_id: q.get("account") || null,
     p_type: q.get("type") || null,
     p_category: q.get("category") || null,
+    p_subcategory: q.get("subcategory") || null,
+    p_channel: q.get("channel") || null,
+    p_tag: q.get("tag") || null,
     p_review_only: q.get("review") === "1",
+    p_recurring: booleanParam(q.get("recurring")),
+    p_internal_transfer: booleanParam(q.get("internalTransfer")),
+    p_reconciled: booleanParam(q.get("reconciled")),
+    p_has_documents: booleanParam(q.get("documents")),
+    p_has_splits: booleanParam(q.get("splits")),
     p_date_from: q.get("from") || null,
     p_date_to: q.get("to") || null,
     p_min_amount: numberParam(q.get("min")),
@@ -41,7 +57,7 @@ export async function GET(request: NextRequest) {
 
   if (error || !data) return NextResponse.json({ ok: false, error: error?.message || "movements_unavailable" }, { status: 400 });
   const response = data as MovementsResponse;
-  const newIds = response.items.filter(item=>item.status==="new").map(item=>item.id);
+  const newIds = response.items.filter(item => item.status === "new").map(item => item.id);
   if (newIds.length) await supabase.rpc("financial_app_mark_new_seen", { p_ids: newIds });
   return NextResponse.json(response, { headers: { "Cache-Control": "private, no-store" } });
 }
