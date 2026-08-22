@@ -1,0 +1,35 @@
+name: Optimize 2.1 movement paging
+on:
+  push:
+    branches: [financial-app-rebuild]
+permissions:
+  contents: write
+jobs:
+  optimize:
+    if: ${{ !contains(github.event.head_commit.message, 'reuse movement facets') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Reuse first-load facets in client
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const file='app/movimientos/movements-client.tsx';
+          const before=fs.readFileSync(file,'utf8');
+          const old=`    q.set("sort",next.sort);\n    try {\n      const response=await fetch(\`/api/movements?\${q.toString()}\`,{cache:"no-store"});\n      const body=await response.json() as MovementsResponse & {error?:string};\n      if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");\n      setPageData(body);`;
+          const next=`    q.set("sort",next.sort);\n    q.set("facets","0");\n    try {\n      const response=await fetch(\`/api/movements?\${q.toString()}\`,{cache:"no-store"});\n      const body=await response.json() as Omit<MovementsResponse,"facets"> & {facets?:MovementsResponse["facets"];error?:string};\n      if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");\n      setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);`;
+          const hits=before.split(old).length-1;
+          if(hits!==1)throw new Error(`Esperaba 1 bloque loadWith y encontré ${hits}`);
+          fs.writeFileSync(file,before.replace(old,next));
+          NODE
+      - name: Commit optimization
+        run: |
+          git config user.name "financial-app-2.1-bot"
+          git config user.email "financial-app-2.1-bot@users.noreply.github.com"
+          git add app/movimientos/movements-client.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "perf(2.1): reuse movement facets after first load [skip ci]"
+          git push origin HEAD:financial-app-rebuild
