@@ -20,6 +20,7 @@
     "audit:v17": "node scripts/audit-v17.mjs",
     "audit:v18": "node scripts/audit-v18.mjs",
     "audit:v19": "node scripts/audit-v19.mjs",
+    "audit:v20": "node scripts/audit-v20.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts"
   },
   "dependencies": {
