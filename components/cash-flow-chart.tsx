@@ -1,14 +1,24 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { CashFlowPoint } from "@/lib/financial/cash-flow";
+import type { CashFlowPoint, CashFlowRangeData } from "@/lib/financial/cash-flow";
+import { bucketBounds, movementState, movementUrl } from "@/lib/financial/movement-query";
 
 const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
-const shortMoney=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR",maximumFractionDigits:0});
 
 type SeriesKey="income"|"expenses"|"accumulated";
+type DrilldownContext={
+  bucket:CashFlowRangeData["bucket"];
+  dateFrom:string;
+  dateTo:string;
+  account:string;
+  type:string;
+  category:string;
+  subcategory:string;
+  merchant:string;
+};
 
-export function CashFlowChart({points}:{points:CashFlowPoint[]}){
+export function CashFlowChart({points,drilldown}:{points:CashFlowPoint[];drilldown:DrilldownContext}){
   const [visible,setVisible]=useState<Record<SeriesKey,boolean>>({income:true,expenses:true,accumulated:true});
   const [active,setActive]=useState<number|null>(null);
   const width=980,height=360,padX=48,base=238,top=35;
@@ -22,6 +32,14 @@ export function CashFlowChart({points}:{points:CashFlowPoint[]}){
   const current=active==null?null:points[active]||null;
   const labelEvery=Math.max(1,Math.ceil(points.length/10));
   const ariaLabel=useMemo(()=>`Cash Flow entre ${points[0]?.date||"sin datos"} y ${points.at(-1)?.date||"sin datos"}`, [points]);
+  const currentMovementUrl=useMemo(()=>{
+    if(!current)return null;
+    const bounds=bucketBounds(current.date,drilldown.bucket,drilldown.dateFrom,drilldown.dateTo);
+    return movementUrl(movementState({
+      from:bounds.from,to:bounds.to,cashFlowOnly:true,
+      account:drilldown.account,type:drilldown.type,category:drilldown.category,subcategory:drilldown.subcategory,merchant:drilldown.merchant,
+    }));
+  },[current,drilldown]);
 
   function toggle(key:SeriesKey){setVisible(v=>({...v,[key]:!v[key]}))}
   function pointerIndex(clientX:number,target:SVGSVGElement){const rect=target.getBoundingClientRect();const x=(clientX-rect.left)/rect.width*width;return Math.max(0,Math.min(points.length-1,Math.floor((x-padX)/Math.max(group,1))))}
@@ -33,9 +51,9 @@ export function CashFlowChart({points}:{points:CashFlowPoint[]}){
       <button type="button" aria-pressed={visible.expenses} onClick={()=>toggle("expenses")}><i className="expense"/>Gastos</button>
       <button type="button" aria-pressed={visible.accumulated} onClick={()=>toggle("accumulated")}><i className="acc"/>Acumulado</button>
     </div>
-    <div className="cf-chart-stage">
+    <div className="cf-chart-stage" onPointerLeave={()=>setActive(null)}>
       <svg className="cf-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={ariaLabel}
-        onPointerMove={e=>setActive(pointerIndex(e.clientX,e.currentTarget))} onPointerLeave={()=>setActive(null)} onPointerDown={e=>setActive(pointerIndex(e.clientX,e.currentTarget))}>
+        onPointerMove={e=>setActive(pointerIndex(e.clientX,e.currentTarget))} onPointerDown={e=>setActive(pointerIndex(e.clientX,e.currentTarget))}>
         <line className="cf-zero" x1={padX} x2={width-padX} y1={base} y2={base}/>
         {points.map((p,i)=>{const x=padX+i*group+group/2,ih=barH(p.income),eh=barH(p.expenses);return <g key={`${p.date}-${i}`}>
           {visible.income&&<rect className="cf-income" x={x-bw-2} y={base-ih} width={bw} height={ih} rx="3"/>}
@@ -44,10 +62,10 @@ export function CashFlowChart({points}:{points:CashFlowPoint[]}){
           {active===i&&<line className="cf-hover-line" x1={x} x2={x} y1={top} y2={base+4}/>} 
         </g>})}
         {visible.accumulated&&<path className="cf-acc-line" d={line}/>} 
-        {visible.accumulated&&points.map((p,i)=>{const x=padX+i*group+group/2,y=accY(p.accumulated);return <circle key={`${p.date}-a`} className="cf-acc-dot" cx={x} cy={y} r={active===i?6:4} tabIndex={0} onFocus={()=>setActive(i)} onBlur={()=>setActive(null)} aria-label={`${p.label}: acumulado ${money.format(p.accumulated)}`}/>})}
+        {visible.accumulated&&points.map((p,i)=>{const x=padX+i*group+group/2,y=accY(p.accumulated);return <circle key={`${p.date}-a`} className="cf-acc-dot" cx={x} cy={y} r={active===i?6:4} tabIndex={0} onFocus={()=>setActive(i)} aria-label={`${p.label}: acumulado ${money.format(p.accumulated)}`}/>})}
       </svg>
-      {current&&<div className="cf-tooltip" role="status"><strong>{current.label}</strong><span>Ingresos <b>{money.format(current.income)}</b></span><span>Gastos <b>{money.format(current.expenses)}</b></span><span>Cash Flow <b>{money.format(current.net)}</b></span><span>Acumulado <b>{money.format(current.accumulated)}</b></span><small>{current.movements} movimiento{current.movements===1?"":"s"}</small></div>}
+      {current&&<div className="cf-tooltip" role="status"><strong>{current.label}</strong><span>Ingresos <b>{money.format(current.income)}</b></span><span>Gastos <b>{money.format(current.expenses)}</b></span><span>Cash Flow <b>{money.format(current.net)}</b></span><span>Acumulado <b>{money.format(current.accumulated)}</b></span><small>{current.movements} movimiento{current.movements===1?"":"s"}</small>{currentMovementUrl&&<a href={currentMovementUrl}>Ver movimientos del periodo →</a>}</div>}
     </div>
-    <p className="cf-chart-help">Toca o mueve el puntero sobre el gráfico para ver el detalle. Puedes ocultar o mostrar cada serie.</p>
+    <p className="cf-chart-help">Toca o mueve el puntero sobre el gráfico para ver el detalle y abrir los movimientos exactos del periodo. Puedes ocultar o mostrar cada serie.</p>
   </div>;
 }
