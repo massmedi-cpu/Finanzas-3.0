@@ -1,6 +1,6 @@
 {
   "name": "financial-app",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,8 +24,10 @@
     "audit:v201": "node scripts/audit-v201.mjs",
     "audit:v210": "node scripts/audit-v210.mjs",
     "audit:v220": "node scripts/audit-v220.mjs",
+    "audit:v230": "node scripts/audit-v230.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
-    "test:analytics": "tsx scripts/analytics-v220-tests.ts"
+    "test:analytics": "tsx scripts/analytics-v220-tests.ts",
+    "test:intelligence": "tsx scripts/intelligence-v230-tests.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
