@@ -1,12 +1,12 @@
 name: Prepare Financial App 1.9 document engine
 on:
-  push:
-    branches: [financial-app-rebuild]
+  pull_request:
+    branches: [main]
 permissions:
   contents: write
 jobs:
   prepare-dependencies:
-    if: github.event.head_commit.message == 'chore(financial-app): prepare 1.9 document engine dependencies'
+    if: github.head_ref == 'financial-app-rebuild'
     runs-on: ubuntu-latest
     timeout-minutes: 8
     steps:
