@@ -1,0 +1,48 @@
+name: Apply Financial App 1.4.0 version
+
+on:
+  push:
+    branches: [financial-app-rebuild]
+    paths:
+      - '.github/workflows/apply-v14-version.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Align package and runtime version
+        run: |
+          npm version 1.4.0 --no-git-tag-version --allow-same-version
+          cat > lib/app-version.ts <<'EOF'
+          export const APP_VERSION = "1.4.0" as const;
+          export const APP_RELEASE_LABEL = `Financial App ${APP_VERSION}` as const;
+          EOF
+          cat > database/FINANCIAL_APP_1.4.0_VERSION.sql <<'EOF'
+          -- Financial App 1.4.0 · alineación de versión canónica
+          insert into financial_app.app_meta(key,value,updated_at)
+          values('app_version','1.4.0',now())
+          on conflict(key) do update set value=excluded.value,updated_at=excluded.updated_at;
+
+          create or replace function financial_app.current_app_version()
+          returns text language sql stable security definer
+          set search_path to 'pg_catalog','financial_app'
+          as $$select coalesce((select value from financial_app.app_meta where key='app_version' limit 1),'1.4.0')$$;
+          EOF
+      - name: Commit version alignment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json lib/app-version.ts database/FINANCIAL_APP_1.4.0_VERSION.sql
+          git diff --cached --quiet && exit 0
+          git commit -m "release(financial-app): align 1.4.0 version"
+          git push origin HEAD:financial-app-rebuild
