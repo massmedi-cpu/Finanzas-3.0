@@ -32,6 +32,8 @@ jobs:
         run: npm run audit:v17
       - name: Recovery 1.8 audit
         run: npm run audit:v18
+      - name: Document engine 1.9 audit
+        run: npm run audit:v19
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit

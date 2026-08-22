@@ -1,4 +1,4 @@
-# Financial App 1.7.0
+# Financial App 1.9.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
@@ -13,17 +13,12 @@ Aplicación financiera personal privada para control, presupuesto, planificació
 
 Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 
-## 1.7.0 — rendimiento y arquitectura
-- Inicio consolidado en una sola RPC financiera (`financial_app_home_overview`) en lugar de seis viajes independientes.
-- Shell persistente: la navegación permanece mientras cambia el workspace.
-- Navegación móvil simplificada a Inicio, Movimientos, Control, Presupuesto y Más.
-- CSS de cada módulo cargado desde su layout de ruta en vez de incluir todas las hojas en el layout raíz.
-- `GET /api/movements` es lectura pura; el reconocimiento de movimientos vistos se realiza mediante POST tras montar la vista.
-- Dashboard y release-readiness usan la versión canónica de aplicación.
-- Inicio consume el resumen accionable del Centro de Control.
-- Manifest PWA real y política de caché larga únicamente para activos inmutables; los datos financieros vivos siguen `private, no-store`.
-- Backup portable de la capa privada con validación de formato y coincidencia de fuente antes de una futura restauración.
-- Runtime Supabase actual documentado y Edge Function de importación inicial deshabilitada incorporada al repositorio.
+## 1.9.0 — motor documental first-party
+- Archivo mantiene el OCR en navegador y elimina dependencias CDN en tiempo de uso.
+- Tesseract.js 7.0.0, PDF.js 6.2.108 y los datos españoles se fijan en `package-lock.json`.
+- Los assets documentales se reconstruyen desde dependencias bloqueadas durante instalación/build y se sirven desde el mismo origen.
+- Cada asset generado queda cubierto por tamaño y SHA-256; `audit:v19` impide regresiones a CDNs o binarios inesperados.
+- Se conserva la arquitectura 1.7 de rendimiento y la recuperación privada transaccional 1.8.
 
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
@@ -32,16 +27,17 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Presupuesto mensual/anual, previsiones, escenarios, objetivos y patrimonio.
 - Centro de Control y cierre/reapertura mensual.
 - Archivo documental privado con OCR local y asociaciones a movimientos.
-- Configuración, tema y copia portable de la capa privada.
+- Configuración, tema y copia portable/restaurable de la capa privada.
 
 ## Seguridad y producción
-Google OAuth es el acceso definitivo previsto, pero la aplicación no debe declararse lista para producción mientras el proveedor Google siga deshabilitado en Supabase. `financial_app_release_readiness()` mantiene ese bloqueo de forma explícita.
+Google OAuth es el acceso definitivo previsto, pero la aplicación no debe declararse lista para producción mientras el proveedor Google no esté validado en Supabase. `financial_app_release_readiness()` mantiene ese bloqueo de forma explícita.
 
-No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales ni backups financieros reales.
+No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni los binarios generados del motor documental.
 
 ## Documentación actual
 - `docs/PROJECT_AXIOMS.md`
 - `docs/AUDIT_FINANCIAL_APP_1.7.0.md`
-- `database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql`
-- `database/FINANCIAL_APP_1.7.0_VERSION.sql`
+- `docs/AUDIT_FINANCIAL_APP_1.8.0.md`
+- `docs/AUDIT_FINANCIAL_APP_1.9.0.md`
+- `database/FINANCIAL_APP_1.9.0_VERSION.sql`
 - `supabase/README.md`

@@ -10,6 +10,9 @@ out/
 .DS_Store
 Thumbs.db
 
+# Generated first-party document engine assets (recreated from package-lock)
+public/vendor/document-engine/
+
 # Local/private financial data must never be committed
 *.sqlite
 *.sqlite3
