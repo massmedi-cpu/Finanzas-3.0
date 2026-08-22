@@ -27,6 +27,7 @@ const required = [
   "database/FINANCIAL_APP_1.2.0_VERSION.sql",
   "database/FINANCIAL_APP_1.4.0_CONTROL_CENTER.sql",
   "database/FINANCIAL_APP_1.4.0_DUPLICATE_FILTER.sql",
+  "database/FINANCIAL_APP_1.4.0_SECURITY_HARDENING.sql",
 ];
 
 const forbiddenRoots = ["src"];
@@ -56,6 +57,9 @@ if (!controlApi.includes("financial_app_control_center")) errors.push("Centro de
 if (!controlApi.includes("financial_app_close_month")) errors.push("Falta cierre mensual en la API de Control");
 const movementsLayer = readFileSync("lib/financial/movements.ts", "utf8");
 if (!movementsLayer.includes("financial_app_movements_advanced_v14")) errors.push("Movimientos no usa el motor v1.4 con filtro de duplicados");
+const securitySql = readFileSync("database/FINANCIAL_APP_1.4.0_SECURITY_HARDENING.sql", "utf8");
+if (!securitySql.includes("security invoker")) errors.push("Los wrappers públicos 1.4 no están protegidos como SECURITY INVOKER");
+if (!securitySql.includes("movements_advanced_v14_enriched_core")) errors.push("Falta el permiso interno del enriquecedor v1.4");
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
