@@ -1,14 +1,17 @@
-# Supabase backend — Finanzas 3.0 V2.0.1
+# Supabase backend — Financial App 1.7.0
 
-Versionado de las Edge Functions exclusivas de Finanzas 3.0:
+Este árbol contiene únicamente las Edge Functions pertenecientes al runtime actual de Financial App.
 
-| Function | Producción auditada | `verify_jwt` | Autenticación real |
-|---|---:|---:|---|
-| `finanzas-v3-bridge` | v4 | false | token privado de aplicación |
-| `finanzas-v3-data` | v2 | false | token privado de aplicación |
-| `finanzas-v3-recurring` | v1 | false | token privado de aplicación |
-| `finanzas-v3-splits` | v1 | false | token privado de aplicación |
+| Function | Estado | `verify_jwt` | Uso |
+|---|---|---:|---|
+| `financial-app-sync` | activa | true | sincronización incremental desde la fuente de solo lectura |
+| `financial-app-preview-session` | temporal | false | canje de ticket de Preview; valida token de un solo uso dentro de la función |
+| `financial-app-initial-import` | deshabilitada | true | responde `410 Gone`; se conserva versionada para que el backend desplegado sea reproducible |
 
-`verify_jwt=false` es deliberado por compatibilidad con la sesión privada existente. Cada función valida el bearer token antes de acceder a datos. Las tablas V3 tienen RLS habilitado, no tienen políticas públicas y el acceso de datos se realiza con `SUPABASE_SERVICE_ROLE_KEY` exclusivamente dentro de Edge Functions.
+Las funciones heredadas `finanzas-v3-*` se han retirado de esta rama porque no forman parte de Financial App 1.7.0. Permanecen en el historial Git y algunas pueden seguir desplegadas en el proyecto Supabase compartido; no deben eliminarse del entorno remoto sin confirmar antes que ninguna aplicación antigua las consume.
 
-No guardar en este árbol secretos, claves service-role, credenciales de Drive ni el código legado sensible de `finanzas-alberto-api`.
+## Reglas
+- No guardar secretos, service-role keys ni credenciales de Google Drive.
+- Las tablas `financial_app.*` mantienen RLS activo y no se exponen directamente al cliente.
+- Los wrappers públicos verifican autorización mediante `financial_app.authorized_email()` en sus núcleos `SECURITY DEFINER`.
+- La fuente bancaria continúa en modo solo lectura; las ediciones viven en la capa privada.
