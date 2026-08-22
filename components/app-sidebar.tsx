@@ -3,6 +3,7 @@ import Link from "next/link";
 
 const sections = [
   ["Inicio", "/"],
+  ["Control", "/control"],
   ["Cuentas", "/cuentas"],
   ["Movimientos", "/movimientos"],
   ["Cash Flow", "/cash-flow"],
