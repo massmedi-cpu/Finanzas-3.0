@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit",
     "audit:structure": "node scripts/audit-structure.mjs",
     "audit:a11y": "node scripts/audit-accessibility.mjs",
-    "audit:v17": "node scripts/audit-v17.mjs"
+    "audit:v17": "node scripts/audit-v17.mjs",
+    "audit:v18": "node scripts/audit-v18.mjs",
+    "test:backup": "tsx scripts/backup-recovery-tests.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
