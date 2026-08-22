@@ -42,11 +42,15 @@ if (!preserve.includes("Un documento posterior vinculado a un movimiento posteri
 if (!archive.includes("worker.recognize(file)")) errors.push("OCR dejó de procesarse en el navegador");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
-if (!version.includes('APP_VERSION = "1.8.0"')) errors.push("Versión de aplicación no alineada con 1.8.0");
+
+const match = version.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
+const current = match ? match.slice(1).map(Number) : null;
+const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1] >= 8));
+if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
 if (errors.length) {
   console.error("Financial App 1.8 audit FAILED");
   errors.forEach((error) => console.error(`- ${error}`));
   process.exit(1);
 }
-console.log("Financial App 1.8 audit OK · preview/diff, checkpoint, restore atómico, preservación de movimientos posteriores, OCR browser-local y protección de recursos");
+console.log("Financial App 1.8 audit OK · garantías de recuperación preservadas en versión >=1.8.0");
