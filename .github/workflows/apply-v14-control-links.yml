@@ -1,0 +1,43 @@
+name: Apply Financial App 1.4 control links
+
+on:
+  push:
+    branches: [financial-app-rebuild]
+    paths:
+      - '.github/workflows/apply-v14-control-links.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+      - name: Patch control links
+        run: |
+          node --input-type=module <<'NODE'
+          import {readFileSync,writeFileSync} from 'node:fs';
+          const path='app/control/control-client.tsx';
+          let text=readFileSync(path,'utf8');
+          const marker='function shiftMonth(month:string,delta:number){const d=new Date(`${month}-01T12:00:00Z`);d.setUTCMonth(d.getUTCMonth()+delta);return d.toISOString().slice(0,7);}\n';
+          const helper='function alertHref(alert:ControlAlert,snapshot:ControlSnapshot){const range=`from=${snapshot.monthStart}&to=${snapshot.monthEnd}`;if(alert.type==="needs_review")return `/movimientos?review=1&${range}`;if(alert.type==="duplicates")return `/movimientos?duplicate=1&${range}`;if(alert.type==="reconciliation")return `/movimientos?reconciled=0&${range}`;return alert.href;}\n';
+          if(!text.includes(marker)) throw new Error('month helper marker not found');
+          text=text.replace(marker,marker+helper);
+          const old='<Link className="text-link" href={alert.href}>Abrir origen →</Link>';
+          const next='<Link className="text-link" href={alertHref(alert,snapshot)}>Abrir origen →</Link>';
+          if(!text.includes(old)) throw new Error('alert link marker not found');
+          text=text.replace(old,next);
+          writeFileSync(path,text);
+          NODE
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/control/control-client.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(financial-app): make control alerts actionable"
+          git push origin HEAD:financial-app-rebuild
