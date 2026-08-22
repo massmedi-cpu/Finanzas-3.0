@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getCashFlowRange, type CashFlowRange } from "@/lib/financial/cash-flow";
+import { movementState, movementUrl } from "@/lib/financial/movement-query";
 import { AppSidebar } from "@/components/app-sidebar";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 
@@ -25,8 +26,14 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
   const customTo=/^\d{4}-\d{2}-\d{2}$/.test(params.to||"")?params.to!:today;
   const data=await getCashFlowRange({range,anchor,dateFrom:range==="custom"?customFrom:null,dateTo:range==="custom"?customTo:null,accountId:params.account||null,category:params.category||null,subcategory:params.subcategory||null,merchant:params.merchant||null,type:params.type||null});
   const filterCount=[params.account,params.category,params.subcategory,params.merchant,params.type].filter(Boolean).length;
+  const movementBase=movementState({
+    from:data.dateFrom,to:data.dateTo,cashFlowOnly:true,
+    account:params.account||"",category:params.category||"",subcategory:params.subcategory||"",merchant:params.merchant||"",type:params.type||"",
+  });
+  const allMovementsUrl=movementUrl(movementBase);
+
   return <main className="app-shell"><AppSidebar active="/cash-flow" status="Cash Flow · reglas centrales protegidas"/><section className="workspace cf-workspace">
-    <header className="topbar"><div><p className="eyebrow">CASH FLOW · {data.version}</p><h1>Cash Flow</h1><p>{rangeLabels[data.range]} · {displayDate(data.dateFrom)} — {displayDate(data.dateTo)}. Ahorro, traspasos internos y duplicados quedan fuera siempre.</p></div><Link className="ghost button-link" href="/movimientos">Ver movimientos</Link></header>
+    <header className="topbar"><div><p className="eyebrow">CASH FLOW · {data.version}</p><h1>Cash Flow</h1><p>{rangeLabels[data.range]} · {displayDate(data.dateFrom)} — {displayDate(data.dateTo)}. Ahorro, traspasos internos y duplicados quedan fuera siempre.</p></div><Link className="ghost button-link" href={allMovementsUrl}>Ver movimientos filtrados</Link></header>
 
     <form className="cf-filter-panel" action="/cash-flow">
       <label><span>Periodo</span><select name="range" defaultValue={data.range}>{Object.entries(rangeLabels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
@@ -47,11 +54,11 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
       <article className="net"><span>Cash Flow</span><strong className={data.net<0?"negative":"positive"}>{money.format(data.net)}</strong><small>{data.positivePeriods} periodos positivos · {data.negativePeriods} negativos</small></article>
     </section>
 
-    <article className="panel cf-main-panel"><div className="panel-head"><div><p className="eyebrow">EVOLUCIÓN · {data.bucket.toUpperCase()}</p><h2>Ingresos, gastos y acumulado</h2></div><span className="pill">{data.series.length} puntos</span></div><CashFlowChart points={data.series}/></article>
+    <article className="panel cf-main-panel"><div className="panel-head"><div><p className="eyebrow">EVOLUCIÓN · {data.bucket.toUpperCase()}</p><h2>Ingresos, gastos y acumulado</h2></div><span className="pill">{data.series.length} puntos</span></div><CashFlowChart points={data.series} drilldown={{bucket:data.bucket,dateFrom:data.dateFrom,dateTo:data.dateTo,account:params.account||"",type:params.type||"",category:params.category||"",subcategory:params.subcategory||"",merchant:params.merchant||""}}/></article>
 
     <div className="cf-lower-grid">
-      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">GASTO</p><h2>Principales categorías</h2></div></div><ol className="cf-categories">{data.topExpenseCategories.map((c,i)=><li key={c.category}><span><b>{i+1}</b>{c.category}</span><strong>{money.format(c.amount)}</strong></li>)}</ol>{!data.topExpenseCategories.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
-      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">COMERCIOS</p><h2>Principales contrapartes</h2></div></div><ol className="cf-categories">{data.topMerchants.map((m,i)=><li key={m.merchant}><span><b>{i+1}</b>{m.merchant}</span><strong>{money.format(m.amount)}</strong></li>)}</ol>{!data.topMerchants.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
+      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">GASTO</p><h2>Principales categorías</h2></div></div><ol className="cf-categories">{data.topExpenseCategories.map((c,i)=><li key={c.category}><Link className="cf-drill-row" href={movementUrl({...movementBase,category:c.category})}><span><b>{i+1}</b>{c.category}</span><strong>{money.format(c.amount)}</strong></Link></li>)}</ol>{!data.topExpenseCategories.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
+      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">COMERCIOS</p><h2>Principales contrapartes</h2></div></div><ol className="cf-categories">{data.topMerchants.map((m,i)=><li key={m.merchant}><Link className="cf-drill-row" href={movementUrl({...movementBase,merchant:m.merchant})}><span><b>{i+1}</b>{m.merchant}</span><strong>{money.format(m.amount)}</strong></Link></li>)}</ol>{!data.topMerchants.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
     </div>
 
     <article className="panel cf-rules-panel"><div className="panel-head"><div><p className="eyebrow">REGLAS CENTRALES</p><h2>Exclusiones del periodo</h2></div></div><ul className="cf-rules"><li><span>Cuenta de ahorro</span><strong>{data.excluded.savings}</strong><small>Exclusión absoluta</small></li><li><span>Traspasos internos</span><strong>{data.excluded.internalTransfers}</strong><small>No son ingreso ni gasto real</small></li><li><span>Duplicados</span><strong>{data.excluded.duplicates}</strong><small>No computan</small></li><li><span>Exclusión manual</span><strong>{data.excluded.manual}</strong><small>Marcados expresamente</small></li><li><span>Origen ausente</span><strong>{data.excluded.sourceMissing}</strong><small>No computan</small></li></ul></article>
