@@ -2,16 +2,13 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
-
-const configured = Boolean(
-  process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY,
-);
+import { SUPABASE_PUBLIC_CONFIGURED } from "@/lib/supabase/config";
 
 export function GoogleLoginButton() {
   const [busy, setBusy] = useState(false);
 
   async function login() {
-    if (!configured) return;
+    if (!SUPABASE_PUBLIC_CONFIGURED) return;
     setBusy(true);
     try {
       const supabase = createClient();
@@ -30,9 +27,9 @@ export function GoogleLoginButton() {
   }
 
   return (
-    <button className="google-button" type="button" onClick={login} disabled={!configured || busy}>
+    <button className="google-button" type="button" onClick={login} disabled={!SUPABASE_PUBLIC_CONFIGURED || busy}>
       <span className="google-g" aria-hidden="true">G</span>
-      {!configured ? "Google OAuth pendiente" : busy ? "Conectando…" : "Continuar con Google"}
+      {!SUPABASE_PUBLIC_CONFIGURED ? "Google OAuth pendiente" : busy ? "Conectando…" : "Continuar con Google"}
     </button>
   );
 }
