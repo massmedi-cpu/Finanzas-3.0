@@ -1,8 +1,8 @@
-# Financial App 2.0.1 — estabilización
+# Financial App 2.0.1
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
-> Estado: 2.0.1 está en rama de estabilización. Producción permanece en 2.0.0 hasta superar el gate completo y realizar un único despliegue de release.
+2.0.1 es una release de estabilización: no añade dominios financieros nuevos y refuerza autenticación, rutas de lectura y protección contra regresiones detectadas al validar 2.0.0 con producción real.
 
 ## Principios permanentes
 - Fuente bancaria externa exclusivamente en modo lectura.
@@ -24,13 +24,14 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Se preservan las garantías de rendimiento de 1.7, recuperación transaccional de 1.8 y motor documental first-party de 1.9.
 
 ## 2.0.1 — estabilización
-- Google OAuth validado con sesión real de producción.
+- Google OAuth activo y validado con sesión real.
 - Supabase usa el dominio de producción y ya no retorna a `localhost:3000`.
+- Los errores inmediatos de Google OAuth se muestran en la pantalla de acceso.
 - Hotfix de Previsión: ningún overview/GET genera ocurrencias ni ejecuta escrituras.
 - Inicio, Plan, Movimientos, detalle y Reglas protegidos como rutas de lectura `STABLE` cuando corresponde.
-- Smoke test de las rutas críticas ejecutado sobre la base real sin alterar datos financieros.
-- Error inmediato de Google OAuth visible en la pantalla de login.
-- Nuevo gate `audit:v201` para impedir regresiones de estas garantías.
+- Smoke de rutas críticas ejecutado sobre la base real sin alterar datos financieros.
+- Release readiness validado con identidad Google, sin fallos.
+- Gate `audit:v201` permanente para impedir regresiones de estas garantías.
 
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
@@ -42,15 +43,14 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Archivo documental privado con OCR local y asociaciones a movimientos.
 - Configuración, tema y copia portable/restaurable de la capa privada.
 
-## Seguridad y producción
-Google OAuth está activo y validado. El acceso continúa limitado por la allowlist de servidor y `financial_app_release_readiness()` mantiene el gate operativo para futuras releases.
-
-No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni los binarios generados del motor documental.
-
-## Despliegue actual
+## Producción
+- Acceso mediante Google OAuth y allowlist de servidor.
 - Vercel: región `cdg1`.
 - Dominio público: `financialapp-home.vercel.app`.
 - La rama `financial-app-rebuild` mantiene el despliegue automático deshabilitado para evitar previews y consumo innecesario.
+- Una release solo se promociona a `main` después de superar CI y el release readiness.
+
+No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni binarios generados del motor documental.
 
 ## Documentación actual
 - `docs/PROJECT_AXIOMS.md`
@@ -59,4 +59,5 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/AUDIT_FINANCIAL_APP_1.9.0.md`
 - `docs/AUDIT_FINANCIAL_APP_2.0.0.md`
 - `docs/AUDIT_FINANCIAL_APP_2.0.1.md`
+- `docs/RELEASE_V2.0.1.md`
 - `supabase/README.md`

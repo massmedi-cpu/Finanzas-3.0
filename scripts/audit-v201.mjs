@@ -4,7 +4,9 @@ const errors=[];
 const required=[
   "database/FINANCIAL_APP_2.0.0_READ_ONLY_FORECAST_HOTFIX.sql",
   "database/FINANCIAL_APP_2.0.1_READ_PATH_HARDENING.sql",
+  "database/FINANCIAL_APP_2.0.1_VERSION.sql",
   "docs/AUDIT_FINANCIAL_APP_2.0.1.md",
+  "docs/RELEASE_V2.0.1.md",
   "components/google-login-button.tsx",
 ];
 for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
@@ -12,12 +14,18 @@ for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
 const read=(file)=>existsSync(file)?readFileSync(file,"utf8"):"";
 const hotfix=read("database/FINANCIAL_APP_2.0.0_READ_ONLY_FORECAST_HOTFIX.sql");
 const hardening=read("database/FINANCIAL_APP_2.0.1_READ_PATH_HARDENING.sql");
+const versionSql=read("database/FINANCIAL_APP_2.0.1_VERSION.sql");
+const appVersion=read("lib/app-version.ts");
 const google=read("components/google-login-button.tsx");
 const forecastRoute=read("app/api/forecast/route.ts");
 const ci=read(".github/workflows/ci.yml");
 const vercel=read("vercel.json");
 const readme=read("README.md");
 const pkg=JSON.parse(read("package.json")||"{}");
+
+if(!appVersion.includes('APP_VERSION = "2.0.1"'))errors.push("APP_VERSION no está sellada en 2.0.1");
+if(!versionSql.includes("'app_version', to_jsonb('2.0.1'::text)"))errors.push("La migración no fija app_version 2.0.1");
+if(!versionSql.includes("'target_version', to_jsonb('2.0.1'::text)"))errors.push("La migración no fija target_version 2.0.1");
 
 if(!hotfix.includes("forecast_refresh_call_not_found"))errors.push("El hotfix de Previsión no verifica la retirada del refresh en lectura");
 if(!hotfix.includes("alter function financial_app.forecast_overview_core(date, integer) stable"))errors.push("Previsión no queda protegida como STABLE");
@@ -53,11 +61,11 @@ if(pkg.scripts?.["audit:v201"]!=="node scripts/audit-v201.mjs")errors.push("Falt
 if(!ci.includes("npm run audit:v201"))errors.push("CI no ejecuta la auditoría 2.0.1");
 if(!vercel.includes('"financial-app-rebuild": false'))errors.push("La rama de estabilización puede gastar previews de Vercel");
 if(!readme.includes("financialapp-home.vercel.app"))errors.push("README no refleja el dominio público actual");
-if(!readme.includes("2.0.1"))errors.push("README no identifica la fase de estabilización 2.0.1");
+if(!readme.includes("Financial App 2.0.1"))errors.push("README no identifica la release 2.0.1");
 
 if(errors.length){
   console.error("Financial App 2.0.1 stabilization audit FAILED");
   errors.forEach(error=>console.error(`- ${error}`));
   process.exit(1);
 }
-console.log("Financial App 2.0.1 audit OK · lecturas puras, RPC STABLE, OAuth visible y rama sin previews");
+console.log("Financial App 2.0.1 audit OK · versión sellada, lecturas puras, RPC STABLE, OAuth visible y rama sin previews");
