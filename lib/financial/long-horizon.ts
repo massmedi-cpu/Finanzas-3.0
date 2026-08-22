@@ -33,6 +33,8 @@ export function buildLongHorizon(plan:PlanOverview):LongHorizon{
   const goalRemaining=plan.domains.goals.summary.remainingTotal;
   const goalFundingMonths=goalRemaining>0&&monthlyGoalCommitment>0?round(goalRemaining/monthlyGoalCommitment):null;
   const sustainability:LongHorizon["sustainability"]=plan.domains.goals.summary.activeCount===0?"no_goals":monthlyResidualCapacity>=0?"positive":"strained";
+  const forecast=plan.domains.forecast;
+  const netWorth=plan.domains.netWorth;
   return {
     month:plan.month,
     asOf:plan.asOf,
@@ -43,8 +45,8 @@ export function buildLongHorizon(plan:PlanOverview):LongHorizon{
     goalRemaining:round(goalRemaining),
     goalFundingMonths,
     sustainability,
-    liquidityBoundary:{days:90,currentBalance:plan.summary.forecastCurrentBalance,projectedBalance90:plan.summary.forecastProjectedBalance90,lowestBalance90:plan.summary.forecastLowestBalance90,firstNegativeDate:plan.domains.forecast.firstNegativeDate},
-    netWorthBoundary:{days:90,currentNetWorth:plan.summary.netWorth,projectedNetWorth90:plan.summary.projectedNetWorth90},
+    liquidityBoundary:{days:90,currentBalance:forecast.currentBalance,projectedBalance90:forecast.projectedBalance,lowestBalance90:forecast.lowestBalance,firstNegativeDate:forecast.firstNegativeDate},
+    netWorthBoundary:{days:90,currentNetWorth:netWorth.netWorth,projectedNetWorth90:netWorth.projectedNetWorth90},
     method:{capacityReference:plan.rules.goalCapacityMethod,linearPlanningOnly:true,bankBalanceForecastLimitedTo90Days:true,netWorthProjectionLimitedTo90Days:true},
   };
 }
