@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 
 export type GoalStatus="on_track"|"attention"|"overdue"|"achieved"|"flexible"|"source_missing";
@@ -41,7 +42,7 @@ export async function getGoalsOverview():Promise<GoalsOverview>{
   if(error||!data)throw new Error(error?.message||"goals_unavailable");
   const raw=data as any;const summary=raw.summary||{};
   return {
-    version:String(raw.version||"1.0.0-rc.1"),asOf:String(raw.asOf||new Date().toISOString().slice(0,10)),capacityReference:asNumber(raw.capacityReference),capacityReferenceMethod:String(raw.capacityReferenceMethod||""),
+    version:String(raw.version||APP_VERSION),asOf:String(raw.asOf||new Date().toISOString().slice(0,10)),capacityReference:asNumber(raw.capacityReference),capacityReferenceMethod:String(raw.capacityReferenceMethod||""),
     summary:{activeCount:asNumber(summary.activeCount),targetTotal:asNumber(summary.targetTotal),trackedTotal:asNumber(summary.trackedTotal),remainingTotal:asNumber(summary.remainingTotal),monthlyRequired:asNumber(summary.monthlyRequired),achievedCount:asNumber(summary.achievedCount),attentionCount:asNumber(summary.attentionCount),overdueCount:asNumber(summary.overdueCount),sourceMissingCount:asNumber(summary.sourceMissingCount)},
     goals:Array.isArray(raw.goals)?raw.goals.map(normalizeGoal):[],
     accounts:Array.isArray(raw.accounts)?raw.accounts.map((a:any)=>({id:String(a.id||""),name:String(a.name||"Cuenta"),role:String(a.role||""),currency:String(a.currency||"EUR"),balance:nullableNumber(a.balance),balanceDate:a.balanceDate||null})):[],
