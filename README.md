@@ -1,4 +1,4 @@
-# Financial App 1.9.0
+# Financial App 2.0.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
@@ -13,15 +13,17 @@ Aplicación financiera personal privada para control, presupuesto, planificació
 
 Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 
-## 1.9.0 — motor documental first-party
-- Archivo mantiene el OCR en navegador y elimina dependencias CDN en tiempo de uso.
-- Tesseract.js 7.0.0, PDF.js 6.2.108 y los datos españoles se fijan en `package-lock.json`.
-- Los assets documentales se reconstruyen desde dependencias bloqueadas durante instalación/build y se sirven desde el mismo origen.
-- Cada asset generado queda cubierto por tamaño y SHA-256; `audit:v19` impide regresiones a CDNs o binarios inesperados.
-- Se conserva la arquitectura 1.7 de rendimiento y la recuperación privada transaccional 1.8.
+## 2.0.0 — Plan Financiero unificado
+- Nueva ruta `/plan` como capa de decisión única sobre presupuesto, previsión, objetivos, patrimonio y Control.
+- El Plan reutiliza los motores financieros canónicos existentes y no duplica fórmulas en el navegador.
+- Una única llamada a `financial_app_plan_overview` agrega resumen, estado, capacidad y prioridades explicables.
+- Cada prioridad conserva trazabilidad mediante `sourcePath` y enlaza al módulo operativo de origen.
+- La capa Plan es de solo lectura: no modifica movimientos, presupuestos, previsiones, objetivos, patrimonio, reglas ni cierres.
+- Se preservan íntegramente las garantías de rendimiento de 1.7, recuperación transaccional de 1.8 y motor documental first-party de 1.9.
 
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
+- Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
 - Movimientos editables y trazables, filtros avanzados, splits, documentos y conciliación.
 - Reglas automáticas con preview, prioridad, aplicación histórica y deshacer seguro.
 - Presupuesto mensual/anual, previsiones, escenarios, objetivos y patrimonio.
@@ -30,14 +32,20 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Configuración, tema y copia portable/restaurable de la capa privada.
 
 ## Seguridad y producción
-Google OAuth es el acceso definitivo previsto, pero la aplicación no debe declararse lista para producción mientras el proveedor Google no esté validado en Supabase. `financial_app_release_readiness()` mantiene ese bloqueo de forma explícita.
+Google OAuth es el acceso definitivo previsto. `financial_app_release_readiness()` mantiene el gate operativo y debe validar la identidad Google autorizada junto con el resto de invariantes antes de considerar una release completamente apta.
 
 No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni los binarios generados del motor documental.
+
+## Despliegue actual
+- Vercel: región `cdg1`.
+- Dominio público asignado: `financial-app-massmedi.vercel.app`.
+- La rama de desarrollo `financial-app-rebuild` permanece con despliegue automático deshabilitado para evitar previews innecesarios.
 
 ## Documentación actual
 - `docs/PROJECT_AXIOMS.md`
 - `docs/AUDIT_FINANCIAL_APP_1.7.0.md`
 - `docs/AUDIT_FINANCIAL_APP_1.8.0.md`
 - `docs/AUDIT_FINANCIAL_APP_1.9.0.md`
+- `docs/AUDIT_FINANCIAL_APP_2.0.0.md`
 - `database/FINANCIAL_APP_1.9.0_VERSION.sql`
 - `supabase/README.md`
