@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 
 export type ReconciliationSummary={total:number;reconciled:number;pending:number;notReconciled:number;notApplicable:number};
@@ -11,7 +12,7 @@ export async function getReconciliationOverview():Promise<ReconciliationOverview
   if(error||!data)throw new Error(error?.message||"reconciliation_unavailable");
   const r=data as any;
   return {
-    version:String(r.version||"1.0.0-rc.1"),
+    version:String(r.version||APP_VERSION),
     summary:{total:n(r.summary?.total),reconciled:n(r.summary?.reconciled),pending:n(r.summary?.pending),notReconciled:n(r.summary?.notReconciled),notApplicable:n(r.summary?.notApplicable)},
     pairs:Array.isArray(r.pairs)?r.pairs.map((x:any)=>({...x,amount:n(x.amount),confidence:n(x.confidence)})):[],
     unresolvedGroups:Array.isArray(r.unresolvedGroups)?r.unresolvedGroups.map((x:any)=>({...x,count:n(x.count),grossAmount:n(x.grossAmount)})):[],
