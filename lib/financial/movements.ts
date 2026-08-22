@@ -51,6 +51,7 @@ export type MovementFacets = {
   types: string[];
   categories: string[];
   subcategories: string[];
+  merchants: string[];
   channels: string[];
   tags: string[];
 };
@@ -74,9 +75,11 @@ export type MovementFilters = {
   type?: string | null;
   category?: string | null;
   subcategory?: string | null;
+  merchant?: string | null;
   channel?: string | null;
   tag?: string | null;
   reviewOnly?: boolean;
+  cashFlowOnly?: boolean;
   recurring?: boolean | null;
   internalTransfer?: boolean | null;
   reconciled?: boolean | null;
@@ -160,6 +163,8 @@ export async function getMovements(filters: MovementFilters = {}): Promise<Movem
     p_min_amount: filters.minAmount ?? null,
     p_max_amount: filters.maxAmount ?? null,
     p_sort: filters.sort ?? "date_desc",
+    p_merchant: filters.merchant || null,
+    p_cash_flow_only: filters.cashFlowOnly ?? false,
   });
   if (error || !data) throw new Error(error?.message || "movements_unavailable");
   const response = data as MovementsResponse;
