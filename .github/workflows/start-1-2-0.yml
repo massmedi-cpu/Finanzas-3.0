@@ -1,0 +1,42 @@
+name: Start Financial App 1.2.0
+
+on:
+  push:
+    branches: [financial-app-rebuild]
+    paths:
+      - '.github/workflows/start-1-2-0.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set 1.2.0 version atomically
+        run: |
+          npm version 1.2.0 --no-git-tag-version
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          writeFileSync('lib/app-version.ts', 'export const APP_VERSION = "1.2.0" as const;\nexport const APP_RELEASE_LABEL = `Financial App ${APP_VERSION}` as const;\n');
+          NODE
+
+      - name: Commit development target
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json lib/app-version.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "feat(financial-app): start 1.2.0 development"
+          git push origin HEAD:financial-app-rebuild
