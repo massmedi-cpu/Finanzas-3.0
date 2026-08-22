@@ -1,0 +1,53 @@
+name: Prepare Financial App 1.9 document engine
+on:
+  push:
+    branches: [financial-app-rebuild]
+permissions:
+  contents: write
+jobs:
+  prepare-dependencies:
+    if: github.event.head_commit.message == 'chore(financial-app): prepare 1.9 document engine dependencies'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install from validated lockfile
+        run: npm ci --no-audit --no-fund
+      - name: Pin first-party document engine packages
+        run: npm install --save-exact --no-audit --no-fund tesseract.js@7.0.0 pdfjs-dist@6.2.108 @tesseract.js-data/spa@1.0.0
+      - name: Align package metadata to 1.9.0
+        run: npm version 1.9.0 --no-git-tag-version
+      - name: Verify dependency and version lock
+        run: |
+          node - <<'NODE'
+          const p=require('./package.json');
+          const l=require('./package-lock.json');
+          const root=l.packages?.[''];
+          const expected={
+            'tesseract.js':'7.0.0',
+            'pdfjs-dist':'6.2.108',
+            '@tesseract.js-data/spa':'1.0.0'
+          };
+          if(p.version!=='1.9.0'||l.version!=='1.9.0'||root?.version!=='1.9.0') process.exit(1);
+          for(const [name,version] of Object.entries(expected)){
+            if(p.dependencies?.[name]!==version||root?.dependencies?.[name]!==version) process.exit(1);
+          }
+          NODE
+          npm ls --depth=0
+          git diff --check
+      - name: Commit npm-generated dependency graph
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(1.9): pin first-party document engine dependencies"
+          git push origin HEAD:financial-app-rebuild
