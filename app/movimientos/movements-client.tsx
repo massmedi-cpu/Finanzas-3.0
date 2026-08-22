@@ -80,11 +80,12 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     q.set("page",String(page));
     q.set("pageSize",String(pageData.pageSize));
     q.set("sort",next.sort);
+    q.set("facets","0");
     try {
       const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
-      const body=await response.json() as MovementsResponse & {error?:string};
+      const body=await response.json() as Omit<MovementsResponse,"facets"> & {facets?:MovementsResponse["facets"];error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
-      setPageData(body);
+      setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);
       window.history.replaceState(null,"",movementUrl(next));
     } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); }
     finally { setLoading(false); }
