@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 
 export type CashFlowMonth = { month:string; income:number; expenses:number; net:number; accumulated:number };
@@ -31,7 +32,7 @@ export async function getCashFlow(year:number):Promise<CashFlowData>{
   if(error||!data) throw new Error(error?.message||"cash_flow_unavailable");
   const raw=data as any;
   return {
-    version:String(raw.version||"1.0.0-rc.1"), year:n(raw.year), years:Array.isArray(raw.years)?raw.years.map(n):[],
+    version:String(raw.version||APP_VERSION), year:n(raw.year), years:Array.isArray(raw.years)?raw.years.map(n):[],
     income:n(raw.income), expenses:n(raw.expenses), net:n(raw.net), positiveMonths:n(raw.positiveMonths), negativeMonths:n(raw.negativeMonths),
     monthly:Array.isArray(raw.monthly)?raw.monthly.map((m:any)=>({month:String(m.month),income:n(m.income),expenses:n(m.expenses),net:n(m.net),accumulated:n(m.accumulated)})):[],
     topExpenseCategories:Array.isArray(raw.topExpenseCategories)?raw.topExpenseCategories.map((c:any)=>({category:String(c.category),amount:n(c.amount),movements:n(c.movements)})):[],
@@ -49,7 +50,7 @@ export async function getCashFlowRange(filters:CashFlowRangeFilters):Promise<Cas
   if(error||!data) throw new Error(error?.message||"cash_flow_range_unavailable");
   const r=data as any;
   return {
-    version:String(r.version||"1.0.0-rc.1"),range:String(r.range||filters.range) as CashFlowRange,anchor:String(r.anchor||filters.anchor),dateFrom:String(r.dateFrom||""),dateTo:String(r.dateTo||""),bucket:String(r.bucket||"month") as CashFlowRangeData["bucket"],
+    version:String(r.version||APP_VERSION),range:String(r.range||filters.range) as CashFlowRange,anchor:String(r.anchor||filters.anchor),dateFrom:String(r.dateFrom||""),dateTo:String(r.dateTo||""),bucket:String(r.bucket||"month") as CashFlowRangeData["bucket"],
     income:n(r.income),expenses:n(r.expenses),net:n(r.net),movements:n(r.movements),positivePeriods:n(r.positivePeriods),negativePeriods:n(r.negativePeriods),
     series:Array.isArray(r.series)?r.series.map((x:any)=>({date:String(x.date),label:String(x.label),income:n(x.income),expenses:n(x.expenses),net:n(x.net),accumulated:n(x.accumulated),movements:n(x.movements)})):[],
     topExpenseCategories:Array.isArray(r.topExpenseCategories)?r.topExpenseCategories.map((x:any)=>({category:String(x.category),amount:n(x.amount),movements:n(x.movements)})):[],
