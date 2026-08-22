@@ -7,6 +7,7 @@ const sections = [
   ["Movimientos", "/movimientos"],
   ["Cash Flow", "/cash-flow"],
   ["Presupuesto", "/presupuesto"],
+  ["Objetivos", "/objetivos"],
   ["Previsión", "/prevision"],
   ["Patrimonio", "/patrimonio"],
   ["Análisis", "/analisis"],
