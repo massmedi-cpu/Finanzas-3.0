@@ -1,8 +1,8 @@
-# Financial App 2.0.1
+# Financial App 2.1.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
-2.0.1 es una release de estabilización: no añade dominios financieros nuevos y refuerza autenticación, rutas de lectura y protección contra regresiones detectadas al validar 2.0.0 con producción real.
+2.1.0 evoluciona la base estable 2.0.1 sin cambiar las reglas financieras: mejora legibilidad, navegación, shell persistente, rendimiento de Movimientos y coherencia del Plan.
 
 ## Principios permanentes
 - Fuente bancaria externa exclusivamente en modo lectura.
@@ -33,6 +33,16 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Release readiness validado con identidad Google, sin fallos.
 - Gate `audit:v201` permanente para impedir regresiones de estas garantías.
 
+## 2.1.0 — rendimiento, legibilidad y coherencia
+- Navegación privada con prefetch por intención, evitando precargar todas las rutas automáticamente.
+- Tipografía compacta reforzada para mejorar legibilidad en escritorio, tablet y móvil.
+- Shell persistente con un único sidebar; eliminados 16 sidebars internos redundantes.
+- Movimientos reutiliza las facetas de la primera carga y evita reenviar datos repetidos en paginaciones y filtros posteriores.
+- Baseline real de rendimiento documentado en `docs/PERFORMANCE_V2.1.0.md`.
+- Plan auditado contra los motores canónicos de Presupuesto, Previsión, Objetivos, Patrimonio y Control.
+- Inicio mantiene horizonte inmediato de 30 días y Plan horizonte explícito de 90 días.
+- Gate `audit:v210` protege navegación, legibilidad, shell único, Movimientos ligero y coherencia del Plan.
+
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
 - Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
@@ -59,5 +69,7 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/AUDIT_FINANCIAL_APP_1.9.0.md`
 - `docs/AUDIT_FINANCIAL_APP_2.0.0.md`
 - `docs/AUDIT_FINANCIAL_APP_2.0.1.md`
-- `docs/RELEASE_V2.0.1.md`
+- `docs/PERFORMANCE_V2.1.0.md`
+- `docs/COHERENCE_V2.1.0.md`
+- `docs/RELEASE_GATE_V2.1.0.md`
 - `supabase/README.md`
