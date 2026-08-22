@@ -32,5 +32,4 @@ La rama `financial-app-rebuild` no genera previews de Vercel. La publicación de
 
 ## Versionado
 
-- Versión de producto: `2.0.1`, definida por `lib/app-version.ts` y `financial_app.app_meta`.
-- El paquete npm interno permanece en `2.0.0` porque esta release no cambia el contrato del paquete ni dependencias; `package.json` y `package-lock.json` permanecen coherentes entre sí.
+La versión `2.0.1` queda alineada en `package.json`, `package-lock.json`, `lib/app-version.ts` y `financial_app.app_meta`. El cambio de versión no altera el árbol de dependencias.
