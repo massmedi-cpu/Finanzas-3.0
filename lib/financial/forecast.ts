@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 
 export type ForecastRecurrence = { frequency: "weekly" | "monthly" | "yearly"; interval: number; until?: string | null };
@@ -28,7 +29,7 @@ export async function getForecastOverview(days=90):Promise<ForecastOverview>{
   if(error||!data) throw new Error(error?.message||"forecast_unavailable");
   const r=data as any;
   return {
-    version:String(r.version||"1.0.0-rc.1"),startDate:String(r.startDate),endDate:String(r.endDate),days:n(r.days),currentBalance:n(r.currentBalance),savingsBalance:n(r.savingsBalance),projectedBalance:n(r.projectedBalance),projectedIncome:n(r.projectedIncome),projectedExpenses:n(r.projectedExpenses),projectedNet:n(r.projectedNet),lowestBalance:n(r.lowestBalance),
+    version:String(r.version||APP_VERSION),startDate:String(r.startDate),endDate:String(r.endDate),days:n(r.days),currentBalance:n(r.currentBalance),savingsBalance:n(r.savingsBalance),projectedBalance:n(r.projectedBalance),projectedIncome:n(r.projectedIncome),projectedExpenses:n(r.projectedExpenses),projectedNet:n(r.projectedNet),lowestBalance:n(r.lowestBalance),
     suggestions:Array.isArray(r.suggestions)?r.suggestions.map((x:any)=>({...x,amount:n(x.amount),confidence:n(x.confidence)})):[],
     events:Array.isArray(r.events)?r.events.map((x:any)=>({...x,amount:n(x.amount),confidence:n(x.confidence)})):[],
     balanceSeries:Array.isArray(r.balanceSeries)?r.balanceSeries.map((x:any)=>({...x,balance:n(x.balance)})):[],
