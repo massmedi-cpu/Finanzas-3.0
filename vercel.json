@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "name": "financial-app",
-  "alias": ["financialapp.massmedi.app"],
+  "alias": ["finanzas-3-0.vercel.app"],
   "regions": ["cdg1"],
   "git": {
     "deploymentEnabled": {
