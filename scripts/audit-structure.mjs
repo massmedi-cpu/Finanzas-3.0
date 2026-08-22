@@ -18,6 +18,7 @@ const required = [
   "lib/app-version.ts",
   "supabase/functions/financial-app-sync/index.ts",
   "database/FINANCIAL_APP_1.0.0_RC1_AUDIT_HARDENING.sql",
+  "database/FINANCIAL_APP_1.0.0_RC2_VERSION_ALIGNMENT.sql",
 ];
 
 const forbiddenRoots = ["src"];
@@ -27,9 +28,20 @@ for (const path of forbiddenRoots) if (existsSync(path)) errors.push(`Legado no 
 
 const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
 if (packageJson.name !== "financial-app") errors.push("package.json no pertenece a Financial App");
-if (packageJson.version !== "1.0.0-rc.1") errors.push("Versión de package.json no centralizada en 1.0.0-rc.1");
+
+if (!existsSync("package-lock.json")) {
+  errors.push("Falta package-lock.json reproducible");
+} else {
+  const packageLock = JSON.parse(readFileSync("package-lock.json", "utf8"));
+  const root = packageLock.packages?.[""];
+  if (packageLock.name !== packageJson.name || packageLock.version !== packageJson.version || root?.version !== packageJson.version) {
+    errors.push("package.json y package-lock.json no comparten nombre/versión canónicos");
+  }
+}
+
 const versionFile = readFileSync("lib/app-version.ts", "utf8");
-if (!versionFile.includes('APP_VERSION = "1.0.0-rc.1"')) errors.push("lib/app-version.ts no coincide con el RC actual");
+const appVersion = versionFile.match(/APP_VERSION\s*=\s*["']([^"']+)["']/)?.[1] ?? null;
+if (appVersion !== packageJson.version) errors.push(`lib/app-version.ts (${appVersion ?? "sin versión"}) no coincide con package.json (${packageJson.version})`);
 
 function walk(dir) {
   if (!existsSync(dir)) return [];
@@ -49,4 +61,4 @@ if (errors.length) {
   for (const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App structural audit OK · ${required.length} rutas críticas · ${activeFiles.length} archivos activos`);
+console.log(`Financial App structural audit OK · ${required.length} rutas críticas · ${activeFiles.length} archivos activos · ${packageJson.version}`);
