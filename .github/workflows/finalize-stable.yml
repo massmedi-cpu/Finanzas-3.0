@@ -1,0 +1,42 @@
+name: Finalize Financial App 1.0.0 stable
+
+on:
+  push:
+    branches: [financial-app-rebuild]
+    paths:
+      - '.github/workflows/finalize-stable.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set stable version atomically
+        run: |
+          npm version 1.0.0 --no-git-tag-version
+          node --input-type=module <<'NODE'
+          import { writeFileSync } from 'node:fs';
+          writeFileSync('lib/app-version.ts', 'export const APP_VERSION = "1.0.0" as const;\nexport const APP_RELEASE_LABEL = `Financial App ${APP_VERSION}` as const;\n');
+          NODE
+
+      - name: Commit stable version
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json lib/app-version.ts
+          git diff --cached --quiet && exit 0
+          git commit -m "release(financial-app): finalize 1.0.0 stable"
+          git push origin HEAD:financial-app-rebuild
