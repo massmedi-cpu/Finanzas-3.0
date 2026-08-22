@@ -2,21 +2,16 @@
 
 import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
+import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
 import { SplitEditor } from "./split-editor";
 
-type TriFilter=""|"1"|"0";
-type Filters = {
-  search:string;account:string;type:string;category:string;subcategory:string;channel:string;tag:string;review:boolean;
-  recurring:TriFilter;internalTransfer:TriFilter;reconciled:TriFilter;documents:TriFilter;splits:TriFilter;
-  from:string;to:string;min:string;max:string;sort:string;
-};
+type Filters = MovementFilterState;
 type EditState = {
   date:string; type:string; category:string; subcategory:string; normalizedConcept:string; counterparty:string; description:string;
   cashFlow:"inherit"|"include"|"exclude"; isInternalTransfer:boolean; isDuplicate:boolean; reconciled:"inherit"|"yes"|"no";
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
 
-const emptyFilters: Filters = {search:"",account:"",type:"",category:"",subcategory:"",channel:"",tag:"",review:false,recurring:"",internalTransfer:"",reconciled:"",documents:"",splits:"",from:"",to:"",min:"",max:"",sort:"date_desc"};
 const money = new Intl.NumberFormat("es-ES", { style:"currency", currency:"EUR" });
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
@@ -60,11 +55,10 @@ function sourceBoolean(value:unknown):boolean|null {
   if (noValues.has(normalized)) return false;
   return null;
 }
-function boolParam(value:TriFilter){return value||null}
 
-export function MovementsClient({ initialData }:{ initialData:MovementsResponse }) {
+export function MovementsClient({ initialData, initialFilters }:{ initialData:MovementsResponse; initialFilters:MovementFilterState }) {
   const [pageData,setPageData] = useState(initialData);
-  const [filters,setFilters] = useState<Filters>(emptyFilters);
+  const [filters,setFilters] = useState<Filters>(initialFilters);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState<string|null>(null);
   const [message,setMessage] = useState<string|null>(null);
@@ -82,35 +76,26 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
 
   async function loadWith(next:Filters,page=1) {
     setLoading(true); setError(null);
-    const q=new URLSearchParams({ page:String(page), pageSize:String(pageData.pageSize), sort:next.sort });
-    if(next.search.trim()) q.set("search",next.search.trim());
-    if(next.account) q.set("account",next.account);
-    if(next.type) q.set("type",next.type);
-    if(next.category) q.set("category",next.category);
-    if(next.subcategory) q.set("subcategory",next.subcategory);
-    if(next.channel) q.set("channel",next.channel);
-    if(next.tag) q.set("tag",next.tag);
-    if(next.review) q.set("review","1");
-    if(boolParam(next.recurring)) q.set("recurring",next.recurring);
-    if(boolParam(next.internalTransfer)) q.set("internalTransfer",next.internalTransfer);
-    if(boolParam(next.reconciled)) q.set("reconciled",next.reconciled);
-    if(boolParam(next.documents)) q.set("documents",next.documents);
-    if(boolParam(next.splits)) q.set("splits",next.splits);
-    if(next.from) q.set("from",next.from);
-    if(next.to) q.set("to",next.to);
-    if(next.min.trim()) q.set("min",next.min.trim());
-    if(next.max.trim()) q.set("max",next.max.trim());
+    const q=movementSearchParams(next);
+    q.set("page",String(page));
+    q.set("pageSize",String(pageData.pageSize));
+    q.set("sort",next.sort);
     try {
       const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
       const body=await response.json() as MovementsResponse & {error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
       setPageData(body);
+      window.history.replaceState(null,"",movementUrl(next));
     } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); }
     finally { setLoading(false); }
   }
 
   async function submitFilters(event:FormEvent) { event.preventDefault(); await loadWith(filters,1); }
-  async function clearFilters() { setFilters(emptyFilters); await loadWith(emptyFilters,1); }
+  async function clearFilters() {
+    const cleared={...EMPTY_MOVEMENT_FILTERS};
+    setFilters(cleared);
+    await loadWith(cleared,1);
+  }
 
   async function openMovement(id:string) {
     setDetailLoading(true); setError(null); setMessage(null);
@@ -185,16 +170,19 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
       <div><strong>{pageData.items.filter(item=>item.hasDocuments).length}</strong><span>visibles con documentos</span></div>
     </section>
 
+    {filters.cashFlowOnly&&<div className="inline-alert info" role="status">Vista enlazada con Cash Flow: se excluyen ahorro, traspasos internos, duplicados, origen ausente y exclusiones manuales.</div>}
+
     <form className="movement-filters" onSubmit={submitFilters}>
       <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID, importe, etiquetas u OCR" /></label>
       <label><span>Cuenta</span><select value={filters.account} onChange={e=>setFilters({...filters,account:e.target.value})}><option value="">Todas</option>{pageData.facets.accounts.map(account=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
       <label><span>Tipo</span><select value={filters.type} onChange={e=>setFilters({...filters,type:e.target.value})}><option value="">Todos</option>{pageData.facets.types.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
       <label><span>Categoría</span><select value={filters.category} onChange={e=>setFilters({...filters,category:e.target.value})}><option value="">Todas</option>{pageData.facets.categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
-      <label><span>Orden</span><select value={filters.sort} onChange={e=>setFilters({...filters,sort:e.target.value})}><option value="date_desc">Más recientes</option><option value="date_asc">Más antiguos</option><option value="amount_desc">Mayor importe</option><option value="amount_asc">Menor importe</option></select></label>
-      <details className="advanced-filter-panel">
+      <label><span>Orden</span><select value={filters.sort} onChange={e=>setFilters({...filters,sort:e.target.value as Filters["sort"]})}><option value="date_desc">Más recientes</option><option value="date_asc">Más antiguos</option><option value="amount_desc">Mayor importe</option><option value="amount_asc">Menor importe</option></select></label>
+      <details className="advanced-filter-panel" open={Boolean(filters.merchant||filters.subcategory||filters.channel||filters.tag||filters.recurring||filters.internalTransfer||filters.reconciled||filters.documents||filters.splits||filters.from||filters.to||filters.min||filters.max)}>
         <summary>Filtros avanzados</summary>
         <div className="advanced-filter-grid">
           <label><span>Subcategoría</span><select value={filters.subcategory} onChange={e=>setFilters({...filters,subcategory:e.target.value})}><option value="">Todas</option>{pageData.facets.subcategories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <label><span>Comercio / contraparte</span><input list="movement-merchants" value={filters.merchant} onChange={e=>setFilters({...filters,merchant:e.target.value})} placeholder="Todos"/><datalist id="movement-merchants">{pageData.facets.merchants.map(value=><option key={value} value={value}/>)}</datalist></label>
           <label><span>Canal</span><select value={filters.channel} onChange={e=>setFilters({...filters,channel:e.target.value})}><option value="">Todos</option>{pageData.facets.channels.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>Recurrente</span><select value={filters.recurring} onChange={e=>setFilters({...filters,recurring:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Sí</option><option value="0">No</option></select></label>
@@ -209,6 +197,7 @@ export function MovementsClient({ initialData }:{ initialData:MovementsResponse 
         </div>
       </details>
       <label className="check-filter"><input type="checkbox" checked={filters.review} onChange={e=>setFilters({...filters,review:e.target.checked})}/><span>Solo pendientes de revisar</span></label>
+      <label className="check-filter"><input type="checkbox" checked={filters.cashFlowOnly} onChange={e=>setFilters({...filters,cashFlowOnly:e.target.checked})}/><span>Solo movimientos computables en Cash Flow</span></label>
       <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading}>Limpiar</button></div>
     </form>
 
