@@ -1,10 +1,10 @@
 # Release gate — Financial App 2.1.0
 
-Estado: EN DESARROLLO. No desplegada.
+Estado: CANDIDATA VALIDADA. Pendiente únicamente de promoción controlada a producción.
 
 ## Base protegida
 
-Financial App 2.0.1 permanece congelada en producción como checkpoint recuperable. Ningún trabajo de 2.1.0 se promociona a `main` hasta superar el gate completo. La rama de trabajo `financial-app-rebuild` mantiene Vercel bloqueado para evitar previews y consumo innecesario.
+Financial App 2.0.1 permanece congelada en producción como checkpoint recuperable hasta que termine el smoke postproducción de 2.1.0. La rama de trabajo `financial-app-rebuild` mantiene Vercel bloqueado para evitar previews y consumo innecesario.
 
 ## Objetivo de 2.1.0
 
@@ -29,19 +29,23 @@ Evolucionar la base estable sin añadir complejidad gratuita. Las prioridades so
 - [x] Medir primera carga, payload y coste de facetas sobre el dataset real; baseline en `docs/PERFORMANCE_V2.1.0.md`.
 - [x] Evitar reenviar facetas globales en paginaciones, filtros y recargas posteriores; el cliente conserva las de la primera carga.
 - [x] Mantener la RPC 2.0.1 estable como fuente de verdad y descartar una RPC dinámica duplicada de mayor riesgo para esta release.
-- [ ] Confirmar por CI que edición, splits, conciliación, OCR, filtros y build permanecen sin regresiones.
+- [x] Confirmar por CI que edición, splits, conciliación, OCR, filtros y build permanecen sin regresiones.
 
 ### B4 · Plan y coherencia
-- [ ] Revisar duplicidades entre Inicio, Plan, Previsión, Presupuesto y Objetivos.
-- [ ] Mantener una única fuente de decisión por cifra y enlaces `sourcePath` trazables.
+- [x] Revisar duplicidades entre Inicio, Plan, Previsión, Presupuesto y Objetivos.
+- [x] Mantener una única fuente de decisión por cifra y enlaces `sourcePath` trazables.
+- [x] Comprobar sobre la base real que las magnitudes compartidas coinciden con sus motores canónicos.
+- [x] Mantener Inicio a 30 días y Plan a 90 días como horizontes explícitamente diferenciados.
 
 ### B5 · cierre 2.1.0
-- [ ] Auditoría financiera, seguridad, rendimiento, responsive y accesibilidad.
-- [ ] `npm ci`, árbol de dependencias, todos los gates heredados, typecheck y build.
-- [ ] Release readiness de Supabase sin fallos.
-- [ ] Versionado final coherente en runtime, paquete, lockfile y base de datos.
-- [ ] Un único merge a `main` y un único despliegue de producción.
-- [ ] Smoke postproducción y rollback 2.0.1 disponible hasta cerrar el release.
+- [x] Readiness previo de Supabase sin fallos, con Google, origen de solo lectura, almacenamiento privado y sincronización correcta.
+- [x] Versionado preparado en runtime, paquete y lockfile como 2.1.0.
+- [x] Migración de versión de base preparada pero no aplicada antes del despliegue para evitar desalinear la 2.0.1 que sigue en producción.
+- [ ] Ejecutar gate CI final sobre el commit candidato exacto: dependencias, auditorías, accesibilidad, typecheck y build.
+- [ ] Promocionar el mismo commit validado a `main`.
+- [ ] Esperar a que el único despliegue de producción quede READY.
+- [ ] Aplicar `FINANCIAL_APP_2.1.0_VERSION.sql` y repetir release readiness con identidad Google.
+- [ ] Smoke postproducción sobre `financialapp-home.vercel.app` y conservar rollback 2.0.1 hasta cerrar el release.
 
 ## Artefactos históricos
 
