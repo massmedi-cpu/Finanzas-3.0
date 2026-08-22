@@ -1,57 +1,39 @@
-# Release gate — V2.4.0
+# Release gate — Financial App 2.4.0
 
-## Estado
+Estado: CANDIDATA DE DESARROLLO. No desplegada.
 
-**Desarrollo funcional: PASS**
+## Base protegida
 
-**Release/producción: PENDIENTE** hasta cerrar la cadena V2.2 → V2.3 → V2.4 y recuperar el único preview final de Vercel.
+2.4.0 parte del head 2.3.0 ya validado por CI completo y acumula 2.2 Analítica + 2.3 Inteligencia. Producción continúa estable en 2.1.0. La rama `develop/v2.4.0-long-horizon` mantiene Vercel bloqueado para evitar previews y consumo innecesario.
 
-## Gates completados
+El antiguo gate V2.4.0 de la arquitectura previa al rebuild se conserva en `docs/legacy/RELEASE_GATE_V2.4.0_PRE_REBUILD.md` y no es una especificación activa.
 
-- [x] Motor de horizonte 1–60 meses.
-- [x] Escenario de 60 meses no truncado a 24 recurrencias.
-- [x] Eventos mensuales planificados cubren 60 meses.
-- [x] Ventanas de 12 meses sin IDs duplicados.
-- [x] Ningún movimiento fuera del horizonte solicitado.
-- [x] Capacidad mensual de objetivos alineada con el horizonte real del escenario.
-- [x] Calendario financiero mensual con arrastre de saldo.
-- [x] Detección de primera fecha negativa.
-- [x] Resumen anual para horizontes superiores a 12 meses.
-- [x] Regresiones financieras existentes en verde.
-- [x] Regresiones específicas long-horizon en verde.
-- [x] TypeScript en verde.
-- [x] Build de producción en verde.
-- [x] Smoke del build real en verde.
-- [x] Invariantes de arquitectura en verde.
-- [x] Rama de desarrollo sin preview automático de Vercel.
+## Objetivo
 
-## Última evidencia CI del bloque
+Añadir planificación de medio/largo plazo sin presentar como previsión bancaria una extrapolación que no esté respaldada por eventos confirmados.
 
-HEAD validado durante el cierre de arquitectura: `8e3d19bab60d2e25102a5abb232b4555776d77ee`.
+## Garantías 2.4
 
-Workflow `Finanzas 3.0 CI`, run #457:
-- Project invariants: success
-- Finance regression tests: success
-- Long-horizon regression tests: success
-- Typecheck: success
-- Production build: success
-- Built app smoke test: success
+- Horizonte de capacidad visible a 3, 6 y 12 meses.
+- Usa exclusivamente la capacidad mensual canónica del Plan y el esfuerzo mensual requerido por objetivos.
+- El margen de cada horizonte es una multiplicación lineal documentada; nunca se etiqueta como saldo futuro.
+- El saldo bancario previsto continúa limitado a los 90 días canónicos de Previsión.
+- La proyección de patrimonio continúa limitada a 90 días.
+- No existen campos de saldo a 180/365 días ni patrimonio a 365 días en el motor 2.4.
+- Se muestra el pendiente total de objetivos y los meses matemáticos al ritmo requerido, sin sustituir sus fechas objetivo individuales.
+- La sostenibilidad distingue objetivos compatibles con capacidad, objetivos por encima de capacidad y ausencia de objetivos activos.
+- La nueva ruta `/plan/horizonte` es privada y reutiliza el Plan canónico; no añade RPC ni escrituras.
+- El Plan enlaza el nuevo horizonte desde la capa inteligente.
 
-GitHub no recibió estado de Vercel para ese HEAD, confirmando que la rama de desarrollo no solicitó preview automático.
+## Gate técnico
 
-## Pendiente para release final
+- Todos los gates 1.7 → 2.3 siguen pasando.
+- `audit:v240`.
+- `test:horizon`.
+- recuperación portable, accesibilidad, typecheck y build de producción.
+- `package.json`, lockfile y runtime coherentes en 2.4.0.
+- Sin despliegues Vercel de desarrollo.
 
-- [ ] Retarget tras fusionar versiones apiladas anteriores.
-- [ ] Bump coordinado `package.json` + `package-lock.json` + `src/version.ts` a 2.4.0.
-- [ ] Un único preview Vercel del HEAD exacto de release.
-- [ ] Recorrido autenticado de Previsión: 12/24/36/60 meses.
-- [ ] Verificar calendario mensual y anual en móvil/escritorio.
-- [ ] Verificar cero errores runtime.
-- [ ] Merge protegido por SHA.
-- [ ] Producción READY en `cdg1`.
-- [ ] `/api/health` = 2.4.0.
-- [ ] Smoke post-deploy y rollback confirmado.
+## Promoción futura
 
-## Rollback
-
-V2.4 es aditiva sobre los motores V2.2/V2.3. No modifica la fuente bancaria, no elimina el snapshot de compatibilidad y no introduce nuevas escrituras. La promoción final no se realizará hasta que el preview exacto del release pase todos los gates.
+Esta candidata no se fusiona ni despliega automáticamente. Antes de convertir 2.4.0 en estable se repetirá el gate completo contra `main`, release readiness de Supabase y un único despliegue de producción. Hasta entonces 2.1.0 sigue siendo la versión publicada y recuperable.
