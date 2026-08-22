@@ -20,6 +20,7 @@ const required = [
   "database/FINANCIAL_APP_1.0.0_RC1_AUDIT_HARDENING.sql",
   "database/FINANCIAL_APP_1.0.0_RC2_VERSION_ALIGNMENT.sql",
   "database/FINANCIAL_APP_1.0.0_STABLE_VERSION.sql",
+  "database/FINANCIAL_APP_1.2.0_VERSION.sql",
 ];
 
 const forbiddenRoots = ["src"];
