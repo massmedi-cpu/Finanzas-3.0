@@ -28,8 +28,12 @@ jobs:
         run: npm ls --depth=0
       - name: Structural Axioma audit
         run: npm run audit:structure
-      - name: Architecture 1.7 audit
+      - name: Architecture 1.7 regression audit
         run: npm run audit:v17
+      - name: Recovery 1.8 audit
+        run: node scripts/audit-v18.mjs
+      - name: Backup recovery command tests
+        run: npx tsx scripts/backup-recovery-tests.ts
       - name: Accessibility regression audit
         run: npm run audit:a11y
       - name: Typecheck
