@@ -24,7 +24,7 @@ if(!globals.includes("prefers-reduced-motion:reduce")) errors.push("Falta soport
 if(!globals.includes("forced-colors:active")) errors.push("Falta soporte básico para colores forzados");
 if(!layout.includes('lang="es-ES"')) errors.push("El idioma raíz debe identificar español de España");
 if(!sidebar.includes('href="#main-content"')) errors.push("La navegación no ofrece salto al contenido principal");
-if(!sidebar.includes("aria-current={current ? \"page\" : undefined}")) errors.push("La navegación no marca aria-current=page");
+if(!/aria-current\s*=\s*\{\s*current\s*\?\s*["']page["']\s*:\s*undefined\s*\}/.test(sidebar)) errors.push("La navegación no marca aria-current=page");
 if(!chart.includes("Ver datos del gráfico en tabla")) errors.push("Cash Flow no ofrece alternativa tabular accesible");
 if(!chart.includes("<caption")) errors.push("La tabla accesible del gráfico no tiene caption");
 if(!chart.includes('role="group"')) errors.push("Los controles de series del gráfico no están agrupados semánticamente");
