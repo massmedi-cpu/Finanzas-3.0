@@ -1,0 +1,25 @@
+import{existsSync,readFileSync}from"node:fs";
+const errors=[];
+const required=["lib/financial/long-horizon.ts","app/plan/horizonte/page.tsx","app/plan-v240.css","scripts/long-horizon-v240-tests.ts","docs/RELEASE_GATE_V2.4.0.md"];
+for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
+const read=file=>existsSync(file)?readFileSync(file,"utf8"):"";
+const horizon=read("lib/financial/long-horizon.ts");
+const page=read("app/plan/horizonte/page.tsx");
+const layout=read("app/plan/layout.tsx");
+const intelligence=read("components/plan-intelligence.tsx");
+const gate=read("docs/RELEASE_GATE_V2.4.0.md");
+const ci=read(".github/workflows/ci.yml");
+const pkg=JSON.parse(read("package.json")||"{}");
+for(const token of ["HorizonMonths=3|6|12","monthlyCapacityReference","monthlyGoalCommitment","monthlyResidualCapacity","bankBalanceForecastLimitedTo90Days:true","netWorthProjectionLimitedTo90Days:true"])if(!horizon.includes(token))errors.push(`Falta garantía long-horizon ${token}`);
+if(!horizon.includes("const months:HorizonMonths[]=[3,6,12]"))errors.push("El horizonte no está fijado a 3/6/12 meses");
+for(const forbidden of ["projectedBalance180","projectedBalance365","projectedNetWorth180","projectedNetWorth365"])if(horizon.includes(forbidden)||page.includes(forbidden))errors.push(`2.4 inventa una proyección no canónica: ${forbidden}`);
+if(/insert\s+into|update\s+financial_app|delete\s+from|supabase\.rpc/i.test(horizon))errors.push("El motor 2.4 contiene escritura o una nueva RPC");
+if(!page.includes("sin inventar saldo futuro")||!page.includes("No es saldo bancario")||!page.includes("90 días"))errors.push("La UI 2.4 no diferencia capacidad de previsión bancaria");
+if(!layout.includes("plan-v240.css"))errors.push("Los estilos 2.4 no están cargados");
+if(!intelligence.includes('href="/plan/horizonte"'))errors.push("Plan Intelligence no enlaza el horizonte 3/6/12");
+if(!gate.includes("Producción continúa estable en 2.1.0")||!gate.includes("Sin despliegues Vercel de desarrollo"))errors.push("El gate 2.4 no protege producción y gasto de previews");
+if(pkg.scripts?.["audit:v240"]!=="node scripts/audit-v240.mjs")errors.push("Falta audit:v240 en package.json");
+if(pkg.scripts?.["test:horizon"]!=="tsx scripts/long-horizon-v240-tests.ts")errors.push("Falta test:horizon en package.json");
+if(!ci.includes("npm run audit:v240")||!ci.includes("npm run test:horizon"))errors.push("CI no ejecuta el gate 2.4");
+if(errors.length){console.error("Financial App 2.4 long-horizon audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
+console.log("Financial App 2.4 audit OK · capacidad 3/6/12, previsión limitada a 90 días y producción protegida");
