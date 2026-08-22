@@ -6,6 +6,7 @@ on:
     branches:
       - 'financial-app-rebuild'
       - 'develop/v2.2.0-analytics'
+      - 'develop/v2.3.0-intelligence'
       - 'release/**'
 permissions:
   contents: read
@@ -45,6 +46,10 @@ jobs:
         run: npm run audit:v220
       - name: Analytics calculation tests
         run: npm run test:analytics
+      - name: Intelligence 2.3 audit
+        run: npm run audit:v230
+      - name: Intelligence decision tests
+        run: npm run test:intelligence
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
@@ -57,7 +62,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Release reproducibility gate
-        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics'
+        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics' || github.ref == 'refs/heads/develop/v2.3.0-intelligence'
         run: |
           test -f package-lock.json
           git diff --exit-code -- package.json package-lock.json
