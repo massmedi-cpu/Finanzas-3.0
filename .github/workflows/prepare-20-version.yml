@@ -1,0 +1,45 @@
+name: Prepare Financial App 2.0 version
+on:
+  pull_request:
+    branches: [main]
+permissions:
+  contents: write
+jobs:
+  bump-version:
+    if: github.head_ref == 'financial-app-rebuild'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout working branch
+        uses: actions/checkout@v4
+        with:
+          ref: financial-app-rebuild
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Bump npm metadata
+        run: npm version 2.0.0 --no-git-tag-version
+      - name: Verify version metadata
+        run: |
+          node - <<'NODE'
+          const p=require('./package.json');
+          const l=require('./package-lock.json');
+          const root=l.packages?.[''];
+          if(p.version!=='2.0.0'||l.version!=='2.0.0'||root?.version!=='2.0.0') process.exit(1);
+          NODE
+          git diff --check
+      - name: Verify reproducible install
+        run: |
+          npm ci --no-audit --no-fund
+          npm ls --depth=0
+      - name: Commit npm-generated version metadata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          test "$(git diff --cached --name-only | sort | tr '\n' ' ')" = "package-lock.json package.json "
+          git commit -m "chore(2.0): align npm version metadata"
+          git push origin HEAD:financial-app-rebuild
