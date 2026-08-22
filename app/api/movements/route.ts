@@ -53,6 +53,8 @@ export async function GET(request: NextRequest) {
     p_min_amount: numberParam(q.get("min")),
     p_max_amount: numberParam(q.get("max")),
     p_sort: q.get("sort") || "date_desc",
+    p_merchant: q.get("merchant") || null,
+    p_cash_flow_only: booleanParam(q.get("cashFlow")) === true,
   });
 
   if (error || !data) return NextResponse.json({ ok: false, error: error?.message || "movements_unavailable" }, { status: 400 });
