@@ -6,7 +6,7 @@ const root = process.cwd();
 const engineRoot = path.join(root, "public", "vendor", "document-engine");
 const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(await readFile(path.join(root, "package-lock.json"), "utf8"));
-const appVersion = await readFile(path.join(root, "lib", "app-version.ts"), "utf8");
+const appVersionSource = await readFile(path.join(root, "lib", "app-version.ts"), "utf8");
 const archive = await readFile(path.join(root, "app", "archivo", "archive-client.tsx"), "utf8");
 const pdfLoader = await readFile(path.join(root, "public", "vendor", "pdfjs-loader.mjs"), "utf8");
 const gitignore = await readFile(path.join(root, ".gitignore"), "utf8");
@@ -21,10 +21,20 @@ function lockedVersion(name) {
 async function sha256(file) {
   return createHash("sha256").update(await readFile(file)).digest("hex");
 }
+function parseVersion(value) {
+  const match=String(value).match(/^(\d+)\.(\d+)\.(\d+)$/);
+  return match?match.slice(1).map(Number):null;
+}
+function atLeast19(value) {
+  const v=parseVersion(value);
+  return Boolean(v && (v[0]>1 || (v[0]===1 && v[1]>=9)));
+}
 
-check(packageJson.version === "1.9.0", "package.json no está en 1.9.0");
-check(lockfile.version === "1.9.0" && lockfile.packages?.[""]?.version === "1.9.0", "package-lock no está alineado con 1.9.0");
-check(appVersion.includes('APP_VERSION = "1.9.0"'), "APP_VERSION no está en 1.9.0");
+const appVersionMatch=appVersionSource.match(/APP_VERSION\s*=\s*"(\d+\.\d+\.\d+)"/);
+const canonicalVersion=appVersionMatch?.[1]??null;
+check(atLeast19(packageJson.version), "la garantía documental 1.9 requiere Financial App >= 1.9.0");
+check(lockfile.version === packageJson.version && lockfile.packages?.[""]?.version === packageJson.version, "package-lock no está alineado con package.json");
+check(canonicalVersion === packageJson.version, "APP_VERSION no coincide con package.json");
 
 const expected = {
   "tesseract.js": "7.0.0",
@@ -59,7 +69,7 @@ check(pdfLoader.includes('/vendor/document-engine/pdfjs/pdf.worker.min.mjs'), "w
 check(archive.includes("localProcessing:true"), "se perdió la garantía de OCR local");
 
 check(manifest.formatVersion === 1 && manifest.generatedFromLockfile === true, "manifest del motor documental inválido");
-check(manifest.appVersion === "1.9.0", "manifest generado para otra versión");
+check(manifest.appVersion === packageJson.version, "manifest generado para otra versión");
 for (const name of ["tesseract.js", "tesseract.js-core", "@tesseract.js-data/spa", "pdfjs-dist"]) {
   check(manifest.packages?.[name] === lockedVersion(name), `manifest no coincide con lockfile para ${name}`);
 }
@@ -85,4 +95,4 @@ for (const asset of manifest.assets) {
   check(await sha256(file) === asset.sha256, `hash SHA-256 no coincide en ${asset.path}`);
 }
 
-console.log(`AUDIT 1.9 OK · motor documental first-party · ${manifest.assets.length} assets verificados`);
+console.log(`AUDIT 1.9 OK · garantía documental preservada en ${packageJson.version} · ${manifest.assets.length} assets verificados`);
