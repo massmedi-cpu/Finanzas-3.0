@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { inferDocumentMetadata, normalizeOcrText } from "../lib/document/ticket-ocr";
+import { inferDocumentMetadata, normalizeOcrText, reconstructTsvReceipt } from "../lib/document/ticket-ocr-v305";
 
 const tobacco = inferDocumentMetadata(`
 ESTANCO LOS PRINCIPES
@@ -62,5 +62,21 @@ assert.equal(invoice.amount, 54.37);
 const cleaned = normalizeOcrText("|||\n  ESTANCO   LOS PRINCIPES  \n@@@\nTOTAL 8,50 €");
 assert.ok(cleaned.includes("ESTANCO LOS PRINCIPES"));
 assert.ok(!cleaned.includes("@@@"));
+
+const tsv=[
+  "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext",
+  "5\t1\t1\t1\t1\t1\t100\t20\t80\t25\t91\tMI",
+  "5\t1\t1\t1\t1\t2\t190\t20\t180\t25\t94\tRESTAURANTE",
+  "5\t1\t1\t1\t2\t1\t90\t60\t40\t25\t8\tZZ",
+  "5\t1\t1\t1\t3\t1\t100\t100\t85\t25\t93\tTOTAL:",
+  "5\t1\t1\t1\t3\t2\t260\t100\t50\t25\t90\t44",
+  "5\t1\t1\t1\t3\t3\t325\t100\t40\t25\t89\t60",
+  "5\t1\t1\t1\t3\t4\t380\t100\t55\t25\t95\tEUR",
+].join("\n");
+const structured=reconstructTsvReceipt(tsv);
+assert.ok(structured);
+assert.ok(structured.text.includes("MI RESTAURANTE"));
+assert.ok(structured.text.includes("44,60"));
+assert.ok(!structured.text.includes("ZZ"));
 
 console.log("ticket-ocr-v302-tests OK");
