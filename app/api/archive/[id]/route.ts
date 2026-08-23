@@ -34,12 +34,20 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
   return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
 }
 
-export async function DELETE(request:NextRequest,{params}:{params:Promise<{id:string}>}){
+export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
-  const {id}=await params;const permanent=request.nextUrl.searchParams.get("permanent")==="1";
-  if(!permanent){const {data,error}=await supabase.rpc("financial_app_archive_archive",{p_id:id});if(error||!data)return NextResponse.json({ok:false,error:error?.message||"archive_failed"},{status:400});return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});}
-  const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});if(detail.error||!detail.data)return NextResponse.json({ok:false,error:detail.error?.message||"document_unavailable"},{status:404});
-  if(detail.data.storagePath){const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);if(removed.error)return NextResponse.json({ok:false,error:`storage_delete_failed: ${removed.error.message}`},{status:400});}
-  const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
-  return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
+  const {id}=await params;
+  const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
+  if(detail.error||!detail.data)return NextResponse.json({ok:false,error:detail.error?.message||"document_unavailable"},{status:404});
+
+  const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});
+  if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
+
+  let storageCleanupPending=false;
+  if(detail.data.storagePath){
+    const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);
+    storageCleanupPending=Boolean(removed.error);
+  }
+
+  return NextResponse.json({ok:true,storageCleanupPending},{headers:{"Cache-Control":"private, no-store"}});
 }

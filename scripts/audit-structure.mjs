@@ -1,1 +1,41 @@
-import{existsSync,readFileSync,readdirSync,statSync}from"node:fs";import{join}from"node:path";const required=["app/page.tsx","app/manifest.ts","app/control/page.tsx","app/cuentas/page.tsx","app/movimientos/page.tsx","app/reglas/page.tsx","app/cash-flow/page.tsx","app/presupuesto/page.tsx","app/prevision/page.tsx","app/patrimonio/page.tsx","app/analisis/page.tsx","app/archivo/page.tsx","app/configuracion/page.tsx","app/api/backup/route.ts","app/api/control/route.ts","app/api/movements/route.ts","app/api/rules/route.ts","components/app-chrome.tsx","lib/app-version.ts","lib/auth/authorized-client.ts","lib/financial/home.ts","supabase/functions/financial-app-sync/index.ts","supabase/functions/financial-app-initial-import/index.ts","database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql","database/FINANCIAL_APP_1.7.0_VERSION.sql"];const errors=[];for(const p of required)if(!existsSync(p))errors.push(`Falta ${p}`);if(existsSync("src"))errors.push("Legado no permitido: src");if(existsSync("app/[section]/page.tsx"))errors.push("Catch-all obsoleto app/[section] sigue activo");const pkg=JSON.parse(readFileSync("package.json","utf8"));if(pkg.name!=="financial-app")errors.push("package.json no pertenece a Financial App");if(!existsSync("package-lock.json"))errors.push("Falta package-lock.json reproducible");else{const lock=JSON.parse(readFileSync("package-lock.json","utf8"));if(lock.name!==pkg.name||lock.version!==pkg.version||lock.packages?.[""]?.version!==pkg.version)errors.push("package y lock no coinciden")};const vf=readFileSync("lib/app-version.ts","utf8");const av=vf.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1];if(av!==pkg.version)errors.push(`Runtime ${av} != package ${pkg.version}`);const home=readFileSync("app/page.tsx","utf8");if(!home.includes("getHomeOverview"))errors.push("Inicio no usa home overview unificado");const movementApi=readFileSync("app/api/movements/route.ts","utf8");if(movementApi.split("export async function POST")[0].includes("financial_app_mark_new_seen"))errors.push("GET movimientos escribe estado");const rootLayout=readFileSync("app/layout.tsx","utf8");for(const css of ["movements.css","accounts.css","budget.css","rules.css","analysis.css"])if(rootLayout.includes(css))errors.push(`CSS modular ${css} sigue en root layout`);const init=readFileSync("supabase/functions/financial-app-initial-import/index.ts","utf8");if(!init.includes("410"))errors.push("Initial import debe permanecer deshabilitado");const legacyRoot="supabase/functions";if(existsSync(legacyRoot))for(const name of readdirSync(legacyRoot))if(name.startsWith("finanzas-v3-"))errors.push(`Edge Function heredada en rama actual: ${name}`);function walk(dir){if(!existsSync(dir))return[];return readdirSync(dir).flatMap(n=>{const p=join(dir,n);return statSync(p).isDirectory()?walk(p):[p]})}const active=[...walk("app"),...walk("components"),...walk("lib")].filter(p=>/\.(ts|tsx)$/.test(p));for(const f of active){const t=readFileSync(f,"utf8");if(/finanzas-v3-|Finanzas 3\.0|V3\.0\./i.test(t))errors.push(`Referencia heredada en ${f}`);if(/1\.0\.0-rc\.1|1\.2\.0|1\.4\.0|1\.6\.0/.test(t))errors.push(`Versión activa obsoleta en ${f}`)}if(errors.length){console.error("Financial App structural audit FAILED");errors.forEach(e=>console.error(`- ${e}`));process.exit(1)}console.log(`Financial App structural audit OK · ${required.length} rutas críticas · ${active.length} archivos activos · ${pkg.version}`);
+import{existsSync,readFileSync,readdirSync,statSync}from"node:fs";
+import{join}from"node:path";
+
+const required=["app/page.tsx","app/manifest.ts","app/control/page.tsx","app/cuentas/page.tsx","app/movimientos/page.tsx","app/reglas/page.tsx","app/cash-flow/page.tsx","app/presupuesto/page.tsx","app/prevision/page.tsx","app/patrimonio/page.tsx","app/analisis/page.tsx","app/archivo/page.tsx","app/configuracion/page.tsx","app/api/backup/route.ts","app/api/control/route.ts","app/api/movements/route.ts","app/api/rules/route.ts","components/app-chrome.tsx","lib/app-version.ts","lib/auth/authorized-client.ts","lib/financial/home.ts","supabase/functions/financial-app-sync/index.ts","supabase/functions/financial-app-initial-import/index.ts","database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql","database/FINANCIAL_APP_1.7.0_VERSION.sql"];
+const errors=[];
+for(const p of required)if(!existsSync(p))errors.push(`Falta ${p}`);
+if(existsSync("src"))errors.push("Legado no permitido: src");
+if(existsSync("app/[section]/page.tsx"))errors.push("Catch-all obsoleto app/[section] sigue activo");
+
+const pkg=JSON.parse(readFileSync("package.json","utf8"));
+if(pkg.name!=="financial-app")errors.push("package.json no pertenece a Financial App");
+if(!existsSync("package-lock.json"))errors.push("Falta package-lock.json reproducible");
+else{
+  const lock=JSON.parse(readFileSync("package-lock.json","utf8"));
+  if(lock.name!==pkg.name||lock.version!==pkg.version||lock.packages?.[""]?.version!==pkg.version)errors.push("package y lock no coinciden");
+}
+
+const vf=readFileSync("lib/app-version.ts","utf8");
+const av=vf.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1];
+if(!av||!/^\d+\.\d+\.\d+$/.test(av))errors.push(`APP_VERSION inválida: ${av}`);
+if(av==="3.1.0"){
+  const migration="database/FINANCIAL_APP_3.1.0_ARCHIVE_DIRECT_DELETE.sql";
+  if(!existsSync(migration))errors.push("Falta migración de release 3.1.0");
+  else if(!readFileSync(migration,"utf8").includes("'3.1.0'"))errors.push("La migración 3.1.0 no sincroniza app_meta");
+}
+
+const home=readFileSync("app/page.tsx","utf8");
+if(!home.includes("getHomeOverview"))errors.push("Inicio no usa home overview unificado");
+const movementApi=readFileSync("app/api/movements/route.ts","utf8");
+if(movementApi.split("export async function POST")[0].includes("financial_app_mark_new_seen"))errors.push("GET movimientos escribe estado");
+const rootLayout=readFileSync("app/layout.tsx","utf8");
+for(const css of ["movements.css","accounts.css","budget.css","rules.css","analysis.css"])if(rootLayout.includes(css))errors.push(`CSS modular ${css} sigue en root layout`);
+const init=readFileSync("supabase/functions/financial-app-initial-import/index.ts","utf8");
+if(!init.includes("410"))errors.push("Initial import debe permanecer deshabilitado");
+const legacyRoot="supabase/functions";
+if(existsSync(legacyRoot))for(const name of readdirSync(legacyRoot))if(name.startsWith("finanzas-v3-"))errors.push(`Edge Function heredada en rama actual: ${name}`);
+function walk(dir){if(!existsSync(dir))return[];return readdirSync(dir).flatMap(n=>{const p=join(dir,n);return statSync(p).isDirectory()?walk(p):[p]})}
+const active=[...walk("app"),...walk("components"),...walk("lib")].filter(p=>/\.(ts|tsx)$/.test(p));
+for(const f of active){const t=readFileSync(f,"utf8");if(/finanzas-v3-|Finanzas 3\.0|V3\.0\./i.test(t))errors.push(`Referencia heredada en ${f}`);if(/1\.0\.0-rc\.1|1\.2\.0|1\.4\.0|1\.6\.0/.test(t))errors.push(`Versión activa obsoleta en ${f}`)}
+if(errors.length){console.error("Financial App structural audit FAILED");errors.forEach(e=>console.error(`- ${e}`));process.exit(1)}
+console.log(`Financial App structural audit OK · ${required.length} rutas críticas · ${active.length} archivos activos · app ${av} · package ${pkg.version}`);
