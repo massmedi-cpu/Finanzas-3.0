@@ -1,4 +1,4 @@
-# Financial App 2.5.0
+# Financial App 2.8.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
@@ -54,17 +54,40 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Se preservan las reglas y bloqueos del cierre mensual existente y su trazabilidad.
 - Formato numérico español centralizado: miles con punto y decimales con coma (`1.234.567,89`).
 - Euros, porcentajes, enteros y cifras con signo usan la misma capa de formato.
-- Se eliminan formateadores locales repetidos de las superficies financieras principales.
 - El cambio es de presentación: no modifica importes, fórmulas financieras ni datos de origen.
-- Gates `audit:v250` y `test:format`, además de todos los controles heredados 1.7 → 2.4.
+- Gates `audit:v250` y `test:format`.
+
+## 2.6.0 — reglas seguras y deterministas
+- Reglas con preview obligatorio y sin escritura sobre la fuente bancaria.
+- Prioridad determinista, cuenta/dirección opcionales y protección frente a formularios modificados tras el preview.
+- Overrides manuales y splits conservan precedencia sobre automatismos.
+- Pausar, reactivar y eliminar reglas es reversible y auditado.
+- Tratamiento horario centralizado para Europe/Madrid y pruebas `test:time`.
+- Gate `audit:v260`.
+
+## 2.7.0 — explicabilidad y procedencia
+- Cada clasificación puede identificar su procedencia: fuente, regla, ajuste manual o split.
+- Las sugerencias son conservadoras, no escriben datos automáticamente y exigen preview antes de convertirse en regla.
+- Nueva superficie privada `/explicabilidad` con trazabilidad al dato de origen.
+- Edge/RPC privilegiadas permanecen fail-closed y service-role only.
+- Gates `audit:v270` y `test:explainability`.
+
+## 2.8.0 — Centro de Control e integridad
+- Centro de Control ampliado con snapshot técnico rápido y read-only.
+- Auditoría profunda únicamente bajo acción explícita del usuario.
+- Comprobaciones de checksum de fuente, fingerprint estructural, IDs, cuentas, sincronización, continuidad, calidad y archivo privado.
+- Historial de auditorías persistente protegido por RLS.
+- La auditoría no modifica movimientos, presupuestos ni la fuente bancaria.
+- Gates `audit:v280` y `test:integrity`, acumulados sobre todas las auditorías 1.7 → 2.7.
 
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
 - Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
 - Movimientos editables y trazables, filtros avanzados, splits, documentos y conciliación.
-- Reglas automáticas con preview, prioridad, aplicación histórica y deshacer seguro.
+- Reglas automáticas seguras con preview, prioridad y reversibilidad.
+- Explicabilidad de clasificaciones y sugerencias conservadoras.
 - Presupuesto mensual/anual, previsiones, escenarios, objetivos y patrimonio.
-- Centro de Control y cierre/reapertura mensual.
+- Centro de Control con integridad del sistema y cierre/reapertura mensual.
 - Archivo documental privado con OCR local y asociaciones a movimientos.
 - Configuración, tema y copia portable/restaurable de la capa privada.
 
@@ -89,6 +112,8 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/RELEASE_GATE_V2.2.0.md`
 - `docs/RELEASE_GATE_V2.3.0.md`
 - `docs/RELEASE_GATE_V2.4.0.md`
-- `scripts/audit-v250.mjs`
-- `scripts/number-format-v250-tests.ts`
+- `docs/RELEASE_GATE_V2.5.0.md`
+- `docs/RELEASE_GATE_V2.6.0.md`
+- `docs/RELEASE_GATE_V2.7.0.md`
+- `docs/RELEASE_GATE_V2.8.0.md`
 - `supabase/README.md`
