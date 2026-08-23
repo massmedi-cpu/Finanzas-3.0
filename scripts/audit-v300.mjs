@@ -11,6 +11,8 @@ const cashFlow=read("components/cash-flow-chart.tsx");
 const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
 const netWorth=read("components/net-worth-chart.tsx");
+const archive=read("app/archivo/archive-client.tsx");
+const movements=read("app/movimientos/movements-client.tsx");
 const vercel=read("vercel.json");
 
 const checks=[
@@ -32,7 +34,14 @@ const checks=[
   [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces de navegación deben cerrar el menú móvil antes de iniciar la transición"],
   [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil con especificidad superior a .sidebar nav"],
   [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%'),"el menú móvil sólo debe activarse dentro del breakpoint móvil"],
+  [archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir hacer una foto de ticket con la cámara trasera"],
+  [archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente de la galería"],
+  [archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener la importación de documentos PDF e imágenes"],
+  [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible en el editor"],
+  [movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica de override"],
+  [movements.includes("No indicado")&&movements.includes("Sí, se repite")&&movements.includes("No, es puntual"),"Recurrente debe expresarse en lenguaje claro"],
   [vercel.includes('"develop/v3.0.0-foundation": false'),"la rama 3.0 debe permanecer sin Preview de Vercel"],
+  [vercel.includes('"hotfix/v3.0.1-document-ux": false'),"el hotfix de captura documental debe permanecer sin Preview de Vercel"],
 ];
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
@@ -41,4 +50,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit 3.0 OK · jerarquía, gráficos, temas, shell persistente y navegación única/estable protegidos");
+console.log("Audit 3.0 OK · jerarquía, gráficos, navegación, captura documental y lenguaje de movimientos protegidos");
