@@ -1,0 +1,20 @@
+name: Scan 2.5 Spanish number format
+on:
+  push:
+    branches: [develop/v2.5.0-month-close]
+permissions:
+  contents: read
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Find local number formatters
+        run: |
+          echo '=== Intl.NumberFormat outside canonical formatter ==='
+          matches=$(grep -RIn --include='*.ts' --include='*.tsx' 'Intl.NumberFormat' app components lib | grep -v 'lib/format/es-es.ts' || true)
+          printf '%s\n' "$matches"
+          echo '=== Numeric toLocaleString with fraction options ==='
+          matches2=$(grep -RIn --include='*.ts' --include='*.tsx' 'toLocaleString("es-ES"' app components lib | grep -E 'FractionDigits|maximumFraction|minimumFraction' || true)
+          printf '%s\n' "$matches2"
+          if [ -n "$matches" ] || [ -n "$matches2" ]; then exit 1; fi
