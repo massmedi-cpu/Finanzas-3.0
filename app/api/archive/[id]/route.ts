@@ -8,7 +8,7 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{id:stri
   const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(error||!data)return NextResponse.json({ok:false,error:error?.message||"document_unavailable"},{status:404});
-  let signedUrl:string|null=null;
+  let signedUrl:string|null=data.storageProvider==="google_drive"?(data.storageUrl||null):null;
   if(data.storageProvider==="supabase_storage"&&data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
   return NextResponse.json({ok:true,document:data,signedUrl},{headers:{"Cache-Control":"private, no-store"}});
 }
