@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
-import { estimateDeskewFromSamples, inferDocumentMetadata, normalizeOcrText, reconstructTsvReceipt } from "../lib/document/ticket-ocr-v306";
+import {
+  estimateDeskewFromSamples,
+  inferDocumentMetadata,
+  normalizeOcrText,
+  reconstructTsvReceipt,
+  scoreReceiptCandidate,
+  shouldRefineReceiptCandidates,
+} from "../lib/document/ticket-ocr-v307";
 
 const tobacco = inferDocumentMetadata(`
 ESTANCO LOS PRINCIPES
@@ -27,7 +34,7 @@ assert.equal(restaurant.documentDate, "2026-08-23");
 assert.equal(restaurant.amount, 26.4);
 assert.equal(restaurant.merchant, "RESTAURANTE LA CASA");
 
-const realRestaurant = inferDocumentMetadata(`
+const realRestaurantText = `
 MI RESTAURANTE
 Hora : 2026-07-11 16:41:59
 Mesa : TERRAZA-13
@@ -44,7 +51,8 @@ Base imponible : 40.55
 IVA (10%) : 4.05
 TOTAL: 44.60 EUR
 PENDIENTE
-`, "receipt");
+`;
+const realRestaurant = inferDocumentMetadata(realRestaurantText, "receipt");
 assert.equal(realRestaurant.documentDate, "2026-07-11");
 assert.equal(realRestaurant.amount, 44.6);
 assert.equal(realRestaurant.merchant, "MI RESTAURANTE");
@@ -86,4 +94,28 @@ for(let line=0;line<7;line+=1){for(let x=20;x<=780;x+=8){skewSamples.push({x,y:4
 const estimated=estimateDeskewFromSamples(skewSamples,800,520);
 assert.ok(Math.abs(estimated-skewDegrees)<=0.5,`deskew esperado ≈${skewDegrees}°, obtenido ${estimated}°`);
 
-console.log("ticket-ocr-v302-tests OK · engine 3.0.6");
+// Regresión observada en producción el 23/08/2026: una pasada con 74% produjo
+// texto completo pero ruidoso, mientras otra declaró 95% con salida no útil.
+const noisyProductionPass=`
+MA MI RESTAURANTE
+a Mora : 2026-07-11 16.41.59 A a
+Mesa TERRAZA-13 Y
+Camarero : ADMIN
+DESCRIPCION UNS PRECIO TOTAL
+CATA GRADE 3 280 8.40
+CORTADA 4 1.80 7.20
+COPA DE VINO 1 2.50 2.50 y
+HAMBUERGUESA CLAST 1 7.00 7.00
+HAMBURGUESA ESP CA 1 8.00 8,00 -
+SERRANITO DE POLLO 1 6.00 6.00
+SIN SALSA
+CUBATA 1 5.50 5.50
+Base imponible : 40.55
+IVA (10%) 4.05
+TOTAL: 44.60 EUR
+`;
+assert.ok(scoreReceiptCandidate(noisyProductionPass,74,"receipt")>scoreReceiptCandidate("",95,"receipt"),"una confianza alta sin texto útil no puede ganar");
+assert.ok(scoreReceiptCandidate(realRestaurantText,95,"receipt")>scoreReceiptCandidate(noisyProductionPass,74,"receipt"),"una lectura completa y más fiable debe ganar a la lectura ruidosa");
+assert.equal(shouldRefineReceiptCandidates([{text:noisyProductionPass,confidence:74},{text:"",confidence:95}],"receipt"),true,"si dos pasadas discrepan o una queda vacía debe ejecutarse una tercera lectura");
+
+console.log("ticket-ocr-v302-tests OK · engine 3.0.7 · selección de pasadas protegida");
