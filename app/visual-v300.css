@@ -24,8 +24,8 @@ html[data-theme="dark"]{--chart-income:#58c996;--chart-expense:#ff7b72;--chart-a
 .panel-head{align-items:center}.panel-head h2{letter-spacing:-.015em}
 .home-main-grid,.home-secondary-grid{align-items:start}
 .home-kpis{grid-template-columns:repeat(12,minmax(0,1fr));gap:10px}
-.home-kpis a{grid-column:span 2;min-height:94px;align-content:start;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
-.home-kpis a:nth-child(-n+3){grid-column:span 4;min-height:122px;padding:18px;border-top:3px solid var(--accent)}
+.home-kpis a{grid-column:span 4;min-height:94px;align-content:start;transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease}
+.home-kpis a:nth-child(-n+3){min-height:122px;padding:18px;border-top:3px solid var(--accent)}
 .home-kpis a:nth-child(1){border-top-color:var(--chart-income)}
 .home-kpis a:nth-child(2){border-top-color:var(--chart-expense)}
 .home-kpis a:nth-child(3){border-top-color:var(--chart-accent)}
@@ -50,5 +50,4 @@ html[data-theme="dark"]{--chart-income:#58c996;--chart-expense:#ff7b72;--chart-a
 .route-loading-v300 .loading-panel{height:250px;grid-column:1/-1}
 @keyframes v300-shimmer{0%{background-position:100% 0}100%{background-position:-100% 0}}
 @media(prefers-reduced-motion:reduce){.route-loading-v300 .loading-head b,.route-loading-v300 .loading-block{animation:none}}
-@media(max-width:1320px){.home-kpis a{grid-column:span 4}.home-kpis a:nth-child(-n+3){grid-column:span 4}}
 @media(max-width:760px){.home-kpis{grid-template-columns:1fr}.home-kpis a,.home-kpis a:nth-child(-n+3){grid-column:auto;min-height:0}.route-loading-v300{padding:24px 16px 104px}.route-loading-v300 .loading-grid{grid-template-columns:1fr}.home-chart-panel{min-height:0}}
