@@ -27,6 +27,7 @@
       "hotfix/v3.0.1-document-ux": false,
       "hotfix/v3.0.2-ticket-ocr": false,
       "hotfix/v3.0.3-tablet-archive": false,
+      "hotfix/v3.0.4-archive-ocr-ux": false,
       "noop-check": false,
       "noop-check-2": false
     }
