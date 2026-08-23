@@ -15,7 +15,6 @@ type EditState = {
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
 
-
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
 const noValues = new Set(["no","false","0"]);
@@ -188,7 +187,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
           <label><span>Subcategoría</span><select value={filters.subcategory} onChange={e=>setFilters({...filters,subcategory:e.target.value})}><option value="">Todas</option>{pageData.facets.subcategories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>Comercio / contraparte</span><input list="movement-merchants" value={filters.merchant} onChange={e=>setFilters({...filters,merchant:e.target.value})} placeholder="Todos"/><datalist id="movement-merchants">{pageData.facets.merchants.map(value=><option key={value} value={value}/>)}</datalist></label>
           <label><span>Canal</span><select value={filters.channel} onChange={e=>setFilters({...filters,channel:e.target.value})}><option value="">Todos</option>{pageData.facets.channels.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
-          <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}/>)}</select></label>
+          <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>Recurrente</span><select value={filters.recurring} onChange={e=>setFilters({...filters,recurring:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Sí</option><option value="0">No</option></select></label>
           <label><span>Duplicado</span><select value={filters.duplicate} onChange={e=>setFilters({...filters,duplicate:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Solo duplicados</option><option value="0">Excluir duplicados</option></select></label>
           <label><span>Entre cuentas</span><select value={filters.internalTransfer} onChange={e=>setFilters({...filters,internalTransfer:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Solo traspasos</option><option value="0">Excluir traspasos</option></select></label>
