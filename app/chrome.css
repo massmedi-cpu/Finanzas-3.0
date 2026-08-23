@@ -4,9 +4,6 @@ html{scrollbar-gutter:stable}
 .app-root.private>.app-route{grid-column:2;min-width:0}
 .app-root.private>.app-route>.app-shell{display:block;min-height:100vh}
 .app-root.private>.app-route>.app-shell>.sidebar{display:none!important}
-
-/* Only one navigation variant may be visible at a time. The qualified
-   selector deliberately outranks the legacy `.sidebar nav{display:flex}`. */
 .app-root.private>.sidebar nav.mobile-nav{display:none!important}
 .mobile-more-menu{display:none}
 .desktop-nav{display:flex}
@@ -14,8 +11,6 @@ html{scrollbar-gutter:stable}
 :where(a,button){touch-action:manipulation}
 a[data-nav-pending="true"]{opacity:.62;cursor:progress;pointer-events:none}
 
-/* Tablet is a first-class layout: no hamburger and no compressed 82px rail.
-   The full navigation stays visible in a horizontal, scrollable top bar. */
 @media(max-width:1180px) and (min-width:681px){
   .app-root.private{display:block;min-width:0}
   .app-root.private>.sidebar{position:sticky;z-index:60;top:0;width:100%;height:auto;min-height:64px;padding:8px 12px;border-right:0;border-bottom:1px solid var(--border);background:var(--surface);display:flex;flex-direction:row;align-items:center;gap:10px;overflow:visible}
@@ -35,7 +30,7 @@ a[data-nav-pending="true"]{opacity:.62;cursor:progress;pointer-events:none}
   .app-root.private{display:block}
   .desktop-nav{display:none!important}
   .app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%;flex-direction:row!important;gap:2px!important;overflow:visible!important;padding:0 4px!important}
-  .mobile-nav>a,.mobile-nav>button{display:grid;place-items:center;flex:1 1 0;min-width:0!important;min-height:52px;border:0;background:transparent;color:var(--muted);padding:5px 3px!important;font:inherit;font-size:11px!important;font-weight:700;line-height:1.1;text-decoration:none;text-align:center;border-radius:8px}
+  .mobile-nav>a,.mobile-nav>button{display:grid;place-items:center;flex:1 1 0;min-width:0!important;min-height:52px;border:0;background:transparent;color:var(--muted);padding:5px 3px!important;font:inherit;font-size:13px!important;font-weight:700;line-height:1.2;text-decoration:none;text-align:center;border-radius:8px}
   .mobile-nav>a.active,.mobile-nav>button.active{color:var(--text);box-shadow:inset 0 -3px var(--accent);background:var(--surface-2)}
   .mobile-more-menu{display:grid;position:fixed;z-index:70;left:10px;right:10px;bottom:82px;max-height:min(62vh,520px);overflow:auto;padding:12px;border:1px solid var(--border);border-radius:18px;background:var(--surface);box-shadow:0 18px 50px rgba(0,0,0,.28)}
   .mobile-more-menu>a{min-height:44px;display:flex;align-items:center;padding:9px 12px;border-radius:9px;color:var(--text);text-decoration:none;font-weight:700}
