@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { resolveClassificationOrigin } from "../lib/financial/classification-origin";
-import { suggestionRulePayload,type ExplainabilitySuggestion } from "../lib/financial/explainability";
+import { suggestionRulePayload,type ExplainabilitySuggestion } from "../lib/financial/explainability-shared";
 
 const base={splitCount:0,categoryOverride:null,subcategoryOverride:null,counterpartyOverride:null,ruleControlsCategory:false,ruleControlsSubcategory:false};
 assert.equal(resolveClassificationOrigin(base).origin,"source");
