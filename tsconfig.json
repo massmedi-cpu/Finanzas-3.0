@@ -15,7 +15,7 @@
     "incremental": true,
     "plugins": [{ "name": "next" }],
     "paths": {
-      "@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-v306"],
+      "@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-v307"],
       "@/*": ["./*"]
     }
   },
