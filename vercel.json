@@ -25,6 +25,7 @@
       "hotfix/v3.0.1-navigation-stability": false,
       "hotfix/v3.0.1-sidebar-duplication": false,
       "hotfix/v3.0.1-document-ux": false,
+      "hotfix/v3.0.2-ticket-ocr": false,
       "noop-check": false,
       "noop-check-2": false
     }

@@ -20,6 +20,7 @@ const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_
   ? readFileSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql", "utf8")
   : "";
 const archive = readFileSync("app/archivo/archive-client.tsx", "utf8");
+const ticketOcr = existsSync("lib/document/ticket-ocr.ts") ? readFileSync("lib/document/ticket-ocr.ts", "utf8") : "";
 const vercel = readFileSync("vercel.json", "utf8");
 const version = readFileSync("lib/app-version.ts", "utf8");
 
@@ -39,7 +40,9 @@ if (!preserve.includes("delete from financial_app.transaction_splits s\n  using 
 if (!preserve.includes("delete from financial_app.transaction_documents td\n  using financial_app.transactions t")) errors.push("El hotfix no protege vínculos de documentos posteriores");
 if (!preserve.includes("Una conciliación que toca un movimiento posterior se conserva")) errors.push("Falta protección de conciliaciones posteriores");
 if (!preserve.includes("Un documento posterior vinculado a un movimiento posterior permanece activo")) errors.push("Falta protección de documentos posteriores");
-if (!archive.includes("worker.recognize(file)")) errors.push("OCR dejó de procesarse en el navegador");
+const legacyBrowserOcr = archive.includes("worker.recognize(file)");
+const enhancedBrowserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && ticketOcr.includes("worker.recognize(input)");
+if (!legacyBrowserOcr && !enhancedBrowserOcr) errors.push("OCR dejó de procesarse en el navegador");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
 
@@ -53,4 +56,4 @@ if (errors.length) {
   errors.forEach((error) => console.error(`- ${error}`));
   process.exit(1);
 }
-console.log("Financial App 1.8 audit OK · garantías de recuperación preservadas en versión >=1.8.0");
+console.log("Financial App 1.8 audit OK · garantías de recuperación y OCR local preservadas en versión >=1.8.0");

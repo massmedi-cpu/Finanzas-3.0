@@ -17,6 +17,7 @@ on:
       - 'develop/v2.8.1-chart-hotfix'
       - 'develop/v3.0.0-foundation'
       - 'hotfix/v3.0.1-sync'
+      - 'hotfix/v3.0.2-ticket-ocr'
       - 'release/**'
 permissions:
   contents: read
@@ -88,6 +89,10 @@ jobs:
         run: npm run audit:v300
       - name: Source sync regression audit
         run: npm run audit:sync
+      - name: Ticket OCR pipeline audit
+        run: npm run audit:ocr
+      - name: Ticket OCR metadata tests
+        run: npm run test:ocr
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
