@@ -81,7 +81,7 @@ const checks=[
   [forecast.includes("El historial propone")&&forecast.includes("Tú confirmas")&&forecast.includes("Solo lo confirmado modifica el saldo")&&!forecast.includes("const horizons="),"la filosofía de previsión debe ser historial -> confirmación -> saldo"],
   [forecast.includes("suggestionTotals")&&forecast.includes("scenarioNet")&&forecast.includes("posible")&&forecast.includes("monthSuggestions"),"las tarjetas de 12 meses deben enseñar un escenario posible sin contaminar el saldo confirmado"],
   [forecastMigration.includes("p_start-730")&&forecastMigration.includes("generate_series(1,24)")&&forecastMigration.includes("historical_pattern_v2"),"el motor debe analizar hasta 730 días y proyectar sugerencias durante todo el horizonte"],
-  [forecastMigration.includes("Ingresos laborales")&&forecastMigration.includes("newer.last_date>c.last_date"),"un nuevo pagador laboral debe invalidar sugerencias del pagador anterior"],
+  [forecastMigration.includes("ingresos laborales")&&forecastMigration.includes("newer.last_date>c.last_date"),"un nuevo pagador laboral debe invalidar sugerencias del pagador anterior"],
   [forecast.includes("monthEvents")&&forecast.includes("selectedMonth")&&forecast.includes("monthOptions"),"la vista principal debe filtrar confirmados y sugerencias por el mes seleccionado"],
   [forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{")&&forecastCss.includes(".forecast-philosophy{"),"la previsión mensual debe tener jerarquía visual propia"],
   [movementsCss.includes('.detail-loading{position:fixed')&&tablet.includes('.detail-loading{position:static!important'),"el estado de carga heredado puede ser fijo en escritorio pero debe neutralizarse en tablet"],
