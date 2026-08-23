@@ -1,44 +1,60 @@
-# Release Gate — V3.0.0
+# Release gate — Financial App 3.0.0
 
-V3.0.0 solo puede considerarse liberada cuando todos los puntos siguientes estén validados sobre el mismo HEAD.
+Estado: CANDIDATA DE RELEASE sobre Financial App 2.8.1.
 
-## 1. Integridad financiera
-- 3.135 movimientos normalizados frente al snapshot actual o igualdad con el conteo vigente si la fuente cambia legítimamente.
-- Checksum snapshot/normalizado idéntico.
-- Sin diferencias financieras respecto al motor validado para ingresos, gastos, neto y traspasos excluidos.
-- Splits, overrides y reglas mantienen precedencia `split > manual > regla > fuente`.
+Este documento sustituye como especificación activa al antiguo gate 3.0 de la arquitectura previa. Ningún requisito obsoleto de aquella rama puede forzar regresiones sobre la arquitectura actual.
 
-## 2. Seguridad
-- `finanzas-v3-data`, `finanzas-v3-recurring` y `finanzas-v3-splits` están ACTIVE con autorización fail-closed.
-- CI prohíbe el patrón `response.status !== 401 && response.status !== 403` en esas funciones.
-- Tablas privadas mantienen RLS deny-by-default.
-- No se expone service role en cliente/repositorio.
-- Advisories de Supabase: ningún WARN nuevo atribuible a Finanzas 3.0 sin resolver.
+## Objetivo
 
-## 3. Recuperación
-- Exportación privada no contiene snapshot bancario.
-- Preview exige esquema/checksum/referencias compatibles.
-- Restore exige confirmación explícita y es atómico.
-- La prueba round-trip V2.9 permanece verde.
+Consolidar Financial App como producto profesional sin duplicar motores financieros ni introducir nuevas fuentes de verdad. 3.0.0 mejora jerarquía, consistencia visual, gráficos, navegación percibida y carga, preservando íntegramente la lógica financiera validada.
 
-## 4. Rendimiento y arquitectura
-- Superficies protegidas no usan `loadValidatedSource`.
-- Movimientos conserva paginación/cursor.
-- Analítica principal se sirve mediante RPC agregados.
-- Índice FK de eventos de reglas aplicado.
+## Sistema visual y dashboard
 
-## 5. CI
-Debe pasar en verde: invariantes, regresión financiera, horizonte largo, cierre mensual, reglas, explicabilidad, auditoría, backup/restore, seguridad V3, TypeScript, build de producción y smoke del servidor compilado.
+- [x] Capa visual común `app/visual-v300.css` cargada al final de las hojas globales.
+- [x] Tokens comunes para ingresos, gastos, serie principal, comparación, grid y relleno auxiliar.
+- [x] Temas claro y oscuro definidos explícitamente.
+- [x] Inicio usa una jerarquía 3+3 a ancho completo: métricas financieras principales primero y estados operativos después.
+- [x] Tarjetas y paneles conservan responsive real y no introducen datos duplicados.
 
-## 6. Vercel
-- Un único preview del HEAD final V3.0.0.
-- Deployment READY.
-- `/api/health` devuelve `3.0.0`.
-- Sin errores/fatales de runtime durante la validación.
-- Solo después del preview se permite promoción a `main` y producción.
+## Gráficos
 
-## 7. Producción
-- Deployment de producción corresponde al SHA fusionado de V3.0.0.
-- `/api/health` 200 y versión `3.0.0`.
-- Login, Inicio, Movimientos, Plan, Previsión, Control y Copias cargan sin error.
-- Rollback/checkpoint conservado.
+- [x] Cash Flow conserva barras de ingresos/gastos y acumulado como línea sin relleno.
+- [x] Cash Flow conserva doble escala/eje independiente de 2.8.1.
+- [x] Análisis usa la semántica visual común para gasto actual/anterior y neto.
+- [x] Histórico de saldo usa la semántica común para línea, área auxiliar y puntos.
+- [x] Patrimonio usa la semántica común para línea, área, puntos y grid.
+- [x] Las reglas de presentación no modifican cálculos, importes ni origen de datos.
+
+## Navegación y carga
+
+- [x] `AppChrome` mantiene el sidebar fuera de la ruta cambiante.
+- [x] `app/loading.tsx` ya no sustituye la interfaz por una pantalla global de estado.
+- [x] La carga se representa mediante skeleton local dentro de la ruta.
+- [x] El skeleton tiene estado accesible y respeta `prefers-reduced-motion`.
+
+## Seguridad, datos y compatibilidad
+
+- [x] Fuente bancaria externa sigue siendo exclusivamente read-only.
+- [x] Sin cambios en reglas de Cash Flow, presupuesto, previsión, objetivos, patrimonio, reglas, cierres o recuperación.
+- [x] Sin nuevas dependencias de producción para la capa visual.
+- [x] Rama `develop/v3.0.0-foundation` con Preview Vercel deshabilitado.
+- [x] `audit:v300` protege la base 3.0 y la corrección 2.8.1.
+
+## Gate final obligatorio
+
+- [x] `package.json` = 3.0.0.
+- [ ] `package-lock.json` raíz = 3.0.0.
+- [x] `lib/app-version.ts` = 3.0.0.
+- [x] README alineado con 3.0.0.
+- [ ] CI final del HEAD exacto completamente verde.
+- [ ] Seguridad de dependencias verde.
+- [ ] Auditorías 1.7 → 2.8.1 + `audit:v300` verdes.
+- [ ] Pruebas de analítica, inteligencia, horizonte, formato, Europe/Madrid, explicabilidad, integridad y backup verdes.
+- [ ] Accesibilidad y TypeScript verdes.
+- [ ] Build de producción reproducible verde.
+- [ ] PR mergeable y promocionada a `main` sólo después del gate anterior.
+- [ ] Un único despliegue final de producción READY sin `aliasError`.
+- [ ] `https://financialapp-home.vercel.app` responde HTTP 200 y muestra 3.0.0.
+- [ ] Sin errores runtime posteriores al despliegue.
+
+No se realizarán previews de desarrollo ni se modificará `main` antes de que el HEAD candidato supere todos los controles.

@@ -1,4 +1,4 @@
-# Financial App 2.8.1
+# Financial App 3.0.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
@@ -88,6 +88,17 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Se conserva tooltip, alternancia de series, tabla accesible y drill-down a Movimientos.
 - Gate `audit:v281` evita volver a publicar el gráfico sin sus estilos o con área rellena.
 
+## 3.0.0 — consolidación profesional del producto
+- Base visual común `visual-v300.css` para semántica financiera, radios, jerarquía y gráficos.
+- Paleta de gráficos estable y explícita para modo claro/oscuro: ingresos, gastos, serie principal, comparación y grid.
+- Inicio adopta jerarquía ejecutiva: ingresos, gastos y Cash Flow tienen prioridad visual; revisión, conciliación y alertas quedan en una segunda fila operativa sin duplicar datos.
+- Cash Flow, Análisis, histórico de saldo y Patrimonio reutilizan la misma semántica visual sin cambiar sus motores de cálculo.
+- La corrección 2.8.1 de Cash Flow queda protegida: barras para ingresos/gastos, acumulado como línea y doble eje independiente.
+- El shell privado permanece visible durante cambios de sección; la carga global se sustituye por skeleton local y accesible.
+- Los skeletons respetan `prefers-reduced-motion`.
+- La versión no introduce nuevas fuentes de verdad ni nuevas fórmulas financieras: consolida presentación, lectura y navegación sobre los motores canónicos existentes.
+- Gate permanente `audit:v300` protege sistema visual, jerarquía de Inicio, gráficos, temas, shell persistente, carga local y bloqueo de Preview de desarrollo.
+
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
 - Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
@@ -125,4 +136,5 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/RELEASE_GATE_V2.7.0.md`
 - `docs/RELEASE_GATE_V2.8.0.md`
 - `docs/RELEASE_GATE_V2.8.1.md`
+- `docs/RELEASE_GATE_V3.0.0.md`
 - `supabase/README.md`
