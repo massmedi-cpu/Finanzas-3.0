@@ -15,6 +15,7 @@ on:
       - 'develop/v2.7.0-explainability-rebuild'
       - 'develop/v2.8.0-integrity-rebuild'
       - 'develop/v2.8.1-chart-hotfix'
+      - 'develop/v3.0.0-foundation'
       - 'release/**'
 permissions:
   contents: read
@@ -82,6 +83,8 @@ jobs:
         run: npm run test:integrity
       - name: Cash Flow chart 2.8.1 audit
         run: npm run audit:v281
+      - name: Visual foundation 3.0 audit
+        run: npm run audit:v300
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
