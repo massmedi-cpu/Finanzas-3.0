@@ -26,10 +26,12 @@
     "audit:v220": "node scripts/audit-v220.mjs",
     "audit:v230": "node scripts/audit-v230.mjs",
     "audit:v240": "node scripts/audit-v240.mjs",
+    "audit:v250": "node scripts/audit-v250.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
     "test:analytics": "tsx scripts/analytics-v220-tests.ts",
     "test:intelligence": "tsx scripts/intelligence-v230-tests.ts",
-    "test:horizon": "tsx scripts/long-horizon-v240-tests.ts"
+    "test:horizon": "tsx scripts/long-horizon-v240-tests.ts",
+    "test:format": "tsx scripts/number-format-v250-tests.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
