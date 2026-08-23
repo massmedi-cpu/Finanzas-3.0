@@ -41,6 +41,8 @@ jobs:
         run: npm ls --depth=0
       - name: Dependency security audit
         run: npm audit --omit=dev --audit-level=high
+      - name: Canonical current architecture audit
+        run: npm run audit:current
       - name: Structural Axioma audit
         run: npm run audit:structure
       - name: Architecture 1.7 regression audit
