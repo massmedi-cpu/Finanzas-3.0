@@ -1,0 +1,27 @@
+name: Apply Archive 3.0.4 patch
+on:
+  push:
+    branches:
+      - hotfix/v3.0.4-archive-ocr-ux
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: hotfix/v3.0.4-archive-ocr-ux
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node scripts/apply-archive-v304.mjs
+      - name: Commit patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/archivo/archive-client.tsx app/api/archive/route.ts 'app/api/archive/[id]/route.ts' app/archive.css lib/document/ticket-ocr.ts scripts/ticket-ocr-v302-tests.ts scripts/audit-ticket-ocr-v302.mjs
+          git diff --cached --quiet && exit 0
+          git commit -m "fix(archive): improve ticket OCR and archive management"
+          git push origin HEAD:hotfix/v3.0.4-archive-ocr-ux
