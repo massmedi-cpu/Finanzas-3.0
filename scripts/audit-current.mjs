@@ -29,7 +29,7 @@ const sharedControlSelectors=new Set([
 function splitSelectorList(prelude){
   const selectors=[];let current="",round=0,square=0;
   for(const char of prelude){
-    if(char==="(" )round++;else if(char===")")round=Math.max(0,round-1);
+    if(char==="(")round++;else if(char===")")round=Math.max(0,round-1);
     else if(char==="[")square++;else if(char==="]")square=Math.max(0,square-1);
     if(char===","&&round===0&&square===0){if(current.trim())selectors.push(current.trim());current="";continue;}
     current+=char;
@@ -88,7 +88,7 @@ must(!fs.existsSync("lib/document/ticket-ocr-v305.ts"),"Permanece el motor OCR v
 const tsconfig=read("tsconfig.json");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"El OCR público no apunta al motor canónico");
 const appVersion=read("lib/app-version.ts");
-must(appVersion.includes('APP_VERSION = "3.2.0"'),"La versión de producto no es 3.2.0");
+must(appVersion.includes('APP_VERSION = "3.2.1"'),"La versión de producto no es 3.2.1");
 
 const vercel=read("vercel.json");
 for(const pattern of ["audit/**","chore/**","develop/**","feat/**","fix/**","hotfix/**","release/**"])
