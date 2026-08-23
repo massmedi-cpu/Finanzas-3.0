@@ -3,6 +3,8 @@ import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 import "./home.css";
 import "./home-v17.css";
+import "./cash-flow.css";
+import "./cash-flow-advanced.css";
 import "./system-state.css";
 import "./chrome.css";
 import "./readability-v210.css";

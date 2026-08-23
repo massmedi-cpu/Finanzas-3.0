@@ -1,4 +1,4 @@
-# Financial App 2.8.0
+# Financial App 2.8.1
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
 
@@ -80,6 +80,14 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - La auditoría no modifica movimientos, presupuestos ni la fuente bancaria.
 - Gates `audit:v280` y `test:integrity`, acumulados sobre todas las auditorías 1.7 → 2.7.
 
+## 2.8.1 — hotfix visual de Cash Flow
+- `CashFlowChart` carga siempre sus estilos tanto en Inicio como en la sección Cash Flow.
+- Ingresos y gastos se representan como barras con contraste válido en claro y oscuro.
+- El acumulado se representa exclusivamente como línea sin relleno y con escala/eje derecho independiente.
+- Se añaden grid, títulos y referencias de ambos ejes sin modificar los datos ni las fórmulas financieras.
+- Se conserva tooltip, alternancia de series, tabla accesible y drill-down a Movimientos.
+- Gate `audit:v281` evita volver a publicar el gráfico sin sus estilos o con área rellena.
+
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
 - Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
@@ -116,4 +124,5 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/RELEASE_GATE_V2.6.0.md`
 - `docs/RELEASE_GATE_V2.7.0.md`
 - `docs/RELEASE_GATE_V2.8.0.md`
+- `docs/RELEASE_GATE_V2.8.1.md`
 - `supabase/README.md`
