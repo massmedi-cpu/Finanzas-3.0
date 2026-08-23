@@ -20,7 +20,8 @@
       "develop/v2.8.1-chart-hotfix": false,
       "develop/v2.9.0-portability": false,
       "develop/v3.0.0-foundation": false,
-      "develop/v3.0.0-release": false
+      "develop/v3.0.0-release": false,
+      "hotfix/v3.0.1-sync": false
     }
   }
 }
