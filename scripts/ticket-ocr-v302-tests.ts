@@ -8,6 +8,7 @@ import {
   shouldRefineReceiptCandidates,
 } from "../lib/document/ticket-ocr-v307";
 import { mergeReceiptTexts } from "../lib/document/ticket-ocr-engine";
+import { parseReceiptLayout } from "../lib/document/receipt-layout";
 
 const tobacco = inferDocumentMetadata(`
 ESTANCO LOS PRINCIPES
@@ -57,6 +58,11 @@ const realRestaurant = inferDocumentMetadata(realRestaurantText, "receipt");
 assert.equal(realRestaurant.documentDate, "2026-07-11");
 assert.equal(realRestaurant.amount, 44.6);
 assert.equal(realRestaurant.merchant, "MI RESTAURANTE");
+const receiptTable=parseReceiptLayout(realRestaurantText);
+assert.equal(receiptTable.items.length,7,"el ticket real debe producir siete líneas de producto");
+assert.deepEqual(receiptTable.items[0],{description:"CAÑA GRANDE",quantity:"3",unitPrice:"2,80",total:"8,40"});
+assert.deepEqual(receiptTable.items[2],{description:"COPA DE VINO",quantity:"1",unitPrice:"2,50",total:"2,50"});
+assert.ok(receiptTable.summary.some(line=>line.label.toLowerCase().startsWith("total")&&line.value.includes("44.60")),"el total debe separarse de las líneas de producto");
 
 const invoice = inferDocumentMetadata(`
 ENERGIA EJEMPLO S.L.
@@ -117,7 +123,6 @@ assert.ok(scoreReceiptCandidate(noisyProductionPass,74,"receipt")>scoreReceiptCa
 assert.ok(scoreReceiptCandidate(realRestaurantText,95,"receipt")>scoreReceiptCandidate(noisyProductionPass,74,"receipt"),"una lectura completa y más fiable debe ganar a la lectura ruidosa");
 assert.equal(shouldRefineReceiptCandidates([{text:noisyProductionPass,confidence:74},{text:"",confidence:95}],"receipt"),true,"si dos pasadas discrepan o una queda vacía debe ejecutarse una tercera lectura");
 
-// Regresión exacta observada tras el reprocesado v3.0.7 del ticket real.
 const v307ProductionText=`
 MI RESTAURANTE
 Hora : 2026-07-11 16.41.59
@@ -164,5 +169,7 @@ const consensusMeta=inferDocumentMetadata(consensus,"receipt");
 assert.equal(consensusMeta.documentDate,"2026-07-11");
 assert.equal(consensusMeta.amount,44.6);
 assert.equal(consensusMeta.merchant,"MI RESTAURANTE");
+const consensusTable=parseReceiptLayout(consensus);
+assert.ok(consensusTable.items.some(item=>item.description==="HAMBURGUESA CLASI"&&item.unitPrice==="7,00"&&item.total==="7,00"),"el consenso correcto debe quedar tabulado sin perder columnas");
 
-console.log("ticket-ocr-v302-tests OK · OCR automático por consenso · regresiones reales protegidas");
+console.log("ticket-ocr-v302-tests OK · OCR automático · regresiones reales · columnas del ticket protegidas");
