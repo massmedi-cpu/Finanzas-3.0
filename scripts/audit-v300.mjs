@@ -49,6 +49,9 @@ const checks=[
   [visual.includes("prefers-reduced-motion:reduce")&&visual.includes("v300-shimmer"),"el skeleton debe respetar movimiento reducido"],
   [chrome.includes('<AppSidebar/><div className="app-route">{children}</div>'),"el shell persistente debe conservar sidebar y ruta separada"],
   [chromeCss.includes("html{scrollbar-gutter:stable}"),"la navegación debe reservar el gutter del scrollbar"],
+  [chromeCss.includes("@media(min-width:1181px)")&&chromeCss.includes("height:100dvh;max-height:100dvh;overflow:hidden")&&chromeCss.includes("nav.desktop-nav{flex:1 1 auto;min-height:0;overflow-y:auto"),"en escritorio el menú lateral debe caber en el viewport y tener scroll vertical propio"],
+  [chromeCss.includes("overscroll-behavior-y:contain")&&chromeCss.includes("scrollbar-width:thin")&&chromeCss.includes("::-webkit-scrollbar-thumb"),"el scroll del menú lateral debe ser visible y no arrastrar la página"],
+  [sidebar.includes("desktopNavRef")&&sidebar.includes("scrollIntoView({block:\"nearest\",inline:\"nearest\"})"),"la opción activa debe mantenerse visible al navegar por un menú con scroll"],
   [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces deben cerrar el menú móvil antes de iniciar transición"],
   [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil"],
   [chromeCss.includes('@media(max-width:1180px) and (min-width:681px)')&&chromeCss.includes('nav.desktop-nav{display:flex!important;flex:1 1 auto')&&chromeCss.includes('overflow-x:auto'),"tablet debe usar navegación horizontal completa sin hamburguesa"],
@@ -86,4 +89,4 @@ const checks=[
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
 if(failures.length){console.error("Audit 3.0 FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Audit 3.0 OK · visual consolidada, navegación táctil, biblioteca única, ticket tabulado y previsión mensual protegidos");
+console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket tabulado y previsión mensual protegidos");
