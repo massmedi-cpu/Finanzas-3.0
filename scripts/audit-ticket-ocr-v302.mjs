@@ -42,12 +42,14 @@ must(css.includes(".receipt-table{")&&css.includes(".receipt-table-wrap{"),"Las 
 must(archiveLib.includes("p_include_archived:true"),"Archivo debe cargar una única biblioteca con todos los documentos existentes");
 must(!client.includes("Mover a Archivados")&&!client.includes("Restaurar a Activos")&&!client.includes("archive-view-switch"),"La interfaz no debe separar Activos y Archivados");
 must(client.includes("Biblioteca única")&&client.includes("Eliminar documento"),"Archivo debe comunicar la biblioteca única y ofrecer eliminación directa");
-must(!archiveApi.includes("archive_before_delete"),"La eliminación directa no debe obligar a archivar antes");
-must(appVersion.includes('APP_VERSION = "3.0.5"'),"La versión visible debe seguir sincronizada con package/lockfile durante este refactor");
+must(!archiveApi.includes("archive_before_delete")&&!archiveApi.includes('request.nextUrl.searchParams.get("permanent")'),"La eliminación directa no debe depender de archivado ni de un modo permanente");
+must(archiveApi.indexOf('financial_app_archive_delete')<archiveApi.indexOf('.storage.from("financial-app-documents").remove'),"La fila debe borrarse antes del cleanup de Storage para evitar documentos fantasma");
+must(archiveApi.includes("storageCleanupPending"),"Un fallo de limpieza física no debe resucitar la ficha documental");
+must(appVersion.includes('APP_VERSION = "3.1.0"'),"La versión visible de esta entrega debe ser 3.1.0");
 must(manifest.includes("APP_VERSION")&&manifest.includes("versión ${APP_VERSION}"),"El manifiesto instalado debe derivar de la versión activa");
 must(proxy.includes("webmanifest"),"El manifest PWA debe quedar fuera del proxy de autenticación");
 must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar la versión del código en ejecución");
 must(css.includes("width:min(920px"),"La revisión de documentos debe conservar ancho usable en escritorio");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
 
-console.log("audit-ticket-ocr-v302 OK · OCR automático · ticket tabulado · biblioteca única");
+console.log("audit-ticket-ocr-v302 OK · OCR automático · ticket tabulado · borrado directo · versión 3.1.0");
