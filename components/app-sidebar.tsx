@@ -6,7 +6,7 @@ import { useEffect,useState } from "react";
 import { IntentLink } from "@/components/intent-link";
 
 const sections = [
-  ["Inicio", "/"],["Plan", "/plan"],["Control", "/control"],["Cuentas", "/cuentas"],["Movimientos", "/movimientos"],["Reglas", "/reglas"],["Cash Flow", "/cash-flow"],["Presupuesto", "/presupuesto"],["Objetivos", "/objetivos"],["Previsión", "/prevision"],["Patrimonio", "/patrimonio"],["Análisis", "/analisis"],["Archivo", "/archivo"],["Configuración", "/configuracion"],
+  ["Inicio", "/"],["Plan", "/plan"],["Control", "/control"],["Cuentas", "/cuentas"],["Movimientos", "/movimientos"],["Reglas", "/reglas"],["Explicabilidad", "/explicabilidad"],["Cash Flow", "/cash-flow"],["Presupuesto", "/presupuesto"],["Objetivos", "/objetivos"],["Previsión", "/prevision"],["Patrimonio", "/patrimonio"],["Análisis", "/analisis"],["Archivo", "/archivo"],["Configuración", "/configuracion"],
 ] as const;
 const mobilePrimary = [["Inicio","/"],["Plan","/plan"],["Movimientos","/movimientos"],["Control","/control"]] as const;
 const mobileMore = sections.filter(([,href])=>!mobilePrimary.some(([,primaryHref])=>primaryHref===href));
