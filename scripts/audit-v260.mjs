@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join, relative } from "node:path";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 
 const ROOTS=["app","components","lib","database","scripts",".github"];
 const EXT=/\.(?:ts|tsx|js|mjs|cjs|sql|json|ya?ml)$/i;
@@ -21,6 +22,11 @@ function lineNumber(text,index){return text.slice(0,index).split(/\r?\n/).length
 function addMatch(bucket,path,text,regex,label){
   for(const match of text.matchAll(regex))bucket.push(`${path}:${lineNumber(text,match.index??0)} · ${label}`);
 }
+function requireTokens(path,tokens){
+  if(!existsSync(path)){errors.push(`${path}:1 · archivo crítico ausente`);return;}
+  const text=readFileSync(path,"utf8");
+  for(const token of tokens)if(!text.includes(token))errors.push(`${path}:1 · falta garantía ${token}`);
+}
 
 const files=ROOTS.flatMap(root=>walk(root)).filter(path=>EXT.test(path));
 for(const path of files){
@@ -39,9 +45,7 @@ for(const path of files){
     addMatch(errors,path,text,/catch\s*(?:\([^)]*\))?\s*\{\s*\}/g,"catch vacío silencia errores");
     addMatch(errors,path,text,/https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?/g,"localhost hardcodeado en runtime");
     addMatch(errors,path,text,/new Date\(\)\.toISOString\(\)\.slice\(0,(?:7|10)\)/g,"periodo derivado de UTC; usar zona Europe/Madrid");
-    if(text.startsWith('"use client"')||text.startsWith("'use client'")){
-      addMatch(errors,path,text,/process\.env\.(?!NEXT_PUBLIC_)[A-Z0-9_]+/g,"variable privada expuesta desde componente cliente");
-    }
+    if(text.startsWith('"use client"')||text.startsWith("'use client'"))addMatch(errors,path,text,/process\.env\.(?!NEXT_PUBLIC_)[A-Z0-9_]+/g,"variable privada expuesta desde componente cliente");
     addMatch(warnings,path,text,/\bconsole\.log\s*\(/g,"console.log residual");
     addMatch(warnings,path,text,/\b(?:TODO|FIXME|HACK|XXX)\b/g,"deuda técnica marcada");
     addMatch(warnings,path,text,/\bany\b/g,"uso de any a revisar");
@@ -59,9 +63,30 @@ for(const path of apiRoutes){
 }
 
 for(const required of [
-  "app/reglas/page.tsx","app/reglas/rules-client.tsx","app/api/rules/route.ts",
-  "lib/format/es-es.ts","lib/auth/authorized-client.ts","vercel.json",".github/workflows/ci.yml"
+  "app/reglas/page.tsx","app/reglas/rules-client.tsx","app/api/rules/route.ts","lib/financial/rules.ts",
+  "lib/format/es-es.ts","lib/time/madrid.ts","scripts/time-v260-tests.ts","lib/auth/authorized-client.ts",
+  "database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql","database/V2.6.0_RULES_MIGRATIONS.md","vercel.json",".github/workflows/ci.yml"
 ])if(!existsSync(required))errors.push(`${required}:1 · archivo crítico ausente`);
+
+requireTokens("app/api/rules/route.ts",[
+  "getAuthorizedClient","financial_app_rules_overview","financial_app_preview_rule","financial_app_upsert_rule",
+  "financial_app_apply_rule","financial_app_deactivate_rule","financial_app_revert_rule","invalid_payload"
+]);
+requireTokens("lib/financial/rules.ts",["normalizeRulesOverview","sourceUntouched","manualOverridesProtected","duplicatesExcluded","sourceMissingExcluded"]);
+requireTokens("database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql",[
+  "transaction_rules","transaction_rule_applications","transaction_rule_history","authorized_email()",
+  "rule_field_has_later_user_edit","revert_rule_applications_core","apply_rules_after_insert_trigger","enable row level security"
+]);
+requireTokens("database/V2.6.0_RULES_MIGRATIONS.md",[
+  "transaction_rules","transaction_rule_applications","transaction_rule_history","financial_app_rules_overview","authorized_email()","Europe/Madrid"
+]);
+const migrationDoc=existsSync("database/V2.6.0_RULES_MIGRATIONS.md")?readFileSync("database/V2.6.0_RULES_MIGRATIONS.md","utf8"):"";
+if(/finance_v3_|finance_v260_/.test(migrationDoc))errors.push("database/V2.6.0_RULES_MIGRATIONS.md:1 · conserva nombres del motor obsoleto");
+
+const rulesRoute=existsSync("app/api/rules/route.ts")?readFileSync("app/api/rules/route.ts","utf8"):"";
+if(/\bany\b/.test(rulesRoute))errors.push("app/api/rules/route.ts:1 · la API 2.6 no puede depender de any");
+const rulesLib=existsSync("lib/financial/rules.ts")?readFileSync("lib/financial/rules.ts","utf8"):"";
+if(/\bany\b/.test(rulesLib))errors.push("lib/financial/rules.ts:1 · la normalización 2.6 no puede depender de any");
 
 const vercel=existsSync("vercel.json")?readFileSync("vercel.json","utf8"):"";
 if(!vercel.includes('"develop/v2.6.0-rules": false'))errors.push("vercel.json:1 · Vercel debe permanecer desactivado para 2.6 durante desarrollo");
@@ -69,10 +94,16 @@ const ci=existsSync(".github/workflows/ci.yml")?readFileSync(".github/workflows/
 if(!ci.includes("develop/v2.6.0-rules"))errors.push(".github/workflows/ci.yml:1 · la rama 2.6 no está protegida por CI");
 if(!ci.includes("'develop/**'"))errors.push(".github/workflows/ci.yml:1 · los PR apilados develop/** no están protegidos");
 
+if(!errors.length){
+  const timeTest=spawnSync(process.platform==="win32"?"npx.cmd":"npx",["tsx","scripts/time-v260-tests.ts"],{encoding:"utf8"});
+  if(timeTest.stdout?.trim())console.log(timeTest.stdout.trim());
+  if(timeTest.status!==0)errors.push(`scripts/time-v260-tests.ts:1 · pruebas Europe/Madrid fallan: ${(timeTest.stderr||"").trim()||`exit ${timeTest.status}`}`);
+}
+
 const runtimeFiles=files.filter(isRuntime).length;
 const coverage=files.length?100:0;
 console.log(`Financial App 2.6 full audit · ${stats.files} archivos · ${stats.lines} líneas · ${stats.bytes} bytes · runtime ${runtimeFiles} archivos · cobertura ${coverage}%`);
 console.log(`Distribución: ${Object.entries(stats.byRoot).map(([root,count])=>`${root}=${count}`).join(" · ")}`);
 if(warnings.length){console.log(`WARNINGS (${warnings.length})`);warnings.slice(0,200).forEach(w=>console.log(`- ${w}`));if(warnings.length>200)console.log(`- … ${warnings.length-200} warnings adicionales`);}
 if(errors.length){console.error(`ERRORS (${errors.length})`);errors.forEach(e=>console.error(`- ${e}`));process.exit(1);}
-console.log("Financial App 2.6 full audit OK · 100% del árbol activo inspeccionado sin hallazgos críticos");
+console.log("Financial App 2.6 full audit OK · 100% del árbol activo inspeccionado · reglas, Madrid y seguridad protegidos");
