@@ -5,6 +5,6 @@ export default function Loading(){
       <span className="loading-block"/><span className="loading-block"/><span className="loading-block"/>
       <span className="loading-block loading-panel"/>
     </div>
-    <span className="sr-only" role="status">Actualizando la vista. Tus datos no se están modificando.</span>
+    <span className="sr-only" role="status" aria-live="polite">Actualizando la vista. Tus datos no se están modificando.</span>
   </main>;
 }
