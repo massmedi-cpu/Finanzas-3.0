@@ -14,8 +14,7 @@ export const dynamic="force-dynamic";
 export async function GET(request:NextRequest){
   const supabase=await authorizedClient(); if(!supabase) return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const search=request.nextUrl.searchParams.get("search");
-  const includeArchived=request.nextUrl.searchParams.get("archived")==="1";
-  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search||null,p_limit:100,p_offset:0,p_include_archived:includeArchived});
+  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search||null,p_limit:100,p_offset:0,p_include_archived:true});
   if(error||!data) return NextResponse.json({ok:false,error:error?.message||"archive_unavailable"},{status:400});
   return NextResponse.json({...data,ok:true},{headers:{"Cache-Control":"private, no-store"}});
 }
