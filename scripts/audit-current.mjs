@@ -41,8 +41,12 @@ must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr
 const appVersion=read("lib/app-version.ts");
 must(appVersion.includes('APP_VERSION = "3.2.0"'),"La versión de producto no es 3.2.0");
 
+const vercel=read("vercel.json");
+for(const pattern of ["audit/**","chore/**","develop/**","feat/**","fix/**","hotfix/**","release/**"])
+  must(vercel.includes(`"${pattern}": false`),`Vercel debe bloquear previews automáticos de ${pattern}`);
+
 const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$\s]/,/GOOGLE_CLIENT_SECRET\s*=\s*[^$\s]/];
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · sin capas CSS históricas/paralelas, marcadores incompletos ni catch vacíos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · arquitectura canónica y previews de trabajo protegidos`);
