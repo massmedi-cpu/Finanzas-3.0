@@ -6,26 +6,22 @@ permissions:
   contents: write
 jobs:
   fix:
-    if: ${{ !contains(github.event.head_commit.message, 'remaining Spain number displays') }}
+    if: ${{ !contains(github.event.head_commit.message, 'repair final Spain format syntax') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Fix exact remaining displays
+      - name: Repair exact malformed replacements
         run: |
           node <<'NODE'
           const fs=require('fs');
-          const items=[
-            ['app/objetivos/goals-client.tsx','knownProgress.toLocaleString("es-ES",{maximumFractionDigits:1})+"%"','formatPercent(knownProgress,1)'],
-            ['app/page.tsx','item.share.toLocaleString("es-ES",{maximumFractionDigits:1})+"%"','formatPercent(item.share,1)'],
-            ['app/presupuesto/budget-client.tsx','item.percent.toLocaleString("es-ES",{maximumFractionDigits:1})+"%"','formatPercent(item.percent,1)']
-          ];
-          for(const [file,fromExpr,toExpr] of items){
+          const fixes={
+            'app/objetivos/goals-client.tsx':[['${${formatPercent(knownProgress,1)} registrado','${formatPercent(knownProgress,1)} registrado']],
+            'app/page.tsx':[['<small>{${formatPercent(item.share,1)} · {item.movements} mov.</small>','<small>{formatPercent(item.share,1)} · {formatInteger(item.movements)} mov.</small>']],
+            'app/presupuesto/budget-client.tsx':[['<span>{${formatPercent(item.percent,1)} consumido</span>','<span>{formatPercent(item.percent,1)} consumido</span>']]
+          };
+          for(const [file,repls] of Object.entries(fixes)){
             let text=fs.readFileSync(file,'utf8');
-            // Expressions occur inside template literals, so replace source fragments rather than evaluated strings.
-            const from=fromExpr.replace('+"%"','')+'}%';
-            const to='${'+toExpr+'}';
-            if(!text.includes(from))throw new Error(`${file}: no aparece ${from}`);
-            text=text.replace(from,to);
+            for(const [from,to] of repls){if(!text.includes(from))throw new Error(`${file}: no aparece patrón esperado`);text=text.replace(from,to);}
             fs.writeFileSync(file,text);
           }
           NODE
@@ -34,5 +30,5 @@ jobs:
           git config user.name "financial-app-2.5-bot"
           git config user.email "financial-app-2.5-bot@users.noreply.github.com"
           git add app
-          git commit -m "fix(2.5): remaining Spain number displays [skip ci]"
+          git commit -m "fix(2.5): repair final Spain format syntax [skip ci]"
           git push origin HEAD:develop/v2.5.0-month-close
