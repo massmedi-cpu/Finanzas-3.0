@@ -18,7 +18,7 @@ export type ArchiveDetail = ArchiveDocument & {
 
 export async function getArchiveOverview(search:string|null=null):Promise<ArchiveOverview>{
   const supabase=await createClient();
-  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search,p_limit:100,p_offset:0,p_include_archived:false});
+  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search,p_limit:100,p_offset:0,p_include_archived:true});
   if(error||!data) throw new Error(error?.message||"archive_unavailable");
   return data as ArchiveOverview;
 }
