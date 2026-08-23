@@ -17,7 +17,11 @@ const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
 const netWorth=read("components/net-worth-chart.tsx");
 const archive=read("app/archivo/archive-client.tsx");
+const archiveLib=read("lib/financial/archive.ts");
 const archiveCss=read("app/archive.css");
+const forecast=read("app/prevision/forecast-client.tsx");
+const forecastPage=read("app/prevision/page.tsx");
+const forecastCss=read("app/forecast.css");
 const movements=read("app/movimientos/movements-client.tsx");
 const movementsCss=read("app/movements.css");
 const vercel=read("vercel.json");
@@ -59,9 +63,18 @@ const checks=[
   [archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener importación PDF e imágenes"],
   [archive.includes('type ActionKind=')&&!archive.includes("const [busy,setBusy]"),"Archivo no debe volver a un estado busy global que bloquee todos los botones"],
   [archive.includes('data-loading={isAction("save")?"true":undefined}')&&archive.includes('"Guardando…":"Guardar cambios"'),"Guardar cambios debe tener feedback específico"],
+  [archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-view-switch")&&!archive.includes("Mover a Archivados")&&!archive.includes("Restaurar a Activos"),"Archivo debe ser una biblioteca única sin estados Activos/Archivados"],
+  [archive.includes("Biblioteca única")&&archive.includes("Eliminar documento"),"Archivo debe explicar la biblioteca única y permitir eliminación directa"],
+  [archive.includes("receipt-table")&&archive.includes("<th>Descripción</th><th>Ud.</th><th>Precio</th><th>Total</th>"),"la reconstrucción del ticket debe usar columnas reales"],
+  [archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben ser responsive"],
   [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo"],
   [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar todo el ancho"],
   [archiveCss.includes("height:100dvh")&&archiveCss.includes("min-width:0"),"el panel de Archivo debe respetar el viewport"],
+  [forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Solo lo confirmado entra en el cálculo"),"Previsión debe cargar un año y explicar qué entra en el cálculo"],
+  [forecast.includes("Mes que quieres revisar")&&forecast.includes("Gastos que quedan")&&forecast.includes("Ingresos que quedan"),"Previsión debe responder por mes qué pagos y cobros quedan"],
+  [forecast.includes("Confirmado = cuenta")&&forecast.includes("Sugerido = no cuenta")&&!forecast.includes("const horizons="),"la filosofía de previsión debe ser explícita y no volver al selector por días"],
+  [forecast.includes("monthEvents")&&forecast.includes("selectedMonth")&&forecast.includes("monthOptions"),"la vista principal debe filtrar los vencimientos por el mes seleccionado"],
+  [forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{")&&forecastCss.includes(".forecast-philosophy{"),"la previsión mensual debe tener jerarquía visual propia"],
   [movementsCss.includes('.detail-loading{position:fixed')&&tablet.includes('.detail-loading{position:static!important'),"el estado de carga heredado puede ser fijo en escritorio pero debe neutralizarse en tablet"],
   [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible"],
   [movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica"],
@@ -73,4 +86,4 @@ const checks=[
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
 if(failures.length){console.error("Audit 3.0 FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Audit 3.0 OK · visual consolidada, controles comunes, navegación táctil, tablet y Archivo sin bloqueo global protegidos");
+console.log("Audit 3.0 OK · visual consolidada, navegación táctil, biblioteca única, ticket tabulado y previsión mensual protegidos");
