@@ -1,0 +1,34 @@
+name: Fix 2.5 percentage formatting
+on:
+  push:
+    branches: [develop/v2.5.0-month-close]
+permissions:
+  contents: write
+jobs:
+  fix:
+    if: ${{ !contains(github.event.head_commit.message, 'canonical percentage display') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace remaining locale percentages
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const fixes={
+            'app/objetivos/goals-client.tsx':[['${knownProgress.toLocaleString("es-ES",{maximumFractionDigits:1})}% registrado','${formatPercent(knownProgress,1)} registrado']],
+            'app/page.tsx':[['${item.share.toLocaleString("es-ES",{maximumFractionDigits:1})}% · ${item.movements} mov.','${formatPercent(item.share,1)} · ${formatInteger(item.movements)} mov.']],
+            'app/presupuesto/budget-client.tsx':[['${item.percent.toLocaleString("es-ES",{maximumFractionDigits:1})}% consumido','${formatPercent(item.percent,1)} consumido']]
+          };
+          for(const [file,repls] of Object.entries(fixes)){
+            let text=fs.readFileSync(file,'utf8');
+            for(const [from,to] of repls){if(!text.includes(from))throw new Error(`${file}: patrón no encontrado: ${from}`);text=text.replace(from,to);}
+            fs.writeFileSync(file,text);
+          }
+          NODE
+      - name: Commit
+        run: |
+          git config user.name "financial-app-2.5-bot"
+          git config user.email "financial-app-2.5-bot@users.noreply.github.com"
+          git add app
+          git commit -m "fix(2.5): canonical percentage display [skip ci]"
+          git push origin HEAD:develop/v2.5.0-month-close
