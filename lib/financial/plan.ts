@@ -1,4 +1,5 @@
 import { APP_VERSION } from "@/lib/app-version";
+import { madridMonth, madridToday } from "@/lib/time/madrid";
 import { createClient } from "@/lib/supabase/server";
 
 export type PlanStatus="stable"|"attention"|"critical";
@@ -30,7 +31,7 @@ const severity=(value:unknown):PlanSeverity=>["critical","high","medium","low"].
 export function normalizeFinancialPlan(raw:any):PlanOverview{
   const summary=raw?.summary||{};const domains=raw?.domains||{};const b=domains.budget||{};const f=domains.forecast||{};const g=domains.goals||{};const nw=domains.netWorth||{};const c=domains.control||{};const gs=g.summary||{};const cs=c.snapshot||{};
   return {
-    version:String(raw?.version||APP_VERSION),asOf:String(raw?.asOf||new Date().toISOString().slice(0,10)),month:String(raw?.month||new Date().toISOString().slice(0,7)),status:["critical","attention"].includes(String(raw?.status))?raw.status:"stable",
+    version:String(raw?.version||APP_VERSION),asOf:String(raw?.asOf||madridToday()),month:String(raw?.month||madridMonth()),status:["critical","attention"].includes(String(raw?.status))?raw.status:"stable",
     summary:{monthlyIncome:n(summary.monthlyIncome),monthlyExpenses:n(summary.monthlyExpenses),monthlyNet:n(summary.monthlyNet),budgetAssigned:n(summary.budgetAssigned),budgetSpent:n(summary.budgetSpent),budgetAvailable:n(summary.budgetAvailable),budgetProjectedDifference:nullable(summary.budgetProjectedDifference),forecastCurrentBalance:n(summary.forecastCurrentBalance),forecastProjectedBalance90:n(summary.forecastProjectedBalance90),forecastLowestBalance90:n(summary.forecastLowestBalance90),forecastProjectedNet90:n(summary.forecastProjectedNet90),netWorth:n(summary.netWorth),projectedNetWorth90:n(summary.projectedNetWorth90),goalMonthlyRequired:n(summary.goalMonthlyRequired),goalCapacityReference:n(summary.goalCapacityReference),capacityAfterGoals:n(summary.capacityAfterGoals)},
     domains:{
       budget:{assigned:n(b.assigned),spent:n(b.spent),available:n(b.available),overBudgetCount:n(b.overBudgetCount),unbudgetedSpent:n(b.unbudgetedSpent),projection:{projectedSpent:n(b.projection?.projectedSpent),projectedDifference:nullable(b.projection?.projectedDifference),method:String(b.projection?.method||"")},href:String(b.href||"/presupuesto")},
@@ -47,7 +48,7 @@ export function normalizeFinancialPlan(raw:any):PlanOverview{
 
 export async function getFinancialPlan(month?:string|null):Promise<PlanOverview>{
   const supabase=await createClient();
-  const pMonth=month&&/^\d{4}-\d{2}$/.test(month)?`${month}-01`:new Date().toISOString().slice(0,10);
+  const pMonth=month&&/^\d{4}-\d{2}$/.test(month)?`${month}-01`:madridToday();
   const {data,error}=await supabase.rpc("financial_app_plan_overview",{p_month:pMonth});
   if(error||!data)throw new Error(error?.message||"financial_plan_unavailable");
   return normalizeFinancialPlan(data);

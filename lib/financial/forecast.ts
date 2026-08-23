@@ -1,4 +1,5 @@
 import { APP_VERSION } from "@/lib/app-version";
+import { madridToday } from "@/lib/time/madrid";
 import { createClient } from "@/lib/supabase/server";
 
 export type ForecastRecurrence = { frequency: "weekly" | "monthly" | "yearly"; interval: number; until?: string | null };
@@ -25,7 +26,7 @@ const n=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
 export async function getForecastOverview(days=90):Promise<ForecastOverview>{
   const supabase=await createClient();
   const safeDays=Math.max(30,Math.min(365,Number.isFinite(days)?days:90));
-  const {data,error}=await supabase.rpc("financial_app_forecast_overview",{p_start:new Date().toISOString().slice(0,10),p_days:safeDays});
+  const {data,error}=await supabase.rpc("financial_app_forecast_overview",{p_start:madridToday(),p_days:safeDays});
   if(error||!data) throw new Error(error?.message||"forecast_unavailable");
   const r=data as any;
   return {
