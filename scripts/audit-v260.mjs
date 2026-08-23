@@ -27,6 +27,20 @@ function requireTokens(path,tokens){
   const text=readFileSync(path,"utf8");
   for(const token of tokens)if(!text.includes(token))errors.push(`${path}:1 · falta garantía ${token}`);
 }
+function explicitAnyMatches(text){
+  const patterns=[
+    /:\s*any\b/g,
+    /\bas\s+any\b/g,
+    /\bany\s*\[\s*\]/g,
+    /<\s*any\s*>/g,
+    /(?:Array|Promise|Record)\s*<[^>]*\bany\b[^>]*>/g,
+  ];
+  return patterns.flatMap(regex=>[...text.matchAll(regex)]);
+}
+function addExplicitAnyWarnings(path,text){
+  for(const match of explicitAnyMatches(text))warnings.push(`${path}:${lineNumber(text,match.index??0)} · uso de any a revisar`);
+}
+function hasExplicitAny(text){return explicitAnyMatches(text).length>0;}
 
 const files=ROOTS.flatMap(root=>walk(root)).filter(path=>EXT.test(path));
 for(const path of files){
@@ -48,7 +62,7 @@ for(const path of files){
     if(text.startsWith('"use client"')||text.startsWith("'use client'"))addMatch(errors,path,text,/process\.env\.(?!NEXT_PUBLIC_)[A-Z0-9_]+/g,"variable privada expuesta desde componente cliente");
     addMatch(warnings,path,text,/\bconsole\.log\s*\(/g,"console.log residual");
     addMatch(warnings,path,text,/\b(?:TODO|FIXME|HACK|XXX)\b/g,"deuda técnica marcada");
-    addMatch(warnings,path,text,/\bany\b/g,"uso de any a revisar");
+    addExplicitAnyWarnings(path,text);
   }
 }
 
@@ -84,9 +98,9 @@ const migrationDoc=existsSync("database/V2.6.0_RULES_MIGRATIONS.md")?readFileSyn
 if(/finance_v3_|finance_v260_/.test(migrationDoc))errors.push("database/V2.6.0_RULES_MIGRATIONS.md:1 · conserva nombres del motor obsoleto");
 
 const rulesRoute=existsSync("app/api/rules/route.ts")?readFileSync("app/api/rules/route.ts","utf8"):"";
-if(/\bany\b/.test(rulesRoute))errors.push("app/api/rules/route.ts:1 · la API 2.6 no puede depender de any");
+if(hasExplicitAny(rulesRoute))errors.push("app/api/rules/route.ts:1 · la API 2.6 no puede depender de any");
 const rulesLib=existsSync("lib/financial/rules.ts")?readFileSync("lib/financial/rules.ts","utf8"):"";
-if(/\bany\b/.test(rulesLib))errors.push("lib/financial/rules.ts:1 · la normalización 2.6 no puede depender de any");
+if(hasExplicitAny(rulesLib))errors.push("lib/financial/rules.ts:1 · la normalización 2.6 no puede depender de any");
 
 const vercel=existsSync("vercel.json")?readFileSync("vercel.json","utf8"):"";
 if(!vercel.includes('"develop/v2.6.0-rules": false'))errors.push("vercel.json:1 · Vercel debe permanecer desactivado para 2.6 durante desarrollo");
