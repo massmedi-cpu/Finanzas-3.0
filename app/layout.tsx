@@ -2,15 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
 import "./home.css";
-import "./home-v17.css";
 import "./cash-flow.css";
 import "./cash-flow-advanced.css";
 import "./system-state.css";
 import "./chrome.css";
-import "./readability-v210.css";
 import "./explicabilidad/explainability.css";
 import "./control/integrity.css";
-import "./visual-v300.css";
+import "./visual.css";
 import "./tablet.css";
 
 export const metadata:Metadata={title:{default:"Financial App",template:"%s · Financial App"},applicationName:"Financial App",description:"Control, análisis, presupuesto y planificación financiera personal",manifest:"/manifest.webmanifest",icons:{icon:[{url:"/icon.png",type:"image/png",sizes:"512x512"}],apple:[{url:"/apple-icon.png",type:"image/png",sizes:"180x180"}]},appleWebApp:{capable:true,title:"Financial App",statusBarStyle:"default"}};
