@@ -15,6 +15,7 @@ const appVersion=fs.readFileSync("lib/app-version.ts","utf8");
 const manifest=fs.readFileSync("app/manifest.ts","utf8");
 const settings=fs.readFileSync("lib/financial/settings.ts","utf8");
 const proxy=fs.readFileSync("proxy.ts","utf8");
+const nextConfig=fs.readFileSync("next.config.ts","utf8");
 
 must(client.includes('recognizeTicketImage(file,worker,onProgress,hint)'),"Archivo debe usar el motor OCR canónico para imágenes");
 must(client.includes('upload(e.target.files[0],"receipt")'),"Cámara y galería deben iniciar OCR de ticket automáticamente");
@@ -45,11 +46,12 @@ must(client.includes("Biblioteca única")&&client.includes("Eliminar documento")
 must(!archiveApi.includes("archive_before_delete")&&!archiveApi.includes('request.nextUrl.searchParams.get("permanent")'),"La eliminación directa no debe depender de archivado ni de un modo permanente");
 must(archiveApi.indexOf('financial_app_archive_delete')<archiveApi.indexOf('.storage.from("financial-app-documents").remove'),"La fila debe borrarse antes del cleanup de Storage para evitar documentos fantasma");
 must(archiveApi.includes("storageCleanupPending"),"Un fallo de limpieza física no debe resucitar la ficha documental");
-must(appVersion.includes('APP_VERSION = "3.1.0"'),"La versión visible de esta entrega debe ser 3.1.0");
+must(appVersion.includes('APP_VERSION = "3.1.1"'),"La versión visible de esta entrega debe ser 3.1.1");
 must(manifest.includes("APP_VERSION")&&manifest.includes("versión ${APP_VERSION}"),"El manifiesto instalado debe derivar de la versión activa");
 must(proxy.includes("webmanifest"),"El manifest PWA debe quedar fuera del proxy de autenticación");
+must(nextConfig.includes("public, max-age=0, must-revalidate"),"El manifest no debe mantener una versión visual obsoleta por caché prolongada");
 must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar la versión del código en ejecución");
 must(css.includes("width:min(920px"),"La revisión de documentos debe conservar ancho usable en escritorio");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
 
-console.log("audit-ticket-ocr-v302 OK · OCR automático · ticket tabulado · borrado directo · versión 3.1.0");
+console.log("audit-ticket-ocr-v302 OK · OCR automático · ticket tabulado · borrado directo · versión 3.1.1");
