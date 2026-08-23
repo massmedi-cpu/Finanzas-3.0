@@ -1,7 +1,9 @@
 name: Financial App CI
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'develop/**'
   push:
     branches:
       - 'financial-app-rebuild'
@@ -73,7 +75,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Release reproducibility gate
-        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics' || github.ref == 'refs/heads/develop/v2.3.0-intelligence' || github.ref == 'refs/heads/develop/v2.4.0-long-horizon' || github.ref == 'refs/heads/develop/v2.5.0-month-close' || github.ref == 'refs/heads/develop/v2.6.0-rules'
+        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || startsWith(github.base_ref, 'develop/') || startsWith(github.ref, 'refs/heads/develop/')
         run: |
           test -f package-lock.json
           git diff --exit-code -- package.json package-lock.json
