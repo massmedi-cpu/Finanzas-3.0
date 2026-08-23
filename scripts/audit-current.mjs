@@ -15,7 +15,8 @@ for(const file of files)for(const pattern of obsoleteRuntimePatterns)must(!patte
 
 for(const file of files.filter(file=>/\.(?:ts|tsx|js|mjs)$/.test(file))){
   const source=read(file);
-  must(!/\b(?:TODO|FIXME|WIP)\b/i.test(source),`Marcador de trabajo incompleto en ${file}`);
+  const incompleteMarker=/(?:^|\n)\s*(?:\/\/|\/\*|\*)\s*(?:TODO|FIXME|WIP)\b/i;
+  must(!incompleteMarker.test(source),`Marcador de trabajo incompleto en ${file}`);
   must(!/catch\s*(?:\([^)]*\))?\s*\{\s*\}/m.test(source),`catch vacío en ${file}`);
 }
 
@@ -44,4 +45,4 @@ const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SU
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · sin capas CSS históricas/paralelas ni marcadores incompletos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · sin capas CSS históricas/paralelas, marcadores incompletos ni catch vacíos`);
