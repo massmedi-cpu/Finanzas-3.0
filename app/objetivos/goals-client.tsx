@@ -47,7 +47,7 @@ export function GoalsClient({initialData}:{initialData:GoalsOverview}){
     {feedback&&<div className="goals-feedback" role="status">{feedback}</div>}
 
     <section className="goals-summary" aria-label="Resumen de objetivos">
-      <article><span>Objetivo total</span><strong>{data.summary.activeCount?formatEuro(data.summary.targetTotal):"—"}</strong><small>{data.summary.activeCount?`${${formatPercent(knownProgress,1)} registrado`:"Crea tu primera meta"}</small></article>
+      <article><span>Objetivo total</span><strong>{data.summary.activeCount?formatEuro(data.summary.targetTotal):"—"}</strong><small>{data.summary.activeCount?`${formatPercent(knownProgress,1)} registrado`:"Crea tu primera meta"}</small></article>
       <article><span>Progreso conocido</span><strong>{data.summary.activeCount?formatEuro(data.summary.trackedTotal):"—"}</strong><small>Solo importes manuales o saldos reales</small></article>
       <article><span>Por completar</span><strong>{data.summary.activeCount?formatEuro(data.summary.remainingTotal):"—"}</strong><small>{data.summary.achievedCount} conseguidos</small></article>
       <article className={data.summary.attentionCount||data.summary.overdueCount?"warning":"good"}><span>Aportación mensual</span><strong>{data.summary.monthlyRequired>0?formatEuro(data.summary.monthlyRequired):"—"}</strong><small>{data.summary.attentionCount} en atención · {data.summary.overdueCount} vencidos</small></article>
