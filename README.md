@@ -1,8 +1,6 @@
-# Financial App 2.1.0
+# Financial App 2.5.0
 
 Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
-
-2.1.0 evoluciona la base estable 2.0.1 sin cambiar las reglas financieras: mejora legibilidad, navegación, shell persistente, rendimiento de Movimientos y coherencia del Plan.
 
 ## Principios permanentes
 - Fuente bancaria externa exclusivamente en modo lectura.
@@ -17,31 +15,48 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 
 ## 2.0 — Plan Financiero unificado
 - Ruta `/plan` como capa de decisión única sobre presupuesto, previsión, objetivos, patrimonio y Control.
-- El Plan reutiliza los motores financieros canónicos existentes y no duplica fórmulas en el navegador.
 - Una única llamada a `financial_app_plan_overview` agrega resumen, estado, capacidad y prioridades explicables.
-- Cada prioridad conserva trazabilidad mediante `sourcePath` y enlaza al módulo operativo de origen.
-- La capa Plan es de solo lectura: no modifica movimientos, presupuestos, previsiones, objetivos, patrimonio, reglas ni cierres.
-- Se preservan las garantías de rendimiento de 1.7, recuperación transaccional de 1.8 y motor documental first-party de 1.9.
+- La capa Plan es de solo lectura y reutiliza motores financieros canónicos.
+- Se preservan rendimiento 1.7, recuperación 1.8 y motor documental first-party 1.9.
 
 ## 2.0.1 — estabilización
 - Google OAuth activo y validado con sesión real.
-- Supabase usa el dominio de producción y ya no retorna a `localhost:3000`.
-- Los errores inmediatos de Google OAuth se muestran en la pantalla de acceso.
-- Hotfix de Previsión: ningún overview/GET genera ocurrencias ni ejecuta escrituras.
-- Inicio, Plan, Movimientos, detalle y Reglas protegidos como rutas de lectura `STABLE` cuando corresponde.
-- Smoke de rutas críticas ejecutado sobre la base real sin alterar datos financieros.
-- Release readiness validado con identidad Google, sin fallos.
-- Gate `audit:v201` permanente para impedir regresiones de estas garantías.
+- Supabase usa el dominio de producción y no retorna a localhost.
+- Lecturas críticas protegidas contra efectos secundarios.
+- Smoke real y gate `audit:v201` para impedir regresiones.
 
 ## 2.1.0 — rendimiento, legibilidad y coherencia
-- Navegación privada con prefetch por intención, evitando precargar todas las rutas automáticamente.
-- Tipografía compacta reforzada para mejorar legibilidad en escritorio, tablet y móvil.
-- Shell persistente con un único sidebar; eliminados 16 sidebars internos redundantes.
-- Movimientos reutiliza las facetas de la primera carga y evita reenviar datos repetidos en paginaciones y filtros posteriores.
-- Baseline real de rendimiento documentado en `docs/PERFORMANCE_V2.1.0.md`.
-- Plan auditado contra los motores canónicos de Presupuesto, Previsión, Objetivos, Patrimonio y Control.
-- Inicio mantiene horizonte inmediato de 30 días y Plan horizonte explícito de 90 días.
-- Gate `audit:v210` protege navegación, legibilidad, shell único, Movimientos ligero y coherencia del Plan.
+- Navegación privada con prefetch por intención.
+- Tipografía compacta reforzada y shell persistente con un único sidebar.
+- Movimientos evita reenviar facetas repetidas en paginaciones y filtros posteriores.
+- Plan auditado contra Presupuesto, Previsión, Objetivos, Patrimonio y Control.
+- Gate `audit:v210`.
+
+## 2.2.0 — analítica comparativa
+- Análisis compara únicamente periodos completos cuando corresponde.
+- Medias, tasa de ahorro, variabilidad, tendencia, concentración y cobertura derivan del overview canónico.
+- Ninguna métrica analítica escribe movimientos ni altera el origen.
+- Gates `audit:v220` y `test:analytics`.
+
+## 2.3.0 — inteligencia financiera explicable
+- Señales deterministas sobre liquidez, presupuesto, objetivos, patrimonio, Control y contexto analítico.
+- Sin modelos externos para inventar cifras ni mutaciones financieras.
+- Cada señal conserva trazabilidad al módulo de origen.
+- Gates `audit:v230` y `test:intelligence`.
+
+## 2.4.0 — horizonte de planificación
+- Capacidad visible a 3, 6 y 12 meses.
+- La proyección de capacidad es lineal y explícita; no se presenta como saldo bancario futuro.
+- Previsión bancaria y patrimonio previsto continúan limitados a 90 días.
+- Ruta privada `/plan/horizonte` y gates `audit:v240` + `test:horizon`.
+
+## 2.5.0 — cierre mensual y formato España
+- Se preservan las reglas y bloqueos del cierre mensual existente y su trazabilidad.
+- Formato numérico español centralizado: miles con punto y decimales con coma (`1.234.567,89`).
+- Euros, porcentajes, enteros y cifras con signo usan la misma capa de formato.
+- Se eliminan formateadores locales repetidos de las superficies financieras principales.
+- El cambio es de presentación: no modifica importes, fórmulas financieras ni datos de origen.
+- Gates `audit:v250` y `test:format`, además de todos los controles heredados 1.7 → 2.4.
 
 ## Funciones principales
 - Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
@@ -57,8 +72,8 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Acceso mediante Google OAuth y allowlist de servidor.
 - Vercel: región `cdg1`.
 - Dominio público: `financialapp-home.vercel.app`.
-- La rama `financial-app-rebuild` mantiene el despliegue automático deshabilitado para evitar previews y consumo innecesario.
-- Una release solo se promociona a `main` después de superar CI y el release readiness.
+- Las ramas de desarrollo mantienen el despliegue automático deshabilitado para evitar previews y consumo innecesario.
+- Una release sólo se promociona a `main` después de superar CI completo y el gate de release.
 
 No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni binarios generados del motor documental.
 
@@ -71,5 +86,9 @@ No se deben subir al repositorio credenciales, claves privadas, extractos bancar
 - `docs/AUDIT_FINANCIAL_APP_2.0.1.md`
 - `docs/PERFORMANCE_V2.1.0.md`
 - `docs/COHERENCE_V2.1.0.md`
-- `docs/RELEASE_GATE_V2.1.0.md`
+- `docs/RELEASE_GATE_V2.2.0.md`
+- `docs/RELEASE_GATE_V2.3.0.md`
+- `docs/RELEASE_GATE_V2.4.0.md`
+- `scripts/audit-v250.mjs`
+- `scripts/number-format-v250-tests.ts`
 - `supabase/README.md`
