@@ -88,6 +88,10 @@ jobs:
         run: npm run audit:v300
       - name: Source sync regression audit
         run: npm run audit:sync
+      - name: Ticket OCR pipeline audit
+        run: npm run audit:ocr
+      - name: Ticket OCR metadata tests
+        run: npm run test:ocr
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
