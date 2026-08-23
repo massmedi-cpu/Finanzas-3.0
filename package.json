@@ -15,6 +15,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "prepare:document-engine": "node scripts/prepare-document-engine.mjs",
+    "audit:current": "node scripts/audit-current.mjs",
     "audit:structure": "node scripts/audit-structure.mjs",
     "audit:a11y": "node scripts/audit-accessibility.mjs",
     "audit:v17": "node scripts/audit-v17.mjs",
