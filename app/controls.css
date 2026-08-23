@@ -17,6 +17,6 @@ button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .inline-alert.error{color:#b42318}
 .empty-state{display:grid;place-items:center;gap:6px;min-height:180px;color:var(--muted)}
 .empty-state strong{color:var(--text)}
-.button-link{color:inherit}
+.button-link{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 @media(prefers-color-scheme:dark){.inline-alert.error,.danger-action{color:#ff8a80}}
 @media(prefers-reduced-motion:reduce){.primary-action,.ghost,.danger-action{transition:none}.primary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{animation:none;border-right-color:currentColor}}
