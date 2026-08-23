@@ -3,8 +3,10 @@ import fs from "node:fs";
 const read=(path)=>fs.readFileSync(path,"utf8");
 const layout=read("app/layout.tsx");
 const visual=read("app/visual-v300.css");
+const chromeCss=read("app/chrome.css");
 const loading=read("app/loading.tsx");
 const chrome=read("components/app-chrome.tsx");
+const sidebar=read("components/app-sidebar.tsx");
 const cashFlow=read("components/cash-flow-chart.tsx");
 const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
@@ -26,6 +28,8 @@ const checks=[
   [loading.includes('className="route-loading-v300"')&&!loading.includes("system-state-shell")&&!loading.includes("next/image"),"la navegación privada debe usar carga local sin sustituir el shell"],
   [visual.includes("prefers-reduced-motion:reduce")&&visual.includes("v300-shimmer"),"el skeleton 3.0 debe respetar movimiento reducido"],
   [chrome.includes('<AppSidebar/><div className="app-route">{children}</div>'),"el shell persistente debe conservar sidebar y ruta separada"],
+  [chromeCss.includes("html{scrollbar-gutter:stable}"),"la navegación debe reservar el gutter del scrollbar para evitar cambios de breakpoint durante la carga"],
+  [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces de navegación deben cerrar el menú móvil antes de iniciar la transición"],
   [vercel.includes('"develop/v3.0.0-foundation": false'),"la rama 3.0 debe permanecer sin Preview de Vercel"],
 ];
 
@@ -35,4 +39,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit 3.0 OK · jerarquía de Inicio, sistema común de gráficos, temas, shell persistente y carga local protegidos");
+console.log("Audit 3.0 OK · jerarquía de Inicio, gráficos, temas, shell persistente, carga local y navegación estable protegidos");
