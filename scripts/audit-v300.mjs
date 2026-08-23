@@ -19,6 +19,7 @@ const netWorth=read("components/net-worth-chart.tsx");
 const archive=read("app/archivo/archive-client.tsx");
 const archiveLib=read("lib/financial/archive.ts");
 const archiveCss=read("app/archive.css");
+const receiptLayout=read("lib/document/receipt-layout.ts");
 const forecast=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
 const forecastCss=read("app/forecast.css");
@@ -68,7 +69,8 @@ const checks=[
   [archive.includes('data-loading={isAction("save")?"true":undefined}')&&archive.includes('"Guardando…":"Guardar cambios"'),"Guardar cambios debe tener feedback específico"],
   [archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-view-switch")&&!archive.includes("Mover a Archivados")&&!archive.includes("Restaurar a Activos"),"Archivo debe ser una biblioteca única sin estados Activos/Archivados"],
   [archive.includes("Biblioteca única")&&archive.includes("Eliminar documento"),"Archivo debe explicar la biblioteca única y permitir eliminación directa"],
-  [archive.includes("receipt-table")&&archive.includes("<th>Descripción</th><th>Ud.</th><th>Precio</th><th>Total</th>"),"la reconstrucción del ticket debe usar columnas reales"],
+  [archive.includes("receipt-table")&&archive.includes("<th>Descripción</th><th>Ud.</th><th>Precio</th><th>Importe</th>"),"la reconstrucción del ticket debe usar columnas Descripción/Ud./Precio/Importe"],
+  [receiptLayout.includes("parseReceiptTsvLayout")&&receiptLayout.includes('source?:"text"|"geometry_tsv"')&&archive.includes("Reconstrucción por geometría del ticket"),"las columnas del ticket deben derivarse de la geometría TSV cuando esté disponible"],
   [archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben ser responsive"],
   [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo"],
   [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar todo el ancho"],
@@ -89,4 +91,4 @@ const checks=[
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
 if(failures.length){console.error("Audit 3.0 FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket tabulado y previsión mensual protegidos");
+console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket geométrico y previsión mensual protegidos");
