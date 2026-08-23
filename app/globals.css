@@ -8,16 +8,16 @@ body{font-size:16px}
 .brand{display:flex;align-items:center;gap:12px;padding:0 8px;color:var(--text);text-decoration:none}
 .brand-icon{width:42px;height:42px;object-fit:contain;flex:0 0 auto}
 .brand strong,.brand small{display:block}
-.brand small{margin-top:2px;font-size:12px;color:var(--muted)}
+.brand small{margin-top:2px;font-size:13px;color:var(--muted)}
 .sidebar nav{display:flex;flex-direction:column;gap:3px}
 .sidebar nav a{color:var(--muted);text-decoration:none;padding:11px 12px;border-radius:8px;font-weight:650;font-size:14px}
 .sidebar nav a:hover,.sidebar nav a.active{color:var(--text);background:var(--surface-2)}
 .sidebar nav a.active{box-shadow:inset 3px 0 var(--accent)}
-.sidebar-foot{margin-top:auto;padding:12px;font-size:12px;color:var(--muted);border-top:1px solid var(--border)}
+.sidebar-foot{margin-top:auto;padding:12px;font-size:13px;color:var(--muted);border-top:1px solid var(--border)}
 .status-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--success);margin-right:7px}
 .workspace{padding:34px clamp(22px,4vw,58px) 60px;max-width:1600px;width:100%;margin:auto}
 .topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;margin-bottom:28px}
-.eyebrow{font-size:11px;letter-spacing:.13em;font-weight:800;color:var(--muted);margin:0 0 8px}
+.eyebrow{font-size:12px;letter-spacing:.13em;font-weight:800;color:var(--muted);margin:0 0 8px}
 .topbar h1{font-size:clamp(28px,3vw,42px);letter-spacing:-.035em;margin:0}
 .topbar p:not(.eyebrow){margin:8px 0 0;color:var(--muted)}
 button{font:inherit}
