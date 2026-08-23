@@ -1,21 +1,22 @@
 import{existsSync,readFileSync}from"node:fs";
 const errors=[];
-const required=["lib/financial/analysis-insights.ts","scripts/analytics-v220-tests.ts","app/analysis-v220.css","docs/RELEASE_GATE_V2.2.0.md"];
+const required=["lib/financial/analysis-insights.ts","scripts/analytics-v220-tests.ts","app/analysis.css","docs/RELEASE_GATE_V2.2.0.md"];
 for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
 const read=file=>existsSync(file)?readFileSync(file,"utf8"):"";
 const insights=read("lib/financial/analysis-insights.ts");
 const page=read("app/analisis/page.tsx");
 const layout=read("app/analisis/layout.tsx");
+const styles=read("app/analysis.css");
 const ci=read(".github/workflows/ci.yml");
 const pkg=JSON.parse(read("package.json")||"{}");
 if(!insights.includes("month.available&&month.complete&&!month.partial"))errors.push("2.2 no excluye meses parciales de las medias comparables");
 for(const token of ["averageMonthlyExpenses","savingsRatePercent","expenseVolatilityPercent","recentExpenseTrendPercent","top3CategorySharePercent","categorizationRatePercent"])if(!insights.includes(token))errors.push(`Falta métrica analítica ${token}`);
 if(!page.includes("buildAnalysisInsights"))errors.push("Análisis no consume la capa de insights 2.2");
 if(!page.includes("Referencia anual de gasto")||!page.includes("no una previsión bancaria"))errors.push("La referencia anual no está diferenciada de una previsión");
-if(!layout.includes("analysis-v220.css"))errors.push("Los estilos 2.2 no están cargados");
+if(!layout.includes("analysis.css")||!styles.includes(".analysis-insight-grid")||!styles.includes(".analysis-diagnostic-grid"))errors.push("La funcionalidad visual analítica no está consolidada en analysis.css");
 if(pkg.scripts?.["audit:v220"]!=="node scripts/audit-v220.mjs")errors.push("Falta audit:v220 en package.json");
 if(pkg.scripts?.["test:analytics"]!=="tsx scripts/analytics-v220-tests.ts")errors.push("Falta test:analytics en package.json");
 if(!ci.includes("npm run audit:v220")||!ci.includes("npm run test:analytics"))errors.push("CI no ejecuta el gate analítico 2.2");
 if(/insert\s+into|update\s+financial_app|delete\s+from/i.test(insights))errors.push("La capa analítica contiene escritura financiera");
-if(errors.length){console.error("Financial App 2.2 analytics audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.2 audit OK · analítica derivada, meses parciales protegidos y sin escrituras");
+if(errors.length){console.error("Financial App analytics audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
+console.log("Financial App analytics audit OK · lógica 2.2 preservada en arquitectura canónica");
