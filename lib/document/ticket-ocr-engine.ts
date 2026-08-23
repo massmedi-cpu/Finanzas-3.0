@@ -26,6 +26,8 @@ type SupplementalPass = {
 };
 
 const visibleLength = (value: string) => value.replace(/\s/g, "").length;
+const letterCount=(value:string)=>(value.match(/\p{L}/gu)||[]).length;
+const wordCount=(value:string)=>(value.match(/[\p{L}]{2,}/gu)||[]).length;
 const compactWords = (value: string) => value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
 
 function repairReceiptNumbers(line: string) {
@@ -54,8 +56,8 @@ function lexicalOverlap(a: string, b: string) {
 
 function lineQuality(raw: string) {
   const line = repairReceiptNumbers(raw).trim();
-  const letters = (line.match(/\p{L}/gu) || []).length;
-  const words = (line.match(/[\p{L}]{2,}/gu) || []).length;
+  const letters = letterCount(line);
+  const words = wordCount(line);
   const decimals = (line.match(/\d+[.,]\d{2}\b/g) || []).length;
   const singleNoise = (line.match(/(?:^|\s)[A-Z](?=\s|$)/g) || []).length;
   const collapsedPrice = (line.match(/\b\d{3,4}(?=\s+\d+[.,]\d{2}\b)/g) || []).length;
@@ -92,9 +94,15 @@ export function mergeReceiptTexts(primaryText: string, alternateText: string) {
     }
     if (bestIndex < 0 || bestFit < 1.5) return repairReceiptNumbers(source);
     const candidate = alternate[bestIndex];
+    const candidateSignature=numericSignature(candidate);
     const sourceQuality = lineQuality(source);
     const candidateQuality = lineQuality(candidate);
-    if (candidateQuality > sourceQuality + 0.9) {
+    const samePrices=Boolean(signature)&&candidateSignature===signature;
+    const richerMatchingLine=samePrices&&candidateQuality>=sourceQuality-0.25&&(
+      letterCount(candidate)>=letterCount(source)+1||
+      wordCount(candidate)>=wordCount(source)+1
+    );
+    if (candidateQuality > sourceQuality + 0.9 || richerMatchingLine) {
       used.add(bestIndex);
       return repairReceiptNumbers(candidate);
     }
