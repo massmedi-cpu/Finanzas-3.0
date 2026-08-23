@@ -6,6 +6,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
 import { SplitEditor } from "./split-editor";
+import { MovementDocuments } from "./movement-documents";
 
 type Filters = MovementFilterState;
 type EditState = {
@@ -13,7 +14,6 @@ type EditState = {
   cashFlow:"inherit"|"include"|"exclude"; isInternalTransfer:boolean; isDuplicate:boolean; reconciled:"inherit"|"yes"|"no";
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
-
 
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
@@ -244,6 +244,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       </form>
 
       <SplitEditor transactionId={selected.id} sourceAmount={Number(selected.source["Importe (€)"]??0)} categories={pageData.facets.categories}/>
+      <MovementDocuments key={selected.id} transaction={selected} onChanged={()=>loadWith(filters,pageData.page)}/>
 
       <details className="trace-panel"><summary>Dato original</summary><dl>{Object.entries(selected.source).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{display(value)}</dd></div>)}</dl></details>
       <details className="trace-panel" open={selected.history.length>0}><summary>Historial de cambios · {selected.history.length}</summary>{selected.history.length?<ol className="history-list">{selected.history.map(entry=><li key={entry.id}><div><strong>{entry.field.replace(/^app\./,"App · ").replace(/^source\./,"Origen · ")}</strong><time>{new Date(entry.changedAt).toLocaleString("es-ES")}</time></div><p><span>{display(entry.before)}</span><b>→</b><span>{display(entry.after)}</span></p><small>{entry.changeOrigin==="source_sync"?"Cambio detectado en la fuente":`Edición · ${entry.changedBy||"usuario"}`}</small></li>)}</ol>:<p className="muted-copy">Este movimiento aún no tiene cambios registrados.</p>}</details>

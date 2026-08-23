@@ -8,8 +8,8 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{id:stri
   const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(error||!data)return NextResponse.json({ok:false,error:error?.message||"document_unavailable"},{status:404});
-  let signedUrl:string|null=null;
-  if(data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
+  let signedUrl:string|null=data.storageProvider==="google_drive"?(data.storageUrl||null):null;
+  if(data.storageProvider==="supabase_storage"&&data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
   return NextResponse.json({ok:true,document:data,signedUrl},{headers:{"Cache-Control":"private, no-store"}});
 }
 
@@ -21,8 +21,9 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
     p_notes:body.notes??null,p_ocr_text:body.ocrText??null,p_ocr_data:body.ocrData??null,p_digital_reconstruction:body.digitalReconstruction??null,p_ocr_status:body.ocrStatus??null
   });
   if(error)return NextResponse.json({ok:false,error:error.message},{status:400});
+  const autoLink=await supabase.rpc("financial_app_auto_link_documents");
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  return NextResponse.json({ok:true,document:detail.data},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({ok:true,document:detail.data,autoLink:autoLink.error?null:autoLink.data},{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
@@ -44,10 +45,10 @@ export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:s
   if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
 
   let storageCleanupPending=false;
-  if(detail.data.storagePath){
+  if(detail.data.storageProvider==="supabase_storage"&&detail.data.storagePath){
     const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);
     storageCleanupPending=Boolean(removed.error);
   }
 
-  return NextResponse.json({ok:true,storageCleanupPending},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({ok:true,storageCleanupPending,externalOriginalPreserved:detail.data.storageProvider==="google_drive"},{headers:{"Cache-Control":"private, no-store"}});
 }
