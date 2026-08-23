@@ -59,6 +59,13 @@ export const INTEGRITY_CHECK_LABEL: Record<IntegrityCheckStatus, string> = {
   fail: "Fallo",
 };
 
+export function summarizeIntegrityChecks(checks: IntegrityCheck[]) {
+  return checks.reduce((summary, check) => {
+    summary[check.status] += 1;
+    return summary;
+  }, { pass: 0, warning: 0, fail: 0 });
+}
+
 export function shortFingerprint(value: string | null | undefined) {
   return value ? value.slice(0, 12) : "—";
 }
