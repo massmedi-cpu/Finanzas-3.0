@@ -11,6 +11,17 @@ html{scrollbar-gutter:stable}
 :where(a,button){touch-action:manipulation}
 a[data-nav-pending="true"]{opacity:.62;cursor:progress;pointer-events:none}
 
+@media(min-width:1181px){
+  .app-root.private>.sidebar{height:100dvh;max-height:100dvh;overflow:hidden;gap:18px;padding-top:20px;padding-bottom:16px}
+  .app-root.private>.sidebar .brand{flex:0 0 auto}
+  .app-root.private>.sidebar nav.desktop-nav{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior-y:contain;scrollbar-gutter:stable;padding-right:4px;scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--muted) 45%,transparent) transparent}
+  .app-root.private>.sidebar nav.desktop-nav::-webkit-scrollbar{width:8px}
+  .app-root.private>.sidebar nav.desktop-nav::-webkit-scrollbar-track{background:transparent}
+  .app-root.private>.sidebar nav.desktop-nav::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--muted) 38%,transparent);border-radius:999px}
+  .app-root.private>.sidebar nav.desktop-nav::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--muted) 58%,transparent)}
+  .app-root.private>.sidebar .sidebar-foot{flex:0 0 auto;margin-top:0;padding-top:10px;padding-bottom:4px}
+}
+
 @media(max-width:1180px) and (min-width:681px){
   .app-root.private{display:block;min-width:0}
   .app-root.private>.sidebar{position:sticky;z-index:60;top:0;width:100%;height:auto;min-height:64px;padding:8px 12px;border-right:0;border-bottom:1px solid var(--border);background:var(--surface);display:flex;flex-direction:row;align-items:center;gap:10px;overflow:visible}
