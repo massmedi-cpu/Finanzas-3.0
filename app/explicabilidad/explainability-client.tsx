@@ -58,20 +58,20 @@ export function ExplainabilityClient({initialData}:{initialData:ExplainabilityOv
 
     <section className="explainability-panel">
       <div className="explainability-panel-head"><div><p className="eyebrow">ORDEN DE DECISIÓN</p><h2>Qué valor tiene prioridad</h2></div><span className="pill">{formatInteger(p.total)} movimientos analizados</span></div>
-      <ol className="precedence-list">{initialData.precedence.sort((a,b)=>a.priority-b.priority).map(item=><li key={item.key}><span>{item.priority}</span><div><strong>{item.label}</strong><p>{item.detail}</p></div></li>)}</ol>
+      <ol className="precedence-list">{[...initialData.precedence].sort((a,b)=>a.priority-b.priority).map(item=><li key={item.key}><span>{item.priority}</span><div><strong>{item.label}</strong><p>{item.detail}</p></div></li>)}</ol>
     </section>
 
     <section className="explainability-panel">
       <div className="explainability-panel-head"><div><p className="eyebrow">SUGERENCIAS · SOLO LECTURA</p><h2>Patrones que podrían convertirse en regla</h2><p>Se muestran únicamente patrones con al menos {initialData.guardrails.minSamples} movimientos y {formatPercent(initialData.guardrails.minDominance*100,0)} de consistencia.</p></div><Link className="secondary-action" href="/reglas">Ver reglas</Link></div>
       {!suggestions.length?<div className="explainability-empty"><strong>No hay sugerencias pendientes con suficiente evidencia.</strong><p>Las reglas existentes, ediciones manuales y divisiones quedan excluidas automáticamente.</p></div>:
       <div className="suggestion-list">{suggestions.map(suggestion=>{
-        const isPreview=previewedId===suggestion.id&&preview;const busy=loadingId===suggestion.id;
+        const activePreview=previewedId===suggestion.id?preview:null;const busy=loadingId===suggestion.id;
         return <article className="suggestion-card" key={suggestion.id}>
           <div className="suggestion-head"><div><span className="suggestion-direction">{directionLabel[suggestion.direction]}</span><h3>{suggestion.merchant}</h3><p>{suggestion.targetCategory}{suggestion.targetSubcategory?` · ${suggestion.targetSubcategory}`:""}</p></div><div className="suggestion-confidence"><strong>{formatPercent(suggestion.confidence*100,0)}</strong><span>confianza</span></div></div>
           <div className="suggestion-metrics"><span><strong>{formatInteger(suggestion.matched)}</strong> coincidencias</span><span><strong>{formatInteger(suggestion.dominantMatches)}</strong> con la clasificación dominante</span></div>
           <details><summary>Ver evidencia</summary><div className="suggestion-samples">{suggestion.samples.map(sample=><div key={sample.sourceId}><span>{sample.date?dateFmt.format(new Date(`${sample.date}T12:00:00`)):"Sin fecha"}</span><strong>{formatEuro(sample.amount)}</strong></div>)}</div></details>
-          {isPreview&&<div className="suggestion-preview"><strong>Vista previa obligatoria superada</strong><span>{formatInteger(preview.matched)} coincidencias · {formatInteger(preview.changeable)} modificables</span></div>}
-          <div className="suggestion-actions"><button type="button" className="secondary-action" disabled={busy} onClick={()=>previewSuggestion(suggestion)}>{busy?"Comprobando…":"Previsualizar regla"}</button><button type="button" className="primary-action" disabled={busy||!isPreview} onClick={()=>createRule(suggestion)}>Crear regla</button></div>
+          {activePreview&&<div className="suggestion-preview"><strong>Vista previa obligatoria superada</strong><span>{formatInteger(activePreview.matched)} coincidencias · {formatInteger(activePreview.changeable)} modificables</span></div>}
+          <div className="suggestion-actions"><button type="button" className="secondary-action" disabled={busy} onClick={()=>previewSuggestion(suggestion)}>{busy?"Comprobando…":"Previsualizar regla"}</button><button type="button" className="primary-action" disabled={busy||!activePreview} onClick={()=>createRule(suggestion)}>Crear regla</button></div>
         </article>;
       })}</div>}
     </section>
