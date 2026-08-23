@@ -15,10 +15,10 @@ must(client.includes('upload(e.target.files[0],"receipt")'), "Cámara/galería d
 must(client.includes("Reprocesar OCR mejorado"), "Debe existir reprocesado OCR mejorado");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-v305"]'), "La app debe resolver el import de OCR al motor 3.0.5");
 must(engine.includes("reconstructTsvReceipt") && engine.includes("tsv:true"), "El OCR debe usar posiciones y confianza TSV, no sólo texto plano");
-must(engine.includes("adaptiveBinary") && engine.includes("adaptive_tsv"), "Debe existir contraste adaptativo para tickets fotografiados");
+must(engine.includes("const adaptive=new Uint8ClampedArray(gray)") && engine.includes('variant:"adaptive_tsv"') && engine.includes("contraste adaptativo"), "Debe existir umbral adaptativo y una pasada OCR específica para tickets fotografiados");
 must(engine.includes("bounds(") && engine.includes("Detectando el papel del ticket"), "Debe recortarse el papel antes del OCR");
 must(engine.includes('tessedit_pageseg_mode'), "Debe probarse segmentación OCR específica");
-must(engine.includes('"6"') && engine.includes('"4"'), "Debe haber estrategias OCR alternativas para bloque y columnas");
+must(engine.includes('v.adaptive,"6"') && engine.includes('v.enhanced,"4"'), "Debe haber estrategias OCR alternativas para bloque y columnas");
 must(engine.includes("inferDocumentMetadata"), "Los metadatos deben derivarse del texto OCR seleccionado");
 must(css.includes("width:min(920px"), "La revisión de documentos debe tener un ancho usable en escritorio");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"), "La reconstrucción OCR debe presentarse con apariencia de ticket, no como JSON técnico");
