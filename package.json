@@ -32,6 +32,7 @@
     "audit:v280": "node scripts/audit-v280.mjs",
     "audit:v281": "node scripts/audit-v281.mjs",
     "audit:v300": "node scripts/audit-v300.mjs",
+    "audit:sync": "node scripts/audit-sync-v301.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
     "test:analytics": "tsx scripts/analytics-v220-tests.ts",
     "test:intelligence": "tsx scripts/intelligence-v230-tests.ts",
