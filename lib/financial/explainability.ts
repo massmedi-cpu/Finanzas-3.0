@@ -1,20 +1,9 @@
 import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 import type { ClassificationOrigin } from "@/lib/financial/classification-origin";
+import type { ExplainabilityOverview } from "@/lib/financial/explainability-shared";
 
-export type ExplainabilitySample={sourceId:string;date:string|null;amount:number};
-export type ExplainabilitySuggestion={
-  id:string;merchant:string;direction:"income"|"expense";targetCategory:string;targetSubcategory:string|null;
-  matched:number;dominantMatches:number;confidence:number;samples:ExplainabilitySample[];
-};
-export type ExplainabilityPrecedence={key:ClassificationOrigin;label:string;detail:string;priority:number};
-export type ExplainabilityOverview={
-  version:string;
-  provenance:{total:number;source:number;rule:number;manual:number;split:number};
-  precedence:ExplainabilityPrecedence[];
-  suggestions:ExplainabilitySuggestion[];
-  guardrails:{readOnly:boolean;sourceUntouched:boolean;previewRequired:boolean;minSamples:number;minDominance:number;manualOverridesExcluded:boolean;splitsExcluded:boolean;existingRuleApplicationsExcluded:boolean};
-};
+export type { ExplainabilityOverview,ExplainabilityPrecedence,ExplainabilitySample,ExplainabilitySuggestion } from "@/lib/financial/explainability-shared";
 
 type JsonRecord=Record<string,unknown>;
 const record=(value:unknown):JsonRecord=>value!==null&&typeof value==="object"&&!Array.isArray(value)?value as JsonRecord:{};
@@ -46,13 +35,4 @@ export async function getExplainabilityOverview(limit=20):Promise<Explainability
   const {data,error}=await supabase.rpc("financial_app_explainability_overview",{p_limit:Math.max(1,Math.min(limit,50))});
   if(error||!data)throw new Error(error?.message||"explainability_unavailable");
   return normalizeExplainabilityOverview(data);
-}
-
-export function suggestionRulePayload(suggestion:ExplainabilitySuggestion){
-  return {
-    name:`Clasificar ${suggestion.merchant}`.slice(0,120),priority:100,active:true,
-    match_counterparty:suggestion.merchant,counterparty_operator:"equals",match_concept:null,concept_operator:"contains",
-    match_type:null,match_category:null,match_account_id:null,amount_min:null,amount_max:null,direction:suggestion.direction,
-    set_category:suggestion.targetCategory,set_subcategory:suggestion.targetSubcategory,add_tags:[],set_recurring:null,stop_processing:true,
-  };
 }
