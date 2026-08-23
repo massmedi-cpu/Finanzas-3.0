@@ -1,6 +1,6 @@
 # Release gate — Financial App 2.8.0
 
-Estado: CANDIDATA ACUMULADA 2.6 → 2.8 sobre la base estable 2.5.0.
+Estado: CANDIDATA FINAL ACUMULADA 2.6 → 2.8 sobre la base estable 2.5.0.
 
 ## Base protegida
 - La rama `develop/v2.8.0-integrity-rebuild` tiene Vercel desactivado.
@@ -41,7 +41,7 @@ Estado: CANDIDATA ACUMULADA 2.6 → 2.8 sobre la base estable 2.5.0.
 - [ ] Inteligencia 2.3 + tests.
 - [ ] Horizonte 2.4 + tests.
 - [ ] Formato/cierre 2.5 + tests.
-- [ ] Reglas 2.6 + tests de tiempo.
+- [ ] Reglas 2.6 + test Europe/Madrid.
 - [ ] Explicabilidad 2.7 + tests.
 - [ ] Integridad 2.8 + tests.
 - [ ] Backup/recovery.
@@ -51,7 +51,7 @@ Estado: CANDIDATA ACUMULADA 2.6 → 2.8 sobre la base estable 2.5.0.
 
 ## Versionado
 - [x] `package.json` = 2.8.0.
-- [ ] `package-lock.json` raíz = 2.8.0.
+- [x] `package-lock.json` raíz = 2.8.0.
 - [x] `lib/app-version.ts` = 2.8.0.
 - [x] README alineado con 2.8.0.
 
