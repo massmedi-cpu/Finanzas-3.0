@@ -16,6 +16,7 @@ export type DocumentMetadata = {
 
 export type ImageOcrResult = {
   text: string;
+  layoutText: string;
   confidence: number | null;
   method: string;
   passes: Array<{ variant: string; confidence: number | null; score: number }>;
@@ -45,6 +46,19 @@ export function normalizeOcrText(text: string) {
     .filter(usefulLine)
     .join("\n")
     .trim();
+}
+
+export function preserveOcrLayout(text: string) {
+  const lines=text.replace(/\r/g,"").split("\n").map(line=>line.replace(/\t/g,"    ").replace(/[|¦]/g,"I").replace(/\s+$/g,""));
+  const compact:string[]=[];
+  let previousBlank=false;
+  for(const line of lines){
+    const blank=!line.trim();
+    if(blank&&previousBlank) continue;
+    compact.push(line);
+    previousBlank=blank;
+  }
+  return compact.join("\n").trim();
 }
 
 export function parseEuroValue(raw: string) {
@@ -184,66 +198,58 @@ function otsuThreshold(histogram: Uint32Array, total: number) {
   return clamp(threshold, 115, 220);
 }
 
+function detectReceiptBounds(data: ImageData, width: number, height: number) {
+  const step=Math.max(4,Math.floor(Math.max(width,height)/650));
+  const rows=Math.ceil(height/step);const cols=Math.ceil(width/step);
+  const rowHits=new Uint32Array(rows);const colHits=new Uint32Array(cols);
+  for(let gy=0;gy<rows;gy+=1){
+    const y=Math.min(height-1,gy*step);
+    for(let gx=0;gx<cols;gx+=1){
+      const x=Math.min(width-1,gx*step);const offset=(y*width+x)*4;
+      const r=data.data[offset],g=data.data[offset+1],b=data.data[offset+2];
+      const hi=Math.max(r,g,b),lo=Math.min(r,g,b);const luma=r*.2126+g*.7152+b*.0722;
+      const paper=luma>=142&&(hi-lo)<=72&&g>=r-38&&b>=r-38;
+      if(paper){rowHits[gy]+=1;colHits[gx]+=1;}
+    }
+  }
+  const rowMin=Math.max(4,Math.round(cols*.16));const colMin=Math.max(4,Math.round(rows*.22));
+  let top=0,bottom=rows-1,left=0,right=cols-1;
+  while(top<rows&&rowHits[top]<rowMin)top+=1;while(bottom>=0&&rowHits[bottom]<rowMin)bottom-=1;
+  while(left<cols&&colHits[left]<colMin)left+=1;while(right>=0&&colHits[right]<colMin)right-=1;
+  if(top>=bottom||left>=right)return null;
+  let x=left*step,y=top*step,w=(right-left+1)*step,h=(bottom-top+1)*step;
+  if(w<width*.38||h<height*.42)return null;
+  const mx=Math.round(w*.045),my=Math.round(h*.035);
+  x=Math.max(0,x-mx);y=Math.max(0,y-my);w=Math.min(width-x,w+mx*2);h=Math.min(height-y,h+my*2);
+  return {x,y,w,h};
+}
+
 async function imageVariants(file: File) {
   const bitmap = await createImageBitmap(file);
   try {
-    let scale = Math.max(1, 1600 / Math.max(1, bitmap.width));
-    if (bitmap.width * scale > 2400) scale = 2400 / bitmap.width;
-    if (bitmap.height * scale > 4200) scale = Math.min(scale, 4200 / bitmap.height);
-    const width = Math.max(1, Math.round(bitmap.width * scale));
-    const height = Math.max(1, Math.round(bitmap.height * scale));
-    const base = document.createElement("canvas");
-    base.width = width;
-    base.height = height;
-    const context = base.getContext("2d", { willReadFrequently: true });
-    if (!context) throw new Error("Canvas no disponible");
-    context.fillStyle = "#fff";
-    context.fillRect(0, 0, width, height);
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = "high";
-    context.drawImage(bitmap, 0, 0, width, height);
-
-    const source = context.getImageData(0, 0, width, height);
-    const grayscale = new Uint8ClampedArray(source.data.length);
-    const histogram = new Uint32Array(256);
-    const pixels = width * height;
-    for (let offset = 0; offset < source.data.length; offset += 4) {
-      const value = Math.round(source.data[offset] * 0.2126 + source.data[offset + 1] * 0.7152 + source.data[offset + 2] * 0.0722);
-      histogram[value] += 1;
-    }
-    const low = percentile(histogram, pixels, 0.015);
-    const high = Math.max(low + 24, percentile(histogram, pixels, 0.985));
-    const stretchedHistogram = new Uint32Array(256);
-    for (let offset = 0; offset < source.data.length; offset += 4) {
-      const raw = Math.round(source.data[offset] * 0.2126 + source.data[offset + 1] * 0.7152 + source.data[offset + 2] * 0.0722);
-      const value = clamp(Math.round(((raw - low) * 255) / (high - low)), 0, 255);
-      stretchedHistogram[value] += 1;
-      grayscale[offset] = value;
-      grayscale[offset + 1] = value;
-      grayscale[offset + 2] = value;
-      grayscale[offset + 3] = 255;
-    }
-    const enhanced = document.createElement("canvas");
-    enhanced.width = width;
-    enhanced.height = height;
-    enhanced.getContext("2d")?.putImageData(new ImageData(grayscale, width, height), 0, 0);
-
-    const threshold = otsuThreshold(stretchedHistogram, pixels);
-    const binaryPixels = new Uint8ClampedArray(grayscale);
-    for (let offset = 0; offset < binaryPixels.length; offset += 4) {
-      const value = binaryPixels[offset] < threshold ? 0 : 255;
-      binaryPixels[offset] = value;
-      binaryPixels[offset + 1] = value;
-      binaryPixels[offset + 2] = value;
-    }
-    const binary = document.createElement("canvas");
-    binary.width = width;
-    binary.height = height;
-    binary.getContext("2d")?.putImageData(new ImageData(binaryPixels, width, height), 0, 0);
-    return { enhanced, binary, width, height, threshold };
-  } finally {
-    bitmap.close();
-  }
+    let scale = Math.max(1, 2100 / Math.max(1, bitmap.width));
+    if (bitmap.width * scale > 2800) scale = 2800 / bitmap.width;
+    if (bitmap.height * scale > 5200) scale = Math.min(scale, 5200 / bitmap.height);
+    const fullWidth = Math.max(1, Math.round(bitmap.width * scale));
+    const fullHeight = Math.max(1, Math.round(bitmap.height * scale));
+    const base = document.createElement("canvas");base.width=fullWidth;base.height=fullHeight;
+    const baseContext=base.getContext("2d",{willReadFrequently:true});if(!baseContext)throw new Error("Canvas no disponible");
+    baseContext.fillStyle="#fff";baseContext.fillRect(0,0,fullWidth,fullHeight);baseContext.imageSmoothingEnabled=true;baseContext.imageSmoothingQuality="high";baseContext.drawImage(bitmap,0,0,fullWidth,fullHeight);
+    const fullData=baseContext.getImageData(0,0,fullWidth,fullHeight);const bounds=detectReceiptBounds(fullData,fullWidth,fullHeight);
+    const original=document.createElement("canvas");
+    if(bounds){original.width=bounds.w;original.height=bounds.h;original.getContext("2d")?.drawImage(base,bounds.x,bounds.y,bounds.w,bounds.h,0,0,bounds.w,bounds.h)}
+    else{original.width=fullWidth;original.height=fullHeight;original.getContext("2d")?.drawImage(base,0,0)}
+    const width=original.width,height=original.height;const context=original.getContext("2d",{willReadFrequently:true});if(!context)throw new Error("Canvas no disponible");
+    const source=context.getImageData(0,0,width,height);const grayscale=new Uint8ClampedArray(source.data.length);const histogram=new Uint32Array(256);const pixels=width*height;
+    for(let offset=0;offset<source.data.length;offset+=4){const value=Math.round(source.data[offset]*.2126+source.data[offset+1]*.7152+source.data[offset+2]*.0722);histogram[value]+=1;}
+    const low=percentile(histogram,pixels,.01);const high=Math.max(low+24,percentile(histogram,pixels,.99));const stretchedHistogram=new Uint32Array(256);
+    for(let offset=0;offset<source.data.length;offset+=4){const raw=Math.round(source.data[offset]*.2126+source.data[offset+1]*.7152+source.data[offset+2]*.0722);const value=clamp(Math.round(((raw-low)*255)/(high-low)),0,255);stretchedHistogram[value]+=1;grayscale[offset]=value;grayscale[offset+1]=value;grayscale[offset+2]=value;grayscale[offset+3]=255;}
+    const enhanced=document.createElement("canvas");enhanced.width=width;enhanced.height=height;enhanced.getContext("2d")?.putImageData(new ImageData(grayscale,width,height),0,0);
+    const threshold=otsuThreshold(stretchedHistogram,pixels);const binaryPixels=new Uint8ClampedArray(grayscale);
+    for(let offset=0;offset<binaryPixels.length;offset+=4){const value=binaryPixels[offset]<threshold?0:255;binaryPixels[offset]=value;binaryPixels[offset+1]=value;binaryPixels[offset+2]=value;}
+    const binary=document.createElement("canvas");binary.width=width;binary.height=height;binary.getContext("2d")?.putImageData(new ImageData(binaryPixels,width,height),0,0);
+    return {original,enhanced,binary,width,height,threshold,cropped:Boolean(bounds)};
+  } finally { bitmap.close(); }
 }
 
 function candidateScore(text: string, confidence: number | null, hint: DocumentTypeHint) {
@@ -262,16 +268,9 @@ function candidateScore(text: string, confidence: number | null, hint: DocumentT
 }
 
 async function recognize(worker: OcrWorker, input: File | HTMLCanvasElement, psm: string) {
-  await worker.setParameters?.({
-    tessedit_pageseg_mode: psm,
-    preserve_interword_spaces: "1",
-    user_defined_dpi: "300",
-  });
-  const result = await worker.recognize(input);
-  return {
-    text: normalizeOcrText(String(result.data?.text || "")),
-    confidence: Number.isFinite(result.data?.confidence) ? Number(result.data?.confidence) : null,
-  };
+  await worker.setParameters?.({tessedit_pageseg_mode:psm,preserve_interword_spaces:"1",user_defined_dpi:"300"});
+  const result=await worker.recognize(input);const raw=String(result.data?.text||"");
+  return {text:normalizeOcrText(raw),layoutText:preserveOcrLayout(raw),confidence:Number.isFinite(result.data?.confidence)?Number(result.data?.confidence):null};
 }
 
 export async function recognizeTicketImage(
@@ -280,37 +279,18 @@ export async function recognizeTicketImage(
   onProgress: (value: number, label: string) => void,
   hint: DocumentTypeHint = null,
 ): Promise<ImageOcrResult> {
-  const passes: Array<{ variant: string; text: string; confidence: number | null; score: number }> = [];
-  let variants: Awaited<ReturnType<typeof imageVariants>> | null = null;
-  try {
-    onProgress(0.1, "Mejorando contraste del ticket");
-    variants = await imageVariants(file);
-    onProgress(0.28, "Leyendo ticket · pasada 1 de 2");
-    const enhanced = await recognize(worker, variants.enhanced, "6");
-    passes.push({ variant: "enhanced_block", ...enhanced, score: candidateScore(enhanced.text, enhanced.confidence, hint) });
-
-    const firstMeta = inferDocumentMetadata(enhanced.text, hint);
-    const firstLooksGood = (enhanced.confidence ?? 0) >= 72 && Boolean(firstMeta.documentDate) && firstMeta.amount !== null && Boolean(firstMeta.merchant) && enhanced.text.length >= 80;
-    if (!firstLooksGood) {
-      onProgress(0.64, "Leyendo ticket · pasada 2 de 2");
-      const sparse = await recognize(worker, variants.binary, "11");
-      passes.push({ variant: "binary_sparse", ...sparse, score: candidateScore(sparse.text, sparse.confidence, hint) });
-    }
-  } catch {
-    onProgress(0.45, "Leyendo imagen original");
-  }
-
-  if (!passes.length || Math.max(...passes.map((item) => item.score)) < 82) {
-    onProgress(0.78, "Comprobando lectura original");
-    const original = await recognize(worker, file, "6");
-    passes.push({ variant: "original_block", ...original, score: candidateScore(original.text, original.confidence, hint) });
-  }
-  const best = passes.reduce((winner, item) => item.score > winner.score ? item : winner, passes[0]);
-  onProgress(0.96, "Interpretando fecha, comercio e importe");
-  return {
-    text: best.text,
-    confidence: best.confidence,
-    method: `image_ocr_multi:${best.variant}`,
-    passes: passes.map(({ variant, confidence, score }) => ({ variant, confidence, score: Math.round(score * 10) / 10 })),
-  };
+  const passes:Array<{variant:string;text:string;layoutText:string;confidence:number|null;score:number}>=[];
+  let variants:Awaited<ReturnType<typeof imageVariants>>|null=null;
+  try{
+    onProgress(.08,"Detectando y recortando el ticket");variants=await imageVariants(file);
+    onProgress(.27,"Leyendo ticket · estructura completa");const block=await recognize(worker,variants.enhanced,"6");passes.push({variant:"enhanced_block",...block,score:candidateScore(block.text,block.confidence,hint)});
+    onProgress(.55,"Leyendo ticket · columnas y precios");const column=await recognize(worker,variants.enhanced,"4");passes.push({variant:"enhanced_column",...column,score:candidateScore(column.text,column.confidence,hint)});
+    const current=passes.reduce((a,b)=>b.score>a.score?b:a);const meta=inferDocumentMetadata(current.text,hint);
+    const looksGood=(current.confidence??0)>=70&&Boolean(meta.documentDate)&&meta.amount!==null&&Boolean(meta.merchant)&&current.text.length>=100;
+    if(!looksGood){onProgress(.75,"Afinando caracteres del ticket");const sparse=await recognize(worker,variants.binary,"11");passes.push({variant:"binary_sparse",...sparse,score:candidateScore(sparse.text,sparse.confidence,hint)});}
+  }catch{onProgress(.62,"Leyendo imagen original");}
+  if(!passes.length){const original=await recognize(worker,file,"6");passes.push({variant:"original_block",...original,score:candidateScore(original.text,original.confidence,hint)});}
+  const best=passes.reduce((winner,item)=>item.score>winner.score?item:winner,passes[0]);
+  onProgress(.96,"Interpretando fecha, comercio e importe");
+  return {text:best.text,layoutText:best.layoutText,confidence:best.confidence,method:`image_ocr_receipt:${best.variant}`,passes:passes.map(({variant,confidence,score})=>({variant,confidence,score:Math.round(score*10)/10}))};
 }
