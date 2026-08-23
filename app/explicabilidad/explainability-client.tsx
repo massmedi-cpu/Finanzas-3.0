@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { formatEuro,formatInteger,formatPercent } from "@/lib/format/es-es";
-import { suggestionRulePayload,type ExplainabilityOverview,type ExplainabilitySuggestion } from "@/lib/financial/explainability";
+import { suggestionRulePayload,type ExplainabilityOverview,type ExplainabilitySuggestion } from "@/lib/financial/explainability-shared";
 import type { RulePreview } from "@/lib/financial/rules";
 
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
