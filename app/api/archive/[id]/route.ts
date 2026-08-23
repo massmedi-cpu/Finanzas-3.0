@@ -25,9 +25,22 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
   return NextResponse.json({ok:true,document:detail.data},{headers:{"Cache-Control":"private, no-store"}});
 }
 
-export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
+export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
-  const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_archive",{p_id:id});
-  if(error||!data)return NextResponse.json({ok:false,error:error?.message||"archive_failed"},{status:400});
+  const {id}=await params;const action=request.nextUrl.searchParams.get("action");
+  if(action!=="restore")return NextResponse.json({ok:false,error:"unsupported_action"},{status:400});
+  const {data,error}=await supabase.rpc("financial_app_archive_restore",{p_id:id});
+  if(error||!data)return NextResponse.json({ok:false,error:error?.message||"restore_failed"},{status:400});
+  return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
+}
+
+export async function DELETE(request:NextRequest,{params}:{params:Promise<{id:string}>}){
+  const supabase=await authorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  const {id}=await params;const permanent=request.nextUrl.searchParams.get("permanent")==="1";
+  if(!permanent){const {data,error}=await supabase.rpc("financial_app_archive_archive",{p_id:id});if(error||!data)return NextResponse.json({ok:false,error:error?.message||"archive_failed"},{status:400});return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});}
+  const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});if(detail.error||!detail.data)return NextResponse.json({ok:false,error:detail.error?.message||"document_unavailable"},{status:404});
+  if(!detail.data.archivedAt)return NextResponse.json({ok:false,error:"archive_before_delete"},{status:409});
+  if(detail.data.storagePath){const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);if(removed.error)return NextResponse.json({ok:false,error:`storage_delete_failed: ${removed.error.message}`},{status:400});}
+  const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
   return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
 }
