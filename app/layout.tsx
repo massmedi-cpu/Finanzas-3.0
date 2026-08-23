@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AppChrome } from "@/components/app-chrome";
 import "./globals.css";
+import "./controls.css";
 import "./home.css";
 import "./cash-flow.css";
 import "./cash-flow-advanced.css";
