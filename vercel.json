@@ -5,6 +5,13 @@
   "regions": ["cdg1"],
   "git": {
     "deploymentEnabled": {
+      "audit/**": false,
+      "chore/**": false,
+      "develop/**": false,
+      "feat/**": false,
+      "fix/**": false,
+      "hotfix/**": false,
+      "release/**": false,
       "financial-app-rebuild": false,
       "financial-app-rebuild-validation-19": false,
       "release/1.0.0": false,
