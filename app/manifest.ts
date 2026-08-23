@@ -1,2 +1,3 @@
 import type { MetadataRoute } from "next";
-export default function manifest():MetadataRoute.Manifest{return{name:"Financial App",short_name:"Financial App",description:"Control y planificación financiera personal",start_url:"/",display:"standalone",background_color:"#f4f6f8",theme_color:"#0b72ff",lang:"es-ES",icons:[{src:"/icon.png",sizes:"512x512",type:"image/png"},{src:"/apple-icon.png",sizes:"180x180",type:"image/png"}]}}
+import { APP_VERSION } from "@/lib/app-version";
+export default function manifest():MetadataRoute.Manifest{return{name:"Financial App",short_name:"Financial App",description:`Control y planificación financiera personal · versión ${APP_VERSION}`,start_url:"/",display:"standalone",background_color:"#f4f6f8",theme_color:"#0b72ff",lang:"es-ES",icons:[{src:"/icon.png",sizes:"512x512",type:"image/png"},{src:"/apple-icon.png",sizes:"180x180",type:"image/png"}]}}
