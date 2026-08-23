@@ -8,19 +8,18 @@ const need = [
   "database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql",
   "scripts/backup-recovery-tests.ts",
   "docs/AUDIT_FINANCIAL_APP_1.8.0.md",
+  "lib/document/ticket-ocr-engine.ts",
 ];
 for (const file of need) if (!existsSync(file)) errors.push(`Falta ${file}`);
 
 const api = readFileSync("app/api/backup/route.ts", "utf8");
 const settings = readFileSync("app/configuracion/settings-client.tsx", "utf8");
-const migration = existsSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql")
-  ? readFileSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql", "utf8")
-  : "";
-const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql")
-  ? readFileSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql", "utf8")
-  : "";
+const migration = existsSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql") ? readFileSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql", "utf8") : "";
+const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql") ? readFileSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql", "utf8") : "";
 const archive = readFileSync("app/archivo/archive-client.tsx", "utf8");
-const ticketOcr = existsSync("lib/document/ticket-ocr.ts") ? readFileSync("lib/document/ticket-ocr.ts", "utf8") : "";
+const engine = existsSync("lib/document/ticket-ocr-engine.ts") ? readFileSync("lib/document/ticket-ocr-engine.ts", "utf8") : "";
+const rectified = existsSync("lib/document/ticket-ocr-v307.ts") ? readFileSync("lib/document/ticket-ocr-v307.ts", "utf8") : "";
+const tsconfig = readFileSync("tsconfig.json", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 const version = readFileSync("lib/app-version.ts", "utf8");
 
@@ -40,10 +39,10 @@ if (!preserve.includes("delete from financial_app.transaction_splits s\n  using 
 if (!preserve.includes("delete from financial_app.transaction_documents td\n  using financial_app.transactions t")) errors.push("El hotfix no protege vínculos de documentos posteriores");
 if (!preserve.includes("Una conciliación que toca un movimiento posterior se conserva")) errors.push("Falta protección de conciliaciones posteriores");
 if (!preserve.includes("Un documento posterior vinculado a un movimiento posterior permanece activo")) errors.push("Falta protección de documentos posteriores");
-const legacyBrowserOcr = archive.includes("worker.recognize(file)");
-const enhancedBrowserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && ticketOcr.includes("worker.recognize(input)");
-if (!legacyBrowserOcr && !enhancedBrowserOcr) errors.push("OCR dejó de procesarse en el navegador");
+const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes("sparseReceiptPass") && rectified.includes("worker.recognize(input") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
+if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
+if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
 
 const match = version.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
@@ -51,9 +50,5 @@ const current = match ? match.slice(1).map(Number) : null;
 const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1] >= 8));
 if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
-if (errors.length) {
-  console.error("Financial App 1.8 audit FAILED");
-  errors.forEach((error) => console.error(`- ${error}`));
-  process.exit(1);
-}
-console.log("Financial App 1.8 audit OK · garantías de recuperación y OCR local preservadas en versión >=1.8.0");
+if (errors.length) {console.error("Financial App 1.8 audit FAILED");errors.forEach((error) => console.error(`- ${error}`));process.exit(1)}
+console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor canónico");

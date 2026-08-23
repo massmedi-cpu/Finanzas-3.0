@@ -1,38 +1,44 @@
 import fs from "node:fs";
 
-function must(condition, message) {
-  if (!condition) throw new Error(message);
-}
+function must(condition,message){if(!condition)throw new Error(message)}
 
-const client = fs.readFileSync("app/archivo/archive-client.tsx", "utf8");
-const engine = fs.readFileSync("lib/document/ticket-ocr-v307.ts", "utf8");
-const tsconfig = fs.readFileSync("tsconfig.json", "utf8");
-const css = fs.readFileSync("app/archive.css", "utf8");
-const appVersion = fs.readFileSync("lib/app-version.ts", "utf8");
-const manifest = fs.readFileSync("app/manifest.ts", "utf8");
-const settings = fs.readFileSync("lib/financial/settings.ts", "utf8");
-const proxy = fs.readFileSync("proxy.ts", "utf8");
+const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const engine=fs.readFileSync("lib/document/ticket-ocr-engine.ts","utf8");
+const rectified=fs.readFileSync("lib/document/ticket-ocr-v307.ts","utf8");
+const tsconfig=fs.readFileSync("tsconfig.json","utf8");
+const css=fs.readFileSync("app/archive.css","utf8");
+const controls=fs.readFileSync("app/controls.css","utf8");
+const appVersion=fs.readFileSync("lib/app-version.ts","utf8");
+const manifest=fs.readFileSync("app/manifest.ts","utf8");
+const settings=fs.readFileSync("lib/financial/settings.ts","utf8");
+const proxy=fs.readFileSync("proxy.ts","utf8");
 
-must(client.includes('recognizeTicketImage(file,worker,onProgress,hint)'), "Archivo debe usar el OCR mejorado para imágenes");
-must(client.includes('file.type.startsWith("image/")?"receipt":null'), "Reprocesar imágenes debe conservar el contexto de ticket");
-must(client.includes('upload(e.target.files[0],"receipt")'), "Cámara/galería deben pasar la pista de ticket");
-must(client.includes("Reprocesar OCR mejorado"), "Debe existir reprocesado OCR mejorado");
-must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-v307"]'), "La app debe resolver el import de OCR al motor 3.0.7");
-must(engine.includes("reconstructTsvReceipt") && engine.includes("tsv: true"), "El OCR debe usar posiciones y confianza TSV, no sólo texto plano");
-must(engine.includes("estimateDeskewFromSamples") && engine.includes("function deskew("), "El OCR debe enderezar tickets fotografiados antes de leerlos");
-must(engine.includes("function paperGeometry(") && engine.includes("function rectify("), "El OCR debe corregir perspectiva horizontal del papel");
-must(engine.includes("Corrigiendo perspectiva y giro") && engine.includes("image_ocr_receipt_v307"), "La ruta de producción debe identificar el OCR 3.0.7");
-must(engine.includes("scoreReceiptCandidate") && engine.includes("shouldRefineReceiptCandidates"), "La selección de pasadas debe separar legibilidad de mera extracción de metadatos");
-must(engine.includes("natural_rectified_tsv") && engine.includes("Contrastando una tercera lectura"), "Las pasadas conflictivas deben provocar una tercera lectura sin binarizar");
-must(engine.includes("characters < 20") && engine.includes("* 0.15 - 35"), "Una confianza alta sin texto útil debe quedar penalizada");
-must(engine.includes('await read(worker, prepared.adaptive, "6")') && engine.includes('await read(worker, prepared.enhanced, "4")'), "Debe conservarse la estrategia multipasada bloque/columnas");
-must(engine.includes("inferDocumentMetadata"), "Los metadatos deben derivarse del texto OCR seleccionado");
-must(appVersion.includes('APP_VERSION = "3.0.5"'), "El hotfix debe conservar la versión de producto 3.0.5");
-must(manifest.includes("APP_VERSION") && manifest.includes("versión ${APP_VERSION}"), "El manifiesto instalado debe cambiar con la versión activa");
-must(proxy.includes("webmanifest"), "El manifest PWA debe quedar fuera del proxy de autenticación para que Android pueda actualizar la instalación");
-must(settings.includes("version:APP_VERSION"), "Configuración debe mostrar la versión del código en ejecución y no una versión backend obsoleta");
-must(css.includes("width:min(920px"), "La revisión de documentos debe tener un ancho usable en escritorio");
-must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"), "La reconstrucción OCR debe presentarse con apariencia de ticket, no como JSON técnico");
-must(client.includes("Archivados")&&client.includes("Eliminar definitivamente")&&client.includes("Restaurar a Activos"), "Archivo debe explicar y gestionar el ciclo Activos/Archivados/eliminación");
+must(client.includes('recognizeTicketImage(file,worker,onProgress,hint)'),"Archivo debe usar el motor OCR canónico para imágenes");
+must(client.includes('upload(e.target.files[0],"receipt")'),"Cámara y galería deben iniciar OCR de ticket automáticamente");
+must(client.includes("automaticOnImport:true"),"El resultado OCR debe registrar que se ejecutó automáticamente al importar");
+must(!client.includes("Reprocesar OCR mejorado"),"La experiencia principal no debe obligar a reprocesar manualmente el OCR");
+must(client.includes("OCR automático completado al importar"),"La interfaz debe dejar claro que el OCR termina durante la importación");
+must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"La app debe importar el OCR mediante un alias estable, no una implementación versionada");
+must(engine.includes('from "./ticket-ocr-v307"'),"El motor canónico debe conservar la rectificación validada como base interna");
+must(engine.includes('tessedit_pageseg_mode: "11"')&&engine.includes("sparse_original_psm11"),"El OCR automático debe ejecutar una lectura complementaria de texto disperso");
+must(engine.includes("mergeReceiptTexts")&&engine.includes("consensus_line_merge"),"El OCR debe combinar líneas entre lecturas en lugar de escoger una sola pasada");
+must(engine.includes("numericSignature")&&engine.includes("lineQuality")&&engine.includes("lexicalOverlap"),"El consenso debe comparar precios, palabras y calidad de línea");
+must(engine.includes("Verificando líneas y nombres del ticket")&&engine.includes("Combinando las lecturas más fiables"),"La mejora de nombres y líneas debe ejecutarse dentro del OCR inicial");
+must(engine.includes("image_ocr_receipt_v308:consensus_sparse")&&engine.includes("image_ocr_receipt_v308:rectified_fallback"),"El resultado debe identificar consenso o fallback de forma auditable");
+must(rectified.includes("reconstructTsvReceipt")&&rectified.includes("tsv: true"),"La base rectificada debe seguir usando posiciones y confianza TSV");
+must(rectified.includes("estimateDeskewFromSamples")&&rectified.includes("function deskew("),"La base OCR debe seguir enderezando tickets");
+must(rectified.includes("function paperGeometry(")&&rectified.includes("function rectify("),"La corrección de perspectiva debe permanecer activa");
+must(rectified.includes("scoreReceiptCandidate")&&rectified.includes("shouldRefineReceiptCandidates"),"La selección multipasada validada debe permanecer como primera capa");
+must(client.includes('type ActionKind=')&&!client.includes("const [busy,setBusy]"),"Archivo no debe bloquear todos los botones con un busy global");
+must(client.includes('"Guardando…":"Guardar cambios"')&&client.includes("applyDetail(body.document)"),"Guardar cambios debe actualizar localmente el documento con feedback específico");
+must(!client.includes('await refresh();await openDocument(detail.id)'),"Guardar no debe volver a recargar lista y detalle después del PATCH");
+must(controls.includes(".primary-action{")&&controls.includes("background:var(--accent)"),"Guardar cambios debe tener un estilo principal disponible globalmente");
+must(appVersion.includes('APP_VERSION = "3.0.5"'),"La versión visible debe seguir sincronizada con package/lockfile durante este refactor");
+must(manifest.includes("APP_VERSION")&&manifest.includes("versión ${APP_VERSION}"),"El manifiesto instalado debe derivar de la versión activa");
+must(proxy.includes("webmanifest"),"El manifest PWA debe quedar fuera del proxy de autenticación");
+must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar la versión del código en ejecución");
+must(css.includes("width:min(920px"),"La revisión de documentos debe conservar ancho usable en escritorio");
+must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
+must(client.includes("Archivados")&&client.includes("Eliminar definitivamente")&&client.includes("Restaurar a Activos"),"Archivo debe preservar el ciclo Activos/Archivados/eliminación");
 
-console.log("audit-ticket-ocr-v302 OK · engine 3.0.7 · selección conflictiva protegida");
+console.log("audit-ticket-ocr-v302 OK · OCR automático por consenso · Archivo sin busy global · controles comunes");

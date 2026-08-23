@@ -1,4 +1,0 @@
-/* Financial App 2.1 · capa de legibilidad. Se carga después de globals/chrome. */
-.brand small,.sidebar-foot{font-size:13px}.eyebrow{font-size:12px}
-@media(max-width:1050px) and (min-width:681px){.sidebar nav a{font-size:13px;line-height:1.25}}
-@media(max-width:680px){.mobile-nav>a,.mobile-nav>button{font-size:13px!important;line-height:1.2}}
