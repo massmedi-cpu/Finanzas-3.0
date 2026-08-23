@@ -1,6 +1,7 @@
 "use client";
 
 import { formatEuro } from "@/lib/format/es-es";
+import { madridToday } from "@/lib/time/madrid";
 
 import { useMemo, useState } from "react";
 import type { ForecastOverview, ForecastSaved, ForecastSuggestion, ForecastPoint } from "@/lib/financial/forecast";
@@ -12,7 +13,7 @@ const horizons=[30,60,90,180];
 const dateLabel=(value:string)=>dateFmt.format(new Date(`${value}T12:00:00`));
 
 type Editor={id?:string;title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;counterparty:string;recurrence:"once"|"monthly"|"bimonthly"|"quarterly"|"yearly";until:string;notes:string;confidence?:number;explanation?:Record<string,unknown>};
-const emptyEditor=():Editor=>({title:"",date:new Date().toISOString().slice(0,10),direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""});
+const emptyEditor=():Editor=>({title:"",date:madridToday(),direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""});
 
 function recurrenceName(saved:ForecastSaved){const r=saved.recurrence;if(!r)return "Una vez";if(r.frequency==="yearly")return "Anual";if(r.frequency==="weekly")return r.interval===1?"Semanal":`Cada ${r.interval} semanas`;if(r.interval===2)return "Bimestral";if(r.interval===3)return "Trimestral";return r.interval===1?"Mensual":`Cada ${r.interval} meses`;}
 function editorRecurrence(saved:ForecastSaved):Editor["recurrence"]{const r=saved.recurrence;if(!r)return "once";if(r.frequency==="yearly")return "yearly";if(r.frequency==="monthly"&&r.interval===2)return "bimonthly";if(r.frequency==="monthly"&&r.interval===3)return "quarterly";return "monthly";}

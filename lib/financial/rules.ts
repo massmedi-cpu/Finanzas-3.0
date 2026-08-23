@@ -21,25 +21,35 @@ export type RulesOverview={
 export type RulePreviewSample={id:string;date:string|null;amount:number;counterparty:string|null;concept:string|null;category:string|null;subcategory:string|null;changes:Record<string,unknown>};
 export type RulePreview={matched:number;changeable:number;samples:RulePreviewSample[];definition:Record<string,unknown>};
 
+type JsonRecord=Record<string,unknown>;
+const record=(value:unknown):JsonRecord=>value!==null&&typeof value==="object"&&!Array.isArray(value)?value as JsonRecord:{};
+const textOrNull=(value:unknown)=>typeof value==="string"&&value.trim()?value:null;
 const n=(value:unknown)=>Number.isFinite(Number(value))?Number(value):0;
 const nullableNumber=(value:unknown)=>value==null||value===""?null:n(value);
 const operator=(value:unknown):RuleTextOperator=>value==="equals"?"equals":"contains";
 const direction=(value:unknown):RuleDirection=>value==="income"||value==="expense"?value:"any";
 
-function normalizeRule(raw:any):TransactionRule{
+function normalizeRule(value:unknown):TransactionRule{
+  const raw=record(value);const conditions=record(raw.conditions);const actions=record(raw.actions);
   return {
     id:String(raw.id||""),name:String(raw.name||"Regla"),active:Boolean(raw.active),priority:n(raw.priority)||100,stopProcessing:raw.stopProcessing!==false,
-    conditions:{counterparty:raw.conditions?.counterparty||null,counterpartyOperator:operator(raw.conditions?.counterpartyOperator),concept:raw.conditions?.concept||null,conceptOperator:operator(raw.conditions?.conceptOperator),type:raw.conditions?.type||null,category:raw.conditions?.category||null,accountId:raw.conditions?.accountId||null,amountMin:nullableNumber(raw.conditions?.amountMin),amountMax:nullableNumber(raw.conditions?.amountMax),direction:direction(raw.conditions?.direction)},
-    actions:{category:raw.actions?.category||null,subcategory:raw.actions?.subcategory||null,addTags:Array.isArray(raw.actions?.addTags)?raw.actions.addTags.map(String):[],recurring:raw.actions?.recurring==null?null:Boolean(raw.actions.recurring)},
-    applicationCount:n(raw.applicationCount),activeApplicationCount:n(raw.activeApplicationCount),lastAppliedAt:raw.lastAppliedAt||null,createdAt:String(raw.createdAt||""),updatedAt:String(raw.updatedAt||""),
+    conditions:{
+      counterparty:textOrNull(conditions.counterparty),counterpartyOperator:operator(conditions.counterpartyOperator),concept:textOrNull(conditions.concept),conceptOperator:operator(conditions.conceptOperator),
+      type:textOrNull(conditions.type),category:textOrNull(conditions.category),accountId:textOrNull(conditions.accountId),amountMin:nullableNumber(conditions.amountMin),amountMax:nullableNumber(conditions.amountMax),direction:direction(conditions.direction),
+    },
+    actions:{
+      category:textOrNull(actions.category),subcategory:textOrNull(actions.subcategory),addTags:Array.isArray(actions.addTags)?actions.addTags.map(String):[],recurring:actions.recurring==null?null:Boolean(actions.recurring),
+    },
+    applicationCount:n(raw.applicationCount),activeApplicationCount:n(raw.activeApplicationCount),lastAppliedAt:textOrNull(raw.lastAppliedAt),createdAt:String(raw.createdAt||""),updatedAt:String(raw.updatedAt||""),
   };
 }
 
-export function normalizeRulesOverview(raw:any):RulesOverview{
-  const summary=raw?.summary||{};const guardrails=raw?.guardrails||{};
+export function normalizeRulesOverview(value:unknown):RulesOverview{
+  const raw=record(value);const summary=record(raw.summary);const guardrails=record(raw.guardrails);
   return {
-    version:String(raw?.version||APP_VERSION),rules:Array.isArray(raw?.rules)?raw.rules.map(normalizeRule):[],
-    accounts:Array.isArray(raw?.accounts)?raw.accounts.map((a:any)=>({id:String(a.id||""),name:String(a.name||"Cuenta"),identifier:String(a.identifier||"")})):[],
+    version:String(raw.version||APP_VERSION),
+    rules:Array.isArray(raw.rules)?raw.rules.map(normalizeRule):[],
+    accounts:Array.isArray(raw.accounts)?raw.accounts.map(value=>{const account=record(value);return{id:String(account.id||""),name:String(account.name||"Cuenta"),identifier:String(account.identifier||"")};}):[],
     summary:{totalRules:n(summary.totalRules),activeRules:n(summary.activeRules),totalApplications:n(summary.totalApplications)},
     guardrails:{sourceUntouched:guardrails.sourceUntouched!==false,manualOverridesProtected:guardrails.manualOverridesProtected!==false,duplicatesExcluded:guardrails.duplicatesExcluded!==false,sourceMissingExcluded:guardrails.sourceMissingExcluded!==false},
   };

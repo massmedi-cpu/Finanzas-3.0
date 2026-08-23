@@ -1,7 +1,9 @@
 name: Financial App CI
 on:
   pull_request:
-    branches: [main]
+    branches:
+      - main
+      - 'develop/**'
   push:
     branches:
       - 'financial-app-rebuild'
@@ -9,6 +11,9 @@ on:
       - 'develop/v2.3.0-intelligence'
       - 'develop/v2.4.0-long-horizon'
       - 'develop/v2.5.0-month-close'
+      - 'develop/v2.6.0-rules'
+      - 'develop/v2.7.0-explainability-rebuild'
+      - 'develop/v2.8.0-integrity-rebuild'
       - 'release/**'
 permissions:
   contents: read
@@ -30,6 +35,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify dependency tree
         run: npm ls --depth=0
+      - name: Dependency security audit
+        run: npm audit --omit=dev --audit-level=high
       - name: Structural Axioma audit
         run: npm run audit:structure
       - name: Architecture 1.7 regression audit
@@ -60,6 +67,18 @@ jobs:
         run: npm run audit:v250
       - name: Spanish Spain number format tests
         run: npm run test:format
+      - name: Full codebase 2.6 audit
+        run: npm run audit:v260
+      - name: Europe/Madrid time tests
+        run: npm run test:time
+      - name: Explainability 2.7 audit
+        run: npm run audit:v270
+      - name: Explainability decision tests
+        run: npm run test:explainability
+      - name: System integrity 2.8 audit
+        run: npm run audit:v280
+      - name: System integrity deterministic tests
+        run: npm run test:integrity
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
@@ -72,7 +91,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Release reproducibility gate
-        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics' || github.ref == 'refs/heads/develop/v2.3.0-intelligence' || github.ref == 'refs/heads/develop/v2.4.0-long-horizon' || github.ref == 'refs/heads/develop/v2.5.0-month-close'
+        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || startsWith(github.base_ref, 'develop/') || startsWith(github.ref, 'refs/heads/develop/')
         run: |
           test -f package-lock.json
           git diff --exit-code -- package.json package-lock.json

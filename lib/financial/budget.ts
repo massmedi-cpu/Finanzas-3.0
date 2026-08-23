@@ -1,4 +1,5 @@
 import { APP_VERSION } from "@/lib/app-version";
+import { madridToday } from "@/lib/time/madrid";
 import { createClient } from "@/lib/supabase/server";
 
 export type BudgetStatus="correct"|"attention"|"exceeded";
@@ -23,7 +24,7 @@ function normalizeBudget(raw:any):BudgetItem{return {
 };}
 export async function getBudgetMonth(month?:string):Promise<BudgetMonth>{
   const supabase=await createClient();
-  const pMonth=month&&/^\d{4}-\d{2}$/.test(month)?`${month}-01`:new Date().toISOString().slice(0,10);
+  const pMonth=month&&/^\d{4}-\d{2}$/.test(month)?`${month}-01`:madridToday();
   const {data,error}=await supabase.rpc("financial_app_budget_month",{p_month:pMonth});
   if(error||!data)throw new Error(error?.message||"budget_unavailable");
   const raw=data as any;
