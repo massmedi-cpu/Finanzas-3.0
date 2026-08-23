@@ -1,5 +1,7 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import { FormEvent, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/browser";
 import type { ArchiveDetail, ArchiveDocument, ArchiveOverview, ArchiveMovementRef } from "@/lib/financial/archive";
@@ -10,11 +12,11 @@ type OcrResult={text:string;status:"complete"|"error";data:Record<string,unknown
 type DetailPayload={ok:true;document:ArchiveDetail;signedUrl:string|null};
 const MAX_FILE=20*1024*1024;
 const allowed=new Set(["application/pdf","image/jpeg","image/png","image/webp","image/heic","image/heif"]);
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 
 function formatDate(value:string|null){return value?dates.format(new Date(`${value}T12:00:00`)):"—"}
-function formatMoney(value:number|null){return value==null?"—":money.format(value)}
+function formatMoney(value:number|null){return value==null?"—":formatEuro(value)}
 function safeName(name:string){return name.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g,"-").replace(/-+/g,"-").slice(0,120)||"documento"}
 async function sha256(file:File){const bytes=await file.arrayBuffer();const digest=await crypto.subtle.digest("SHA-256",bytes);return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("")}
 function loadScript(src:string,id:string){return new Promise<void>((resolve,reject)=>{if(document.getElementById(id)){resolve();return}const script=document.createElement("script");script.id=id;script.src=src;script.async=true;script.onload=()=>resolve();script.onerror=()=>reject(new Error("No se pudo cargar el motor OCR"));document.head.appendChild(script)})}

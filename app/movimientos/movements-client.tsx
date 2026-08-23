@@ -1,5 +1,7 @@
 "use client";
 
+import { formatEuro, formatInteger } from "@/lib/format/es-es";
+
 import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
@@ -12,7 +14,7 @@ type EditState = {
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
 
-const money = new Intl.NumberFormat("es-ES", { style:"currency", currency:"EUR" });
+
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
 const noValues = new Set(["no","false","0"]);
@@ -21,7 +23,7 @@ function formatDate(value:string|null) {
   if (!value) return "—";
   return dateFormat.format(new Date(`${value}T12:00:00`));
 }
-function formatMoney(value:number|null) { return value == null ? "—" : money.format(value); }
+function formatMoney(value:number|null) { return value == null ? "—" : formatEuro(value); }
 function display(value:unknown) {
   if (value === null || value === undefined || value === "") return "—";
   if (typeof value === "boolean") return value ? "Sí" : "No";
@@ -71,7 +73,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     if (!pageData.total) return "0 movimientos";
     const first=(pageData.page-1)*pageData.pageSize+1;
     const last=Math.min(pageData.total,pageData.page*pageData.pageSize);
-    return `${first.toLocaleString("es-ES")}–${last.toLocaleString("es-ES")} de ${pageData.total.toLocaleString("es-ES")}`;
+    return `${formatInteger(first)}–${formatInteger(last)} de ${formatInteger(pageData.total)}`;
   },[pageData]);
 
   async function loadWith(next:Filters,page=1) {
@@ -165,7 +167,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
 
   return <div className="movements-module">
     <section className="movement-summary" aria-label="Resumen de movimientos">
-      <div><strong>{pageData.total.toLocaleString("es-ES")}</strong><span>movimientos</span></div>
+      <div><strong>{formatInteger(pageData.total)}</strong><span>movimientos</span></div>
       <div><strong>{pageData.items.filter(item=>item.needsReview).length}</strong><span>visibles por revisar</span></div>
       <div><strong>{pageData.items.filter(item=>item.hasOverrides).length}</strong><span>visibles editados</span></div>
       <div><strong>{pageData.items.filter(item=>item.hasDocuments).length}</strong><span>visibles con documentos</span></div>

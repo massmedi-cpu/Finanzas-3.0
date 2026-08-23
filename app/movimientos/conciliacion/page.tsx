@@ -1,8 +1,9 @@
+import { formatEuro } from "@/lib/format/es-es";
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getReconciliationOverview } from "@/lib/financial/reconciliation";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 const methodLabel=(value:string)=>value==="linked_product_exact_same_day"?"Productos vinculados · exacto mismo día":value==="exact_same_day"?"Cuentas propias · exacto mismo día":value;
 const statusLabel=(value:string)=>value==="pending"?"Pendiente":"No conciliado";
@@ -36,11 +37,11 @@ export default async function ReconciliationPage(){
       </div>
 
       <article className="panel reconciliation-pairs"><div className="panel-head"><div><p className="eyebrow">EVIDENCIA CONFIRMADA</p><h2>Últimas parejas</h2></div><span className="pill">confianza 100</span></div>
-        <div className="reconciliation-table-wrap"><table><thead><tr><th>Fecha</th><th>Movimiento A</th><th>Movimiento B</th><th>Importe</th><th>Método</th></tr></thead><tbody>{data.pairs.slice(0,40).map(pair=><tr key={pair.id}><td>{fmt(pair.dateA)}</td><td><strong>{pair.a}</strong><small>{pair.accountA}</small></td><td><strong>{pair.b}</strong><small>{pair.accountB}</small></td><td className="numeric">{money.format(pair.amount)}</td><td><span>{methodLabel(pair.method)}</span><small>{pair.reason||"Coincidencia validada"}</small></td></tr>)}</tbody></table></div>
+        <div className="reconciliation-table-wrap"><table><thead><tr><th>Fecha</th><th>Movimiento A</th><th>Movimiento B</th><th>Importe</th><th>Método</th></tr></thead><tbody>{data.pairs.slice(0,40).map(pair=><tr key={pair.id}><td>{fmt(pair.dateA)}</td><td><strong>{pair.a}</strong><small>{pair.accountA}</small></td><td><strong>{pair.b}</strong><small>{pair.accountB}</small></td><td className="numeric">{formatEuro(pair.amount)}</td><td><span>{methodLabel(pair.method)}</span><small>{pair.reason||"Coincidencia validada"}</small></td></tr>)}</tbody></table></div>
       </article>
 
       <article className="panel reconciliation-pending"><div className="panel-head"><div><p className="eyebrow">PENDIENTE DE EVIDENCIA</p><h2>Grupos todavía no resueltos</h2></div><span className="pill">{data.summary.pending+data.summary.notReconciled}</span></div>
-        <div className="pending-groups">{data.unresolvedGroups.map((g,i)=><div key={`${g.status}-${g.identifier}-${g.subcategory}-${i}`}><div><strong>{g.subcategory}</strong><span>{g.account}</span><small>{fmt(g.firstDate)} — {fmt(g.lastDate)}</small></div><div><b>{g.count}</b><span>{statusLabel(g.status)}</span><small>{money.format(g.grossAmount)}</small></div></div>)}</div>
+        <div className="pending-groups">{data.unresolvedGroups.map((g,i)=><div key={`${g.status}-${g.identifier}-${g.subcategory}-${i}`}><div><strong>{g.subcategory}</strong><span>{g.account}</span><small>{fmt(g.firstDate)} — {fmt(g.lastDate)}</small></div><div><b>{g.count}</b><span>{statusLabel(g.status)}</span><small>{formatEuro(g.grossAmount)}</small></div></div>)}</div>
       </article>
 
       <p className="reconciliation-note">Financial App no concilia por parecido. Si falta el extracto o la segunda pata, el movimiento permanece pendiente hasta disponer de evidencia suficiente.</p>

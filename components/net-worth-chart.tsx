@@ -1,6 +1,7 @@
+import { formatEuroInteger } from "@/lib/format/es-es";
 import type { NetWorthHistoryPoint } from "@/lib/financial/net-worth";
 
-const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
 
 export function NetWorthChart({ points }: { points: NetWorthHistoryPoint[] }) {
   const complete = points.filter((point) => point.netWorth != null);
@@ -25,10 +26,10 @@ export function NetWorthChart({ points }: { points: NetWorthHistoryPoint[] }) {
 
   return <div className="nw-chart-wrap">
     <svg className="nw-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolución del patrimonio neto">
-      {grid.map((line) => <g key={line.y}><line className="nw-grid-line" x1={left} x2={width - right} y1={line.y} y2={line.y}/><text className="nw-axis-label" x={left - 8} y={line.y + 4} textAnchor="end">{money.format(line.value)}</text></g>)}
+      {grid.map((line) => <g key={line.y}><line className="nw-grid-line" x1={left} x2={width - right} y1={line.y} y2={line.y}/><text className="nw-axis-label" x={left - 8} y={line.y + 4} textAnchor="end">{formatEuroInteger(line.value)}</text></g>)}
       <path className="nw-area" d={`${path} L${x(complete.length - 1)},${top + plotH} L${x(0)},${top + plotH} Z`}/>
       <path className="nw-line" d={path}/>
-      {complete.map((point, index) => <g key={point.month}><circle className="nw-dot" cx={x(index)} cy={y(point.netWorth as number)} r="4"/><text className="nw-month" x={x(index)} y={height - 14} textAnchor="middle">{point.month.slice(5)}/{point.month.slice(2,4)}</text><title>{point.month}: {money.format(point.netWorth as number)}</title></g>)}
+      {complete.map((point, index) => <g key={point.month}><circle className="nw-dot" cx={x(index)} cy={y(point.netWorth as number)} r="4"/><text className="nw-month" x={x(index)} y={height - 14} textAnchor="middle">{point.month.slice(5)}/{point.month.slice(2,4)}</text><title>{point.month}: {formatEuroInteger(point.netWorth as number)}</title></g>)}
     </svg>
   </div>;
 }

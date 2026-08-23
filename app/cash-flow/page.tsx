@@ -1,10 +1,11 @@
+import { formatEuro } from "@/lib/format/es-es";
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getCashFlowRange, type CashFlowRange } from "@/lib/financial/cash-flow";
 import { movementState, movementUrl } from "@/lib/financial/movement-query";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
 const allowedRanges=new Set<CashFlowRange>(["day","week","month","quarter","year","historical","custom"]);
 const rangeLabels:Record<CashFlowRange,string>={day:"Día",week:"Semana",month:"Mes",quarter:"Trimestre",year:"Año",historical:"Histórico",custom:"Personalizado"};
@@ -48,16 +49,16 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
     </form>
 
     <section className="cf-summary">
-      <article><span>Ingresos</span><strong className="positive">{money.format(data.income)}</strong><small>{data.movements} movimientos computables</small></article>
-      <article><span>Gastos</span><strong className="negative">{money.format(data.expenses)}</strong><small>Solo gasto personal real</small></article>
-      <article className="net"><span>Cash Flow</span><strong className={data.net<0?"negative":"positive"}>{money.format(data.net)}</strong><small>{data.positivePeriods} periodos positivos · {data.negativePeriods} negativos</small></article>
+      <article><span>Ingresos</span><strong className="positive">{formatEuro(data.income)}</strong><small>{data.movements} movimientos computables</small></article>
+      <article><span>Gastos</span><strong className="negative">{formatEuro(data.expenses)}</strong><small>Solo gasto personal real</small></article>
+      <article className="net"><span>Cash Flow</span><strong className={data.net<0?"negative":"positive"}>{formatEuro(data.net)}</strong><small>{data.positivePeriods} periodos positivos · {data.negativePeriods} negativos</small></article>
     </section>
 
     <article className="panel cf-main-panel"><div className="panel-head"><div><p className="eyebrow">EVOLUCIÓN · {data.bucket.toUpperCase()}</p><h2>Ingresos, gastos y acumulado</h2></div><span className="pill">{data.series.length} puntos</span></div><CashFlowChart points={data.series} drilldown={{bucket:data.bucket,dateFrom:data.dateFrom,dateTo:data.dateTo,account:params.account||"",type:params.type||"",category:params.category||"",subcategory:params.subcategory||"",merchant:params.merchant||""}}/></article>
 
     <div className="cf-lower-grid">
-      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">GASTO</p><h2>Principales categorías</h2></div></div><ol className="cf-categories">{data.topExpenseCategories.map((c,i)=><li key={c.category}><Link className="cf-drill-row" href={movementUrl({...movementBase,category:c.category,max:"-0.01"})}><span><b>{i+1}</b>{c.category}</span><strong>{money.format(c.amount)}</strong></Link></li>)}</ol>{!data.topExpenseCategories.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
-      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">COMERCIOS</p><h2>Principales contrapartes</h2></div></div><ol className="cf-categories">{data.topMerchants.map((m,i)=><li key={m.merchant}><Link className="cf-drill-row" href={movementUrl({...movementBase,merchant:m.merchant,max:"-0.01"})}><span><b>{i+1}</b>{m.merchant}</span><strong>{money.format(m.amount)}</strong></Link></li>)}</ol>{!data.topMerchants.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
+      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">GASTO</p><h2>Principales categorías</h2></div></div><ol className="cf-categories">{data.topExpenseCategories.map((c,i)=><li key={c.category}><Link className="cf-drill-row" href={movementUrl({...movementBase,category:c.category,max:"-0.01"})}><span><b>{i+1}</b>{c.category}</span><strong>{formatEuro(c.amount)}</strong></Link></li>)}</ol>{!data.topExpenseCategories.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
+      <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">COMERCIOS</p><h2>Principales contrapartes</h2></div></div><ol className="cf-categories">{data.topMerchants.map((m,i)=><li key={m.merchant}><Link className="cf-drill-row" href={movementUrl({...movementBase,merchant:m.merchant,max:"-0.01"})}><span><b>{i+1}</b>{m.merchant}</span><strong>{formatEuro(m.amount)}</strong></Link></li>)}</ol>{!data.topMerchants.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
     </div>
 
     <article className="panel cf-rules-panel"><div className="panel-head"><div><p className="eyebrow">REGLAS CENTRALES</p><h2>Exclusiones del periodo</h2></div></div><ul className="cf-rules"><li><span>Cuenta de ahorro</span><strong>{data.excluded.savings}</strong><small>Exclusión absoluta</small></li><li><span>Traspasos internos</span><strong>{data.excluded.internalTransfers}</strong><small>No son ingreso ni gasto real</small></li><li><span>Duplicados</span><strong>{data.excluded.duplicates}</strong><small>No computan</small></li><li><span>Exclusión manual</span><strong>{data.excluded.manual}</strong><small>Marcados expresamente</small></li><li><span>Origen ausente</span><strong>{data.excluded.sourceMissing}</strong><small>No computan</small></li></ul></article>

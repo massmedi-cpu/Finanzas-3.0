@@ -1,10 +1,12 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import Link from "next/link";
 import { useMemo,useState } from "react";
 import type { ControlAlert,ControlAlertState,ControlOverview,ControlSeverity,ControlSnapshot } from "@/lib/financial/control";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const monthFmt=new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"});
 const severityLabel:Record<ControlSeverity,string>={critical:"Crítica",high:"Alta",medium:"Media",low:"Informativa"};
 const stateLabel:Record<ControlAlertState,string>={open:"Abierta",resolved:"Resuelta",dismissed:"Ignorada",snoozed:"Pospuesta"};
@@ -33,9 +35,9 @@ export function ControlClient({initialData}:{initialData:ControlOverview}){
     {feedback&&<div className="control-feedback" role="status" aria-live="polite">{feedback}</div>}
 
     <section className="control-summary" aria-label="Resumen del mes">
-      <article><span>Ingresos</span><strong>{money.format(snapshot.income)}</strong><small>Cash Flow computable</small></article>
-      <article><span>Gastos</span><strong>{money.format(snapshot.expenses)}</strong><small>Gasto personal real</small></article>
-      <article className={snapshot.net<0?"warning":"good"}><span>Cash Flow neto</span><strong>{money.format(snapshot.net)}</strong><small>{snapshot.net<0?"Mes negativo":"Mes positivo"}</small></article>
+      <article><span>Ingresos</span><strong>{formatEuro(snapshot.income)}</strong><small>Cash Flow computable</small></article>
+      <article><span>Gastos</span><strong>{formatEuro(snapshot.expenses)}</strong><small>Gasto personal real</small></article>
+      <article className={snapshot.net<0?"warning":"good"}><span>Cash Flow neto</span><strong>{formatEuro(snapshot.net)}</strong><small>{snapshot.net<0?"Mes negativo":"Mes positivo"}</small></article>
       <article className={snapshot.closeBlockers?"danger":snapshot.closeWarnings?"warning":"good"}><span>Estado de cierre</span><strong>{snapshot.closeBlockers?`${snapshot.closeBlockers} bloqueos`:snapshot.closeWarnings?`${snapshot.closeWarnings} avisos`:"Listo"}</strong><small>{snapshot.closeReady?"Puede cerrarse cuando termine el mes":"Requiere revisión"}</small></article>
     </section>
 
@@ -53,7 +55,7 @@ export function ControlClient({initialData}:{initialData:ControlOverview}){
       </section>
     </div>
 
-    <section className="control-panel control-history"><div className="control-panel-head"><div><p className="eyebrow">TRAZABILIDAD</p><h2>Últimos cierres</h2></div><span className="pill">{data.closes.length} registrados</span></div>{!data.closes.length?<p className="muted-copy">Todavía no hay cierres guardados.</p>:<div className="close-history-list">{data.closes.map(close=><Link href={`/control?month=${close.month}`} key={close.id}><span><strong>{monthLabel(close.month)}</strong><small>{close.status==="closed"?"Cierre vigente":"Reabierto"}</small></span><span><b>{money.format(close.snapshot.net)}</b><small>{close.snapshot.closeWarnings} avisos en el snapshot</small></span></Link>)}</div>}</section>
+    <section className="control-panel control-history"><div className="control-panel-head"><div><p className="eyebrow">TRAZABILIDAD</p><h2>Últimos cierres</h2></div><span className="pill">{data.closes.length} registrados</span></div>{!data.closes.length?<p className="muted-copy">Todavía no hay cierres guardados.</p>:<div className="close-history-list">{data.closes.map(close=><Link href={`/control?month=${close.month}`} key={close.id}><span><strong>{monthLabel(close.month)}</strong><small>{close.status==="closed"?"Cierre vigente":"Reabierto"}</small></span><span><b>{formatEuro(close.snapshot.net)}</b><small>{close.snapshot.closeWarnings} avisos en el snapshot</small></span></Link>)}</div>}</section>
 
     <aside className="control-rules"><strong>Reglas del centro de control</strong><p><b>Gasto anómalo:</b> {data.rules.highExpense}. <b>Bloqueos de cierre:</b> {data.rules.closeBlockers}. <b>Avisos no bloqueantes:</b> {data.rules.closeWarnings}. Resolver o ignorar un aviso no modifica ningún movimiento; el dato financiero solo cambia desde su módulo de origen.</p></aside>
   </div>;
@@ -64,4 +66,4 @@ function CloseChecklist({snapshot}:{snapshot:ControlSnapshot}){const rows=[
   ["Pendientes de revisión",snapshot.needsReview,snapshot.needsReview===0,true],
   ["Sin conciliar",snapshot.unreconciled,snapshot.unreconciled===0,false],
   ["Presupuestos excedidos",snapshot.overBudgetCount,snapshot.overBudgetCount===0,false],
-] as const;return <ul className="close-checklist">{rows.map(([label,count,ok,blocking])=><li key={label} className={ok?"ok":blocking?"blocking":"warning"}><span>{ok?"✓":blocking?"!":"·"}</span><div><strong>{label}</strong><small>{ok?"Sin incidencias":`${count} pendiente${count===1?"":"s"}${blocking?" · bloquea el cierre":" · no bloquea"}`}</small></div></li>)}<li className={snapshot.unbudgetedSpent===0?"ok":"warning"}><span>{snapshot.unbudgetedSpent===0?"✓":"·"}</span><div><strong>Gasto sin presupuesto</strong><small>{snapshot.unbudgetedSpent===0?"Todo el gasto está presupuestado":`${money.format(snapshot.unbudgetedSpent)} · no bloquea`}</small></div></li></ul>}
+] as const;return <ul className="close-checklist">{rows.map(([label,count,ok,blocking])=><li key={label} className={ok?"ok":blocking?"blocking":"warning"}><span>{ok?"✓":blocking?"!":"·"}</span><div><strong>{label}</strong><small>{ok?"Sin incidencias":`${count} pendiente${count===1?"":"s"}${blocking?" · bloquea el cierre":" · no bloquea"}`}</small></div></li>)}<li className={snapshot.unbudgetedSpent===0?"ok":"warning"}><span>{snapshot.unbudgetedSpent===0?"✓":"·"}</span><div><strong>Gasto sin presupuesto</strong><small>{snapshot.unbudgetedSpent===0?"Todo el gasto está presupuestado":`${formatEuro(snapshot.unbudgetedSpent)} · no bloquea`}</small></div></li></ul>}

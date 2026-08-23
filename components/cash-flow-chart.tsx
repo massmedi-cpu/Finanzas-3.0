@@ -1,10 +1,12 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import { useId, useMemo, useState } from "react";
 import type { CashFlowPoint, CashFlowRangeData } from "@/lib/financial/cash-flow";
 import { bucketBounds, movementState, movementUrl } from "@/lib/financial/movement-query";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 
 type SeriesKey="income"|"expenses"|"accumulated";
 type DrilldownContext={
@@ -65,7 +67,7 @@ export function CashFlowChart({points,drilldown}:{points:CashFlowPoint[];drilldo
         {visible.accumulated&&<path className="cf-acc-line" d={line}/>} 
         {visible.accumulated&&points.map((p,i)=>{const x=padX+i*group+group/2,y=accY(p.accumulated);return <circle key={`${p.date}-a`} className="cf-acc-dot" cx={x} cy={y} r={active===i?6:4}/>})}
       </svg>
-      {current&&<div className="cf-tooltip" role="status" aria-live="polite"><strong>{current.label}</strong><span>Ingresos <b>{money.format(current.income)}</b></span><span>Gastos <b>{money.format(current.expenses)}</b></span><span>Cash Flow <b>{money.format(current.net)}</b></span><span>Acumulado <b>{money.format(current.accumulated)}</b></span><small>{current.movements} movimiento{current.movements===1?"":"s"}</small>{currentMovementUrl&&<a href={currentMovementUrl}>Ver movimientos del periodo →</a>}</div>}
+      {current&&<div className="cf-tooltip" role="status" aria-live="polite"><strong>{current.label}</strong><span>Ingresos <b>{formatEuro(current.income)}</b></span><span>Gastos <b>{formatEuro(current.expenses)}</b></span><span>Cash Flow <b>{formatEuro(current.net)}</b></span><span>Acumulado <b>{formatEuro(current.accumulated)}</b></span><small>{current.movements} movimiento{current.movements===1?"":"s"}</small>{currentMovementUrl&&<a href={currentMovementUrl}>Ver movimientos del periodo →</a>}</div>}
     </div>
     <p id={helpId} className="cf-chart-help">Toca o mueve el puntero sobre el gráfico para ver el detalle. Con teclado o lector de pantalla, abre la tabla de datos situada a continuación. Puedes ocultar o mostrar cada serie.</p>
     <details className="cf-chart-data">
@@ -74,7 +76,7 @@ export function CashFlowChart({points,drilldown}:{points:CashFlowPoint[];drilldo
         <table>
           <caption className="sr-only">Datos de Cash Flow y acceso a los movimientos de cada periodo</caption>
           <thead><tr><th scope="col">Periodo</th><th scope="col">Ingresos</th><th scope="col">Gastos</th><th scope="col">Cash Flow</th><th scope="col">Acumulado</th><th scope="col">Mov.</th><th scope="col">Detalle</th></tr></thead>
-          <tbody>{points.map(point=><tr key={`table-${point.date}`}><th scope="row">{point.label}</th><td>{money.format(point.income)}</td><td>{money.format(point.expenses)}</td><td>{money.format(point.net)}</td><td>{money.format(point.accumulated)}</td><td>{point.movements}</td><td><a href={urlForPoint(point)}>Ver movimientos</a></td></tr>)}</tbody>
+          <tbody>{points.map(point=><tr key={`table-${point.date}`}><th scope="row">{point.label}</th><td>{formatEuro(point.income)}</td><td>{formatEuro(point.expenses)}</td><td>{formatEuro(point.net)}</td><td>{formatEuro(point.accumulated)}</td><td>{point.movements}</td><td><a href={urlForPoint(point)}>Ver movimientos</a></td></tr>)}</tbody>
         </table>
       </div>
     </details>
