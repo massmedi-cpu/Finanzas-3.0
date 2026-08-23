@@ -16,6 +16,7 @@
       "develop/v2.7.0-explainability": false,
       "develop/v2.7.0-explainability-rebuild": false,
       "develop/v2.8.0-control-center": false,
+      "develop/v2.8.0-integrity-rebuild": false,
       "develop/v2.9.0-portability": false,
       "develop/v3.0.0-release": false
     }
