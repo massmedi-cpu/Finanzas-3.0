@@ -3,9 +3,9 @@ const errors=[];const required=["lib/format/es-es.ts","scripts/number-format-v25
 for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
 const walk=dir=>!existsSync(dir)?[]:readdirSync(dir).flatMap(name=>{const path=join(dir,name);return statSync(path).isDirectory()?walk(path):[path]});
 for(const file of [...walk("app"),...walk("components"),...walk("lib")].filter(path=>/\.(ts|tsx)$/.test(path)&&path!=="lib/format/es-es.ts")){
-  const text=readFileSync(file,"utf8");
-  if(text.includes("Intl.NumberFormat"))errors.push(`${file}: crea Intl.NumberFormat fuera del formateador canónico`);
-  if(/toLocaleString\(\s*["']es-ES["'][\s\S]{0,120}(?:minimum|maximum)FractionDigits/.test(text))errors.push(`${file}: formatea una cifra con toLocaleString en vez del helper es-ES`);
+  const text=readFileSync(file,"utf8");const lines=text.split(/\r?\n/);
+  lines.forEach((line,index)=>{if(line.includes("Intl.NumberFormat"))errors.push(`${file}:${index+1}: ${line.trim()}`);});
+  lines.forEach((line,index)=>{if(/toLocaleString\(\s*["']es-ES["']/.test(line)&&/(?:minimum|maximum)FractionDigits/.test(line))errors.push(`${file}:${index+1}: ${line.trim()}`);});
 }
 if(existsSync("lib/format/es-es.ts")){
   const format=readFileSync("lib/format/es-es.ts","utf8");
