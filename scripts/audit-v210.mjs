@@ -3,6 +3,7 @@ const errors=[];
 const need=["components/intent-link.tsx","components/app-sidebar.tsx","app/loading.tsx","app/globals.css","app/chrome.css","docs/RELEASE_GATE_V2.1.0.md","docs/PERFORMANCE_V2.1.0.md","docs/COHERENCE_V2.1.0.md","docs/legacy/RELEASE_GATE_V2.1.0_PRE_REBUILD.md"];
 for(const file of need)if(!existsSync(file))errors.push(`Falta ${file}`);
 function pagesWithNestedSidebar(dir){const found=[];for(const name of readdirSync(dir)){const path=join(dir,name);const stat=statSync(path);if(stat.isDirectory())found.push(...pagesWithNestedSidebar(path));else if(name==="page.tsx"&&readFileSync(path,"utf8").includes("AppSidebar"))found.push(path)}return found}
+function ruleHas(css,selector,token){const escaped=selector.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");const match=css.match(new RegExp(`${escaped}\\{([^}]*)\\}`));return Boolean(match?.[1].includes(token));}
 if(!errors.length){
   const intent=readFileSync("components/intent-link.tsx","utf8");const sidebar=readFileSync("components/app-sidebar.tsx","utf8");const layout=readFileSync("app/layout.tsx","utf8");const globals=readFileSync("app/globals.css","utf8");const chrome=readFileSync("app/chrome.css","utf8");const movementsClient=readFileSync("app/movimientos/movements-client.tsx","utf8");const movementsApi=readFileSync("app/api/movements/route.ts","utf8");const performance=readFileSync("docs/PERFORMANCE_V2.1.0.md","utf8");const coherence=readFileSync("docs/COHERENCE_V2.1.0.md","utf8");const planLib=readFileSync("lib/financial/plan.ts","utf8");const homePage=readFileSync("app/page.tsx","utf8");const planPage=readFileSync("app/plan/page.tsx","utf8");const gate=readFileSync("docs/RELEASE_GATE_V2.1.0.md","utf8");
   if(!intent.includes("prefetch={false}"))errors.push("IntentLink no desactiva el prefetch automático");
@@ -11,7 +12,7 @@ if(!errors.length){
   if(!sidebar.includes('from "@/components/intent-link"')||!sidebar.includes("<IntentLink"))errors.push("La navegación no usa IntentLink");
   if(sidebar.includes('from "next/link"'))errors.push("AppSidebar conserva Link con prefetch automático");
   if(layout.includes("readability-v210.css"))errors.push("La legibilidad 2.1 sigue como capa histórica separada");
-  if(!globals.includes(".eyebrow{font-size:12px}")||!globals.includes(".brand small{margin-top:2px;font-size:13px"))errors.push("La legibilidad consolidada no preserva tamaños mínimos");
+  if(!ruleHas(globals,".eyebrow","font-size:12px")||!ruleHas(globals,".brand small","font-size:13px"))errors.push("La legibilidad consolidada no preserva tamaños mínimos");
   if(!chrome.includes("font-size:13px!important")||!chrome.includes("line-height:1.2"))errors.push("La navegación móvil no queda protegida a 13 px");
   if(!gate.includes("CANDIDATA VALIDADA")||!gate.includes("2.0.1 permanece congelada"))errors.push("El gate 2.1 no protege el checkpoint 2.0.1");
   const nested=pagesWithNestedSidebar("app");if(nested.length)errors.push(`Quedan ${nested.length} AppSidebar redundantes: ${nested.join(", ")}`);
