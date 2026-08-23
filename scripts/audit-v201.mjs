@@ -25,8 +25,10 @@ const pkg=JSON.parse(read("package.json")||"{}");
 
 const semver=(value)=>String(value||"").split(".").map(part=>Number.parseInt(part,10)||0);
 const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){const x=a[i]||0,y=b[i]||0;if(x!==y)return x>y}return true};
-if(!atLeast(pkg.version,"2.0.1"))errors.push("La versión actual es anterior a 2.0.1");
-if(!appVersion.includes(`APP_VERSION = "${pkg.version}"`))errors.push("APP_VERSION no coincide con package.json");
+const productVersion=appVersion.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+if(!atLeast(pkg.version,"2.0.1"))errors.push("El paquete técnico actual es anterior a 2.0.1");
+if(!atLeast(productVersion,"2.0.1"))errors.push("La versión de producto actual es anterior a 2.0.1");
+if(!/^\d+\.\d+\.\d+$/.test(productVersion))errors.push("APP_VERSION no es semver válida");
 if(!versionSql.includes("'app_version', to_jsonb('2.0.1'::text)"))errors.push("La migración histórica no fija app_version 2.0.1");
 if(!versionSql.includes("'target_version', to_jsonb('2.0.1'::text)"))errors.push("La migración histórica no fija target_version 2.0.1");
 
@@ -71,4 +73,4 @@ if(errors.length){
   errors.forEach(error=>console.error(`- ${error}`));
   process.exit(1);
 }
-console.log(`Financial App 2.0.1 audit OK · garantías preservadas en ${pkg.version}, lecturas puras, RPC STABLE, OAuth visible y rama sin previews`);
+console.log(`Financial App 2.0.1 audit OK · garantías preservadas en producto ${productVersion} / paquete ${pkg.version}, lecturas puras, RPC STABLE, OAuth visible y rama sin previews`);
