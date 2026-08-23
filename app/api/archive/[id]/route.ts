@@ -9,7 +9,7 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{id:stri
   const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(error||!data)return NextResponse.json({ok:false,error:error?.message||"document_unavailable"},{status:404});
   let signedUrl:string|null=null;
-  if(data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
+  if(data.storageProvider==="supabase_storage"&&data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
   return NextResponse.json({ok:true,document:data,signedUrl},{headers:{"Cache-Control":"private, no-store"}});
 }
 
@@ -44,10 +44,10 @@ export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:s
   if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
 
   let storageCleanupPending=false;
-  if(detail.data.storagePath){
+  if(detail.data.storageProvider==="supabase_storage"&&detail.data.storagePath){
     const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);
     storageCleanupPending=Boolean(removed.error);
   }
 
-  return NextResponse.json({ok:true,storageCleanupPending},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({ok:true,storageCleanupPending,externalOriginalPreserved:detail.data.storageProvider==="google_drive"},{headers:{"Cache-Control":"private, no-store"}});
 }
