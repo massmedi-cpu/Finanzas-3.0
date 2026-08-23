@@ -20,9 +20,36 @@ for(const file of files.filter(file=>/\.(?:ts|tsx|js|mjs)$/.test(file))){
   must(!/catch\s*(?:\([^)]*\))?\s*\{\s*\}/m.test(source),`catch vacío en ${file}`);
 }
 
+const cssFiles=files.filter(file=>file.endsWith(".css"));
+const sharedControlSelectors=new Set(["button",".primary-action",".ghost",".danger-action",".icon-button",".button-link","button:disabled","[aria-disabled=\"true\"]","button[aria-busy=\"true\"]","a[aria-busy=\"true\"]"]);
+function cssSelectors(source){
+  const clean=source.replace(/\/\*[\s\S]*?\*\//g,"");
+  const selectors=[];
+  for(const match of clean.matchAll(/([^{}]+)\{/g)){
+    const prelude=String(match[1]||"").trim();
+    if(!prelude||prelude.startsWith("@"))continue;
+    for(const selector of prelude.split(",").map(value=>value.trim()).filter(Boolean))selectors.push(selector);
+  }
+  return selectors;
+}
+for(const file of cssFiles){
+  const selectors=cssSelectors(read(file));
+  if(file!=="app/controls.css"){
+    for(const selector of selectors)must(!sharedControlSelectors.has(selector),`Selector compartido ${selector} redefinido fuera de controls.css: ${file}`);
+    for(const selector of selectors){
+      const unscopedState=/^\.(?:primary-action|ghost|danger-action|icon-button|button-link)(?=[:[])/.test(selector);
+      must(!unscopedState,`Estado de control compartido redefinido sin ámbito fuera de controls.css: ${selector} en ${file}`);
+    }
+  }
+}
+const controls=read("app/controls.css");
+for(const token of ["button{font:inherit}",".primary-action{","background:var(--accent)",".ghost{",".danger-action{",".icon-button{","button:disabled","button[aria-busy=\"true\"]",".primary-action[aria-busy=\"true\"]::before"])
+  must(controls.includes(token),`controls.css ha perdido la garantía compartida: ${token}`);
+
 const rootLayout=read("app/layout.tsx");
 for(const forbidden of ["cash-flow.css","explainability.css","integrity.css","analysis.css","plan.css","budget.css","movements.css"])
   must(!rootLayout.includes(forbidden),`El layout raíz carga CSS específico de módulo: ${forbidden}`);
+must(rootLayout.includes('import "./globals.css"')&&rootLayout.includes('import "./controls.css"')&&rootLayout.indexOf('import "./controls.css"')>rootLayout.indexOf('import "./globals.css"'),"controls.css debe cargarse una sola vez después de globals.css");
 
 const routeStyleContracts=[
   ["app/analisis/layout.tsx","analysis.css"],
@@ -49,4 +76,4 @@ const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SU
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · arquitectura canónica y previews de trabajo protegidos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · controles con propietario único, arquitectura canónica y previews protegidos`);
