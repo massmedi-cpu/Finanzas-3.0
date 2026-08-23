@@ -12,6 +12,7 @@ on:
       - 'develop/v2.4.0-long-horizon'
       - 'develop/v2.5.0-month-close'
       - 'develop/v2.6.0-rules'
+      - 'develop/v2.7.0-explainability-rebuild'
       - 'release/**'
 permissions:
   contents: read
@@ -67,6 +68,10 @@ jobs:
         run: npm run test:format
       - name: Full codebase 2.6 audit
         run: npm run audit:v260
+      - name: Explainability 2.7 audit
+        run: npm run audit:v270
+      - name: Explainability decision tests
+        run: npm run test:explainability
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
