@@ -11,6 +11,7 @@ const css = fs.readFileSync("app/archive.css", "utf8");
 const appVersion = fs.readFileSync("lib/app-version.ts", "utf8");
 const manifest = fs.readFileSync("app/manifest.ts", "utf8");
 const settings = fs.readFileSync("lib/financial/settings.ts", "utf8");
+const proxy = fs.readFileSync("proxy.ts", "utf8");
 
 must(client.includes('recognizeTicketImage(file,worker,onProgress,hint)'), "Archivo debe usar el OCR mejorado para imágenes");
 must(client.includes('file.type.startsWith("image/")?"receipt":null'), "Reprocesar imágenes debe conservar el contexto de ticket");
@@ -27,9 +28,10 @@ must(engine.includes('v.adaptive,"6"') && engine.includes('v.enhanced,"4"'), "De
 must(engine.includes("inferDocumentMetadata"), "Los metadatos deben derivarse del texto OCR seleccionado");
 must(appVersion.includes('APP_VERSION = "3.0.5"'), "El hotfix debe conservar la versión de producto 3.0.5");
 must(manifest.includes("APP_VERSION") && manifest.includes("versión ${APP_VERSION}"), "El manifiesto instalado debe cambiar con la versión activa");
+must(proxy.includes("webmanifest"), "El manifest PWA debe quedar fuera del proxy de autenticación para que Android pueda actualizar la instalación");
 must(settings.includes("version:APP_VERSION"), "Configuración debe mostrar la versión del código en ejecución y no una versión backend obsoleta");
 must(css.includes("width:min(920px"), "La revisión de documentos debe tener un ancho usable en escritorio");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"), "La reconstrucción OCR debe presentarse con apariencia de ticket, no como JSON técnico");
 must(client.includes("Archivados")&&client.includes("Eliminar definitivamente")&&client.includes("Restaurar a Activos"), "Archivo debe explicar y gestionar el ciclo Activos/Archivados/eliminación");
 
-console.log("audit-ticket-ocr-v302 OK · engine rectificado 3.0.6 · app 3.0.5");
+console.log("audit-ticket-ocr-v302 OK · engine rectificado 3.0.6 · app 3.0.5 · manifest público");
