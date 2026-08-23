@@ -12,6 +12,7 @@ const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
 const netWorth=read("components/net-worth-chart.tsx");
 const archive=read("app/archivo/archive-client.tsx");
+const archiveCss=read("app/archive.css");
 const movements=read("app/movimientos/movements-client.tsx");
 const vercel=read("vercel.json");
 
@@ -37,11 +38,15 @@ const checks=[
   [archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir hacer una foto de ticket con la cámara trasera"],
   [archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente de la galería"],
   [archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener la importación de documentos PDF e imágenes"],
+  [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo y no dentro del flujo de página"],
+  [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar el ancho disponible completo"],
+  [archiveCss.includes("height:100dvh")&&archiveCss.includes("min-width:0"),"el panel de Archivo debe respetar el viewport y permitir encogimiento sin recortes"],
   [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible en el editor"],
   [movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica de override"],
   [movements.includes("No indicado")&&movements.includes("Sí, se repite")&&movements.includes("No, es puntual"),"Recurrente debe expresarse en lenguaje claro"],
   [vercel.includes('"develop/v3.0.0-foundation": false'),"la rama 3.0 debe permanecer sin Preview de Vercel"],
   [vercel.includes('"hotfix/v3.0.1-document-ux": false'),"el hotfix de captura documental debe permanecer sin Preview de Vercel"],
+  [vercel.includes('"hotfix/v3.0.3-tablet-archive": false'),"el hotfix tablet de Archivo debe permanecer sin Preview de Vercel"],
 ];
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
@@ -50,4 +55,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit 3.0 OK · jerarquía, gráficos, navegación, captura documental y lenguaje de movimientos protegidos");
+console.log("Audit 3.0 OK · jerarquía, gráficos, navegación, captura documental, tablet y lenguaje de movimientos protegidos");
