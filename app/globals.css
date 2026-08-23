@@ -20,9 +20,6 @@ body{font-size:16px}
 .eyebrow{font-size:12px;letter-spacing:.13em;font-weight:800;color:var(--muted);margin:0 0 8px}
 .topbar h1{font-size:clamp(28px,3vw,42px);letter-spacing:-.035em;margin:0}
 .topbar p:not(.eyebrow){margin:8px 0 0;color:var(--muted)}
-button{font:inherit}
-.ghost{border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}
-.button-link{color:var(--text)}
 .account-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
 .account-card,.metric-grid article,.panel{background:var(--surface);border:1px solid var(--border);box-shadow:var(--shadow)}
 .account-card{min-height:170px;border-radius:16px;padding:22px;display:flex;flex-direction:column;justify-content:space-between}
@@ -60,9 +57,7 @@ button{font:inherit}
 .skip-link:focus{transform:translateY(0)}
 :where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:3px solid var(--accent)!important;outline-offset:3px!important}
 .sidebar nav a[aria-current="page"]{color:var(--text);background:var(--surface-2)}
-button:disabled,[aria-disabled="true"]{cursor:not-allowed;opacity:.58}
-button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
-.sidebar nav a,.ghost,.primary-action,.cf-series-controls button{min-height:44px}
+.sidebar nav a,.cf-series-controls button{min-height:44px}
 .sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
 #main-content:focus{outline:none}
 #main-content:focus-visible{outline:3px solid var(--accent);outline-offset:-3px}
