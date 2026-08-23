@@ -25,6 +25,10 @@ export function formatEuro(value:number|null|undefined){
   return finite(value)?`${formatDecimalCore(value!,2,2)} €`:"—";
 }
 
+export function formatEuroInteger(value:number|null|undefined){
+  return finite(value)?`${formatDecimalCore(Math.round(value!),0,0)} €`:"—";
+}
+
 export function formatSignedEuro(value:number|null|undefined){
   if(!finite(value))return "—";
   const formatted=formatEuro(value);
@@ -34,6 +38,12 @@ export function formatSignedEuro(value:number|null|undefined){
 export function formatPercent(value:number|null|undefined,maximumFractionDigits=1){
   if(!finite(value))return "—";
   return `${formatDecimalCore(value!,0,Math.max(0,Math.min(4,maximumFractionDigits)))} %`;
+}
+
+export function formatSignedPercent(value:number|null|undefined,maximumFractionDigits=1){
+  if(!finite(value))return "—";
+  const formatted=formatPercent(value,maximumFractionDigits);
+  return value!>0?`+${formatted}`:formatted;
 }
 
 export const ES_NUMBER_FORMAT_RULE="1.234.567,89" as const;
