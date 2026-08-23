@@ -7,10 +7,10 @@ export const dynamic="force-dynamic";
 
 export default async function ForecastPage(){
   await requireAuthorizedUser();
-  const initialData=await getForecastOverview(90);
+  const initialData=await getForecastOverview(365);
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace forecast-workspace">
-    <header className="topbar"><div><p className="eyebrow">PREVISIÓN · {initialData.version}</p><h1>Previsión financiera</h1><p>Proyecta el saldo con previsiones confirmadas, sugerencias explicables y escenarios temporales que no alteran tus datos.</p></div></header>
+    <header className="topbar"><div><p className="eyebrow">PREVISIÓN · {initialData.version}</p><h1>Previsión financiera</h1><p>Consulta qué gastos e ingresos quedan por llegar en cada mes y cómo afectarán al saldo. Solo lo confirmado entra en el cálculo.</p></div></header>
     <ForecastClient initialData={initialData}/>
-    <ScenarioSimulator startDate={initialData.startDate} initialDays={initialData.days}/>
+    <ScenarioSimulator startDate={initialData.startDate} initialDays={90}/>
   </section></main>;
 }
