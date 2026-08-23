@@ -21,8 +21,9 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
     p_notes:body.notes??null,p_ocr_text:body.ocrText??null,p_ocr_data:body.ocrData??null,p_digital_reconstruction:body.digitalReconstruction??null,p_ocr_status:body.ocrStatus??null
   });
   if(error)return NextResponse.json({ok:false,error:error.message},{status:400});
+  const autoLink=await supabase.rpc("financial_app_auto_link_documents");
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  return NextResponse.json({ok:true,document:detail.data},{headers:{"Cache-Control":"private, no-store"}});
+  return NextResponse.json({ok:true,document:detail.data,autoLink:autoLink.error?null:autoLink.data},{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
