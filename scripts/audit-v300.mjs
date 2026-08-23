@@ -3,10 +3,12 @@ import fs from "node:fs";
 const read=(path)=>fs.readFileSync(path,"utf8");
 const layout=read("app/layout.tsx");
 const visual=read("app/visual-v300.css");
+const tablet=read("app/tablet.css");
 const chromeCss=read("app/chrome.css");
 const loading=read("app/loading.tsx");
 const chrome=read("components/app-chrome.tsx");
 const sidebar=read("components/app-sidebar.tsx");
+const intentLink=read("components/intent-link.tsx");
 const cashFlow=read("components/cash-flow-chart.tsx");
 const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
@@ -14,11 +16,13 @@ const netWorth=read("components/net-worth-chart.tsx");
 const archive=read("app/archivo/archive-client.tsx");
 const archiveCss=read("app/archive.css");
 const movements=read("app/movimientos/movements-client.tsx");
+const movementsCss=read("app/movements.css");
 const vercel=read("vercel.json");
 
 const checks=[
   [layout.includes('import "./visual-v300.css"'),"la base visual 3.0 debe cargarse desde el layout raíz"],
   [layout.lastIndexOf('visual-v300.css')>layout.lastIndexOf('integrity.css'),"visual-v300.css debe cargarse después de las hojas heredadas"],
+  [layout.includes('import "./tablet.css"')&&layout.lastIndexOf('tablet.css')>layout.lastIndexOf('visual-v300.css'),"la adaptación tablet debe cargarse después de la base visual para poder corregir reglas heredadas"],
   [visual.includes("--chart-income")&&visual.includes("--chart-expense")&&visual.includes("--chart-accent")&&visual.includes("--chart-grid"),"debe existir una semántica común de colores para gráficos"],
   [visual.includes('html[data-theme="light"]')&&visual.includes('html[data-theme="dark"]'),"la paleta común debe soportar tema claro y oscuro explícitos"],
   [visual.includes(".home-kpis{grid-template-columns:repeat(12")&&visual.includes(".home-kpis a{grid-column:span 4"),"Inicio debe usar una jerarquía ejecutiva 3+3 sin huecos"],
@@ -34,13 +38,20 @@ const checks=[
   [chromeCss.includes("html{scrollbar-gutter:stable}"),"la navegación debe reservar el gutter del scrollbar para evitar cambios de breakpoint durante la carga"],
   [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces de navegación deben cerrar el menú móvil antes de iniciar la transición"],
   [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil con especificidad superior a .sidebar nav"],
-  [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%'),"el menú móvil sólo debe activarse dentro del breakpoint móvil"],
+  [chromeCss.includes('@media(max-width:1180px) and (min-width:681px)')&&chromeCss.includes('nav.desktop-nav{display:flex!important;flex:1 1 auto')&&chromeCss.includes('overflow-x:auto'),"tablet debe usar navegación horizontal completa sin hamburguesa ni rail comprimido"],
+  [!chromeCss.includes('grid-template-columns:82px minmax(0,1fr)'),"tablet no debe volver al rail lateral comprimido de 82px"],
+  [chromeCss.includes('@media(max-width:680px)')&&chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%'),"el menú Más sólo debe activarse dentro del breakpoint móvil"],
+  [intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben dar respuesta visual inmediata mientras cambia la ruta"],
+  [!intentLink.includes('onTouchStart={event=>{warm();'),"tocar un enlace no debe lanzar un prefetch duplicado justo antes de navegar"],
+  [tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&tablet.includes('.detail-loading{position:static!important'),"tablet debe eliminar el indicador flotante de carga de Movimientos"],
+  [tablet.includes('.workspace{max-width:none!important;width:100%')&&tablet.includes('.movement-drawer{width:100%;max-width:none'),"tablet debe aprovechar el ancho disponible sin comprimir paneles principales"],
   [archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir hacer una foto de ticket con la cámara trasera"],
   [archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente de la galería"],
   [archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener la importación de documentos PDF e imágenes"],
   [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo y no dentro del flujo de página"],
   [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar el ancho disponible completo"],
   [archiveCss.includes("height:100dvh")&&archiveCss.includes("min-width:0"),"el panel de Archivo debe respetar el viewport y permitir encogimiento sin recortes"],
+  [movementsCss.includes('.detail-loading{position:fixed')&&tablet.includes('.detail-loading{position:static!important'),"el estado de carga heredado puede ser fijo en escritorio pero debe neutralizarse en tablet"],
   [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible en el editor"],
   [movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica de override"],
   [movements.includes("No indicado")&&movements.includes("Sí, se repite")&&movements.includes("No, es puntual"),"Recurrente debe expresarse en lenguaje claro"],
@@ -55,4 +66,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit 3.0 OK · jerarquía, gráficos, navegación, captura documental, tablet y lenguaje de movimientos protegidos");
+console.log("Audit 3.0 OK · jerarquía, gráficos, navegación táctil, tablet sin hamburguesa/flotantes, captura documental y lenguaje protegidos");
