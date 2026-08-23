@@ -27,6 +27,7 @@
     "audit:v230": "node scripts/audit-v230.mjs",
     "audit:v240": "node scripts/audit-v240.mjs",
     "audit:v250": "node scripts/audit-v250.mjs",
+    "audit:v260": "node scripts/audit-v260.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
     "test:analytics": "tsx scripts/analytics-v220-tests.ts",
     "test:intelligence": "tsx scripts/intelligence-v230-tests.ts",
