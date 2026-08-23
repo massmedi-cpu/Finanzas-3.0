@@ -33,6 +33,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Verify dependency tree
         run: npm ls --depth=0
+      - name: Dependency security audit
+        run: npm audit --omit=dev --audit-level=high
       - name: Structural Axioma audit
         run: npm run audit:structure
       - name: Architecture 1.7 regression audit
@@ -63,6 +65,8 @@ jobs:
         run: npm run audit:v250
       - name: Spanish Spain number format tests
         run: npm run test:format
+      - name: Full codebase 2.6 audit
+        run: npm run audit:v260
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
