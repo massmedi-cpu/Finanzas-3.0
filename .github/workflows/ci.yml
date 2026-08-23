@@ -69,6 +69,8 @@ jobs:
         run: npm run test:format
       - name: Full codebase 2.6 audit
         run: npm run audit:v260
+      - name: Europe/Madrid time tests
+        run: npm run test:time
       - name: Explainability 2.7 audit
         run: npm run audit:v270
       - name: Explainability decision tests
