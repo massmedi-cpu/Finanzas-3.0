@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { inferDocumentMetadata, normalizeOcrText, reconstructTsvReceipt } from "../lib/document/ticket-ocr-v305";
+import { estimateDeskewFromSamples, inferDocumentMetadata, normalizeOcrText, reconstructTsvReceipt } from "../lib/document/ticket-ocr-v306";
 
 const tobacco = inferDocumentMetadata(`
 ESTANCO LOS PRINCIPES
@@ -79,4 +79,11 @@ assert.ok(structured.text.includes("MI RESTAURANTE"));
 assert.ok(structured.text.includes("44,60"));
 assert.ok(!structured.text.includes("ZZ"));
 
-console.log("ticket-ocr-v302-tests OK");
+const skewSamples:Array<{x:number;y:number}>=[];
+const skewDegrees=3;
+const slope=Math.tan(skewDegrees*Math.PI/180);
+for(let line=0;line<7;line+=1){for(let x=20;x<=780;x+=8){skewSamples.push({x,y:40+line*60+slope*x});}}
+const estimated=estimateDeskewFromSamples(skewSamples,800,520);
+assert.ok(Math.abs(estimated-skewDegrees)<=0.5,`deskew esperado ≈${skewDegrees}°, obtenido ${estimated}°`);
+
+console.log("ticket-ocr-v302-tests OK · engine 3.0.6");
