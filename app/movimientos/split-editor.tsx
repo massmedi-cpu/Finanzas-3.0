@@ -1,5 +1,7 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import { useEffect, useMemo, useState } from "react";
 import "./split-editor.css";
 
@@ -18,7 +20,7 @@ type SplitResponse = {
   error?: string;
 };
 
-const money = new Intl.NumberFormat("es-ES", { style:"currency", currency:"EUR" });
+
 const cents = (value:number) => Math.round((value + Number.EPSILON) * 100) / 100;
 const blank = (amount:number):Split => ({ amount, category:null, subcategory:null, beneficiary:null, isPersonal:true, notes:null });
 
@@ -56,7 +58,7 @@ export function SplitEditor({transactionId,sourceAmount,categories}:{transaction
   function removePart(index:number){setRows(current=>current.filter((_,i)=>i!==index));}
 
   async function save(){
-    if(!valid){setError(`Las partes deben sumar exactamente ${money.format(sourceAmount)} y mantener el mismo signo.`);return;}
+    if(!valid){setError(`Las partes deben sumar exactamente ${formatEuro(sourceAmount)} y mantener el mismo signo.`);return;}
     setSaving(true);setError(null);setMessage(null);
     try{
       const payload=rows.map(({amount,category,subcategory,beneficiary,isPersonal,notes})=>({amount:Number(amount),category:category?.trim()||null,subcategory:subcategory?.trim()||null,beneficiary:beneficiary?.trim()||null,isPersonal,notes:notes?.trim()||null}));
@@ -71,7 +73,7 @@ export function SplitEditor({transactionId,sourceAmount,categories}:{transaction
 
   if(loading)return <section className="split-editor"><p className="muted-copy">Cargando división…</p></section>;
   return <section className="split-editor" aria-labelledby="split-editor-title">
-    <div className="split-editor-head"><div><p className="eyebrow">MOVIMIENTO COMPARTIDO</p><h3 id="split-editor-title">Dividir movimiento</h3><p>El importe bancario original nunca se modifica. Las partes deben sumar {money.format(sourceAmount)}.</p></div>{rows.length===0?<button className="ghost" type="button" onClick={startSplit}>Crear división</button>:<button className="ghost" type="button" onClick={()=>setRows([])}>Quitar división</button>}</div>
+    <div className="split-editor-head"><div><p className="eyebrow">MOVIMIENTO COMPARTIDO</p><h3 id="split-editor-title">Dividir movimiento</h3><p>El importe bancario original nunca se modifica. Las partes deben sumar {formatEuro(sourceAmount)}.</p></div>{rows.length===0?<button className="ghost" type="button" onClick={startSplit}>Crear división</button>:<button className="ghost" type="button" onClick={()=>setRows([])}>Quitar división</button>}</div>
     {error&&<div className="inline-alert error" role="alert">{error}</div>}
     {message&&<div className="inline-alert success" role="status">{message}</div>}
     {rows.length>0&&<>
@@ -87,7 +89,7 @@ export function SplitEditor({transactionId,sourceAmount,categories}:{transaction
           <label className="split-notes">Notas<input value={row.notes||""} onChange={e=>update(index,{notes:e.target.value})}/></label>
         </div>
       </article>)}</div>
-      <div className="split-totals"><span>Total partes <strong>{money.format(total)}</strong></span><span className={Math.abs(difference)<=0.01?"split-ok":"split-error"}>Diferencia <strong>{money.format(difference)}</strong></span></div>
+      <div className="split-totals"><span>Total partes <strong>{formatEuro(total)}</strong></span><span className={Math.abs(difference)<=0.01?"split-ok":"split-error"}>Diferencia <strong>{formatEuro(difference)}</strong></span></div>
       <div className="split-actions"><button className="ghost" type="button" onClick={addPart}>Añadir parte</button><button className="primary-action" type="button" onClick={save} disabled={saving||!valid}>{saving?"Guardando…":"Guardar división"}</button></div>
     </>}
     {rows.length===0&&<p className="muted-copy">Sin división. Puedes repartir el movimiento entre varias categorías o beneficiarios cuando sea un gasto compartido.</p>}

@@ -1,10 +1,12 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import Link from "next/link";
 import { useState } from "react";
 import type { RuleDirection,RulePreview,RuleTextOperator,RulesOverview,TransactionRule } from "@/lib/financial/rules";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
 type RecurringChoice="unchanged"|"yes"|"no";
 type Editor={
@@ -44,7 +46,7 @@ function validate(editor:Editor){
   if(p.amount_min!=null&&p.amount_max!=null&&p.amount_min>p.amount_max)return "El importe mínimo no puede superar al máximo.";
   return null;
 }
-function conditionSummary(rule:TransactionRule){const c=rule.conditions;const parts:string[]=[];if(c.counterparty)parts.push(`Contraparte ${operatorLabel(c.counterpartyOperator)} “${c.counterparty}”`);if(c.concept)parts.push(`Concepto ${operatorLabel(c.conceptOperator)} “${c.concept}”`);if(c.type)parts.push(`Tipo “${c.type}”`);if(c.category)parts.push(`Categoría actual “${c.category}”`);if(c.accountId)parts.push("Cuenta concreta");if(c.amountMin!=null||c.amountMax!=null)parts.push(`Importe ${c.amountMin!=null?`desde ${money.format(c.amountMin)}`:""}${c.amountMin!=null&&c.amountMax!=null?" ":""}${c.amountMax!=null?`hasta ${money.format(c.amountMax)}`:""}`);if(c.direction!=="any")parts.push(directionLabel[c.direction]);return parts.join(" · ");}
+function conditionSummary(rule:TransactionRule){const c=rule.conditions;const parts:string[]=[];if(c.counterparty)parts.push(`Contraparte ${operatorLabel(c.counterpartyOperator)} “${c.counterparty}”`);if(c.concept)parts.push(`Concepto ${operatorLabel(c.conceptOperator)} “${c.concept}”`);if(c.type)parts.push(`Tipo “${c.type}”`);if(c.category)parts.push(`Categoría actual “${c.category}”`);if(c.accountId)parts.push("Cuenta concreta");if(c.amountMin!=null||c.amountMax!=null)parts.push(`Importe ${c.amountMin!=null?`desde ${formatEuro(c.amountMin)}`:""}${c.amountMin!=null&&c.amountMax!=null?" ":""}${c.amountMax!=null?`hasta ${formatEuro(c.amountMax)}`:""}`);if(c.direction!=="any")parts.push(directionLabel[c.direction]);return parts.join(" · ");}
 function actionSummary(rule:TransactionRule){const a=rule.actions;const parts:string[]=[];if(a.category)parts.push(`Categoría → ${a.category}`);if(a.subcategory)parts.push(`Subcategoría → ${a.subcategory}`);if(a.addTags.length)parts.push(`+ ${a.addTags.join(", ")}`);if(a.recurring!=null)parts.push(a.recurring?"Marcar recurrente":"Marcar no recurrente");return parts.join(" · ");}
 
 export function RulesClient({initialData}:{initialData:RulesOverview}){
@@ -98,7 +100,7 @@ export function RulesClient({initialData}:{initialData:RulesOverview}){
           <div className="rules-form-grid"><label>Añadir etiquetas<input value={editor.tags} onChange={e=>setEditor({...editor,tags:e.target.value})} placeholder="hogar, fijo, suscripción"/><small>Separadas por comas; no elimina etiquetas existentes.</small></label><label>Recurrente<select value={editor.recurring} onChange={e=>setEditor({...editor,recurring:e.target.value as RecurringChoice})}><option value="unchanged">No cambiar</option><option value="yes">Marcar recurrente</option><option value="no">Marcar no recurrente</option></select></label></div>
           <label className="rules-check"><input type="checkbox" checked={editor.stopProcessing} onChange={e=>setEditor({...editor,stopProcessing:e.target.checked})}/><span><strong>Detener reglas posteriores si esta regla modifica el movimiento</strong><small>Útil para que una regla específica tenga prioridad sobre otras más generales.</small></span></label>
         </fieldset>
-        {preview&&<section className="rule-preview" aria-label="Vista previa de la regla"><div className="rule-preview-head"><div><strong>{preview.matched} coincidencias</strong><span>{preview.changeable} movimientos cambiarían</span></div><span className="pill">Máximo 8 ejemplos</span></div>{!preview.samples.length?<p>No hay movimientos actuales que necesiten cambios con esta definición.</p>:<div className="rule-preview-list">{preview.samples.map(sample=><article key={sample.id}><div><strong>{sample.counterparty||sample.concept||"Movimiento"}</strong><span>{sample.date?dateFmt.format(new Date(`${sample.date}T12:00:00`)):"Sin fecha"} · {money.format(sample.amount)}</span></div><div className="preview-change-tags">{Object.keys(sample.changes||{}).map(key=><span key={key}>{changeLabel[key]||key}</span>)}</div><Link className="text-link" href={sample.counterparty?`/movimientos?search=${encodeURIComponent(sample.counterparty)}`:"/movimientos"}>Ver en movimientos →</Link></article>)}</div>}</section>}
+        {preview&&<section className="rule-preview" aria-label="Vista previa de la regla"><div className="rule-preview-head"><div><strong>{preview.matched} coincidencias</strong><span>{preview.changeable} movimientos cambiarían</span></div><span className="pill">Máximo 8 ejemplos</span></div>{!preview.samples.length?<p>No hay movimientos actuales que necesiten cambios con esta definición.</p>:<div className="rule-preview-list">{preview.samples.map(sample=><article key={sample.id}><div><strong>{sample.counterparty||sample.concept||"Movimiento"}</strong><span>{sample.date?dateFmt.format(new Date(`${sample.date}T12:00:00`)):"Sin fecha"} · {formatEuro(sample.amount)}</span></div><div className="preview-change-tags">{Object.keys(sample.changes||{}).map(key=><span key={key}>{changeLabel[key]||key}</span>)}</div><Link className="text-link" href={sample.counterparty?`/movimientos?search=${encodeURIComponent(sample.counterparty)}`:"/movimientos"}>Ver en movimientos →</Link></article>)}</div>}</section>}
       </div>
       <div className="rules-modal-actions"><span className="rules-modal-note">Guardar activa la regla para movimientos nuevos. Los históricos solo cambian al pulsar “Aplicar a existentes”.</span><button className="ghost" type="button" onClick={()=>setEditor(null)} disabled={loading}>Cancelar</button><button className="ghost" type="button" onClick={()=>previewEditor()} disabled={loading}>{loading?"Calculando…":"Previsualizar"}</button><button className="primary-action" type="button" onClick={saveRule} disabled={loading}>{loading?"Guardando…":"Guardar regla"}</button></div>
     </section></div>}

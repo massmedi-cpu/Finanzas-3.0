@@ -1,10 +1,12 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import { useMemo, useState } from "react";
 import type { ManualNetWorthItem, NetWorthOverview } from "@/lib/financial/net-worth";
 import { NetWorthChart } from "@/components/net-worth-chart";
 
-const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
+
 const dateFmt = new Intl.DateTimeFormat("es-ES", { day: "2-digit", month: "2-digit", year: "numeric" });
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -76,10 +78,10 @@ export function NetWorthClient({ initial }: { initial: NetWorthOverview }) {
     {error && <div className="nw-error" role="alert">{error}</div>}
 
     <section className="nw-summary">
-      <article><span>Activos</span><strong>{money.format(data.assets)}</strong><small>Cuentas + activos manuales incluidos</small></article>
-      <article><span>Deudas</span><strong>{money.format(data.liabilities)}</strong><small>Pasivos manuales y saldos negativos</small></article>
-      <article className="nw-total"><span>Patrimonio neto</span><strong>{money.format(data.netWorth)}</strong><small>{data.changeFromFirstCompletePercent >= 0 ? "+" : ""}{data.changeFromFirstCompletePercent.toFixed(2)} % desde el primer mes completo</small></article>
-      <article><span>Proyección 90 días</span><strong>{money.format(data.projectedNetWorth90)}</strong><small>Impacto confirmado: {money.format(data.forecastImpact90)}</small></article>
+      <article><span>Activos</span><strong>{formatEuro(data.assets)}</strong><small>Cuentas + activos manuales incluidos</small></article>
+      <article><span>Deudas</span><strong>{formatEuro(data.liabilities)}</strong><small>Pasivos manuales y saldos negativos</small></article>
+      <article className="nw-total"><span>Patrimonio neto</span><strong>{formatEuro(data.netWorth)}</strong><small>{data.changeFromFirstCompletePercent >= 0 ? "+" : ""}{data.changeFromFirstCompletePercent.toFixed(2)} % desde el primer mes completo</small></article>
+      <article><span>Proyección 90 días</span><strong>{formatEuro(data.projectedNetWorth90)}</strong><small>Impacto confirmado: {formatEuro(data.forecastImpact90)}</small></article>
     </section>
 
     <article className="panel nw-chart-panel">
@@ -91,8 +93,8 @@ export function NetWorthClient({ initial }: { initial: NetWorthOverview }) {
     <div className="nw-grid">
       <article className="panel nw-items-panel">
         <div className="panel-head"><div><p className="eyebrow">COMPOSICIÓN</p><h2>Elementos patrimoniales</h2></div><button className="ghost" onClick={() => setEditor(emptyEditor())}>Añadir elemento</button></div>
-        <div className="nw-group"><h3>Cuentas automáticas</h3>{data.bankItems.map((item) => <div className="nw-item" key={item.id}><div><strong>{item.name}</strong><span>{item.identifier} · {item.role === "savings" ? "Ahorro" : "Operativa"}</span></div><div className="nw-item-value"><strong>{item.balance == null ? "—" : money.format(item.balance)}</strong><small>{item.balanceDate ? `Saldo ${dateFmt.format(new Date(`${item.balanceDate}T12:00:00`))}` : "Sin saldo"}</small></div></div>)}</div>
-        <div className="nw-group"><h3>Elementos manuales</h3>{activeManual.length === 0 ? <p className="nw-empty">No has añadido inversiones, otros activos ni deudas. Las cuentas bancarias son actualmente todo el patrimonio registrado.</p> : activeManual.map((item) => <div className={`nw-item manual ${item.includeInTotal ? "" : "excluded"}`} key={item.id}><div><strong>{item.name}</strong><span>{item.itemType === "liability" ? "Deuda" : "Activo"}{item.category ? ` · ${item.category}` : ""}{!item.includeInTotal ? " · fuera del total" : ""}</span></div><div className="nw-item-value"><strong className={item.itemType === "liability" ? "negative" : ""}>{item.itemType === "liability" ? "−" : ""}{money.format(item.value)}</strong><div className="nw-actions"><button onClick={() => editItem(item)}>Editar</button><button onClick={() => void deactivate(item.id)}>Retirar</button></div></div></div>)}</div>
+        <div className="nw-group"><h3>Cuentas automáticas</h3>{data.bankItems.map((item) => <div className="nw-item" key={item.id}><div><strong>{item.name}</strong><span>{item.identifier} · {item.role === "savings" ? "Ahorro" : "Operativa"}</span></div><div className="nw-item-value"><strong>{item.balance == null ? "—" : formatEuro(item.balance)}</strong><small>{item.balanceDate ? `Saldo ${dateFmt.format(new Date(`${item.balanceDate}T12:00:00`))}` : "Sin saldo"}</small></div></div>)}</div>
+        <div className="nw-group"><h3>Elementos manuales</h3>{activeManual.length === 0 ? <p className="nw-empty">No has añadido inversiones, otros activos ni deudas. Las cuentas bancarias son actualmente todo el patrimonio registrado.</p> : activeManual.map((item) => <div className={`nw-item manual ${item.includeInTotal ? "" : "excluded"}`} key={item.id}><div><strong>{item.name}</strong><span>{item.itemType === "liability" ? "Deuda" : "Activo"}{item.category ? ` · ${item.category}` : ""}{!item.includeInTotal ? " · fuera del total" : ""}</span></div><div className="nw-item-value"><strong className={item.itemType === "liability" ? "negative" : ""}>{item.itemType === "liability" ? "−" : ""}{formatEuro(item.value)}</strong><div className="nw-actions"><button onClick={() => editItem(item)}>Editar</button><button onClick={() => void deactivate(item.id)}>Retirar</button></div></div></div>)}</div>
         {inactiveManual.length > 0 && <details className="nw-archived"><summary>Elementos retirados ({inactiveManual.length})</summary>{inactiveManual.map((item) => <div className="nw-item" key={item.id}><div><strong>{item.name}</strong><span>Retirado · historial conservado</span></div><button className="ghost" onClick={() => editItem(item)}>Reactivar</button></div>)}</details>}
       </article>
 

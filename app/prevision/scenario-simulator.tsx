@@ -1,9 +1,11 @@
 "use client";
 
+import { formatEuro } from "@/lib/format/es-es";
+
 import { FormEvent, useMemo, useState } from "react";
 import type { ForecastScenarioFrequency, ForecastScenarioResult } from "@/lib/financial/forecast";
 
-const money=new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"});
+
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
 const formatDate=(v:string|null)=>v?dateFmt.format(new Date(`${v}T12:00:00`)):"—";
 
@@ -43,13 +45,13 @@ export function ScenarioSimulator({startDate,initialDays}:{startDate:string;init
     {error&&<div className="forecast-feedback" role="alert">{error}</div>}
     {result&&<div className="scenario-result">
       <div className="scenario-comparison">
-        <article><span>Saldo actual</span><strong>{money.format(result.currentBalance)}</strong><small>Ahorro aparte: {money.format(result.savingsBalance)}</small></article>
-        <article><span>Base confirmada</span><strong>{money.format(result.baseline.projectedBalance)}</strong><small>Mínimo {money.format(result.baseline.lowestBalance)}</small></article>
-        <article className={delta<0?"warning":"good"}><span>Con escenario</span><strong>{money.format(result.scenario.projectedBalance)}</strong><small>Mínimo {money.format(result.scenario.lowestBalance)}</small></article>
-        <article className={delta<0?"danger":"good"}><span>Impacto</span><strong className={delta<0?"negative":"positive"}>{money.format(delta)}</strong><small>{result.scenario.events.length} evento{result.scenario.events.length===1?"":"s"} hipotético{result.scenario.events.length===1?"":"s"}</small></article>
+        <article><span>Saldo actual</span><strong>{formatEuro(result.currentBalance)}</strong><small>Ahorro aparte: {formatEuro(result.savingsBalance)}</small></article>
+        <article><span>Base confirmada</span><strong>{formatEuro(result.baseline.projectedBalance)}</strong><small>Mínimo {formatEuro(result.baseline.lowestBalance)}</small></article>
+        <article className={delta<0?"warning":"good"}><span>Con escenario</span><strong>{formatEuro(result.scenario.projectedBalance)}</strong><small>Mínimo {formatEuro(result.scenario.lowestBalance)}</small></article>
+        <article className={delta<0?"danger":"good"}><span>Impacto</span><strong className={delta<0?"negative":"positive"}>{formatEuro(delta)}</strong><small>{result.scenario.events.length} evento{result.scenario.events.length===1?"":"s"} hipotético{result.scenario.events.length===1?"":"s"}</small></article>
       </div>
       {result.scenario.firstNegativeDate&&<div className="scenario-warning" role="status"><strong>Riesgo de saldo negativo</strong><span>El escenario cruza por debajo de 0 € el {formatDate(result.scenario.firstNegativeDate)}. El ahorro no se usa automáticamente.</span></div>}
-      <div className="scenario-events"><div className="panel-head"><div><p className="eyebrow">EVENTOS HIPOTÉTICOS</p><h3>{result.scenario.title}</h3></div><span className="pill">impacto {money.format(delta)}</span></div>{result.scenario.events.map(event=><div key={event.id}><span>{formatDate(event.date)}</span><strong className={event.amount<0?"negative":"positive"}>{money.format(event.amount)}</strong></div>)}</div>
+      <div className="scenario-events"><div className="panel-head"><div><p className="eyebrow">EVENTOS HIPOTÉTICOS</p><h3>{result.scenario.title}</h3></div><span className="pill">impacto {formatEuro(delta)}</span></div>{result.scenario.events.map(event=><div key={event.id}><span>{formatDate(event.date)}</span><strong className={event.amount<0?"negative":"positive"}>{formatEuro(event.amount)}</strong></div>)}</div>
       <p className="scenario-proof">Resultado temporal. `readOnly = {String(result.rules.readOnly)}` · ahorro usado = {result.rules.savingsUsed?"sí":"no"} · previsiones oficiales modificadas = {result.rules.officialForecastsModified?"sí":"no"}.</p>
     </div>}
   </section>;

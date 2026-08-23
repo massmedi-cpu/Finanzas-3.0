@@ -8,6 +8,7 @@ on:
       - 'develop/v2.2.0-analytics'
       - 'develop/v2.3.0-intelligence'
       - 'develop/v2.4.0-long-horizon'
+      - 'develop/v2.5.0-month-close'
       - 'release/**'
 permissions:
   contents: read
@@ -55,6 +56,10 @@ jobs:
         run: npm run audit:v240
       - name: Long horizon calculation tests
         run: npm run test:horizon
+      - name: Month close and Spanish format 2.5 audit
+        run: npm run audit:v250
+      - name: Spanish Spain number format tests
+        run: npm run test:format
       - name: Backup recovery unit tests
         run: npm run test:backup
       - name: Accessibility regression audit
@@ -67,7 +72,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Release reproducibility gate
-        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics' || github.ref == 'refs/heads/develop/v2.3.0-intelligence' || github.ref == 'refs/heads/develop/v2.4.0-long-horizon'
+        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || github.ref == 'refs/heads/develop/v2.2.0-analytics' || github.ref == 'refs/heads/develop/v2.3.0-intelligence' || github.ref == 'refs/heads/develop/v2.4.0-long-horizon' || github.ref == 'refs/heads/develop/v2.5.0-month-close'
         run: |
           test -f package-lock.json
           git diff --exit-code -- package.json package-lock.json

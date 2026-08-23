@@ -1,6 +1,7 @@
+import { formatEuroInteger } from "@/lib/format/es-es";
 export type BalancePoint = { month: string; balance: number | null };
 
-const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+
 const month = new Intl.DateTimeFormat("es-ES", { month: "short", year: "2-digit" });
 
 export function BalanceChart({ points, compact = false }: { points: BalancePoint[]; compact?: boolean }) {
@@ -24,8 +25,8 @@ export function BalanceChart({ points, compact = false }: { points: BalancePoint
     <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Evolución del saldo desde ${first.month} hasta ${last.month}`} preserveAspectRatio="none">
       <path className="balance-chart-area" d={`${path} L${x(valid.length - 1)},${height - pad} L${x(0)},${height - pad} Z`} />
       <path className="balance-chart-line" d={path} />
-      {!compact && valid.map((point,index)=><circle key={point.month} className="balance-chart-dot" cx={x(index)} cy={y(point.balance)} r="3.5"><title>{month.format(new Date(`${point.month}-01T12:00:00`))}: ${money.format(point.balance)}</title></circle>)}
+      {!compact && valid.map((point,index)=><circle key={point.month} className="balance-chart-dot" cx={x(index)} cy={y(point.balance)} r="3.5"><title>{month.format(new Date(`${point.month}-01T12:00:00`))}: ${formatEuroInteger(point.balance)}</title></circle>)}
     </svg>
-    {!compact && <div className="balance-chart-legend"><span>{month.format(new Date(`${first.month}-01T12:00:00`))} · {money.format(first.balance)}</span><strong>{month.format(new Date(`${last.month}-01T12:00:00`))} · {money.format(last.balance)}</strong></div>}
+    {!compact && <div className="balance-chart-legend"><span>{month.format(new Date(`${first.month}-01T12:00:00`))} · {formatEuroInteger(first.balance)}</span><strong>{month.format(new Date(`${last.month}-01T12:00:00`))} · {formatEuroInteger(last.balance)}</strong></div>}
   </div>;
 }
