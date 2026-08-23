@@ -1,3 +1,4 @@
+import "./cash-flow.css";
 import { formatEuro, formatInteger, formatPercent } from "@/lib/format/es-es";
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";

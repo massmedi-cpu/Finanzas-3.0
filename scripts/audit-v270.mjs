@@ -8,6 +8,7 @@ const required=[
   "app/explicabilidad/page.tsx",
   "app/explicabilidad/explainability-client.tsx",
   "app/explicabilidad/explainability.css",
+  "app/explicabilidad/layout.tsx",
   "scripts/explainability-v270-tests.ts"
 ];
 for(const file of required)if(!existsSync(file))errors.push(`Falta ${file}`);
@@ -22,9 +23,10 @@ const shared=read(required[3]);if(shared.includes("@/lib/supabase/server")||shar
 const client=read(required[5]);
 for(const token of ["Previsualizar regla","Crear regla","previewedId","suggestionRulePayload","explainability-shared"]){if(!client.includes(token))errors.push(`UI 2.7 sin guardarraíl: ${token}`);}
 if(client.includes('from "@/lib/financial/explainability"'))errors.push("El cliente 2.7 no puede importar el loader de servidor");
-const layout=read("app/layout.tsx");if(!layout.includes("./explicabilidad/explainability.css"))errors.push("CSS de explicabilidad no cargado");
+const routeLayout=read("app/explicabilidad/layout.tsx");if(!routeLayout.includes("./explainability.css"))errors.push("CSS de explicabilidad no cargado en su layout de ruta");
+const rootLayout=read("app/layout.tsx");if(rootLayout.includes("explicabilidad/explainability.css"))errors.push("CSS de explicabilidad no debe contaminar el layout raíz");
 const sidebar=read("components/app-sidebar.tsx");if(!sidebar.includes('["Explicabilidad", "/explicabilidad"]'))errors.push("Explicabilidad no está en navegación");
 const vercel=read("vercel.json");if(!vercel.includes('"develop/v2.7.0-explainability-rebuild": false'))errors.push("Vercel no está bloqueado para la rama 2.7 reconstruida");
 const ci=read(".github/workflows/ci.yml");for(const token of ["audit:v270","test:explainability"]){if(!ci.includes(token))errors.push(`CI no ejecuta ${token}`);}
 if(errors.length){console.error("Financial App 2.7 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.7 audit OK · explicabilidad solo lectura, frontera server/client, preview obligatorio y protección de regresiones");
+console.log("Financial App 2.7 audit OK · explicabilidad solo lectura, CSS acotado, frontera server/client y preview obligatorio");

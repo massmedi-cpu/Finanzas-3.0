@@ -8,6 +8,7 @@ const required = [
   "app/api/control/integrity/route.ts",
   "app/control/integrity-panel.tsx",
   "app/control/integrity.css",
+  "app/control/layout.tsx",
   "scripts/integrity-v280-tests.ts",
 ];
 for (const file of required) if (!existsSync(file)) errors.push(`Falta ${file}`);
@@ -52,8 +53,10 @@ for (const token of ["Ejecutar auditoría profunda", 'method: "POST"', "shortFin
 }
 const control = read("app/control/page.tsx");
 for (const token of ["getSystemIntegrityOverview", "Promise.all", "IntegrityPanel"]) if (!control.includes(token)) errors.push(`Control no integra 2.8: ${token}`);
-const layout = read("app/layout.tsx");
-if (!layout.includes("./control/integrity.css")) errors.push("CSS de integridad no cargado");
+const routeLayout = read("app/control/layout.tsx");
+if (!routeLayout.includes("./integrity.css")) errors.push("CSS de integridad no cargado en el layout de Control");
+const rootLayout = read("app/layout.tsx");
+if (rootLayout.includes("control/integrity.css")) errors.push("CSS de integridad no debe cargarse globalmente");
 const vercel = read("vercel.json");
 if (!vercel.includes('"develop/v2.8.0-integrity-rebuild": false')) errors.push("Vercel no está bloqueado para la rama 2.8 reconstruida");
 const ci = read(".github/workflows/ci.yml");
@@ -64,4 +67,4 @@ if (errors.length) {
   errors.forEach(error => console.error(`- ${error}`));
   process.exit(1);
 }
-console.log("Financial App 2.8 audit OK · lecturas puras, auditoría explícita, huellas persistentes y Vercel protegido");
+console.log("Financial App 2.8 audit OK · lecturas puras, auditoría explícita, CSS acotado y huellas persistentes");
