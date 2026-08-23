@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { formatInteger } from "@/lib/format/es-es";
-import { INTEGRITY_CHECK_LABEL, INTEGRITY_STATUS_LABEL, shortFingerprint, type IntegrityOverview } from "@/lib/financial/integrity-shared";
+import { INTEGRITY_CHECK_LABEL, INTEGRITY_STATUS_LABEL, shortFingerprint, summarizeIntegrityChecks, type IntegrityOverview } from "@/lib/financial/integrity-shared";
 
 const dateTimeFmt = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
@@ -15,11 +15,7 @@ export function IntegrityPanel({ initialData }: { initialData: IntegrityOverview
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const current = data.current;
-  const counts = useMemo(() => ({
-    pass: current.checks.filter(check => check.status === "pass").length,
-    warning: current.checks.filter(check => check.status === "warning").length,
-    fail: current.checks.filter(check => check.status === "fail").length,
-  }), [current.checks]);
+  const counts = summarizeIntegrityChecks(current.checks);
 
   async function reload() {
     const response = await fetch("/api/control/integrity", { cache: "no-store" });
