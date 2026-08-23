@@ -30,6 +30,8 @@ const checks=[
   [chrome.includes('<AppSidebar/><div className="app-route">{children}</div>'),"el shell persistente debe conservar sidebar y ruta separada"],
   [chromeCss.includes("html{scrollbar-gutter:stable}"),"la navegación debe reservar el gutter del scrollbar para evitar cambios de breakpoint durante la carga"],
   [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces de navegación deben cerrar el menú móvil antes de iniciar la transición"],
+  [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil con especificidad superior a .sidebar nav"],
+  [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%'),"el menú móvil sólo debe activarse dentro del breakpoint móvil"],
   [vercel.includes('"develop/v3.0.0-foundation": false'),"la rama 3.0 debe permanecer sin Preview de Vercel"],
 ];
 
@@ -39,4 +41,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit 3.0 OK · jerarquía de Inicio, gráficos, temas, shell persistente, carga local y navegación estable protegidos");
+console.log("Audit 3.0 OK · jerarquía, gráficos, temas, shell persistente y navegación única/estable protegidos");

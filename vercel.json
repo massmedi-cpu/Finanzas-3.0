@@ -23,6 +23,7 @@
       "develop/v3.0.0-release": false,
       "hotfix/v3.0.1-sync": false,
       "hotfix/v3.0.1-navigation-stability": false,
+      "hotfix/v3.0.1-sidebar-duplication": false,
       "noop-check": false,
       "noop-check-2": false
     }
