@@ -6,6 +6,7 @@ import { FormEvent, useMemo, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
 import { SplitEditor } from "./split-editor";
+import { MovementDocuments } from "./movement-documents";
 
 type Filters = MovementFilterState;
 type EditState = {
@@ -187,7 +188,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
           <label><span>Subcategoría</span><select value={filters.subcategory} onChange={e=>setFilters({...filters,subcategory:e.target.value})}><option value="">Todas</option>{pageData.facets.subcategories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
           <label><span>Comercio / contraparte</span><input list="movement-merchants" value={filters.merchant} onChange={e=>setFilters({...filters,merchant:e.target.value})} placeholder="Todos"/><datalist id="movement-merchants">{pageData.facets.merchants.map(value=><option key={value} value={value}/>)}</datalist></label>
           <label><span>Canal</span><select value={filters.channel} onChange={e=>setFilters({...filters,channel:e.target.value})}><option value="">Todos</option>{pageData.facets.channels.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
-          <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
+          <label><span>Etiqueta</span><select value={filters.tag} onChange={e=>setFilters({...filters,tag:e.target.value})}><option value="">Todas</option>{pageData.facets.tags.map(value=><option key={value} value={value}/>)}</select></label>
           <label><span>Recurrente</span><select value={filters.recurring} onChange={e=>setFilters({...filters,recurring:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Sí</option><option value="0">No</option></select></label>
           <label><span>Duplicado</span><select value={filters.duplicate} onChange={e=>setFilters({...filters,duplicate:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Solo duplicados</option><option value="0">Excluir duplicados</option></select></label>
           <label><span>Entre cuentas</span><select value={filters.internalTransfer} onChange={e=>setFilters({...filters,internalTransfer:e.target.value as TriFilter})}><option value="">Todos</option><option value="1">Solo traspasos</option><option value="0">Excluir traspasos</option></select></label>
@@ -244,6 +245,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       </form>
 
       <SplitEditor transactionId={selected.id} sourceAmount={Number(selected.source["Importe (€)"]??0)} categories={pageData.facets.categories}/>
+      <MovementDocuments key={selected.id} transaction={selected} onChanged={()=>loadWith(filters,pageData.page)}/>
 
       <details className="trace-panel"><summary>Dato original</summary><dl>{Object.entries(selected.source).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{display(value)}</dd></div>)}</dl></details>
       <details className="trace-panel" open={selected.history.length>0}><summary>Historial de cambios · {selected.history.length}</summary>{selected.history.length?<ol className="history-list">{selected.history.map(entry=><li key={entry.id}><div><strong>{entry.field.replace(/^app\./,"App · ").replace(/^source\./,"Origen · ")}</strong><time>{new Date(entry.changedAt).toLocaleString("es-ES")}</time></div><p><span>{display(entry.before)}</span><b>→</b><span>{display(entry.after)}</span></p><small>{entry.changeOrigin==="source_sync"?"Cambio detectado en la fuente":`Edición · ${entry.changedBy||"usuario"}`}</small></li>)}</ol>:<p className="muted-copy">Este movimiento aún no tiene cambios registrados.</p>}</details>
