@@ -39,7 +39,7 @@ if (!preserve.includes("delete from financial_app.transaction_splits s\n  using 
 if (!preserve.includes("delete from financial_app.transaction_documents td\n  using financial_app.transactions t")) errors.push("El hotfix no protege vínculos de documentos posteriores");
 if (!preserve.includes("Una conciliación que toca un movimiento posterior se conserva")) errors.push("Falta protección de conciliaciones posteriores");
 if (!preserve.includes("Un documento posterior vinculado a un movimiento posterior permanece activo")) errors.push("Falta protección de documentos posteriores");
-const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes("sparseReceiptPass") && rectified.includes("worker.recognize(input") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
+const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes("geometryReceiptPass") && engine.includes("worker.recognize(input") && rectified.includes("worker.recognize(input") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
 if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
@@ -51,4 +51,4 @@ const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1]
 if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
 if (errors.length) {console.error("Financial App 1.8 audit FAILED");errors.forEach((error) => console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor canónico");
+console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor geométrico canónico");
