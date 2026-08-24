@@ -1,0 +1,33 @@
+name: Temporary Financial App 3.4.5 manifest alignment
+
+on:
+  push:
+    branches:
+      - chore/3.4.5-version-integrity
+
+permissions:
+  contents: write
+
+jobs:
+  align:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref_name }}
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Align npm manifest and lockfile
+        run: npm version 3.4.5 --no-git-tag-version
+      - name: Commit generated lockfile metadata
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: align package manifests to 3.4.5"
+          git push origin HEAD:${{ github.ref_name }}
