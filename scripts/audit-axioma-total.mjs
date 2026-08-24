@@ -25,10 +25,14 @@ const appVersionSource=read("lib/app-version.ts");
 const versionMatch=appVersionSource.match(/APP_VERSION\s*=\s*"([^"]+)"/);
 const appVersion=versionMatch?.[1]??null;
 
-must(Boolean(appVersion),"lib/app-version.ts no expone APP_VERSION explícita");
-must(packageJson.version===appVersion,`Versión duplicada/incoherente: package.json=${packageJson.version}, APP_VERSION=${appVersion}`);
+must(Boolean(appVersion)&&/^\d+\.\d+\.\d+$/.test(appVersion||""),"lib/app-version.ts no expone APP_VERSION semántica explícita");
+// package.json identifica el paquete técnico instalado; APP_VERSION identifica el producto visible.
+// La única obligación del paquete es permanecer coherente con su lock. Nunca puede alimentar UI/PWA.
 must(lock.version===packageJson.version,"package-lock.version no coincide con package.json");
 must(lock.packages?.[""]?.version===packageJson.version,"package-lock root package no coincide con package.json");
+const documentPrep=read("scripts/prepare-document-engine.mjs");
+must(documentPrep.includes("lib\",\"app-version.ts")&&documentPrep.includes("const appVersion=versionMatch[1]"),"El manifiesto documental debe derivar su versión de APP_VERSION, no de package.json");
+must(!documentPrep.includes("appVersion: packageJson.version"),"package.json no puede volver a ser fuente de versión visible");
 
 for(const file of runtimeFiles){
   const base=path.basename(file);
@@ -52,6 +56,13 @@ for(const [file,source] of financialSources){
   must(hardcodedVersions.length===0,`Versión histórica hardcodeada en dominio financiero ${file}: ${[...new Set(hardcodedVersions)].join(", ")}`);
 }
 
+const authHelper=read("lib/auth/authorized-client.ts");
+must(authHelper.includes("hasFinancialAppAccess")&&authHelper.includes("supabase.auth.getUser()"),"La autorización API canónica debe validar sesión y lista de acceso");
+for(const file of codeFiles.filter(file=>file.startsWith("app/api/"))){
+  const source=read(file);
+  if(source.includes("createClient()")&&source.includes("auth.getUser()"))warn(source.includes("getAuthorizedClient"),`API con autorización local duplicada: ${file}`);
+}
+
 const ci=read(".github/workflows/ci.yml");
 must(!/develop\/v\d|hotfix\/v\d|financial-app-rebuild/.test(ci),"CI acoplado a ramas históricas concretas");
 must(ci.includes("audit:axioma"),"CI no ejecuta el gate AXIOMA total");
@@ -59,18 +70,7 @@ must(ci.includes("audit:axioma"),"CI no ejecuta el gate AXIOMA total");
 const packageText=read("package.json");
 const allRepoCode=[...walk("scripts"),...runtimeFiles].filter(file=>/\.(?:ts|tsx|js|mjs)$/.test(file));
 const referencedText=[packageText,ci,...allRepoCode.map(read)].join("\n");
-const staleCandidates=[
-  "check-project-invariants.mjs",
-  "run-domain-tests.mjs",
-  "backup-portability-tests.mjs",
-  "classification-rule-tests.mjs",
-  "explainability-tests.mjs",
-  "long-horizon-tests.mjs",
-  "month-close-tests.mjs",
-  "source-multisheet-invariant-tests.mjs",
-  "system-audit-tests.mjs",
-  "v300-security-tests.mjs",
-];
+const staleCandidates=["check-project-invariants.mjs","run-domain-tests.mjs","source-multisheet-invariant-tests.mjs"];
 for(const name of staleCandidates){
   const file=`scripts/${name}`;
   if(!fs.existsSync(file))continue;
@@ -83,4 +83,4 @@ for(const file of codeFiles){const source=read(file);for(const pattern of secret
 
 if(warnings.length){console.warn("AXIOMA total audit warnings:");for(const item of warnings)console.warn(`- ${item}`);}
 if(failures.length){console.error("AXIOMA total audit FAILED:");for(const item of failures)console.error(`- ${item}`);process.exit(1);}
-console.log(`AXIOMA total audit OK · ${runtimeFiles.length} archivos runtime inspeccionados · versión, deuda histórica, tipado y CI coherentes`);
+console.log(`AXIOMA total audit OK · ${runtimeFiles.length} archivos runtime inspeccionados · APP_VERSION canónica, deuda histórica, autorización, tipado y CI coherentes`);
