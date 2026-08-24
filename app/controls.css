@@ -1,3 +1,4 @@
+button{font:inherit}
 .primary-action,.ghost,.danger-action,.icon-button{font:inherit;touch-action:manipulation}
 .primary-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:10px;padding:10px 15px;font-weight:800;line-height:1.2;cursor:pointer;text-decoration:none;transition:filter .14s ease,opacity .14s ease,transform .08s ease}
 .primary-action:hover:not(:disabled){filter:brightness(1.04)}
@@ -16,6 +17,6 @@ button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .inline-alert.error{color:#b42318}
 .empty-state{display:grid;place-items:center;gap:6px;min-height:180px;color:var(--muted)}
 .empty-state strong{color:var(--text)}
-.button-link{color:inherit}
+.button-link{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 @media(prefers-color-scheme:dark){.inline-alert.error,.danger-action{color:#ff8a80}}
 @media(prefers-reduced-motion:reduce){.primary-action,.ghost,.danger-action{transition:none}.primary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{animation:none;border-right-color:currentColor}}

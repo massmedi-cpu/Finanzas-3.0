@@ -7,5 +7,5 @@
   .movement-table-wrap{max-width:100%;overscroll-behavior-x:contain}
   .movement-filters,.archive-toolbar,.archive-import-actions,.editor-actions{min-width:0}
   .archive-workspace,.movements-workspace{max-width:none!important}
-  button,a,input,select,textarea{scroll-margin-top:78px}
+  :where(button,a,input,select,textarea){scroll-margin-top:78px}
 }
