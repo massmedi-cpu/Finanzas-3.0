@@ -29,7 +29,6 @@ type SupplementalPass = {text:string;layoutText:string;confidence:number|null;ts
 type Bounds={left:number;top:number;width:number;height:number};
 type GeometryPass=SupplementalPass&{receiptLayout:ReceiptLayout|null;bounds:Bounds;canvas:HTMLCanvasElement};
 
-const visibleLength = (value: string) => value.replace(/\s/g, "").length;
 const letterCount=(value:string)=>(value.match(/\p{L}/gu)||[]).length;
 const wordCount=(value:string)=>(value.match(/[\p{L}]{2,}/gu)||[]).length;
 const compactWords = (value: string) => value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]+/g, " ").trim().split(/\s+/).filter(Boolean);
