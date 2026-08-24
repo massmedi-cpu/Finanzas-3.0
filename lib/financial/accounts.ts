@@ -1,4 +1,6 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
+import { asArray, asBoolean, asNumber, asRecord, asString, nullableNumber, nullableString, recordArray } from "@/lib/validation/json";
 import type { BalancePoint } from "@/components/balance-chart";
 
 export type AccountSource = { identifier: string; label: string; primary: boolean };
@@ -53,21 +55,31 @@ export type AccountDetail = {
   recentMovements: AccountMovement[];
 };
 
-function asNumber(value: unknown, fallback = 0) {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
+function normalizeSource(value: unknown): AccountSource {
+  const raw=asRecord(value);
+  return {identifier:asString(raw.identifier),label:asString(raw.label),primary:asBoolean(raw.primary)};
 }
 
-function normalizeAccount(raw: any): FinancialAccount {
+function normalizeBalancePoint(value: unknown): BalancePoint {
+  const raw=asRecord(value);
+  return {month:asString(raw.month),balance:nullableNumber(raw.balance)};
+}
+
+function normalizeAccount(value: unknown): FinancialAccount {
+  const raw=asRecord(value);
   return {
-    ...raw,
-    balance: raw.balance == null ? null : asNumber(raw.balance),
-    movements: asNumber(raw.movements),
-    monthIncome: asNumber(raw.monthIncome),
-    monthExpenses: asNumber(raw.monthExpenses),
-    monthNet: asNumber(raw.monthNet),
-    balanceSeries: Array.isArray(raw.balanceSeries) ? raw.balanceSeries.map((point: any) => ({ month: String(point.month), balance: point.balance == null ? null : asNumber(point.balance) })) : [],
-    sources: Array.isArray(raw.sources) ? raw.sources : [],
+    id:asString(raw.id),name:asString(raw.name),institution:nullableString(raw.institution),productType:nullableString(raw.productType),identifier:asString(raw.identifier),role:asString(raw.role),currency:asString(raw.currency,"EUR"),cashFlowEnabled:asBoolean(raw.cashFlowEnabled),
+    balance:nullableNumber(raw.balance),balanceDate:nullableString(raw.balanceDate),movements:asNumber(raw.movements),firstDate:nullableString(raw.firstDate),lastDate:nullableString(raw.lastDate),
+    monthIncome:asNumber(raw.monthIncome),monthExpenses:asNumber(raw.monthExpenses),monthNet:asNumber(raw.monthNet),
+    balanceSeries:asArray(raw.balanceSeries).map(normalizeBalancePoint),sources:asArray(raw.sources).map(normalizeSource),
+  };
+}
+
+function normalizeMovement(value: unknown): AccountMovement {
+  const raw=asRecord(value);
+  return {
+    id:asString(raw.id),sourceId:asString(raw.sourceId),date:asString(raw.date),concept:nullableString(raw.concept),counterparty:nullableString(raw.counterparty),category:nullableString(raw.category),type:nullableString(raw.type),
+    amount:asNumber(raw.amount),balance:nullableNumber(raw.balance),sourceIdentifier:nullableString(raw.sourceIdentifier),needsReview:asBoolean(raw.needsReview),
   };
 }
 
@@ -75,12 +87,9 @@ export async function getAccountsOverview(): Promise<AccountsOverview> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("financial_app_accounts");
   if (error || !data) throw new Error(error?.message || "accounts_unavailable");
-  const raw = data as any;
+  const raw=asRecord(data);
   return {
-    version: String(raw.version || "0.4.0"),
-    month: String(raw.month || ""),
-    totalAvailable: asNumber(raw.totalAvailable),
-    accounts: Array.isArray(raw.accounts) ? raw.accounts.map(normalizeAccount) : [],
+    version:asString(raw.version,APP_VERSION),month:asString(raw.month),totalAvailable:asNumber(raw.totalAvailable),accounts:recordArray(raw.accounts).map(normalizeAccount),
   };
 }
 
@@ -88,17 +97,11 @@ export async function getAccountDetail(id: string): Promise<AccountDetail> {
   const supabase = await createClient();
   const { data, error } = await supabase.rpc("financial_app_account_detail", { p_account_id: id });
   if (error || !data) throw new Error(error?.message || "account_unavailable");
-  const raw = data as any;
-  const a = raw.account || {};
+  const raw=asRecord(data);
+  const account=normalizeAccount(raw.account);
   return {
-    version: String(raw.version || "0.4.0"),
-    account: {
-      id: String(a.id || ""), name: String(a.name || ""), institution: a.institution ?? null, productType: a.productType ?? null,
-      identifier: String(a.identifier || ""), role: String(a.role || ""), currency: String(a.currency || "EUR"), cashFlowEnabled: Boolean(a.cashFlowEnabled),
-      balance: a.balance == null ? null : asNumber(a.balance), balanceDate: a.balanceDate ?? null, movements: asNumber(a.movements), firstDate: a.firstDate ?? null, lastDate: a.lastDate ?? null,
-    },
-    sources: Array.isArray(raw.sources) ? raw.sources : [],
-    balanceSeries: Array.isArray(raw.balanceSeries) ? raw.balanceSeries.map((point: any) => ({ month: String(point.month), balance: point.balance == null ? null : asNumber(point.balance) })) : [],
-    recentMovements: Array.isArray(raw.recentMovements) ? raw.recentMovements.map((movement: any) => ({ ...movement, amount: asNumber(movement.amount), balance: movement.balance == null ? null : asNumber(movement.balance), needsReview: Boolean(movement.needsReview) })) : [],
+    version:asString(raw.version,APP_VERSION),
+    account:{id:account.id,name:account.name,institution:account.institution,productType:account.productType,identifier:account.identifier,role:account.role,currency:account.currency,cashFlowEnabled:account.cashFlowEnabled,balance:account.balance,balanceDate:account.balanceDate,movements:account.movements,firstDate:account.firstDate,lastDate:account.lastDate},
+    sources:asArray(raw.sources).map(normalizeSource),balanceSeries:asArray(raw.balanceSeries).map(normalizeBalancePoint),recentMovements:asArray(raw.recentMovements).map(normalizeMovement),
   };
 }
