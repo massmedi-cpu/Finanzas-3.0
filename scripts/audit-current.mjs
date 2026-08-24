@@ -73,6 +73,11 @@ if(fs.existsSync(autoLinkBoundaryMigration)){
     must(migration.includes(token),`El cierre 3.4.4 ha perdido la garantía: ${token}`);
 }
 
+const intentLink=read("components/intent-link.tsx");
+must(intentLink.includes("prefetch={false}"),"La navegación privada no debe recuperar el prefetch masivo automático");
+must(intentLink.includes("onMouseEnter={event=>{warm();")&&intentLink.includes("onFocus={event=>{warm();"),"La navegación de escritorio debe precargar solo por intención");
+must(intentLink.includes("onTouchStart={event=>{warm();onTouchStart?.(event)}}"),"La navegación táctil debe iniciar la precarga al comenzar la intención, antes del click");
+
 const vercel=read("vercel.json");
 for(const pattern of ["audit/**","chore/**","develop/**","feat/**","fix/**","hotfix/**","release/**"])
   must(vercel.includes(`"${pattern}": false`),`Vercel debe bloquear previews automáticos de ${pattern}`);
@@ -81,4 +86,4 @@ const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SU
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · versión, Drive/movimientos y arquitectura canónica protegidos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · versión, navegación por intención, Drive/movimientos y arquitectura canónica protegidos`);
