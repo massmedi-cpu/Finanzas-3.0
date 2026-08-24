@@ -31,5 +31,5 @@ export function IntentLink({href,onClick,onMouseEnter,onFocus,onTouchStart,...pr
     }}
     onMouseEnter={event=>{warm();onMouseEnter?.(event)}}
     onFocus={event=>{warm();onFocus?.(event)}}
-    onTouchStart={event=>{warm();onTouchStart?.(event)}}/>;
+    onTouchStart={event=>{onTouchStart?.(event)}}/>;
 }
