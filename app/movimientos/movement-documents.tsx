@@ -9,10 +9,12 @@ const dateFormat=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",
 
 function formatDate(value:string|null){return value?dateFormat.format(new Date(`${value}T12:00:00`)):"—";}
 function formatMoney(value:number|null){return value==null?"—":formatEuro(value);}
+function isDriveDocument(document:MovementDocument){return document.storageProvider==="google_drive"&&Boolean(document.storageUrl);}
 function confidenceLabel(document:MovementDocument){
-  if(document.associationOrigin==="manual")return "Vinculación manual";
-  if(document.confidence!=null)return `Automático · ${Math.round(Number(document.confidence)*100)}%`;
-  return "Vinculado";
+  if(document.associationOrigin==="drive_exact")return "Google Drive · coincidencia exacta";
+  if(document.associationOrigin==="manual")return isDriveDocument(document)?"Google Drive · vinculación manual":"Vinculación manual";
+  if(document.confidence!=null)return `${isDriveDocument(document)?"Google Drive · ":""}Automático · ${Math.round(Number(document.confidence)*100)}%`;
+  return isDriveDocument(document)?"Google Drive · vinculado":"Vinculado";
 }
 
 export function MovementDocuments({transaction,onChanged}:{transaction:TransactionDetail;onChanged?:()=>void|Promise<void>}){
@@ -63,17 +65,22 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
     finally{setBusy(null);}
   }
 
+  function openAction(document:MovementDocument){
+    if(isDriveDocument(document))return <a className="ghost" href={document.storageUrl!} target="_blank" rel="noopener noreferrer">Ver en Google Drive</a>;
+    return <button className="ghost" type="button" onClick={()=>openDocument(document)} disabled={busy!==null}>{busy===`open-${document.id}`?"Abriendo…":"Ver ticket / factura"}</button>;
+  }
+
   const title=matches.linked.length
-    ?`${matches.linked.length} documento${matches.linked.length===1?" vinculado":"s vinculados"}`
-    :matches.suggestions.length?"Posible factura encontrada":"Sin factura vinculada";
+    ?`${matches.linked.length} relacionado${matches.linked.length===1?"":"s"}`
+    :matches.suggestions.length?"posible coincidencia":"sin documento vinculado";
 
   return <details className="trace-panel movement-documents" open>
-    <summary>Documentos · {title}</summary>
+    <summary>Factura / ticket relacionado · {title}</summary>
     <div className="document-link-panel">
       {error&&<div className="inline-alert error" role="alert">{error}</div>}
 
       {matches.linked.length>0&&<div className="document-group">
-        <strong className="document-group-title">Vinculados</strong>
+        <strong className="document-group-title">Relacionado con este movimiento</strong>
         <ul className="document-link-list">
           {matches.linked.map(document=><li key={document.id}>
             <div className="document-link-copy">
@@ -82,7 +89,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
               <small>{confidenceLabel(document)}</small>
             </div>
             <div className="document-link-actions">
-              <button className="ghost" type="button" onClick={()=>openDocument(document)} disabled={busy!==null}>{busy===`open-${document.id}`?"Abriendo…":"Abrir"}</button>
+              {openAction(document)}
               <button className="ghost" type="button" onClick={()=>unlinkDocument(document)} disabled={busy!==null}>{busy===`unlink-${document.id}`?"Quitando…":"Desvincular"}</button>
             </div>
           </li>)}
@@ -91,23 +98,23 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
 
       {matches.suggestions.length>0&&<div className="document-group">
         <strong className="document-group-title">Coincidencias para revisar</strong>
-        <p className="muted-copy">Financial App compara importe, fecha y comercio. Solo las coincidencias inequívocas se vinculan automáticamente.</p>
+        <p className="muted-copy">Financial App compara importe, fecha real de compra y comercio. Las coincidencias inequívocas de Google Drive se vinculan automáticamente.</p>
         <ul className="document-link-list">
           {matches.suggestions.map(document=><li key={document.id}>
             <div className="document-link-copy">
               <strong>{document.fileName}</strong>
               <span>{document.merchant||"Documento"} · {formatDate(document.documentDate)} · {formatMoney(document.amount)}</span>
-              <small>Coincidencia {Math.round(Number(document.score??0))}%{document.merchantMatch?" · comercio coincide":""}{document.daysDiff!=null?` · ${document.daysDiff} día${document.daysDiff===1?"":"s"} de diferencia`:""}{document.installmentMatch?" · pago fraccionado":""}</small>
+              <small>{isDriveDocument(document)?"Google Drive · ":""}Coincidencia {Math.round(Number(document.score??0))}%{document.merchantMatch?" · comercio coincide":""}{document.daysDiff!=null?` · ${document.daysDiff} día${document.daysDiff===1?"":"s"} de diferencia`:""}{document.installmentMatch?" · pago fraccionado":""}</small>
             </div>
             <div className="document-link-actions">
-              <button className="ghost" type="button" onClick={()=>openDocument(document)} disabled={busy!==null}>Abrir</button>
+              {openAction(document)}
               <button className="primary-action" type="button" onClick={()=>linkDocument(document)} disabled={busy!==null}>{busy===`link-${document.id}`?"Vinculando…":"Vincular"}</button>
             </div>
           </li>)}
         </ul>
       </div>}
 
-      {!matches.linked.length&&!matches.suggestions.length&&<p className="muted-copy">No se ha encontrado una factura o ticket compatible con este movimiento. Cuando exista un documento con fecha, importe o comercio compatibles aparecerá aquí.</p>}
+      {!matches.linked.length&&!matches.suggestions.length&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Si ya existe en Google Drive, Financial App intentará relacionarlo por fecha real de compra, importe y comercio; si haces una foto o subes un ticket a Archivo, el OCR intentará vincularlo automáticamente al movimiento correcto.</p>}
     </div>
   </details>;
 }
