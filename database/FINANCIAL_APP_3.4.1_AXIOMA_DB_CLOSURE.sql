@@ -94,6 +94,67 @@ grant execute on function public.financial_app_archive_restore(uuid) to authenti
 revoke execute on function financial_app.auto_link_documents_core() from public, anon, authenticated;
 grant execute on function financial_app.auto_link_documents_core() to service_role;
 
+-- Los endpoints antiguos arrastraban como metadato la versión en la que nacieron.
+-- No se reescribe su lógica: se sustituye únicamente el literal esperado y la
+-- migración falla si la definición ya no coincide, evitando modificaciones opacas.
+do $version_cleanup$
+declare
+  r record;
+  v_definition text;
+  v_old_marker text;
+  v_new_marker constant text := '''version'',financial_app.current_app_version()';
+begin
+  for r in
+    select * from (values
+      ('account_detail_core','0.4.0'),
+      ('accounts_core','0.4.0'),
+      ('archive_overview_core','0.10.0'),
+      ('forecast_overview_core','0.8.1'),
+      ('net_worth_overview_core','0.8.0')
+    ) as expected(proname,old_version)
+  loop
+    select pg_get_functiondef(p.oid) into v_definition
+    from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='financial_app' and p.proname=r.proname;
+    if v_definition is null then raise exception 'Missing function %',r.proname; end if;
+    v_old_marker:=format('''version'',''%s''',r.old_version);
+    if position(v_old_marker in v_definition)=0 then
+      raise exception 'Expected version marker % not found in %',v_old_marker,r.proname;
+    end if;
+    execute replace(v_definition,v_old_marker,v_new_marker);
+  end loop;
+
+  select pg_get_functiondef(p.oid) into v_definition
+  from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+  where n.nspname='financial_app' and p.proname='settings_overview_core';
+  if v_definition is null then raise exception 'Missing settings_overview_core'; end if;
+  if position('''version'',coalesce(v_target,v_schema,''1.0.0'')' in v_definition)=0
+     or position('''targetVersion'',coalesce(v_target,''1.0.0'')' in v_definition)=0 then
+    raise exception 'Unexpected settings_overview_core version contract';
+  end if;
+  v_definition:=replace(v_definition,
+    '''version'',coalesce(v_target,v_schema,''1.0.0'')',
+    '''version'',financial_app.current_app_version()');
+  v_definition:=replace(v_definition,
+    '''targetVersion'',coalesce(v_target,''1.0.0'')',
+    '''targetVersion'',coalesce(v_target,financial_app.current_app_version())');
+  execute v_definition;
+end
+$version_cleanup$;
+
+create or replace function financial_app.current_app_version()
+returns text
+language sql
+stable
+security definer
+set search_path to 'pg_catalog','financial_app'
+as $function$
+  select coalesce((select value #>> '{}' from financial_app.app_meta where key='app_version'),'unknown')
+$function$;
+
+-- Metadato de una RC 1.0 que ya no interviene en ningún contrato activo.
+delete from financial_app.app_meta where key='release_candidate';
+
 -- La versión visible y la versión objetivo vuelven a quedar alineadas.
 insert into financial_app.app_meta(key,value,updated_at)
 values ('app_version',to_jsonb('3.4.1'::text),now()),('target_version',to_jsonb('3.4.1'::text),now())
