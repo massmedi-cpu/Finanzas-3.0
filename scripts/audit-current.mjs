@@ -20,6 +20,24 @@ for(const file of files.filter(file=>/\.(?:ts|tsx|js|mjs)$/.test(file))){
   must(!/catch\s*(?:\([^)]*\))?\s*\{\s*\}/m.test(source),`catch vacío en ${file}`);
 }
 
+const cssFiles=files.filter(file=>file.endsWith(".css"));
+const sharedControlSelectors=new Set([
+  "button",".primary-action",".ghost",".danger-action",".icon-button",".button-link",
+  "button:disabled","[aria-disabled=\"true\"]","button[aria-busy=\"true\"]","a[aria-busy=\"true\"]",
+  ".inline-alert",".inline-alert.success",".inline-alert.error",".empty-state",".empty-state strong"
+]);
+function splitSelectorList(prelude){const selectors=[];let current="",round=0,square=0;for(const char of prelude){if(char==="(")round++;else if(char===")")round=Math.max(0,round-1);else if(char==="[")square++;else if(char==="]")square=Math.max(0,square-1);if(char===","&&round===0&&square===0){if(current.trim())selectors.push(current.trim());current="";continue;}current+=char;}if(current.trim())selectors.push(current.trim());return selectors;}
+function cssSelectors(source){const clean=source.replace(/\/\*[\s\S]*?\*\//g,"");const selectors=[];for(const match of clean.matchAll(/([^{}]+)\{/g)){const prelude=String(match[1]||"").trim();if(!prelude||prelude.startsWith("@"))continue;selectors.push(...splitSelectorList(prelude));}return selectors;}
+for(const file of cssFiles){const selectors=cssSelectors(read(file));if(file!=="app/controls.css"){for(const selector of selectors)must(!sharedControlSelectors.has(selector),`Selector compartido ${selector} redefinido fuera de controls.css: ${file}`);for(const selector of selectors){const unscopedState=/^\.(?:primary-action|ghost|danger-action|icon-button|button-link|inline-alert|empty-state)(?=[:[])/.test(selector);must(!unscopedState,`Estado de control compartido redefinido sin ámbito fuera de controls.css: ${selector} en ${file}`);}}}
+const controls=read("app/controls.css");
+for(const token of ["button{font:inherit}",".primary-action{","background:var(--accent)",".ghost{",".danger-action{",".icon-button{",".button-link{display:inline-flex",".inline-alert{",".empty-state{","button:disabled","button[aria-busy=\"true\"]",".primary-action[aria-busy=\"true\"]::before"]) must(controls.includes(token),`controls.css ha perdido la garantía compartida: ${token}`);
+const globals=read("app/globals.css");
+must(globals.includes('html[data-theme="light"]')&&globals.includes('html[data-theme="dark"]'),"La paleta de tema manual debe vivir en globals.css");
+const settingsCss=read("app/settings.css");
+must(!settingsCss.includes(':root[data-theme="light"]')&&!settingsCss.includes(':root[data-theme="dark"]'),"Configuración no puede ser propietaria de la paleta global");
+const movementsCss=read("app/movements.css");
+must(!movementsCss.includes(".sidebar nav")&&!movementsCss.includes(".sidebar{"),"Movimientos no puede redefinir la navegación global");
+
 const rootLayout=read("app/layout.tsx");
 for(const forbidden of ["cash-flow.css","explainability.css","integrity.css","analysis.css","plan.css","budget.css","movements.css"])
   must(!rootLayout.includes(forbidden),`El layout raíz carga CSS específico de módulo: ${forbidden}`);
