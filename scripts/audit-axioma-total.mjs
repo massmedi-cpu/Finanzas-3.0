@@ -41,6 +41,8 @@ for(const file of runtimeFiles){
     const source=read(file);
     must(!/(?:^|\n)\s*(?:\/\/|\/\*|\*)\s*(?:TODO|FIXME|WIP)\b/i.test(source),`Trabajo incompleto en runtime: ${file}`);
     must(!/catch\s*(?:\([^)]*\))?\s*\{\s*\}/m.test(source),`catch vacío en runtime: ${file}`);
+    const versionedRpcCalls=source.match(/\.rpc\(\s*["'][^"']*_v\d+(?:[._-]?\d+)*["']/gi)||[];
+    must(versionedRpcCalls.length===0,`RPC runtime versionado/arrastrado en ${file}: ${[...new Set(versionedRpcCalls)].join(", ")}`);
   }
 }
 
@@ -83,4 +85,4 @@ for(const file of codeFiles){const source=read(file);for(const pattern of secret
 
 if(warnings.length){console.warn("AXIOMA total audit warnings:");for(const item of warnings)console.warn(`- ${item}`);}
 if(failures.length){console.error("AXIOMA total audit FAILED:");for(const item of failures)console.error(`- ${item}`);process.exit(1);}
-console.log(`AXIOMA total audit OK · ${runtimeFiles.length} archivos runtime inspeccionados · APP_VERSION canónica, deuda histórica, autorización, tipado y CI coherentes`);
+console.log(`AXIOMA total audit OK · ${runtimeFiles.length} archivos runtime inspeccionados · APP_VERSION canónica, deuda histórica, RPC, autorización, tipado y CI coherentes`);
