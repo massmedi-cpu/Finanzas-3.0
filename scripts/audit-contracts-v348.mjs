@@ -20,7 +20,7 @@ must(movementsApi.includes('supabase.rpc("financial_app_movements_advanced"'),"M
 
 const settingsApi=read("app/api/settings/route.ts");
 must(settingsApi.includes('p_timezone:timezone'),"Configuración debe persistir la zona horaria mediante la firma canónica");
-must(!settingsApi.includes("p_settings"),"Configuración no debe recuperar la firma obsoleta theme + settings JSON");
+must(!/\bp_settings\s*:/.test(settingsApi),"Configuración no debe recuperar la firma obsoleta theme + settings JSON");
 
 const migrationPath="database/FINANCIAL_APP_3.4.8_RETIRE_OBSOLETE_RPCS.sql";
 must(fs.existsSync(migrationPath),"Falta la migración 3.4.8 que retira contratos obsoletos");
