@@ -1,19 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
-
-async function authorizedClient(){
-  const supabase=await createClient();
-  const {data,error}=await supabase.auth.getUser();
-  const email=normalizeEmail(data.user?.email);
-  if(error||!data.user||!(await hasFinancialAppAccess(supabase,email))) return null;
-  return supabase;
-}
+import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 
 export const dynamic="force-dynamic";
 
 export async function GET(request:NextRequest){
-  const supabase=await authorizedClient();
+  const supabase=await getAuthorizedClient();
   if(!supabase) return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const raw=Number(request.nextUrl.searchParams.get("year"));
   const year=Number.isInteger(raw)&&raw>=2000&&raw<=2100?raw:new Date().getFullYear();
