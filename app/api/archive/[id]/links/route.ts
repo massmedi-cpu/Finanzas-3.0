@@ -1,26 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
+import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 
-async function authorizedClient(){
-  const supabase=await createClient();
-  const {data,error}=await supabase.auth.getUser();
-  const email=normalizeEmail(data.user?.email);
-  if(error||!data.user||!(await hasFinancialAppAccess(supabase,email)))return null;
-  return supabase;
-}
+type AuthorizedClient=NonNullable<Awaited<ReturnType<typeof getAuthorizedClient>>>;
 
-async function updatedDocument(supabase:Awaited<ReturnType<typeof createClient>>,id:string){
+async function updatedDocument(supabase:AuthorizedClient,id:string){
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(detail.error||!detail.data)throw new Error(detail.error?.message||"document_unavailable");
   return detail.data;
 }
 
 export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await authorizedClient();
+  const supabase=await getAuthorizedClient();
   if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const {id}=await params;
-  const body=await request.json().catch(()=>null);
+  const body=await request.json().catch(()=>null) as {sourceId?:unknown}|null;
   const sourceId=String(body?.sourceId||"");
   const {data,error}=await supabase.rpc("financial_app_archive_link",{p_document_id:id,p_source_id:sourceId});
   if(error||!data)return NextResponse.json({ok:false,error:error?.message||"link_failed"},{status:400});
@@ -29,7 +22,7 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
 }
 
 export async function DELETE(request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await authorizedClient();
+  const supabase=await getAuthorizedClient();
   if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const {id}=await params;
   const sourceId=request.nextUrl.searchParams.get("sourceId")||"";
