@@ -8,7 +8,7 @@ import {
   type DocumentMetadata,
   type DocumentTypeHint,
   type ImageOcrResult,
-} from "./ticket-ocr-v307";
+} from "./ticket-ocr-geometry";
 import {
   parseReceiptTsvLayout,
   parseTsvWords,
