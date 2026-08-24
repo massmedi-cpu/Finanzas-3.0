@@ -7,7 +7,6 @@ export function AnalysisTrendChart({months,year,comparisonYear,periodStart,perio
   const width=980,height=330,padX=48,padY=34,innerW=width-padX*2,innerH=height-padY*2;
   const max=Math.max(1,...shown.flatMap(m=>[m.income,m.expenses,m.priorIncome||0,m.priorExpenses||0,Math.abs(m.net),Math.abs(m.priorNet||0)]));
   const step=innerW/shown.length; const barW=Math.min(22,step*.2);
-  const y=(v:number)=>padY+innerH-(v/max)*innerH;
   const netMax=Math.max(1,...shown.flatMap(m=>[Math.abs(m.net),Math.abs(m.priorNet||0)]));
   const netY=(v:number)=>padY+innerH/2-(v/netMax)*(innerH*.42);
   const points=(key:"net"|"priorNet")=>shown.map((m,i)=>`${padX+step*(i+.5)},${netY(Number(m[key]||0))}`).join(" ");
