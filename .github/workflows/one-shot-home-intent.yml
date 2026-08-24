@@ -1,0 +1,39 @@
+name: One-shot home navigation policy alignment
+
+on:
+  push:
+    branches:
+      - perf/3.4.6-touch-intent-prefetch
+
+permissions:
+  contents: write
+
+jobs:
+  align-home-navigation:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: perf/3.4.6-touch-intent-prefetch
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Replace automatic home links with canonical intent links
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const file='app/page.tsx';
+          let source=fs.readFileSync(file,'utf8');
+          if(!source.includes('import Link from "next/link";')) throw new Error('Home no longer has expected Next Link import');
+          source=source.replace('import Link from "next/link";','import { IntentLink } from "@/components/intent-link";');
+          source=source.replaceAll('<Link','<IntentLink').replaceAll('</Link>','</IntentLink>');
+          fs.writeFileSync(file,source);
+          NODE
+      - name: Commit home navigation alignment
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/page.tsx
+          git commit -m "perf: restore intent-only prefetch on home navigation"
+          git push origin HEAD:perf/3.4.6-touch-intent-prefetch
