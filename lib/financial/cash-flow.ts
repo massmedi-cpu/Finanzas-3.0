@@ -1,5 +1,6 @@
 import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
+import { asArray, asBoolean, asNumber, asRecord, asString, nullableString } from "@/lib/validation/json";
 
 export type CashFlowMonth = { month:string; income:number; expenses:number; net:number; accumulated:number };
 export type CashFlowCategory = { category:string; amount:number; movements?:number };
@@ -24,20 +25,20 @@ export type CashFlowRangeData = {
   rules:{savingsAlwaysExcluded:boolean;internalTransfersExcluded:boolean;duplicatesExcluded:boolean;sourceMissingExcluded:boolean;personalSplitsApplied:boolean};
 };
 
-const n=(value:unknown)=>Number.isFinite(Number(value))?Number(value):0;
+function normalizeCategory(value:unknown):CashFlowCategory{const x=asRecord(value);return{category:asString(x.category),amount:asNumber(x.amount),movements:asNumber(x.movements)}}
 
 export async function getCashFlow(year:number):Promise<CashFlowData>{
   const supabase=await createClient();
   const {data,error}=await supabase.rpc("financial_app_cash_flow",{p_year:year});
   if(error||!data) throw new Error(error?.message||"cash_flow_unavailable");
-  const raw=data as any;
+  const raw=asRecord(data),excluded=asRecord(raw.excluded),rules=asRecord(raw.rules);
   return {
-    version:String(raw.version||APP_VERSION), year:n(raw.year), years:Array.isArray(raw.years)?raw.years.map(n):[],
-    income:n(raw.income), expenses:n(raw.expenses), net:n(raw.net), positiveMonths:n(raw.positiveMonths), negativeMonths:n(raw.negativeMonths),
-    monthly:Array.isArray(raw.monthly)?raw.monthly.map((m:any)=>({month:String(m.month),income:n(m.income),expenses:n(m.expenses),net:n(m.net),accumulated:n(m.accumulated)})):[],
-    topExpenseCategories:Array.isArray(raw.topExpenseCategories)?raw.topExpenseCategories.map((c:any)=>({category:String(c.category),amount:n(c.amount),movements:n(c.movements)})):[],
-    excluded:{savings:n(raw.excluded?.savings),internalTransfers:n(raw.excluded?.internalTransfers),duplicates:n(raw.excluded?.duplicates),manual:n(raw.excluded?.manual)},
-    rules:{savingsAlwaysExcluded:Boolean(raw.rules?.savingsAlwaysExcluded),internalTransfersExcluded:Boolean(raw.rules?.internalTransfersExcluded),duplicatesExcluded:Boolean(raw.rules?.duplicatesExcluded),sourceMissingExcluded:Boolean(raw.rules?.sourceMissingExcluded)}
+    version:asString(raw.version,APP_VERSION), year:asNumber(raw.year), years:asArray(raw.years).map(value=>asNumber(value)),
+    income:asNumber(raw.income), expenses:asNumber(raw.expenses), net:asNumber(raw.net), positiveMonths:asNumber(raw.positiveMonths), negativeMonths:asNumber(raw.negativeMonths),
+    monthly:asArray(raw.monthly).map(value=>{const m=asRecord(value);return{month:asString(m.month),income:asNumber(m.income),expenses:asNumber(m.expenses),net:asNumber(m.net),accumulated:asNumber(m.accumulated)}}),
+    topExpenseCategories:asArray(raw.topExpenseCategories).map(normalizeCategory),
+    excluded:{savings:asNumber(excluded.savings),internalTransfers:asNumber(excluded.internalTransfers),duplicates:asNumber(excluded.duplicates),manual:asNumber(excluded.manual)},
+    rules:{savingsAlwaysExcluded:asBoolean(rules.savingsAlwaysExcluded),internalTransfersExcluded:asBoolean(rules.internalTransfersExcluded),duplicatesExcluded:asBoolean(rules.duplicatesExcluded),sourceMissingExcluded:asBoolean(rules.sourceMissingExcluded)}
   };
 }
 
@@ -48,16 +49,18 @@ export async function getCashFlowRange(filters:CashFlowRangeFilters):Promise<Cas
     p_account_id:filters.accountId||null,p_category:filters.category||null,p_subcategory:filters.subcategory||null,p_merchant:filters.merchant||null,p_type:filters.type||null,
   });
   if(error||!data) throw new Error(error?.message||"cash_flow_range_unavailable");
-  const r=data as any;
+  const r=asRecord(data),facets=asRecord(r.facets),normalizedFilters=asRecord(r.filters),excluded=asRecord(r.excluded),rules=asRecord(r.rules);
+  const rawRange=asString(r.range,filters.range);const range:CashFlowRange=["day","week","month","quarter","year","historical","custom"].includes(rawRange)?rawRange as CashFlowRange:filters.range;
+  const rawBucket=asString(r.bucket,"month");const bucket:CashFlowRangeData["bucket"]=["day","week","month"].includes(rawBucket)?rawBucket as CashFlowRangeData["bucket"]:"month";
   return {
-    version:String(r.version||APP_VERSION),range:String(r.range||filters.range) as CashFlowRange,anchor:String(r.anchor||filters.anchor),dateFrom:String(r.dateFrom||""),dateTo:String(r.dateTo||""),bucket:String(r.bucket||"month") as CashFlowRangeData["bucket"],
-    income:n(r.income),expenses:n(r.expenses),net:n(r.net),movements:n(r.movements),positivePeriods:n(r.positivePeriods),negativePeriods:n(r.negativePeriods),
-    series:Array.isArray(r.series)?r.series.map((x:any)=>({date:String(x.date),label:String(x.label),income:n(x.income),expenses:n(x.expenses),net:n(x.net),accumulated:n(x.accumulated),movements:n(x.movements)})):[],
-    topExpenseCategories:Array.isArray(r.topExpenseCategories)?r.topExpenseCategories.map((x:any)=>({category:String(x.category),amount:n(x.amount),movements:n(x.movements)})):[],
-    topMerchants:Array.isArray(r.topMerchants)?r.topMerchants.map((x:any)=>({merchant:String(x.merchant),amount:n(x.amount),movements:n(x.movements)})):[],
-    facets:{accounts:Array.isArray(r.facets?.accounts)?r.facets.accounts.map((x:any)=>({id:String(x.id),name:String(x.name),identifier:String(x.identifier)})):[],categories:Array.isArray(r.facets?.categories)?r.facets.categories.map(String):[],subcategories:Array.isArray(r.facets?.subcategories)?r.facets.subcategories.map(String):[],merchants:Array.isArray(r.facets?.merchants)?r.facets.merchants.map(String):[],types:Array.isArray(r.facets?.types)?r.facets.types.map(String):[]},
-    filters:{accountId:r.filters?.accountId||null,category:r.filters?.category||null,subcategory:r.filters?.subcategory||null,merchant:r.filters?.merchant||null,type:r.filters?.type||null},
-    excluded:{savings:n(r.excluded?.savings),internalTransfers:n(r.excluded?.internalTransfers),duplicates:n(r.excluded?.duplicates),manual:n(r.excluded?.manual),sourceMissing:n(r.excluded?.sourceMissing)},
-    rules:{savingsAlwaysExcluded:Boolean(r.rules?.savingsAlwaysExcluded),internalTransfersExcluded:Boolean(r.rules?.internalTransfersExcluded),duplicatesExcluded:Boolean(r.rules?.duplicatesExcluded),sourceMissingExcluded:Boolean(r.rules?.sourceMissingExcluded),personalSplitsApplied:Boolean(r.rules?.personalSplitsApplied)},
+    version:asString(r.version,APP_VERSION),range,anchor:asString(r.anchor,filters.anchor),dateFrom:asString(r.dateFrom),dateTo:asString(r.dateTo),bucket,
+    income:asNumber(r.income),expenses:asNumber(r.expenses),net:asNumber(r.net),movements:asNumber(r.movements),positivePeriods:asNumber(r.positivePeriods),negativePeriods:asNumber(r.negativePeriods),
+    series:asArray(r.series).map(value=>{const x=asRecord(value);return{date:asString(x.date),label:asString(x.label),income:asNumber(x.income),expenses:asNumber(x.expenses),net:asNumber(x.net),accumulated:asNumber(x.accumulated),movements:asNumber(x.movements)}}),
+    topExpenseCategories:asArray(r.topExpenseCategories).map(normalizeCategory),
+    topMerchants:asArray(r.topMerchants).map(value=>{const x=asRecord(value);return{merchant:asString(x.merchant),amount:asNumber(x.amount),movements:asNumber(x.movements)}}),
+    facets:{accounts:asArray(facets.accounts).map(value=>{const x=asRecord(value);return{id:asString(x.id),name:asString(x.name),identifier:asString(x.identifier)}}),categories:asArray(facets.categories).map(value=>asString(value)),subcategories:asArray(facets.subcategories).map(value=>asString(value)),merchants:asArray(facets.merchants).map(value=>asString(value)),types:asArray(facets.types).map(value=>asString(value))},
+    filters:{accountId:nullableString(normalizedFilters.accountId),category:nullableString(normalizedFilters.category),subcategory:nullableString(normalizedFilters.subcategory),merchant:nullableString(normalizedFilters.merchant),type:nullableString(normalizedFilters.type)},
+    excluded:{savings:asNumber(excluded.savings),internalTransfers:asNumber(excluded.internalTransfers),duplicates:asNumber(excluded.duplicates),manual:asNumber(excluded.manual),sourceMissing:asNumber(excluded.sourceMissing)},
+    rules:{savingsAlwaysExcluded:asBoolean(rules.savingsAlwaysExcluded),internalTransfersExcluded:asBoolean(rules.internalTransfersExcluded),duplicatesExcluded:asBoolean(rules.duplicatesExcluded),sourceMissingExcluded:asBoolean(rules.sourceMissingExcluded),personalSplitsApplied:asBoolean(rules.personalSplitsApplied)},
   };
 }
