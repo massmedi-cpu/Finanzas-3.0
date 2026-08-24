@@ -52,7 +52,7 @@ for(const path of files){
   if(isRuntime(path)){
     addMatch(errors,path,text,/\bdebugger\s*;/g,"debugger residual");
     addMatch(errors,path,text,/\beval\s*\(/g,"eval no permitido");
-    addMatch(errors,path,text,/\bnew\s+Function\s*\(/g,"new Function no permitido");
+    addMatch(errors,path,text,/\bnew\s+Function\s*\(/g,"new Function no permitido en runtime");
     addMatch(errors,path,text,/dangerouslySetInnerHTML/g,"HTML sin escapar no permitido");
     addMatch(errors,path,text,/from\s+["']node:child_process["']|from\s+["']child_process["']/g,"child_process no permitido en runtime");
     addMatch(errors,path,text,/\/\/@ts-ignore|\/\/@ts-nocheck|\/\*\s*@ts-ignore|\/\*\s*@ts-nocheck/g,"supresión TypeScript no permitida");
@@ -103,10 +103,11 @@ const rulesLib=existsSync("lib/financial/rules.ts")?readFileSync("lib/financial/
 if(hasExplicitAny(rulesLib))errors.push("lib/financial/rules.ts:1 · la normalización 2.6 no puede depender de any");
 
 const vercel=existsSync("vercel.json")?readFileSync("vercel.json","utf8"):"";
-if(!vercel.includes('"develop/v2.6.0-rules": false'))errors.push("vercel.json:1 · Vercel debe permanecer desactivado para 2.6 durante desarrollo");
+if(!vercel.includes('"develop/**": false'))errors.push("vercel.json:1 · Vercel debe bloquear previews de ramas develop/**");
 const ci=existsSync(".github/workflows/ci.yml")?readFileSync(".github/workflows/ci.yml","utf8"):"";
-if(!ci.includes("develop/v2.6.0-rules"))errors.push(".github/workflows/ci.yml:1 · la rama 2.6 no está protegida por CI");
-if(!ci.includes("'develop/**'"))errors.push(".github/workflows/ci.yml:1 · los PR apilados develop/** no están protegidos");
+if(!ci.includes("pull_request:")||!ci.includes("push:"))errors.push(".github/workflows/ci.yml:1 · CI debe cubrir pull requests y main");
+if((ci.match(/- main/g)||[]).length<2)errors.push(".github/workflows/ci.yml:1 · CI debe proteger PR hacia main y push a main");
+if(/develop\/v\d|hotfix\/v\d|financial-app-rebuild/.test(ci))errors.push(".github/workflows/ci.yml:1 · CI no puede volver a ramas históricas concretas");
 
 if(!errors.length){
   const timeTest=spawnSync(process.platform==="win32"?"npx.cmd":"npx",["tsx","scripts/time-v260-tests.ts"],{encoding:"utf8"});
