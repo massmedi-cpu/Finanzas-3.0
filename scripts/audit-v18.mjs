@@ -9,6 +9,7 @@ const need = [
   "scripts/backup-recovery-tests.ts",
   "docs/AUDIT_FINANCIAL_APP_1.8.0.md",
   "lib/document/ticket-ocr-engine.ts",
+  "lib/document/ticket-ocr-geometry.ts",
 ];
 for (const file of need) if (!existsSync(file)) errors.push(`Falta ${file}`);
 
@@ -18,7 +19,7 @@ const migration = existsSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql") ? read
 const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql") ? readFileSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql", "utf8") : "";
 const archive = readFileSync("app/archivo/archive-client.tsx", "utf8");
 const engine = existsSync("lib/document/ticket-ocr-engine.ts") ? readFileSync("lib/document/ticket-ocr-engine.ts", "utf8") : "";
-const rectified = existsSync("lib/document/ticket-ocr-v307.ts") ? readFileSync("lib/document/ticket-ocr-v307.ts", "utf8") : "";
+const geometry = existsSync("lib/document/ticket-ocr-geometry.ts") ? readFileSync("lib/document/ticket-ocr-geometry.ts", "utf8") : "";
 const tsconfig = readFileSync("tsconfig.json", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 const version = readFileSync("lib/app-version.ts", "utf8");
@@ -39,7 +40,7 @@ if (!preserve.includes("delete from financial_app.transaction_splits s\n  using 
 if (!preserve.includes("delete from financial_app.transaction_documents td\n  using financial_app.transactions t")) errors.push("El hotfix no protege vínculos de documentos posteriores");
 if (!preserve.includes("Una conciliación que toca un movimiento posterior se conserva")) errors.push("Falta protección de conciliaciones posteriores");
 if (!preserve.includes("Un documento posterior vinculado a un movimiento posterior permanece activo")) errors.push("Falta protección de documentos posteriores");
-const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes("geometryReceiptPass") && engine.includes("worker.recognize(input") && rectified.includes("worker.recognize(input") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
+const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes('from "./ticket-ocr-geometry"') && engine.includes("geometryReceiptPass") && engine.includes("worker.recognize(input") && geometry.includes("worker.recognize(input") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
 if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
