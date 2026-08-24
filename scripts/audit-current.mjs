@@ -48,7 +48,9 @@ must(movementDocuments.includes("Factura / ticket relacionado"),"Cada detalle de
 must(movementDocuments.includes("Ver en Google Drive")&&movementDocuments.includes("document.storageUrl"),"Los documentos de Drive deben abrir el original mediante su URL de Google Drive");
 must(movementDocuments.includes("fecha real de compra")&&movementDocuments.includes("OCR intentará vincularlo automáticamente"),"La UI debe explicar la vinculación por fecha real y el flujo de tickets fotografiados");
 const archiveApi=read("app/api/archive/[id]/route.ts");
-must(archiveApi.includes('financial_app_auto_link_documents'),"Guardar OCR/metadatos de un ticket debe volver a intentar su vinculación automática");
+must(archiveApi.includes('financial_app_archive_update'),"Guardar OCR/metadatos debe pasar por la actualización documental canónica");
+must(!archiveApi.includes('financial_app_auto_link_documents'),"El endpoint no debe reintroducir el RPC SECURITY DEFINER de autoenlace retirado en 3.4.4");
+must(archiveApi.includes("detail.error||!detail.data"),"PATCH debe validar que puede recuperar el documento actualizado antes de responder éxito");
 must(archiveApi.includes('storageProvider==="google_drive"')&&archiveApi.includes("externalOriginalPreserved"),"Los originales de Google Drive deben abrirse directamente y nunca eliminarse desde Financial App");
 const driveMigration="database/FINANCIAL_APP_3.3.1_DRIVE_MATCH_DATE.sql";
 must(fs.existsSync(driveMigration),"Falta la migración canónica de fecha real para documentos Drive");
@@ -56,6 +58,13 @@ if(fs.existsSync(driveMigration)){
   const migration=read(driveMigration);
   for(const token of ["transaction_match_date","source_original_concept","drive_exact","document_candidates=1","transaction_candidates=1","storage_provider='google_drive'"])
     must(migration.includes(token),`La vinculación documental ha perdido la garantía: ${token}`);
+}
+const autoLinkBoundaryMigration="database/FINANCIAL_APP_3.4.4_DOCUMENT_AUTOLINK_BOUNDARY.sql";
+must(fs.existsSync(autoLinkBoundaryMigration),"Falta el cierre canónico del límite de seguridad del autoenlace documental");
+if(fs.existsSync(autoLinkBoundaryMigration)){
+  const migration=read(autoLinkBoundaryMigration);
+  for(const token of ["perform financial_app.auto_link_documents_core()","drop function public.financial_app_auto_link_documents() restrict","revoke execute on function financial_app.auto_link_documents_core() from public, anon, authenticated","'app_version',to_jsonb('3.4.4'::text)"])
+    must(migration.includes(token),`El cierre 3.4.4 ha perdido la garantía: ${token}`);
 }
 
 const vercel=read("vercel.json");
