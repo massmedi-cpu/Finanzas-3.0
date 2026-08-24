@@ -1,0 +1,31 @@
+name: One-shot Financial App 3.4.8 version alignment
+
+on:
+  push:
+    branches:
+      - chore/3.4.8-retire-obsolete-rpcs
+
+permissions:
+  contents: write
+
+jobs:
+  align-version:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: chore/3.4.8-retire-obsolete-rpcs
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Align package manifests
+        run: npm version 3.4.8 --no-git-tag-version
+      - name: Commit aligned manifests
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: align package manifests to 3.4.8"
+          git push
