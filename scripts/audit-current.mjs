@@ -41,7 +41,13 @@ must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr
 const appVersion=read("lib/app-version.ts");
 const versionMatch=appVersion.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
 must(Boolean(versionMatch),"APP_VERSION debe ser semántica y explícita");
+const runtimeVersion=versionMatch?versionMatch.slice(1).join("."):null;
 if(versionMatch){const current=versionMatch.slice(1).map(Number);const minimum=[3,3,1];const ok=current[0]>minimum[0]||(current[0]===minimum[0]&&(current[1]>minimum[1]||(current[1]===minimum[1]&&current[2]>=minimum[2])));must(ok,"La versión activa debe incluir las garantías documentales de 3.3.1 o posteriores");}
+const packageJson=JSON.parse(read("package.json"));
+const packageLock=JSON.parse(read("package-lock.json"));
+const lockRoot=packageLock.packages?.[""];
+must(Boolean(runtimeVersion)&&packageJson.version===runtimeVersion,`package.json (${packageJson.version}) y APP_VERSION (${runtimeVersion??"inválida"}) deben coincidir`);
+must(packageLock.version===packageJson.version&&lockRoot?.version===packageJson.version,"package-lock.json debe conservar exactamente la versión canónica de package.json");
 
 const movementDocuments=read("app/movimientos/movement-documents.tsx");
 must(movementDocuments.includes("Factura / ticket relacionado"),"Cada detalle de movimiento debe identificar claramente la documentación relacionada");
@@ -75,4 +81,4 @@ const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SU
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · Drive/movimientos y arquitectura canónica protegidos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · versión, Drive/movimientos y arquitectura canónica protegidos`);
