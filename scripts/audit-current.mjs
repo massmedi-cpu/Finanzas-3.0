@@ -39,7 +39,24 @@ must(!fs.existsSync("lib/document/ticket-ocr-v305.ts"),"Permanece el motor OCR v
 const tsconfig=read("tsconfig.json");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"El OCR público no apunta al motor canónico");
 const appVersion=read("lib/app-version.ts");
-must(appVersion.includes('APP_VERSION = "3.2.0"'),"La versión de producto no es 3.2.0");
+const versionMatch=appVersion.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
+must(Boolean(versionMatch),"APP_VERSION debe ser semántica y explícita");
+if(versionMatch){const current=versionMatch.slice(1).map(Number);const minimum=[3,3,1];const ok=current[0]>minimum[0]||(current[0]===minimum[0]&&(current[1]>minimum[1]||(current[1]===minimum[1]&&current[2]>=minimum[2])));must(ok,"La versión activa debe incluir las garantías documentales de 3.3.1 o posteriores");}
+
+const movementDocuments=read("app/movimientos/movement-documents.tsx");
+must(movementDocuments.includes("Factura / ticket relacionado"),"Cada detalle de movimiento debe identificar claramente la documentación relacionada");
+must(movementDocuments.includes("Ver en Google Drive")&&movementDocuments.includes("document.storageUrl"),"Los documentos de Drive deben abrir el original mediante su URL de Google Drive");
+must(movementDocuments.includes("fecha real de compra")&&movementDocuments.includes("OCR intentará vincularlo automáticamente"),"La UI debe explicar la vinculación por fecha real y el flujo de tickets fotografiados");
+const archiveApi=read("app/api/archive/[id]/route.ts");
+must(archiveApi.includes('financial_app_auto_link_documents'),"Guardar OCR/metadatos de un ticket debe volver a intentar su vinculación automática");
+must(archiveApi.includes('storageProvider==="google_drive"')&&archiveApi.includes("externalOriginalPreserved"),"Los originales de Google Drive deben abrirse directamente y nunca eliminarse desde Financial App");
+const driveMigration="database/FINANCIAL_APP_3.3.1_DRIVE_MATCH_DATE.sql";
+must(fs.existsSync(driveMigration),"Falta la migración canónica de fecha real para documentos Drive");
+if(fs.existsSync(driveMigration)){
+  const migration=read(driveMigration);
+  for(const token of ["transaction_match_date","source_original_concept","drive_exact","document_candidates=1","transaction_candidates=1","storage_provider='google_drive'"])
+    must(migration.includes(token),`La vinculación documental ha perdido la garantía: ${token}`);
+}
 
 const vercel=read("vercel.json");
 for(const pattern of ["audit/**","chore/**","develop/**","feat/**","fix/**","hotfix/**","release/**"])
@@ -49,4 +66,4 @@ const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SU
 for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · arquitectura canónica y previews de trabajo protegidos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · Drive/movimientos y arquitectura canónica protegidos`);
