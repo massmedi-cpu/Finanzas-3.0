@@ -9,6 +9,10 @@ const manifestPath = path.join(targetRoot, "manifest.json");
 
 const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 const lockfile = JSON.parse(await readFile(path.join(root, "package-lock.json"), "utf8"));
+const versionSource = await readFile(path.join(root,"lib","app-version.ts"),"utf8");
+const versionMatch=versionSource.match(/APP_VERSION\s*=\s*"([^"]+)"/);
+if(!versionMatch)throw new Error("APP_VERSION no disponible para el manifiesto documental");
+const appVersion=versionMatch[1];
 
 function lockedVersion(name) {
   return lockfile.packages?.[`node_modules/${name}`]?.version ?? packageJson.dependencies?.[name] ?? null;
@@ -28,50 +32,23 @@ async function copyTracked(source, relativeTarget) {
   await mkdir(path.dirname(destination), { recursive: true });
   await copyFile(source, destination);
   const info = await stat(destination);
-  assets.push({
-    path: relativeTarget.replaceAll(path.sep, "/"),
-    bytes: info.size,
-    sha256: await sha256(destination),
-  });
+  assets.push({path: relativeTarget.replaceAll(path.sep, "/"),bytes: info.size,sha256: await sha256(destination)});
 }
 
-await copyTracked(
-  path.join(nodeModules, "tesseract.js", "dist", "tesseract.min.js"),
-  path.join("tesseract", "tesseract.min.js"),
-);
-await copyTracked(
-  path.join(nodeModules, "tesseract.js", "dist", "worker.min.js"),
-  path.join("tesseract", "worker.min.js"),
-);
-await copyTracked(
-  path.join(nodeModules, "pdfjs-dist", "build", "pdf.min.mjs"),
-  path.join("pdfjs", "pdf.min.mjs"),
-);
-await copyTracked(
-  path.join(nodeModules, "pdfjs-dist", "build", "pdf.worker.min.mjs"),
-  path.join("pdfjs", "pdf.worker.min.mjs"),
-);
-await copyTracked(
-  path.join(nodeModules, "@tesseract.js-data", "spa", "4.0.0", "spa.traineddata.gz"),
-  path.join("tessdata", "spa.traineddata.gz"),
-);
+await copyTracked(path.join(nodeModules, "tesseract.js", "dist", "tesseract.min.js"),path.join("tesseract", "tesseract.min.js"));
+await copyTracked(path.join(nodeModules, "tesseract.js", "dist", "worker.min.js"),path.join("tesseract", "worker.min.js"));
+await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.min.mjs"),path.join("pdfjs", "pdf.min.mjs"));
+await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.worker.min.mjs"),path.join("pdfjs", "pdf.worker.min.mjs"));
+await copyTracked(path.join(nodeModules, "@tesseract.js-data", "spa", "4.0.0", "spa.traineddata.gz"),path.join("tessdata", "spa.traineddata.gz"));
 
 const coreSource = path.join(nodeModules, "tesseract.js-core");
-const coreFiles = (await readdir(coreSource))
-  .filter((name) => name.startsWith("tesseract-core") && name.endsWith(".wasm.js"))
-  .sort();
-
-if (coreFiles.length < 4) {
-  throw new Error(`Tesseract core incompleto: ${coreFiles.length} variantes .wasm.js encontradas`);
-}
-
-for (const file of coreFiles) {
-  await copyTracked(path.join(coreSource, file), path.join("tesseract-core", file));
-}
+const coreFiles = (await readdir(coreSource)).filter((name) => name.startsWith("tesseract-core") && name.endsWith(".wasm.js")).sort();
+if (coreFiles.length < 4) throw new Error(`Tesseract core incompleto: ${coreFiles.length} variantes .wasm.js encontradas`);
+for (const file of coreFiles) await copyTracked(path.join(coreSource, file), path.join("tesseract-core", file));
 
 const manifest = {
   formatVersion: 1,
-  appVersion: packageJson.version,
+  appVersion,
   generatedFromLockfile: true,
   packages: {
     "tesseract.js": lockedVersion("tesseract.js"),

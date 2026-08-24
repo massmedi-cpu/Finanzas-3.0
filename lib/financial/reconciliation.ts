@@ -1,21 +1,12 @@
 import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
+import { asArray, asNumber, asRecord, asString, nullableString } from "@/lib/validation/json";
 
 export type ReconciliationSummary={total:number;reconciled:number;pending:number;notReconciled:number;notApplicable:number};
 export type ReconciliationPair={id:string;a:string;b:string;amount:number;dateA:string;dateB:string;accountA:string;accountB:string;identifierA:string;identifierB:string;method:string;confidence:number;reason:string|null;createdAt:string};
 export type ReconciliationGroup={identifier:string;account:string;subcategory:string;status:"pending"|"not_reconciled";count:number;firstDate:string;lastDate:string;grossAmount:number};
 export type ReconciliationOverview={version:string;summary:ReconciliationSummary;pairs:ReconciliationPair[];unresolvedGroups:ReconciliationGroup[];methods:{method:string;count:number}[]};
-const n=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
-export async function getReconciliationOverview():Promise<ReconciliationOverview>{
-  const supabase=await createClient();
-  const {data,error}=await supabase.rpc("financial_app_reconciliation_overview");
-  if(error||!data)throw new Error(error?.message||"reconciliation_unavailable");
-  const r=data as any;
-  return {
-    version:String(r.version||APP_VERSION),
-    summary:{total:n(r.summary?.total),reconciled:n(r.summary?.reconciled),pending:n(r.summary?.pending),notReconciled:n(r.summary?.notReconciled),notApplicable:n(r.summary?.notApplicable)},
-    pairs:Array.isArray(r.pairs)?r.pairs.map((x:any)=>({...x,amount:n(x.amount),confidence:n(x.confidence)})):[],
-    unresolvedGroups:Array.isArray(r.unresolvedGroups)?r.unresolvedGroups.map((x:any)=>({...x,count:n(x.count),grossAmount:n(x.grossAmount)})):[],
-    methods:Array.isArray(r.methods)?r.methods.map((x:any)=>({method:String(x.method),count:n(x.count)})):[],
-  };
-}
+
+const pair=(value:unknown):ReconciliationPair=>{const x=asRecord(value);return{id:asString(x.id),a:asString(x.a),b:asString(x.b),amount:asNumber(x.amount),dateA:asString(x.dateA),dateB:asString(x.dateB),accountA:asString(x.accountA),accountB:asString(x.accountB),identifierA:asString(x.identifierA),identifierB:asString(x.identifierB),method:asString(x.method),confidence:asNumber(x.confidence),reason:nullableString(x.reason),createdAt:asString(x.createdAt)}};
+const group=(value:unknown):ReconciliationGroup=>{const x=asRecord(value);return{identifier:asString(x.identifier),account:asString(x.account),subcategory:asString(x.subcategory),status:asString(x.status)==="not_reconciled"?"not_reconciled":"pending",count:asNumber(x.count),firstDate:asString(x.firstDate),lastDate:asString(x.lastDate),grossAmount:asNumber(x.grossAmount)}};
+export async function getReconciliationOverview():Promise<ReconciliationOverview>{const supabase=await createClient();const{data,error}=await supabase.rpc("financial_app_reconciliation_overview");if(error||!data)throw new Error(error?.message||"reconciliation_unavailable");const r=asRecord(data),summary=asRecord(r.summary);return{version:asString(r.version,APP_VERSION),summary:{total:asNumber(summary.total),reconciled:asNumber(summary.reconciled),pending:asNumber(summary.pending),notReconciled:asNumber(summary.notReconciled),notApplicable:asNumber(summary.notApplicable)},pairs:asArray(r.pairs).map(pair),unresolvedGroups:asArray(r.unresolvedGroups).map(group),methods:asArray(r.methods).map(value=>{const x=asRecord(value);return{method:asString(x.method),count:asNumber(x.count)}})}}

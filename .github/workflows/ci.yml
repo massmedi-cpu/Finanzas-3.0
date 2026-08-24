@@ -3,22 +3,9 @@ on:
   pull_request:
     branches:
       - main
-      - 'develop/**'
   push:
     branches:
-      - 'financial-app-rebuild'
-      - 'develop/v2.2.0-analytics'
-      - 'develop/v2.3.0-intelligence'
-      - 'develop/v2.4.0-long-horizon'
-      - 'develop/v2.5.0-month-close'
-      - 'develop/v2.6.0-rules'
-      - 'develop/v2.7.0-explainability-rebuild'
-      - 'develop/v2.8.0-integrity-rebuild'
-      - 'develop/v2.8.1-chart-hotfix'
-      - 'develop/v3.0.0-foundation'
-      - 'hotfix/v3.0.1-sync'
-      - 'hotfix/v3.0.2-ticket-ocr'
-      - 'release/**'
+      - main
 permissions:
   contents: read
 jobs:
@@ -41,6 +28,8 @@ jobs:
         run: npm ls --depth=0
       - name: Dependency security audit
         run: npm audit --omit=dev --audit-level=high
+      - name: Total AXIOMA structural audit
+        run: npm run audit:axioma
       - name: Canonical current architecture audit
         run: npm run audit:current
       - name: Structural Axioma audit
@@ -99,6 +88,8 @@ jobs:
         run: npm run test:backup
       - name: Accessibility regression audit
         run: npm run audit:a11y
+      - name: Static lint
+        run: npm run lint
       - name: Typecheck
         run: npm run typecheck
       - name: Production build
@@ -107,7 +98,6 @@ jobs:
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
       - name: Release reproducibility gate
-        if: startsWith(github.ref, 'refs/heads/release/') || github.base_ref == 'main' || startsWith(github.base_ref, 'develop/') || startsWith(github.ref, 'refs/heads/develop/') || startsWith(github.ref, 'refs/heads/hotfix/')
         run: |
           test -f package-lock.json
           git diff --exit-code -- package.json package-lock.json

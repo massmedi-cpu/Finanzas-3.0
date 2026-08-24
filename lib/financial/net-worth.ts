@@ -1,102 +1,20 @@
+import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
+import { madridToday } from "@/lib/time/madrid";
+import { asArray, asBoolean, asNumber, asRecord, asString, nullableNumber, nullableString } from "@/lib/validation/json";
 
-export type BankNetWorthItem = {
-  id: string;
-  kind: "bank";
-  name: string;
-  identifier: string;
-  role: string;
-  balance: number | null;
-  balanceDate: string | null;
-  automatic: boolean;
-};
+export type BankNetWorthItem={id:string;kind:"bank";name:string;identifier:string;role:string;balance:number|null;balanceDate:string|null;automatic:boolean};
+export type ManualNetWorthItem={id:string;kind:"manual";name:string;itemType:"asset"|"liability";category:string|null;value:number;valuationDate:string;includeInTotal:boolean;notes:string|null;active:boolean};
+export type NetWorthHistoryPoint={month:string;bankNet:number;manualNet:number;netWorth:number|null;complete:boolean;knownAccounts:number;accountCount:number};
+export type NetWorthOverview={version:string;asOf:string;assets:number;liabilities:number;netWorth:number;bankAssets:number;manualAssets:number;manualLiabilities:number;forecastImpact90:number;projectedNetWorth90:number;changeFromFirstCompletePercent:number;bankItems:BankNetWorthItem[];manualItems:ManualNetWorthItem[];history:NetWorthHistoryPoint[];coverage:{knownAccounts:number;accountCount:number;currentComplete:boolean};rules:{manualItemsRequireUserAction:boolean;forecastUsesSavedOnly:boolean;suggestionsAffectProjection:boolean;incompleteHistoricalMonthsAreNull:boolean}};
 
-export type ManualNetWorthItem = {
-  id: string;
-  kind: "manual";
-  name: string;
-  itemType: "asset" | "liability";
-  category: string | null;
-  value: number;
-  valuationDate: string;
-  includeInTotal: boolean;
-  notes: string | null;
-  active: boolean;
-};
+const bankItem=(value:unknown):BankNetWorthItem=>{const item=asRecord(value);return{id:asString(item.id),kind:"bank",name:asString(item.name),identifier:asString(item.identifier),role:asString(item.role,"other"),balance:nullableNumber(item.balance),balanceDate:nullableString(item.balanceDate),automatic:asBoolean(item.automatic)}};
+const manualItem=(value:unknown):ManualNetWorthItem=>{const item=asRecord(value);return{id:asString(item.id),kind:"manual",name:asString(item.name),itemType:asString(item.itemType)==="liability"?"liability":"asset",category:nullableString(item.category),value:asNumber(item.value),valuationDate:asString(item.valuationDate),includeInTotal:asBoolean(item.includeInTotal),notes:nullableString(item.notes),active:asBoolean(item.active)}};
+const historyPoint=(value:unknown):NetWorthHistoryPoint=>{const point=asRecord(value);return{month:asString(point.month),bankNet:asNumber(point.bankNet),manualNet:asNumber(point.manualNet),netWorth:nullableNumber(point.netWorth),complete:asBoolean(point.complete),knownAccounts:asNumber(point.knownAccounts),accountCount:asNumber(point.accountCount)}};
 
-export type NetWorthHistoryPoint = {
-  month: string;
-  bankNet: number;
-  manualNet: number;
-  netWorth: number | null;
-  complete: boolean;
-  knownAccounts: number;
-  accountCount: number;
-};
-
-export type NetWorthOverview = {
-  version: string;
-  asOf: string;
-  assets: number;
-  liabilities: number;
-  netWorth: number;
-  bankAssets: number;
-  manualAssets: number;
-  manualLiabilities: number;
-  forecastImpact90: number;
-  projectedNetWorth90: number;
-  changeFromFirstCompletePercent: number;
-  bankItems: BankNetWorthItem[];
-  manualItems: ManualNetWorthItem[];
-  history: NetWorthHistoryPoint[];
-  coverage: { knownAccounts: number; accountCount: number; currentComplete: boolean };
-  rules: {
-    manualItemsRequireUserAction: boolean;
-    forecastUsesSavedOnly: boolean;
-    suggestionsAffectProjection: boolean;
-    incompleteHistoricalMonthsAreNull: boolean;
-  };
-};
-
-const n = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : 0;
-
-export function normalizeNetWorth(raw: any): NetWorthOverview {
-  return {
-    version: String(raw?.version || "0.8.0"),
-    asOf: String(raw?.asOf || new Date().toISOString().slice(0, 10)),
-    assets: n(raw?.assets),
-    liabilities: n(raw?.liabilities),
-    netWorth: n(raw?.netWorth),
-    bankAssets: n(raw?.bankAssets),
-    manualAssets: n(raw?.manualAssets),
-    manualLiabilities: n(raw?.manualLiabilities),
-    forecastImpact90: n(raw?.forecastImpact90),
-    projectedNetWorth90: n(raw?.projectedNetWorth90),
-    changeFromFirstCompletePercent: n(raw?.changeFromFirstCompletePercent),
-    bankItems: Array.isArray(raw?.bankItems) ? raw.bankItems.map((item: any) => ({
-      id: String(item.id), kind: "bank" as const, name: String(item.name), identifier: String(item.identifier || ""), role: String(item.role || "other"),
-      balance: item.balance == null ? null : n(item.balance), balanceDate: item.balanceDate || null, automatic: Boolean(item.automatic),
-    })) : [],
-    manualItems: Array.isArray(raw?.manualItems) ? raw.manualItems.map((item: any) => ({
-      id: String(item.id), kind: "manual" as const, name: String(item.name), itemType: item.itemType === "liability" ? "liability" as const : "asset" as const,
-      category: item.category || null, value: n(item.value), valuationDate: String(item.valuationDate), includeInTotal: Boolean(item.includeInTotal), notes: item.notes || null, active: Boolean(item.active),
-    })) : [],
-    history: Array.isArray(raw?.history) ? raw.history.map((point: any) => ({
-      month: String(point.month), bankNet: n(point.bankNet), manualNet: n(point.manualNet), netWorth: point.netWorth == null ? null : n(point.netWorth),
-      complete: Boolean(point.complete), knownAccounts: n(point.knownAccounts), accountCount: n(point.accountCount),
-    })) : [],
-    coverage: { knownAccounts: n(raw?.coverage?.knownAccounts), accountCount: n(raw?.coverage?.accountCount), currentComplete: Boolean(raw?.coverage?.currentComplete) },
-    rules: {
-      manualItemsRequireUserAction: Boolean(raw?.rules?.manualItemsRequireUserAction), forecastUsesSavedOnly: Boolean(raw?.rules?.forecastUsesSavedOnly),
-      suggestionsAffectProjection: Boolean(raw?.rules?.suggestionsAffectProjection), incompleteHistoricalMonthsAreNull: Boolean(raw?.rules?.incompleteHistoricalMonthsAreNull),
-    },
-  };
+export function normalizeNetWorth(value:unknown):NetWorthOverview{
+  const raw=asRecord(value);const coverage=asRecord(raw.coverage);const rules=asRecord(raw.rules);
+  return{version:asString(raw.version,APP_VERSION),asOf:asString(raw.asOf,madridToday()),assets:asNumber(raw.assets),liabilities:asNumber(raw.liabilities),netWorth:asNumber(raw.netWorth),bankAssets:asNumber(raw.bankAssets),manualAssets:asNumber(raw.manualAssets),manualLiabilities:asNumber(raw.manualLiabilities),forecastImpact90:asNumber(raw.forecastImpact90),projectedNetWorth90:asNumber(raw.projectedNetWorth90),changeFromFirstCompletePercent:asNumber(raw.changeFromFirstCompletePercent),bankItems:asArray(raw.bankItems).map(bankItem),manualItems:asArray(raw.manualItems).map(manualItem),history:asArray(raw.history).map(historyPoint),coverage:{knownAccounts:asNumber(coverage.knownAccounts),accountCount:asNumber(coverage.accountCount),currentComplete:asBoolean(coverage.currentComplete)},rules:{manualItemsRequireUserAction:asBoolean(rules.manualItemsRequireUserAction),forecastUsesSavedOnly:asBoolean(rules.forecastUsesSavedOnly),suggestionsAffectProjection:asBoolean(rules.suggestionsAffectProjection),incompleteHistoricalMonthsAreNull:asBoolean(rules.incompleteHistoricalMonthsAreNull)}};
 }
 
-export async function getNetWorthOverview(months = 18): Promise<NetWorthOverview> {
-  const supabase = await createClient();
-  const safeMonths = Math.max(6, Math.min(60, Number.isFinite(months) ? Math.trunc(months) : 18));
-  const { data, error } = await supabase.rpc("financial_app_net_worth_overview", { p_months: safeMonths });
-  if (error || !data) throw new Error(error?.message || "net_worth_unavailable");
-  return normalizeNetWorth(data);
-}
+export async function getNetWorthOverview(months=18):Promise<NetWorthOverview>{const supabase=await createClient();const safeMonths=Math.max(6,Math.min(60,Number.isFinite(months)?Math.trunc(months):18));const{data,error}=await supabase.rpc("financial_app_net_worth_overview",{p_months:safeMonths});if(error||!data)throw new Error(error?.message||"net_worth_unavailable");return normalizeNetWorth(data)}

@@ -1,6 +1,7 @@
 import { APP_VERSION } from "@/lib/app-version";
 import { madridToday } from "@/lib/time/madrid";
 import { createClient } from "@/lib/supabase/server";
+import { asArray, asBoolean, asNumber, asRecord, asString, nullableNumber, nullableString } from "@/lib/validation/json";
 
 export type BudgetStatus="correct"|"attention"|"exceeded";
 export type BudgetItem = {
@@ -15,26 +16,26 @@ export type BudgetMonth={
   projection:{projectedSpent:number;projectedDifference:number|null;method:"not_started"|"actual_closed"|"current_daily_rate"|string};
   annual:{year:number;assigned:number;budgetedSpent:number;totalSpent:number;difference:number|null;months:BudgetAnnualMonth[]};
 };
-const asNumber=(value:unknown)=>Number.isFinite(Number(value))?Number(value):0;
-const nullableNumber=(value:unknown)=>value==null?null:asNumber(value);
-function normalizeBudget(raw:any):BudgetItem{return {
-  id:String(raw.id),name:String(raw.name||raw.category||"Presupuesto"),category:String(raw.category||"Sin categoría"),subcategory:raw.subcategory||null,
-  assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),carryover:Boolean(raw.carryover),carryIn:asNumber(raw.carryIn),available:asNumber(raw.available),percent:asNumber(raw.percent),suggestion:asNumber(raw.suggestion),movements:asNumber(raw.movements),notes:raw.notes||null,
-  projectedSpend:nullableNumber(raw.projectedSpend),projectedDifference:nullableNumber(raw.projectedDifference),status:["attention","exceeded"].includes(String(raw.status))?String(raw.status) as BudgetStatus:"correct",daysRemaining:asNumber(raw.daysRemaining),
+
+function normalizeBudget(value:unknown):BudgetItem{const raw=asRecord(value);const rawStatus=asString(raw.status);return {
+  id:asString(raw.id),name:asString(raw.name,asString(raw.category,"Presupuesto")),category:asString(raw.category,"Sin categoría"),subcategory:nullableString(raw.subcategory),
+  assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),carryover:asBoolean(raw.carryover),carryIn:asNumber(raw.carryIn),available:asNumber(raw.available),percent:asNumber(raw.percent),suggestion:asNumber(raw.suggestion),movements:asNumber(raw.movements),notes:nullableString(raw.notes),
+  projectedSpend:nullableNumber(raw.projectedSpend),projectedDifference:nullableNumber(raw.projectedDifference),status:rawStatus==="attention"||rawStatus==="exceeded"?rawStatus:"correct",daysRemaining:asNumber(raw.daysRemaining),
 };}
+
 export async function getBudgetMonth(month?:string):Promise<BudgetMonth>{
   const supabase=await createClient();
   const pMonth=month&&/^\d{4}-\d{2}$/.test(month)?`${month}-01`:madridToday();
   const {data,error}=await supabase.rpc("financial_app_budget_month",{p_month:pMonth});
   if(error||!data)throw new Error(error?.message||"budget_unavailable");
-  const raw=data as any;
+  const raw=asRecord(data);const calendar=asRecord(raw.calendar);const projection=asRecord(raw.projection);const annual=asRecord(raw.annual);
   return {
-    version:String(raw.version||APP_VERSION),month:String(raw.month||pMonth.slice(0,7)),assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),available:asNumber(raw.available),overBudgetCount:asNumber(raw.overBudgetCount),unbudgetedSpent:asNumber(raw.unbudgetedSpent),
-    budgets:Array.isArray(raw.budgets)?raw.budgets.map(normalizeBudget):[],
-    unbudgeted:Array.isArray(raw.unbudgeted)?raw.unbudgeted.map((item:any)=>({category:String(item.category||"Sin categoría"),subcategory:item.subcategory||null,spent:asNumber(item.spent),suggestion:asNumber(item.suggestion),movements:asNumber(item.movements)})):[],
-    categories:Array.isArray(raw.categories)?raw.categories.map(String):[],
-    calendar:{daysInMonth:asNumber(raw.calendar?.daysInMonth),daysElapsed:asNumber(raw.calendar?.daysElapsed),daysRemaining:asNumber(raw.calendar?.daysRemaining)},
-    projection:{projectedSpent:asNumber(raw.projection?.projectedSpent),projectedDifference:nullableNumber(raw.projection?.projectedDifference),method:String(raw.projection?.method||"")},
-    annual:{year:asNumber(raw.annual?.year),assigned:asNumber(raw.annual?.assigned),budgetedSpent:asNumber(raw.annual?.budgetedSpent),totalSpent:asNumber(raw.annual?.totalSpent),difference:nullableNumber(raw.annual?.difference),months:Array.isArray(raw.annual?.months)?raw.annual.months.map((m:any)=>({month:String(m.month),assigned:asNumber(m.assigned),budgetedSpent:asNumber(m.budgetedSpent),totalSpent:asNumber(m.totalSpent),difference:nullableNumber(m.difference)})):[]},
+    version:asString(raw.version,APP_VERSION),month:asString(raw.month,pMonth.slice(0,7)),assigned:asNumber(raw.assigned),spent:asNumber(raw.spent),available:asNumber(raw.available),overBudgetCount:asNumber(raw.overBudgetCount),unbudgetedSpent:asNumber(raw.unbudgetedSpent),
+    budgets:asArray(raw.budgets).map(normalizeBudget),
+    unbudgeted:asArray(raw.unbudgeted).map(value=>{const item=asRecord(value);return{category:asString(item.category,"Sin categoría"),subcategory:nullableString(item.subcategory),spent:asNumber(item.spent),suggestion:asNumber(item.suggestion),movements:asNumber(item.movements)}}),
+    categories:asArray(raw.categories).map(value=>asString(value)),
+    calendar:{daysInMonth:asNumber(calendar.daysInMonth),daysElapsed:asNumber(calendar.daysElapsed),daysRemaining:asNumber(calendar.daysRemaining)},
+    projection:{projectedSpent:asNumber(projection.projectedSpent),projectedDifference:nullableNumber(projection.projectedDifference),method:asString(projection.method)},
+    annual:{year:asNumber(annual.year),assigned:asNumber(annual.assigned),budgetedSpent:asNumber(annual.budgetedSpent),totalSpent:asNumber(annual.totalSpent),difference:nullableNumber(annual.difference),months:asArray(annual.months).map(value=>{const m=asRecord(value);return{month:asString(m.month),assigned:asNumber(m.assigned),budgetedSpent:asNumber(m.budgetedSpent),totalSpent:asNumber(m.totalSpent),difference:nullableNumber(m.difference)}})},
   };
 }

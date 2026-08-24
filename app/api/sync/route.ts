@@ -1,17 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
-import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
+import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
-  const supabase = await createClient();
-  const { data: userData, error: userError } = await supabase.auth.getUser();
-  const email = normalizeEmail(userData.user?.email);
-  if (userError || !userData.user || !(await hasFinancialAppAccess(supabase, email))) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
+  const supabase = await getAuthorizedClient();
+  if (!supabase) return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
 
   const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
   const accessToken = sessionData.session?.access_token;

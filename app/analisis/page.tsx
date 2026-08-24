@@ -1,4 +1,4 @@
-import { formatEuro, formatInteger, formatNumber, formatPercent, formatSignedPercent } from "@/lib/format/es-es";
+import { formatEuro, formatInteger, formatPercent, formatSignedPercent } from "@/lib/format/es-es";
 import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { APP_VERSION } from "@/lib/app-version";
