@@ -23,7 +23,7 @@ const receiptLayout=read("lib/document/receipt-layout.ts");
 const forecast=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
 const forecastCss=read("app/forecast.css");
-const forecastMigration=read("database/FINANCIAL_APP_3.2.0_FORECAST_HISTORY_SUGGESTIONS.sql");
+const forecastMigration=read("database/FINANCIAL_APP_3.4.8_FORECAST_PROBABILISTIC_MODEL.sql");
 const movements=read("app/movimientos/movements-client.tsx");
 const movementsCss=read("app/movements.css");
 const vercel=read("vercel.json");
@@ -76,13 +76,14 @@ const checks=[
   [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo"],
   [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar todo el ancho"],
   [archiveCss.includes("height:100dvh")&&archiveCss.includes("min-width:0"),"el panel de Archivo debe respetar el viewport"],
-  [forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Solo lo confirmado entra en el cálculo"),"Previsión debe cargar un año y mantener separado el cálculo confirmado"],
-  [forecast.includes("Mes que quieres revisar")&&forecast.includes("Según tu historial")&&forecast.includes("Podría ocurrir en"),"Previsión debe mostrar por mes los patrones históricos pendientes de confirmar"],
-  [forecast.includes("El historial propone")&&forecast.includes("Tú confirmas")&&forecast.includes("Solo lo confirmado modifica el saldo")&&!forecast.includes("const horizons="),"la filosofía de previsión debe ser historial -> confirmación -> saldo"],
-  [forecast.includes("suggestionTotals")&&forecast.includes("scenarioNet")&&forecast.includes("posible")&&forecast.includes("monthSuggestions"),"las tarjetas de 12 meses deben enseñar un escenario posible sin contaminar el saldo confirmado"],
-  [forecastMigration.includes("p_start-730")&&forecastMigration.includes("generate_series(1,24)")&&forecastMigration.includes("historical_pattern_v2"),"el motor debe analizar hasta 730 días y proyectar sugerencias durante todo el horizonte"],
+  [forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Un cargo solo se considera real cuando aparece en Movimientos"),"Previsión debe cargar un año y separar claramente predicción de movimiento real"],
+  [forecast.includes("Mes que quieres revisar")&&forecast.includes("Cargos e ingresos probables")&&forecast.includes("Fecha estimada"),"Previsión debe mostrar por mes patrones históricos y fecha aproximada"],
+  [forecast.includes("El historial estima")&&forecast.includes("Movimientos confirma")&&!forecast.includes("acceptSuggestion")&&!forecast.includes("Sí, espero que ocurra"),"la filosofía de previsión debe ser historial -> estimación -> movimiento real, sin confirmación previa"],
+  [forecast.includes("suggestionTotals")&&forecast.includes("estimatedNet")&&forecast.includes("automática")&&forecast.includes("monthSuggestions"),"las tarjetas de 12 meses deben integrar las predicciones en el saldo estimado"],
+  [forecastMigration.includes("p_start-1460")&&forecastMigration.includes("historical_pattern_v3")&&forecastMigration.includes("dateVariationDays")&&forecastMigration.includes("'suggestionsAffectProjection',true"),"el motor debe analizar hasta cuatro años, estimar fecha y sumar predicciones a la proyección"],
+  [forecastMigration.includes("'automaticSuggestionsRequireConfirmation',false")&&forecastMigration.includes("'realOnlyAfterTransaction',true"),"el motor debe impedir que una predicción automática se trate como cargo confirmado"],
   [forecastMigration.includes("ingresos laborales")&&forecastMigration.includes("newer.last_date>c.last_date"),"un nuevo pagador laboral debe invalidar sugerencias del pagador anterior"],
-  [forecast.includes("monthEvents")&&forecast.includes("selectedMonth")&&forecast.includes("monthOptions"),"la vista principal debe filtrar confirmados y sugerencias por el mes seleccionado"],
+  [forecast.includes("monthEvents")&&forecast.includes("monthManualEvents")&&forecast.includes("selectedMonth")&&forecast.includes("monthOptions"),"la vista principal debe distinguir previsiones automáticas y manuales por mes"],
   [forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{")&&forecastCss.includes(".forecast-philosophy{"),"la previsión mensual debe tener jerarquía visual propia"],
   [movementsCss.includes('.detail-loading{position:fixed')&&tablet.includes('.detail-loading{position:static!important'),"el estado de carga heredado puede ser fijo en escritorio pero debe neutralizarse en tablet"],
   [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible"],
@@ -95,4 +96,4 @@ const checks=[
 
 const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
 if(failures.length){console.error("Audit 3.0 FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket geométrico y previsión histórica mensual protegidos");
+console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket geométrico y previsión probabilística protegidos");
