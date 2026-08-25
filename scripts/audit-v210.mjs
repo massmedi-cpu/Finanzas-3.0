@@ -12,7 +12,8 @@ if(!errors.length){
   if(sidebar.includes('from "next/link"'))errors.push("AppSidebar conserva Link con prefetch automático");
   if(layout.includes("readability-v210.css"))errors.push("La legibilidad 2.1 sigue como capa histórica separada");
   if(!globals.includes(".eyebrow{font-size:12px;")||!globals.includes(".brand small{margin-top:2px;font-size:13px;"))errors.push("La legibilidad consolidada no preserva tamaños mínimos");
-  if(!chrome.includes("font-size:13px!important")||!chrome.includes("line-height:1.2"))errors.push("La navegación móvil no queda protegida a 13 px");
+  if(!globals.includes("@media(max-width:680px){body{font-size:17px}")||!globals.includes(".eyebrow{font-size:13px}"))errors.push("La escala tipográfica móvil no preserva la mejora de legibilidad");
+  if(!chrome.includes("font-size:13.5px!important")||!chrome.includes("line-height:1.2"))errors.push("La navegación móvil no queda protegida a 13,5 px");
   if(!gate.includes("CANDIDATA VALIDADA")||!gate.includes("2.0.1 permanece congelada"))errors.push("El gate 2.1 no protege el checkpoint 2.0.1");
   const nested=pagesWithNestedSidebar("app");if(nested.length)errors.push(`Quedan ${nested.length} AppSidebar redundantes: ${nested.join(", ")}`);
   if(!movementsClient.includes('q.set("facets","0")'))errors.push("Movimientos no solicita respuestas ligeras después de la carga inicial");
@@ -23,4 +24,4 @@ if(!errors.length){
   if(!planLib.includes('supabase.rpc("financial_app_plan_overview"'))errors.push("Plan no usa la RPC pública única");if(!planPage.includes("Origen: {action.sourcePath}"))errors.push("Las prioridades del Plan no muestran sourcePath");if(!homePage.includes("PRÓXIMOS 30 DÍAS"))errors.push("Inicio no identifica el horizonte inmediato de 30 días");if(!planPage.includes("90 días"))errors.push("Plan no identifica el horizonte de 90 días");
 }
 if(errors.length){console.error("Financial App 2.1 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.1 audit OK · navegación táctil, legibilidad consolidada, shell único, Movimientos ligero y Plan coherente");
+console.log("Financial App 2.1 audit OK · navegación táctil, legibilidad móvil reforzada, shell único, Movimientos ligero y Plan coherente");
