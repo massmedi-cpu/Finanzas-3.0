@@ -12,11 +12,11 @@ export type ForecastMonth = { month:string; income:number; expenses:number; net:
 export type ForecastOverview = {
   version:string; startDate:string; endDate:string; days:number; currentBalance:number; savingsBalance:number; projectedBalance:number; projectedIncome:number; projectedExpenses:number; projectedNet:number; lowestBalance:number;
   suggestions:ForecastSuggestion[]; events:ForecastEvent[]; balanceSeries:ForecastPoint[]; monthly:ForecastMonth[]; savedForecasts:ForecastSaved[]; consolidatedCount:number;
-  rules:{ automaticSuggestionsAreReadOnly:boolean; suggestionsAffectProjection?:boolean; historyWindowDays:number; amountTolerancePercent:number; dateToleranceDays:number; stalePatternsExcluded:boolean };
+  rules:{ automaticSuggestionsAreReadOnly:boolean; automaticSuggestionsRequireConfirmation?:boolean; suggestionsAffectProjection?:boolean; realOnlyAfterTransaction?:boolean; predictionDateUsesTypicalDay?:boolean; historyWindowDays:number; amountTolerancePercent:number; dateToleranceDays:number; stalePatternsExcluded:boolean };
 };
 export type ForecastScenarioFrequency="once"|"weekly"|"monthly"|"yearly";
-export type ForecastScenarioEvent={id:string;date:string;amount:number;title:string;source:"saved"|"scenario"};
-export type ForecastScenarioLine={date:string;balance:number;title:string;source:"current"|"saved"|"scenario"};
+export type ForecastScenarioEvent={id:string;date:string;amount:number;title:string;source:"saved"|"suggested"|"scenario"};
+export type ForecastScenarioLine={date:string;balance:number;title:string;source:"current"|"saved"|"suggested"|"scenario"};
 export type ForecastScenarioResult={
   version:string;startDate:string;endDate:string;days:number;currentBalance:number;savingsBalance:number;
   baseline:{projectedBalance:number;net:number;lowestBalance:number;events:ForecastScenarioEvent[];balanceSeries:ForecastScenarioLine[]};
@@ -40,6 +40,6 @@ export async function getForecastOverview(days=90):Promise<ForecastOverview>{
   return {
     version:asString(r.version,APP_VERSION),startDate:asString(r.startDate),endDate:asString(r.endDate),days:asNumber(r.days),currentBalance:asNumber(r.currentBalance),savingsBalance:asNumber(r.savingsBalance),projectedBalance:asNumber(r.projectedBalance),projectedIncome:asNumber(r.projectedIncome),projectedExpenses:asNumber(r.projectedExpenses),projectedNet:asNumber(r.projectedNet),lowestBalance:asNumber(r.lowestBalance),
     suggestions:asArray(r.suggestions).map(suggestion),events:asArray(r.events).map(event),balanceSeries:asArray(r.balanceSeries).map(point),monthly:asArray(r.monthly).map(month),savedForecasts:asArray(r.savedForecasts).map(saved),consolidatedCount:asNumber(r.consolidatedCount),
-    rules:{automaticSuggestionsAreReadOnly:r.rules?asBoolean(rules.automaticSuggestionsAreReadOnly):true,suggestionsAffectProjection:r.rules?asBoolean(rules.suggestionsAffectProjection):false,historyWindowDays:r.rules?asNumber(rules.historyWindowDays):270,amountTolerancePercent:r.rules?asNumber(rules.amountTolerancePercent):12,dateToleranceDays:r.rules?asNumber(rules.dateToleranceDays):5,stalePatternsExcluded:r.rules?asBoolean(rules.stalePatternsExcluded):true},
+    rules:{automaticSuggestionsAreReadOnly:r.rules?asBoolean(rules.automaticSuggestionsAreReadOnly):true,automaticSuggestionsRequireConfirmation:r.rules?asBoolean(rules.automaticSuggestionsRequireConfirmation):false,suggestionsAffectProjection:r.rules?asBoolean(rules.suggestionsAffectProjection):false,realOnlyAfterTransaction:r.rules?asBoolean(rules.realOnlyAfterTransaction):true,predictionDateUsesTypicalDay:r.rules?asBoolean(rules.predictionDateUsesTypicalDay):false,historyWindowDays:r.rules?asNumber(rules.historyWindowDays):730,amountTolerancePercent:r.rules?asNumber(rules.amountTolerancePercent):12,dateToleranceDays:r.rules?asNumber(rules.dateToleranceDays):5,stalePatternsExcluded:r.rules?asBoolean(rules.stalePatternsExcluded):true},
   };
 }
