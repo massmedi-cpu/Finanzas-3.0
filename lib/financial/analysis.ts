@@ -14,11 +14,7 @@ export type AnalysisOverview={
   rules:{samePeriodComparison:boolean;partialMonthUsesSameElapsedDays:boolean;excludeSavings:boolean;excludeInternalTransfers:boolean;excludeDuplicates:boolean;respectCashFlowOverride:boolean};
 };
 
-export async function getAnalysisOverview(year?:number):Promise<AnalysisOverview>{
-  const supabase=await createClient();
-  const requested=Number.isInteger(year)&&year!>=2000&&year!<=2100?year:new Date().getFullYear();
-  const {data,error}=await supabase.rpc("financial_app_analysis_overview",{p_year:requested});
-  if(error||!data) throw new Error(error?.message||"analysis_unavailable");
+function parseOverview(data:unknown):AnalysisOverview{
   const r=asRecord(data);const rules=asRecord(r.rules);
   return {
     version:asString(r.version,APP_VERSION),year:asNumber(r.year),periodStart:asString(r.periodStart),periodEnd:asString(r.periodEnd),comparisonYear:asNumber(r.comparisonYear),comparisonPeriodEnd:asString(r.comparisonPeriodEnd),
@@ -31,4 +27,19 @@ export async function getAnalysisOverview(year?:number):Promise<AnalysisOverview
     years:asArray(r.years).map(asNumber).filter(value=>Number.isFinite(value)),
     rules:{samePeriodComparison:asBoolean(rules.samePeriodComparison),partialMonthUsesSameElapsedDays:asBoolean(rules.partialMonthUsesSameElapsedDays),excludeSavings:asBoolean(rules.excludeSavings),excludeInternalTransfers:asBoolean(rules.excludeInternalTransfers),excludeDuplicates:asBoolean(rules.excludeDuplicates),respectCashFlowOverride:asBoolean(rules.respectCashFlowOverride)}
   };
+}
+
+export async function getAnalysisOverview(year?:number):Promise<AnalysisOverview>{
+  const supabase=await createClient();
+  const requested=Number.isInteger(year)&&year!>=2000&&year!<=2100?year:new Date().getFullYear();
+  const {data,error}=await supabase.rpc("financial_app_analysis_overview",{p_year:requested});
+  if(error||!data) throw new Error(error?.message||"analysis_unavailable");
+  return parseOverview(data);
+}
+
+export async function getAnalysisOverviewPeriod(from:string,to:string):Promise<AnalysisOverview>{
+  const supabase=await createClient();
+  const {data,error}=await supabase.rpc("financial_app_analysis_overview_period",{p_from:from,p_to:to});
+  if(error||!data) throw new Error(error?.message||"analysis_period_unavailable");
+  return parseOverview(data);
 }
