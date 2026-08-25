@@ -6,11 +6,11 @@ const page=read("app/analisis/page.tsx");
 const dashboard=read("components/analysis-visual-dashboard.tsx");
 const css=read("app/analysis.css");
 
-for(const token of ["AnalysisVisualDashboard","Gráficos e informes rápidos","analysis-insight-grid"]){
+for(const token of ["AnalysisVisualDashboard","analysis-insight-grid"]){
   if(!page.includes(token))failures.push(`Análisis ha perdido la integración visual: ${token}`);
 }
 for(const token of [
-  '"monthly-flow"','"net-trend"','"savings-rate"','"cumulative-net"','"category-donut"','"category-bars"','"merchant-bars"','"year-compare"','"deviations"','"monthly-heatmap"',
+  "Gráficos e informes rápidos",'"monthly-flow"','"net-trend"','"savings-rate"','"cumulative-net"','"category-donut"','"category-bars"','"merchant-bars"','"year-compare"','"deviations"','"monthly-heatmap"',
   "Personalizar gráficos","Restablecer","localStorage","draggable","Informes rápidos","Último mes cerrado","Media últimos 3 meses"
 ]){
   if(!dashboard.includes(token))failures.push(`Dashboard visual incompleto: ${token}`);
