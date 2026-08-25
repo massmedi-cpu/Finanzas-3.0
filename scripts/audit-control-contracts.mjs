@@ -9,9 +9,7 @@ for(const root of roots)walk(root);
 
 const failures=[];
 const read=file=>fs.readFileSync(file,"utf8");
-for(const file of files){
-  if(read(file).includes("secondary-action"))failures.push(`${file} usa la clase de control huérfana secondary-action`);
-}
+for(const file of files){if(read(file).includes("secondary-action"))failures.push(`${file} usa la clase de control huérfana secondary-action`);}
 
 const localContracts=[
   {token:"text-button",clients:["app/reglas/rules-client.tsx"],css:"app/rules.css",selector:".rule-actions .text-button{",label:"Reglas"},
@@ -22,23 +20,19 @@ const localContracts=[
   {token:"danger-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".danger-button{",label:"Objetivos"},
 ];
 
-for(const contract of localContracts){
-  const css=read(contract.css);
-  if(!css.includes(contract.selector))failures.push(`${contract.label} usa ${contract.token} sin estilo local propietario en ${contract.css}`);
-}
-for(const token of ["text-button","danger-button"]){
-  const allowed=new Set(localContracts.filter(contract=>contract.token===token).flatMap(contract=>[...contract.clients,contract.css]));
-  for(const file of files){if(read(file).includes(token)&&!allowed.has(file))failures.push(`${file} usa ${token} sin contrato de propiedad declarado`);}
-}
+for(const contract of localContracts){const css=read(contract.css);if(!css.includes(contract.selector))failures.push(`${contract.label} usa ${contract.token} sin estilo local propietario en ${contract.css}`);}
+for(const token of ["text-button","danger-button"]){const allowed=new Set(localContracts.filter(contract=>contract.token===token).flatMap(contract=>[...contract.clients,contract.css]));for(const file of files){if(read(file).includes(token)&&!allowed.has(file))failures.push(`${file} usa ${token} sin contrato de propiedad declarado`);}}
+
+const controls=read("app/controls.css");
+const iconRule=/\.icon-button\{([^}]*)\}/.exec(controls)?.[1]||"";
+for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRule.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
+const analysisDashboard=read("components/analysis-visual-dashboard.tsx");
+const analysisPeriod=read("components/analysis-period-form.tsx");
+for(const token of ['className="icon-button"','className="ghost"']){if(!analysisDashboard.includes(token))failures.push(`Análisis ha perdido control canónico: ${token}`);}
+if(!analysisPeriod.includes('className="primary-action"'))failures.push("Selector de periodo ha perdido el botón primario canónico");
 
 const explainability=read("app/explicabilidad/explainability-client.tsx");
-for(const token of ['className="ghost"','className="primary-action"','Comprobar qué detectará','Activar para futuros']){
-  if(!explainability.includes(token))failures.push(`Explicabilidad ha perdido el contrato de control/claridad: ${token}`);
-}
+for(const token of ['className="ghost"','className="primary-action"','Comprobar qué detectará','Activar para futuros']){if(!explainability.includes(token))failures.push(`Explicabilidad ha perdido el contrato de control/claridad: ${token}`);}
 
-if(failures.length){
-  console.error("Control usage audit FAILED");
-  for(const failure of failures)console.error(`- ${failure}`);
-  process.exit(1);
-}
-console.log("Control usage audit OK · sin controles huérfanos y con propiedad explícita para variantes locales");
+if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
+console.log("Control usage audit OK · controles canónicos completos, sin clases huérfanas y con propiedad explícita para variantes locales");
