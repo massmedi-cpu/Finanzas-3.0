@@ -2,11 +2,12 @@ button{font:inherit}
 .primary-action,.ghost,.danger-action,.icon-button{font:inherit;touch-action:manipulation}
 .primary-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:10px;padding:10px 15px;font-weight:800;line-height:1.2;cursor:pointer;text-decoration:none;transition:filter .14s ease,opacity .14s ease,transform .08s ease}
 .primary-action:hover:not(:disabled){filter:brightness(1.04)}
-.primary-action:active:not(:disabled),.ghost:active:not(:disabled),.danger-action:active:not(:disabled){transform:translateY(1px)}
+.primary-action:active:not(:disabled),.ghost:active:not(:disabled),.danger-action:active:not(:disabled),.icon-button:active:not(:disabled){transform:translateY(1px)}
 .ghost{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid var(--border);background:var(--surface);color:var(--text);border-radius:10px;padding:10px 14px;font-weight:700;line-height:1.2;cursor:pointer;text-decoration:none;transition:border-color .14s ease,background .14s ease,opacity .14s ease,transform .08s ease}
 .ghost:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:var(--surface-2)}
 .danger-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;border:1px solid #d92d20;background:transparent;color:#b42318;border-radius:10px;padding:10px 14px;font-weight:800;line-height:1.2;cursor:pointer;transition:background .14s ease,opacity .14s ease,transform .08s ease}
-.icon-button{display:inline-grid;place-items:center;cursor:pointer}
+.icon-button{width:36px;height:36px;min-width:36px;display:inline-grid;place-items:center;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--text);padding:0;line-height:1;cursor:pointer;transition:border-color .14s ease,background .14s ease,opacity .14s ease,transform .08s ease}
+.icon-button:hover:not(:disabled){border-color:color-mix(in srgb,var(--accent) 40%,var(--border));background:var(--surface-2)}
 button:disabled,[aria-disabled="true"]{cursor:not-allowed;opacity:.58}
 button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .primary-action[aria-busy="true"],.ghost[aria-busy="true"],.danger-action[aria-busy="true"]{opacity:.78}
@@ -19,4 +20,4 @@ button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .empty-state strong{color:var(--text)}
 .button-link{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 @media(prefers-color-scheme:dark){.inline-alert.error,.danger-action{color:#ff8a80}}
-@media(prefers-reduced-motion:reduce){.primary-action,.ghost,.danger-action{transition:none}.primary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{animation:none;border-right-color:currentColor}}
+@media(prefers-reduced-motion:reduce){.primary-action,.ghost,.danger-action,.icon-button{transition:none}.primary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{animation:none;border-right-color:currentColor}}
