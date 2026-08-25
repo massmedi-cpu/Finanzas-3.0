@@ -151,7 +151,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
         </ul>
       </div>}
 
-      {!matches.linked.length&&!matches.suggestions.length&&!pickerOpen&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Puedes vincular manualmente cualquier documento de Archivo o dejar que Financial App proponga coincidencias por fecha, importe y comercio.</p>}
+      {!matches.linked.length&&!matches.suggestions.length&&!pickerOpen&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Puedes vincular manualmente cualquier documento de Archivo. Si haces una foto o subes un ticket, el OCR intentará vincularlo automáticamente usando la fecha real de compra, el importe y el comercio.</p>}
     </div>
   </details>;
 }
