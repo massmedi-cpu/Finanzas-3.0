@@ -5,8 +5,7 @@ import { APP_VERSION } from "@/lib/app-version";
 import { getAnalysisOverview } from "@/lib/financial/analysis";
 import { buildAnalysisInsights } from "@/lib/financial/analysis-insights";
 import { movementState, movementUrl } from "@/lib/financial/movement-query";
-import { AnalysisTrendChart } from "@/components/analysis-trend-chart";
-
+import { AnalysisVisualDashboard } from "@/components/analysis-visual-dashboard";
 
 const pct=(v:number|null)=>formatSignedPercent(v,1);
 const plainPct=(v:number|null)=>formatPercent(v,1);
@@ -47,7 +46,7 @@ export default async function AnalysisPage({searchParams}:{searchParams:Promise<
       <article><span>Referencia anual de gasto</span><strong>{insights.annualizedExpenses==null?"—":formatEuro(insights.annualizedExpenses)}</strong><small>Media mensual × 12. Es una referencia lineal, no una previsión bancaria.</small></article>
     </section>
 
-    <article className="panel analysis-trend-panel"><div className="panel-head"><div><p className="eyebrow">EVOLUCIÓN</p><h2>{data.year} frente a {data.comparisonYear}</h2></div><span className="pill">Mismo periodo</span></div><AnalysisTrendChart months={data.monthly} year={data.year} comparisonYear={data.comparisonYear} periodStart={data.periodStart} periodEnd={data.periodEnd}/></article>
+    <AnalysisVisualDashboard months={data.monthly} categories={data.categories} merchants={data.merchants} deviations={data.deviations} insights={insights} year={data.year} comparisonYear={data.comparisonYear} income={data.income} expenses={data.expenses} net={data.net} priorIncome={data.priorIncome} priorExpenses={data.priorExpenses} priorNet={data.priorNet}/>
 
     <div className="analysis-grid analysis-diagnostic-grid">
       <article className="panel analysis-diagnostics"><div className="panel-head"><div><p className="eyebrow">DIAGNÓSTICO</p><h2>Cómo se está comportando tu año</h2></div><span className={`pill coverage-${insights.coverage}`}>Cobertura {coverageCopy(insights.coverage)}</span></div><dl>
