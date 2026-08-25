@@ -34,5 +34,20 @@ if(!analysisPeriod.includes('className="primary-action"'))failures.push("Selecto
 const explainability=read("app/explicabilidad/explainability-client.tsx");
 for(const token of ['className="ghost"','className="primary-action"','Comprobar qué detectará','Activar para futuros']){if(!explainability.includes(token))failures.push(`Explicabilidad ha perdido el contrato de control/claridad: ${token}`);}
 
+const chrome=read("app/chrome.css");
+const sidebar=read("components/app-sidebar.tsx");
+for(const token of [
+  "@media(max-width:680px)",
+  ".app-root.private>.sidebar{position:sticky",
+  ".app-root.private>.sidebar nav.mobile-nav{display:flex!important;position:fixed",
+  "bottom:0;width:100%",
+  "env(safe-area-inset-bottom,0px)",
+  ".app-root.private>.app-route{display:block;width:100%;max-width:100%;min-width:0",
+  ".app-root.private>.sidebar .sidebar-foot{display:none}",
+  "overflow-x:clip"
+]){if(!chrome.includes(token))failures.push(`Shell móvil incompleto: falta ${token}`);}
+for(const token of ["mobilePrimary","mobile-nav","mobile-more-menu","Más"]){if(!sidebar.includes(token))failures.push(`Navegación móvil incompleta: falta ${token}`);}
+if(chrome.includes("@media(max-width:680px){.app-root.private{display:block}\n  .desktop-nav"))failures.push("Shell móvil ha vuelto al layout roto que conserva la sidebar vertical de escritorio");
+
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles canónicos completos, sin clases huérfanas y con propiedad explícita para variantes locales");
+console.log("Control usage audit OK · controles canónicos completos, navegación móvil protegida y sin clases huérfanas");
