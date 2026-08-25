@@ -31,7 +31,7 @@ export function ScenarioSimulator({startDate,initialDays}:{startDate:string;init
 
   return <section className="forecast-panel scenario-panel" aria-labelledby="scenario-title">
     <div className="forecast-panel-head"><div><p className="eyebrow">SIMULADOR · NO GUARDA DATOS</p><h2 id="scenario-title">¿Qué pasa si…?</h2></div><span className="pill">solo lectura</span></div>
-    <p className="scenario-intro">Superpone un ingreso o gasto hipotético a la previsión confirmada. No crea movimientos, no guarda previsiones y no utiliza el ahorro para cubrir déficits.</p>
+    <p className="scenario-intro">Superpone un ingreso o gasto hipotético a la previsión estimada, incluidos los patrones históricos. No crea movimientos, no guarda previsiones y no utiliza el ahorro para cubrir déficits.</p>
     <form className="scenario-form" onSubmit={simulate}>
       <label className="wide"><span>Escenario</span><input value={form.title} onChange={e=>setForm({...form,title:e.target.value})} placeholder="Ej. Comprar un móvil" maxLength={120}/></label>
       <label><span>Fecha inicial</span><input type="date" min={startDate} value={form.date} onChange={e=>setForm({...form,date:e.target.value})}/></label>
@@ -46,7 +46,7 @@ export function ScenarioSimulator({startDate,initialDays}:{startDate:string;init
     {result&&<div className="scenario-result">
       <div className="scenario-comparison">
         <article><span>Saldo actual</span><strong>{formatEuro(result.currentBalance)}</strong><small>Ahorro aparte: {formatEuro(result.savingsBalance)}</small></article>
-        <article><span>Base confirmada</span><strong>{formatEuro(result.baseline.projectedBalance)}</strong><small>Mínimo {formatEuro(result.baseline.lowestBalance)}</small></article>
+        <article><span>Base prevista</span><strong>{formatEuro(result.baseline.projectedBalance)}</strong><small>Mínimo {formatEuro(result.baseline.lowestBalance)}</small></article>
         <article className={delta<0?"warning":"good"}><span>Con escenario</span><strong>{formatEuro(result.scenario.projectedBalance)}</strong><small>Mínimo {formatEuro(result.scenario.lowestBalance)}</small></article>
         <article className={delta<0?"danger":"good"}><span>Impacto</span><strong className={delta<0?"negative":"positive"}>{formatEuro(delta)}</strong><small>{result.scenario.events.length} evento{result.scenario.events.length===1?"":"s"} hipotético{result.scenario.events.length===1?"":"s"}</small></article>
       </div>
