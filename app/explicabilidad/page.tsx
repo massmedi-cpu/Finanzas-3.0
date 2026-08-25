@@ -9,7 +9,7 @@ export default async function ExplainabilityPage(){
   const data=await getExplainabilityOverview(20);
   return <main className="app-shell">
     <section id="main-content" tabIndex={-1} className="workspace explainability-workspace">
-      <header className="topbar"><div><p className="eyebrow">EXPLICABILIDAD · {data.version}</p><h1>Por qué está clasificado así</h1><p>Consulta de dónde procede la clasificación y revisa patrones repetidos antes de convertirlos en reglas privadas.</p></div></header>
+      <header className="topbar"><div><p className="eyebrow">EXPLICABILIDAD · {data.version}</p><h1>Por qué está clasificado así</h1><p>Consulta de dónde sale cada clasificación y decide si quieres que Financial App aprenda patrones repetidos para clasificar automáticamente movimientos futuros.</p></div></header>
       <ExplainabilityClient initialData={data}/>
     </section>
   </main>;
