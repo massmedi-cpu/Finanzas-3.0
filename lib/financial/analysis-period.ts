@@ -12,11 +12,11 @@ const addDays=(value:string,days:number)=>{const date=parse(value);if(!date)retu
 const addMonths=(value:string,months:number)=>{const source=parse(value);if(!source)return value;const day=source.getUTCDate();const target=new Date(Date.UTC(source.getUTCFullYear(),source.getUTCMonth()+months,1));const last=new Date(Date.UTC(target.getUTCFullYear(),target.getUTCMonth()+1,0)).getUTCDate();target.setUTCDate(Math.min(day,last));return ymd(target)};
 const monthStart=(value:string)=>`${value.slice(0,7)}-01`;
 const monthEnd=(value:string)=>{const date=parse(monthStart(value));if(!date)return value;date.setUTCMonth(date.getUTCMonth()+1);date.setUTCDate(0);return ymd(date)};
-const validYear=(value:string|undefined,fallback:number)=>{const parsed=Number(value);return Number.isInteger(parsed)&&parsed>=2000&&parsed<=2100?parsed:fallback};
+const validYear=(value:string|undefined,fallback:number,currentYear:number)=>{const parsed=Number(value);return Number.isInteger(parsed)&&parsed>=2000&&parsed<=currentYear?parsed:fallback};
 
 export function resolveAnalysisPeriod(params:Params,today:string,currentYear:number):ResolvedAnalysisPeriod{
   const requested=PERIODS.has(params.period as AnalysisPeriodKey)?params.period as AnalysisPeriodKey:"year";
-  const year=validYear(params.year,currentYear);
+  const year=validYear(params.year,currentYear,currentYear);
   if(requested==="month")return {period:"month",year:currentYear,from:monthStart(today),to:today};
   if(requested==="previous-month"){
     const previous=addMonths(monthStart(today),-1);
