@@ -58,7 +58,7 @@ const checks=[
   [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil"],
   [chromeCss.includes('@media(max-width:1180px) and (min-width:681px)')&&chromeCss.includes('nav.desktop-nav{display:flex!important;flex:1 1 auto')&&chromeCss.includes('overflow-x:auto'),"tablet debe usar navegación horizontal completa sin hamburguesa"],
   [!chromeCss.includes('grid-template-columns:82px minmax(0,1fr)'),"tablet no debe volver al rail comprimido de 82px"],
-  [chromeCss.includes('@media(max-width:680px)')&&chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;height:100%'),"el menú Más sólo debe activarse en móvil"],
+  [chromeCss.includes('@media(max-width:680px)')&&chromeCss.includes('.app-root.private>.sidebar{position:sticky')&&chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;position:fixed')&&chromeCss.includes('bottom:0;width:100%'),"en móvil el shell debe ser cabecera compacta + navegación inferior, sin sidebar vertical de escritorio"],
   [intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben dar respuesta visual inmediata"],
   [!intentLink.includes('onTouchStart={event=>{warm();'),"un toque no debe lanzar un prefetch duplicado"],
   [tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&tablet.includes('.detail-loading{position:static!important'),"tablet debe eliminar el indicador flotante de Movimientos"],
