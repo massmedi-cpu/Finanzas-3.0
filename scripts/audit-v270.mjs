@@ -21,7 +21,7 @@ for(const token of ["split","manual","rule","source","resolveClassificationOrigi
 const server=read(required[2]);if(!server.includes("@/lib/supabase/server"))errors.push("El loader 2.7 debe mantener Supabase en servidor");
 const shared=read(required[3]);if(shared.includes("@/lib/supabase/server")||shared.includes("next/headers"))errors.push("El modelo compartido 2.7 no puede depender de APIs de servidor");
 const client=read(required[5]);
-for(const token of ["Previsualizar regla","Crear regla","previewedId","suggestionRulePayload","explainability-shared"]){if(!client.includes(token))errors.push(`UI 2.7 sin guardarraíl: ${token}`);}
+for(const token of ["Comprobar qué detectará","Activar para futuros","previewedId","suggestionRulePayload","explainability-shared"]){if(!client.includes(token))errors.push(`UI 2.7 sin guardarraíl: ${token}`);}
 if(client.includes('from "@/lib/financial/explainability"'))errors.push("El cliente 2.7 no puede importar el loader de servidor");
 const routeLayout=read("app/explicabilidad/layout.tsx");if(!routeLayout.includes("./explainability.css"))errors.push("CSS de explicabilidad no cargado en su layout de ruta");
 const rootLayout=read("app/layout.tsx");if(rootLayout.includes("explicabilidad/explainability.css"))errors.push("CSS de explicabilidad no debe contaminar el layout raíz");
@@ -29,4 +29,4 @@ const sidebar=read("components/app-sidebar.tsx");if(!sidebar.includes('["Explica
 const vercel=read("vercel.json");if(!vercel.includes('"develop/v2.7.0-explainability-rebuild": false'))errors.push("Vercel no está bloqueado para la rama 2.7 reconstruida");
 const ci=read(".github/workflows/ci.yml");for(const token of ["audit:v270","test:explainability"]){if(!ci.includes(token))errors.push(`CI no ejecuta ${token}`);}
 if(errors.length){console.error("Financial App 2.7 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.7 audit OK · explicabilidad solo lectura, CSS acotado, frontera server/client y preview obligatorio");
+console.log("Financial App 2.7 audit OK · explicabilidad solo lectura, CSS acotado, frontera server/client y comprobación previa obligatoria");
