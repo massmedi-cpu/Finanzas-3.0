@@ -24,8 +24,8 @@ for(const contract of localContracts){const css=read(contract.css);if(!css.inclu
 for(const token of ["text-button","danger-button"]){const allowed=new Set(localContracts.filter(contract=>contract.token===token).flatMap(contract=>[...contract.clients,contract.css]));for(const file of files){if(read(file).includes(token)&&!allowed.has(file))failures.push(`${file} usa ${token} sin contrato de propiedad declarado`);}}
 
 const controls=read("app/controls.css");
-const iconRule=/\.icon-button\{([^}]*)\}/.exec(controls)?.[1]||"";
-for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRule.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
+const iconRules=[...controls.matchAll(/\.icon-button\{([^}]*)\}/g)].map(match=>match[1]).join(";");
+for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRules.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
 const analysisDashboard=read("components/analysis-visual-dashboard.tsx");
 const analysisPeriod=read("components/analysis-period-form.tsx");
 for(const token of ['className="icon-button"','className="ghost"']){if(!analysisDashboard.includes(token))failures.push(`Análisis ha perdido control canónico: ${token}`);}
