@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { FormEvent, useState } from "react";
 import { formatEuro } from "@/lib/format/es-es";
 import type { MovementDocument, MovementDocumentMatches, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
+
+type ArchiveCandidate={id:string;fileName:string;documentType:string|null;documentDate:string|null;amount:number|null;merchant:string|null;storageProvider?:string|null;storageUrl?:string|null};
+type ArchiveOverviewPayload={ok?:boolean;documents?:ArchiveCandidate[];error?:string};
 
 const emptyMatches:MovementDocumentMatches={status:"none",linked:[],suggestions:[]};
 const dateFormat=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -21,6 +24,10 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
   const [matches,setMatches]=useState<MovementDocumentMatches>(transaction.documentMatches??emptyMatches);
   const [busy,setBusy]=useState<string|null>(null);
   const [error,setError]=useState<string|null>(null);
+  const [pickerOpen,setPickerOpen]=useState(false);
+  const [pickerLoading,setPickerLoading]=useState(false);
+  const [pickerSearch,setPickerSearch]=useState("");
+  const [candidates,setCandidates]=useState<ArchiveCandidate[]>([]);
 
   async function refresh(){
     const response=await fetch(`/api/movements/${transaction.id}`,{cache:"no-store"});
@@ -43,16 +50,19 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
     finally{setBusy(null);}
   }
 
-  async function linkDocument(document:MovementDocument){
-    setBusy(`link-${document.id}`);setError(null);
+  async function linkById(documentId:string){
+    setBusy(`link-${documentId}`);setError(null);
     try{
-      const response=await fetch(`/api/archive/${document.id}/links`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sourceId:transaction.sourceId})});
+      const response=await fetch(`/api/archive/${documentId}/links`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({sourceId:transaction.sourceId})});
       const body=await response.json() as {ok?:boolean;error?:string};
-      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo vincular la factura");
+      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo vincular la factura o ticket");
       await refresh();
-    }catch(cause){setError(cause instanceof Error?cause.message:"No se pudo vincular la factura");}
+      setPickerOpen(false);
+    }catch(cause){setError(cause instanceof Error?cause.message:"No se pudo vincular la factura o ticket");}
     finally{setBusy(null);}
   }
+
+  async function linkDocument(document:MovementDocument){await linkById(document.id);}
 
   async function unlinkDocument(document:MovementDocument){
     setBusy(`unlink-${document.id}`);setError(null);
@@ -64,6 +74,26 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
     }catch(cause){setError(cause instanceof Error?cause.message:"No se pudo desvincular la factura");}
     finally{setBusy(null);}
   }
+
+  async function loadCandidates(query=pickerSearch){
+    setPickerLoading(true);setError(null);
+    try{
+      const params=new URLSearchParams({archived:"1"});
+      if(query.trim())params.set("search",query.trim());
+      const response=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});
+      const body=await response.json() as ArchiveOverviewPayload;
+      if(!response.ok)throw new Error(body.error||"No se pudo cargar Archivo");
+      const linkedIds=new Set(matches.linked.map(document=>document.id));
+      setCandidates((body.documents||[]).filter(document=>!linkedIds.has(document.id)).slice(0,40));
+    }catch(cause){setError(cause instanceof Error?cause.message:"No se pudo cargar Archivo");}
+    finally{setPickerLoading(false);}
+  }
+
+  async function openPicker(){
+    const next=!pickerOpen;setPickerOpen(next);
+    if(next&&!candidates.length)await loadCandidates("");
+  }
+  async function submitPickerSearch(event:FormEvent){event.preventDefault();await loadCandidates();}
 
   function openAction(document:MovementDocument){
     if(isDriveDocument(document))return <a className="ghost" href={document.storageUrl!} target="_blank" rel="noopener noreferrer">Ver en Google Drive</a>;
@@ -78,6 +108,13 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
     <summary>Factura / ticket relacionado · {title}</summary>
     <div className="document-link-panel">
       {error&&<div className="inline-alert error" role="alert">{error}</div>}
+      <div className="manual-link-actions"><button className="primary-action" type="button" onClick={openPicker} disabled={busy!==null}>{pickerOpen?"Cerrar selector":"Vincular factura o ticket"}</button></div>
+
+      {pickerOpen&&<section className="manual-link-picker" aria-label="Elegir factura o ticket de Archivo">
+        <form className="link-picker-toolbar" onSubmit={submitPickerSearch}><input value={pickerSearch} onChange={event=>setPickerSearch(event.target.value)} placeholder="Buscar por archivo, comercio, importe u OCR"/><button className="ghost" type="submit" disabled={pickerLoading}>{pickerLoading?"Buscando…":"Buscar"}</button></form>
+        <p className="muted-copy">Elige cualquier documento ya subido a Archivo. La vinculación es manual y reversible.</p>
+        <div className="link-picker-list">{candidates.map(document=><div key={document.id}><span><strong>{document.fileName}</strong><small>{document.merchant||document.documentType||"Documento"} · {formatDate(document.documentDate)} · {formatMoney(document.amount)}</small></span><button className="primary-action" type="button" onClick={()=>linkById(document.id)} disabled={busy!==null}>{busy===`link-${document.id}`?"Vinculando…":"Vincular"}</button></div>)}{!pickerLoading&&!candidates.length&&<p className="muted-copy">No hay documentos disponibles con esa búsqueda.</p>}</div>
+      </section>}
 
       {matches.linked.length>0&&<div className="document-group">
         <strong className="document-group-title">Relacionado con este movimiento</strong>
@@ -114,7 +151,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
         </ul>
       </div>}
 
-      {!matches.linked.length&&!matches.suggestions.length&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Si ya existe en Google Drive, Financial App intentará relacionarlo por fecha real de compra, importe y comercio; si haces una foto o subes un ticket a Archivo, el OCR intentará vincularlo automáticamente al movimiento correcto.</p>}
+      {!matches.linked.length&&!matches.suggestions.length&&!pickerOpen&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Puedes vincular manualmente cualquier documento de Archivo o dejar que Financial App proponga coincidencias por fecha, importe y comercio.</p>}
     </div>
   </details>;
 }
