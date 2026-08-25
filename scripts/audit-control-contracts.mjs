@@ -14,12 +14,12 @@ for(const file of files){
 }
 
 const localContracts=[
-  {token:"text-button",clients:["app/reglas/rules-client.tsx"],css:"app/rules.css",selector:".rule-actions .text-button{"},label:"Reglas"},
-  {token:"text-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".text-button{"},label:"Presupuesto"},
-  {token:"danger-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".danger-button{"},label:"Presupuesto"},
-  {token:"text-button",clients:["app/control/control-client.tsx"],css:"app/control.css",selector:".text-link,.text-button{"},label:"Control"},
-  {token:"text-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".text-button{"},label:"Objetivos"},
-  {token:"danger-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".danger-button{"},label:"Objetivos"},
+  {token:"text-button",clients:["app/reglas/rules-client.tsx"],css:"app/rules.css",selector:".rule-actions .text-button{",label:"Reglas"},
+  {token:"text-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".text-button{",label:"Presupuesto"},
+  {token:"danger-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".danger-button{",label:"Presupuesto"},
+  {token:"text-button",clients:["app/control/control-client.tsx"],css:"app/control.css",selector:".text-link,.text-button{",label:"Control"},
+  {token:"text-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".text-button{",label:"Objetivos"},
+  {token:"danger-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".danger-button{",label:"Objetivos"},
 ];
 
 for(const contract of localContracts){
