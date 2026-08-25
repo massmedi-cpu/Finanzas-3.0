@@ -8,7 +8,10 @@ const periodForm=read("components/analysis-period-form.tsx");
 const periodLogic=read("lib/financial/analysis-period.ts");
 const analysisData=read("lib/financial/analysis.ts");
 const migration=read("database/FINANCIAL_APP_3.4.8_ANALYSIS_PERIODS.sql");
-const css=read("app/analysis.css")+read("app/analysis-visual-wall.css")+read("app/analysis-interactions.css");
+const baseCss=read("app/analysis.css");
+const wallCss=read("app/analysis-visual-wall.css");
+const interactionCss=read("app/analysis-interactions.css");
+const css=baseCss+wallCss+interactionCss;
 
 for(const token of ["AnalysisVisualDashboard","AnalysisPeriodForm","resolveAnalysisPeriod","getAnalysisOverviewPeriod","analysis-insight-grid"]){
   if(!page.includes(token))failures.push(`Análisis ha perdido la integración de periodo/visual: ${token}`);
@@ -33,10 +36,13 @@ for(const selector of chartFamilies){if(!css.includes(`.${selector}`))failures.p
 if((dashboard.match(/case \"/g)||[]).length<24)failures.push("Análisis debe conservar al menos 24 visualizaciones configurables");
 if((dashboard.match(/detailProps\(/g)||[]).length<18)failures.push("Los gráficos han perdido detalle interactivo suficiente");
 if(!css.includes("@media(max-width:680px)"))failures.push("Dashboard visual sin adaptación móvil explícita");
+for(const token of [".analysis-workspace{overflow-x:clip}",".analysis-viz-grid,.analysis-viz-grid>*{min-width:0;width:100%}",".analysis-pareto svg,.analysis-waterfall svg{min-width:0;width:100%;height:190px}",".analysis-svg-chart svg{width:100%;height:180px}"]){if(!wallCss.includes(token))failures.push(`Contrato móvil de gráficos ausente: ${token}`);}
+for(const token of ["position:fixed!important","bottom:calc(12px + env(safe-area-inset-bottom))!important","label:has(input:disabled)","max-height:min(58vh,420px)"]){if(!interactionCss.includes(token))failures.push(`Contrato móvil de interacción ausente: ${token}`);}
+if(wallCss.includes("min-width:620px"))failures.push("Análisis móvil no puede reintroducir gráficos de 620 px que desborden la pantalla");
 
 if(failures.length){
   console.error("AXIOMA visual analysis audit FAILED");
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("AXIOMA visual analysis audit OK · 24 visualizaciones, detalle flotante, leyendas, periodos globales, personalización y responsive protegidos");
+console.log("AXIOMA visual analysis audit OK · 24 visualizaciones, detalle flotante, leyendas, periodos globales y layout móvil sin desbordamientos protegidos");
