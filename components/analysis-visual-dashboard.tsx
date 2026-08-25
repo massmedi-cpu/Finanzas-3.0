@@ -25,9 +25,9 @@ const LABELS:Record<ChartId,string>={
 
 const clamp=(v:number,min:number,max:number)=>Math.max(min,Math.min(max,v));
 const pct=(current:number,previous:number)=>previous>0?((current-previous)/previous)*100:null;
-const points=(values:number[],width:number,height:number,pad=26)=>{
+const points=(values:number[],width:number,height:number,pad=26,domain?:{min:number;max:number})=>{
   if(!values.length)return "";
-  const min=Math.min(0,...values),max=Math.max(0,...values);const span=Math.max(1,max-min);
+  const min=domain?.min??Math.min(0,...values),max=domain?.max??Math.max(0,...values);const span=Math.max(1,max-min);
   return values.map((v,i)=>{const x=pad+(i*(width-pad*2))/Math.max(1,values.length-1);const y=pad+((max-v)/span)*(height-pad*2);return `${x},${y}`}).join(" ");
 };
 
@@ -44,8 +44,8 @@ function MonthlyFlowChart({months}:{months:AnalysisMonth[]}){
 }
 
 function LineChart({values,secondary,labels,aria}:{values:number[];secondary?:number[];labels:string[];aria:string}){
-  const width=720,height=230;const primary=points(values,width,height);const second=secondary?points(secondary,width,height):"";
-  return <div className="analysis-svg-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={aria}><line className="viz-zero" x1="26" x2={width-26} y1={height/2} y2={height/2}/>{secondary&&<polyline className="viz-line-secondary" points={second}/>}<polyline className="viz-line-primary" points={primary}/>{values.map((v,i)=>{const [x,y]=(primary.split(" ")[i]||"0,0").split(",");return <g key={i}><circle className="viz-point" cx={x} cy={y} r="4"><title>{`${labels[i]} · ${formatEuro(v)}`}</title></circle></g>})}</svg></div>;
+  const width=720,height=230;const all=secondary?[...values,...secondary]:values;const domain={min:Math.min(0,...all),max:Math.max(0,...all)};const primary=points(values,width,height,26,domain);const second=secondary?points(secondary,width,height,26,domain):"";const zeroY=26+((domain.max-0)/Math.max(1,domain.max-domain.min))*(height-52);
+  return <div className="analysis-svg-chart"><svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={aria}><line className="viz-zero" x1="26" x2={width-26} y1={zeroY} y2={zeroY}/>{secondary&&<polyline className="viz-line-secondary" points={second}/>}<polyline className="viz-line-primary" points={primary}/>{values.map((v,i)=>{const [x,y]=(primary.split(" ")[i]||"0,0").split(",");return <g key={i}><circle className="viz-point" cx={x} cy={y} r="4"><title>{`${labels[i]} · ${formatEuro(v)}`}</title></circle></g>})}</svg></div>;
 }
 
 function SavingsRateChart({months}:{months:AnalysisMonth[]}){
@@ -80,9 +80,9 @@ function Heatmap({months}:{months:AnalysisMonth[]}){
 }
 
 export function AnalysisVisualDashboard(props:Props){
-  const [order,setOrder]=useState<ChartId[]>(DEFAULT_ORDER);const [hidden,setHidden]=useState<ChartId[]>([]);const [customizing,setCustomizing]=useState(false);const [status,setStatus]=useState("");
-  useEffect(()=>{try{const raw=localStorage.getItem(STORAGE_KEY);if(!raw)return;const saved=JSON.parse(raw) as {order?:ChartId[];hidden?:ChartId[]};if(Array.isArray(saved.order)){const valid=saved.order.filter(id=>DEFAULT_ORDER.includes(id));setOrder([...valid,...DEFAULT_ORDER.filter(id=>!valid.includes(id))]);}if(Array.isArray(saved.hidden))setHidden(saved.hidden.filter(id=>DEFAULT_ORDER.includes(id)));}catch{}},[]);
-  useEffect(()=>{try{localStorage.setItem(STORAGE_KEY,JSON.stringify({order,hidden}));}catch{}},[order,hidden]);
+  const [order,setOrder]=useState<ChartId[]>(DEFAULT_ORDER);const [hidden,setHidden]=useState<ChartId[]>([]);const [customizing,setCustomizing]=useState(false);const [status,setStatus]=useState("");const [hydrated,setHydrated]=useState(false);
+  useEffect(()=>{try{const raw=localStorage.getItem(STORAGE_KEY);if(raw){const saved=JSON.parse(raw) as {order?:ChartId[];hidden?:ChartId[]};if(Array.isArray(saved.order)){const valid=saved.order.filter(id=>DEFAULT_ORDER.includes(id));setOrder([...valid,...DEFAULT_ORDER.filter(id=>!valid.includes(id))]);}if(Array.isArray(saved.hidden))setHidden(saved.hidden.filter(id=>DEFAULT_ORDER.includes(id)));}}catch{setStatus("No se pudo recuperar la personalización guardada.");}finally{setHydrated(true);}},[]);
+  useEffect(()=>{if(!hydrated)return;try{localStorage.setItem(STORAGE_KEY,JSON.stringify({order,hidden}));}catch{setStatus("La personalización no se pudo guardar en este dispositivo.");}},[hydrated,order,hidden]);
   const visible=order.filter(id=>!hidden.includes(id));
   const reports=useMemo(()=>{const complete=props.months.filter(m=>m.available&&m.complete&&!m.partial);const last=complete.at(-1);const last3=complete.slice(-3);const avg3=last3.length?last3.reduce((s,m)=>s+m.expenses,0)/last3.length:0;const incomeChange=pct(props.income,props.priorIncome);const expenseChange=pct(props.expenses,props.priorExpenses);return [
     {label:"Último mes cerrado",value:last?formatEuro(last.net):"—",detail:last?`${last.label}: ${formatEuro(last.income)} ingresos · ${formatEuro(last.expenses)} gastos`:"Aún no hay un mes completo."},
@@ -93,9 +93,9 @@ export function AnalysisVisualDashboard(props:Props){
     {label:"Concentración top 3",value:formatPercent(props.insights.top3CategorySharePercent,1),detail:"Peso de las tres categorías de mayor gasto."},
   ];},[props]);
   const move=(id:ChartId,offset:number)=>setOrder(current=>{const from=current.indexOf(id),to=from+offset;if(from<0||to<0||to>=current.length)return current;const copy=[...current];copy.splice(from,1);copy.splice(to,0,id);setStatus("Orden de gráficos actualizado.");return copy;});
-  const hide=(id:ChartId)=>{setHidden(v=>[...v,id]);setStatus(`${LABELS[id]} ocultado.`)};
+  const hide=(id:ChartId)=>{setHidden(v=>v.includes(id)?v:[...v,id]);setStatus(`${LABELS[id]} ocultado.`)};
   const restore=(id:ChartId)=>{setHidden(v=>v.filter(x=>x!==id));setStatus(`${LABELS[id]} visible de nuevo.`)};
-  const reset=()=>{setOrder(DEFAULT_ORDER);setHidden([]);setStatus("Diseño de Análisis restablecido.");};
+  const reset=()=>{setOrder([...DEFAULT_ORDER]);setHidden([]);setStatus("Diseño de Análisis restablecido.");};
   const drop=(target:ChartId,source:ChartId)=>{if(source===target)return;setOrder(current=>{const copy=current.filter(id=>id!==source);copy.splice(copy.indexOf(target),0,source);return copy;});setStatus("Orden de gráficos actualizado.");};
   const render=(id:ChartId)=>{
     switch(id){
