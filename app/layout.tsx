@@ -6,6 +6,7 @@ import "./home.css";
 import "./system-state.css";
 import "./chrome.css";
 import "./visual.css";
+import "./document-linking.css";
 import "./tablet.css";
 
 export const metadata:Metadata={title:{default:"Financial App",template:"%s · Financial App"},applicationName:"Financial App",description:"Control, análisis, presupuesto y planificación financiera personal",manifest:"/manifest.webmanifest",icons:{icon:[{url:"/icon.png",type:"image/png",sizes:"512x512"}],apple:[{url:"/apple-icon.png",type:"image/png",sizes:"180x180"}]},appleWebApp:{capable:true,title:"Financial App",statusBarStyle:"default"}};
