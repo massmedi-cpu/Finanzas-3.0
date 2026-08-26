@@ -3,15 +3,18 @@ import path from "node:path";
 
 const root=process.cwd();
 const enforced=process.env.VERCEL==="1"||process.env.CI==="true";
-const url=(process.env.NEXT_PUBLIC_SUPABASE_URL||process.env.SUPABASE_URL||"").replace(/\/$/,"");
-const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||"";
+const configSource=fs.readFileSync(path.join(root,"lib/supabase/config.ts"),"utf8");
+const fallbackUrl=configSource.match(/FALLBACK_SUPABASE_URL\s*=\s*["']([^"']+)["']/)?.[1]||"";
+const fallbackKey=configSource.match(/FALLBACK_SUPABASE_PUBLISHABLE_KEY\s*=\s*["']([^"']+)["']/)?.[1]||"";
+const url=(process.env.NEXT_PUBLIC_SUPABASE_URL||process.env.SUPABASE_URL||fallbackUrl).replace(/\/$/,"");
+const key=process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY||process.env.SUPABASE_PUBLISHABLE_KEY||fallbackKey;
 
 if(!url||!key){
   if(enforced){
-    console.error("Supabase release preflight FAILED · faltan NEXT_PUBLIC_SUPABASE_URL o NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
+    console.error("Supabase release preflight FAILED · configuración pública de Supabase no disponible");
     process.exit(1);
   }
-  console.log("Supabase release preflight omitido fuera de CI/Vercel · variables no configuradas");
+  console.log("Supabase release preflight omitido fuera de CI/Vercel · configuración no disponible");
   process.exit(0);
 }
 
