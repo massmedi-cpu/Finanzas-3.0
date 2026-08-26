@@ -80,6 +80,8 @@ jobs:
         run: npm run audit:v300
       - name: Bulk editing and Drive sync 3.8 audit
         run: npm run audit:v380
+      - name: Archive partial PATCH 3.8.1 audit
+        run: npm run audit:v381
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
