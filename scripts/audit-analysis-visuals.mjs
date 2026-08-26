@@ -37,12 +37,14 @@ if((dashboard.match(/case \"/g)||[]).length<24)failures.push("Análisis debe con
 if((dashboard.match(/detailProps\(/g)||[]).length<18)failures.push("Los gráficos han perdido detalle interactivo suficiente");
 if(!css.includes("@media(max-width:680px)"))failures.push("Dashboard visual sin adaptación móvil explícita");
 for(const token of [".analysis-workspace{overflow-x:clip}",".analysis-viz-grid,.analysis-viz-grid>*{min-width:0;width:100%}",".analysis-pareto svg,.analysis-waterfall svg{min-width:0;width:100%;height:190px}",".analysis-svg-chart svg{width:100%;height:180px}"]){if(!wallCss.includes(token))failures.push(`Contrato móvil de gráficos ausente: ${token}`);}
-for(const token of ["position:fixed!important","bottom:calc(12px + env(safe-area-inset-bottom))!important","label:has(input:disabled)","max-height:min(58vh,420px)"]){if(!interactionCss.includes(token))failures.push(`Contrato móvil de interacción ausente: ${token}`);}
+for(const token of ["label:has(input:disabled)","max-height:min(58vh,420px)","width:min(280px,calc(100% - 24px))"]){if(!interactionCss.includes(token))failures.push(`Contrato móvil de interacción ausente: ${token}`);}
 if(wallCss.includes("min-width:620px"))failures.push("Análisis móvil no puede reintroducir gráficos de 620 px que desborden la pantalla");
+if(css.includes("!important"))failures.push("Análisis no puede depender de overrides !important");
+for(const token of [".analysis-bar-pair .income{background:var(--chart-income)}",".analysis-bar-pair .expense{background:var(--chart-expense)}",".analysis-diverging .negative-bar{background:var(--expense)}"]){if(!css.includes(token))failures.push(`Color financiero semántico ausente: ${token}`);}
 
 if(failures.length){
   console.error("AXIOMA visual analysis audit FAILED");
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("AXIOMA visual analysis audit OK · 24 visualizaciones, detalle flotante, leyendas, periodos globales y layout móvil sin desbordamientos protegidos");
+console.log("AXIOMA visual analysis audit OK · 24 visualizaciones, detalle flotante, tokens semánticos, periodos globales y layout móvil sin overrides protegidos");
