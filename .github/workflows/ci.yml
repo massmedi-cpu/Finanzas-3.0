@@ -82,6 +82,8 @@ jobs:
         run: npm run audit:v380
       - name: Archive partial PATCH 3.8.1 audit
         run: npm run audit:v381
+      - name: Reconciliation workbench 3.9 audit
+        run: npm run audit:v390
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit

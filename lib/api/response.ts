@@ -26,6 +26,21 @@ const PUBLIC_EXACT = new Set([
   "bulk_limit_exceeded",
   "batch_not_found",
   "batch_already_undone",
+  "changed_since_open",
+  "candidate_changed_since_open",
+  "reconciliation_reason_required",
+  "reconciliation_reason_too_long",
+  "invalid_reconciliation_decision",
+  "invalid_reconciliation_status",
+  "same_transaction",
+  "same_source_product",
+  "amounts_do_not_offset",
+  "dates_too_far_apart",
+  "pair_requires_internal_transfers",
+  "pair_already_reconciled",
+  "invalid_source_state",
+  "transaction_a_not_found",
+  "transaction_b_not_found",
 ]);
 
 const PUBLIC_PREFIXES = [
