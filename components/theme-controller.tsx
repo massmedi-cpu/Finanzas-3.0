@@ -6,6 +6,7 @@ import {
   normalizeThemePreference,
   persistThemePreference,
   readStoredThemePreference,
+  resolveThemePreference,
   THEME_CHANGE_EVENT,
   THEME_STORAGE_KEY,
   type ThemePreference,
@@ -14,6 +15,7 @@ import {
 export function ThemeController(){
   useEffect(()=>{
     const media=window.matchMedia("(prefers-color-scheme: dark)");
+    const root=document.documentElement;
     let preference=readStoredThemePreference();
     applyThemePreference(preference);
 
@@ -31,10 +33,21 @@ export function ThemeController(){
       preference=normalizeThemePreference(custom.detail?.theme);
       applyThemePreference(preference);
     };
+    const observer=new MutationObserver(()=>{
+      const selected=root.dataset.theme;
+      if(!selected){preference="system";applyThemePreference("system");return;}
+      if(selected!=="light"&&selected!=="dark")return;
+      const stored=readStoredThemePreference();
+      if(stored==="system"&&selected===resolveThemePreference("system"))return;
+      if(root.dataset.themePreference===selected)return;
+      preference=selected;
+      applyThemePreference(selected);
+    });
 
     media.addEventListener("change",onSystemChange);
     window.addEventListener("storage",onStorage);
     window.addEventListener(THEME_CHANGE_EVENT,onThemeChange);
+    observer.observe(root,{attributes:true,attributeFilter:["data-theme"]});
 
     void fetch("/api/settings",{cache:"no-store"})
       .then(async response=>response.ok?response.json():null)
@@ -47,6 +60,7 @@ export function ThemeController(){
       .catch(()=>undefined);
 
     return()=>{
+      observer.disconnect();
       media.removeEventListener("change",onSystemChange);
       window.removeEventListener("storage",onStorage);
       window.removeEventListener(THEME_CHANGE_EVENT,onThemeChange);
