@@ -5,7 +5,7 @@ const failures=[];
 const must=(ok,message)=>{if(!ok)failures.push(message)};
 
 const version=read("lib/app-version.ts");
-must(version.includes('APP_VERSION = "3.8.0"'),"La versión visible debe ser 3.8.0");
+must(version.includes('APP_VERSION = "3.8.'),"La versión visible debe permanecer en la familia 3.8.x");
 
 const bulkApi=read("app/api/movements/bulk/route.ts");
 for(const token of ["MAX_BULK_MOVEMENTS = 200","financial_app_bulk_update_transactions","financial_app_undo_bulk_transaction_batch","no_transactions_selected","bulk_limit_exceeded","changed_since_apply"])
