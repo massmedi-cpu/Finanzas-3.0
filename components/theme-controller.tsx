@@ -12,10 +12,18 @@ import {
   type ThemePreference,
 } from "@/lib/ui/theme";
 
+function hasStoredThemePreference(){
+  try{
+    const raw=window.localStorage.getItem(THEME_STORAGE_KEY);
+    return raw==="system"||raw==="light"||raw==="dark";
+  }catch{return false;}
+}
+
 export function ThemeController(){
   useEffect(()=>{
     const media=window.matchMedia("(prefers-color-scheme: dark)");
     const root=document.documentElement;
+    let hasStoredPreference=hasStoredThemePreference();
     let preference=readStoredThemePreference();
     applyThemePreference(preference);
 
@@ -25,12 +33,14 @@ export function ThemeController(){
     };
     const onStorage=(event:StorageEvent)=>{
       if(event.key!==THEME_STORAGE_KEY)return;
+      hasStoredPreference=event.newValue==="system"||event.newValue==="light"||event.newValue==="dark";
       preference=normalizeThemePreference(event.newValue);
       applyThemePreference(preference);
     };
     const onThemeChange=(event:Event)=>{
       const custom=event as CustomEvent<{theme?:ThemePreference}>;
       preference=normalizeThemePreference(custom.detail?.theme);
+      hasStoredPreference=true;
       applyThemePreference(preference);
     };
     const observer=new MutationObserver(()=>{
@@ -52,10 +62,12 @@ export function ThemeController(){
     void fetch("/api/settings",{cache:"no-store"})
       .then(async response=>response.ok?response.json():null)
       .then(body=>{
+        if(hasStoredPreference)return;
         const serverTheme=body?.data?.preferences?.theme;
         if(serverTheme!=="system"&&serverTheme!=="light"&&serverTheme!=="dark")return;
         preference=serverTheme;
         persistThemePreference(serverTheme);
+        hasStoredPreference=true;
       })
       .catch(()=>undefined);
 

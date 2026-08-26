@@ -12,8 +12,12 @@ const css=read("app/forecast.css");
 const api=read("app/api/forecast/route.ts");
 const lib=read("lib/financial/forecast-calendar.ts");
 const migration=read("database/FINANCIAL_APP_3.7.0_FORECAST_DISMISSALS.sql");
+const hotfix=read("database/FINANCIAL_APP_3.7.1_FORECAST_READ_SECURITY.sql");
 
-must(appVersion.includes('APP_VERSION = "3.7.0"'),"La versión visible debe ser 3.7.0");
+const version=appVersion.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
+must(atLeast(version,"3.7.0"),"La versión visible debe ser 3.7.0 o posterior");
 for(const token of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b4f8a","--accent:#4c9bff","--focus:#4c9bff"])
   must(globals.includes(token),`Falta identidad azul canónica: ${token}`);
 for(const legacy of ["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"])
@@ -33,6 +37,9 @@ must(lib.includes("dismissibleOccurrences")&&lib.includes("dismissedEventsExclud
 for(const token of ["forecast_event_overrides","dismiss_forecast_event","financial_app_dismiss_forecast_event","dismissibleOccurrences","dismissedEventsExcludedFromMetrics","o.event_id=x.item->>'id'"])
   must(migration.includes(token),`Migración 3.7 incompleta: ${token}`);
 must(migration.includes("revoke all on table financial_app.forecast_event_overrides from public,anon,authenticated")&&migration.includes("grant execute on function public.financial_app_dismiss_forecast_event"),"La persistencia de descartes debe mantener frontera de autorización");
+for(const token of ["forecast_calendar_visible_core","security definer","financial_app.authorized_email()","forecast_event_overrides","select financial_app.forecast_calendar_visible_core(p_start,p_months)"])
+  must(hotfix.toLowerCase().includes(token.toLowerCase()),`Hotfix 3.7.1 de lectura incompleto: ${token}`);
+must(hotfix.includes("revoke all on function financial_app.forecast_calendar_visible_core(date,integer) from public,anon")&&hotfix.includes("grant execute on function financial_app.forecast_calendar_visible_core(date,integer) to authenticated,service_role"),"El hotfix debe mantener la frontera de autorización de la lectura");
 must(css.includes(".forecast-cashflow-summary{")&&css.includes(".forecast-delete-button{"),"Faltan estilos del resumen o del botón Eliminar");
 
 const roots=["app","components"];
@@ -43,4 +50,4 @@ for(const root of roots){
 }
 
 if(failures.length){console.error("Forecast and blue identity 3.7 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast and blue identity 3.7 audit OK · azul canónico, Previsión primaria, descartes persistentes y cash flow mensual protegidos");
+console.log("Forecast and blue identity 3.7 audit OK · azul canónico, Previsión primaria, descartes persistentes, lectura autenticada y cash flow mensual protegidos");
