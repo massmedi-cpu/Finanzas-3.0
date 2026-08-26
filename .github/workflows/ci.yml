@@ -78,6 +78,8 @@ jobs:
         run: npm run audit:v281
       - name: Visual foundation 3.0 audit
         run: npm run audit:v300
+      - name: Visual debt audit
+        run: npm run audit:visual-debt
       - name: Source sync regression audit
         run: npm run audit:sync
       - name: Ticket OCR pipeline audit
