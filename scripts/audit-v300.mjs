@@ -46,9 +46,9 @@ must(!exists("app/home-v17.css")&&!exists("app/readability-v210.css")&&!exists("
 must(!exists("components/app-sidebar.tsx"),"la sidebar SaaS retirada no debe reaparecer");
 
 // Foundations Financial App 2026.
-for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#6f4e37","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:","--font-xs:12px","--font-md:16px","--font-3xl:34px"])
+for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#0b4f8a","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:","--font-xs:12px","--font-md:16px","--font-3xl:34px"])
   must(globals.includes(token),`foundation visual ausente: ${token}`);
-for(const token of ['html[data-theme="light"]','html[data-theme="dark"]','--bg:#111412','--accent:#d2a174'])
+for(const token of ['html[data-theme="light"]','html[data-theme="dark"]','--bg:#111412','--accent:#4c9bff'])
   must(globals.includes(token),`modo oscuro/claro incompleto: ${token}`);
 must(globals.includes("font-variant-numeric:tabular-nums"),"los importes deben conservar alineación numérica tabular");
 must(globals.includes(".panel{")&&globals.includes("border-top:1px solid var(--border)")&&globals.includes("border-radius:0;box-shadow:none"),"los paneles base deben estructurarse con divisores, no tarjetas elevadas");
@@ -59,7 +59,7 @@ must(tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&!tablet
 
 // Navegación propia, sin sidebar genérica.
 must(chrome.includes("<AppNavigation/>")&&!chrome.includes("<AppSidebar"),"AppChrome debe montar la navegación de producto actual");
-for(const token of ['["Inicio","/"]','["Movimientos","/movimientos"]','["Cuentas","/cuentas"]','["Plan","/plan"]','["Análisis","/analisis"]','["Control","/control"]'])
+for(const token of ['["Inicio","/"]','["Movimientos","/movimientos"]','["Cuentas","/cuentas"]','["Plan","/plan"]','["Previsión","/prevision"]','["Análisis","/analisis"]','["Control","/control"]'])
   must(navigation.includes(token),`falta destino primario: ${token}`);
 must(navigation.includes('className="product-primary-nav"')&&navigation.includes('className="mobile-nav"'),"deben existir variantes de navegación desktop y móvil");
 must(navigation.includes('aria-expanded={moreOpen}')&&navigation.includes('aria-controls="product-more-menu"'),"el menú secundario debe tener contrato accesible");
@@ -105,7 +105,7 @@ must(archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-
 must(archive.includes("receipt-table")&&receiptLayout.includes("parseReceiptTsvLayout"),"la reconstrucción de tickets debe conservar tabla y geometría TSV");
 must(archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben seguir siendo responsive");
 
-// Previsión 3.6: calendario de movimientos esperados, no simulador de saldo.
+// Previsión 3.6 base: calendario de movimientos esperados, no simulador de saldo.
 must(forecastPage.includes("getForecastCalendar(12)")&&forecastPage.includes("Calendario de próximos movimientos")&&!forecastPage.includes("ScenarioSimulator"),"Previsión debe ser un calendario anual de movimientos, sin simulador");
 for(const token of ["forecast-calendar-grid","AGENDA DEL MES","Confirmado por un movimiento real","Pasados sin confirmar","Añadir movimiento esperado","Fecha estimada"])
   must(forecast.includes(token),`Previsión calendario ha perdido un contrato: ${token}`);
@@ -128,4 +128,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit visual identity 2026 OK · foundations, navegación, Inicio, Movimientos, gráficos, calendario de previsión, accesibilidad y contratos funcionales protegidos");
+console.log("Audit visual identity 2026 OK · foundations azules, navegación, Inicio, Movimientos, gráficos, calendario de previsión, accesibilidad y contratos funcionales protegidos");

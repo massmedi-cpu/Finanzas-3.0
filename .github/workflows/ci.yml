@@ -82,6 +82,8 @@ jobs:
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
         run: npm run audit:forecast-calendar
+      - name: Forecast blue cash flow 3.7 audit
+        run: npm run audit:forecast-calendar-v370
       - name: Source sync regression audit
         run: npm run audit:sync
       - name: Ticket OCR pipeline audit

@@ -10,6 +10,7 @@ const primary = [
   ["Movimientos","/movimientos"],
   ["Cuentas","/cuentas"],
   ["Plan","/plan"],
+  ["Previsión","/prevision"],
   ["Análisis","/analisis"],
   ["Control","/control"],
 ] as const;
@@ -17,7 +18,6 @@ const primary = [
 const secondary = [
   ["Cash Flow","/cash-flow"],
   ["Presupuesto","/presupuesto"],
-  ["Previsión","/prevision"],
   ["Objetivos","/objetivos"],
   ["Patrimonio","/patrimonio"],
   ["Reglas","/reglas"],
@@ -30,7 +30,7 @@ const mobilePrimary = [
   ["Inicio","/"],
   ["Movimientos","/movimientos"],
   ["Plan","/plan"],
-  ["Control","/control"],
+  ["Previsión","/prevision"],
 ] as const;
 
 function matches(pathname:string,href:string){

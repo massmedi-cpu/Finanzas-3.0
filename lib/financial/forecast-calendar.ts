@@ -16,7 +16,7 @@ export type ForecastCalendarEvent={
 export type ForecastCalendarOverview={
   version:string;startDate:string;endDate:string;months:number;events:ForecastCalendarEvent[];
   counts:{total:number;expected:number;received:number;late:number};
-  rules:{calendarOnly:boolean;estimatedDates:boolean;actualMovementConfirms:boolean;annualInsuranceAndTaxPatterns:boolean;historyWindowDays:number;maximumMonths:number};
+  rules:{calendarOnly:boolean;estimatedDates:boolean;actualMovementConfirms:boolean;annualInsuranceAndTaxPatterns:boolean;dismissibleOccurrences:boolean;dismissedEventsExcludedFromMetrics:boolean;historyWindowDays:number;maximumMonths:number};
 };
 
 const status=(value:unknown):ForecastCalendarStatus=>value==="received"?"received":value==="late"?"late":"expected";
@@ -58,6 +58,7 @@ export async function getForecastCalendar(months=12):Promise<ForecastCalendarOve
     rules:{
       calendarOnly:bool(rules.calendarOnly,true),estimatedDates:bool(rules.estimatedDates,true),
       actualMovementConfirms:bool(rules.actualMovementConfirms,true),annualInsuranceAndTaxPatterns:bool(rules.annualInsuranceAndTaxPatterns,true),
+      dismissibleOccurrences:bool(rules.dismissibleOccurrences,true),dismissedEventsExcludedFromMetrics:bool(rules.dismissedEventsExcludedFromMetrics,true),
       historyWindowDays:asNumber(rules.historyWindowDays,1460),maximumMonths:asNumber(rules.maximumMonths,18),
     },
   };

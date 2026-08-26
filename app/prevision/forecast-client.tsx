@@ -45,6 +45,7 @@ function movementHref(event:ForecastCalendarEvent){
   if(search)q.set("search",search);
   return`/movimientos?${q.toString()}`;
 }
+function effectiveAmount(event:ForecastCalendarEvent){return event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount;}
 
 type Editor={
   title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;
@@ -64,18 +65,25 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
   const[filter,setFilter]=useState<"all"|"expense"|"income">("all");
 
   const monthOptions=useMemo(()=>Array.from({length:data.months},(_,i)=>addMonths(data.startDate.slice(0,7),i)),[data.months,data.startDate]);
-  const monthEvents=useMemo(()=>data.events
+  const allMonthEvents=useMemo(()=>data.events
     .filter(event=>event.estimatedDate.startsWith(selectedMonth))
-    .filter(event=>filter==="all"||(filter==="expense"?event.estimatedAmount<0:event.estimatedAmount>0))
-    .sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)||Math.abs(b.estimatedAmount)-Math.abs(a.estimatedAmount)),[data.events,selectedMonth,filter]);
+    .sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)||Math.abs(b.estimatedAmount)-Math.abs(a.estimatedAmount)),[data.events,selectedMonth]);
+  const monthEvents=useMemo(()=>allMonthEvents.filter(event=>filter==="all"||(filter==="expense"?effectiveAmount(event)<0:effectiveAmount(event)>0)),[allMonthEvents,filter]);
   const eventsByDay=useMemo(()=>{const map=new Map<string,ForecastCalendarEvent[]>();for(const event of monthEvents){const list=map.get(event.estimatedDate)||[];list.push(event);map.set(event.estimatedDate,list);}return map;},[monthEvents]);
   const cells=useMemo(()=>monthCells(selectedMonth),[selectedMonth]);
   const counts=useMemo(()=>({
-    total:monthEvents.length,
-    expected:monthEvents.filter(x=>x.status==="expected").length,
-    received:monthEvents.filter(x=>x.status==="received").length,
-    late:monthEvents.filter(x=>x.status==="late").length,
-  }),[monthEvents]);
+    total:allMonthEvents.length,
+    expected:allMonthEvents.filter(x=>x.status==="expected").length,
+    received:allMonthEvents.filter(x=>x.status==="received").length,
+    late:allMonthEvents.filter(x=>x.status==="late").length,
+  }),[allMonthEvents]);
+  const estimatedFlow=useMemo(()=>allMonthEvents.reduce((acc,event)=>{
+    const amount=effectiveAmount(event);
+    acc.cashFlow+=amount;
+    if(amount>0)acc.income+=amount;
+    if(amount<0)acc.expenses+=Math.abs(amount);
+    return acc;
+  },{cashFlow:0,income:0,expenses:0}),[allMonthEvents]);
 
   async function load(){
     setLoading(true);setFeedback(null);
@@ -110,15 +118,16 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
       setEditor(null);await load();setFeedback("Movimiento esperado añadido al calendario.");
     }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido guardar.");setLoading(false);}
   }
-  async function cancel(event:ForecastCalendarEvent){
-    if(!event.forecastId||!window.confirm("¿Quitar esta previsión manual y sus próximas repeticiones? Los movimientos bancarios no se modifican."))return;
+  async function removeEvent(event:ForecastCalendarEvent){
+    if(!window.confirm(`¿Eliminar “${event.title}” de esta previsión? Solo se descarta esta ocurrencia; el movimiento bancario real, si existe, no se modifica.`))return;
     setLoading(true);setFeedback(null);
     try{
-      const response=await fetch(`/api/forecast?id=${encodeURIComponent(event.forecastId)}`,{method:"DELETE"});
+      const q=new URLSearchParams({eventId:event.id,patternId:event.patternId,date:event.estimatedDate,title:event.title});
+      const response=await fetch(`/api/forecast?${q.toString()}`,{method:"DELETE"});
       const json=await response.json();
-      if(!response.ok)throw new Error(json.error||"No se ha podido quitar.");
-      await load();setFeedback("Previsión manual retirada.");
-    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido quitar.");setLoading(false);}
+      if(!response.ok)throw new Error(json.error||"No se ha podido eliminar.");
+      await load();setFeedback("Movimiento eliminado de la previsión. Ya no cuenta en los cálculos del mes.");
+    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido eliminar.");setLoading(false);}
   }
   function stepMonth(offset:number){
     const next=addMonths(selectedMonth,offset);
@@ -149,6 +158,12 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
 
     {feedback&&<div className="forecast-feedback" role="status">{feedback}</div>}
 
+    <section className="forecast-cashflow-summary" aria-label={`Estimación financiera de ${monthLabel(selectedMonth)}`}>
+      <article className="forecast-cashflow-main"><span>Cash Flow estimado</span><strong className={estimatedFlow.cashFlow<0?"negative":estimatedFlow.cashFlow>0?"positive":""}>{formatEuro(estimatedFlow.cashFlow)}</strong><small>Confirmados con importe real; el resto con importe estimado.</small></article>
+      <article><span>Ingresos estimados</span><strong className="positive">{formatEuro(estimatedFlow.income)}</strong><small>Todos los ingresos no eliminados.</small></article>
+      <article><span>Gastos estimados</span><strong className="negative">{formatEuro(estimatedFlow.expenses)}</strong><small>Todos los cargos no eliminados.</small></article>
+    </section>
+
     <section className="forecast-month-status" aria-label={`Estado de ${monthLabel(selectedMonth)}`}>
       <div><span>Movimientos</span><strong>{counts.total}</strong></div>
       <div><span>Esperados</span><strong>{counts.expected}</strong></div>
@@ -167,17 +182,17 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
           <div className="forecast-day-events">{events.map(event=><a
             key={event.id}
             href={`#${domId(event.id)}`}
-            className={`forecast-calendar-event ${event.status} ${event.estimatedAmount<0?"expense":"income"}`}
-            aria-label={`${event.title}, ${statusLabel(event)}, ${formatEuro(event.estimatedAmount)}`}
-            title={`${event.title} · ${formatEuro(event.estimatedAmount)} · ${statusLabel(event)}`}
-          ><span>{event.title}</span><b>{formatEuro(event.estimatedAmount)}</b></a>)}</div>
+            className={`forecast-calendar-event ${event.status} ${effectiveAmount(event)<0?"expense":"income"}`}
+            aria-label={`${event.title}, ${statusLabel(event)}, ${formatEuro(effectiveAmount(event))}`}
+            title={`${event.title} · ${formatEuro(effectiveAmount(event))} · ${statusLabel(event)}`}
+          ><span>{event.title}</span><b>{formatEuro(effectiveAmount(event))}</b></a>)}</div>
         </div>;
       })}</div>
     </section>
 
     <section className="forecast-agenda" aria-labelledby="forecast-agenda-title">
-      <div className="forecast-agenda-head"><div><p className="eyebrow">AGENDA DEL MES</p><h2 id="forecast-agenda-title">{monthLabel(selectedMonth)}</h2></div><span>{monthEvents.length} movimientos</span></div>
-      {!monthEvents.length?<div className="forecast-empty"><strong>No hay movimientos previstos para este mes.</strong><p>Puedes añadir uno manualmente si sabes que llegará.</p></div>:
+      <div className="forecast-agenda-head"><div><p className="eyebrow">AGENDA DEL MES</p><h2 id="forecast-agenda-title">{monthLabel(selectedMonth)}</h2></div><span>{allMonthEvents.length} movimientos</span></div>
+      {!monthEvents.length?<div className="forecast-empty"><strong>No hay movimientos previstos con este filtro.</strong><p>Puedes cambiar el filtro o añadir uno manualmente.</p></div>:
       <div className="forecast-agenda-list">{monthEvents.map(event=><article id={domId(event.id)} key={event.id} className={`forecast-agenda-item ${event.status}`}>
         <div className="forecast-agenda-date"><strong>{dayFmt.format(new Date(`${event.estimatedDate}T12:00:00`))}</strong><span>± {event.toleranceDays} días</span></div>
         <div className="forecast-agenda-main">
@@ -191,7 +206,7 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
           {event.status==="late"&&<div className="forecast-late-note">La fecha estimada ya pasó y todavía no aparece un movimiento compatible.</div>}
           {event.status==="expected"&&<div className="forecast-expected-note">Aún no ha llegado. Se marcará como recibido cuando aparezca un movimiento bancario compatible.</div>}
         </div>
-        <div className="forecast-agenda-side"><b className={event.estimatedAmount<0?"negative":"positive"}>{formatEuro(event.estimatedAmount)}</b><span className={`forecast-status ${event.status}`}>{statusLabel(event)}</span>{event.source==="manual"&&event.forecastId&&<button type="button" className="link-button" onClick={()=>cancel(event)}>Quitar</button>}</div>
+        <div className="forecast-agenda-side"><b className={effectiveAmount(event)<0?"negative":"positive"}>{formatEuro(effectiveAmount(event))}</b><span className={`forecast-status ${event.status}`}>{statusLabel(event)}</span><button type="button" className="forecast-delete-button" onClick={()=>removeEvent(event)}>Eliminar</button></div>
       </article>)}</div>}
     </section>
 
