@@ -50,6 +50,20 @@ export async function POST(request:NextRequest){
 export async function DELETE(request:NextRequest){
   const supabase=await getAuthorizedClient();
   if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+
+  const eventId=request.nextUrl.searchParams.get("eventId")?.trim()||"";
+  if(eventId){
+    const estimatedDate=validDate(request.nextUrl.searchParams.get("date"));
+    if(!estimatedDate)return NextResponse.json({ok:false,error:"invalid_event_date"},{status:400});
+    const patternId=request.nextUrl.searchParams.get("patternId")?.trim()||null;
+    const title=request.nextUrl.searchParams.get("title")?.trim()||null;
+    const{data,error}=await supabase.rpc("financial_app_dismiss_forecast_event",{
+      p_event_id:eventId,p_pattern_id:patternId,p_estimated_date:estimatedDate,p_title:title,
+    });
+    if(error||!data)return NextResponse.json({ok:false,error:error?.message||"forecast_dismiss_failed"},{status:400});
+    return NextResponse.json({ok:true,dismissed:true},{headers:{"Cache-Control":"private, no-store"}});
+  }
+
   const id=request.nextUrl.searchParams.get("id");
   if(!id)return NextResponse.json({ok:false,error:"missing_id"},{status:400});
   const{data,error}=await supabase.rpc("financial_app_cancel_forecast",{p_id:id});

@@ -37,6 +37,7 @@
     "audit:v300": "node scripts/audit-v300.mjs",
     "audit:visual-debt": "node scripts/audit-visual-debt.mjs",
     "audit:forecast-calendar": "node scripts/audit-forecast-calendar-v360.mjs",
+    "audit:forecast-calendar-v370": "node scripts/audit-forecast-calendar-v370.mjs",
     "audit:sync": "node scripts/audit-sync-v301.mjs",
     "audit:ocr": "node scripts/audit-ticket-ocr-v302.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
