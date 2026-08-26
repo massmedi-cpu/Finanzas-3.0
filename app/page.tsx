@@ -1,4 +1,5 @@
 import "./cash-flow.css";
+import "./home-streaming.css";
 import { Suspense } from "react";
 import { formatEuro, formatInteger } from "@/lib/format/es-es";
 import { IntentLink } from "@/components/intent-link";
