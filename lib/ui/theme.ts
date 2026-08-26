@@ -10,7 +10,7 @@ export function normalizeThemePreference(value:unknown):ThemePreference{
 
 export function readStoredThemePreference():ThemePreference{
   if(typeof window==="undefined")return "system";
-  try{return normalizeThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY));}catch{return "system";}
+  try{return normalizeThemePreference(window.localStorage.getItem(THEME_STORAGE_KEY));}catch(error){void error;return "system";}
 }
 
 export function resolveThemePreference(preference:ThemePreference):EffectiveTheme{
@@ -33,7 +33,7 @@ export function applyThemePreference(preference:ThemePreference){
 
 export function persistThemePreference(preference:ThemePreference){
   if(typeof window==="undefined")return;
-  try{window.localStorage.setItem(THEME_STORAGE_KEY,preference);}catch{}
+  try{window.localStorage.setItem(THEME_STORAGE_KEY,preference);}catch(error){void error;}
   applyThemePreference(preference);
   window.dispatchEvent(new CustomEvent<{theme:ThemePreference}>(THEME_CHANGE_EVENT,{detail:{theme:preference}}));
 }
