@@ -4,6 +4,11 @@ begin;
 -- Expone únicamente dos resúmenes autenticados que Inicio necesita para evitar
 -- descargar overviews completos de Conciliación y Control.
 
+-- El core de conciliación permanece cerrado a anon, pero el rol autenticado debe
+-- poder ejecutarlo porque el wrapper público es SECURITY INVOKER (no elevamos privilegios).
+revoke all on function financial_app.reconciliation_summary_core() from public,anon;
+grant execute on function financial_app.reconciliation_summary_core() to authenticated,service_role;
+
 create or replace function public.financial_app_reconciliation_summary()
 returns jsonb
 language sql
