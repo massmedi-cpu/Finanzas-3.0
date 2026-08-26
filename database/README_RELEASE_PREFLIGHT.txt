@@ -1,0 +1,1 @@
+FINANCIAL_APP_RELEASE_PREFLIGHT.sql installs the safe public release manifest used only for build compatibility checks. It exposes version metadata and function names, never financial rows or user data.
