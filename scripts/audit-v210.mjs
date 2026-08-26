@@ -11,9 +11,9 @@ if(!errors.length){
   if(!navigation.includes('from "@/components/intent-link"')||!navigation.includes("<IntentLink"))errors.push("La navegación no usa IntentLink");
   if(navigation.includes('from "next/link"'))errors.push("AppNavigation conserva Link con prefetch automático");
   if(layout.includes("readability-v210.css"))errors.push("La legibilidad 2.1 sigue como capa histórica separada");
-  if(!globals.includes("body{")||!globals.includes("font-size:15px")||!globals.includes(".eyebrow{")||!globals.includes("font-size:11px"))errors.push("La base tipográfica actual no está definida de forma explícita");
-  if(!globals.includes("@media(max-width:680px)")||!globals.includes("body{font-size:16px}"))errors.push("La escala tipográfica móvil no aumenta legibilidad de forma controlada");
-  if(!chrome.includes(".mobile-nav a,.mobile-nav button")||!chrome.includes("font-size:12px")||!chrome.includes("min-height:48px"))errors.push("La navegación móvil no protege lectura y objetivo táctil");
+  if(!globals.includes("--font-xs:12px")||!globals.includes("--font-md:16px")||!globals.includes("--font-3xl:34px")||!globals.includes("font-size:var(--font-md)")||!globals.includes("font-size:var(--font-xs)"))errors.push("La base tipográfica actual no está definida mediante la escala canónica");
+  if(!globals.includes("@media(max-width:680px)")||globals.includes("body{font-size:15px}"))errors.push("La escala móvil no debe reducir la base tipográfica canónica de 16 px");
+  if(!chrome.includes(".mobile-nav a,.mobile-nav button")||!chrome.includes("font-size:12.5px")||!chrome.includes("min-height:48px"))errors.push("La navegación móvil no protege lectura y objetivo táctil");
   if(!gate.includes("CANDIDATA VALIDADA")||!gate.includes("2.0.1 permanece congelada"))errors.push("El gate 2.1 no protege el checkpoint 2.0.1");
   const nested=pagesWithNestedNavigation("app");if(nested.length)errors.push(`Quedan ${nested.length} navegaciones redundantes: ${nested.join(", ")}`);
   if(!movementsClient.includes('q.set("facets","0")'))errors.push("Movimientos no solicita respuestas ligeras después de la carga inicial");
@@ -27,4 +27,4 @@ if(!errors.length){
   if(!planPage.includes("90 días"))errors.push("Plan no identifica el horizonte de 90 días");
 }
 if(errors.length){console.error("Financial App 2.1 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 2.1 audit OK · navegación táctil, legibilidad móvil, shell único, Movimientos ligero y Plan coherente");
+console.log("Financial App 2.1 audit OK · navegación táctil, escala tipográfica canónica, shell único, Movimientos ligero y Plan coherente");

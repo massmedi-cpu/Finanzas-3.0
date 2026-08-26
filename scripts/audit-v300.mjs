@@ -42,7 +42,7 @@ must(!exists("app/home-v17.css")&&!exists("app/readability-v210.css")&&!exists("
 must(!exists("components/app-sidebar.tsx"),"la sidebar SaaS retirada no debe reaparecer");
 
 // Foundations Financial App 2026.
-for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#6f4e37","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:"])
+for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#6f4e37","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:","--font-xs:12px","--font-md:16px","--font-3xl:34px"])
   must(globals.includes(token),`foundation visual ausente: ${token}`);
 for(const token of ['html[data-theme="light"]','html[data-theme="dark"]','--bg:#111412','--accent:#d2a174'])
   must(globals.includes(token),`modo oscuro/claro incompleto: ${token}`);
@@ -62,15 +62,17 @@ must(navigation.includes('aria-expanded={moreOpen}')&&navigation.includes('aria-
 must(chromeCss.includes(".product-nav{")&&chromeCss.includes("position:sticky")&&chromeCss.includes(".product-more-menu{"),"el chrome debe usar navegación superior y overlay secundario");
 must(chromeCss.includes("@media(max-width:680px)")&&chromeCss.includes(".mobile-nav{position:fixed")&&chromeCss.includes("bottom:0"),"móvil debe usar navegación inferior propia");
 must(!chromeCss.includes("grid-template-columns:250px")&&!chromeCss.includes(".sidebar"),"el chrome no debe recuperar la sidebar genérica");
+must(!chromeCss.includes("font-size:10.5px")&&chromeCss.includes("font-size:12px")&&chromeCss.includes("font-size:13px"),"la navegación no debe recuperar microtipografía ilegible");
 must(intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben conservar feedback de navegación");
 
-// Inicio como narrativa financiera, no muro de widgets.
-for(const token of ["home-balance-story","home-balance-primary","home-account-ledger","home-month-pulse","home-flow-section","home-forecast-section","home-decision-grid"])
+// Inicio como narrativa financiera, no muro de widgets ni saldo total protagonista.
+for(const token of ["home-accounts-section","home-account-ledger","home-month-pulse","home-flow-section","home-forecast-section","home-decision-grid"])
   must(home.includes(token),`Inicio ha perdido su secuencia narrativa: ${token}`);
 must(!home.includes("home-kpis")&&!home.includes("home-account-card")&&!home.includes('className="panel home-'),"Inicio no debe volver al patrón card + KPI + panel");
-must(home.includes("getHomeOverview")&&home.includes("CashFlowChart")&&home.includes("dashboard.totalAvailable"),"el rediseño de Inicio debe seguir usando los datos y cálculos canónicos");
-must(homeCss.includes(".home-balance-primary>strong")&&homeCss.includes("font-variant-numeric:tabular-nums"),"el saldo principal debe tener jerarquía numérica explícita");
+must(home.includes("getHomeOverview")&&home.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos y mostrar la versión canónica del producto");
+must(!home.includes("home.version")&&!home.includes("dashboard.totalAvailable")&&!home.includes("home-balance-primary"),"Inicio no debe mostrar la versión interna del RPC ni el saldo total como protagonista");
 must(homeCss.includes(".home-account-row")&&homeCss.includes("border-bottom:1px solid var(--border)"),"las cuentas deben leerse como ledger continuo");
+must(homeCss.includes("font-size:clamp(30px,2.6vw,38px)")&&!/font-size:(?:9(?:\.5)?|10(?:\.5)?|11(?:\.5)?)px/.test(homeCss),"Inicio debe usar una escala tipográfica equilibrada, sin microtexto ni titulares desproporcionados");
 must(homeCss.includes("@media(max-width:680px)")&&homeCss.includes("@media(max-width:420px)"),"Inicio debe resolver móvil pequeño explícitamente");
 
 // Movimientos: tabla financiera en escritorio, lista compacta en móvil.
