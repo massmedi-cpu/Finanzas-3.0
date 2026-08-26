@@ -13,10 +13,11 @@ export type ForecastCalendarEvent={
   frequency:ForecastCalendarFrequency;confidence:number;status:ForecastCalendarStatus;toleranceDays:number;
   explanation:Record<string,unknown>;actual:ForecastCalendarActual|null;
 };
+export type ForecastActualMonth={month:string;income:number;expenses:number;cashFlow:number;movements:number};
 export type ForecastCalendarOverview={
-  version:string;startDate:string;endDate:string;months:number;events:ForecastCalendarEvent[];
+  version:string;startDate:string;endDate:string;months:number;events:ForecastCalendarEvent[];actualMonths:ForecastActualMonth[];
   counts:{total:number;expected:number;received:number;late:number};
-  rules:{calendarOnly:boolean;estimatedDates:boolean;actualMovementConfirms:boolean;annualInsuranceAndTaxPatterns:boolean;dismissibleOccurrences:boolean;dismissedEventsExcludedFromMetrics:boolean;historyWindowDays:number;maximumMonths:number};
+  rules:{calendarOnly:boolean;estimatedDates:boolean;actualMovementConfirms:boolean;annualInsuranceAndTaxPatterns:boolean;dismissibleOccurrences:boolean;dismissedEventsExcludedFromMetrics:boolean;normalizedCategoryFallbackMatching:boolean;actualExpensesIncludedInProjection:boolean;confirmedEventsNotDoubleCounted:boolean;historyWindowDays:number;maximumMonths:number};
 };
 
 const status=(value:unknown):ForecastCalendarStatus=>value==="received"?"received":value==="late"?"late":"expected";
@@ -44,6 +45,10 @@ const event=(value:unknown):ForecastCalendarEvent=>{
     toleranceDays:Math.max(0,asNumber(x.toleranceDays)),explanation:asRecord(x.explanation),actual:actual(x.actual),
   };
 };
+const actualMonth=(value:unknown):ForecastActualMonth=>{
+  const x=asRecord(value);
+  return{month:asString(x.month),income:asNumber(x.income),expenses:asNumber(x.expenses),cashFlow:asNumber(x.cashFlow),movements:asNumber(x.movements)};
+};
 
 export async function getForecastCalendar(months=12):Promise<ForecastCalendarOverview>{
   const supabase=await createClient();
@@ -53,12 +58,14 @@ export async function getForecastCalendar(months=12):Promise<ForecastCalendarOve
   const r=asRecord(data);const counts=asRecord(r.counts);const rules=asRecord(r.rules);
   return{
     version:APP_VERSION,startDate:asString(r.startDate),endDate:asString(r.endDate),months:asNumber(r.months,safeMonths),
-    events:asArray(r.events).map(event),
+    events:asArray(r.events).map(event),actualMonths:asArray(r.actualMonths).map(actualMonth),
     counts:{total:asNumber(counts.total),expected:asNumber(counts.expected),received:asNumber(counts.received),late:asNumber(counts.late)},
     rules:{
       calendarOnly:bool(rules.calendarOnly,true),estimatedDates:bool(rules.estimatedDates,true),
       actualMovementConfirms:bool(rules.actualMovementConfirms,true),annualInsuranceAndTaxPatterns:bool(rules.annualInsuranceAndTaxPatterns,true),
       dismissibleOccurrences:bool(rules.dismissibleOccurrences,true),dismissedEventsExcludedFromMetrics:bool(rules.dismissedEventsExcludedFromMetrics,true),
+      normalizedCategoryFallbackMatching:bool(rules.normalizedCategoryFallbackMatching,true),actualExpensesIncludedInProjection:bool(rules.actualExpensesIncludedInProjection,true),
+      confirmedEventsNotDoubleCounted:bool(rules.confirmedEventsNotDoubleCounted,true),
       historyWindowDays:asNumber(rules.historyWindowDays,1460),maximumMonths:asNumber(rules.maximumMonths,18),
     },
   };
