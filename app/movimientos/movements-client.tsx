@@ -7,6 +7,7 @@ import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDet
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
 import { SplitEditor } from "./split-editor";
 import { MovementDocuments } from "./movement-documents";
+import { BulkMovementEditor } from "./bulk-movement-editor";
 
 type Filters = MovementFilterState;
 type EditState = {
@@ -15,6 +16,7 @@ type EditState = {
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
 
+const MAX_BULK_MOVEMENTS=200;
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
 const yesValues = new Set(["sí","si","yes","true","1"]);
 const noValues = new Set(["no","false","0"]);
@@ -66,8 +68,10 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   const [message,setMessage] = useState<string|null>(null);
   const [selected,setSelected] = useState<TransactionDetail|null>(null);
   const [edit,setEdit] = useState<EditState|null>(null);
+  const [selectedIds,setSelectedIds] = useState<Set<string>>(()=>new Set());
   const [detailLoading,setDetailLoading] = useState(false);
   const [saving,setSaving] = useState(false);
+  const [bulkSaving,setBulkSaving] = useState(false);
   const pages = Math.max(1, Math.ceil(pageData.total / pageData.pageSize));
   const range = useMemo(() => {
     if (!pageData.total) return "0 movimientos";
@@ -75,6 +79,8 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     const last=Math.min(pageData.total,pageData.page*pageData.pageSize);
     return `${formatInteger(first)}–${formatInteger(last)} de ${formatInteger(pageData.total)}`;
   },[pageData]);
+  const visibleIds=useMemo(()=>pageData.items.map(item=>item.id),[pageData.items]);
+  const allVisibleSelected=visibleIds.length>0&&visibleIds.every(id=>selectedIds.has(id));
 
   async function loadWith(next:Filters,page=1) {
     setLoading(true); setError(null);
@@ -98,6 +104,42 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     const cleared={...EMPTY_MOVEMENT_FILTERS};
     setFilters(cleared);
     await loadWith(cleared,1);
+  }
+
+  function toggleSelection(id:string,checked:boolean){
+    setSelectedIds(current=>{
+      const next=new Set(current);
+      if(!checked){next.delete(id);return next;}
+      if(next.has(id))return next;
+      if(next.size>=MAX_BULK_MOVEMENTS){setError(`Puedes editar como máximo ${MAX_BULK_MOVEMENTS} movimientos por lote.`);return current;}
+      next.add(id);setError(null);return next;
+    });
+  }
+  function toggleVisible(){
+    setSelectedIds(current=>{
+      const next=new Set(current);
+      if(allVisibleSelected){visibleIds.forEach(id=>next.delete(id));return next;}
+      const missing=visibleIds.filter(id=>!next.has(id));
+      if(next.size+missing.length>MAX_BULK_MOVEMENTS){setError(`La selección superaría el máximo de ${MAX_BULK_MOVEMENTS} movimientos.`);return current;}
+      missing.forEach(id=>next.add(id));setError(null);return next;
+    });
+  }
+  function clearBulkSelection(){setSelectedIds(new Set());}
+
+  async function applyBulk(patch:Record<string,unknown>){
+    if(!selectedIds.size||!Object.keys(patch).length)return false;
+    setBulkSaving(true);setError(null);setMessage(null);
+    try{
+      const response=await fetch("/api/movements/bulk",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ids:[...selectedIds],patch})});
+      const body=await response.json() as {ok?:boolean;updated?:number;error?:string};
+      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo aplicar la edición masiva");
+      const updated=Number(body.updated||selectedIds.size);
+      setSelectedIds(new Set());
+      setMessage(`${updated} movimiento${updated===1?"":"s"} actualizado${updated===1?"":"s"} en una sola operación.`);
+      await loadWith(filters,pageData.page);
+      return true;
+    }catch(cause){setError(cause instanceof Error?cause.message:"Error en la edición masiva");return false;}
+    finally{setBulkSaving(false);}
   }
 
   async function openMovement(id:string) {
@@ -208,15 +250,23 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     {error&&<div className="inline-alert error" role="alert">{error}</div>}
     {message&&<div className="inline-alert success" role="status">{message}</div>}
 
+    <div className="movement-selection-toolbar">
+      <button className="ghost" type="button" onClick={toggleVisible} disabled={loading||!visibleIds.length}>{allVisibleSelected?"Quitar visibles":"Seleccionar visibles"}</button>
+      <span>{selectedIds.size?`${selectedIds.size} seleccionado${selectedIds.size===1?"":"s"}`:"Selecciona movimientos para editarlos juntos"}</span>
+      {selectedIds.size>0&&<button className="ghost" type="button" onClick={clearBulkSelection} disabled={bulkSaving}>Limpiar selección</button>}
+    </div>
+
+    {selectedIds.size>0&&<BulkMovementEditor selectedCount={selectedIds.size} categories={pageData.facets.categories} types={pageData.facets.types} busy={bulkSaving} onApply={applyBulk} onClear={clearBulkSelection}/>} 
+
     <div className={`movement-table-wrap ${loading?"is-loading":""}`} aria-busy={loading}>
       <table className="movement-table">
-        <thead><tr><th>Fecha</th><th>Movimiento</th><th>Categoría</th><th>Cuenta</th><th className="numeric">Importe</th><th>Estado</th></tr></thead>
-        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement}/>)}</tbody>
+        <thead><tr><th className="selection-cell"><span className="sr-only">Seleccionar</span></th><th>Fecha</th><th>Movimiento</th><th>Categoría</th><th>Cuenta</th><th className="numeric">Importe</th><th>Estado</th></tr></thead>
+        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement} selected={selectedIds.has(item.id)} onToggle={toggleSelection}/>)}</tbody>
       </table>
       {!pageData.items.length&&<div className="empty-state"><strong>No hay movimientos con estos filtros.</strong><span>Prueba a limpiar algún criterio de búsqueda.</span></div>}
     </div>
 
-    <div className="movement-cards">{pageData.items.map(item=><button key={item.id} className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button>)}</div>
+    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
 
     <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||pageData.page<=1} onClick={()=>loadWith(filters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||pageData.page>=pages} onClick={()=>loadWith(filters,pageData.page+1)}>Siguiente</button></div></footer>
 
@@ -261,8 +311,9 @@ function Status({item}:{item:MovementItem}) {
   return <span className="status-badge ok">Correcto</span>;
 }
 
-function MovementRow({item,onOpen}:{item:MovementItem;onOpen:(id:string)=>void}) {
-  return <tr>
+function MovementRow({item,onOpen,selected,onToggle}:{item:MovementItem;onOpen:(id:string)=>void;selected:boolean;onToggle:(id:string,checked:boolean)=>void}) {
+  return <tr className={selected?"is-selected":""}>
+    <td className="selection-cell"><input type="checkbox" checked={selected} onChange={e=>onToggle(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></td>
     <td><span className="date-main">{formatDate(item.date)}</span><small>{item.time?item.time.slice(0,5):""}</small></td>
     <td><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}</button></td>
     <td><span>{item.category||"Sin categoría"}</span>{item.subcategory&&<small>{item.subcategory}</small>}</td>
