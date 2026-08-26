@@ -15,9 +15,22 @@ export async function GET(_request:NextRequest,{params}:{params:Promise<{id:stri
 export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await getAuthorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const {id}=await params;let body:unknown;try{body=await request.json();}catch{return NextResponse.json({ok:false,error:"invalid_json"},{status:400});}const input=asRecord(body);
+  const current=await supabase.rpc("financial_app_archive_document",{p_id:id});
+  if(current.error||!current.data)return NextResponse.json({ok:false,error:current.error?.message||"document_unavailable"},{status:404});
+  if(!Object.keys(input).length)return NextResponse.json({ok:true,document:current.data},{headers:{"Cache-Control":"private, no-store"}});
+  const has=(key:string)=>Object.prototype.hasOwnProperty.call(input,key);
+  const existing=current.data as Record<string,unknown>;
   const {error}=await supabase.rpc("financial_app_archive_update",{
-    p_id:id,p_document_type:input.documentType??null,p_document_date:input.documentDate??null,p_amount:input.amount??null,p_merchant:input.merchant??null,
-    p_notes:input.notes??null,p_ocr_text:input.ocrText??null,p_ocr_data:input.ocrData??null,p_digital_reconstruction:input.digitalReconstruction??null,p_ocr_status:input.ocrStatus??null
+    p_id:id,
+    p_document_type:has("documentType")?input.documentType:existing.documentType,
+    p_document_date:has("documentDate")?input.documentDate:existing.documentDate,
+    p_amount:has("amount")?input.amount:existing.amount,
+    p_merchant:has("merchant")?input.merchant:existing.merchant,
+    p_notes:has("notes")?input.notes:existing.notes,
+    p_ocr_text:has("ocrText")?input.ocrText:existing.ocrText,
+    p_ocr_data:has("ocrData")?input.ocrData:existing.ocrData,
+    p_digital_reconstruction:has("digitalReconstruction")?input.digitalReconstruction:existing.digitalReconstruction,
+    p_ocr_status:has("ocrStatus")?input.ocrStatus:existing.ocrStatus
   });
   if(error)return NextResponse.json({ok:false,error:error.message},{status:400});
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
