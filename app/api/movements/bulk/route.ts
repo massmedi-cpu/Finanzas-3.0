@@ -14,6 +14,21 @@ export async function POST(request: NextRequest) {
   catch { return NextResponse.json({ ok:false, error:"invalid_json" }, { status:400 }); }
 
   const input = asRecord(body);
+  const action = String(input.action ?? "apply");
+
+  if (action === "undo") {
+    const batchId = typeof input.batchId === "string" && input.batchId.trim() ? input.batchId.trim() : null;
+    const { data, error } = await supabase.rpc("financial_app_undo_bulk_transaction_batch", { p_batch_id:batchId });
+    if (error || !data) {
+      const message = error?.message || "bulk_undo_failed";
+      const status = message.includes("changed_since_apply") ? 409 : 400;
+      return NextResponse.json({ ok:false, error:message }, { status });
+    }
+    return NextResponse.json(data, { headers:{ "Cache-Control":"private, no-store" } });
+  }
+
+  if (action !== "apply") return NextResponse.json({ ok:false, error:"unsupported_action" }, { status:400 });
+
   const ids = Array.isArray(input.ids)
     ? [...new Set(input.ids.map(value => String(value ?? "").trim()).filter(Boolean))]
     : [];
