@@ -29,30 +29,33 @@ for(const token of ["AUTO_SYNC_INTERVAL = 15 * 60 * 1000","useEffect","financial
 
 const sync=read("supabase/functions/financial-app-sync/index.ts");
 for(const token of [
-  'const VERSION = 4',
   'DRIVE_DOCUMENTS_ROOT_ID = "1HR64X9Tu2FuRD2cdyA6BGOIqfxZqtaIW"',
-  'scope:"https://www.googleapis.com/auth/drive.readonly"',
-  "financial_app_import_drive_documents",
-  "supportedDriveDocument",
-  "driveDocuments(token)",
-  "financial_app_drive_documents_error"
-]) must(sync.includes(token),`La sincronización Drive ha perdido la garantía: ${token}`);
+  'scope: "https://www.googleapis.com/auth/drive.readonly"',
+  "financial_app_drive_sync_state",
+  "financial_app_apply_drive_document_delta",
+  "financial_app_finalize_document_links",
+  "driveStartPageToken",
+  "driveChanges",
+  "driveDocumentDelta",
+  "/drive/v3/changes",
+  'includeRemoved: "true"',
+  "DriveChangeTokenError",
+  "fallbackFullScan",
+  "financial_app_sync_metrics",
+  "supportedDriveDocument"
+]) must(sync.includes(token),`La sincronización Drive actual ha perdido la garantía: ${token}`);
 must(!sync.includes("https://www.googleapis.com/auth/drive.file"),"Drive no puede adquirir permisos de escritura");
-must(!sync.includes("https://www.googleapis.com/auth/drive\""),"Drive no puede usar el scope completo de escritura");
+must(!sync.includes('scope: "https://www.googleapis.com/auth/drive"'),"Drive no puede usar el scope completo de escritura");
 
-const migration=read("database/FINANCIAL_APP_3.8.0_BULK_DRIVE_SYNC.sql");
+const bulkMigration=read("database/FINANCIAL_APP_3.8.0_BULK_DRIVE_SYNC.sql");
 for(const token of [
   "bulk_update_transactions_rpc",
   "perform financial_app.update_transaction_rpc(v_id,p_patch)",
   "if v_count>200",
-  "financial_app_import_drive_documents",
-  "import_drive_documents_core",
   "coalesce(auth.jwt()->>'role','')<>'service_role'",
-  "revoke all on function public.financial_app_import_drive_documents(jsonb) from public, anon, authenticated",
-  "grant execute on function public.financial_app_import_drive_documents(jsonb) to service_role",
   "revoke all on function financial_app.auto_link_documents_core() from public, anon, authenticated",
   "documents_storage_identity_uq"
-]) must(migration.includes(token),`La migración 3.8.0 ha perdido la garantía: ${token}`);
+]) must(bulkMigration.includes(token),`La migración base 3.8.0 ha perdido la garantía: ${token}`);
 
 const undoMigration=read("database/FINANCIAL_APP_3.8.0_BATCH_UNDO.sql");
 for(const token of [
@@ -66,6 +69,26 @@ for(const token of [
   "batchId"
 ]) must(undoMigration.includes(token),`El lote reversible 3.8.0 ha perdido la garantía: ${token}`);
 
+const incrementalMigration=read("database/FINANCIAL_APP_3.8.1_DRIVE_INCREMENTAL_SYNC.sql");
+for(const token of [
+  "create table if not exists financial_app.drive_sync_state",
+  "change_token text",
+  "financial_app_drive_sync_state",
+  "financial_app_apply_drive_document_delta",
+  "p_removed_ids text[]",
+  "p_next_token text",
+  "p_full_scan boolean",
+  "archived_at=coalesce(d.archived_at,now())",
+  "archived_at=null",
+  "grant execute on function public.financial_app_drive_sync_state() to service_role",
+  "grant execute on function public.financial_app_apply_drive_document_delta(jsonb,text[],text,boolean) to service_role",
+  "revoke all on table financial_app.drive_sync_state from public,anon,authenticated"
+]) must(incrementalMigration.includes(token),`La migración incremental ha perdido la garantía: ${token}`);
+
+const historyIndex=read("database/FINANCIAL_APP_3.8.1_BULK_HISTORY_INDEX.sql");
+for(const token of ["transaction_bulk_batch_items_transaction_id_idx","transaction_bulk_batch_items(transaction_id)"])
+  must(historyIndex.includes(token),`Falta el índice de cobertura del historial masivo: ${token}`);
+
 const archivePage=read("app/archivo/page.tsx");
 const reviewPage=read("app/archivo/revision/page.tsx");
 const reviewClient=read("app/archivo/revision/review-client.tsx");
@@ -76,5 +99,5 @@ for(const token of ["Documentos por revisar","getArchiveReviewQueue"])
 for(const token of ["suggestions","Mejor coincidencia","/links","Abrir original"])
   must(reviewClient.includes(token),`La revisión documental ha perdido la acción: ${token}`);
 
-if(failures.length){console.error("Financial App 3.8.0 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 3.8.0 audit OK · edición masiva reversible, Drive read-only, revisión documental, auto-sync y límites de seguridad protegidos");
+if(failures.length){console.error("Financial App 3.8 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
+console.log("Financial App 3.8 audit OK · edición masiva reversible, historial indexado, Drive incremental read-only, revisión documental y límites protegidos");
