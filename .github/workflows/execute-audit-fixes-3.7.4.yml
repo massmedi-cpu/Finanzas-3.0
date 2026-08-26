@@ -1,0 +1,77 @@
+name: Execute Financial App 3.7.4 audit fixes
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+concurrency:
+  group: execute-audit-fixes-3-7-4
+  cancel-in-progress: false
+
+jobs:
+  execute:
+    if: github.event.pull_request.head.ref == 'audit-fixes-3.7.4' && github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v6
+        with:
+          ref: audit-fixes-3.7.4
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Execute canonical transformation
+        shell: bash
+        run: |
+          python3 - <<'BOOT'
+          from pathlib import Path
+          import textwrap
+
+          source = Path('.github/workflows/prepare-audit-fixes-3.7.4.yml').read_text()
+          marker = "          python3 - <<'PY'\n"
+          start = source.index(marker) + len(marker)
+          end = source.index("\n          PY\n", start)
+          program = textwrap.dedent(source[start:end])
+          exec(compile(program, 'audit-3.7.4-transform.py', 'exec'))
+          BOOT
+
+      - name: Synchronize package metadata
+        run: npm version 3.7.4 --no-git-tag-version --allow-same-version
+
+      - name: Install reproducibly
+        run: npm ci --no-audit --no-fund
+
+      - name: Validate transformed release
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ulxsvuksrghjgcjfuegv.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          npm run audit:axioma
+          npm run audit:current
+          npm run audit:structure
+          npm run audit:forecast-calendar-v370
+          npm run audit:a11y
+          npm run lint
+          npm run typecheck
+          npm run build
+
+      - name: Remove one-shot workflows
+        run: rm .github/workflows/prepare-audit-fixes-3.7.4.yml .github/workflows/execute-audit-fixes-3.7.4.yml
+
+      - name: Commit validated release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: Financial App 3.7.4 audit hardening"
+          git push origin HEAD:audit-fixes-3.7.4
