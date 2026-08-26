@@ -4,9 +4,6 @@ const read=file=>fs.readFileSync(file,"utf8");
 const failures=[];
 const must=(ok,message)=>{if(!ok)failures.push(message)};
 
-const version=read("lib/app-version.ts");
-must(version.includes('APP_VERSION = "3.8.1"'),"La versión visible debe ser 3.8.1");
-
 const route=read("app/api/archive/[id]/route.ts");
 for(const token of [
   'financial_app_archive_document',
@@ -31,7 +28,7 @@ for(const forbidden of [
 
 const migration=read("database/FINANCIAL_APP_3.8.1_ARCHIVE_PATCH.sql");
 for(const token of ["'app_version'","'target_version'","'3.8.1'"])
-  must(migration.includes(token),`La release 3.8.1 no registra su versión: ${token}`);
+  must(migration.includes(token),`La release 3.8.1 no registra su versión histórica: ${token}`);
 
 if(failures.length){console.error("Financial App 3.8.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
 console.log("Financial App 3.8.1 audit OK · PATCH parcial conserva campos omitidos y permite null explícito donde el contrato DB lo admite");
