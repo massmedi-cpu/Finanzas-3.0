@@ -15,6 +15,7 @@ export type ArchiveDetail = ArchiveDocument & {
   ocrText:string|null; ocrData:Record<string,unknown>|null; digitalReconstruction:Record<string,unknown>|null;
   history:Array<{action:string;before:unknown;after:unknown;changedBy:string|null;changedAt:string}>;
 };
+export type ArchiveReviewQueue = { version:string; total:number; documents:ArchiveDocument[] };
 
 export async function getArchiveOverview(search:string|null=null):Promise<ArchiveOverview>{
   const supabase=await createClient();
@@ -22,4 +23,19 @@ export async function getArchiveOverview(search:string|null=null):Promise<Archiv
   if(error||!data) throw new Error(error?.message||"archive_unavailable");
   const overview=data as ArchiveOverview;
   return {...overview,hasMore:overview.documents.length>=200};
+}
+
+export async function getArchiveReviewQueue():Promise<ArchiveReviewQueue>{
+  const supabase=await createClient();
+  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:null,p_limit:1000,p_offset:0,p_include_archived:false});
+  if(error||!data) throw new Error(error?.message||"archive_review_unavailable");
+  const overview=data as ArchiveOverview;
+  const documents=overview.documents
+    .filter(document=>!document.archivedAt&&document.links.length===0&&document.suggestions.length>0)
+    .sort((a,b)=>{
+      const scoreA=Math.max(...a.suggestions.map(item=>Number(item.score||0)),0);
+      const scoreB=Math.max(...b.suggestions.map(item=>Number(item.score||0)),0);
+      return scoreB-scoreA||String(b.documentDate||b.createdAt).localeCompare(String(a.documentDate||a.createdAt));
+    });
+  return {version:overview.version,total:documents.length,documents};
 }
