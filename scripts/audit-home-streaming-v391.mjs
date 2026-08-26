@@ -42,6 +42,8 @@ const migration=read("database/FINANCIAL_APP_3.9.1_HOME_STREAMING.sql");
 for(const token of [
   "financial_app_reconciliation_summary",
   "financial_app_control_summary",
+  "revoke all on function financial_app.reconciliation_summary_core() from public,anon",
+  "grant execute on function financial_app.reconciliation_summary_core() to authenticated,service_role",
   "revoke all on function public.financial_app_reconciliation_summary() from public,anon",
   "grant execute on function public.financial_app_reconciliation_summary() to authenticated,service_role",
   "revoke all on function public.financial_app_control_summary(date,jsonb,jsonb) from public,anon",
