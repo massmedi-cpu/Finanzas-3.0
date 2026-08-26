@@ -24,6 +24,13 @@
   --radius-control:9px;
   --radius-overlay:16px;
   --content-max:1540px;
+  --font-xs:12px;
+  --font-sm:13px;
+  --font-md:16px;
+  --font-lg:18px;
+  --font-xl:22px;
+  --font-2xl:28px;
+  --font-3xl:34px;
 }
 @media(prefers-color-scheme:dark){:root{
   --bg:#111412;
@@ -72,7 +79,7 @@ body{
   margin:0;min-height:100%;
   background:var(--bg);color:var(--text);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
-  font-size:15px;line-height:1.45;text-rendering:optimizeLegibility;
+  font-size:var(--font-md);line-height:1.48;text-rendering:optimizeLegibility;
 }
 input,select,textarea{font:inherit}
 a{color:inherit}
@@ -81,10 +88,10 @@ strong,.amount,.numeric{font-variant-numeric:tabular-nums lining-nums}
 .workspace{width:100%;max-width:var(--content-max);margin:0 auto;padding:34px clamp(20px,3.6vw,56px) 64px}
 .topbar{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-bottom:30px}
 .eyebrow{
-  margin:0 0 7px;color:var(--muted);font-size:11px;font-weight:780;
-  letter-spacing:.12em;text-transform:uppercase
+  margin:0 0 7px;color:var(--muted);font-size:var(--font-xs);font-weight:780;
+  letter-spacing:.1em;text-transform:uppercase
 }
-.topbar h1{margin:0;font-size:clamp(27px,3vw,40px);line-height:1.02;letter-spacing:-.042em;font-weight:760}
+.topbar h1{margin:0;font-size:clamp(27px,2.4vw,var(--font-3xl));line-height:1.04;letter-spacing:-.035em;font-weight:760}
 .topbar p:not(.eyebrow){max-width:68ch;margin:9px 0 0;color:var(--muted)}
 .positive{color:var(--success)}
 .negative{color:var(--expense)}
@@ -98,25 +105,25 @@ strong,.amount,.numeric{font-variant-numeric:tabular-nums lining-nums}
 .account-card.primary{box-shadow:inset 0 3px var(--accent)}
 .account-card.total{background:var(--text);color:var(--bg)}
 .account-card span{display:block;font-weight:760}
-.account-card small{color:var(--muted)}
+.account-card small{color:var(--muted);font-size:var(--font-xs)}
 .account-card.total small,.account-card.total p{color:inherit;opacity:.68}
-.account-card strong{font-size:clamp(26px,3vw,38px);letter-spacing:-.045em}
-.account-card p{margin:0;color:var(--muted);font-size:12px}
+.account-card strong{font-size:clamp(24px,2.4vw,32px);letter-spacing:-.035em}
+.account-card p{margin:0;color:var(--muted);font-size:var(--font-xs)}
 .metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin:18px 0;border-block:1px solid var(--border)}
 .metric-grid article{min-height:106px;padding:16px 18px;background:transparent;border:0;border-right:1px solid var(--border);border-radius:0;box-shadow:none}
 .metric-grid>*:last-child article{border-right:0}
 .metric-grid span,.metric-grid small{display:block}
-.metric-grid span{color:var(--muted);font-size:12px;font-weight:700}
-.metric-grid strong{display:block;margin:7px 0;font-size:25px;letter-spacing:-.03em}
-.metric-grid small{color:var(--muted);font-size:11px}
+.metric-grid span{color:var(--muted);font-size:var(--font-sm);font-weight:700}
+.metric-grid strong{display:block;margin:7px 0;font-size:var(--font-xl);letter-spacing:-.025em}
+.metric-grid small{color:var(--muted);font-size:var(--font-xs)}
 .content-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(280px,.78fr);gap:34px}
 .panel{
   min-height:0;padding:22px 0 0;background:transparent;border:0;border-top:1px solid var(--border);
   border-radius:0;box-shadow:none
 }
 .panel-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}
-.panel h2{margin:0;font-size:19px;letter-spacing:-.018em}
-.pill{display:inline-flex;align-items:center;min-height:28px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-control);color:var(--muted);font-size:11px}
+.panel h2{margin:0;font-size:var(--font-lg);letter-spacing:-.015em}
+.pill{display:inline-flex;align-items:center;min-height:28px;padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-control);color:var(--muted);font-size:var(--font-xs)}
 .pill-link{text-decoration:none}
 .pill-link:hover{border-color:var(--border-strong);color:var(--text)}
 .section-workspace{max-width:1240px}
@@ -150,10 +157,8 @@ body .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overf
   .content-grid{grid-template-columns:1fr}
 }
 @media(max-width:680px){
-  body{font-size:16px}
   .workspace{padding:24px 16px 98px}
   .topbar{display:block;margin-bottom:24px}
-  .eyebrow{font-size:11px}
   .account-grid,.metric-grid{grid-template-columns:1fr}
   .account-card.total{grid-column:auto}
   .metric-grid article{border-right:0}
