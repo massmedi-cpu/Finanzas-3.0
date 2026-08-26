@@ -26,11 +26,12 @@ const PUBLIC_EXACT = new Set([
   "bulk_limit_exceeded",
   "batch_not_found",
   "batch_already_undone",
-  "changed_since_apply",
 ]);
 
 const PUBLIC_PREFIXES = [
   "field_not_editable",
+  "changed_since_apply",
+  "backup_not_safe",
 ] as const;
 
 function databaseErrorCode(error: unknown) {
@@ -43,7 +44,7 @@ export function publicApiErrorCode(error: unknown, fallback: string) {
   const raw = databaseErrorCode(error);
   if (PUBLIC_EXACT.has(raw)) return raw;
   for (const prefix of PUBLIC_PREFIXES) {
-    if (raw === prefix || raw.startsWith(`${prefix}:`)) return prefix;
+    if (raw === prefix || raw.startsWith(`${prefix}:`) || raw.startsWith(`${prefix} `)) return prefix;
   }
   return fallback;
 }
