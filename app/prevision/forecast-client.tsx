@@ -1,100 +1,217 @@
 "use client";
 
+import { useMemo,useState } from "react";
 import { formatEuro } from "@/lib/format/es-es";
 import { madridToday } from "@/lib/time/madrid";
-import { useMemo, useState } from "react";
-import type { ForecastOverview, ForecastSaved, ForecastSuggestion, ForecastPoint } from "@/lib/financial/forecast";
+import type { ForecastCalendarEvent,ForecastCalendarOverview } from "@/lib/financial/forecast-calendar";
 
-const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
-const shortDate=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short"});
 const monthFmt=new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"});
-const dateLabel=(value:string)=>dateFmt.format(new Date(`${value}T12:00:00`));
-const monthLabel=(value:string)=>monthFmt.format(new Date(`${value}-15T12:00:00`));
-const currentMonth=madridToday().slice(0,7);
+const dayFmt=new Intl.DateTimeFormat("es-ES",{weekday:"short",day:"2-digit",month:"short"});
+const fullDateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"long",year:"numeric"});
+const weekdays=["L","M","X","J","V","S","D"];
+const today=madridToday();
 
-function addMonths(month:string,offset:number){const [year,number]=month.split("-").map(Number);return new Date(Date.UTC(year,number-1+offset,1)).toISOString().slice(0,7)}
-function monthEnd(month:string){const [year,number]=month.split("-").map(Number);const day=new Date(Date.UTC(year,number,0)).getUTCDate();return `${month}-${String(day).padStart(2,"0")}`}
-function balanceBefore(points:ForecastPoint[],fallback:number,date:string){let value=fallback;for(const point of points){if(point.source==="current")continue;if(point.date>=date)break;value=point.balance}return value}
-function balanceThrough(points:ForecastPoint[],fallback:number,date:string){let value=fallback;for(const point of points){if(point.source==="current")continue;if(point.date>date)break;value=point.balance}return value}
-function suggestionTotals(items:ForecastSuggestion[],month:string){const matches=items.filter(item=>item.nextDate.startsWith(month));const income=matches.filter(item=>item.amount>0).reduce((sum,item)=>sum+item.amount,0);const expenses=Math.abs(matches.filter(item=>item.amount<0).reduce((sum,item)=>sum+item.amount,0));return{count:matches.length,income,expenses,net:income-expenses};}
-
-type Editor={id?:string;title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;counterparty:string;recurrence:"once"|"monthly"|"bimonthly"|"quarterly"|"yearly";until:string;notes:string;confidence?:number;explanation?:Record<string,unknown>};
-const emptyEditor=():Editor=>({title:"",date:madridToday(),direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""});
-
-function recurrenceName(saved:ForecastSaved){const r=saved.recurrence;if(!r)return "Una vez";if(r.frequency==="yearly")return "Anual";if(r.frequency==="weekly")return r.interval===1?"Semanal":`Cada ${r.interval} semanas`;if(r.interval===2)return "Bimestral";if(r.interval===3)return "Trimestral";return r.interval===1?"Mensual":`Cada ${r.interval} meses`;}
-function editorRecurrence(saved:ForecastSaved):Editor["recurrence"]{const r=saved.recurrence;if(!r)return "once";if(r.frequency==="yearly")return "yearly";if(r.frequency==="monthly"&&r.interval===2)return "bimonthly";if(r.frequency==="monthly"&&r.interval===3)return "quarterly";return "monthly";}
-function recurrenceLabel(item:ForecastSuggestion){if(item.recurrence.frequency==="yearly")return "anual";if(item.recurrence.interval===1)return "mensual";if(item.recurrence.interval===2)return "bimestral";if(item.recurrence.interval===3)return "trimestral";return `cada ${item.recurrence.interval} meses`;}
-function estimatedDateMargin(item:ForecastSuggestion){const variation=Math.round(Number(item.explanation.dateVariationDays||0));if(variation<=1)return "fecha muy estable en el historial";return `margen habitual ±${variation} días`;}
-
-function ForecastChart({points}:{points:ForecastPoint[]}){
-  if(points.length<2)return <div className="forecast-chart-empty">Aún no hay suficientes eventos previstos para dibujar la proyección.</div>;
-  const width=960,height=270,padX=34,padY=24;const values=points.map(p=>p.balance);const min=Math.min(...values),max=Math.max(...values);const span=Math.max(1,max-min);const step=(width-padX*2)/Math.max(1,points.length-1);
-  const coords=points.map((p,i)=>({x:padX+i*step,y:padY+(max-p.balance)/span*(height-padY*2),p}));
-  const line=coords.map(c=>`${c.x},${c.y}`).join(" ");
-  return <div className="forecast-chart-wrap"><svg className="forecast-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Evolución estimada del saldo"><line className="forecast-grid-line" x1={padX} x2={width-padX} y1={height-padY} y2={height-padY}/><polyline className="forecast-line" points={line}/>{coords.map((c,i)=><circle key={`${c.p.date}-${i}`} className={c.p.source==="current"?"forecast-dot current":"forecast-dot"} cx={c.x} cy={c.y} r={i===0?5:3.5}><title>{`${dateLabel(c.p.date)} · ${formatEuro(c.p.balance)} · ${c.p.title}`}</title></circle>)}</svg><div className="forecast-chart-labels"><span>{dateLabel(points[0].date)}</span><span>{dateLabel(points[points.length-1].date)}</span></div></div>;
+function monthLabel(month:string){return monthFmt.format(new Date(`${month}-15T12:00:00`));}
+function dateLabel(date:string){return fullDateFmt.format(new Date(`${date}T12:00:00`));}
+function addMonths(month:string,offset:number){const[y,m]=month.split("-").map(Number);return new Date(Date.UTC(y,m-1+offset,1)).toISOString().slice(0,7);}
+function daysInMonth(month:string){const[y,m]=month.split("-").map(Number);return new Date(Date.UTC(y,m,0)).getUTCDate();}
+function monthCells(month:string){
+  const[y,m]=month.split("-").map(Number);
+  const first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
+  const cells:(string|null)[]=Array.from({length:first},()=>null);
+  for(let d=1;d<=daysInMonth(month);d++)cells.push(`${month}-${String(d).padStart(2,"0")}`);
+  while(cells.length%7)cells.push(null);
+  return cells;
+}
+function recurrenceLabel(value:ForecastCalendarEvent["frequency"]){
+  if(value==="once")return"Una vez";
+  if(value==="weekly")return"Semanal";
+  if(value==="bimonthly")return"Bimestral";
+  if(value==="quarterly")return"Trimestral";
+  if(value==="yearly")return"Anual";
+  return"Mensual";
+}
+function statusLabel(event:ForecastCalendarEvent){
+  if(event.status==="received")return"Recibido";
+  if(event.status==="late")return"Pendiente";
+  return"Esperado";
+}
+function sourceLabel(event:ForecastCalendarEvent){return event.source==="manual"?"Añadido por ti":"Detectado automáticamente";}
+function domId(id:string){return`forecast-${id.replace(/[^a-zA-Z0-9_-]/g,"-")}`;}
+function movementHref(event:ForecastCalendarEvent){
+  if(!event.actual)return"/movimientos";
+  const q=new URLSearchParams({from:event.actual.date,to:event.actual.date});
+  const search=(event.counterparty||event.actual.title||event.title).trim();
+  if(search)q.set("search",search);
+  return`/movimientos?${q.toString()}`;
 }
 
-export function ForecastClient({initialData}:{initialData:ForecastOverview}){
-  const [data,setData]=useState(initialData);const [loading,setLoading]=useState(false);const [feedback,setFeedback]=useState<string|null>(null);const [editor,setEditor]=useState<Editor|null>(null);const [selectedMonth,setSelectedMonth]=useState(currentMonth);
-  const monthOptions=useMemo(()=>Array.from({length:12},(_,index)=>addMonths(currentMonth,index)),[]);
-  const monthEvents=useMemo(()=>data.events.filter(event=>event.date.startsWith(selectedMonth)),[data.events,selectedMonth]);
-  const monthManualEvents=useMemo(()=>monthEvents.filter(event=>event.source==="saved"),[monthEvents]);
-  const monthSuggestions=useMemo(()=>data.suggestions.filter(item=>item.nextDate.startsWith(selectedMonth)),[data.suggestions,selectedMonth]);
-  const monthExpenses=useMemo(()=>Math.abs(monthEvents.filter(event=>event.amount<0).reduce((sum,event)=>sum+event.amount,0)),[monthEvents]);
-  const monthIncome=useMemo(()=>monthEvents.filter(event=>event.amount>0).reduce((sum,event)=>sum+event.amount,0),[monthEvents]);
-  const suggestedIncome=useMemo(()=>monthSuggestions.filter(item=>item.amount>0).reduce((sum,item)=>sum+item.amount,0),[monthSuggestions]);
-  const suggestedExpenses=useMemo(()=>Math.abs(monthSuggestions.filter(item=>item.amount<0).reduce((sum,item)=>sum+item.amount,0)),[monthSuggestions]);
-  const firstRelevantDate=selectedMonth===currentMonth?madridToday():`${selectedMonth}-01`;const lastRelevantDate=monthEnd(selectedMonth);
-  const startBalance=selectedMonth===currentMonth?data.currentBalance:balanceBefore(data.balanceSeries,data.currentBalance,firstRelevantDate);
-  const endBalance=balanceThrough(data.balanceSeries,startBalance,lastRelevantDate);
-  const selectedPoints=data.balanceSeries.filter(point=>point.source!=="current"&&point.date>=firstRelevantDate&&point.date<=lastRelevantDate);
-  const lowestSelected=Math.min(startBalance,...selectedPoints.map(point=>point.balance));
-  const monthNet=monthIncome-monthExpenses;const isCurrent=selectedMonth===currentMonth;
-  const monthWindow=isCurrent?`Desde hoy, ${dateLabel(madridToday())}, hasta ${dateLabel(lastRelevantDate)}`:`Del ${dateLabel(`${selectedMonth}-01`)} al ${dateLabel(lastRelevantDate)}`;
+type Editor={
+  title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;
+  counterparty:string;recurrence:"once"|"monthly"|"bimonthly"|"quarterly"|"yearly";until:string;notes:string;
+};
+function emptyEditor(month:string):Editor{
+  const date=month===today.slice(0,7)?today:`${month}-01`;
+  return{title:"",date,direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""};
+}
 
-  async function load(){setLoading(true);setFeedback(null);try{const response=await fetch(`/api/forecast?days=365`,{cache:"no-store"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido cargar la previsión");setData(json);}catch(error){setFeedback(error instanceof Error?error.message:"Error al cargar la previsión");}finally{setLoading(false);}}
-  function openSaved(item:ForecastSaved){setEditor({id:item.id,title:item.title,date:item.date,direction:item.amount>=0?"income":"expense",amount:Math.abs(item.amount).toFixed(2).replace(".",","),category:item.category||"",subcategory:item.subcategory||"",counterparty:item.counterparty||"",recurrence:editorRecurrence(item),until:item.recurrence?.until||"",notes:item.notes||"",confidence:item.confidence});setFeedback(null);}
-  async function postForecast(payload:any,message:string){setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido guardar la previsión");setEditor(null);await load();setFeedback(message);}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido guardar");setLoading(false);}}
-  async function saveEditor(){if(!editor)return;const amount=Math.abs(Number(editor.amount.replace(",",".")));if(!editor.title.trim()||!editor.date||!Number.isFinite(amount)||amount<=0){setFeedback("Indica título, fecha e importe válidos.");return;}let recurrence:any=null;if(editor.recurrence!=="once"){if(editor.recurrence==="yearly")recurrence={frequency:"yearly",interval:1};else recurrence={frequency:"monthly",interval:editor.recurrence==="bimonthly"?2:editor.recurrence==="quarterly"?3:1};if(editor.until)recurrence.until=editor.until;}await postForecast({id:editor.id||null,title:editor.title,date:editor.date,amount:editor.direction==="expense"?-amount:amount,category:editor.category||null,subcategory:editor.subcategory||null,counterparty:editor.counterparty||null,recurrence,notes:editor.notes||null,confidence:editor.confidence??1,explanation:editor.explanation||{source:"manual"}},editor.id?"Previsión actualizada.":"Previsión añadida al cálculo estimado.");}
-  async function cancelForecast(id:string){if(!window.confirm("¿Cancelar esta previsión manual? Los movimientos reales no se modifican."))return;setLoading(true);setFeedback(null);try{const response=await fetch(`/api/forecast?id=${encodeURIComponent(id)}`,{method:"DELETE"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido cancelar");await load();setFeedback("Previsión manual cancelada.");}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido cancelar");setLoading(false);}}
+export function ForecastClient({initialData}:{initialData:ForecastCalendarOverview}){
+  const[data,setData]=useState(initialData);
+  const[selectedMonth,setSelectedMonth]=useState(today.slice(0,7));
+  const[editor,setEditor]=useState<Editor|null>(null);
+  const[loading,setLoading]=useState(false);
+  const[feedback,setFeedback]=useState<string|null>(null);
+  const[filter,setFilter]=useState<"all"|"expense"|"income">("all");
 
-  return <div className={`forecast-module ${loading?"is-loading":""}`}>
-    <section className="forecast-philosophy"><div><p className="eyebrow">CÓMO FUNCIONA LA PREVISIÓN</p><h2>La app estima; el banco confirma</h2><p>Financial App analiza tu historial para estimar <strong>qué cargos o ingresos pueden llegar, cuánto podrían ser y sobre qué fecha</strong>. No tienes que confirmar una predicción: solo se convierte en movimiento real cuando aparece en Movimientos.</p></div><div className="forecast-philosophy-rules"><article><strong>Previsto</strong><span>Patrón histórico o previsión manual. Se usa para estimar el saldo futuro, pero todavía no es un movimiento real.</span></article><article><strong>Real</strong><span>Solo cuando el cargo o ingreso aparece en tus movimientos bancarios. La previsión se actualiza entonces con el dato real.</span></article></div></section>
+  const monthOptions=useMemo(()=>Array.from({length:data.months},(_,i)=>addMonths(data.startDate.slice(0,7),i)),[data.months,data.startDate]);
+  const monthEvents=useMemo(()=>data.events
+    .filter(event=>event.estimatedDate.startsWith(selectedMonth))
+    .filter(event=>filter==="all"||(filter==="expense"?event.estimatedAmount<0:event.estimatedAmount>0))
+    .sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)||Math.abs(b.estimatedAmount)-Math.abs(a.estimatedAmount)),[data.events,selectedMonth,filter]);
+  const eventsByDay=useMemo(()=>{const map=new Map<string,ForecastCalendarEvent[]>();for(const event of monthEvents){const list=map.get(event.estimatedDate)||[];list.push(event);map.set(event.estimatedDate,list);}return map;},[monthEvents]);
+  const cells=useMemo(()=>monthCells(selectedMonth),[selectedMonth]);
+  const counts=useMemo(()=>({
+    total:monthEvents.length,
+    expected:monthEvents.filter(x=>x.status==="expected").length,
+    received:monthEvents.filter(x=>x.status==="received").length,
+    late:monthEvents.filter(x=>x.status==="late").length,
+  }),[monthEvents]);
 
-    <div className="forecast-toolbar"><label className="forecast-month-selector"><span>Mes que quieres revisar</span><select value={selectedMonth} onChange={event=>setSelectedMonth(event.target.value)}>{monthOptions.map(month=><option key={month} value={month}>{monthLabel(month)}</option>)}</select><small>{monthWindow}</small></label><button className="primary-action" type="button" onClick={()=>setEditor(emptyEditor())}>+ Añadir previsión que ya conoces</button></div>
-    {feedback&&<div className="forecast-feedback" role="status">{feedback}</div>}
-    {monthSuggestions.length>0&&<div className="forecast-feedback" role="status"><strong>Según tu historial:</strong> en {monthLabel(selectedMonth)} se estiman {formatEuro(suggestedIncome)} de ingresos y {formatEuro(suggestedExpenses)} de gastos detectados automáticamente. Son previsiones, no movimientos reales.</div>}
+  async function load(){
+    setLoading(true);setFeedback(null);
+    try{
+      const response=await fetch("/api/forecast?months=12",{cache:"no-store"});
+      const json=await response.json();
+      if(!response.ok)throw new Error(json.error||"No se ha podido actualizar el calendario.");
+      setData(json);
+    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido actualizar el calendario.");}
+    finally{setLoading(false);}
+  }
+  async function save(){
+    if(!editor)return;
+    const amount=Math.abs(Number(editor.amount.replace(",",".")));
+    if(!editor.title.trim()||!editor.date||!Number.isFinite(amount)||amount<=0){setFeedback("Indica un nombre, una fecha y un importe válidos.");return;}
+    let recurrence:any=null;
+    if(editor.recurrence!=="once"){
+      recurrence=editor.recurrence==="yearly"
+        ?{frequency:"yearly",interval:1}
+        :{frequency:"monthly",interval:editor.recurrence==="bimonthly"?2:editor.recurrence==="quarterly"?3:1};
+      if(editor.until)recurrence.until=editor.until;
+    }
+    setLoading(true);setFeedback(null);
+    try{
+      const response=await fetch("/api/forecast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+        title:editor.title.trim(),date:editor.date,amount:editor.direction==="expense"?-amount:amount,
+        category:editor.category||null,subcategory:editor.subcategory||null,counterparty:editor.counterparty||null,
+        recurrence,notes:editor.notes||null,confidence:1,explanation:{source:"manual_calendar"},
+      })});
+      const json=await response.json();
+      if(!response.ok)throw new Error(json.error||"No se ha podido guardar.");
+      setEditor(null);await load();setFeedback("Movimiento esperado añadido al calendario.");
+    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido guardar.");setLoading(false);}
+  }
+  async function cancel(event:ForecastCalendarEvent){
+    if(!event.forecastId||!window.confirm("¿Quitar esta previsión manual y sus próximas repeticiones? Los movimientos bancarios no se modifican."))return;
+    setLoading(true);setFeedback(null);
+    try{
+      const response=await fetch(`/api/forecast?id=${encodeURIComponent(event.forecastId)}`,{method:"DELETE"});
+      const json=await response.json();
+      if(!response.ok)throw new Error(json.error||"No se ha podido quitar.");
+      await load();setFeedback("Previsión manual retirada.");
+    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido quitar.");setLoading(false);}
+  }
+  function stepMonth(offset:number){
+    const next=addMonths(selectedMonth,offset);
+    if(monthOptions.includes(next))setSelectedMonth(next);
+  }
 
-    <section className="forecast-month-summary" aria-label={`Resumen estimado de ${monthLabel(selectedMonth)}`}>
-      <article><span>{isCurrent?"Saldo actual":"Saldo estimado al iniciar el mes"}</span><strong>{formatEuro(startBalance)}</strong><small>{isCurrent?"Dato real de hoy":"Incluye las previsiones de los meses anteriores"}</small></article>
-      <article><span>Ingresos previstos</span><strong className="positive">{formatEuro(monthIncome)}</strong><small>{monthEvents.filter(event=>event.amount>0).length} previsión{monthEvents.filter(event=>event.amount>0).length===1?"":"es"} en el mes</small></article>
-      <article><span>Gastos previstos</span><strong className="negative">{formatEuro(monthExpenses)}</strong><small>{monthEvents.filter(event=>event.amount<0).length} previsión{monthEvents.filter(event=>event.amount<0).length===1?"":"es"} en el mes</small></article>
-      <article className={monthNet<0?"warning":"good"}><span>Saldo estimado al terminar</span><strong>{formatEuro(endBalance)}</strong><small>Impacto previsto del mes: {formatEuro(monthNet)}</small></article>
-      <article className={lowestSelected<0?"danger":"good"}><span>Saldo mínimo estimado</span><strong>{formatEuro(lowestSelected)}</strong><small>{lowestSelected<0?"La previsión detecta riesgo de saldo negativo":"La previsión no baja de 0 €"}</small></article>
+  return <div className={`forecast-calendar-module ${loading?"is-loading":""}`}>
+    <section className="forecast-calendar-intro">
+      <div><p className="eyebrow">CALENDARIO</p><h2>Lo que debería llegar</h2><p>Las fechas son aproximadas. Seguros e impuestos se buscan también por comportamiento anual, aunque cambien de importe o no sean perfectamente regulares.</p></div>
+      <div className="forecast-calendar-legend" aria-label="Estados del calendario">
+        <span className="legend-expected">Esperado</span><span className="legend-received">Recibido</span><span className="legend-late">Pendiente</span>
+      </div>
     </section>
 
-    <div className="forecast-grid forecast-month-grid">
-      <section className="forecast-panel"><div className="forecast-panel-head"><div><p className="eyebrow">AÑADIDO POR TI</p><h2>Previsiones que ya conoces</h2><p>Úsalas para pagos o ingresos futuros que conoces de antemano. Siguen siendo previsiones hasta que aparezca el movimiento real.</p></div><span className="pill">{monthManualEvents.length}</span></div>{!monthManualEvents.length?<div className="forecast-empty"><strong>No has añadido ninguna previsión manual para este mes.</strong><p>Los patrones automáticos aparecen a la derecha y no necesitan confirmación.</p></div>:<div className="forecast-events">{monthManualEvents.map(event=><article key={event.id}><div className="forecast-event-date"><strong>{shortDate.format(new Date(`${event.date}T12:00:00`))}</strong><span>Planificado</span></div><div><strong>{event.title}</strong><span>{event.category||"Sin categoría"}{event.subcategory?` · ${event.subcategory}`:""}</span></div><div className="forecast-event-right"><b className={event.amount<0?"negative":"positive"}>{formatEuro(event.amount)}</b><small>{event.amount<0?"Gasto previsto":"Ingreso previsto"}</small></div></article>)}</div>}</section>
-
-      <aside className="forecast-panel forecast-suggestion-panel"><div className="forecast-panel-head"><div><p className="eyebrow">DETECTADO EN TU HISTORIAL</p><h2>Cargos e ingresos probables en {monthLabel(selectedMonth)}</h2><p>Se buscan patrones de meses anteriores y de años anteriores. La fecha es estimada y puede variar.</p></div><span className="pill">{monthSuggestions.length}</span></div>{!monthSuggestions.length?<div className="forecast-empty compact"><strong>No se ha detectado ningún patrón probable para este mes.</strong></div>:<div className="forecast-suggestions">{monthSuggestions.map(item=><article key={item.id}><div className="forecast-suggestion-head"><div><strong>{item.title}</strong><span>{recurrenceLabel(item)}</span></div><b className={item.amount<0?"negative":"positive"}>{formatEuro(item.amount)}</b></div><p><strong>Fecha estimada: {dateLabel(item.nextDate)}</strong> · {estimatedDateMargin(item)}</p><div className="confidence-row"><span><i style={{width:`${Math.round(item.confidence*100)}%`}}/></span><b>{Math.round(item.confidence*100)}%</b></div><p>{String(item.explanation.reason||"Patrón recurrente detectado en tu historial")}. {Number(item.explanation.observations||0)} observación{Number(item.explanation.observations||0)===1?"":"es"}{item.explanation.medianIntervalDays?` · intervalo típico ${Number(item.explanation.medianIntervalDays).toLocaleString("es-ES")} días`:""}. <strong>No requiere confirmación previa.</strong></p></article>)}</div>}</aside>
+    <div className="forecast-calendar-toolbar">
+      <div className="forecast-month-nav">
+        <button type="button" className="ghost-action" onClick={()=>stepMonth(-1)} disabled={selectedMonth===monthOptions[0]}>←</button>
+        <label><span className="sr-only">Mes</span><select value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}>{monthOptions.map(month=><option key={month} value={month}>{monthLabel(month)}</option>)}</select></label>
+        <button type="button" className="ghost-action" onClick={()=>stepMonth(1)} disabled={selectedMonth===monthOptions.at(-1)}>→</button>
+      </div>
+      <div className="forecast-type-filter" aria-label="Tipo de movimiento">
+        <button type="button" className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>Todos</button>
+        <button type="button" className={filter==="expense"?"active":""} onClick={()=>setFilter("expense")}>Cargos</button>
+        <button type="button" className={filter==="income"?"active":""} onClick={()=>setFilter("income")}>Ingresos</button>
+      </div>
+      <button className="primary-action" type="button" onClick={()=>setEditor(emptyEditor(selectedMonth))}>+ Añadir movimiento esperado</button>
     </div>
 
-    <article className="panel forecast-main-panel"><div className="panel-head"><div><p className="eyebrow">VISTA A 12 MESES</p><h2>Saldo estimado con patrones históricos</h2><p>La curva combina las previsiones automáticas detectadas en tu historial con las previsiones que hayas añadido manualmente. Ninguna de ellas es un movimiento real hasta que llegue al banco.</p></div><span className="pill">Hasta {dateLabel(data.endDate)}</span></div><ForecastChart points={data.balanceSeries}/><div className="forecast-months forecast-month-buttons">{monthOptions.map(month=>{const summary=data.monthly.find(item=>item.month===month);const possible=suggestionTotals(data.suggestions,month);const manual=data.events.filter(event=>event.source==="saved"&&event.date.startsWith(month)).length;const estimatedNet=summary?.net||0;return <button type="button" key={month} className={month===selectedMonth?"active":""} onClick={()=>setSelectedMonth(month)}><span>{monthLabel(month)}</span><b className={estimatedNet<0?"negative":"positive"}>{formatEuro(estimatedNet)}</b><small>{possible.count} automática{possible.count===1?"":"s"} · {manual} manual{manual===1?"":"es"}</small></button>})}</div></article>
+    {feedback&&<div className="forecast-feedback" role="status">{feedback}</div>}
 
-    <section className="forecast-panel saved-forecasts"><div className="forecast-panel-head"><div><p className="eyebrow">PREVISIONES MANUALES</p><h2>Lo que ya sabes que ocurrirá</h2><p>Estas reglas las has añadido tú. Cuando llegue un movimiento real compatible, la app lo consolida para evitar contarlo dos veces.</p></div><span className="pill">{data.savedForecasts.length}</span></div>{!data.savedForecasts.length?<div className="forecast-empty compact"><strong>No has añadido previsiones manuales.</strong><p>No hace falta añadir ni confirmar los patrones que detecta automáticamente el historial.</p></div>:<div className="saved-forecast-list">{data.savedForecasts.map(item=><article key={item.id}><div><strong>{item.title}</strong><span>{dateLabel(item.date)} · {recurrenceName(item)}</span><small>{item.category||"Sin categoría"}{item.counterparty?` · ${item.counterparty}`:""}</small></div><b className={item.amount<0?"negative":"positive"}>{formatEuro(item.amount)}</b><button className="ghost" type="button" onClick={()=>openSaved(item)}>Editar</button></article>)}</div>}</section>
+    <section className="forecast-month-status" aria-label={`Estado de ${monthLabel(selectedMonth)}`}>
+      <div><span>Movimientos</span><strong>{counts.total}</strong></div>
+      <div><span>Esperados</span><strong>{counts.expected}</strong></div>
+      <div><span>Recibidos</span><strong className="positive">{counts.received}</strong></div>
+      <div><span>Pasados sin confirmar</span><strong className={counts.late?"negative":""}>{counts.late}</strong></div>
+    </section>
 
-    <aside className="forecast-rule-note"><strong>Regla simple</strong><p><b>El historial estima.</b> <b>Movimientos confirma.</b> Un cargo probable entra en la proyección sin pedirte que adivines si llegará. Cuando llega de verdad, el movimiento bancario pasa a ser la realidad y el patrón se recalcula con ese nuevo dato.</p></aside>
+    <section className="forecast-calendar" aria-label={`Calendario de ${monthLabel(selectedMonth)}`}>
+      <div className="forecast-weekdays" aria-hidden="true">{weekdays.map(day=><span key={day}>{day}</span>)}</div>
+      <div className="forecast-calendar-grid">{cells.map((date,index)=>{
+        if(!date)return <div key={`empty-${index}`} className="forecast-day empty" aria-hidden="true"/>;
+        const events=eventsByDay.get(date)||[];
+        const day=Number(date.slice(-2));
+        return <div key={date} className={`forecast-day ${date===today?"today":""} ${events.length?"has-events":""}`}>
+          <span className="forecast-day-number">{day}</span>
+          <div className="forecast-day-events">{events.map(event=><a
+            key={event.id}
+            href={`#${domId(event.id)}`}
+            className={`forecast-calendar-event ${event.status} ${event.estimatedAmount<0?"expense":"income"}`}
+            aria-label={`${event.title}, ${statusLabel(event)}, ${formatEuro(event.estimatedAmount)}`}
+            title={`${event.title} · ${formatEuro(event.estimatedAmount)} · ${statusLabel(event)}`}
+          ><span>{event.title}</span><b>{formatEuro(event.estimatedAmount)}</b></a>)}</div>
+        </div>;
+      })}</div>
+    </section>
 
-    {editor&&<div className="forecast-modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)setEditor(null);}}><section className="forecast-modal" role="dialog" aria-modal="true" aria-labelledby="forecast-editor-title"><div className="forecast-modal-head"><div><p className="eyebrow">{editor.id?"EDITAR PREVISIÓN MANUAL":"NUEVA PREVISIÓN MANUAL"}</p><h2 id="forecast-editor-title">Movimiento futuro que ya conoces</h2></div><button className="icon-button" type="button" onClick={()=>setEditor(null)} aria-label="Cerrar">×</button></div><div className="forecast-form">
-      <label className="wide">Título<input value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})} placeholder="Ej. Seguro del coche"/></label>
-      <label>Fecha prevista<input type="date" value={editor.date} onChange={e=>setEditor({...editor,date:e.target.value})}/></label>
-      <label>Tipo<select value={editor.direction} onChange={e=>setEditor({...editor,direction:e.target.value as Editor["direction"]})}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label>
-      <label>Importe previsto (€)<input inputMode="decimal" value={editor.amount} onChange={e=>setEditor({...editor,amount:e.target.value})} placeholder="0,00"/></label>
-      <label>Recurrencia<select value={editor.recurrence} onChange={e=>setEditor({...editor,recurrence:e.target.value as Editor["recurrence"]})}><option value="once">Una vez</option><option value="monthly">Mensual</option><option value="bimonthly">Bimestral</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label>
-      {editor.recurrence!=="once"&&<label>Hasta <small>Opcional</small><input type="date" value={editor.until} onChange={e=>setEditor({...editor,until:e.target.value})}/></label>}
-      <label>Categoría<input value={editor.category} onChange={e=>setEditor({...editor,category:e.target.value})} placeholder="Opcional"/></label><label>Subcategoría<input value={editor.subcategory} onChange={e=>setEditor({...editor,subcategory:e.target.value})} placeholder="Opcional"/></label>
-      <label className="wide">Comercio o contraparte<input value={editor.counterparty} onChange={e=>setEditor({...editor,counterparty:e.target.value})} placeholder="Ayuda a vincularlo cuando llegue el movimiento real"/></label>
-      <label className="wide">Notas<textarea rows={3} value={editor.notes} onChange={e=>setEditor({...editor,notes:e.target.value})} placeholder="Opcional"/></label>
-    </div><div className="forecast-modal-actions">{editor.id&&<button className="danger-action" type="button" onClick={()=>cancelForecast(editor.id!)} disabled={loading}>Cancelar previsión</button>}<div/><button className="ghost" type="button" onClick={()=>setEditor(null)}>Cerrar</button><button className="primary-action" type="button" onClick={saveEditor} disabled={loading}>{loading?"Guardando…":"Guardar"}</button></div></section></div>}
+    <section className="forecast-agenda" aria-labelledby="forecast-agenda-title">
+      <div className="forecast-agenda-head"><div><p className="eyebrow">AGENDA DEL MES</p><h2 id="forecast-agenda-title">{monthLabel(selectedMonth)}</h2></div><span>{monthEvents.length} movimientos</span></div>
+      {!monthEvents.length?<div className="forecast-empty"><strong>No hay movimientos previstos para este mes.</strong><p>Puedes añadir uno manualmente si sabes que llegará.</p></div>:
+      <div className="forecast-agenda-list">{monthEvents.map(event=><article id={domId(event.id)} key={event.id} className={`forecast-agenda-item ${event.status}`}>
+        <div className="forecast-agenda-date"><strong>{dayFmt.format(new Date(`${event.estimatedDate}T12:00:00`))}</strong><span>± {event.toleranceDays} días</span></div>
+        <div className="forecast-agenda-main">
+          <div className="forecast-agenda-title"><strong>{event.title}</strong><span>{sourceLabel(event)} · {recurrenceLabel(event.frequency)}</span></div>
+          <div className="forecast-agenda-meta"><span>{event.category||"Sin categoría"}{event.subcategory?` · ${event.subcategory}`:""}</span><span>Fecha estimada: {dateLabel(event.estimatedDate)}</span></div>
+          {event.status==="received"&&event.actual&&<div className="forecast-confirmation">
+            <strong>Confirmado por un movimiento real</strong>
+            <span>Previsto {formatEuro(event.estimatedAmount)} · recibido {formatEuro(event.actual.amount)} el {dateLabel(event.actual.date)}</span>
+            <a href={movementHref(event)}>Ver movimiento que lo confirma →</a>
+          </div>}
+          {event.status==="late"&&<div className="forecast-late-note">La fecha estimada ya pasó y todavía no aparece un movimiento compatible.</div>}
+          {event.status==="expected"&&<div className="forecast-expected-note">Aún no ha llegado. Se marcará como recibido cuando aparezca un movimiento bancario compatible.</div>}
+        </div>
+        <div className="forecast-agenda-side"><b className={event.estimatedAmount<0?"negative":"positive"}>{formatEuro(event.estimatedAmount)}</b><span className={`forecast-status ${event.status}`}>{statusLabel(event)}</span>{event.source==="manual"&&event.forecastId&&<button type="button" className="link-button" onClick={()=>cancel(event)}>Quitar</button>}</div>
+      </article>)}</div>}
+    </section>
+
+    {editor&&<div className="forecast-editor-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setEditor(null);}}>
+      <section className="forecast-editor" role="dialog" aria-modal="true" aria-label="Añadir movimiento esperado">
+        <div className="forecast-editor-head"><div><p className="eyebrow">MOVIMIENTO ESPERADO</p><h2>Añadir al calendario</h2></div><button type="button" className="icon-action" onClick={()=>setEditor(null)} aria-label="Cerrar">×</button></div>
+        <div className="forecast-editor-grid">
+          <label className="wide"><span>Nombre</span><input value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})} placeholder="Ej. Seguro del coche"/></label>
+          <label><span>Fecha estimada</span><input type="date" value={editor.date} onChange={e=>setEditor({...editor,date:e.target.value})}/></label>
+          <label><span>Tipo</span><select value={editor.direction} onChange={e=>setEditor({...editor,direction:e.target.value as Editor["direction"]})}><option value="expense">Cargo</option><option value="income">Ingreso</option></select></label>
+          <label><span>Importe estimado</span><input inputMode="decimal" value={editor.amount} onChange={e=>setEditor({...editor,amount:e.target.value})} placeholder="0,00"/></label>
+          <label><span>Repetición</span><select value={editor.recurrence} onChange={e=>setEditor({...editor,recurrence:e.target.value as Editor["recurrence"]})}><option value="once">Una vez</option><option value="monthly">Mensual</option><option value="bimonthly">Bimestral</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label>
+          <label><span>Categoría</span><input value={editor.category} onChange={e=>setEditor({...editor,category:e.target.value})} placeholder="Ej. Seguros"/></label>
+          <label><span>Subcategoría</span><input value={editor.subcategory} onChange={e=>setEditor({...editor,subcategory:e.target.value})}/></label>
+          <label className="wide"><span>Entidad / concepto</span><input value={editor.counterparty} onChange={e=>setEditor({...editor,counterparty:e.target.value})} placeholder="Ayuda a identificar el cargo real"/></label>
+          {editor.recurrence!=="once"&&<label><span>Repetir hasta</span><input type="date" value={editor.until} onChange={e=>setEditor({...editor,until:e.target.value})}/></label>}
+          <label className="wide"><span>Notas</span><textarea rows={3} value={editor.notes} onChange={e=>setEditor({...editor,notes:e.target.value})}/></label>
+        </div>
+        <div className="forecast-editor-actions"><button type="button" className="ghost-action" onClick={()=>setEditor(null)}>Cancelar</button><button type="button" className="primary-action" onClick={save} disabled={loading}>Guardar</button></div>
+      </section>
+    </div>}
   </div>;
 }
