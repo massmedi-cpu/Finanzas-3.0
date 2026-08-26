@@ -1,0 +1,320 @@
+name: Prepare Financial App 3.7.4 audit fixes
+
+on:
+  push:
+    branches:
+      - audit-fixes-3.7.4
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-audit-fixes-3-7-4
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout audit branch
+        uses: actions/checkout@v6
+        with:
+          ref: audit-fixes-3.7.4
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Apply canonical audit fixes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str):
+              p = Path(path)
+              text = p.read_text()
+              if old not in text:
+                  raise SystemExit(f"Expected source fragment not found in {path}")
+              p.write_text(text.replace(old, new, 1))
+
+          Path("lib/app-version.ts").write_text('export const APP_VERSION = "3.7.4" as const;\nexport const APP_RELEASE_LABEL = `Financial App ${APP_VERSION}` as const;\n')
+
+          Path("lib/supabase/proxy.ts").write_text('''import { createServerClient } from "@supabase/ssr";
+          import { NextResponse, type NextRequest } from "next/server";
+          import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
+          import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/supabase/config";
+
+          export async function updateSession(request: NextRequest) {
+            let response = NextResponse.next({ request });
+            const pathname = request.nextUrl.pathname;
+            const publicPath = pathname === "/login" || pathname.startsWith("/auth/");
+            const apiPath = pathname.startsWith("/api/");
+
+            const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+              cookies: {
+                getAll() {
+                  return request.cookies.getAll();
+                },
+                setAll(cookiesToSet, headers) {
+                  cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+                  response = NextResponse.next({ request });
+                  cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options));
+                  Object.entries(headers).forEach(([name, value]) => response.headers.set(name, value));
+                },
+              },
+            });
+
+            const { data, error } = await supabase.auth.getClaims();
+            const email = normalizeEmail(typeof data?.claims?.email === "string" ? data.claims.email : null);
+            const authenticated = !error && Boolean(data?.claims?.sub);
+            const allowed = authenticated && (await hasFinancialAppAccess(supabase, email));
+
+            if (!publicPath && !allowed) {
+              if (authenticated) await supabase.auth.signOut({ scope: "local" });
+              if (apiPath) {
+                return NextResponse.json(
+                  { ok: false, error: authenticated ? "forbidden" : "unauthorized" },
+                  { status: authenticated ? 403 : 401, headers: { "Cache-Control": "private, no-store" } },
+                );
+              }
+              const target = authenticated ? "/login?error=unauthorized" : "/login";
+              return NextResponse.redirect(new URL(target, request.url));
+            }
+
+            if (pathname === "/login" && allowed) {
+              return NextResponse.redirect(new URL("/", request.url));
+            }
+
+            response.headers.set("Cache-Control", "private, no-store");
+            return response;
+          }
+          ''')
+
+          Path("app/api/archive/route.ts").write_text('''import { NextRequest, NextResponse } from "next/server";
+          import { getAuthorizedClient } from "@/lib/auth/authorized-client";
+          import { asNumber, asRecord, asString } from "@/lib/validation/json";
+
+          export const dynamic="force-dynamic";
+
+          function boundedInteger(value:string|null,fallback:number,min:number,max:number){
+            const parsed=Number.parseInt(value??"",10);
+            return Number.isFinite(parsed)?Math.min(max,Math.max(min,parsed)):fallback;
+          }
+
+          export async function GET(request:NextRequest){
+            const supabase=await getAuthorizedClient(); if(!supabase) return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+            const search=request.nextUrl.searchParams.get("search");
+            const limit=boundedInteger(request.nextUrl.searchParams.get("limit"),200,1,200);
+            const offset=boundedInteger(request.nextUrl.searchParams.get("offset"),0,0,1_000_000);
+            const includeArchived=request.nextUrl.searchParams.get("archived")!=="0";
+            const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search||null,p_limit:limit,p_offset:offset,p_include_archived:includeArchived});
+            if(error||!data) return NextResponse.json({ok:false,error:error?.message||"archive_unavailable"},{status:400});
+            const payload=asRecord(data);
+            const documents=Array.isArray(payload.documents)?payload.documents:[];
+            return NextResponse.json({...payload,ok:true,hasMore:documents.length>=limit},{headers:{"Cache-Control":"private, no-store"}});
+          }
+
+          export async function POST(request:NextRequest){
+            const supabase=await getAuthorizedClient(); if(!supabase) return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+            let body:unknown; try{body=await request.json();}catch{return NextResponse.json({ok:false,error:"invalid_json"},{status:400});}
+            const input=asRecord(body);
+            const {data,error}=await supabase.rpc("financial_app_archive_create",{
+              p_file_name:asString(input.fileName),p_mime_type:asString(input.mimeType),p_storage_path:asString(input.storagePath),
+              p_file_size:asNumber(input.fileSize),p_content_hash:asString(input.contentHash)
+            });
+            if(error||!data) return NextResponse.json({ok:false,error:error?.message||"archive_create_failed"},{status:400});
+            return NextResponse.json({ok:true,id:data},{headers:{"Cache-Control":"private, no-store"}});
+          }
+          ''')
+
+          replace_once(
+              "lib/financial/archive.ts",
+              "  total:number; processed:number; linked:number; documents:ArchiveDocument[];",
+              "  total:number; processed:number; linked:number; hasMore?:boolean; documents:ArchiveDocument[];",
+          )
+          replace_once(
+              "lib/financial/archive.ts",
+              '  return data as ArchiveOverview;\n}',
+              '  const overview=data as ArchiveOverview;\n  return {...overview,hasMore:overview.documents.length>=200};\n}',
+          )
+
+          replace_once(
+              "app/archivo/archive-client.tsx",
+              'type ActionKind="search"|"open"|"upload"|"ocr-upgrade"|"save"|"link"|"unlink"|"delete";',
+              'type ActionKind="search"|"open"|"upload"|"ocr-upgrade"|"save"|"link"|"unlink"|"delete"|"more";',
+          )
+          replace_once(
+              "app/archivo/archive-client.tsx",
+              'const MAX_FILE=20*1024*1024;\nconst allowed=new Set(["application/pdf","image/jpeg","image/png","image/webp","image/heic","image/heif"]);',
+              'const MAX_FILE=20*1024*1024;\nconst PAGE_SIZE=200;\nconst allowed=new Set(["application/pdf","image/jpeg","image/png","image/webp","image/heic","image/heif"]);',
+          )
+          old_refresh='  async function refresh(q=search){const params=new URLSearchParams({archived:"1"});if(q.trim())params.set("search",q.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json();if(!r.ok)throw new Error(body.error||"No se pudo cargar Archivo");setData(body as ArchiveOverview);return body as ArchiveOverview}\n'
+          new_refresh='''  async function refresh(q=search){const params=new URLSearchParams({archived:"1",limit:String(PAGE_SIZE),offset:"0"});if(q.trim())params.set("search",q.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json();if(!r.ok)throw new Error(body.error||"No se pudo cargar Archivo");setData(body as ArchiveOverview);return body as ArchiveOverview}\n  async function loadMore(){if(isAction("more"))return;setAction({kind:"more"});setError(null);try{const params=new URLSearchParams({archived:"1",limit:String(PAGE_SIZE),offset:String(data.documents.length)});if(search.trim())params.set("search",search.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json() as ArchiveOverview&{error?:string};if(!r.ok)throw new Error(body.error||"No se pudieron cargar más documentos");setData(current=>{const seen=new Set(current.documents.map(item=>item.id));const documents=[...current.documents,...body.documents.filter(item=>!seen.has(item.id))];return{...body,documents}})}catch(cause){setError(cause instanceof Error?cause.message:"Error al cargar más documentos")}finally{setAction(null)}}\n'''
+          replace_once("app/archivo/archive-client.tsx",old_refresh,new_refresh)
+          replace_once(
+              "app/archivo/archive-client.tsx",
+              '  const visibleDocuments=data.documents;\n',
+              '  const visibleDocuments=data.documents;\n  const hasMore=Boolean(data.hasMore);\n',
+          )
+          replace_once(
+              "app/archivo/archive-client.tsx",
+              '    {!visibleDocuments.length&&<div className="empty-state"><strong>Biblioteca vacía</strong><span>Añade una factura, ticket, contrato o justificante para empezar.</span></div>}',
+              '    {hasMore&&<div className="archive-library-note"><strong>Hay más documentos</strong><button className="ghost" type="button" onClick={loadMore} disabled={isAction("more")} aria-busy={isAction("more")||undefined}>{isAction("more")?"Cargando…":"Cargar más"}</button></div>}\n    {!visibleDocuments.length&&<div className="empty-state"><strong>Biblioteca vacía</strong><span>Añade una factura, ticket, contrato o justificante para empezar.</span></div>}',
+          )
+
+          Path(".github/workflows/production-smoke.yml").write_text('''name: Production smoke
+
+          on:
+            push:
+              branches:
+                - main
+
+          permissions:
+            contents: read
+
+          jobs:
+            smoke:
+              runs-on: ubuntu-latest
+              timeout-minutes: 12
+              steps:
+                - name: Verify production surface
+                  env:
+                    BASE_URL: https://finanzas-3-0.vercel.app
+                  shell: bash
+                  run: |
+                    set -euo pipefail
+                    ready=0
+                    for attempt in $(seq 1 60); do
+                      code=$(curl -sS -o /tmp/login-body -w '%{http_code}' --max-time 15 "$BASE_URL/login" || true)
+                      if [ "$code" = "200" ]; then
+                        ready=1
+                        break
+                      fi
+                      sleep 5
+                    done
+                    if [ "$ready" != "1" ]; then
+                      echo "Production login did not become ready"
+                      exit 1
+                    fi
+
+                    check_redirect() {
+                      path="$1"
+                      code=$(curl -sS -D /tmp/headers -o /tmp/body -w '%{http_code}' --max-redirs 0 --max-time 15 "$BASE_URL$path" || true)
+                      if [ "$code" != "307" ] && [ "$code" != "308" ]; then
+                        echo "Expected auth redirect for $path, got $code"
+                        cat /tmp/body
+                        exit 1
+                      fi
+                      if ! grep -Eqi '^location: .*/login' /tmp/headers; then
+                        echo "Missing login redirect for $path"
+                        cat /tmp/headers
+                        exit 1
+                      fi
+                    }
+
+                    check_api_unauthorized() {
+                      path="$1"
+                      code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 15 "$BASE_URL$path" || true)
+                      if [ "$code" != "401" ]; then
+                        echo "Expected 401 for $path, got $code"
+                        cat /tmp/body
+                        exit 1
+                      fi
+                      if ! grep -q '"error":"unauthorized"' /tmp/body; then
+                        echo "Unexpected unauthorized payload for $path"
+                        cat /tmp/body
+                        exit 1
+                      fi
+                    }
+
+                    for path in / /movimientos /prevision /archivo /ajustes; do
+                      check_redirect "$path"
+                    done
+                    for path in /api/archive /api/settings /api/forecast; do
+                      check_api_unauthorized "$path"
+                    done
+                    echo "Production smoke passed: login, protected routes and API auth contract are healthy."
+          ''')
+
+          Path("database/FINANCIAL_APP_3.7.4_AUDIT_SECURITY.sql").write_text('''-- Financial App 3.7.4 — security hardening and canonical release metadata.
+          -- Keeps application access through authenticated RPCs while removing inherited anonymous EXECUTE privileges.
+
+          alter table financial_app.forecast_event_overrides enable row level security;
+          revoke all on table financial_app.forecast_event_overrides from public, anon, authenticated;
+          grant all on table financial_app.forecast_event_overrides to service_role;
+
+          revoke all on function financial_app.archive_delete_core(uuid) from public, anon;
+          grant execute on function financial_app.archive_delete_core(uuid) to authenticated, service_role;
+
+          revoke all on function financial_app.archive_restore_core(uuid) from public, anon;
+          grant execute on function financial_app.archive_restore_core(uuid) to authenticated, service_role;
+
+          revoke all on function financial_app.explainability_overview_core(integer) from public, anon;
+          grant execute on function financial_app.explainability_overview_core(integer) to authenticated, service_role;
+
+          revoke all on function financial_app.forecast_suggestions_v2(date,date) from public, anon;
+          grant execute on function financial_app.forecast_suggestions_v2(date,date) to authenticated, service_role;
+
+          revoke all on function financial_app.movements_advanced_core(integer,integer,text,uuid,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,date,date,numeric,numeric,text,text,boolean,boolean) from public, anon;
+          grant execute on function financial_app.movements_advanced_core(integer,integer,text,uuid,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,date,date,numeric,numeric,text,text,boolean,boolean) to authenticated, service_role;
+
+          revoke all on function financial_app.movements_advanced_enriched_core(integer,integer,text,uuid,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,date,date,numeric,numeric,text,text,boolean,boolean) from public, anon;
+          grant execute on function financial_app.movements_advanced_enriched_core(integer,integer,text,uuid,text,text,text,text,text,boolean,boolean,boolean,boolean,boolean,boolean,date,date,numeric,numeric,text,text,boolean,boolean) to authenticated, service_role;
+
+          revoke all on function financial_app.run_system_audit_core() from public, anon;
+          grant execute on function financial_app.run_system_audit_core() to authenticated, service_role;
+
+          revoke all on function financial_app.system_integrity_overview_core() from public, anon;
+          grant execute on function financial_app.system_integrity_overview_core() to authenticated, service_role;
+
+          revoke all on function financial_app.system_integrity_snapshot_core(boolean) from public, anon;
+          grant execute on function financial_app.system_integrity_snapshot_core(boolean) to authenticated, service_role;
+
+          revoke all on function financial_app.transaction_document_matches_core(uuid) from public, anon;
+          grant execute on function financial_app.transaction_document_matches_core(uuid) to authenticated, service_role;
+
+          insert into financial_app.app_meta(key,value,updated_at)
+          values
+            ('app_version',to_jsonb('3.7.4'::text),now()),
+            ('target_version',to_jsonb('3.7.4'::text),now())
+          on conflict(key) do update
+          set value=excluded.value,updated_at=excluded.updated_at;
+          ''')
+          PY
+
+      - name: Synchronize package metadata
+        run: npm version 3.7.4 --no-git-tag-version --allow-same-version
+
+      - name: Install reproducibly
+        run: npm ci --no-audit --no-fund
+
+      - name: Focused audit gates
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: https://ulxsvuksrghjgcjfuegv.supabase.co
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          npm run audit:axioma
+          npm run audit:current
+          npm run audit:structure
+          npm run audit:forecast-calendar-v370
+          npm run audit:a11y
+          npm run lint
+          npm run typecheck
+          npm run build
+
+      - name: Remove one-shot preparer
+        run: rm .github/workflows/prepare-audit-fixes-3.7.4.yml
+
+      - name: Commit prepared audit release
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "fix: Financial App 3.7.4 audit hardening"
+          git push origin HEAD:audit-fixes-3.7.4
