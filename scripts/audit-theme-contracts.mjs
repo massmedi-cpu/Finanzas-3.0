@@ -18,10 +18,12 @@ for(const token of ["dataset.theme=e","dataset.themePreference=p","prefers-color
   if(!layout.includes(token))failures.push(`Bootstrap de tema incompleto: ${token}`);
 }
 if(!manifest.includes('background_color:"#f4f2ed"')||!manifest.includes('theme_color:"#f4f2ed"'))failures.push("El manifiesto PWA no usa la superficie canónica clara");
-if(!chrome.includes("<ThemeController/>"))failures.push("El shell privado no monta el controlador canónico de tema");
-for(const token of ["matchMedia(\"(prefers-color-scheme: dark)\")","addEventListener(\"change\"","addEventListener(\"storage\"","MutationObserver","fetch(\"/api/settings\"","persistThemePreference(serverTheme)"]){
+if(!chrome.includes("<ThemeController/>"))failures.push("El shell no monta el controlador canónico de tema");
+if(!chrome.includes('if(publicRoute)return <><ThemeController/>{children}</>;'))failures.push("Login/auth deben mantener activo ThemeController para no perder la preferencia al entrar o salir");
+for(const token of ["matchMedia(\"(prefers-color-scheme: dark)\")","addEventListener(\"change\"","addEventListener(\"storage\"","MutationObserver","fetch(\"/api/settings\"","persistThemePreference(serverTheme)","hasStoredThemePreference","hasStoredPreference","if(hasStoredPreference)return;"]){
   if(!controller.includes(token))failures.push(`ThemeController incompleto: ${token}`);
 }
+if(controller.indexOf("if(hasStoredPreference)return;")>controller.indexOf("persistThemePreference(serverTheme)"))failures.push("La preferencia del servidor puede volver a pisar una preferencia local explícita");
 for(const token of ["THEME_STORAGE_KEY","THEME_CHROME","root.dataset.theme=effective","root.dataset.themePreference=preference","root.style.colorScheme=effective","meta.content=THEME_CHROME[effective]"]){
   if(!theme.includes(token))failures.push(`Runtime canónico de tema incompleto: ${token}`);
 }
@@ -30,4 +32,4 @@ if(!controls.includes("color:var(--expense)")||!controls.includes("color:var(--s
 if(!settings.includes('localStorage.setItem("financial-app-theme", theme)'))failures.push("Configuración debe persistir la preferencia de tema");
 
 if(failures.length){console.error("Theme contract audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Theme contract audit OK · tema efectivo, sistema, PWA chrome, tokens semánticos y sincronización servidor/dispositivo protegidos");
+console.log("Theme contract audit OK · tema local persistente, login/navegación, sistema, PWA chrome y sincronización servidor/dispositivo protegidos");
