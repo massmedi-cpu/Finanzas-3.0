@@ -20,4 +20,7 @@ button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .empty-state strong{color:var(--text)}
 .button-link{display:inline-flex;align-items:center;text-decoration:none;color:inherit}
 @media(prefers-color-scheme:dark){.inline-alert.error,.danger-action{color:#ff8a80}}
+html[data-theme="dark"] .inline-alert.error,html[data-theme="dark"] .danger-action{color:#ff8a80}
+html[data-theme="light"] .inline-alert.error{color:#b42318}
+html[data-theme="light"] .danger-action{color:#b42318}
 @media(prefers-reduced-motion:reduce){.primary-action,.ghost,.danger-action,.icon-button{transition:none}.primary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{animation:none;border-right-color:currentColor}}
