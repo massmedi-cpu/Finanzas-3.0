@@ -1,7 +1,7 @@
 /* Financial App · canonical readable typography
    This stylesheet owns minimum readable sizes across the product surface.
    It is intentionally loaded after component styles so dense modules cannot
-   reintroduce 9–12px user-facing text. No !important is required. */
+   reintroduce 9–12px user-facing text. It relies on normal cascade specificity. */
 
 .app-root.private{
   --readable-meta:14px;
