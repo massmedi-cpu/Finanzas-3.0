@@ -3,6 +3,7 @@ export type EffectiveTheme="light"|"dark";
 
 export const THEME_STORAGE_KEY="financial-app-theme";
 export const THEME_CHANGE_EVENT="financial-app-theme-change";
+export const THEME_CHROME={light:"#f4f2ed",dark:"#111412"} as const;
 
 export function normalizeThemePreference(value:unknown):ThemePreference{
   return value==="light"||value==="dark"||value==="system"?value:"system";
@@ -28,7 +29,7 @@ export function applyThemePreference(preference:ThemePreference){
   root.style.colorScheme=effective;
   let meta=document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
   if(!meta){meta=document.createElement("meta");meta.name="theme-color";document.head.appendChild(meta);}
-  meta.content=effective==="dark"?"#0d1117":"#f4f6f8";
+  meta.content=THEME_CHROME[effective];
 }
 
 export function persistThemePreference(preference:ThemePreference){

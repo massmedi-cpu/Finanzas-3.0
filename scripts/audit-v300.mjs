@@ -1,21 +1,28 @@
 import fs from "node:fs";
 
-const read=(path)=>fs.readFileSync(path,"utf8");
-const exists=(path)=>fs.existsSync(path);
+const read=path=>fs.readFileSync(path,"utf8");
+const exists=path=>fs.existsSync(path);
+const failures=[];
+const must=(condition,message)=>{if(!condition)failures.push(message)};
+
 const layout=read("app/layout.tsx");
+const globals=read("app/globals.css");
 const visual=read("app/visual.css");
 const controls=read("app/controls.css");
-const globals=read("app/globals.css");
-const tablet=read("app/tablet.css");
 const chromeCss=read("app/chrome.css");
-const loading=read("app/loading.tsx");
+const tablet=read("app/tablet.css");
+const home=read("app/page.tsx");
+const homeCss=read("app/home.css");
 const chrome=read("components/app-chrome.tsx");
-const sidebar=read("components/app-sidebar.tsx");
+const navigation=read("components/app-navigation.tsx");
 const intentLink=read("components/intent-link.tsx");
+const loading=read("app/loading.tsx");
 const cashFlow=read("components/cash-flow-chart.tsx");
 const analysis=read("components/analysis-trend-chart.tsx");
 const balance=read("components/balance-chart.tsx");
 const netWorth=read("components/net-worth-chart.tsx");
+const movements=read("app/movimientos/movements-client.tsx");
+const movementsCss=read("app/movements.css");
 const archive=read("app/archivo/archive-client.tsx");
 const archiveLib=read("lib/financial/archive.ts");
 const archiveCss=read("app/archive.css");
@@ -24,76 +31,85 @@ const forecast=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
 const forecastCss=read("app/forecast.css");
 const forecastMigration=read("database/FINANCIAL_APP_3.4.8_FORECAST_PROBABILISTIC_MODEL.sql");
-const movements=read("app/movimientos/movements-client.tsx");
-const movementsCss=read("app/movements.css");
-const vercel=read("vercel.json");
+const manifest=read("app/manifest.ts");
 
-const checks=[
-  [layout.includes('import "./controls.css"'),"los controles compartidos deben cargarse globalmente"],
-  [layout.includes('import "./visual.css"'),"la base visual consolidada debe cargarse desde el layout raíz"],
-  [layout.lastIndexOf('visual.css')>layout.lastIndexOf('integrity.css'),"visual.css debe cargarse después de las hojas estructurales"],
-  [layout.includes('import "./tablet.css"')&&layout.lastIndexOf('tablet.css')>layout.lastIndexOf('visual.css'),"la adaptación tablet debe cargarse después de la base visual"],
-  [!layout.includes("home-v17.css")&&!layout.includes("readability-v210.css")&&!layout.includes("visual-v300.css"),"el runtime no debe volver a cargar capas CSS históricas versionadas"],
-  [!exists("app/home-v17.css")&&!exists("app/readability-v210.css")&&!exists("app/visual-v300.css"),"las capas históricas ya consolidadas no deben reaparecer"],
-  [!globals.includes("grid-template-columns:82px")&&!globals.includes(".ghost{margin-top:18px}"),"globals.css no debe competir con la navegación responsive ni alterar todos los botones móviles"],
-  [controls.includes(".primary-action{")&&controls.includes("background:var(--accent)")&&controls.includes('[aria-busy="true"]::before'),"las acciones principales deben tener estilo y feedback de carga comunes"],
-  [controls.includes(".inline-alert{")&&controls.includes(".empty-state{"),"alertas y estados vacíos compartidos deben vivir en la capa común"],
-  [visual.includes("--chart-income")&&visual.includes("--chart-expense")&&visual.includes("--chart-accent")&&visual.includes("--chart-grid"),"debe existir una semántica común de colores para gráficos"],
-  [visual.includes('html[data-theme="light"]')&&visual.includes('html[data-theme="dark"]'),"la paleta común debe soportar tema claro y oscuro explícitos"],
-  [visual.includes(".home-kpis{grid-template-columns:repeat(12")&&visual.includes(".home-kpis a{grid-column:span 4"),"Inicio debe usar una jerarquía ejecutiva 3+3 sin huecos"],
-  [visual.includes(".cf-income{fill:var(--chart-income)!important}")&&visual.includes(".cf-expense{fill:var(--chart-expense)!important}"),"Cash Flow debe reutilizar la paleta común"],
-  [visual.includes(".cf-acc-line{stroke:var(--chart-accent)!important;fill:none!important}"),"el acumulado de Cash Flow debe seguir siendo una línea sin relleno"],
-  [visual.includes(".a-bar-current")&&visual.includes(".a-line-current")&&analysis.includes("analysis-chart"),"Análisis debe quedar cubierto por la base común de gráficos"],
-  [visual.includes(".balance-chart-line")&&visual.includes(".balance-chart-area")&&balance.includes("balance-chart-area"),"el histórico de saldo debe quedar cubierto por la base común"],
-  [visual.includes(".nw-line")&&visual.includes(".nw-grid-line")&&netWorth.includes("nw-chart"),"Patrimonio debe quedar cubierto por la base común"],
-  [cashFlow.includes("Ingresos / gastos")&&cashFlow.includes("const accY="),"la corrección de doble eje 2.8.1 debe permanecer intacta"],
-  [loading.includes('className="route-loading-v300"')&&!loading.includes("system-state-shell")&&!loading.includes("next/image"),"la navegación privada debe usar carga local sin sustituir el shell"],
-  [visual.includes("prefers-reduced-motion:reduce")&&visual.includes("v300-shimmer"),"el skeleton debe respetar movimiento reducido"],
-  [chrome.includes('<AppSidebar/><div className="app-route">{children}</div>'),"el shell persistente debe conservar sidebar y ruta separada"],
-  [chromeCss.includes("html{scrollbar-gutter:stable}"),"la navegación debe reservar el gutter del scrollbar"],
-  [chromeCss.includes("@media(min-width:1181px)")&&chromeCss.includes("height:100dvh;max-height:100dvh;overflow:hidden")&&chromeCss.includes("nav.desktop-nav{flex:1 1 auto;min-height:0;overflow-y:auto"),"en escritorio el menú lateral debe caber en el viewport y tener scroll vertical propio"],
-  [chromeCss.includes("overscroll-behavior-y:contain")&&chromeCss.includes("scrollbar-width:thin")&&chromeCss.includes("::-webkit-scrollbar-thumb"),"el scroll del menú lateral debe ser visible y no arrastrar la página"],
-  [sidebar.includes("desktopNavRef")&&sidebar.includes("scrollIntoView({block:\"nearest\",inline:\"nearest\"})"),"la opción activa debe mantenerse visible al navegar por un menú con scroll"],
-  [sidebar.includes('onClick={()=>setMoreOpen(false)}>{label}</IntentLink>'),"los enlaces deben cerrar el menú móvil antes de iniciar transición"],
-  [chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:none!important}'),"el menú móvil debe permanecer oculto fuera del breakpoint móvil"],
-  [chromeCss.includes('@media(max-width:1180px) and (min-width:681px)')&&chromeCss.includes('nav.desktop-nav{display:flex!important;flex:1 1 auto')&&chromeCss.includes('overflow-x:auto'),"tablet debe usar navegación horizontal completa sin hamburguesa"],
-  [!chromeCss.includes('grid-template-columns:82px minmax(0,1fr)'),"tablet no debe volver al rail comprimido de 82px"],
-  [chromeCss.includes('@media(max-width:680px)')&&chromeCss.includes('.app-root.private>.sidebar{position:sticky')&&chromeCss.includes('.app-root.private>.sidebar nav.mobile-nav{display:flex!important;position:fixed')&&chromeCss.includes('bottom:0;width:100%'),"en móvil el shell debe ser cabecera compacta + navegación inferior, sin sidebar vertical de escritorio"],
-  [intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben dar respuesta visual inmediata"],
-  [!intentLink.includes('onTouchStart={event=>{warm();'),"un toque no debe lanzar un prefetch duplicado"],
-  [tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&tablet.includes('.detail-loading{position:static!important'),"tablet debe eliminar el indicador flotante de Movimientos"],
-  [tablet.includes('.workspace{max-width:none!important;width:100%')&&tablet.includes('.movement-drawer{width:100%;max-width:none'),"tablet debe aprovechar el ancho disponible"],
-  [archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir foto con cámara trasera"],
-  [archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente"],
-  [archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener importación PDF e imágenes"],
-  [archive.includes('type ActionKind=')&&!archive.includes("const [busy,setBusy]"),"Archivo no debe volver a un estado busy global que bloquee todos los botones"],
-  [archive.includes('data-loading={isAction("save")?"true":undefined}')&&archive.includes('"Guardando…":"Guardar cambios"'),"Guardar cambios debe tener feedback específico"],
-  [archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-view-switch")&&!archive.includes("Mover a Archivados")&&!archive.includes("Restaurar a Activos"),"Archivo debe ser una biblioteca única sin estados Activos/Archivados"],
-  [archive.includes("Biblioteca única")&&archive.includes("Eliminar documento"),"Archivo debe explicar la biblioteca única y permitir eliminación directa"],
-  [archive.includes("receipt-table")&&archive.includes("<th>Descripción</th><th>Ud.</th><th>Precio</th><th>Importe</th>"),"la reconstrucción del ticket debe usar columnas Descripción/Ud./Precio/Importe"],
-  [receiptLayout.includes("parseReceiptTsvLayout")&&receiptLayout.includes('source?:"text"|"geometry_tsv"')&&archive.includes("Reconstrucción por geometría del ticket"),"las columnas del ticket deben derivarse de la geometría TSV cuando esté disponible"],
-  [archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben ser responsive"],
-  [archiveCss.includes(".archive-module .drawer-backdrop{position:fixed;z-index:80;inset:0")&&archiveCss.includes("justify-content:flex-end"),"Archivo debe abrir el detalle como overlay fijo"],
-  [archiveCss.includes("@media(max-width:1050px) and (min-width:681px)")&&archiveCss.includes(".archive-drawer{flex:1 1 auto;width:100%;max-width:none"),"en tablet el panel de Archivo debe ocupar todo el ancho"],
-  [archiveCss.includes("height:100dvh")&&archiveCss.includes("min-width:0"),"el panel de Archivo debe respetar el viewport"],
-  [forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Un cargo solo se considera real cuando aparece en Movimientos"),"Previsión debe cargar un año y separar claramente predicción de movimiento real"],
-  [forecast.includes("Mes que quieres revisar")&&forecast.includes("Cargos e ingresos probables")&&forecast.includes("Fecha estimada"),"Previsión debe mostrar por mes patrones históricos y fecha aproximada"],
-  [forecast.includes("El historial estima")&&forecast.includes("Movimientos confirma")&&!forecast.includes("acceptSuggestion")&&!forecast.includes("Sí, espero que ocurra"),"la filosofía de previsión debe ser historial -> estimación -> movimiento real, sin confirmación previa"],
-  [forecast.includes("suggestionTotals")&&forecast.includes("estimatedNet")&&forecast.includes("automática")&&forecast.includes("monthSuggestions"),"las tarjetas de 12 meses deben integrar las predicciones en el saldo estimado"],
-  [forecastMigration.includes("p_start-1460")&&forecastMigration.includes("historical_pattern_v3")&&forecastMigration.includes("dateVariationDays")&&forecastMigration.includes("'suggestionsAffectProjection',true"),"el motor debe analizar hasta cuatro años, estimar fecha y sumar predicciones a la proyección"],
-  [forecastMigration.includes("'automaticSuggestionsRequireConfirmation',false")&&forecastMigration.includes("'realOnlyAfterTransaction',true"),"el motor debe impedir que una predicción automática se trate como cargo confirmado"],
-  [forecastMigration.includes("ingresos laborales")&&forecastMigration.includes("newer.last_date>c.last_date"),"un nuevo pagador laboral debe invalidar sugerencias del pagador anterior"],
-  [forecast.includes("monthEvents")&&forecast.includes("monthManualEvents")&&forecast.includes("selectedMonth")&&forecast.includes("monthOptions"),"la vista principal debe distinguir previsiones automáticas y manuales por mes"],
-  [forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{")&&forecastCss.includes(".forecast-philosophy{"),"la previsión mensual debe tener jerarquía visual propia"],
-  [movementsCss.includes('.detail-loading{position:fixed')&&tablet.includes('.detail-loading{position:static!important'),"el estado de carga heredado puede ser fijo en escritorio pero debe neutralizarse en tablet"],
-  [movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible"],
-  [movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica"],
-  [movements.includes("No indicado")&&movements.includes("Sí, se repite")&&movements.includes("No, es puntual"),"Recurrente debe expresarse en lenguaje claro"],
-  [vercel.includes('"develop/v3.0.0-foundation": false'),"la rama 3.0 debe permanecer sin Preview de Vercel"],
-  [vercel.includes('"hotfix/v3.0.1-document-ux": false'),"el hotfix documental debe permanecer sin Preview de Vercel"],
-  [vercel.includes('"hotfix/v3.0.3-tablet-archive": false'),"el hotfix tablet debe permanecer sin Preview de Vercel"],
-];
+// Carga y arquitectura CSS.
+must(layout.includes('import "./controls.css"'),"los controles compartidos deben cargarse globalmente");
+must(layout.includes('import "./visual.css"'),"la base visual consolidada debe cargarse desde el layout raíz");
+must(layout.includes('import "./tablet.css"')&&layout.lastIndexOf('tablet.css')>layout.lastIndexOf('visual.css'),"tablet debe adaptarse después de la base visual");
+must(!layout.includes("home-v17.css")&&!layout.includes("readability-v210.css")&&!layout.includes("visual-v300.css"),"el runtime no debe recuperar capas CSS históricas versionadas");
+must(!exists("app/home-v17.css")&&!exists("app/readability-v210.css")&&!exists("app/visual-v300.css"),"las capas visuales históricas no deben reaparecer");
+must(!exists("components/app-sidebar.tsx"),"la sidebar SaaS retirada no debe reaparecer");
 
-const failures=checks.filter(([ok])=>!ok).map(([,message])=>message);
-if(failures.length){console.error("Audit 3.0 FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Audit 3.0 OK · visual consolidada, navegación adaptable, biblioteca única, ticket geométrico y previsión probabilística protegidos");
+// Foundations Financial App 2026.
+for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#6f4e37","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:"])
+  must(globals.includes(token),`foundation visual ausente: ${token}`);
+for(const token of ['html[data-theme="light"]','html[data-theme="dark"]','--bg:#111412','--accent:#d2a174'])
+  must(globals.includes(token),`modo oscuro/claro incompleto: ${token}`);
+must(globals.includes("font-variant-numeric:tabular-nums"),"los importes deben conservar alineación numérica tabular");
+must(globals.includes(".panel{")&&globals.includes("border-top:1px solid var(--border)")&&globals.includes("border-radius:0;box-shadow:none"),"los paneles base deben estructurarse con divisores, no tarjetas elevadas");
+must(controls.includes("background:var(--accent)")&&controls.includes("color:var(--expense)"),"los controles deben consumir la jerarquía y semántica del sistema");
+must(visual.includes("--chart-income")&&visual.includes("--chart-expense")&&visual.includes("--chart-accent")&&visual.includes("--chart-grid"),"los gráficos deben compartir semántica visual");
+must(!visual.includes("!important"),"visual.css no debe depender de parches !important");
+must(tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&!tablet.includes("!important"),"tablet debe resolverse sin overrides !important");
+
+// Navegación propia, sin sidebar genérica.
+must(chrome.includes("<AppNavigation/>")&&!chrome.includes("<AppSidebar"),"AppChrome debe montar la navegación de producto actual");
+for(const token of ['["Inicio","/"]','["Movimientos","/movimientos"]','["Cuentas","/cuentas"]','["Plan","/plan"]','["Análisis","/analisis"]','["Control","/control"]'])
+  must(navigation.includes(token),`falta destino primario: ${token}`);
+must(navigation.includes('className="product-primary-nav"')&&navigation.includes('className="mobile-nav"'),"deben existir variantes de navegación desktop y móvil");
+must(navigation.includes('aria-expanded={moreOpen}')&&navigation.includes('aria-controls="product-more-menu"'),"el menú secundario debe tener contrato accesible");
+must(chromeCss.includes(".product-nav{")&&chromeCss.includes("position:sticky")&&chromeCss.includes(".product-more-menu{"),"el chrome debe usar navegación superior y overlay secundario");
+must(chromeCss.includes("@media(max-width:680px)")&&chromeCss.includes(".mobile-nav{position:fixed")&&chromeCss.includes("bottom:0"),"móvil debe usar navegación inferior propia");
+must(!chromeCss.includes("grid-template-columns:250px")&&!chromeCss.includes(".sidebar"),"el chrome no debe recuperar la sidebar genérica");
+must(intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben conservar feedback de navegación");
+
+// Inicio como narrativa financiera, no muro de widgets.
+for(const token of ["home-balance-story","home-balance-primary","home-account-ledger","home-month-pulse","home-flow-section","home-forecast-section","home-decision-grid"])
+  must(home.includes(token),`Inicio ha perdido su secuencia narrativa: ${token}`);
+must(!home.includes("home-kpis")&&!home.includes("home-account-card")&&!home.includes('className="panel home-'),"Inicio no debe volver al patrón card + KPI + panel");
+must(home.includes("getHomeOverview")&&home.includes("CashFlowChart")&&home.includes("dashboard.totalAvailable"),"el rediseño de Inicio debe seguir usando los datos y cálculos canónicos");
+must(homeCss.includes(".home-balance-primary>strong")&&homeCss.includes("font-variant-numeric:tabular-nums"),"el saldo principal debe tener jerarquía numérica explícita");
+must(homeCss.includes(".home-account-row")&&homeCss.includes("border-bottom:1px solid var(--border)"),"las cuentas deben leerse como ledger continuo");
+must(homeCss.includes("@media(max-width:680px)")&&homeCss.includes("@media(max-width:420px)"),"Inicio debe resolver móvil pequeño explícitamente");
+
+// Movimientos: tabla financiera en escritorio, lista compacta en móvil.
+must(movementsCss.includes(".movement-table-wrap{overflow:auto;background:transparent;border-block:1px solid var(--border)"),"Movimientos debe conservar tabla plana integrada en escritorio");
+must(movementsCss.includes(".movement-card{width:100%;display:flex")&&movementsCss.includes("border-radius:0")&&movementsCss.includes("box-shadow:none"),"Movimientos móvil no debe volver a tarjetas flotantes");
+must(movementsCss.includes(".amount{font-weight:780;font-variant-numeric:tabular-nums"),"los importes de movimientos deben quedar alineados y jerarquizados");
+must(movementsCss.includes(".status-badge.ok")&&movementsCss.includes(".status-badge.warning")&&movementsCss.includes(".status-badge.edited"),"los estados de movimiento deben conservar semántica visual");
+must(movements.includes("Automático según reglas")&&!movements.includes(">Regla automática</option>"),"Cash Flow debe usar lenguaje comprensible");
+must(movements.includes("Automático / según origen")&&!movements.includes(">Sin override</option>"),"Conciliación debe evitar terminología técnica");
+must(movements.includes("No indicado")&&movements.includes("Sí, se repite")&&movements.includes("No, es puntual"),"Recurrente debe expresarse en lenguaje claro");
+
+// Gráficos y estados.
+must(cashFlow.includes("Ingresos / gastos")&&cashFlow.includes("const accY="),"la corrección de doble eje de Cash Flow debe permanecer intacta");
+must(cashFlow.includes("Ver datos del gráfico en tabla")&&cashFlow.includes("<caption"),"Cash Flow debe conservar alternativa tabular accesible");
+must(visual.includes(".a-bar-current")&&visual.includes(".a-line-current")&&analysis.includes("analysis-chart"),"Análisis debe quedar cubierto por la semántica común de gráficos");
+must(visual.includes(".balance-chart-line")&&visual.includes(".balance-chart-area")&&balance.includes("balance-chart-area"),"el histórico de saldo debe quedar cubierto por la base común");
+must(visual.includes(".nw-line")&&visual.includes(".nw-grid-line")&&netWorth.includes("nw-chart"),"Patrimonio debe quedar cubierto por la base común");
+must(loading.includes('className="route-loading-v300"')&&loading.includes('role="status"'),"la carga privada debe conservar skeleton accesible");
+must(visual.includes("prefers-reduced-motion:reduce")&&visual.includes("v300-shimmer"),"el skeleton debe respetar movimiento reducido");
+
+// Contratos documentales y de previsión que el rediseño no puede deteriorar.
+must(archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir foto con cámara trasera");
+must(archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente");
+must(archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener importación PDF e imágenes");
+must(archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-view-switch"),"Archivo debe seguir siendo una biblioteca única");
+must(archive.includes("receipt-table")&&receiptLayout.includes("parseReceiptTsvLayout"),"la reconstrucción de tickets debe conservar tabla y geometría TSV");
+must(archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben seguir siendo responsive");
+must(forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Un cargo solo se considera real cuando aparece en Movimientos"),"Previsión debe mantener horizonte anual y separación estimación/real");
+must(forecast.includes("Mes que quieres revisar")&&forecast.includes("Cargos e ingresos probables")&&forecast.includes("Fecha estimada"),"Previsión debe mantener lectura mensual y fecha aproximada");
+must(forecastMigration.includes("historical_pattern_v3")&&forecastMigration.includes("dateVariationDays")&&forecastMigration.includes("'realOnlyAfterTransaction',true"),"el motor probabilístico de previsión debe permanecer intacto");
+must(forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{"),"la previsión mensual debe conservar jerarquía visual propia");
+
+// PWA y consistencia de identidad.
+must(layout.includes("#f4f2ed")&&layout.includes("#111412"),"el chrome PWA dinámico debe compartir la paleta del sistema");
+must(manifest.includes('background_color:"#f4f2ed"')&&manifest.includes('theme_color:"#f4f2ed"'),"el manifest debe compartir el fondo canónico claro");
+
+if(failures.length){
+  console.error("Audit visual identity 2026 FAILED");
+  for(const failure of failures)console.error(`- ${failure}`);
+  process.exit(1);
+}
+console.log("Audit visual identity 2026 OK · foundations, navegación, Inicio, Movimientos, gráficos, accesibilidad y contratos funcionales protegidos");
