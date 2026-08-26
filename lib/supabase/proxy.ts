@@ -6,7 +6,7 @@ import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/lib/supabase/config";
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
-  const publicPath = pathname === "/login" || pathname.startsWith("/auth/");
+  const publicPath = pathname === "/login" || pathname.startsWith("/auth/") || pathname === "/design-preview";
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     cookies: {
