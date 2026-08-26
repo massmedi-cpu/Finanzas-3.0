@@ -29,8 +29,12 @@ const archiveCss=read("app/archive.css");
 const receiptLayout=read("lib/document/receipt-layout.ts");
 const forecast=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
+const forecastLayout=read("app/prevision/layout.tsx");
 const forecastCss=read("app/forecast.css");
-const forecastMigration=read("database/FINANCIAL_APP_3.4.8_FORECAST_PROBABILISTIC_MODEL.sql");
+const forecastLegacyMigration=read("database/FINANCIAL_APP_3.4.8_FORECAST_PROBABILISTIC_MODEL.sql");
+const forecastCalendarMigration=read("database/FINANCIAL_APP_3.6.0_FORECAST_CALENDAR.sql");
+const forecastCalendarLib=read("lib/financial/forecast-calendar.ts");
+const forecastApi=read("app/api/forecast/route.ts");
 const manifest=read("app/manifest.ts");
 
 // Carga y arquitectura CSS.
@@ -93,17 +97,27 @@ must(visual.includes(".nw-line")&&visual.includes(".nw-grid-line")&&netWorth.inc
 must(loading.includes('className="route-loading-v300"')&&loading.includes('role="status"'),"la carga privada debe conservar skeleton accesible");
 must(visual.includes("prefers-reduced-motion:reduce")&&visual.includes("v300-shimmer"),"el skeleton debe respetar movimiento reducido");
 
-// Contratos documentales y de previsión que el rediseño no puede deteriorar.
+// Contratos documentales.
 must(archive.includes("Hacer foto de ticket")&&archive.includes('capture="environment"'),"Archivo debe permitir foto con cámara trasera");
 must(archive.includes("Elegir foto de galería")&&archive.includes("galleryRef"),"Archivo debe permitir elegir una foto existente");
 must(archive.includes("Añadir documento")&&archive.includes('accept=".pdf,image/jpeg,image/png,image/webp,image/heic,image/heif"'),"Archivo debe mantener importación PDF e imágenes");
 must(archiveLib.includes("p_include_archived:true")&&!archive.includes("archive-view-switch"),"Archivo debe seguir siendo una biblioteca única");
 must(archive.includes("receipt-table")&&receiptLayout.includes("parseReceiptTsvLayout"),"la reconstrucción de tickets debe conservar tabla y geometría TSV");
 must(archiveCss.includes(".receipt-table{")&&archiveCss.includes(".receipt-table-wrap{"),"las columnas del ticket deben seguir siendo responsive");
-must(forecastPage.includes("getForecastOverview(365)")&&forecastPage.includes("Un cargo solo se considera real cuando aparece en Movimientos"),"Previsión debe mantener horizonte anual y separación estimación/real");
-must(forecast.includes("Mes que quieres revisar")&&forecast.includes("Cargos e ingresos probables")&&forecast.includes("Fecha estimada"),"Previsión debe mantener lectura mensual y fecha aproximada");
-must(forecastMigration.includes("historical_pattern_v3")&&forecastMigration.includes("dateVariationDays")&&forecastMigration.includes("'realOnlyAfterTransaction',true"),"el motor probabilístico de previsión debe permanecer intacto");
-must(forecastCss.includes(".forecast-month-selector{")&&forecastCss.includes(".forecast-month-summary{"),"la previsión mensual debe conservar jerarquía visual propia");
+
+// Previsión 3.6: calendario de movimientos esperados, no simulador de saldo.
+must(forecastPage.includes("getForecastCalendar(12)")&&forecastPage.includes("Calendario de próximos movimientos")&&!forecastPage.includes("ScenarioSimulator"),"Previsión debe ser un calendario anual de movimientos, sin simulador");
+for(const token of ["forecast-calendar-grid","AGENDA DEL MES","Confirmado por un movimiento real","Pasados sin confirmar","Añadir movimiento esperado","Fecha estimada"])
+  must(forecast.includes(token),`Previsión calendario ha perdido un contrato: ${token}`);
+must(forecast.includes('value="yearly"')&&forecast.includes("Se marcará como recibido cuando aparezca un movimiento bancario compatible"),"Previsión debe permitir anuales y reservar la confirmación al banco");
+must(forecastApi.includes("financial_app_forecast_calendar")&&forecastApi.includes("p_months"),"el API de Previsión debe usar el calendario canónico");
+must(forecastCalendarLib.includes("actualMovementConfirms")&&forecastCalendarLib.includes("annualInsuranceAndTaxPatterns")&&forecastCalendarLib.includes("ForecastCalendarActual"),"el contrato tipado del calendario debe distinguir estimación y movimiento real");
+for(const token of ["financial_app_forecast_calendar","previous_year_seasonal","annualInsuranceAndTaxPatterns","actualMovementConfirms","'received'","interval_months=12"])
+  must(forecastCalendarMigration.includes(token),`motor de calendario incompleto: ${token}`);
+must(forecastCalendarMigration.includes("revoke all on function financial_app.forecast_calendar_core(date,integer) from public,anon")&&forecastCalendarMigration.includes("grant execute on function public.financial_app_forecast_calendar(date,integer) to authenticated,service_role"),"el RPC calendario debe conservar su frontera de autorización");
+must(forecastLegacyMigration.includes("historical_pattern_v3")&&forecastLegacyMigration.includes("dateVariationDays")&&forecastLegacyMigration.includes("'realOnlyAfterTransaction',true"),"la migración histórica 3.4.8 debe permanecer preservada");
+must(forecastCss.includes(".forecast-calendar-grid{")&&forecastCss.includes(".forecast-agenda-item{")&&forecastCss.includes("@media(max-width:680px)"),"el calendario debe resolver escritorio y móvil explícitamente");
+must(!forecastLayout.includes("forecast-scenario.css"),"Previsión no debe cargar estilos del simulador retirado");
 
 // PWA y consistencia de identidad.
 must(layout.includes("#f4f2ed")&&layout.includes("#111412"),"el chrome PWA dinámico debe compartir la paleta del sistema");
@@ -114,4 +128,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit visual identity 2026 OK · foundations, navegación, Inicio, Movimientos, gráficos, accesibilidad y contratos funcionales protegidos");
+console.log("Audit visual identity 2026 OK · foundations, navegación, Inicio, Movimientos, gráficos, calendario de previsión, accesibilidad y contratos funcionales protegidos");
