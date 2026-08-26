@@ -9,7 +9,7 @@ export type ArchiveDocument = {
 };
 export type ArchiveOverview = {
   ok?:true; version:string; bucket:string; private:boolean; maxFileSize:number; allowedMimeTypes:string[];
-  total:number; processed:number; linked:number; documents:ArchiveDocument[];
+  total:number; processed:number; linked:number; hasMore?:boolean; documents:ArchiveDocument[];
 };
 export type ArchiveDetail = ArchiveDocument & {
   ocrText:string|null; ocrData:Record<string,unknown>|null; digitalReconstruction:Record<string,unknown>|null;
@@ -20,5 +20,6 @@ export async function getArchiveOverview(search:string|null=null):Promise<Archiv
   const supabase=await createClient();
   const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search,p_limit:200,p_offset:0,p_include_archived:true});
   if(error||!data) throw new Error(error?.message||"archive_unavailable");
-  return data as ArchiveOverview;
+  const overview=data as ArchiveOverview;
+  return {...overview,hasMore:overview.documents.length>=200};
 }

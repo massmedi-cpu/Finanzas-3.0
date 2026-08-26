@@ -7,6 +7,7 @@ export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({ request });
   const pathname = request.nextUrl.pathname;
   const publicPath = pathname === "/login" || pathname.startsWith("/auth/");
+  const apiPath = pathname.startsWith("/api/");
 
   const supabase = createServerClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
     cookies: {
@@ -29,6 +30,12 @@ export async function updateSession(request: NextRequest) {
 
   if (!publicPath && !allowed) {
     if (authenticated) await supabase.auth.signOut({ scope: "local" });
+    if (apiPath) {
+      return NextResponse.json(
+        { ok: false, error: authenticated ? "forbidden" : "unauthorized" },
+        { status: authenticated ? 403 : 401, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
     const target = authenticated ? "/login?error=unauthorized" : "/login";
     return NextResponse.redirect(new URL(target, request.url));
   }

@@ -1,32 +1,72 @@
-name: Financial App Production Smoke
+name: Production smoke
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
 
 permissions:
   contents: read
 
-concurrency:
-  group: financial-app-production-smoke
-  cancel-in-progress: true
-
 jobs:
   smoke:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
     steps:
-      - name: Verify production responds
+      - name: Verify production surface
         env:
           BASE_URL: https://finanzas-3-0.vercel.app
+        shell: bash
         run: |
+          set -euo pipefail
+          ready=0
           for attempt in $(seq 1 60); do
-            code=$(curl -sS -o /tmp/body -w '%{http_code}' -L --max-redirs 2 "$BASE_URL/login" || true)
+            code=$(curl -sS -o /tmp/login-body -w '%{http_code}' --max-time 15 "$BASE_URL/login" || true)
             if [ "$code" = "200" ]; then
-              grep -qi "Financial App" /tmp/body && exit 0
+              ready=1
+              break
             fi
-            sleep 2
+            sleep 5
           done
-          echo "Production smoke failed"
-          cat /tmp/body || true
-          exit 1
+          if [ "$ready" != "1" ]; then
+            echo "Production login did not become ready"
+            exit 1
+          fi
+
+          check_redirect() {
+            path="$1"
+            code=$(curl -sS -D /tmp/headers -o /tmp/body -w '%{http_code}' --max-redirs 0 --max-time 15 "$BASE_URL$path" || true)
+            if [ "$code" != "307" ] && [ "$code" != "308" ]; then
+              echo "Expected auth redirect for $path, got $code"
+              cat /tmp/body
+              exit 1
+            fi
+            if ! grep -Eqi '^location: .*/login' /tmp/headers; then
+              echo "Missing login redirect for $path"
+              cat /tmp/headers
+              exit 1
+            fi
+          }
+
+          check_api_unauthorized() {
+            path="$1"
+            code=$(curl -sS -o /tmp/body -w '%{http_code}' --max-time 15 "$BASE_URL$path" || true)
+            if [ "$code" != "401" ]; then
+              echo "Expected 401 for $path, got $code"
+              cat /tmp/body
+              exit 1
+            fi
+            if ! grep -q '"error":"unauthorized"' /tmp/body; then
+              echo "Unexpected unauthorized payload for $path"
+              cat /tmp/body
+              exit 1
+            fi
+          }
+
+          for path in / /movimientos /prevision /archivo /ajustes; do
+            check_redirect "$path"
+          done
+          for path in /api/archive /api/settings /api/forecast; do
+            check_api_unauthorized "$path"
+          done
+          echo "Production smoke passed: login, protected routes and API auth contract are healthy."
