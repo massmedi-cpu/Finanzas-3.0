@@ -15,9 +15,10 @@ type OcrResult={text:string;status:"complete"|"error";data:Record<string,unknown
 type DetailPayload={ok:true;document:ArchiveDetail;signedUrl:string|null};
 type UpdatedDetailPayload={ok:true;document:ArchiveDetail;error?:string};
 type ArchiveEdit={documentType:string;documentDate:string;amount:number|string;merchant:string;notes:string;ocrText:string};
-type ActionKind="search"|"open"|"upload"|"ocr-upgrade"|"save"|"link"|"unlink"|"delete";
+type ActionKind="search"|"open"|"upload"|"ocr-upgrade"|"save"|"link"|"unlink"|"delete"|"more";
 type ActionState={kind:ActionKind;target?:string}|null;
 const MAX_FILE=20*1024*1024;
+const PAGE_SIZE=200;
 const allowed=new Set(["application/pdf","image/jpeg","image/png","image/webp","image/heic","image/heif"]);
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 
@@ -57,7 +58,8 @@ export function ArchiveClient({initialData}:{initialData:ArchiveOverview}){
 
   function applyDetail(document:ArchiveDetail,nextSignedUrl?:string|null){setDetail(document);setEdit(editFromDocument(document));if(nextSignedUrl!==undefined)setSignedUrl(nextSignedUrl);setData(current=>{const found=current.documents.some(item=>item.id===document.id);const documents=found?current.documents.map(item=>item.id===document.id?document:item):[document,...current.documents];return{...current,documents}})}
   function removeDocument(id:string){setData(current=>({...current,documents:current.documents.filter(item=>item.id!==id),total:Math.max(0,current.total-1)}))}
-  async function refresh(q=search){const params=new URLSearchParams({archived:"1"});if(q.trim())params.set("search",q.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json();if(!r.ok)throw new Error(body.error||"No se pudo cargar Archivo");setData(body as ArchiveOverview);return body as ArchiveOverview}
+  async function refresh(q=search){const params=new URLSearchParams({archived:"1",limit:String(PAGE_SIZE),offset:"0"});if(q.trim())params.set("search",q.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json();if(!r.ok)throw new Error(body.error||"No se pudo cargar Archivo");setData(body as ArchiveOverview);return body as ArchiveOverview}
+  async function loadMore(){if(isAction("more"))return;setAction({kind:"more"});setError(null);try{const params=new URLSearchParams({archived:"1",limit:String(PAGE_SIZE),offset:String(data.documents.length)});if(search.trim())params.set("search",search.trim());const r=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});const body=await r.json() as ArchiveOverview&{error?:string};if(!r.ok)throw new Error(body.error||"No se pudieron cargar más documentos");setData(current=>{const seen=new Set(current.documents.map(item=>item.id));const documents=[...current.documents,...body.documents.filter(item=>!seen.has(item.id))];return{...body,documents}})}catch(cause){setError(cause instanceof Error?cause.message:"Error al cargar más documentos")}finally{setAction(null)}}
   async function submitSearch(e:FormEvent){e.preventDefault();setAction({kind:"search"});setError(null);try{await refresh()}catch(cause){setError(cause instanceof Error?cause.message:"Error de búsqueda")}finally{setAction(null)}}
   async function upgradeExistingOcr(document:ArchiveDetail,url:string){
     if(!needsOcrUpgrade(document))return;setAction({kind:"ocr-upgrade",target:document.id});setProgress(.02);setProgressLabel("Actualizando automáticamente el OCR anterior");
@@ -101,6 +103,7 @@ export function ArchiveClient({initialData}:{initialData:ArchiveOverview}){
 
   const currentSuggestions:ArchiveMovementRef[]=detail?.suggestions??[];
   const visibleDocuments=data.documents;
+  const hasMore=Boolean(data.hasMore);
   const reconstructionLayout=detail?.digitalReconstruction&&typeof detail.digitalReconstruction==="object"?String((detail.digitalReconstruction as Record<string,unknown>).layoutText||detail.ocrText||""):String(detail?.ocrText||"");
   const receiptLayout=reconstructionReceiptLayout(detail)||parseReceiptLayout(reconstructionLayout);
 
@@ -111,6 +114,7 @@ export function ArchiveClient({initialData}:{initialData:ArchiveOverview}){
     {error&&<div className="inline-alert error" role="alert">{error}</div>}{message&&<div className="inline-alert success" role="status">{message}</div>}
     <div className="archive-library-note"><strong>Biblioteca única</strong><span>Facturas, tickets y demás documentos aparecen juntos. No hay estados de activo o archivado.</span></div>
     <section className="document-grid">{visibleDocuments.map(doc=><button className="document-card" key={doc.id} onClick={()=>openDocument(doc.id)} type="button" disabled={isAction("open",doc.id)} aria-busy={isAction("open",doc.id)||undefined}><div className="document-kind">{doc.mimeType==="application/pdf"?"PDF":"IMG"}</div><div><strong>{doc.fileName}</strong><span>{doc.merchant||doc.documentType} · {formatDate(doc.documentDate)}</span><small>{formatMoney(doc.amount)} · {isAction("open",doc.id)?"Abriendo…":doc.ocrStatus==="complete"?"OCR automático":doc.ocrStatus==="manual"?"OCR corregido":doc.ocrStatus==="error"?"OCR pendiente":doc.ocrStatus}</small></div>{doc.links.length>0&&<em>{formatInteger(doc.links.length)} vínculo{doc.links.length===1?"":"s"}</em>}</button>)}</section>
+    {hasMore&&<div className="archive-library-note"><strong>Hay más documentos</strong><button className="ghost" type="button" onClick={loadMore} disabled={isAction("more")} aria-busy={isAction("more")||undefined}>{isAction("more")?"Cargando…":"Cargar más"}</button></div>}
     {!visibleDocuments.length&&<div className="empty-state"><strong>Biblioteca vacía</strong><span>Añade una factura, ticket, contrato o justificante para empezar.</span></div>}
     {detail&&edit&&<div className="drawer-backdrop" onMouseDown={()=>!drawerLocked&&(setDetail(null),setEdit(null),setSignedUrl(null))}><aside className="archive-drawer" role="dialog" aria-modal="true" aria-labelledby="archive-title" onMouseDown={e=>e.stopPropagation()}><header className="drawer-head"><div><p className="eyebrow">ORIGINAL PRIVADO</p><h2 id="archive-title">{detail.fileName}</h2><p>{detail.contentHash?.slice(0,16)}… · {detail.fileSize?`${(detail.fileSize/1024).toFixed(0)} KB`:""}</p></div><button className="icon-button" type="button" disabled={drawerLocked} onClick={()=>{setDetail(null);setEdit(null);setSignedUrl(null)}} aria-label="Cerrar">×</button></header>
       <div className="archive-actions">{signedUrl&&<a className="ghost button-link" href={signedUrl} target="_blank" rel="noreferrer">Abrir original</a>}<button className="danger-action" type="button" onClick={deleteCurrent} disabled={isAction("delete")||isAction("ocr-upgrade")} aria-busy={isAction("delete")||undefined}>{isAction("delete")?"Eliminando…":"Eliminar documento"}</button></div>

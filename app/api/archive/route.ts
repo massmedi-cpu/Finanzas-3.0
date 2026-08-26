@@ -4,12 +4,22 @@ import { asNumber, asRecord, asString } from "@/lib/validation/json";
 
 export const dynamic="force-dynamic";
 
+function boundedInteger(value:string|null,fallback:number,min:number,max:number){
+  const parsed=Number.parseInt(value??"",10);
+  return Number.isFinite(parsed)?Math.min(max,Math.max(min,parsed)):fallback;
+}
+
 export async function GET(request:NextRequest){
   const supabase=await getAuthorizedClient(); if(!supabase) return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
   const search=request.nextUrl.searchParams.get("search");
-  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search||null,p_limit:100,p_offset:0,p_include_archived:true});
+  const limit=boundedInteger(request.nextUrl.searchParams.get("limit"),200,1,200);
+  const offset=boundedInteger(request.nextUrl.searchParams.get("offset"),0,0,1_000_000);
+  const includeArchived=request.nextUrl.searchParams.get("archived")!=="0";
+  const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search||null,p_limit:limit,p_offset:offset,p_include_archived:includeArchived});
   if(error||!data) return NextResponse.json({ok:false,error:error?.message||"archive_unavailable"},{status:400});
-  return NextResponse.json({...asRecord(data),ok:true},{headers:{"Cache-Control":"private, no-store"}});
+  const payload=asRecord(data);
+  const documents=Array.isArray(payload.documents)?payload.documents:[];
+  return NextResponse.json({...payload,ok:true,hasMore:documents.length>=limit},{headers:{"Cache-Control":"private, no-store"}});
 }
 
 export async function POST(request:NextRequest){
