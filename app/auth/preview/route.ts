@@ -9,11 +9,25 @@ function backToLogin(request: NextRequest) {
   return NextResponse.redirect(new URL("/login?error=preview", request.url));
 }
 
+function safePreviewTarget(request: NextRequest) {
+  const raw = request.nextUrl.searchParams.get("next")?.trim() || "/";
+  if (!raw.startsWith("/") || raw.startsWith("//") || raw.includes("\\")) return "/";
+  try {
+    const target = new URL(raw, request.url);
+    if (target.origin !== request.nextUrl.origin) return "/";
+    if (target.pathname.startsWith("/auth/")) return "/";
+    return `${target.pathname}${target.search}`;
+  } catch {
+    return "/";
+  }
+}
+
 export async function GET(request: NextRequest) {
   if (process.env.VERCEL_ENV !== "preview") return new NextResponse(null, { status: 404 });
 
   const token = request.nextUrl.searchParams.get("token")?.trim() ?? "";
   if (token.length < 32 || token.length > 160) return backToLogin(request);
+  const target = safePreviewTarget(request);
 
   const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
   const host = (forwardedHost || request.headers.get("host") || request.nextUrl.host).toLowerCase();
@@ -39,7 +53,7 @@ export async function GET(request: NextRequest) {
       return backToLogin(request);
     }
 
-    const response = NextResponse.redirect(new URL("/", request.url));
+    const response = NextResponse.redirect(new URL(target, request.url));
     response.headers.set("Cache-Control", "private, no-store");
     return response;
   } catch {
