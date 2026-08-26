@@ -1,0 +1,1 @@
+Validated on Vercel against Financial App 3.8.1 and 62 live financial_app_* RPCs before Next.js compilation.
