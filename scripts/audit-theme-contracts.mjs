@@ -21,7 +21,7 @@ if(!chrome.includes("<ThemeController/>"))failures.push("El shell privado no mon
 for(const token of ["matchMedia(\"(prefers-color-scheme: dark)\")","addEventListener(\"change\"","addEventListener(\"storage\"","fetch(\"/api/settings\"","persistThemePreference(serverTheme)"]){
   if(!controller.includes(token))failures.push(`ThemeController incompleto: ${token}`);
 }
-for(const token of ["THEME_STORAGE_KEY","data.theme=effective","data.themePreference=preference","root.style.colorScheme=effective","meta.content=effective===\"dark\""]){
+for(const token of ["THEME_STORAGE_KEY","root.dataset.theme=effective","root.dataset.themePreference=preference","root.style.colorScheme=effective","meta.content=effective===\"dark\""]){
   if(!theme.includes(token))failures.push(`Runtime canónico de tema incompleto: ${token}`);
 }
 if(!settings.includes('localStorage.setItem("financial-app-theme", theme)'))failures.push("Configuración debe persistir la preferencia de tema");
