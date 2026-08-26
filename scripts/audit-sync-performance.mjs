@@ -7,8 +7,8 @@ const migration=read("database/FINANCIAL_APP_3.8.1_SYNC_PERFORMANCE_OBSERVABILIT
 
 const deferred="financial_app_import_drive_documents_deferred";
 const finalize="financial_app_finalize_document_links";
-const snapshot="applySnapshot(meta,items)";
-const finalizeCall="finalizeDocumentLinks()";
+const snapshotCall="sync=await applySnapshot(meta,items)";
+const finalizeCall="autoLink=await finalizeDocumentLinks()";
 
 if(!edge.includes(deferred)) errors.push("La Edge Function debe importar documentos con el RPC diferido");
 if(!edge.includes(finalize)) errors.push("La Edge Function debe usar el RPC finalizador de asociaciones");
@@ -18,7 +18,7 @@ if(!edge.includes('Promise.all([driveMeta(token),sourceState()])')) errors.push(
 for(const metric of ["driveScan","documentsApply","autoLink","listRequests","supportedDocuments"]){
   if(!edge.includes(metric)) errors.push(`Falta telemetría obligatoria de sync: ${metric}`);
 }
-const snapshotIndex=edge.indexOf(snapshot);
+const snapshotIndex=edge.indexOf(snapshotCall);
 const finalizeIndex=edge.indexOf(finalizeCall);
 if(snapshotIndex<0) errors.push("No se localiza la aplicación del snapshot bancario");
 if(finalizeIndex<0) errors.push("No se localiza la finalización del autoenlace");
