@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { POST as runSync } from "@/app/api/sync/route";
 import { createClient } from "@/lib/supabase/server";
 import { SUPABASE_URL } from "@/lib/supabase/config";
 import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
@@ -51,6 +52,15 @@ export async function GET(request: NextRequest) {
     if (error || !data.user || !(await hasFinancialAppAccess(supabase, email))) {
       await supabase.auth.signOut({ scope: "local" });
       return backToLogin(request);
+    }
+
+    // E2E de preview: una única petición consume el token, crea la sesión y ejecuta
+    // exactamente el mismo handler POST que usa el botón de sincronización.
+    if (target === "/api/sync") {
+      const response = await runSync();
+      response.headers.set("Cache-Control", "private, no-store");
+      response.headers.set("X-Financial-App-Preview-Probe", "sync");
+      return response;
     }
 
     const response = NextResponse.redirect(new URL(target, request.url));
