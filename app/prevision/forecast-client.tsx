@@ -77,13 +77,21 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
     received:allMonthEvents.filter(x=>x.status==="received").length,
     late:allMonthEvents.filter(x=>x.status==="late").length,
   }),[allMonthEvents]);
-  const estimatedFlow=useMemo(()=>allMonthEvents.reduce((acc,event)=>{
-    const amount=effectiveAmount(event);
-    acc.cashFlow+=amount;
-    if(amount>0)acc.income+=amount;
-    if(amount<0)acc.expenses+=Math.abs(amount);
-    return acc;
-  },{cashFlow:0,income:0,expenses:0}),[allMonthEvents]);
+  const actualMonth=useMemo(()=>data.actualMonths.find(item=>item.month===selectedMonth)??{month:selectedMonth,income:0,expenses:0,cashFlow:0,movements:0},[data.actualMonths,selectedMonth]);
+  const estimatedFlow=useMemo(()=>{
+    const pendingFlow=allMonthEvents.filter(event=>event.status!=="received").reduce((acc,event)=>{
+      const amount=event.estimatedAmount;
+      acc.cashFlow+=amount;
+      if(amount>0)acc.income+=amount;
+      if(amount<0)acc.expenses+=Math.abs(amount);
+      return acc;
+    },{cashFlow:0,income:0,expenses:0});
+    return{
+      cashFlow:actualMonth.cashFlow+pendingFlow.cashFlow,
+      income:actualMonth.income+pendingFlow.income,
+      expenses:actualMonth.expenses+pendingFlow.expenses,
+    };
+  },[actualMonth,allMonthEvents]);
 
   async function load(){
     setLoading(true);setFeedback(null);
@@ -159,9 +167,9 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
     {feedback&&<div className="forecast-feedback" role="status">{feedback}</div>}
 
     <section className="forecast-cashflow-summary" aria-label={`Estimación financiera de ${monthLabel(selectedMonth)}`}>
-      <article className="forecast-cashflow-main"><span>Cash Flow estimado</span><strong className={estimatedFlow.cashFlow<0?"negative":estimatedFlow.cashFlow>0?"positive":""}>{formatEuro(estimatedFlow.cashFlow)}</strong><small>Confirmados con importe real; el resto con importe estimado.</small></article>
-      <article><span>Ingresos estimados</span><strong className="positive">{formatEuro(estimatedFlow.income)}</strong><small>Todos los ingresos no eliminados.</small></article>
-      <article><span>Gastos estimados</span><strong className="negative">{formatEuro(estimatedFlow.expenses)}</strong><small>Todos los cargos no eliminados.</small></article>
+      <article className="forecast-cashflow-main"><span>Cash Flow estimado</span><strong className={estimatedFlow.cashFlow<0?"negative":estimatedFlow.cashFlow>0?"positive":""}>{formatEuro(estimatedFlow.cashFlow)}</strong><small>Real acumulado del mes + movimientos pendientes estimados.</small></article>
+      <article><span>Ingresos estimados</span><strong className="positive">{formatEuro(estimatedFlow.income)}</strong><small>Ingresos reales ya recibidos + ingresos aún esperados.</small></article>
+      <article><span>Gastos estimados</span><strong className="negative">{formatEuro(estimatedFlow.expenses)}</strong><small>Gastos reales ya realizados + cargos pendientes estimados.</small></article>
     </section>
 
     <section className="forecast-month-status" aria-label={`Estado de ${monthLabel(selectedMonth)}`}>
