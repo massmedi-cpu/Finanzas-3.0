@@ -8,6 +8,7 @@ import "./chrome.css";
 import "./visual.css";
 import "./document-linking.css";
 import "./tablet.css";
+import "./typography.css";
 
 export const metadata:Metadata={
   title:{default:"Financial App",template:"%s · Financial App"},

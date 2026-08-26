@@ -1,0 +1,82 @@
+/* Financial App · canonical readable typography
+   This stylesheet owns minimum readable sizes across the product surface.
+   It is intentionally loaded after component styles so dense modules cannot
+   reintroduce 9–12px user-facing text. It relies on normal cascade specificity. */
+
+.app-root.private{
+  --readable-meta:14px;
+  --readable-copy:16px;
+  --readable-control:15px;
+}
+
+.app-root.private .app-route :where(small,label){font-size:var(--readable-meta);line-height:1.42}
+.app-root.private .app-route :where(p:not(.eyebrow)){font-size:var(--readable-copy);line-height:1.55}
+.app-root.private .app-route :where(input,select,textarea,button){font-size:var(--readable-control)}
+.app-root.private .app-route :where(dt,dd){font-size:var(--readable-meta);line-height:1.45}
+.app-root.private .app-route :where(code){font-size:13.5px}
+.app-root.private .app-route .eyebrow{font-size:var(--readable-meta);line-height:1.3}
+.app-root.private .app-route .pill{font-size:var(--readable-meta)}
+.app-root.private .app-route .inline-alert{font-size:var(--readable-meta)}
+.app-root.private .app-route table th{font-size:13.5px;line-height:1.35}
+.app-root.private .app-route table td{font-size:15px;line-height:1.45}
+
+/* Product chrome */
+.app-root.private :where(.product-brand strong){font-size:16px}
+.app-root.private :where(.product-brand small,.product-data-status){font-size:var(--readable-meta)}
+.app-root.private :where(.product-primary-nav a,.product-more-button,.product-more-head strong,.product-more-menu a){font-size:15px}
+.app-root.private :where(.mobile-nav a,.mobile-nav button){font-size:14.5px}
+
+/* Home */
+.app-root.private .app-route :where(.home-top-actions>span,.home-account-row small,.home-month-pulse span,.home-month-pulse small,.home-budget-context dt,.home-budget-context>p:not(.eyebrow),.home-forecast-line span,.home-upcoming span,.home-section-note,.home-category-list small,.home-freshness){font-size:var(--readable-meta)}
+.app-root.private .app-route :where(.home-account-row>div:first-child strong,.home-budget-context dd,.home-upcoming strong,.home-upcoming b,.home-category-list strong,.home-category-list b,.home-attention-list a){font-size:15px}
+.app-root.private .app-route :where(.home-section-heading>div>p:last-child,.home-section-heading>a,.home-budget-context>a){font-size:15px}
+.app-root.private .app-route .home-attention-list a strong{font-size:16px}
+.app-root.private .app-route .home-empty{font-size:var(--readable-meta)}
+
+/* Movements */
+.app-root.private .app-route :where(.movement-summary span,.advanced-filter-panel summary,.pagination,.detail-loading,.drawer-head p:not(.eyebrow),.source-lock span,.trace-panel summary,.trace-panel dl div,.history-list time,.history-list small,.history-list p,.muted-copy,.movement-card span,.movement-card small,.movement-open span,.movement-open small){font-size:var(--readable-meta)}
+.app-root.private .app-route :where(.movement-open strong,.source-lock strong,.history-list strong,.movement-card strong,.card-side b){font-size:15px}
+.app-root.private .app-route .status-badge{font-size:13.5px}
+.app-root.private .app-route .flag-grid label{font-size:var(--readable-meta)}
+
+/* Accounts */
+.app-root.private .app-route :where(.accounts-total span,.accounts-total p,.account-overview-head>div>span,.account-balance small,.account-balance span,.balance-chart-legend,.balance-chart-empty,.account-stats span,.account-sources span,.account-rule-note p,.account-detail-hero>div:first-child>span,.account-detail-hero small,.account-detail-meta span,.source-list small,.source-explanation,.recent-date span,.recent-concept span){font-size:var(--readable-meta)}
+.app-root.private .app-route :where(.account-actions a,.recent-account-movements .panel-head a,.source-list strong,.recent-date strong,.recent-concept strong){font-size:15px}
+.app-root.private .app-route .source-list span{font-size:13.5px}
+
+/* Forecast */
+.app-root.private .app-route :where(.forecast-calendar-legend span,.forecast-cashflow-summary small,.forecast-month-status span,.forecast-weekdays span,.forecast-day-number,.forecast-calendar-event,.forecast-calendar-event b,.forecast-agenda-date span,.forecast-agenda-title span,.forecast-agenda-meta,.forecast-status,.forecast-delete-button,.link-button,.forecast-confirmation,.forecast-late-note,.forecast-expected-note,.forecast-editor-grid label>span){font-size:var(--readable-meta)}
+.app-root.private .app-route :where(.forecast-type-filter button,.forecast-feedback,.forecast-cashflow-summary span,.forecast-agenda-head>span,.forecast-agenda-date strong){font-size:15px}
+.app-root.private .app-route .forecast-agenda-title strong{font-size:16px}
+
+/* Plan and long horizon: these areas were the densest source of 8.5–12px text. */
+.app-root.private .app-route :where(.plan-status-count span,.plan-kpis span,.plan-capacity-grid span,.plan-actions li small,.plan-empty span,.plan-integrity dt,.plan-integrity dd,.plan-domain-grid small,.plan-domain-grid em,.plan-intelligence-signal small,.plan-intelligence-empty span,.plan-intelligence-foot,.horizon-points article>span,.horizon-points article>small,.horizon-points dt,.horizon-points dd,.horizon-liquidity dl>div,.horizon-goals dl>div,.horizon-note,.horizon-method-grid p){font-size:var(--readable-meta)}
+.app-root.private .app-route :where(.plan-kpis a,.plan-control-link,.plan-actions li p,.plan-section-head>p,.plan-method p,.plan-method ul,.plan-intelligence-head p:not(.eyebrow),.plan-intelligence-signal p,.horizon-status p:not(.eyebrow)){font-size:15px}
+.app-root.private .app-route :where(.plan-action-title strong,.plan-domain-grid span,.plan-intelligence-signal>div strong,.horizon-method-grid strong){font-size:15px}
+.app-root.private .app-route :where(.plan-action-title span,.plan-intelligence-signal>div span){font-size:13.5px}
+.app-root.private .app-route :where(.plan-method code,.horizon-method-grid code){font-size:13.5px}
+
+/* Generic dense-system patterns used by Budget, Control, Rules, Archive, Settings,
+   Analysis and Explainability. Large amounts/headings are deliberately excluded. */
+.app-root.private .app-route :where(
+  [class*="-summary"] span,
+  [class*="-stats"] span,
+  [class*="-meta"] span,
+  [class*="-legend"] span,
+  [class*="-source"] small,
+  [class*="-date"] span,
+  [class*="-note"],
+  [class*="-status"] small
+){font-size:var(--readable-meta);line-height:1.45}
+
+@media(max-width:680px){
+  .app-root.private{
+    --readable-meta:14.5px;
+    --readable-copy:16px;
+    --readable-control:16px;
+  }
+  .app-root.private :where(.mobile-nav a,.mobile-nav button){font-size:14.5px}
+  .app-root.private .app-route :where(.movement-card strong,.card-side b,.forecast-agenda-title strong){font-size:16px}
+  /* Calendar events intentionally collapse to dots on mobile; keep their hidden text at 0. */
+  .app-root.private .app-route .forecast-calendar-event{font-size:0}
+}

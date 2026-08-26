@@ -11,6 +11,7 @@ const visual=read("app/visual.css");
 const controls=read("app/controls.css");
 const chromeCss=read("app/chrome.css");
 const tablet=read("app/tablet.css");
+const typography=read("app/typography.css");
 const home=read("app/page.tsx");
 const homeCss=read("app/home.css");
 const chrome=read("components/app-chrome.tsx");
@@ -41,12 +42,13 @@ const manifest=read("app/manifest.ts");
 must(layout.includes('import "./controls.css"'),"los controles compartidos deben cargarse globalmente");
 must(layout.includes('import "./visual.css"'),"la base visual consolidada debe cargarse desde el layout raíz");
 must(layout.includes('import "./tablet.css"')&&layout.lastIndexOf('tablet.css')>layout.lastIndexOf('visual.css'),"tablet debe adaptarse después de la base visual");
+must(layout.includes('import "./typography.css"')&&layout.lastIndexOf('typography.css')>layout.lastIndexOf('tablet.css'),"la tipografía legible debe ser la autoridad global final después de tablet");
 must(!layout.includes("home-v17.css")&&!layout.includes("readability-v210.css")&&!layout.includes("visual-v300.css"),"el runtime no debe recuperar capas CSS históricas versionadas");
 must(!exists("app/home-v17.css")&&!exists("app/readability-v210.css")&&!exists("app/visual-v300.css"),"las capas visuales históricas no deben reaparecer");
 must(!exists("components/app-sidebar.tsx"),"la sidebar SaaS retirada no debe reaparecer");
 
 // Foundations Financial App 2026.
-for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#0b4f8a","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:","--font-xs:12px","--font-md:16px","--font-3xl:34px"])
+for(const token of ["--bg:#f4f2ed","--surface:#fbfaf7","--text:#202422","--accent:#0b4f8a","--expense:#a64b43","--success:#2d715f","--radius-control:9px","--shadow-float:","--font-xs:14px","--font-sm:15px","--font-md:17px","--font-lg:21px","--font-xl:25px","--font-2xl:31px","--font-3xl:38px"])
   must(globals.includes(token),`foundation visual ausente: ${token}`);
 for(const token of ['html[data-theme="light"]','html[data-theme="dark"]','--bg:#111412','--accent:#4c9bff'])
   must(globals.includes(token),`modo oscuro/claro incompleto: ${token}`);
@@ -57,6 +59,13 @@ must(visual.includes("--chart-income")&&visual.includes("--chart-expense")&&visu
 must(!visual.includes("!important"),"visual.css no debe depender de parches !important");
 must(tablet.includes('@media (min-width:681px) and (max-width:1180px)')&&!tablet.includes("!important"),"tablet debe resolverse sin overrides !important");
 
+// Escala de lectura: no volver a depender de la microtipografía histórica de módulos densos.
+for(const token of ["--readable-meta:14px","--readable-copy:16px","--readable-control:15px","--readable-meta:14.5px","--readable-control:16px","table th{font-size:13.5px","table td{font-size:15px"])
+  must(typography.includes(token),`contrato tipográfico legible ausente: ${token}`);
+must(!typography.includes("!important"),"typography.css no debe depender de !important");
+for(const token of [".product-primary-nav a,.product-more-button",".mobile-nav a,.mobile-nav button",".home-account-row small",".home-month-pulse span",".home-section-heading>div>p:last-child",".movement-summary span",".movement-open strong",".account-stats span",".forecast-agenda-title span",".plan-intelligence-signal>div span"])
+  must(typography.includes(token),`la autoridad tipográfica no cubre una superficie densa: ${token}`);
+
 // Navegación propia, sin sidebar genérica.
 must(chrome.includes("<AppNavigation/>")&&!chrome.includes("<AppSidebar"),"AppChrome debe montar la navegación de producto actual");
 for(const token of ['["Inicio","/"]','["Movimientos","/movimientos"]','["Cuentas","/cuentas"]','["Plan","/plan"]','["Previsión","/prevision"]','["Análisis","/analisis"]','["Control","/control"]'])
@@ -66,7 +75,7 @@ must(navigation.includes('aria-expanded={moreOpen}')&&navigation.includes('aria-
 must(chromeCss.includes(".product-nav{")&&chromeCss.includes("position:sticky")&&chromeCss.includes(".product-more-menu{"),"el chrome debe usar navegación superior y overlay secundario");
 must(chromeCss.includes("@media(max-width:680px)")&&chromeCss.includes(".mobile-nav{position:fixed")&&chromeCss.includes("bottom:0"),"móvil debe usar navegación inferior propia");
 must(!chromeCss.includes("grid-template-columns:250px")&&!chromeCss.includes(".sidebar"),"el chrome no debe recuperar la sidebar genérica");
-must(!chromeCss.includes("font-size:10.5px")&&chromeCss.includes("font-size:12px")&&chromeCss.includes("font-size:13px"),"la navegación no debe recuperar microtipografía ilegible");
+must(!chromeCss.includes("font-size:10.5px")&&typography.includes(".product-primary-nav a,.product-more-button")&&typography.includes("font-size:15px")&&typography.includes(".mobile-nav a,.mobile-nav button")&&typography.includes("font-size:14.5px"),"la navegación debe quedar cubierta por la escala legible actual");
 must(intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentLink.includes('aria-busy={pending||undefined}'),"los enlaces deben conservar feedback de navegación");
 
 // Inicio como narrativa financiera, no muro de widgets ni saldo total protagonista.
@@ -76,7 +85,7 @@ must(!home.includes("home-kpis")&&!home.includes("home-account-card")&&!home.inc
 must(home.includes("getHomeOverview")&&home.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos y mostrar la versión canónica del producto");
 must(!home.includes("home.version")&&!home.includes("dashboard.totalAvailable")&&!home.includes("home-balance-primary"),"Inicio no debe mostrar la versión interna del RPC ni el saldo total como protagonista");
 must(homeCss.includes(".home-account-row")&&homeCss.includes("border-bottom:1px solid var(--border)"),"las cuentas deben leerse como ledger continuo");
-must(homeCss.includes("font-size:clamp(30px,2.6vw,38px)")&&!/font-size:(?:9(?:\.5)?|10(?:\.5)?|11(?:\.5)?)px/.test(homeCss),"Inicio debe usar una escala tipográfica equilibrada, sin microtexto ni titulares desproporcionados");
+must(homeCss.includes("font-size:clamp(30px,2.6vw,38px)")&&typography.includes(".home-account-row small")&&typography.includes(".home-month-pulse span")&&typography.includes(".home-section-heading>div>p:last-child")&&typography.includes("--readable-meta:14px"),"Inicio debe conservar titular equilibrado y microtexto elevado por la autoridad tipográfica");
 must(homeCss.includes("@media(max-width:680px)")&&homeCss.includes("@media(max-width:420px)"),"Inicio debe resolver móvil pequeño explícitamente");
 
 // Movimientos: tabla financiera en escritorio, lista compacta en móvil.
@@ -128,4 +137,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Audit visual identity 2026 OK · foundations azules, navegación, Inicio, Movimientos, gráficos, calendario de previsión, accesibilidad y contratos funcionales protegidos");
+console.log("Audit visual identity 2026 OK · foundations azules, tipografía legible, navegación, Inicio, Movimientos, gráficos, calendario de previsión, accesibilidad y contratos funcionales protegidos");
