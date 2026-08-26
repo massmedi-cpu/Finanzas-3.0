@@ -38,6 +38,7 @@
     "audit:v300": "node scripts/audit-v300.mjs",
     "audit:v380": "node scripts/audit-v380.mjs",
     "audit:v381": "node scripts/audit-v381.mjs",
+    "audit:release-preflight": "node scripts/audit-release-preflight.mjs",
     "audit:visual-debt": "node scripts/audit-visual-debt.mjs",
     "audit:forecast-calendar": "node scripts/audit-forecast-calendar-v360.mjs",
     "audit:forecast-calendar-v370": "node scripts/audit-forecast-calendar-v370.mjs",
