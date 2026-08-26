@@ -10,7 +10,7 @@
     "postinstall": "node scripts/prepare-document-engine.mjs",
     "predev": "node scripts/prepare-document-engine.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/preflight-supabase-contract.mjs && node scripts/prepare-document-engine.mjs",
+    "prebuild": "node scripts/preflight-supabase-contract.mjs && node scripts/audit-api-boundary.mjs && node scripts/prepare-document-engine.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
