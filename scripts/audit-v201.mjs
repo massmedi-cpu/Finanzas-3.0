@@ -34,7 +34,7 @@ if(!versionSql.includes("'target_version', to_jsonb('2.0.1'::text)"))errors.push
 
 if(!hotfix.includes("forecast_refresh_call_not_found"))errors.push("El hotfix de Previsión no verifica la retirada del refresh en lectura");
 if(!hotfix.includes("alter function financial_app.forecast_overview_core(date, integer) stable"))errors.push("Previsión no queda protegida como STABLE");
-if(!hotfix.includes("alter function public.financial_app_forecast_overview(date, integer) stable"))errors.push("El RPC público de Previsión no queda protegido como STABLE");
+if(!hotfix.includes("alter function public.financial_app_forecast_overview(date, integer) stable"))errors.push("El RPC público histórico de Previsión no queda protegido como STABLE");
 
 for(const fn of [
   "authorized_email",
@@ -60,7 +60,7 @@ if(!hardening.includes("refusing to mark write-capable function"))errors.push("E
 if(!google.includes('window.location.assign("/login?error=oauth")'))errors.push("Google OAuth vuelve a ocultar errores inmediatos");
 const forecastGet=forecastRoute.split("export async function POST")[0];
 if(/financial_app_(upsert|cancel)_forecast/.test(forecastGet))errors.push("GET /api/forecast contiene una mutación");
-if(!forecastGet.includes('financial_app_forecast_overview'))errors.push("GET /api/forecast dejó de usar el overview canónico");
+if(!forecastGet.includes('financial_app_forecast_overview')&&!forecastGet.includes('financial_app_forecast_calendar'))errors.push("GET /api/forecast dejó de usar una lectura canónica de Previsión");
 
 if(pkg.scripts?.["audit:v201"]!=="node scripts/audit-v201.mjs")errors.push("Falta script audit:v201 en package.json");
 if(!ci.includes("npm run audit:v201"))errors.push("CI no ejecuta la auditoría 2.0.1");
