@@ -1,23 +1,24 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
+import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
 import { asRecord } from "@/lib/validation/json";
 export const dynamic="force-dynamic";
 
 export async function GET(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await getAuthorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  if(error||!data)return NextResponse.json({ok:false,error:error?.message||"document_unavailable"},{status:404});
+  if(error||!data)return apiFailure("archive.document.read",error,"document_unavailable",404);
   let signedUrl:string|null=data.storageProvider==="google_drive"?(data.storageUrl||null):null;
   if(data.storageProvider==="supabase_storage"&&data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
-  return NextResponse.json({ok:true,document:data,signedUrl},{headers:{"Cache-Control":"private, no-store"}});
+  return apiJson({ok:true,document:data,signedUrl});
 }
 
 export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await getAuthorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
-  const {id}=await params;let body:unknown;try{body=await request.json();}catch{return NextResponse.json({ok:false,error:"invalid_json"},{status:400});}const input=asRecord(body);
+  const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
+  const {id}=await params;let body:unknown;try{body=await request.json();}catch{return apiError("invalid_json");}const input=asRecord(body);
   const current=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  if(current.error||!current.data)return NextResponse.json({ok:false,error:current.error?.message||"document_unavailable"},{status:404});
-  if(!Object.keys(input).length)return NextResponse.json({ok:true,document:current.data},{headers:{"Cache-Control":"private, no-store"}});
+  if(current.error||!current.data)return apiFailure("archive.document.patch.read",current.error,"document_unavailable",404);
+  if(!Object.keys(input).length)return apiJson({ok:true,document:current.data});
   const has=(key:string)=>Object.prototype.hasOwnProperty.call(input,key);
   const existing=current.data as Record<string,unknown>;
   const {error}=await supabase.rpc("financial_app_archive_update",{
@@ -32,28 +33,28 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
     p_digital_reconstruction:has("digitalReconstruction")?input.digitalReconstruction:existing.digitalReconstruction,
     p_ocr_status:has("ocrStatus")?input.ocrStatus:existing.ocrStatus
   });
-  if(error)return NextResponse.json({ok:false,error:error.message},{status:400});
+  if(error)return apiFailure("archive.document.patch",error,"document_update_failed");
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  if(detail.error||!detail.data)return NextResponse.json({ok:false,error:detail.error?.message||"document_unavailable"},{status:404});
-  return NextResponse.json({ok:true,document:detail.data},{headers:{"Cache-Control":"private, no-store"}});
+  if(detail.error||!detail.data)return apiFailure("archive.document.patch.reload",detail.error,"document_unavailable",404);
+  return apiJson({ok:true,document:detail.data});
 }
 
 export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await getAuthorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const {id}=await params;const action=request.nextUrl.searchParams.get("action");
-  if(action!=="restore")return NextResponse.json({ok:false,error:"unsupported_action"},{status:400});
+  if(action!=="restore")return apiError("unsupported_action");
   const {data,error}=await supabase.rpc("financial_app_archive_restore",{p_id:id});
-  if(error||!data)return NextResponse.json({ok:false,error:error?.message||"restore_failed"},{status:400});
-  return NextResponse.json({ok:true},{headers:{"Cache-Control":"private, no-store"}});
+  if(error||!data)return apiFailure("archive.document.restore",error,"restore_failed");
+  return apiJson({ok:true});
 }
 
 export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
-  const supabase=await getAuthorizedClient();if(!supabase)return NextResponse.json({ok:false,error:"unauthorized"},{status:401});
+  const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const {id}=await params;const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
-  if(detail.error||!detail.data)return NextResponse.json({ok:false,error:detail.error?.message||"document_unavailable"},{status:404});
+  if(detail.error||!detail.data)return apiFailure("archive.document.delete.read",detail.error,"document_unavailable",404);
   const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});
-  if(deleted.error||!deleted.data)return NextResponse.json({ok:false,error:deleted.error?.message||"delete_failed"},{status:400});
+  if(deleted.error||!deleted.data)return apiFailure("archive.document.delete",deleted.error,"delete_failed");
   let storageCleanupPending=false;
   if(detail.data.storageProvider==="supabase_storage"&&detail.data.storagePath){const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);storageCleanupPending=Boolean(removed.error);}
-  return NextResponse.json({ok:true,storageCleanupPending,externalOriginalPreserved:detail.data.storageProvider==="google_drive"},{headers:{"Cache-Control":"private, no-store"}});
+  return apiJson({ok:true,storageCleanupPending,externalOriginalPreserved:detail.data.storageProvider==="google_drive"});
 }
