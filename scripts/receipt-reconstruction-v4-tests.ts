@@ -22,7 +22,7 @@ const primary:ReceiptLayout={
     item("CAÑA GRANDE","2","2.80","5.60",270),
     item("AGUA CON GAS","1","1.80","1.80",350),
   ],
-  unparsedBody:[{text:"CUBATA 1 5.50 5.50",top:310,bottom:332,confidence:48,sourceLine:"CUBATA 1 5.50 5.50"}],
+  unparsedBody:[{text:"CUBATA 1 5.50 5.50",top:310,bottom:332,confidence:48}],
   summary:[{label:"Base",value:"15.91"},{label:"IVA",value:"1.59"},{label:"Total",value:"17.50"}],
   footer:["Powered by camarero.com"],
   source:"geometry_tsv",
