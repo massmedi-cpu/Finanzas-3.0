@@ -16,7 +16,7 @@ for(const token of [
   'has("ocrData")?input.ocrData:existing.ocrData',
   'has("digitalReconstruction")?input.digitalReconstruction:existing.digitalReconstruction',
   'has("ocrStatus")?input.ocrStatus:existing.ocrStatus',
-  '!Object.keys(input).length'
+  '!Object.keys(rawInput).length'
 ]) must(route.includes(token),`El PATCH parcial de Archivo ha perdido la garantía: ${token}`);
 
 for(const forbidden of [
