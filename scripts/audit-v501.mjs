@@ -9,6 +9,7 @@ const migration=read("database/FINANCIAL_APP_5.0.1_OCR_BRAND_RELEASE.sql");
 const release=read("docs/releases/5.0.1.md");
 const login=read("app/login/page.tsx");
 const authCss=read("app/auth.css");
+const ocrEngine=read("lib/document/ticket-ocr-engine.ts");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
@@ -24,6 +25,14 @@ must(!/(?:insert\s+into|update|delete\s+from)\s+financial_app\.transactions/i.te
 must(release.includes("Financial App 5.0.1")&&release.includes("cuatro-siete")&&release.includes("Nuevo logotipo"),"Falta documentar OCR e identidad de 5.0.1");
 must(login.includes('src="/brand/logotipo.png"')&&login.includes("width={260}")&&login.includes("height={260}"),"Login no utiliza el nuevo logotipo con tamaño legible");
 must(authCss.includes("background:transparent")&&authCss.includes("max-width:260px"),"El contenedor de marca debe respetar la transparencia del nuevo logotipo");
+for(const token of [
+  "locator_money_columns_psm6",
+  "fastcrop_adaptive_psm6",
+  "fastcrop_gray_psm6",
+  "moneyWords.length>=3",
+  "image_ocr_receipt_v501:fastcrop_v2",
+]) must(ocrEngine.includes(token),`OCR 5.0.1 rápido incompleto: ${token}`);
+must(!ocrEngine.includes('"adaptive_columns_psm4"'),"El OCR rápido no debe repetir una segunda pasada PSM4 sobre la foto completa");
 
 function pngDimensions(file){
   const value=fs.readFileSync(file);
@@ -53,4 +62,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · versión, migración, OCR e identidad alineados");
+console.log("Financial App 5.0.1 audit OK · versión, migración, OCR rápido e identidad alineados");
