@@ -29,7 +29,7 @@ function parseVersion(value) {
 }
 function atLeast19(value) {
   const v=parseVersion(value);
-  return Boolean(v && (v[0]>1 || (v[0]===1 && v[1]>=9));
+  return Boolean(v && (v[0]>1 || (v[0]===1 && v[1]>=9)));
 }
 
 const appVersionMatch=appVersionSource.match(/APP_VERSION\s*=\s*"(\d+\.\d+\.\d+)"/);
