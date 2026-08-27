@@ -10,6 +10,7 @@ const need = [
   "docs/AUDIT_FINANCIAL_APP_1.8.0.md",
   "lib/document/ticket-ocr-engine.ts",
   "lib/document/ticket-ocr-geometry.ts",
+  "lib/document/receipt-reconstruction.ts",
 ];
 for (const file of need) if (!existsSync(file)) errors.push(`Falta ${file}`);
 
@@ -20,6 +21,7 @@ const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_
 const archive = readFileSync("app/archivo/archive-client.tsx", "utf8");
 const engine = existsSync("lib/document/ticket-ocr-engine.ts") ? readFileSync("lib/document/ticket-ocr-engine.ts", "utf8") : "";
 const geometry = existsSync("lib/document/ticket-ocr-geometry.ts") ? readFileSync("lib/document/ticket-ocr-geometry.ts", "utf8") : "";
+const reconstruction = existsSync("lib/document/receipt-reconstruction.ts") ? readFileSync("lib/document/receipt-reconstruction.ts", "utf8") : "";
 const tsconfig = readFileSync("tsconfig.json", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 const version = readFileSync("lib/app-version.ts", "utf8");
@@ -48,21 +50,20 @@ const archiveUsesCanonicalBrowserEngine =
   archive.includes("/vendor/document-engine/tessdata");
 const engineIsMapped = tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
 const engineRecognizesLocally =
-  (engine.includes("worker.recognize(input") || geometry.includes("worker.recognize(input")) &&
-  engine.includes('from "./ticket-ocr-geometry"') &&
-  (engine.includes("localAdaptiveThreshold") || geometry.includes("localAdaptiveThreshold"));
+  engine.includes("worker.recognize(input") &&
+  engine.includes("localAdaptiveThreshold") &&
+  engine.includes("paperGeometry") &&
+  engine.includes("deskew");
 const canonicalPipeline =
-  (engine.includes("recognizeOptimizedTicket") && engine.includes("return recognizeOptimizedTicket(file,worker,onProgress,hint)")) ||
-  (engine.includes("locator_money_columns_psm6") && engine.includes("fastcrop_adaptive_psm6") && engine.includes("image_ocr_receipt_v501:fastcrop_v"));
-const browserOcr =
-  archiveUsesCanonicalBrowserEngine &&
-  engineIsMapped &&
-  engineRecognizesLocally &&
-  canonicalPipeline &&
-  !engine.includes("geometryReceiptPass");
+  engine.includes("canonical_adaptive_psm6") &&
+  engine.includes("image_ocr_receipt_v501:canonical_v4") &&
+  engine.includes("reconstructReceiptEvidence") &&
+  reconstruction.includes("mergeAlignedDescriptions");
+const browserOcr = archiveUsesCanonicalBrowserEngine && engineIsMapped && engineRecognizesLocally && canonicalPipeline && !engine.includes("geometryReceiptPass");
 if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
+if (!geometry.includes("estimateDeskewFromSamples")) errors.push("Se perdió la garantía histórica de corrección de giro");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
 
 const match = version.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
