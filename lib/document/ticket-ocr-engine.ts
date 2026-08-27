@@ -70,7 +70,7 @@ type VisualRow = {
 type VisualLayout = {
   version: 1;
   engine: "PaddleOCR.js";
-  model: "PP-OCRv5";
+  model: "PP-OCRv6";
   language: "es";
   sourceWidth: number;
   sourceHeight: number;
@@ -205,7 +205,7 @@ function makeVisualLayout(boxes: Box[], sourceWidth: number, sourceHeight: numbe
   return {
     version: 1,
     engine: "PaddleOCR.js",
-    model: "PP-OCRv5",
+    model: "PP-OCRv6",
     language: "es",
     sourceWidth,
     sourceHeight,
@@ -322,7 +322,7 @@ function averageConfidence(boxes: Box[]) {
 }
 
 /**
- * Canonical receipt OCR based on PP-OCRv5 geometry.
+ * Canonical receipt OCR based on PP-OCRv6 geometry.
  *
  * There is deliberately one recognition pass over the original image. No
  * thresholded copy, no second OCR engine and no text invented from a merchant
@@ -336,16 +336,16 @@ export async function recognizeTicketImage(
   hint: DocumentTypeHint = "receipt",
 ): Promise<ImageOcrResult> {
   const started = now();
-  onProgress(0.08, "Leyendo el original con PP-OCRv5");
+  onProgress(0.08, "Leyendo el original con PP-OCRv6");
   const results = await engine.predict(file, {
     textRecScoreThresh: 0,
     textDetMaxSideLimit: 4000,
   });
   const result = results?.[0];
-  if (!result) throw new Error("PP-OCRv5 no devolvió resultado");
+  if (!result) throw new Error("PP-OCRv6 no devolvió resultado");
 
   const boxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
-  if (!boxes.length) throw new Error("PP-OCRv5 no detectó texto en la imagen");
+  if (!boxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
   onProgress(0.72, "Ordenando líneas por su posición real");
 
   const rows = groupRows(boxes);
@@ -376,7 +376,7 @@ export async function recognizeTicketImage(
     totalMs: elapsed(started),
   };
   const pass: OcrPassEvidence & Record<string, unknown> = {
-    variant: "ppocrv5_es_geometry",
+    variant: "ppocrv6_es_geometry",
     confidence,
     score: confidence,
     rawText,
@@ -395,7 +395,7 @@ export async function recognizeTicketImage(
     layoutText,
     tsv: "",
     confidence,
-    method: `${RECEIPT_OCR_METHOD_PREFIX}ppocrv5_es_geometry`,
+    method: `${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`,
     passes: [pass],
     receiptLayout,
     metadata,
