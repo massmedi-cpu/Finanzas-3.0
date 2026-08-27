@@ -26,7 +26,7 @@ export type TsvLine = { top: number; bottom: number; words: TsvWord[]; plain: st
 const moneyPattern = "[+-]?\\d{1,7}(?:[.,]\\d{2})";
 const qtyPattern = "\\d+(?:[.,]\\d+)?";
 const itemRegex = new RegExp(`^(.+?)\\s+(${qtyPattern})\\s+(${moneyPattern})\\s+(${moneyPattern})(?:\\s*(?:EUR|€))?$`, "i");
-const summaryRegex = /^(base(?:\s+imponible)?|subtotal|total\s+iva|iva(?:\s*\([^)]*\)|\s+\d+(?:[.,]\d+)?%?)?|total(?:\s+a\s+pagar)?|importe\s+total|efectivo|tarjeta)\s*:?[\s-]*(.+)$/i;
+const summaryRegex = /^(base(?:\s+imponible)?|subtotal|total\s+iva|iva(?:\s*\([^)]*\)|\s+\d+(?:[.,]\d+)?%)?|total(?:\s+a\s+pagar)?|importe\s+total|efectivo|tarjeta)\s*:?[\s-]*(.+)$/i;
 const columnHeader = /^(descripci[oó]n\s+)?u(?:d|ds|ds\.)\s+precio\s+(?:total|importe)$/i;
 
 function cleanLine(value: string) { return value.replace(/[|]+/g, " ").replace(/\s+/g, " ").trim(); }
