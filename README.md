@@ -1,14 +1,15 @@
-# Financial App 5.0.0
+# Financial App 5.0.1
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 5.0.0
+## Baseline 5.0.1
 
-5.0 cierra la evolución arquitectónica iniciada en 4.x y deja una única implementación runtime por responsabilidad.
+5.0 cierra la evolución arquitectónica iniciada en 4.x y deja una única implementación runtime por responsabilidad. 5.0.1 refuerza el OCR documental con un único pipeline canónico, preservación de evidencia RAW/TSV y validación financiera estricta antes de persistir resultados como completos.
 
 - Inicio usa `financial_app_home_pulse` como ruta crítica ligera y carga cuentas/secciones secundarias en paralelo.
 - Se retiran el dashboard monolítico y el antiguo home overview, tanto en loaders Next.js como en RPC PostgreSQL.
 - El release probe valida únicamente superficies canónicas: cuentas, home pulse, movimientos, previsión, archivo, matching e inteligencia.
+- El OCR de tickets conserva RAW, geometría y estructura por separado y marca contradicciones como revisión pendiente en lugar de inventar datos.
 - Los gates históricos siguen activos de forma forward-compatible.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` describen la arquitectura real 5.0; migraciones y auditorías antiguas quedan como historial, no como runtime.
 
@@ -89,7 +90,7 @@ Una versión solo llega a `main` después de superar:
 
 ## Versionado
 
-- Producto visible: `lib/app-version.ts` → **5.0.0**.
+- Producto visible: `lib/app-version.ts` → **5.0.1**.
 - Paquete npm técnico: **3.4.8**.
 
 Ambos versionados son deliberadamente independientes.
