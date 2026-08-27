@@ -7,19 +7,19 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 const page=read("app/page.tsx");
 for(const token of [
   'import { Suspense } from "react"',
-  "const dashboardPromise=getFinancialDashboard()",
   "const accountsPromise=getAccountsOverview()",
   "const budgetPromise=getBudgetMonth(month)",
   "const forecastPromise=getForecastOverview(30)",
   "const analysisPromise=getAnalysisOverview(year)",
   "const reconciliationPromise=getHomeReconciliationSummary()",
-  "const controlPromise=Promise.all([dashboardPromise,budgetPromise])",
-  "const dashboard=await dashboardPromise",
   "<HomeAccountsSection data={accountsPromise}/>",
   "<HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/>",
   "<HomeForecastSection data={forecastPromise}/>",
-  "<HomeDecisionGrid dashboard={dashboard}"
 ]) must(page.includes(token),`Inicio ha perdido la garantía de streaming/paralelismo: ${token}`);
+
+const legacyCritical=page.includes("const dashboardPromise=getFinancialDashboard()")&&page.includes("const dashboard=await dashboardPromise")&&page.includes("const controlPromise=Promise.all([dashboardPromise,budgetPromise])")&&page.includes("<HomeDecisionGrid dashboard={dashboard}");
+const optimizedCritical=page.includes("const pulsePromise=getHomePulse()")&&page.includes("const pulse=await pulsePromise")&&page.includes("const controlPromise=Promise.all([pulsePromise,budgetPromise])")&&page.includes("<HomeDecisionGrid pulse={pulse}");
+must(legacyCritical||optimizedCritical,"Inicio debe conservar un único núcleo crítico mientras el resto se transmite en paralelo");
 
 must((page.match(/<Suspense\b/g)||[]).length>=4,"Inicio debe conservar al menos cuatro límites Suspense independientes");
 must(!page.includes("getHomeOverview"),"Inicio no puede volver al RPC monolítico getHomeOverview");
@@ -31,8 +31,8 @@ const sections=read("app/home-sections.tsx");
 for(const token of [
   "HomeAccountsFallback","HomePulseSecondaryFallback","HomeFlowFallback","HomeForecastFallback","HomeDecisionFallback",
   "Promise.all([analysis,budget])","Promise.all([analysis,budget,reconciliation,control])",
-  "dashboard.needsReview","dashboard.sync?.newCount"
 ]) must(sections.includes(token),`Las secciones progresivas han perdido una garantía: ${token}`);
+must((sections.includes("dashboard.needsReview")&&sections.includes("dashboard.sync?.newCount"))||(sections.includes("pulse.needsReview")&&sections.includes("pulse.sync?.newCount")),"Las decisiones de Inicio deben seguir mostrando revisión y última sincronización");
 
 const loader=read("lib/financial/home-streaming.ts");
 for(const token of ["financial_app_reconciliation_summary","financial_app_control_summary","p_cash_flow","p_budget"])
@@ -51,4 +51,4 @@ for(const token of [
 ]) must(migration.includes(token),`La migración ligera de Inicio ha perdido la garantía: ${token}`);
 
 if(failures.length){console.error("Financial App 3.9.1 home streaming audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 3.9.1 home streaming audit OK · dashboard crítico primero, secundarios paralelos y resúmenes mínimos protegidos");
+console.log("Financial App 3.9.1 home streaming audit OK · núcleo crítico único, secundarios paralelos y resúmenes mínimos protegidos");

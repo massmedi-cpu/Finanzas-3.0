@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
 import { asBoolean, asNumber, asRecord } from "@/lib/validation/json";
-import type { FinancialDashboard } from "@/lib/financial/dashboard";
 import type { BudgetMonth } from "@/lib/financial/budget";
 import type { ReconciliationSummary } from "@/lib/financial/reconciliation";
 
@@ -11,6 +10,8 @@ export type HomeControlSummary={
   closeBlockers:number;
   closeWarnings:number;
 };
+
+type HomeControlFinancials={month:string;income:number;expenses:number;cashFlow:number};
 
 export async function getHomeReconciliationSummary():Promise<ReconciliationSummary>{
   const supabase=await createClient();
@@ -26,12 +27,12 @@ export async function getHomeReconciliationSummary():Promise<ReconciliationSumma
   };
 }
 
-export async function getHomeControlSummary(dashboard:FinancialDashboard,budget:BudgetMonth):Promise<HomeControlSummary>{
+export async function getHomeControlSummary(financials:HomeControlFinancials,budget:BudgetMonth):Promise<HomeControlSummary>{
   const supabase=await createClient();
-  const month=/^\d{4}-\d{2}$/.test(dashboard.month)?`${dashboard.month}-01`:null;
+  const month=/^\d{4}-\d{2}$/.test(financials.month)?`${financials.month}-01`:null;
   const {data,error}=await supabase.rpc("financial_app_control_summary",{
     p_month:month,
-    p_cash_flow:{income:dashboard.income,expenses:dashboard.expenses,net:dashboard.cashFlow},
+    p_cash_flow:{income:financials.income,expenses:financials.expenses,net:financials.cashFlow},
     p_budget:budget,
   });
   if(error||!data)throw new Error(error?.message||"control_summary_unavailable");

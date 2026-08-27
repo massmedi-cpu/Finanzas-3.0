@@ -14,7 +14,10 @@ const plan=read("components/plan-intelligence.tsx");
 const probe=read("lib/financial/release-probe.ts");
 const css=read("app/intelligence.css");
 
-must(appVersion.includes('APP_VERSION = "4.4.0"'),"APP_VERSION no es 4.4.0");
+const currentVersion=appVersion.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
+must(atLeast(currentVersion,"4.4.0"),"APP_VERSION debe ser 4.4.0 o posterior");
 must(sql.includes("actionable_intelligence_core")&&sql.includes("financial_app_actionable_intelligence"),"RPC 4.4 no definido de extremo a extremo");
 must(sql.includes("anomaly_raw")&&sql.includes("recurring_raw")&&sql.includes("rising_raw")&&sql.includes("opportunity_raw"),"Faltan familias de señales 4.4");
 must(sql.includes("h.n>=3")&&sql.includes("median_amount*1.75")&&sql.includes("r.avg_interval between 20 and 45")&&sql.includes("r.recent>=r.previous*1.25"),"Umbrales conservadores de evidencia incompletos");
