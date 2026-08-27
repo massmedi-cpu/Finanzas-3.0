@@ -1,7 +1,13 @@
 import{existsSync,readFileSync}from"node:fs";
 const errors=[];
-const need=["components/app-chrome.tsx","app/chrome.css","app/manifest.ts","lib/auth/authorized-client.ts","lib/financial/home.ts","app/api/backup/route.ts","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql"];
+const need=["components/app-chrome.tsx","app/chrome.css","app/manifest.ts","lib/auth/authorized-client.ts","app/api/backup/route.ts","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql"];
 for(const f of need)if(!existsSync(f))errors.push(`Falta ${f}`);
+const version=readFileSync("lib/app-version.ts","utf8").match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+const major=Number.parseInt(version.split(".")[0]||"0",10)||0;
+if(major>=5){
+  if(!existsSync("lib/financial/home-pulse.ts"))errors.push("Falta lib/financial/home-pulse.ts en la arquitectura 5.0+");
+  if(existsSync("lib/financial/home.ts"))errors.push("5.0+ no puede conservar el loader home.ts sustituido");
+}else if(!existsSync("lib/financial/home.ts"))errors.push("Falta lib/financial/home.ts en la arquitectura histórica pre-5.0");
 
 const movements=readFileSync("app/api/movements/route.ts","utf8");
 const getPart=movements.split("export async function POST")[0];
@@ -14,6 +20,7 @@ const progressiveHome=criticalRead&&["getHomeControlSummary","getHomeReconciliat
 const unifiedHome=home.includes("getHomeOverview");
 if(!unifiedHome&&!progressiveHome)errors.push("Inicio no usa una arquitectura de lectura financiera canónica");
 if(!progressiveHome&&/getAccountsOverview|getBudgetMonth|getForecastOverview|getAnalysisOverview|getReconciliationOverview/.test(home))errors.push("Inicio conserva lecturas financieras paralelas antiguas fuera de la arquitectura progresiva");
+if(major>=5&&home.includes("getFinancialDashboard"))errors.push("5.0+ no puede reintroducir getFinancialDashboard en Inicio");
 
 const layout=readFileSync("app/layout.tsx","utf8");
 if(!layout.includes("AppChrome"))errors.push("Falta shell persistente");
