@@ -57,8 +57,8 @@ const engineIsMapped = tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/d
 const engineRecognizesLocally =
   engine.includes("worker.recognize(input") &&
   engine.includes("prepareReceiptImage") &&
-  engine.includes("adaptive_psm6") &&
-  engine.includes("grayscale_psm4");
+  engine.includes("adaptive_receipt_region_psm6") &&
+  engine.includes("grayscale_literal_psm4");
 const canonicalPipeline =
   engine.includes("reconstructReceiptEvidence") &&
   engine.includes("validateReceiptFinancials") &&
@@ -66,7 +66,7 @@ const canonicalPipeline =
   reconstruction.includes("samePhysicalRow") &&
   reconstruction.includes("mergePhysicalRows") &&
   validator.includes('"needs_review"') &&
-  revision.includes('canonical_integrity_v5');
+  revision.includes('canonical_integrity_v6');
 const noLegacyFallback = !engine.includes("recognizeLegacyTicket") && !engine.includes("geometryReceiptPass");
 const browserOcr = archiveUsesCanonicalBrowserEngine && engineIsMapped && engineRecognizesLocally && canonicalPipeline && noLegacyFallback;
 if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");

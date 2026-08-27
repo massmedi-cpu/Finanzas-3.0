@@ -10,7 +10,7 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - Se retiran el dashboard monolítico y el antiguo home overview, tanto en loaders Next.js como en RPC PostgreSQL.
 - El release probe valida únicamente superficies canónicas: cuentas, home pulse, movimientos, previsión, archivo, matching e inteligencia.
 - El OCR de tickets conserva RAW, geometría y estructura por separado y marca contradicciones como revisión pendiente en lugar de inventar datos.
-- La revisión canónica del motor OCR es `canonical_integrity_v5`; documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado.
+- La revisión canónica del motor OCR es `canonical_integrity_v6`; primero conserva una lectura gris literal y usa su geometría para limitar la lectura de precisión al contenido físico del ticket. Los documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado.
 - Los gates históricos siguen activos de forma forward-compatible.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` describen la arquitectura real 5.0; migraciones y auditorías antiguas quedan como historial, no como runtime.
 

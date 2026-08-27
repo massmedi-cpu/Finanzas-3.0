@@ -72,6 +72,39 @@ function samePhysicalRow(a: PhysicalRow, b: PhysicalRow, medianHeight: number) {
   return Math.abs(ac - bc) <= tolerance;
 }
 
+function textEvidenceQuality(value: string) {
+  const line = cleanSpaces(value);
+  if (!line) return -20;
+  const letterCount = letters(line);
+  const digits = (line.match(/\d/g) || []).length;
+  const tokens = line.split(/\s+/).filter(Boolean);
+  const singleLetters = tokens.filter((token) => /^\p{L}$/u.test(token)).length;
+  const symbols = line.replace(/[\p{L}\d\s€%.,:()\/+\-]/gu, "").length;
+  const recognizableWords = (line.match(/\p{L}[\p{L}\d]{1,}/gu) || []).length;
+  return letterCount * 0.45 + recognizableWords * 2 + Math.min(4, digits * 0.2) - singleLetters * 1.8 - symbols * 1.4;
+}
+
+function descriptionEvidence(value: string) {
+  const line = cleanSpaces(value);
+  if (!line) return null;
+  const numeric = line.search(/\b\d/);
+  const candidate = cleanSpaces(numeric > 0 ? line.slice(0, numeric) : line)
+    .replace(/^[^\p{L}]+/u, "")
+    .replace(/[^\p{L}\d)]+$/u, "");
+  return /\p{L}[\p{L}\d]{1,}/u.test(candidate) ? candidate : null;
+}
+
+function repairItemDescription(item: ReceiptLineItem, evidence: ReceiptUnparsedRow) {
+  const candidate = descriptionEvidence(evidence.text);
+  if (!candidate) return item;
+  if (textEvidenceQuality(candidate) <= textEvidenceQuality(item.description) + 1.5) return item;
+  return {
+    ...item,
+    description: candidate,
+    confidence: Number.isFinite(evidence.confidence) ? Number(evidence.confidence) : item.confidence,
+  };
+}
+
 function mergePhysicalRows(primary: PhysicalRow[], alternate: PhysicalRow[]) {
   const heights = [...primary, ...alternate].map(rowHeight).filter(Number.isFinite).sort((a, b) => a - b);
   const medianHeight = heights[Math.floor(heights.length / 2)] || 18;
@@ -96,12 +129,14 @@ function mergePhysicalRows(primary: PhysicalRow[], alternate: PhysicalRow[]) {
     }
     const target = primary[bestIndex];
     if (!target.item && source.item && arithmeticValid(source.item)) {
-      target.item = { ...source.item };
+      target.item = target.unparsed ? repairItemDescription({ ...source.item }, target.unparsed) : { ...source.item };
       target.unparsed = null;
     } else if (target.item && source.item && arithmeticValid(source.item)) {
-      // Only replace a whole row when both observations refer to the same physical baseline.
-      // Never shift descriptions by price similarity or lexical resemblance.
       if (itemConfidence(source.item) > itemConfidence(target.item) + 5) target.item = { ...source.item };
+    } else if (target.item && source.unparsed) {
+      target.item = repairItemDescription(target.item, source.unparsed);
+    } else if (target.unparsed && source.unparsed) {
+      if (textEvidenceQuality(source.unparsed.text) > textEvidenceQuality(target.unparsed.text) + 1.5) target.unparsed = { ...source.unparsed };
     } else if (!target.unparsed && source.unparsed) {
       target.unparsed = { ...source.unparsed };
     }
@@ -121,11 +156,22 @@ function uniqueLines(lines: string[]) {
   return result;
 }
 
+function zoneQuality(lines: string[]) {
+  if (!lines.length) return -20;
+  const scored = lines.map(textEvidenceQuality);
+  const positive = scored.filter((score) => score > 0);
+  return positive.reduce((sum, score) => sum + score, 0) / Math.max(1, positive.length) - (scored.length - positive.length) * 2;
+}
+
 function mergeZone(layouts: ReceiptLayout[], zone: "header" | "footer") {
   if (!layouts.length) return [];
-  const selected = [...layouts].sort((a, b) => b[zone].join(" ").length - a[zone].join(" ").length)[0];
-  const lines = [...selected[zone]];
-  for (const layout of layouts) lines.push(...layout[zone]);
+  const ordered = [...layouts].sort((a, b) => zoneQuality(b[zone]) - zoneQuality(a[zone]));
+  const lines: string[] = [];
+  for (const layout of ordered) {
+    for (const line of layout[zone]) {
+      if (textEvidenceQuality(line) >= 1) lines.push(line);
+    }
+  }
   return uniqueLines(lines).slice(0, zone === "header" ? 18 : 12);
 }
 
@@ -222,6 +268,18 @@ export function cleanReceiptMerchant(value: string | null) {
   return letters(cleaned) >= 3 ? cleaned.trim() : null;
 }
 
+function layoutEvidenceScore(layout: ReceiptLayout) {
+  const validItems = layout.items.filter(arithmeticValid).length;
+  const invalidItems = layout.items.length - validItems;
+  const unparsed = layout.unparsedBody?.length || 0;
+  return validItems * 14
+    - invalidItems * 8
+    - unparsed * 6
+    + layout.summary.length * 5
+    + Math.min(8, Math.max(0, zoneQuality(layout.header)))
+    + Math.min(4, Math.max(0, zoneQuality(layout.footer)));
+}
+
 export function reconstructReceiptEvidence(
   texts: string[],
   layouts: Array<ReceiptLayout | null | undefined>,
@@ -236,8 +294,7 @@ export function reconstructReceiptEvidence(
   }
   if (!candidates.length) return { layout: null, total: null };
 
-  const score = (layout: ReceiptLayout) => layout.items.length * 10 + (layout.unparsedBody?.length || 0) * 4 + Math.min(6, layout.header.length) + Math.min(4, layout.footer.length);
-  const ordered = [...candidates].sort((a, b) => score(b) - score(a));
+  const ordered = [...candidates].sort((a, b) => layoutEvidenceScore(b) - layoutEvidenceScore(a));
   const rows = physicalRows(ordered[0]);
   for (const alternate of ordered.slice(1)) mergePhysicalRows(rows, physicalRows(alternate));
 

@@ -8,7 +8,13 @@ import {
   type OcrPassEvidence,
 } from "./ticket-ocr";
 import { prepareReceiptImage } from "./receipt-image-preprocessor";
-import { parseReceiptTsvLayout, receiptLayoutToText, type ReceiptLayout } from "./receipt-layout";
+import {
+  parseReceiptTsvLayout,
+  parseTsvWords,
+  receiptLayoutToText,
+  tsvLines,
+  type ReceiptLayout,
+} from "./receipt-layout";
 import { cleanReceiptMerchant, reconstructReceiptEvidence } from "./receipt-reconstruction";
 import { validateReceiptFinancials, type ReceiptValidation } from "./receipt-financial-validator";
 import { RECEIPT_OCR_METHOD_PREFIX } from "./receipt-ocr-revision";
@@ -46,27 +52,158 @@ type ReadPass = {
   score: number;
 };
 
+type ReceiptBounds = { left: number; top: number; width: number; height: number };
+
 const now = () => typeof performance !== "undefined" ? performance.now() : Date.now();
 const elapsed = (started: number) => Math.round((now() - started) * 10) / 10;
+const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
 function visibleChars(text: string) {
   return (text.match(/[\p{L}\d]/gu) || []).length;
 }
 
+function recognitionNoise(text: string) {
+  const lines = String(text || "").replace(/\r/g, "").split("\n").map((line) => line.trim()).filter(Boolean);
+  const tokens = lines.flatMap((line) => line.split(/\s+/)).filter(Boolean);
+  const singleLetterTokens = tokens.filter((token) => /^\p{L}$/u.test(token)).length;
+  const symbolHeavyLines = lines.filter((line) => {
+    const compact = line.replace(/\s/g, "");
+    if (!compact) return false;
+    const useful = (compact.match(/[\p{L}\d€%.,:()\/+\-]/gu) || []).length;
+    return useful / compact.length < 0.62;
+  }).length;
+  const tinyNoiseLines = lines.filter((line) => {
+    const letters = (line.match(/\p{L}/gu) || []).length;
+    const digits = (line.match(/\d/g) || []).length;
+    return line.length <= 16 && letters + digits <= 3;
+  }).length;
+  return Math.min(32, singleLetterTokens * 0.55 + symbolHeavyLines * 2.2 + tinyNoiseLines * 1.25);
+}
+
 function textScore(text: string, confidence: number | null, layout: ReceiptLayout | null, hint: DocumentTypeHint) {
   const metadata = inferDocumentMetadata(text, hint);
-  let score = (confidence ?? 0) * 0.45 + Math.min(25, visibleChars(text) / 18);
-  score += Math.min(30, (layout?.items.length || 0) * 6);
-  score += Math.min(12, (layout?.header.length || 0) * 1.2);
-  score += Math.min(8, (layout?.footer.length || 0) * 1.1);
-  if (metadata.documentDate) score += 5;
-  if (metadata.merchant) score += 5;
-  if (/\bTOTAL\b/i.test(text)) score += 5;
-  score -= Math.min(24, (layout?.unparsedBody?.length || 0) * 6);
+  const meaningfulLines = normalizeOcrText(text).split(/\r?\n/).filter((line) => visibleChars(line) >= 4).length;
+  let score = (confidence ?? 0) * 0.8 + Math.min(12, meaningfulLines * 0.65);
+  score += Math.min(10, (layout?.items.length || 0) * 2);
+  if (metadata.documentDate) score += 4;
+  if (metadata.merchant) score += 4;
+  if (/\bTOTAL\b/i.test(text)) score += 2;
+  score -= Math.min(22, (layout?.unparsedBody?.length || 0) * 2.75);
+  score -= recognitionNoise(text);
   return Math.round(score * 10) / 10;
 }
 
-async function readPass(worker: OcrWorker, input: HTMLCanvasElement | File, psm: string, variant: string, hint: DocumentTypeHint): Promise<ReadPass> {
+function quantile(values: number[], q: number) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const index = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * q)));
+  return sorted[index];
+}
+
+/**
+ * Derives the physical receipt text region from OCR geometry only. It has no
+ * merchant/product vocabulary and never rewrites OCR text. The first clean
+ * grayscale observation is therefore also the locator for the precision pass.
+ */
+function detectReceiptTextBounds(tsv: string, width: number, height: number): ReceiptBounds {
+  const full = { left: 0, top: 0, width, height };
+  const words = parseTsvWords(tsv).filter((word) => word.conf >= 18 && word.height < height * 0.12);
+  if (words.length < 10) return full;
+
+  const lines = tsvLines(tsv);
+  const anchor = lines.find((line) => /DESCRIP/i.test(line.plain) && /PRECI/i.test(line.plain));
+  if (anchor) {
+    const anchorLeft = Math.min(...anchor.words.map((word) => word.left));
+    const anchorRight = Math.max(...anchor.words.map((word) => word.left + word.width));
+    const anchorWidth = Math.max(1, anchorRight - anchorLeft);
+    const horizontalMargin = anchorWidth * 0.1;
+    const left = clamp(anchorLeft - horizontalMargin, 0, width - 1);
+    const right = clamp(anchorRight + horizontalMargin, left + 1, width);
+    const aligned = lines.filter((line) => {
+      const useful = line.words.filter((word) => word.conf >= 18);
+      if (!useful.length) return false;
+      const inside = useful.filter((word) => {
+        const center = word.left + word.width / 2;
+        return center >= left && center <= right;
+      }).length;
+      return inside / useful.length >= 0.55;
+    });
+    if (aligned.length >= 6) {
+      const topRaw = Math.min(...aligned.map((line) => line.top));
+      const bottomRaw = Math.max(...aligned.map((line) => line.bottom));
+      const contentHeight = Math.max(1, bottomRaw - topRaw);
+      const top = clamp(topRaw - contentHeight * 0.055, 0, height - 1);
+      const bottom = clamp(bottomRaw + contentHeight * 0.07, top + 1, height);
+      const expandedLeft = clamp(left - anchorWidth * 0.025, 0, width - 1);
+      const expandedRight = clamp(right + anchorWidth * 0.025, expandedLeft + 1, width);
+      const candidate = {
+        left: Math.floor(expandedLeft),
+        top: Math.floor(top),
+        width: Math.ceil(expandedRight - expandedLeft),
+        height: Math.ceil(bottom - top),
+      };
+      const areaRatio = (candidate.width * candidate.height) / Math.max(1, width * height);
+      if (candidate.width >= width * 0.35 && candidate.height >= height * 0.35 && areaRatio < 0.94) return candidate;
+    }
+  }
+
+  const useful = words.filter((word) => word.conf >= 28);
+  if (useful.length < 14) return full;
+  let left = quantile(useful.map((word) => word.left), 0.04);
+  let right = quantile(useful.map((word) => word.left + word.width), 0.96);
+  let top = quantile(useful.map((word) => word.top), 0.015);
+  let bottom = quantile(useful.map((word) => word.top + word.height), 0.985);
+  const contentWidth = right - left;
+  const contentHeight = bottom - top;
+  if (contentWidth < width * 0.3 || contentHeight < height * 0.3) return full;
+  left = clamp(left - contentWidth * 0.08, 0, width - 1);
+  right = clamp(right + contentWidth * 0.08, left + 1, width);
+  top = clamp(top - contentHeight * 0.055, 0, height - 1);
+  bottom = clamp(bottom + contentHeight * 0.07, top + 1, height);
+  const candidate = { left: Math.floor(left), top: Math.floor(top), width: Math.ceil(right - left), height: Math.ceil(bottom - top) };
+  const areaRatio = (candidate.width * candidate.height) / Math.max(1, width * height);
+  return areaRatio < 0.94 ? candidate : full;
+}
+
+function cropCanvas(source: HTMLCanvasElement, bounds: ReceiptBounds) {
+  if (bounds.left === 0 && bounds.top === 0 && bounds.width === source.width && bounds.height === source.height) return source;
+  const output = document.createElement("canvas");
+  output.width = bounds.width;
+  output.height = bounds.height;
+  const context = output.getContext("2d");
+  if (!context) throw new Error("Canvas no disponible");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, output.width, output.height);
+  context.drawImage(source, bounds.left, bounds.top, bounds.width, bounds.height, 0, 0, bounds.width, bounds.height);
+  return output;
+}
+
+function offsetReceiptLayout(layout: ReceiptLayout | null, topOffset: number) {
+  if (!layout || !topOffset) return layout;
+  return {
+    ...layout,
+    items: layout.items.map((item) => ({
+      ...item,
+      top: Number.isFinite(item.top) ? Number(item.top) + topOffset : item.top,
+      bottom: Number.isFinite(item.bottom) ? Number(item.bottom) + topOffset : item.bottom,
+    })),
+    summary: layout.summary.map((line) => ({ ...line, top: Number.isFinite(line.top) ? Number(line.top) + topOffset : line.top })),
+    unparsedBody: (layout.unparsedBody || []).map((row) => ({
+      ...row,
+      top: Number.isFinite(row.top) ? Number(row.top) + topOffset : row.top,
+      bottom: Number.isFinite(row.bottom) ? Number(row.bottom) + topOffset : row.bottom,
+    })),
+  } satisfies ReceiptLayout;
+}
+
+async function readPass(
+  worker: OcrWorker,
+  input: HTMLCanvasElement | File,
+  psm: string,
+  variant: string,
+  hint: DocumentTypeHint,
+  topOffset = 0,
+): Promise<ReadPass> {
   const started = now();
   await worker.setParameters?.({
     tessedit_pageseg_mode: psm,
@@ -77,7 +214,7 @@ async function readPass(worker: OcrWorker, input: HTMLCanvasElement | File, psm:
   const rawText = String(result.data?.text || "");
   const normalizedText = normalizeOcrText(rawText);
   const tsv = String(result.data?.tsv || "");
-  const receiptLayout = parseReceiptTsvLayout(tsv);
+  const receiptLayout = offsetReceiptLayout(parseReceiptTsvLayout(tsv), topOffset);
   const confidence = Number.isFinite(result.data?.confidence) ? Number(result.data?.confidence) : null;
   return {
     variant,
@@ -106,7 +243,7 @@ function shouldRunSecondary(primary: ReadPass, validation: ReceiptValidation, hi
   if (hint !== "receipt") return visibleChars(primary.rawText) < 100 || (primary.confidence ?? 0) < 45;
   const metadata = inferDocumentMetadata(primary.rawText, hint);
   if (validation.status !== "complete") return true;
-  if ((primary.confidence ?? 0) < 62) return true;
+  if ((primary.confidence ?? 0) < 72) return true;
   if (visibleChars(primary.rawText) < 120) return true;
   if (!metadata.documentDate || !metadata.merchant) return true;
   if (!primary.receiptLayout?.items.length) return true;
@@ -115,17 +252,17 @@ function shouldRunSecondary(primary: ReadPass, validation: ReceiptValidation, hi
 }
 
 function pickPrimaryRaw(passes: ReadPass[]) {
-  return [...passes].sort((a, b) => b.score - a.score)[0] || passes[0];
+  return [...passes].sort((a, b) => b.score - a.score || (b.confidence ?? 0) - (a.confidence ?? 0))[0] || passes[0];
 }
 
 function chooseMetadata(passes: ReadPass[], layout: ReceiptLayout | null, validation: ReceiptValidation, hint: DocumentTypeHint): DocumentMetadata {
   const combined = passes.map((pass) => pass.rawText).join("\n\n--- OCR PASS ---\n\n");
   const metadata = inferDocumentMetadata(combined, hint);
-  const merchantCandidates = passes
-    .map((pass) => inferDocumentMetadata(pass.rawText, hint).merchant)
-    .map(cleanReceiptMerchant)
-    .filter((value): value is string => Boolean(value));
-  const merchant = merchantCandidates.sort((a, b) => b.length - a.length)[0] || cleanReceiptMerchant(metadata.merchant);
+  const merchant = passes
+    .map((pass) => ({ value: cleanReceiptMerchant(inferDocumentMetadata(pass.rawText, hint).merchant), score: pass.score }))
+    .filter((candidate): candidate is { value: string; score: number } => Boolean(candidate.value))
+    .sort((a, b) => b.score - a.score || a.value.length - b.value.length)[0]?.value
+    || cleanReceiptMerchant(metadata.merchant);
   const printedTotal = validation.printedTotal;
   return {
     ...metadata,
@@ -150,9 +287,11 @@ function passEvidence(pass: ReadPass): OcrPassEvidence {
 /**
  * Canonical receipt OCR.
  *
- * There is deliberately no legacy-engine catch/fallback here. A failed canonical
- * pass fails visibly; a weak pass is refined once and then validated. Raw text
- * and TSV evidence are kept independently from the reconstructed ticket.
+ * The clean grayscale observation is deliberately first: it preserves literal
+ * characters and supplies geometry. A second precision observation is then run
+ * only over the detected receipt region. Raw evidence is never rewritten by
+ * reconstruction and every inferred structured value remains independently
+ * auditable against the stored OCR passes.
  */
 export async function recognizeTicketImage(
   file: File,
@@ -163,12 +302,10 @@ export async function recognizeTicketImage(
   const totalStarted = now();
   onProgress(0.04, "Preparando imagen");
   const prepared = await prepareReceiptImage(file);
-  onProgress(0.16, prepared.paperDetected ? "Detectando documento" : "Documento completo detectado");
-  onProgress(0.24, "Corrigiendo perspectiva");
-  onProgress(0.31, "Corrigiendo inclinación e iluminación");
+  onProgress(0.18, prepared.paperDetected ? "Documento detectado" : "Localizando contenido del ticket");
 
-  onProgress(0.38, "Leyendo contenido");
-  const primary = await readPass(worker, prepared.adaptive, "6", "adaptive_psm6", hint);
+  onProgress(0.3, "Leyendo texto original");
+  const primary = await readPass(worker, prepared.grayscale, "4", "grayscale_literal_psm4", hint);
   const passes: ReadPass[] = [primary];
   let reconstructionStarted = now();
   let reconstructed = reconstructPasses(passes, inferDocumentMetadata(primary.rawText, hint).merchant);
@@ -176,8 +313,11 @@ export async function recognizeTicketImage(
   let secondaryMs = 0;
 
   if (shouldRunSecondary(primary, reconstructed.validation, hint)) {
-    onProgress(0.62, "Completando zonas dudosas");
-    const secondary = await readPass(worker, prepared.grayscale, "4", "grayscale_psm4", hint);
+    const bounds = detectReceiptTextBounds(primary.tsv, prepared.adaptive.width, prepared.adaptive.height);
+    const precisionInput = cropCanvas(prepared.adaptive, bounds);
+    const cropped = precisionInput !== prepared.adaptive;
+    onProgress(0.58, cropped ? "Leyendo con precisión solo el ticket" : "Completando zonas dudosas");
+    const secondary = await readPass(worker, precisionInput, "6", cropped ? "adaptive_receipt_region_psm6" : "adaptive_precision_psm6", hint, bounds.top);
     secondaryMs = secondary.durationMs;
     passes.push(secondary);
     reconstructionStarted = now();

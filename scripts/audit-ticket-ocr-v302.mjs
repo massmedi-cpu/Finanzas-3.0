@@ -23,7 +23,7 @@ must(client.includes("sharedWorkerPromise")&&client.includes("workerReuse:true")
 for(const token of ["rawText:recognized.rawText","normalizedText:recognized.normalizedText","tsv:recognized.tsv","validation:recognized.validation","metrics:recognized.metrics","localProcessing:true","automaticOnImport:true"])
   must(client.includes(token),`Archivo no persiste la evidencia OCR: ${token}`);
 
-for(const token of ["prepareReceiptImage","adaptive_psm6","grayscale_psm4","reconstructReceiptEvidence","validateReceiptFinancials","RECEIPT_OCR_METHOD_PREFIX","rawText","normalizedText","tsv","metrics"])
+for(const token of ["prepareReceiptImage","grayscale_literal_psm4","adaptive_receipt_region_psm6","detectReceiptTextBounds","reconstructReceiptEvidence","validateReceiptFinancials","RECEIPT_OCR_METHOD_PREFIX","rawText","normalizedText","tsv","metrics"])
   must(engine.includes(token),`Motor OCR canónico incompleto: ${token}`);
 must(!/recognizeLegacyTicket|geometryReceiptPass|totalsZonePass|fastcrop_adaptive_psm6|fastcrop_gray_psm6|locator_money_columns_psm6/.test(engine),"Sobrevive un fallback o pipeline OCR paralelo");
 must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe existir un segundo motor OCR runtime versionado");
@@ -31,14 +31,14 @@ must(!fs.existsSync("lib/document/ticket-ocr-geometry.ts"),"El motor geométrico
 
 for(const token of ["detectPaper","rectifyPaper","estimateDeskewFromSamples","deskew","localAdaptiveThreshold","contrastStretch"])
   must(preprocessor.includes(token),`Preprocesado físico incompleto: ${token}`);
-for(const token of ["samePhysicalRow","mergePhysicalRows","arithmeticValid","reconstructReceiptEvidence"])
+for(const token of ["samePhysicalRow","mergePhysicalRows","arithmeticValid","descriptionEvidence","reconstructReceiptEvidence"])
   must(reconstruction.includes(token),`Reconstrucción física incompleta: ${token}`);
-must(reconstruction.includes("Never shift descriptions by price similarity or lexical resemblance"),"La reconstrucción debe prohibir reasignar descripciones por precio o similitud léxica");
+must(!reconstruction.includes("numericAgreement")&&!reconstruction.includes("lexicalOverlap"),"La reconstrucción no puede reasignar filas por precio o similitud léxica global");
 must(receiptLayout.includes("parseReceiptTsvLayout")&&receiptLayout.includes("unparsedBody")&&receiptLayout.includes("top")&&receiptLayout.includes("bottom"),"El layout debe preservar TSV, geometría y filas no interpretadas");
 
 for(const token of ["needs_review","failed","invalid_item_arithmetic","unparsed_body_rows","items_total_mismatch","base_tax_total_mismatch"])
   must(validator.includes(token),`Validador financiero incompleto: ${token}`);
-must(revision.includes('canonical_integrity_v5')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR canónica no está identificada de forma estable");
+must(revision.includes('canonical_integrity_v6')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR canónica no está identificada de forma estable");
 
 for(const token of ["rawText","normalizedText","layoutText","tsv","validation","metrics"])
   must(baseOcr.includes(token),`El contrato OCR ha perdido ${token}`);
