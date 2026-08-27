@@ -60,11 +60,12 @@ check(prebuildSteps.at(-1) === "node scripts/prepare-document-engine.mjs", "preb
 check(packageJson.scripts?.["audit:v19"] === "node scripts/audit-v19.mjs", "falta audit:v19");
 check(gitignore.includes("public/vendor/document-engine/"), "los assets generados no están excluidos de Git");
 
-const paddleRuntime = revision.includes("paddle_layout_v1");
+const paddleRuntime = revision.includes("paddle_layout_v2");
 if (paddleRuntime) {
   check(archive.includes("PaddleOCR.create"), "Archivo no usa PaddleOCR.js como runtime canónico");
-  check(archive.includes('ocrVersion:"PP-OCRv5"') && archive.includes('lang:"es"'), "PP-OCRv5 no está fijado a español");
-  check(!archive.includes("Tesseract"), "Archivo conserva Tesseract en runtime pese a paddle_layout_v1");
+  check(archive.includes('ocrVersion:"PP-OCRv6"') && archive.includes('lang:"es"'), "PP-OCRv6 no está fijado a español");
+  check(!archive.includes('ocrVersion:"PP-OCRv5"'), "Archivo conserva la combinación PP-OCRv5 + es que PaddleOCR.js 0.4.2 no soporta");
+  check(!archive.includes("Tesseract"), "Archivo conserva Tesseract en runtime pese a paddle_layout_v2");
   check(paddleLoader.includes("@paddleocr/paddleocr-js@0.4.2"), "PaddleOCR.js no está fijado a 0.4.2");
   check(archive.includes("https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/"), "ORT WASM no está fijado a la versión auditada");
   check(!archive.includes("unpkg.com")&&!archive.includes("tessdata.projectnaptha.com"), "Archivo referencia un CDN OCR no permitido");
@@ -111,4 +112,4 @@ for (const asset of manifest.assets) {
   check(await sha256(file) === asset.sha256, `hash SHA-256 no coincide en ${asset.path}`);
 }
 
-console.log(`AUDIT 1.9 OK · producto ${canonicalVersion} · assets históricos verificables · runtime ${paddleRuntime?"PP-OCRv5":"1.9"}`);
+console.log(`AUDIT 1.9 OK · producto ${canonicalVersion} · assets históricos verificables · runtime ${paddleRuntime?"PP-OCRv6 es":"1.9"}`);
