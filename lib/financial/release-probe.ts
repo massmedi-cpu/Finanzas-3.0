@@ -1,7 +1,7 @@
 import { APP_VERSION } from "@/lib/app-version";
+import { getAccountsOverview } from "@/lib/financial/accounts";
 import { getActionableIntelligence } from "@/lib/financial/actionable-intelligence";
 import { getArchiveOverview } from "@/lib/financial/archive";
-import { getFinancialDashboard } from "@/lib/financial/dashboard";
 import { getForecastCalendar } from "@/lib/financial/forecast-calendar";
 import { getHomePulse } from "@/lib/financial/home-pulse";
 import { getMatchingObservability } from "@/lib/financial/matching-observability";
@@ -12,7 +12,7 @@ export type AuthenticatedReleaseProbe = {
   version: string;
   privateSession: true;
   checks: {
-    dashboardReadable: boolean;
+    accountsReadable: boolean;
     homePulseReadable: boolean;
     movementsReadable: boolean;
     forecastReadable: boolean;
@@ -26,8 +26,8 @@ export type AuthenticatedReleaseProbe = {
 };
 
 export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedReleaseProbe> {
-  const [dashboard, homePulse, movements, forecast, archive, matching, intelligence] = await Promise.all([
-    getFinancialDashboard(),
+  const [accounts, homePulse, movements, forecast, archive, matching, intelligence] = await Promise.all([
+    getAccountsOverview(),
     getHomePulse(),
     getMovements({ page: 1, pageSize: 1 }),
     getForecastCalendar(1),
@@ -37,7 +37,10 @@ export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedRelea
   ]);
 
   const checks = {
-    dashboardReadable: Boolean(dashboard.month) && Array.isArray(dashboard.accounts),
+    accountsReadable:
+      accounts.version === APP_VERSION &&
+      Boolean(accounts.month) &&
+      Array.isArray(accounts.accounts),
     homePulseReadable:
       homePulse.version === APP_VERSION &&
       Boolean(homePulse.month) &&
