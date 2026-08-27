@@ -62,11 +62,30 @@ assert.equal(geometric.items[0].description,"CAFE");
 assert.equal(geometric.items[1].description,"TOSTADA");
 assert.equal(receiptLayoutTotal(geometric),7.5);
 
+// An OCR quantity that contradicts price × total is not trusted. The parser may
+// recover it only when arithmetic uniquely determines an integer quantity.
+const noisyQuantityTsv=[
+  header,
+  "5\t1\t1\t1\t1\t1\t100\t100\t150\t20\t95\tDESCRIPCION",
+  "5\t1\t1\t1\t1\t2\t560\t100\t50\t20\t95\tUDS",
+  "5\t1\t1\t1\t1\t3\t670\t100\t70\t20\t95\tPRECIO",
+  "5\t1\t1\t1\t1\t4\t800\t100\t80\t20\t95\tTOTAL",
+  "5\t1\t1\t1\t2\t1\t100\t140\t130\t20\t95\tPRODUCTO",
+  "5\t1\t1\t1\t2\t2\t575\t140\t25\t20\t80\t11",
+  "5\t1\t1\t1\t2\t3\t688\t140\t50\t20\t96\t2.80",
+  "5\t1\t1\t1\t2\t4\t820\t140\t50\t20\t96\t2.80",
+].join("\n");
+const recovered=parseReceiptTsvLayout(noisyQuantityTsv);
+assert.ok(recovered);
+assert.equal(recovered.items.length,1);
+assert.equal(recovered.items[0].quantity,"1");
+assert.equal(recovered.items[0].inferredQuantity,true);
+
 const reconstructed=reconstructReceiptEvidence([receipt],[geometric],metadata.merchant);
 assert.ok(reconstructed.layout);
 assert.equal(reconstructed.layout.items.length,2);
 assert.equal(reconstructed.total,7.5);
-assert.equal(RECEIPT_OCR_REVISION,"canonical_integrity_v5");
+assert.equal(RECEIPT_OCR_REVISION,"canonical_integrity_v6");
 assert.ok(RECEIPT_OCR_METHOD_PREFIX.includes(RECEIPT_OCR_REVISION));
 
 console.log("ticket-ocr integrity tests OK");
