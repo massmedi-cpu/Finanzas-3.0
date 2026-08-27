@@ -63,7 +63,7 @@
     "test:time": "tsx scripts/time-v260-tests.ts",
     "test:explainability": "tsx scripts/explainability-v270-tests.ts",
     "test:integrity": "tsx scripts/integrity-v280-tests.ts",
-    "test:ocr": "tsx scripts/ticket-ocr-v302-tests.ts"
+    "test:ocr": "tsx scripts/ticket-ocr-v302-tests.ts && tsx scripts/receipt-reconstruction-v4-tests.ts"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
