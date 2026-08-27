@@ -3,14 +3,12 @@
   "version": "3.4.8",
   "private": true,
   "type": "module",
-  "engines": {
-    "node": "22.x"
-  },
+  "engines": {"node": "22.x"},
   "scripts": {
     "postinstall": "node scripts/prepare-document-engine.mjs",
     "predev": "node scripts/prepare-document-engine.mjs",
     "dev": "next dev",
-    "prebuild": "node scripts/audit-release-preflight.mjs && node scripts/audit-v380.mjs && node scripts/audit-v381.mjs && node scripts/audit-v390.mjs && node scripts/audit-home-streaming-v391.mjs && node scripts/audit-v400.mjs && node scripts/audit-v410.mjs && node scripts/audit-v420.mjs && node scripts/preflight-supabase-contract.mjs && node scripts/audit-api-boundary.mjs && node scripts/audit-sync-performance.mjs && node scripts/prepare-document-engine.mjs",
+    "prebuild": "node scripts/audit-release-preflight.mjs && node scripts/audit-v380.mjs && node scripts/audit-v381.mjs && node scripts/audit-v390.mjs && node scripts/audit-home-streaming-v391.mjs && node scripts/audit-v400.mjs && node scripts/audit-v410.mjs && node scripts/audit-v420.mjs && node scripts/audit-v430.mjs && node scripts/preflight-supabase-contract.mjs && node scripts/audit-api-boundary.mjs && node scripts/audit-sync-performance.mjs && node scripts/prepare-document-engine.mjs",
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
@@ -18,7 +16,7 @@
     "preflight:supabase": "node scripts/preflight-supabase-contract.mjs",
     "prepare:document-engine": "node scripts/prepare-document-engine.mjs",
     "audit:axioma": "node scripts/audit-axioma-total.mjs",
-    "audit:current": "node scripts/audit-current.mjs && node scripts/audit-contracts-v348.mjs && node scripts/audit-control-contracts.mjs && node scripts/audit-analysis-visuals.mjs && node scripts/audit-theme-contracts.mjs && node scripts/audit-release-preflight.mjs && node scripts/audit-v380.mjs && node scripts/audit-v381.mjs && node scripts/audit-v390.mjs && node scripts/audit-home-streaming-v391.mjs && node scripts/audit-v400.mjs && node scripts/audit-v410.mjs && node scripts/audit-v420.mjs && node scripts/audit-api-boundary.mjs && node scripts/audit-sync-performance.mjs",
+    "audit:current": "node scripts/audit-current.mjs && node scripts/audit-contracts-v348.mjs && node scripts/audit-control-contracts.mjs && node scripts/audit-analysis-visuals.mjs && node scripts/audit-theme-contracts.mjs && node scripts/audit-release-preflight.mjs && node scripts/audit-v380.mjs && node scripts/audit-v381.mjs && node scripts/audit-v390.mjs && node scripts/audit-home-streaming-v391.mjs && node scripts/audit-v400.mjs && node scripts/audit-v410.mjs && node scripts/audit-v420.mjs && node scripts/audit-v430.mjs && node scripts/audit-api-boundary.mjs && node scripts/audit-sync-performance.mjs",
     "audit:api-boundary": "node scripts/audit-api-boundary.mjs",
     "audit:sync-performance": "node scripts/audit-sync-performance.mjs",
     "audit:home-streaming": "node scripts/audit-home-streaming-v391.mjs",
@@ -45,6 +43,7 @@
     "audit:v400": "node scripts/audit-v400.mjs",
     "audit:v410": "node scripts/audit-v410.mjs",
     "audit:v420": "node scripts/audit-v420.mjs",
+    "audit:v430": "node scripts/audit-v430.mjs",
     "e2e:preview": "node scripts/authenticated-preview-e2e.mjs",
     "audit:release-preflight": "node scripts/audit-release-preflight.mjs",
     "audit:visual-debt": "node scripts/audit-visual-debt.mjs",

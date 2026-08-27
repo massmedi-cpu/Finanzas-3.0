@@ -1,1 +1,1 @@
-Next planned audit block: matching observability and release telemetry for reconciliation/forecast decisions.
+Next planned audit block: actionable financial intelligence on anomalies, subscriptions, rising expenses and savings opportunities, reusing the canonical matching-quality signals without duplicating financial data.

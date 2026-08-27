@@ -11,24 +11,19 @@ const probeUrl=new URL("/auth/preview",base);
 probeUrl.searchParams.set("token",token);
 probeUrl.searchParams.set("next","/api/release-probe");
 
-const headers={accept:"application/json","user-agent":"Financial-App-authenticated-preview-e2e/4.2"};
+const headers={accept:"application/json","user-agent":"Financial-App-authenticated-preview-e2e/4.3"};
 if(bypass)headers["x-vercel-protection-bypass"]=bypass;
 
-async function request(){
-  return fetch(probeUrl,{method:"GET",headers,redirect:"manual",cache:"no-store"});
-}
+async function request(){return fetch(probeUrl,{method:"GET",headers,redirect:"manual",cache:"no-store"});}
 
 const first=await request();
-if(first.status!==200){
-  const location=first.headers.get("location")||"";
-  throw new Error(`Authenticated preview probe failed with HTTP ${first.status}${location?` -> ${new URL(location,base).pathname}`:""}`);
-}
+if(first.status!==200){const location=first.headers.get("location")||"";throw new Error(`Authenticated preview probe failed with HTTP ${first.status}${location?` -> ${new URL(location,base).pathname}`:""}`);}
 const payload=await first.json();
 const expectedTop=["checks","ok","privateSession","version"];
 const actualTop=Object.keys(payload).sort();
 if(JSON.stringify(actualTop)!==JSON.stringify(expectedTop))throw new Error("Probe returned unexpected top-level fields");
-if(payload.ok!==true||payload.privateSession!==true||payload.version!=="4.2.0")throw new Error("Probe identity/version contract failed");
-const expectedChecks=["archiveReadable","dashboardReadable","forecastContracts","forecastReadable","movementsReadable"];
+if(payload.ok!==true||payload.privateSession!==true||payload.version!=="4.3.0")throw new Error("Probe identity/version contract failed");
+const expectedChecks=["archiveReadable","dashboardReadable","forecastContracts","forecastReadable","matchingObservabilityReadable","matchingQualityGate","movementsReadable"];
 const actualChecks=Object.keys(payload.checks||{}).sort();
 if(JSON.stringify(actualChecks)!==JSON.stringify(expectedChecks))throw new Error("Probe returned unexpected check fields");
 for(const key of expectedChecks)if(payload.checks[key]!==true)throw new Error(`Authenticated read failed: ${key}`);
@@ -40,4 +35,4 @@ if(!replayLocation)throw new Error("Rejected replay did not return a login redir
 const rejected=new URL(replayLocation,base);
 if(rejected.pathname!=="/login"||rejected.searchParams.get("error")!=="preview")throw new Error("Rejected replay did not use the safe preview login error path");
 
-console.log("Authenticated preview E2E OK · private dashboard, movements, forecast and archive reads verified · token replay rejected");
+console.log("Authenticated preview E2E OK · private dashboard, movements, forecast, archive and matching-quality gate verified · token replay rejected");

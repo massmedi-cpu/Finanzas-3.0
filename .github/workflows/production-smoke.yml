@@ -66,7 +66,7 @@ jobs:
           for path in / /movimientos /prevision /archivo /ajustes; do
             check_redirect "$path"
           done
-          for path in /api/archive /api/settings /api/forecast; do
+          for path in /api/archive /api/settings /api/forecast /api/control/matching-quality; do
             check_api_unauthorized "$path"
           done
 
@@ -77,4 +77,4 @@ jobs:
             exit 1
           fi
 
-          echo "Production smoke passed: login, protected routes, API auth contract and preview-only E2E boundary are healthy."
+          echo "Production smoke passed: login, protected routes, API auth contract, matching-quality API and preview-only E2E boundary are healthy."
