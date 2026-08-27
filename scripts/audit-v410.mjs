@@ -22,7 +22,7 @@ expect(db.includes("restore_forecast_event")&&db.includes("dismissedEvents")&&db
 expect(route.includes("export async function PATCH")&&route.includes("financial_app_restore_forecast_event"),"API autenticada de restauración");
 expect(lib.includes("ForecastProjectionMonth")&&lib.includes("dismissedEvents:ForecastCalendarEvent[]")&&lib.includes("oneToOneActualMatching"),"contrato TypeScript 4.1 completo");
 expect(client.includes("forecast-month-strip")&&client.includes("projectionMonths")&&client.includes("restoreEvent")&&client.includes("Descartados"),"UI mensual, proyección y restauración visibles");
-expect(client.includes("Justificado por un movimiento real")&&client.includes("no compite con otra previsión"),"confirmación real explicable y conservadora");
+expect(client.includes("Justificado por un movimiento real")&&(client.includes("no compite con otra previsión")||client.includes("no compita con otra previsión")),"confirmación real explicable y conservadora");
 expect(layout.includes('forecast-ledger.css')&&styles.includes("forecast-month-strip")&&styles.includes("forecast-dismissed"),"estilos de ledger con nombre funcional no versionado");
 
 if(checks.some(check=>!check.condition))process.exit(1);
