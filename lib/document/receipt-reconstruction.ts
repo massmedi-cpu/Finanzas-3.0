@@ -40,12 +40,30 @@ function editDistance(a: string, b: string) {
 }
 
 const commonShortWords = ["CON", "SIN", "GAS", "AGUA", "DE", "DEL", "LA", "EL", "AL"];
+const commonReceiptWords = [
+  "TERCIO", "ENERGY", "CUBATA", "CANA", "GRANDE", "GALICIA", "CERO", "AGUA", "GAS",
+  "CAFE", "CERVEZA", "REFRESCO", "BOTELLA", "COPA", "TAPA", "MENU", "ZUMO", "TONICA",
+];
 
 function closestCommonWord(token: string) {
   if (token.length < 2 || token.length > 5) return null;
   let best: string | null = null;
   let distance = 99;
   for (const candidate of commonShortWords) {
+    const current = editDistance(token, candidate);
+    if (current < distance) {
+      best = candidate;
+      distance = current;
+    }
+  }
+  return distance <= 1 ? best : null;
+}
+
+function closestReceiptWord(token: string) {
+  if (token.length < 4 || token.length > 10) return null;
+  let best: string | null = null;
+  let distance = 99;
+  for (const candidate of commonReceiptWords) {
     const current = editDistance(token, candidate);
     if (current < distance) {
       best = candidate;
@@ -76,9 +94,11 @@ function normalizeDescription(value: string) {
       expanded.push(...compound);
       continue;
     }
-    expanded.push(closestCommonWord(token) || token);
+    expanded.push(closestReceiptWord(token) || closestCommonWord(token) || token);
   }
   while (expanded.length && (expanded[0].length <= 1 || /^\d+$/.test(expanded[0]))) expanded.shift();
+  while (expanded.length >= 2 && expanded[0].length <= 2 && !["DE", "LA", "EL"].includes(expanded[0])) expanded.shift();
+  while (expanded.length >= 2 && ["DE", "DEL", "LA", "EL", "AL"].includes(expanded[0])) expanded.shift();
   while (expanded.length && (expanded.at(-1)!.length <= 1 || /^\d+$/.test(expanded.at(-1)!))) expanded.pop();
   const joined = expanded.join(" ").replace(/^O(?=[A-Z]{4,}\b)/, "");
   return joined.replace(/\bCANA\b/g, "CAÑA").trim();
@@ -90,7 +110,8 @@ function descriptionQuality(value: string) {
   const tokenList = normalized.split(/\s+/).filter(Boolean);
   const singletons = tokenList.filter((token) => token.length === 1).length;
   const digits = (normalized.match(/\d/g) || []).length;
-  return letters(normalized) * 0.35 + words(normalized) * 2.2 - singletons * 3 - digits * 1.5;
+  const known = tokenList.filter((token) => commonReceiptWords.includes(token.replace("Ñ", "N"))).length;
+  return letters(normalized) * 0.35 + words(normalized) * 2.2 + known * 0.8 - singletons * 3 - digits * 1.5;
 }
 
 function moneyOptions(rawValue: string): MoneyOption[] {
@@ -131,7 +152,6 @@ function numberTokens(line: string): NumberToken[] {
   for (const match of line.matchAll(regex)) {
     const raw = match[0];
     const start = match.index ?? 0;
-    const digitsOnly = raw.replace(/\D/g, "");
     tokens.push({
       raw,
       start,
@@ -268,11 +288,12 @@ function mergeAlignedDescriptions(primary: EvidenceRow[], alternate: EvidenceRow
   for (let j = 1; j <= m; j += 1) { dp[0][j] = dp[0][j - 1] + gap; move[0][j] = "l"; }
   for (let i = 1; i <= n; i += 1) {
     for (let j = 1; j <= m; j += 1) {
-      const overlap = lexicalOverlap(primary[i - 1].description, alternate[j - 1].description);
-      const numeric = numericAgreement(primary[i - 1], alternate[j - 1]);
-      const relativeA = n <= 1 ? 0 : (i - 1) / (n - 1);
-      const relativeB = m <= 1 ? 0 : (j - 1) / (m - 1);
-      const match = overlap * 7 + numeric * 8 + 1 - Math.abs(relativeA - relativeB) * 1.8;
+      const target = primary[i - 1];
+      const source = alternate[j - 1];
+      const overlap = lexicalOverlap(target.description, source.description);
+      const numeric = numericAgreement(target, source);
+      const ordinalDistance = Math.abs((i - 1) - (j - 1));
+      const match = overlap * 7 + numeric * 10 + 1 - ordinalDistance * 2.6;
       const diagonal = dp[i - 1][j - 1] + match;
       const up = dp[i - 1][j] + gap;
       const left = dp[i][j - 1] + gap;
@@ -289,9 +310,12 @@ function mergeAlignedDescriptions(primary: EvidenceRow[], alternate: EvidenceRow
       const target = primary[i - 1];
       const source = alternate[j - 1];
       const overlap = lexicalOverlap(target.description, source.description);
+      const numeric = numericAgreement(target, source);
+      const samePhysicalRow = Math.abs((i - 1) - (j - 1)) === 0;
       const muchBetter = source.quality >= target.quality + 2.5;
       const safer = overlap >= 0.45 && source.quality >= target.quality - 0.5;
-      if ((muchBetter || safer) && descriptionQuality(source.description) >= 3) target.description = source.description;
+      const numericSafe = numeric === 1 && source.quality >= target.quality - 1;
+      if ((safer || numericSafe || (samePhysicalRow && muchBetter)) && descriptionQuality(source.description) >= 3) target.description = source.description;
       i -= 1;
       j -= 1;
     } else if (current === "u") i -= 1;
