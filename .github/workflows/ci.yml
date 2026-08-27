@@ -86,6 +86,8 @@ jobs:
         run: npm run audit:v390
       - name: Progressive home 3.9.1 audit
         run: npm run audit:home-streaming
+      - name: Movements automation 4.0 audit
+        run: npm run audit:v400
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
