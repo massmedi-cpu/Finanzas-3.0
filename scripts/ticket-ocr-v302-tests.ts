@@ -42,9 +42,9 @@ const file=new File([new Uint8Array([1,2,3])],"receipt.jpg",{type:"image/jpeg"})
 const progress:Array<[number,string]>=[];
 const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push([value,label]),"receipt");
 
-assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia sobre el original");
+assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia");
 assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v2");
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v3");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -58,12 +58,33 @@ assert.equal(result.receiptLayout?.summary.at(-1)?.value,"7.50");
 assert.ok(result.rawText.includes("CAFETERIA CENTRAL"));
 assert.ok(result.rawText.includes("TOSTADA"));
 assert.equal(result.metrics?.secondaryMs,0,"No puede existir una segunda pasada OCR de rescate");
-assert.equal(result.metrics?.preprocessMs,0,"No puede reutilizarse el preprocesado destructivo anterior");
+assert.equal(result.metrics?.preprocessMs,0,"En Node sin canvas debe conservarse el fallback no destructivo");
 const pass=result.passes[0] as typeof result.passes[0]&{visualLayout?:{lines?:unknown[];bounds?:{width:number;height:number}}};
 assert.ok(pass.visualLayout);
 assert.equal(pass.visualLayout?.lines?.length,fakePaddleResult.items.length);
 assert.ok((pass.visualLayout?.bounds?.width||0)>0);
 assert.ok((pass.visualLayout?.bounds?.height||0)>0);
 assert.ok(progress.some(([,label])=>label.includes("PP-OCRv6")));
+
+const noisyPaddleResult={
+  ...fakePaddleResult,
+  image:{width:1200,height:560},
+  items:[
+    ...fakePaddleResult.items,
+    item("WOOKISHVAR",1080,150,110,.96),
+    item("出88481日日886886815888日8618日88840",420,500,360,.92),
+    item("BACKGROUND",1085,190,105,.91),
+  ],
+};
+const noisyEngine={async predict(){return [noisyPaddleResult];}};
+const noisy=await recognizeTicketImage(file,noisyEngine,()=>undefined,"receipt");
+assert.ok(noisy.rawText.includes("WOOKISHVAR"),"La evidencia literal debe conservar el texto detectado por el motor");
+assert.ok(noisy.rawText.includes("886886"),"La evidencia literal debe conservar también la detección espuria");
+assert.ok(!noisy.text.includes("WOOKISHVAR"),"El texto fiable no debe incorporar letras del fondo fuera del ticket");
+assert.ok(!noisy.text.includes("BACKGROUND"),"La reconstrucción no debe ampliar sus límites por texto del fondo");
+assert.ok(!noisy.text.includes("886886"),"La basura de códigos/patrones bajo el cierre debe descartarse");
+const noisyPass=noisy.passes[0] as typeof noisy.passes[0]&{discardedBoxCount?:number;visualLayout?:{lines?:Array<{text?:string}>}};
+assert.ok((noisyPass.discardedBoxCount||0)>=3);
+assert.ok(!(noisyPass.visualLayout?.lines||[]).some(line=>String(line.text||"").includes("WOOKISHVAR")));
 
 console.log("ticket-ocr PP-OCRv6 geometry tests OK");
