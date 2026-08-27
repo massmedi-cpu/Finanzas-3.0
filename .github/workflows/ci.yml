@@ -94,6 +94,8 @@ jobs:
         run: npm run audit:v420
       - name: Matching observability 4.3 audit
         run: npm run audit:v430
+      - name: Actionable intelligence 4.4 audit
+        run: npm run audit:v440
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
