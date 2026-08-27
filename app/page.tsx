@@ -1,47 +1,66 @@
 import "./cash-flow.css";
-import { formatEuro, formatInteger, formatPercent } from "@/lib/format/es-es";
+import "./home-streaming.css";
+import { Suspense } from "react";
+import { formatEuro, formatInteger } from "@/lib/format/es-es";
 import { IntentLink } from "@/components/intent-link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
-import { getHomeOverview } from "@/lib/financial/home";
-import { movementState,movementUrl } from "@/lib/financial/movement-query";
+import { getFinancialDashboard } from "@/lib/financial/dashboard";
+import { getAccountsOverview } from "@/lib/financial/accounts";
+import { getBudgetMonth } from "@/lib/financial/budget";
+import { getForecastOverview } from "@/lib/financial/forecast";
+import { getAnalysisOverview } from "@/lib/financial/analysis";
+import { getHomeControlSummary,getHomeReconciliationSummary } from "@/lib/financial/home-streaming";
+import { madridToday } from "@/lib/time/madrid";
 import { SyncButton } from "@/components/sync-button";
-import { CashFlowChart } from "@/components/cash-flow-chart";
 import { APP_VERSION } from "@/lib/app-version";
-import type { CashFlowPoint } from "@/lib/financial/cash-flow";
+import {
+  HomeAccountsFallback,HomeAccountsSection,
+  HomePulseSecondary,HomePulseSecondaryFallback,
+  HomeFlowFallback,HomeFlowSection,
+  HomeForecastFallback,HomeForecastSection,
+  HomeDecisionFallback,HomeDecisionGrid,
+} from "./home-sections";
 
 const date=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 export const dynamic="force-dynamic";
 function fmtDate(value:string|null|undefined){return value?date.format(new Date(`${value.slice(0,10)}T12:00:00`)):"—"}
-function variation(series:{balance:number|null}[]){const values=series.map(x=>x.balance).filter((x):x is number=>x!=null&&Number.isFinite(x));return values.length>=2?values.at(-1)!-values.at(-2)!:null}
-function signed(value:number){return `${value>0?"+":""}${formatEuro(value)}`}
 
 export default async function Home(){
   await requireAuthorizedUser();
-  const home=await getHomeOverview();
-  const{dashboard,accounts,budget,forecast,analysis,reconciliation,controlSummary}=home;
-  const year=analysis.year||Number(dashboard.month.slice(0,4))||new Date().getFullYear();
-  const accountCards=accounts.accounts;
-  let accumulated=0;
-  const cashFlowPoints:CashFlowPoint[]=analysis.monthly.filter(m=>m.available).map(m=>{accumulated+=m.net;return{date:`${m.month}-01`,label:m.month,income:m.income,expenses:m.expenses,net:m.net,accumulated,movements:0}});
-  const budgetRate=budget.assigned>0?Math.min(150,(budget.spent/budget.assigned)*100):0;
-  const reconciliationOpen=reconciliation.summary.pending+reconciliation.summary.notReconciled;
-  const alertCount=controlSummary.visibleAlerts+controlSummary.hiddenAlerts;
-  const upcoming=forecast.events.slice(0,4);
-  const suggestions=forecast.suggestions.slice(0,4);
+
+  // Todas las consultas secundarias arrancan antes de esperar al dashboard.
+  // La respuesta HTML solo bloquea por el núcleo mensual; el resto se transmite
+  // por límites Suspense independientes en cuanto cada bloque queda disponible.
+  const today=madridToday();
+  const year=Number(today.slice(0,4));
+  const month=today.slice(0,7);
+  const dashboardPromise=getFinancialDashboard();
+  const accountsPromise=getAccountsOverview();
+  const budgetPromise=getBudgetMonth(month);
+  const forecastPromise=getForecastOverview(30);
+  const analysisPromise=getAnalysisOverview(year);
+  const reconciliationPromise=getHomeReconciliationSummary();
+  const controlPromise=Promise.all([dashboardPromise,budgetPromise]).then(([dashboard,budget])=>getHomeControlSummary(dashboard,budget));
+
+  const dashboard=await dashboardPromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace home-workspace">
     <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(dashboard.lastMovementDate)}</span><SyncButton/></div></header>
 
-    <section className="home-accounts-section" aria-labelledby="home-accounts-title"><div className="home-section-heading compact"><div><p className="eyebrow">CUENTAS</p><h2 id="home-accounts-title">Disponibilidad por cuenta</h2><p>Consulta cada cuenta por separado; el saldo total queda reservado para Patrimonio.</p></div><IntentLink href="/cuentas">Ver cuentas →</IntentLink></div><div className="home-account-ledger" aria-label="Cuentas">{accountCards.map(account=>{const change=variation(account.balanceSeries||[]);return <IntentLink key={account.id} href={`/cuentas/${account.id}`} className="home-account-row"><div><strong>{account.name}</strong><small>{account.identifier} · {account.role==="operating"?"Operativa":"Ahorro"}</small></div><div className="home-account-balance"><strong>{account.balance==null?"—":formatEuro(account.balance)}</strong><small>{change==null?"Variación reciente no disponible":`${signed(change)} vs. mes anterior`}</small></div></IntentLink>})}</div></section>
+    <Suspense fallback={<HomeAccountsFallback/>}><HomeAccountsSection data={accountsPromise}/></Suspense>
 
-    <section className="home-month-pulse" aria-label="Resumen del mes"><IntentLink href="/analisis"><span>Ingresos</span><strong className="positive">{formatEuro(dashboard.income)}</strong><small>reales computables</small></IntentLink><IntentLink href="/presupuesto"><span>Gastos</span><strong className="negative">{formatEuro(dashboard.expenses)}</strong><small>gasto personal real</small></IntentLink><IntentLink href="/cash-flow"><span>Cash Flow</span><strong className={dashboard.cashFlow<0?"negative":"positive"}>{formatEuro(dashboard.cashFlow)}</strong><small>sin ahorro ni traspasos</small></IntentLink><IntentLink href="/movimientos?review=1"><span>Por revisar</span><strong>{formatInteger(dashboard.needsReview)}</strong><small>{dashboard.reviewSource}</small></IntentLink><IntentLink href="/movimientos/conciliacion"><span>Conciliación</span><strong>{formatInteger(reconciliationOpen)}</strong><small>{reconciliation.summary.reconciled} conciliados</small></IntentLink><IntentLink href="/control"><span>Alertas</span><strong>{formatInteger(alertCount)}</strong><small>{controlSummary.closeReady?"mes listo para cierre":`${controlSummary.closeBlockers} bloqueos · ${controlSummary.closeWarnings} avisos`}</small></IntentLink></section>
+    <section className="home-month-pulse" aria-label="Resumen del mes">
+      <IntentLink href="/analisis"><span>Ingresos</span><strong className="positive">{formatEuro(dashboard.income)}</strong><small>reales computables</small></IntentLink>
+      <IntentLink href="/presupuesto"><span>Gastos</span><strong className="negative">{formatEuro(dashboard.expenses)}</strong><small>gasto personal real</small></IntentLink>
+      <IntentLink href="/cash-flow"><span>Cash Flow</span><strong className={dashboard.cashFlow<0?"negative":"positive"}>{formatEuro(dashboard.cashFlow)}</strong><small>sin ahorro ni traspasos</small></IntentLink>
+      <IntentLink href="/movimientos?review=1"><span>Por revisar</span><strong>{formatInteger(dashboard.needsReview)}</strong><small>{dashboard.reviewSource}</small></IntentLink>
+      <Suspense fallback={<HomePulseSecondaryFallback/>}><HomePulseSecondary reconciliation={reconciliationPromise} control={controlPromise}/></Suspense>
+    </section>
 
-    <section className="home-flow-section" aria-labelledby="home-flow-title"><div className="home-section-heading"><div><p className="eyebrow">EVOLUCIÓN {year}</p><h2 id="home-flow-title">Cómo se está moviendo tu dinero</h2><p>Ingresos, gastos y acumulado en el mismo contexto temporal.</p></div><IntentLink href="/cash-flow">Abrir Cash Flow →</IntentLink></div><div className="home-flow-layout"><div className="home-chart-area">{cashFlowPoints.length?<CashFlowChart points={cashFlowPoints} drilldown={{bucket:"month",dateFrom:analysis.periodStart,dateTo:analysis.periodEnd,account:"",type:"",category:"",subcategory:"",merchant:""}}/>:<div className="home-empty">No hay evolución disponible.</div>}</div><aside className="home-budget-context" aria-label={`Presupuesto ${dashboard.month}`}><p className="eyebrow">PRESUPUESTO · {dashboard.month}</p><h3>Control del mes</h3>{budget.assigned>0?<><dl><div><dt>Asignado</dt><dd>{formatEuro(budget.assigned)}</dd></div><div><dt>Gastado</dt><dd>{formatEuro(budget.spent)}</dd></div><div><dt>Disponible</dt><dd className={budget.available<0?"negative":"positive"}>{formatEuro(budget.available)}</dd></div></dl><div className="home-budget-bar" aria-label={`${Math.round(budgetRate)}% del presupuesto consumido`}><i style={{width:`${Math.min(100,budgetRate)}%`}}/></div><p>{Math.round(budgetRate)}% consumido · {budget.overBudgetCount} presupuestos excedidos.</p></>:<div className="home-empty compact"><strong>Aún no hay presupuestos asignados.</strong><span>El gasto real del mes es {formatEuro(budget.spent)} y hay {formatEuro(budget.unbudgetedSpent)} sin presupuesto.</span></div>}<IntentLink href="/presupuesto">Revisar presupuesto →</IntentLink></aside></div></section>
-
-    <section className="home-forecast-section" aria-labelledby="home-forecast-title"><div className="home-section-heading"><div><p className="eyebrow">PRÓXIMOS 30 DÍAS</p><h2 id="home-forecast-title">Lo que viene</h2><p>Previsión basada en movimientos confirmados y patrones fiables.</p></div><IntentLink href="/prevision">Simular escenarios →</IntentLink></div><div className="home-forecast-line"><div><span>Saldo previsto</span><strong>{formatEuro(forecast.projectedBalance)}</strong></div><div><span>Saldo mínimo</span><strong className={forecast.lowestBalance<0?"negative":""}>{formatEuro(forecast.lowestBalance)}</strong></div></div>{upcoming.length?<div className="home-upcoming">{upcoming.map(event=><div key={event.id}><span>{fmtDate(event.date)}</span><strong>{event.title}</strong><b className={event.amount<0?"negative":"positive"}>{formatEuro(event.amount)}</b></div>)}</div>:suggestions.length?<><p className="home-section-note">Patrones detectados que aún no afectan al saldo:</p><div className="home-upcoming suggestions">{suggestions.map(item=><div key={item.id}><span>{fmtDate(item.nextDate)}</span><strong>{item.title} · {Math.round(item.confidence*100)}%</strong><b className={item.amount<0?"negative":"positive"}>{formatEuro(item.amount)}</b></div>)}</div></>:<div className="home-empty compact">Sin próximos movimientos confirmados ni patrones fiables.</div>}</section>
-
-    <section className="home-decision-grid"><div className="home-spend-section"><div className="home-section-heading compact"><div><p className="eyebrow">GASTO {year}</p><h2>En qué se concentra</h2></div><IntentLink href="/analisis">Analizar →</IntentLink></div>{analysis.categories.length?<div className="home-category-list">{analysis.categories.slice(0,6).map(item=><IntentLink key={item.category} href={movementUrl(movementState({category:item.category,from:analysis.periodStart,to:analysis.periodEnd,cashFlowOnly:true}))}><div><strong>{item.category}</strong><small>{formatPercent(item.share,1)} · {formatInteger(item.movements)} mov.</small></div><b>{formatEuro(item.amount)}</b><i><span style={{width:`${Math.min(100,item.share)}%`}}/></i></IntentLink>)}</div>:<div className="home-empty">No hay categorías disponibles.</div>}</div><div className="home-attention-section"><div className="home-section-heading compact"><div><p className="eyebrow">CONTROL</p><h2>Qué necesita atención</h2></div><IntentLink href="/control">{formatInteger(alertCount)} alertas →</IntentLink></div><div className="home-attention-list"><IntentLink href="/movimientos?review=1"><span>Movimientos por revisar</span><strong>{dashboard.needsReview}</strong></IntentLink><IntentLink href="/movimientos/conciliacion"><span>Conciliación pendiente / no conciliada</span><strong>{reconciliationOpen}</strong></IntentLink><IntentLink href="/analisis"><span>Sin categoría</span><strong>{analysis.uncategorizedCount}</strong></IntentLink><IntentLink href="/presupuesto"><span>Presupuestos excedidos</span><strong>{budget.overBudgetCount}</strong></IntentLink><IntentLink href="/movimientos"><span>Detectados en última sincronización</span><strong>{dashboard.sync?.newCount??0}</strong></IntentLink></div></div></section>
+    <Suspense fallback={<HomeFlowFallback/>}><HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/></Suspense>
+    <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>
+    <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid dashboard={dashboard} analysis={analysisPromise} budget={budgetPromise} reconciliation={reconciliationPromise} control={controlPromise}/></Suspense>
 
     <footer className="home-freshness"><span>Fuente oficial: Google Drive XLSX · solo lectura.</span><span>Última sincronización {dashboard.sync?.finishedAt?new Date(dashboard.sync.finishedAt).toLocaleString("es-ES"):"pendiente"}.</span></footer>
-  </section></main>
+  </section></main>;
 }

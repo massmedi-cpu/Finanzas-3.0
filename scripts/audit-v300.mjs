@@ -13,6 +13,8 @@ const chromeCss=read("app/chrome.css");
 const tablet=read("app/tablet.css");
 const typography=read("app/typography.css");
 const home=read("app/page.tsx");
+const homeSections=read("app/home-sections.tsx");
+const homeSurface=`${home}\n${homeSections}`;
 const homeCss=read("app/home.css");
 const chrome=read("components/app-chrome.tsx");
 const navigation=read("components/app-navigation.tsx");
@@ -80,10 +82,11 @@ must(intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentL
 
 // Inicio como narrativa financiera, no muro de widgets ni saldo total protagonista.
 for(const token of ["home-accounts-section","home-account-ledger","home-month-pulse","home-flow-section","home-forecast-section","home-decision-grid"])
-  must(home.includes(token),`Inicio ha perdido su secuencia narrativa: ${token}`);
-must(!home.includes("home-kpis")&&!home.includes("home-account-card")&&!home.includes('className="panel home-'),"Inicio no debe volver al patrón card + KPI + panel");
-must(home.includes("getHomeOverview")&&home.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos y mostrar la versión canónica del producto");
-must(!home.includes("home.version")&&!home.includes("dashboard.totalAvailable")&&!home.includes("home-balance-primary"),"Inicio no debe mostrar la versión interna del RPC ni el saldo total como protagonista");
+  must(homeSurface.includes(token),`Inicio ha perdido su secuencia narrativa: ${token}`);
+must(!homeSurface.includes("home-kpis")&&!homeSurface.includes("home-account-card")&&!homeSurface.includes('className="panel home-'),"Inicio no debe volver al patrón card + KPI + panel");
+must(home.includes("getFinancialDashboard")&&homeSections.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos, el gráfico de evolución y mostrar la versión canónica del producto");
+must(home.includes("Suspense")&&home.includes("getHomeControlSummary")&&home.includes("getHomeReconciliationSummary"),"Inicio debe conservar la arquitectura progresiva 3.9.1");
+must(!homeSurface.includes("home.version")&&!homeSurface.includes("dashboard.totalAvailable")&&!homeSurface.includes("home-balance-primary"),"Inicio no debe mostrar la versión interna del RPC ni el saldo total como protagonista");
 must(homeCss.includes(".home-account-row")&&homeCss.includes("border-bottom:1px solid var(--border)"),"las cuentas deben leerse como ledger continuo");
 must(homeCss.includes("font-size:clamp(30px,2.6vw,38px)")&&typography.includes(".home-account-row small")&&typography.includes(".home-month-pulse span")&&typography.includes(".home-section-heading>div>p:last-child")&&typography.includes("--readable-meta:14px"),"Inicio debe conservar titular equilibrado y microtexto elevado por la autoridad tipográfica");
 must(homeCss.includes("@media(max-width:680px)")&&homeCss.includes("@media(max-width:420px)"),"Inicio debe resolver móvil pequeño explícitamente");

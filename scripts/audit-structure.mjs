@@ -25,7 +25,8 @@ if(av==="3.1.0"){
 }
 
 const home=readFileSync("app/page.tsx","utf8");
-if(!home.includes("getHomeOverview"))errors.push("Inicio no usa home overview unificado");
+for(const contract of ["getFinancialDashboard","getHomeControlSummary","getHomeReconciliationSummary","Suspense"])if(!home.includes(contract))errors.push(`Inicio no respeta arquitectura progresiva 3.9.1: falta ${contract}`);
+if(home.includes("getHomeOverview"))errors.push("Inicio ha regresado al home overview monolítico");
 const movementApi=readFileSync("app/api/movements/route.ts","utf8");
 if(movementApi.split("export async function POST")[0].includes("financial_app_mark_new_seen"))errors.push("GET movimientos escribe estado");
 const rootLayout=readFileSync("app/layout.tsx","utf8");
