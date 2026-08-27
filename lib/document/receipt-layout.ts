@@ -56,6 +56,7 @@ function lineText(words: TsvWord[]) { return cleanLine([...words].sort((a, b) =>
 function center(word: TsvWord) { return word.left + word.width / 2; }
 function normalizeKey(value: string) { return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Z0-9]/g, ""); }
 function hasUsefulText(value: string) { return (value.match(/[\p{L}\d]/gu) || []).length >= 2; }
+function recognizableDescription(value: string) { return /\p{L}[\p{L}\d]{1,}/u.test(cleanLine(value)); }
 
 export function receiptDisplayNumber(value: string) { return value.replace(".", ","); }
 
@@ -76,7 +77,7 @@ export function parseReceiptLayout(text: string): ReceiptLayout {
     }
     if (tableEnded) { footer.push(line); rowIndex += 1; continue; }
     const item = line.match(itemRegex);
-    if (seenTable && item && plausibleItem(item[2], item[3], item[4])) {
+    if (seenTable && item && recognizableDescription(item[1]) && plausibleItem(item[2], item[3], item[4])) {
       items.push({ description: item[1].trim(), quantity: receiptDisplayNumber(item[2]), unitPrice: receiptDisplayNumber(item[3]), total: receiptDisplayNumber(item[4]), top: rowIndex, bottom: rowIndex, sourceLine: line });
       rowIndex += 1;
       continue;
@@ -191,8 +192,9 @@ export function parseReceiptTsvLayout(tsv: string): ReceiptLayout | null {
         total = total || decimals.at(-1)!;
       }
     }
-    if (!quantity) {
-      quantity = inferredQuantity(unitPrice, total);
+    const arithmeticQuantity = inferredQuantity(unitPrice, total);
+    if (!quantity || (quantity && unitPrice && total && !plausibleItem(quantity, unitPrice, total) && arithmeticQuantity)) {
+      quantity = arithmeticQuantity;
       quantityInferred = Boolean(quantity);
     }
     if (!description) {
@@ -200,7 +202,7 @@ export function parseReceiptTsvLayout(tsv: string): ReceiptLayout | null {
       if (firstNumeric > 0) description = cleanLine(plain.slice(0, firstNumeric));
     }
 
-    if (description && quantity && unitPrice && total && plausibleItem(quantity, unitPrice, total)) {
+    if (description && recognizableDescription(description) && quantity && unitPrice && total && plausibleItem(quantity, unitPrice, total)) {
       items.push({
         description,
         quantity: receiptDisplayNumber(quantity),
