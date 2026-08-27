@@ -51,8 +51,10 @@ must(!probe.includes("getFinancialDashboard")&&!probe.includes("dashboardReadabl
 must(e2e.includes("expectedVersion")&&e2e.includes('"accountsReadable"')&&e2e.includes('"homePulseReadable"'),"E2E 5.0 no valida versión dinámica y superficies canónicas");
 must(!e2e.includes('"dashboardReadable"'),"E2E 5.0 conserva el dashboard sustituido");
 
-for(const doc of [[canonical,"CANONICAL_ARCHITECTURE"],[architecture,"ARCHITECTURE"],[readme,"README"]])
-  must(doc[0].includes("5.0.0"),`${doc[1]} no declara la arquitectura 5.0.0`);
+must(canonical.includes("5.0.0"),"CANONICAL_ARCHITECTURE no declara la arquitectura base 5.0.0");
+must(architecture.includes("5.0.0"),"ARCHITECTURE no declara la arquitectura base 5.0.0");
+const readmeDeclaresBaseline=readme.includes("5.0.0")||readme.includes(`Baseline ${currentVersion}`)||readme.includes(`Financial App ${currentVersion}`);
+must(readmeDeclaresBaseline&&atLeast(currentVersion,"5.0.0"),"README no declara una baseline vigente compatible con la arquitectura 5.0.0");
 must(!architecture.includes("finance_v3_")&&!architecture.includes("finanzas-v3-"),"ARCHITECTURE.md sigue presentando la arquitectura V3 sustituida como vigente");
 must(nextAudit.includes("5.0.0")&&nextAudit.toLowerCase().includes("baseline"),"README_AUDIT_NEXT no cierra el roadmap anterior en la baseline 5.0");
 
