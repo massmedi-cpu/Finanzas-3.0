@@ -14,6 +14,7 @@ const lib=read("lib/financial/forecast-calendar.ts");
 const migration=read("database/FINANCIAL_APP_3.7.0_FORECAST_DISMISSALS.sql");
 const hotfix=read("database/FINANCIAL_APP_3.7.1_FORECAST_READ_SECURITY.sql");
 const actuals=read("database/FINANCIAL_APP_3.7.2_FORECAST_ACTUALS.sql");
+const ledger410=fs.existsSync("database/FINANCIAL_APP_4.1.0_FORECAST_LEDGER.sql")?read("database/FINANCIAL_APP_4.1.0_FORECAST_LEDGER.sql"):"";
 
 const version=appVersion.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
 const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
@@ -30,11 +31,28 @@ const mobileBlock=navigation.split("const mobilePrimary")[1]?.split("function ma
 must(primaryBlock.includes('["Previsión","/prevision"]'),"Previsión debe ser destino primario en escritorio");
 must(!secondaryBlock.includes('["Previsión","/prevision"]'),"Previsión no debe seguir duplicada en el menú secundario");
 must(mobileBlock.includes('["Previsión","/prevision"]'),"Previsión debe ser destino principal en móvil");
-for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)","Ya no cuenta en los cálculos del mes"])
+for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)"])
   must(client.includes(token),`Previsión 3.7 ha perdido contrato: ${token}`);
+must(client.includes("Ya no cuenta en los cálculos del mes")||client.includes("Ya no cuenta en el cash flow estimado"),"Previsión debe informar que un descarte deja de contar en los cálculos");
 must(client.includes('event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount'),"Los confirmados deben usar importe real y los demás estimado");
-for(const token of ["data.actualMonths.find","event.status!==\"received\"","actualMonth.cashFlow+pendingFlow.cashFlow","actualMonth.income+pendingFlow.income","actualMonth.expenses+pendingFlow.expenses","Gastos reales ya realizados + cargos pendientes estimados."])
-  must(client.includes(token),`Proyección mensual 3.7.2 incompleta: ${token}`);
+
+const legacyClientProjection=[
+  "data.actualMonths.find","event.status!==\"received\"","actualMonth.cashFlow+pendingFlow.cashFlow","actualMonth.income+pendingFlow.income","actualMonth.expenses+pendingFlow.expenses"
+].every(token=>client.includes(token));
+const serverProjection=
+  client.includes("data.projectionMonths.find")&&
+  client.includes("projection.projectedCashFlow")&&
+  client.includes("projection.projectedIncome")&&
+  client.includes("projection.projectedExpenses")&&
+  lib.includes("ForecastProjectionMonth")&&lib.includes("projectionMonths")&&
+  ledger410.includes("status<>'received'")&&
+  ledger410.includes("coalesce(a.cash_flow,0)+coalesce(p.cash_flow,0)")&&
+  ledger410.includes("coalesce(a.income,0)+coalesce(p.income,0)")&&
+  ledger410.includes("coalesce(a.expenses,0)+coalesce(p.expenses,0)")&&
+  ledger410.includes("confirmedEventsNotDoubleCounted")&&ledger410.includes("dismissedEventsExcludedFromMetrics");
+must(legacyClientProjection||serverProjection,"La proyección mensual debe sumar real + pendiente, excluir confirmados del pendiente y excluir descartados, en cliente legado o contrato canónico de servidor");
+must(client.includes("real +")&&client.includes("todavía previsto"),"La UI debe explicar la composición real + pendiente del Cash Flow estimado");
+
 must(api.includes("financial_app_dismiss_forecast_event")&&api.includes("eventId")&&api.includes("p_estimated_date"),"DELETE de Previsión debe descartar una ocurrencia persistente");
 for(const token of ["actualMonths","ForecastActualMonth","normalizedCategoryFallbackMatching","actualExpensesIncludedInProjection","confirmedEventsNotDoubleCounted"])
   must(lib.includes(token),`Contrato tipado 3.7.2 incompleto: ${token}`);
@@ -49,6 +67,10 @@ for(const token of ["actualMonths","normalizedCategoryFallbackMatching","actualE
 must(actuals.includes("greatest(2::numeric,abs((v.item->>'estimatedAmount')::numeric)*.05)"),"El fallback de confirmación debe mantener una tolerancia de importe estrecha");
 must(actuals.includes("already.item->'actual'->>'transactionId'=t.id::text"),"El fallback no debe reutilizar movimientos ya confirmados");
 must(actuals.includes("row_number() over(partition by b.transaction_id"),"Un movimiento real no debe confirmar dos previsiones");
+if(ledger410){
+  must(ledger410.includes("event_rank=1 and transaction_rank=1"),"4.1 debe reforzar la conciliación previsión↔real 1↔1");
+  must(ledger410.includes("actualExpensesIncludedInProjection")&&ledger410.includes("serverSideMonthlyProjection"),"4.1 debe mantener gastos reales dentro de la proyección canónica");
+}
 must(css.includes(".forecast-cashflow-summary{")&&css.includes(".forecast-delete-button{"),"Faltan estilos del resumen o del botón Eliminar");
 
 const roots=["app","components"];
