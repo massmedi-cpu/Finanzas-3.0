@@ -21,8 +21,10 @@ for(const token of ["Deshacer última edición masiva","action:\"undo\"","change
   must(undoButton.includes(token),`El deshacer masivo ha perdido la garantía: ${token}`);
 
 const syncButton=read("components/sync-button.tsx");
-for(const token of ["AUTO_SYNC_INTERVAL = 15 * 60 * 1000","useEffect","financial-app-last-auto-sync","Actualizado con aviso"])
-  must(syncButton.includes(token),`La sincronización automática ha perdido la garantía: ${token}`);
+const legacyAutoSync=["AUTO_SYNC_INTERVAL = 15 * 60 * 1000","useEffect","financial-app-last-auto-sync"].every(token=>syncButton.includes(token));
+const optimizedManualSync=!syncButton.includes("useEffect")&&!syncButton.includes("AUTO_SYNC_INTERVAL")&&syncButton.includes("data?.changed===true")&&syncButton.includes("startRefresh(()=>router.refresh())");
+must(legacyAutoSync||optimizedManualSync,"La estrategia de sincronización debe ser automática heredada o manual 4.5 sin refresh innecesario");
+must(syncButton.includes("Actualizado con aviso"),"La sincronización debe conservar el estado de aviso documental");
 
 const sync=read("supabase/functions/financial-app-sync/index.ts");
 for(const token of [
@@ -97,4 +99,4 @@ for(const token of ["suggestions","Mejor coincidencia","/links","Abrir original"
   must(reviewClient.includes(token),`La revisión documental ha perdido la acción: ${token}`);
 
 if(failures.length){console.error("Financial App 3.8 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 3.8 audit OK · edición masiva reversible, historial indexado, Drive incremental read-only, revisión documental y límites protegidos");
+console.log("Financial App 3.8 audit OK · edición masiva reversible, Drive incremental read-only, sync no disruptiva compatible y revisión documental protegidos");

@@ -3,6 +3,7 @@ import { getActionableIntelligence } from "@/lib/financial/actionable-intelligen
 import { getArchiveOverview } from "@/lib/financial/archive";
 import { getFinancialDashboard } from "@/lib/financial/dashboard";
 import { getForecastCalendar } from "@/lib/financial/forecast-calendar";
+import { getHomePulse } from "@/lib/financial/home-pulse";
 import { getMatchingObservability } from "@/lib/financial/matching-observability";
 import { getMovements } from "@/lib/financial/movements";
 
@@ -12,6 +13,7 @@ export type AuthenticatedReleaseProbe = {
   privateSession: true;
   checks: {
     dashboardReadable: boolean;
+    homePulseReadable: boolean;
     movementsReadable: boolean;
     forecastReadable: boolean;
     archiveReadable: boolean;
@@ -24,8 +26,9 @@ export type AuthenticatedReleaseProbe = {
 };
 
 export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedReleaseProbe> {
-  const [dashboard, movements, forecast, archive, matching, intelligence] = await Promise.all([
+  const [dashboard, homePulse, movements, forecast, archive, matching, intelligence] = await Promise.all([
     getFinancialDashboard(),
+    getHomePulse(),
     getMovements({ page: 1, pageSize: 1 }),
     getForecastCalendar(1),
     getArchiveOverview(null),
@@ -35,6 +38,12 @@ export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedRelea
 
   const checks = {
     dashboardReadable: Boolean(dashboard.month) && Array.isArray(dashboard.accounts),
+    homePulseReadable:
+      homePulse.version === APP_VERSION &&
+      Boolean(homePulse.month) &&
+      homePulse.rules.readOnly === true &&
+      homePulse.rules.singleTransactionPass === true &&
+      homePulse.rules.accountsExcludedFromCriticalPath === true,
     movementsReadable: movements.ok === true && Array.isArray(movements.items) && Array.isArray(movements.facets.accounts),
     forecastReadable: forecast.version === APP_VERSION && forecast.months === 1 && Array.isArray(forecast.projectionMonths),
     archiveReadable: archive.private === true && Array.isArray(archive.documents),
