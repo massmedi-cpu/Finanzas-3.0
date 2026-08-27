@@ -50,7 +50,8 @@ const archiveUsesCanonicalBrowserEngine =
   archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") &&
   archive.includes("PaddleOCR.create") &&
   archive.includes('lang:"es"') &&
-  archive.includes('ocrVersion:"PP-OCRv5"') &&
+  archive.includes('ocrVersion:"PP-OCRv6"') &&
+  !archive.includes('ocrVersion:"PP-OCRv5"') &&
   archive.includes("localProcessing:true") &&
   !archive.includes("Tesseract");
 const engineIsMapped = tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
@@ -58,13 +59,13 @@ const engineRecognizesLocally =
   engine.includes("engine.predict(file") &&
   engine.includes("groupRows") &&
   engine.includes("makeVisualLayout") &&
-  engine.includes("ppocrv5_es_geometry");
+  engine.includes("ppocrv6_es_geometry");
 const canonicalPipeline =
   engine.includes("validateReceiptFinancials") &&
   engine.includes("RECEIPT_OCR_METHOD_PREFIX") &&
   engine.includes("visualLayout") &&
   validator.includes('"needs_review"') &&
-  revision.includes('paddle_layout_v1') &&
+  revision.includes('paddle_layout_v2') &&
   loader.includes("@paddleocr/paddleocr-js@0.4.2");
 const noLegacyFallback =
   !engine.includes("recognizeLegacyTicket") &&
@@ -73,7 +74,7 @@ const noLegacyFallback =
   !engine.includes("adaptive_psm") &&
   !engine.includes("grayscale_psm");
 const browserOcr = archiveUsesCanonicalBrowserEngine && engineIsMapped && engineRecognizesLocally && canonicalPipeline && noLegacyFallback;
-if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor PP-OCRv5 canónico");
+if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor PP-OCRv6 español canónico");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
 if (!archive.includes("imagePreprocessing:false")) errors.push("El runtime ha vuelto a activar el preprocesado OCR anterior");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
@@ -84,4 +85,4 @@ const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1]
 if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
 if (errors.length) {console.error("Financial App 1.8 audit FAILED");errors.forEach((error) => console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 1.8 audit OK · recuperación preservada y OCR local automático servido por PP-OCRv5 canónico");
+console.log("Financial App 1.8 audit OK · recuperación preservada y OCR local automático servido por PP-OCRv6 español canónico");
