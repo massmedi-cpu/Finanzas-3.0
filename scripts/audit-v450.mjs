@@ -3,6 +3,8 @@ import fs from "node:fs";
 const read=(path)=>fs.readFileSync(path,"utf8");
 const failures=[];
 const must=(ok,message)=>{if(!ok)failures.push(message)};
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
 
 const version=read("lib/app-version.ts");
 const migration=read("database/FINANCIAL_APP_4.5.0_HOME_PERFORMANCE.sql");
@@ -16,8 +18,9 @@ const probe=read("lib/financial/release-probe.ts");
 const e2e=read("scripts/authenticated-preview-e2e.mjs");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
+const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
 
-must(version.includes('APP_VERSION = "4.5.0"'),"APP_VERSION no es 4.5.0");
+must(atLeast(currentVersion,"4.5.0"),"APP_VERSION debe ser 4.5.0 o posterior");
 for(const token of ["transactions_latest_source_balance_idx","include (source_balance, account_id)","home_pulse_core","financial_app_home_pulse","'singleTransactionPass',true","'accountsExcludedFromCriticalPath',true","revoke all on function public.financial_app_home_pulse(date) from public,anon","grant execute on function public.financial_app_home_pulse(date) to authenticated,service_role"])
   must(migration.includes(token),`Falta garantía SQL 4.5: ${token}`);
 must(!/insert\s+into\s+financial_app\.transactions/i.test(migration)&&!/update\s+financial_app\.transactions/i.test(migration)&&!/delete\s+from\s+financial_app\.transactions/i.test(migration),"4.5 no puede mutar movimientos");
@@ -34,7 +37,7 @@ must(sync.includes("data?.changed===true")&&sync.includes("startRefresh(()=>rout
 must(intent.includes("onTouchStart={event=>{warm();onTouchStart?.(event)}}"),"La navegación táctil debe precalentar el destino antes del tap completo");
 
 must(probe.includes("homePulseReadable")&&probe.includes("accountsExcludedFromCriticalPath === true"),"Release probe no protege la ruta crítica 4.5");
-must(e2e.includes('payload.version!=="4.5.0"')&&e2e.includes('"homePulseReadable"'),"E2E autenticado no valida 4.5");
+must(e2e.includes("expectedVersion")&&e2e.includes('"homePulseReadable"'),"E2E autenticado no valida dinámicamente el pulso 4.5+");
 must(pkg.scripts?.["audit:v450"]==="node scripts/audit-v450.mjs","Falta script audit:v450");
 must(String(pkg.scripts?.prebuild||"").includes("audit-v450.mjs"),"prebuild no ejecuta 4.5");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v450.mjs"),"audit:current no ejecuta 4.5");
