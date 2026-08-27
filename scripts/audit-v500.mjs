@@ -16,7 +16,10 @@ const nextAudit=read("docs/README_AUDIT_NEXT.txt");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
-must(version.includes('APP_VERSION = "5.0.0"'),"APP_VERSION no es 5.0.0");
+const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const left=semver(value),right=semver(minimum);for(let index=0;index<3;index+=1){if((left[index]||0)!==(right[index]||0))return(left[index]||0)>(right[index]||0)}return true};
+must(atLeast(currentVersion,"5.0.0"),"APP_VERSION es anterior a la arquitectura base 5.0.0");
 must(!fs.existsSync("lib/financial/home.ts"),"Permanece el loader monolítico home.ts sustituido");
 must(!fs.existsSync("lib/financial/dashboard.ts"),"Permanece el loader dashboard.ts sustituido");
 

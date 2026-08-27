@@ -100,6 +100,8 @@ jobs:
         run: npm run audit:v450
       - name: Architecture closure 5.0 audit
         run: npm run audit:v500
+      - name: OCR and identity 5.0.1 audit
+        run: npm run audit:v501
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import {
   estimateDeskewFromSamples,
+  extractReceiptTotal,
   inferDocumentMetadata,
   normalizeOcrText,
+  reconcileReceiptSummary,
   reconstructTsvReceipt,
   scoreReceiptCandidate,
   shouldRefineReceiptCandidates,
@@ -44,4 +46,16 @@ const rows=[
 ];
 const avilaTsv=[header,...rows].join("\n");const geo=parseReceiptTsvLayout(avilaTsv);assert.ok(geo);assert.equal(geo.items.length,5);assert.equal(geo.items[0].description,"ENERGY");assert.equal(geo.items[2].description,"CAÑA GRANDE");assert.equal(receiptLayoutTotal(geo),17.5,"TOTAL 17,50 debe prevalecer sobre horas y subtotales");
 const bounds=detectReceiptTextBounds(avilaTsv,1000,600);assert.ok(bounds.width>500&&bounds.height>200,"el localizador debe conservar el bloque de texto del ticket");
-console.log("ticket-ocr-v302-tests OK · geometría canónica · total/fecha/comercio protegidos · Ávila 17,50 €");
+
+const damagedRows=[
+"5\t1\t1\t1\t1\t1\t100\t145\t170\t24\t96\tDESCRIPCION","5\t1\t1\t1\t1\t2\t560\t145\t50\t24\t82\tUOS","5\t1\t1\t1\t1\t3\t670\t145\t78\t24\t96\tPRECIO","5\t1\t1\t1\t1\t4\t800\t145\t92\t24\t45\tTHPRTE",
+"5\t1\t1\t1\t2\t1\t100\t190\t95\t23\t92\tENERGY","5\t1\t1\t1\t2\t2\t688\t190\t52\t23\t95\t1.80","5\t1\t1\t1\t2\t3\t820\t190\t52\t23\t95\t1.80",
+"5\t1\t1\t1\t3\t1\t100\t230\t72\t23\t92\tTERCIO","5\t1\t1\t1\t3\t2\t180\t230\t82\t23\t92\tGALICIA","5\t1\t1\t1\t3\t3\t270\t230\t60\t23\t91\tCERO","5\t1\t1\t1\t3\t4\t688\t230\t52\t23\t95\t2.80","5\t1\t1\t1\t3\t5\t820\t230\t52\t23\t95\t2.80",
+"5\t1\t1\t1\t4\t1\t100\t270\t70\t23\t92\tCAÑA","5\t1\t1\t1\t4\t2\t180\t270\t82\t23\t92\tGRANDE","5\t1\t1\t1\t4\t3\t575\t270\t18\t23\t95\t2","5\t1\t1\t1\t4\t4\t688\t270\t52\t23\t95\t2.80","5\t1\t1\t1\t4\t5\t820\t270\t52\t23\t95\t5.60",
+"5\t1\t1\t1\t5\t1\t100\t310\t72\t23\t92\tCUBATA","5\t1\t1\t1\t5\t2\t688\t310\t52\t23\t95\t5.50","5\t1\t1\t1\t5\t3\t820\t310\t52\t23\t95\t5.50",
+"5\t1\t1\t1\t6\t1\t100\t350\t70\t23\t92\tAGUA","5\t1\t1\t1\t6\t2\t180\t350\t55\t23\t92\tCON","5\t1\t1\t1\t6\t3\t245\t350\t55\t23\t92\tGAS","5\t1\t1\t1\t6\t4\t688\t350\t52\t23\t95\t1.80","5\t1\t1\t1\t6\t5\t820\t350\t52\t23\t95\t1.80",
+"5\t1\t1\t1\t7\t1\t650\t430\t75\t23\t96\tTotal:","5\t1\t1\t1\t7\t2\t810\t430\t65\t23\t96\t17.50"
+];
+const damaged=parseReceiptTsvLayout([header,...damagedRows].join("\n"));assert.ok(damaged);assert.equal(damaged.items.length,5,"una cabecera UOS/THPRTE no puede hacer desaparecer productos legibles");assert.deepEqual(damaged.items.map(item=>item.quantity),["1","1","2","1","1"],"las cantidades omitidas por OCR se recuperan solo cuando precio × cantidad coincide");assert.equal(receiptLayoutTotal(damaged),17.5);assert.equal(extractReceiptTotal("Total IVA 1,59\nTotal: 1750"),17.5,"un total sin separador decimal se repara dentro de la zona Total");
+assert.deepEqual(reconcileReceiptSummary([{label:"Base",value:"5.91"},{label:"Total IVA",value:"1.59"}],17.5),[{label:"Base",value:"15.91"},{label:"Total IVA",value:"1.59"},{label:"Total",value:"17.50"}],"Base debe repararse solo cuando IVA y Total demuestran el dígito perdido");
+console.log("ticket-ocr-v302-tests OK · lectura adaptativa rápida · cinco líneas Ávila · total/fecha/comercio protegidos · 17,50 €");

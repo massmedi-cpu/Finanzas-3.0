@@ -115,11 +115,12 @@ function likelyMerchant(lines: string[]) {
     const letters = (line.match(/\p{L}/gu) || []).length;
     const digits = (line.match(/\d/g) || []).length;
     const symbols = line.replace(/[\p{L}\d\s]/gu, "").length;
+    const shortTokens=(line.match(/\b[\p{L}]{1,2}\b/gu)||[]).length;
     if (letters < 3 || symbols > Math.max(5, line.length * 0.28)) continue;
-    let score = Math.min(letters,24) * 1.25 - digits * 0.8 - symbols * 1.1 - index * 1.1;
-    if(index===0)score+=16;else if(index<=2)score+=5;
+    let score = Math.min(letters,24) * 1.25 - digits * 0.8 - symbols * 1.1 - shortTokens*1.6 - index * 1.1;
+    if(index===0)score+=11;else if(index<=2)score+=5;
     if (line === line.toUpperCase() && letters >= 5) score += 3;
-    if (/\b(BAR|CAFE|CAFÉ|RESTAURANTE|SUPERMERCADO|ESTANCO|FARMACIA|TIENDA|HOTEL|MES[ÓO]N|TABERNA)\b/i.test(line)) score += 16;
+    if (/\b(BAR|CAFE|CAFÉ|RESTAURANTE|SUPERMERCADO|ESTANCO|FARMACIA|TIENDA|HOTEL|MES[ÓO]N|TABERNA)\b/i.test(line)) score += 22;
     if (/\b(SL|S\.L\.|SA|S\.A\.)\b/i.test(line)) score += 4;
     if (!best || score > best.score) best = { line, score };
   }

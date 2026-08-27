@@ -7,6 +7,16 @@ import {
   type DocumentMetadata,
   type ImageOcrResult,
 } from "./ticket-ocr";
+import {
+  parseReceiptLayout,
+  parseReceiptTsvLayout,
+  receiptLayoutToText,
+  receiptLayoutTotal,
+  tsvLines,
+  type ReceiptLayout,
+  type ReceiptLineItem,
+  type ReceiptSummaryLine,
+} from "./receipt-layout";
 
 export { inferDocumentMetadata, normalizeOcrText, preserveOcrLayout, parseEuroValue };
 export type { DocumentTypeHint, DocumentMetadata, ImageOcrResult };
@@ -35,6 +45,8 @@ type Candidate = {
   layoutText: string;
   confidence: number | null;
   score: number;
+  tsv: string;
+  receiptLayout: ReceiptLayout | null;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
@@ -180,6 +192,9 @@ function paperGeometry(data: ImageData, width: number, height: number): PaperGeo
   const topWidth = topRight - topLeft;
   const bottomWidth = bottomRight - bottomLeft;
   if (Math.min(topWidth, bottomWidth) < width * 0.34) return null;
+  const widthRatio=Math.max(topWidth,bottomWidth)/Math.max(1,Math.min(topWidth,bottomWidth));
+  const nearImageEdge=spans.filter(span=>span.left<=step*2||span.right>=width-step*2).length/spans.length;
+  if(widthRatio>1.28||nearImageEdge>.45&&Math.max(topWidth,bottomWidth)>width*.78)return null;
   return { top, bottom, topLeft, topRight, bottomLeft, bottomRight };
 }
 
@@ -276,12 +291,20 @@ function deskew(source: HTMLCanvasElement) {
   return { canvas: output, angle };
 }
 
+export function localAdaptiveThreshold(grayscale:Uint8ClampedArray,width:number,height:number){
+  const output=new Uint8ClampedArray(grayscale.length);const stride=width+1;const integral=new Uint32Array(stride*(height+1));
+  for(let y=1;y<=height;y+=1){let row=0;for(let x=1;x<=width;x+=1){row+=grayscale[((y-1)*width+(x-1))*4];integral[y*stride+x]=integral[(y-1)*stride+x]+row;}}
+  const radius=clamp(Math.round(Math.min(width,height)/38),18,42);const ratio=.92;
+  for(let y=0;y<height;y+=1){const top=Math.max(0,y-radius);const bottom=Math.min(height,y+radius+1);for(let x=0;x<width;x+=1){const left=Math.max(0,x-radius);const right=Math.min(width,x+radius+1);const area=(right-left)*(bottom-top);const sum=integral[bottom*stride+right]-integral[top*stride+right]-integral[bottom*stride+left]+integral[top*stride+left];const source=(y*width+x)*4;const value=grayscale[source]<sum/Math.max(1,area)*ratio?0:255;output[source]=output[source+1]=output[source+2]=value;output[source+3]=255;}}
+  return output;
+}
+
 async function variants(file: File) {
   const bitmap = await createImageBitmap(file);
   try {
-    let scale = Math.max(1, 2100 / Math.max(1, bitmap.width));
-    if (bitmap.width * scale > 2800) scale = 2800 / bitmap.width;
-    if (bitmap.height * scale > 5200) scale = Math.min(scale, 5200 / bitmap.height);
+    let scale = bitmap.width < 1250 ? Math.min(1.2, 1400 / Math.max(1, bitmap.width)) : 1;
+    if (bitmap.width * scale > 2000) scale = 2000 / bitmap.width;
+    if (bitmap.height * scale > 3400) scale = Math.min(scale, 3400 / bitmap.height);
     const fullWidth = Math.round(bitmap.width * scale);
     const fullHeight = Math.round(bitmap.height * scale);
     const base = document.createElement("canvas");
@@ -307,42 +330,12 @@ async function variants(file: File) {
       grayscale[offset] = grayscale[offset + 1] = grayscale[offset + 2] = value;
       grayscale[offset + 3] = 255;
     }
-    const enhanced = document.createElement("canvas");
-    enhanced.width = width;
-    enhanced.height = height;
-    enhanced.getContext("2d")?.putImageData(new ImageData(grayscale, width, height), 0, 0);
-    const adaptive = new Uint8ClampedArray(grayscale);
-    const blockSize = Math.max(64, Math.round(Math.min(width, height) / 18));
-    for (let blockY = 0; blockY < height; blockY += blockSize) {
-      for (let blockX = 0; blockX < width; blockX += blockSize) {
-        const endX = Math.min(width, blockX + blockSize);
-        const endY = Math.min(height, blockY + blockSize);
-        let sum = 0;
-        let count = 0;
-        for (let y = blockY; y < endY; y += 2) {
-          for (let x = blockX; x < endX; x += 2) {
-            sum += grayscale[(y * width + x) * 4];
-            count += 1;
-          }
-        }
-        const threshold = clamp(Math.round(sum / Math.max(1, count)) - 18, 118, 220);
-        for (let y = blockY; y < endY; y += 1) {
-          for (let x = blockX; x < endX; x += 1) {
-            const offset = (y * width + x) * 4;
-            const value = grayscale[offset] < threshold ? 0 : 255;
-            adaptive[offset] = adaptive[offset + 1] = adaptive[offset + 2] = value;
-            adaptive[offset + 3] = 255;
-          }
-        }
-      }
-    }
+    const adaptive = localAdaptiveThreshold(grayscale,width,height);
     const adaptiveCanvas = document.createElement("canvas");
     adaptiveCanvas.width = width;
     adaptiveCanvas.height = height;
     adaptiveCanvas.getContext("2d")?.putImageData(new ImageData(adaptive, width, height), 0, 0);
     return {
-      natural,
-      enhanced,
       adaptive: adaptiveCanvas,
       deskewAngle: straight.angle,
       perspectiveCorrected: rectified.perspective,
@@ -360,11 +353,13 @@ async function read(worker: Worker, input: HTMLCanvasElement | File, pageSegment
   });
   const result = await worker.recognize(input, {}, { text: true, tsv: true });
   const raw = String(result.data?.text || "");
-  const structured = reconstructTsvReceipt(String(result.data?.tsv || ""));
+  const tsv=String(result.data?.tsv || "");const structured = reconstructTsvReceipt(tsv);
   return {
     text: repair(structured?.text || normalizeOcrText(raw)),
     layoutText: structured?.layoutText || preserveOcrLayout(raw),
     confidence: Number.isFinite(result.data?.confidence) ? Number(result.data?.confidence) : null,
+    tsv,
+    receiptLayout:parseReceiptTsvLayout(tsv),
   };
 }
 
@@ -386,23 +381,98 @@ export function scoreReceiptCandidate(text: string, confidence: number | null, h
   return score;
 }
 
-export function shouldRefineReceiptCandidates(candidates: Array<{ text: string; confidence: number | null }>, hint: DocumentTypeHint) {
-  if (candidates.length < 2) return true;
+function estimatedTableRows(text:string){
+  const lines=normalizeOcrText(text).split(/\r?\n/);const header=lines.findIndex(line=>/DESCRIP/i.test(line)&&/PRECI/i.test(line));if(header<0)return 0;let rows=0;
+  for(const line of lines.slice(header+1)){if(/\b(BASE|TOTAL|IVA|PENDIENTE|PAGADO)\b/i.test(line))break;const amounts=line.match(/\d+[.,]\d{1,3}\b/g)||[];if(amounts.length>=2&&/\p{L}/u.test(line))rows+=1;}
+  return rows;
+}
+
+export function shouldRefineReceiptCandidates(candidates: Array<{ text: string; confidence: number | null;receiptLayout?:ReceiptLayout|null }>, hint: DocumentTypeHint) {
+  if (!candidates.length) return true;
   const usable = candidates.filter((candidate) => visibleChars(candidate.text) >= 80);
-  if (usable.length < candidates.length) return true;
-  const confidences = candidates.map((candidate) => candidate.confidence).filter((value): value is number => value !== null);
-  if (confidences.length >= 2 && Math.max(...confidences) - Math.min(...confidences) >= 12) return true;
+  if (!usable.length) return true;
   const best = candidates.reduce((current, candidate) =>
-    scoreReceiptCandidate(candidate.text, candidate.confidence, hint) > scoreReceiptCandidate(current.text, current.confidence, hint)
+    scoreReceiptCandidate(candidate.text, candidate.confidence, hint)+(candidate.receiptLayout?.items.length||0)*7 > scoreReceiptCandidate(current.text, current.confidence, hint)+(current.receiptLayout?.items.length||0)*7
       ? candidate
       : current,
   );
   const metadata = inferDocumentMetadata(best.text, hint);
-  return !metadata.documentDate || metadata.amount === null || !metadata.merchant;
+  const items=best.receiptLayout?.items.length||0;const itemConfidence=best.receiptLayout?.items.map(item=>item.confidence).filter((value):value is number=>Number.isFinite(value))||[];
+  const weakItems=itemConfidence.length>0&&itemConfidence.reduce((sum,value)=>sum+value,0)/itemConfidence.length<48;
+  const missingRows=estimatedTableRows(best.text)>items;
+  return visibleChars(best.text)<110||!metadata.documentDate||!metadata.merchant||(hint==="receipt"&&(items===0||missingRows||weakItems));
 }
 
-function addCandidate(candidates: Candidate[], variant: string, result: { text: string; layoutText: string; confidence: number | null }, hint: DocumentTypeHint) {
-  candidates.push({ variant, ...result, score: scoreReceiptCandidate(result.text, result.confidence, hint) });
+function addCandidate(candidates: Candidate[], variant: string, result: { text: string; layoutText: string; confidence: number | null;tsv:string;receiptLayout:ReceiptLayout|null }, hint: DocumentTypeHint) {
+  candidates.push({ variant, ...result, score: scoreReceiptCandidate(result.text, result.confidence, hint)+(result.receiptLayout?.items.length||0)*7+layoutItemsConfidence(result.receiptLayout?.items||[])*.08 });
+}
+
+function cropCanvas(source:HTMLCanvasElement,left:number,top:number,width:number,height:number){
+  const output=document.createElement("canvas");output.width=Math.max(1,Math.round(width));output.height=Math.max(1,Math.round(height));const context=output.getContext("2d");if(!context)throw new Error("Canvas no disponible");context.fillStyle="#fff";context.fillRect(0,0,output.width,output.height);context.drawImage(source,left,top,width,height,0,0,output.width,output.height);return output;
+}
+
+function scaleCanvas(source:HTMLCanvasElement,targetWidth:number){
+  const scale=Math.min(2.2,Math.max(1,targetWidth/source.width));if(scale<=1.02)return source;const output=document.createElement("canvas");output.width=Math.round(source.width*scale);output.height=Math.round(source.height*scale);const context=output.getContext("2d");if(!context)return source;context.imageSmoothingEnabled=true;context.imageSmoothingQuality="high";context.drawImage(source,0,0,output.width,output.height);return output;
+}
+
+function summaryZone(tsv:string,width:number,height:number){
+  const lines=tsvLines(tsv);const summary=lines.filter(line=>line.top>height*.32&&/\b(BASE|IVA|TOTAL)\b/i.test(line.plain));
+  if(summary.length){const lineHeight=Math.max(18,median(summary.map(line=>line.bottom-line.top)));const top=clamp(Math.min(...summary.map(line=>line.top))-lineHeight*2.2,0,height-1);const bottom=clamp(Math.max(...summary.map(line=>line.bottom))+lineHeight*3.2,top+1,height);const left=Math.floor(width*.27);const right=Math.ceil(width*.94);return{left,top:Math.floor(top),width:Math.max(1,right-left),height:Math.max(1,Math.ceil(bottom-top))};}
+  return{left:Math.floor(width*.27),top:Math.floor(height*.5),width:Math.floor(width*.67),height:Math.floor(height*.25)};
+}
+
+export function extractReceiptTotal(text:string){
+  for(const raw of normalizeOcrText(repair(text)).split(/\r?\n/)){
+    const line=raw.replace(/^[^\p{L}]+/u,"");if(!/\btotal\b/i.test(line)||/\btotal\s+iva\b/i.test(line))continue;const tail=line.slice(Math.max(0,line.toLowerCase().indexOf("total")+5));const decimals=tail.match(/\d{1,6}[.,]\d{2}\b/g)||[];
+    if(decimals.length){const value=parseEuroValue(decimals.at(-1)!);if(value!==null&&value>=0&&value<100000)return value;}
+    const collapsed=(tail.match(/\b\d{3,7}\b/g)||[]).at(-1);if(collapsed){const value=Number(`${collapsed.slice(0,-2)}.${collapsed.slice(-2)}`);if(Number.isFinite(value)&&value>=0&&value<100000)return value;}
+  }
+  return null;
+}
+
+function summaryKey(value:string){return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z]/g,"");}
+
+export function reconcileReceiptSummary(summaryLines:ReceiptSummaryLine[],totalAmount:number|null){
+  const summary=summaryLines.map(line=>({...line}));
+  if(totalAmount===null)return summary;
+  const totalValue=totalAmount.toFixed(2);const totalIndex=summary.findIndex(line=>summaryKey(line.label)==="TOTAL");
+  if(totalIndex>=0)summary[totalIndex]={label:"Total",value:totalValue};else summary.push({label:"Total",value:totalValue});
+  const baseIndex=summary.findIndex(line=>summaryKey(line.label)==="BASE");const taxIndex=summary.findIndex(line=>["IVA","TOTALIVA"].includes(summaryKey(line.label)));
+  if(baseIndex>=0&&taxIndex>=0){const base=parseEuroValue(summary[baseIndex].value);const tax=parseEuroValue(summary[taxIndex].value);const inferredBase=totalAmount-(tax??0);
+    if(base!==null&&tax!==null&&inferredBase>=0&&Math.abs(base+tax-totalAmount)>.04)summary[baseIndex]={label:"Base",value:inferredBase.toFixed(2)};
+  }
+  return summary;
+}
+
+function withSummary(layout:ReceiptLayout|null,text:string,totalAmount:number|null){
+  if(!layout)return null;const detected=parseReceiptLayout(text).summary;const summary:ReceiptSummaryLine[]=[];const seen=new Set<string>();
+  for(const line of [...layout.summary,...detected]){const key=summaryKey(line.label);if(!key||seen.has(key))continue;seen.add(key);summary.push(line);}
+  return{...layout,summary:reconcileReceiptSummary(summary,totalAmount),source:"geometry_tsv" as const};
+}
+
+function layoutItemsConfidence(items:ReceiptLineItem[]){const values=items.map(item=>item.confidence).filter((value):value is number=>Number.isFinite(value));return values.length?values.reduce((sum,value)=>sum+value,0)/values.length:0;}
+
+function itemKey(item:ReceiptLineItem){return `${item.quantity}|${item.unitPrice.replace(",",".")}|${item.total.replace(",",".")}`;}
+function descriptionLetters(value:string){return(value.match(/\p{L}/gu)||[]).length;}
+function descriptionTokens(value:string){return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").match(/[A-Z0-9]+/g)||[];}
+
+function mergeReceiptLayouts(selected:ReceiptLayout|null,candidates:Candidate[]){
+  if(!selected)return null;const alternatives=candidates.map(candidate=>candidate.receiptLayout).filter((layout):layout is ReceiptLayout=>Boolean(layout));
+  const items=selected.items.map((item)=>{let choice=item;const key=itemKey(item);const ambiguous=selected.items.filter(candidate=>itemKey(candidate)===key).length>1;
+    for(const layout of alternatives){for(const candidate of layout.items){if(itemKey(candidate)!==key)continue;const overlapWords=new Set(descriptionTokens(item.description));const overlap=descriptionTokens(candidate.description).some(word=>overlapWords.has(word));if(ambiguous&&!overlap)continue;const richer=descriptionLetters(candidate.description)>=descriptionLetters(choice.description)+2&&(candidate.confidence??0)>=(choice.confidence??0)-25;const clearer=(candidate.confidence??0)>=(choice.confidence??0)+15&&descriptionLetters(candidate.description)>=descriptionLetters(choice.description);if(richer||clearer)choice=candidate;}}
+    return choice;
+  });
+  const merchantLayout=alternatives.reduce((current,layout)=>merchantScore(inferDocumentMetadata(receiptLayoutToText(layout),"receipt").merchant)>merchantScore(inferDocumentMetadata(receiptLayoutToText(current),"receipt").merchant)?layout:current,selected);
+  return{...selected,header:merchantLayout.header,items,source:"geometry_tsv" as const};
+}
+
+function merchantScore(value:string|null){
+  if(!value)return-Infinity;const letters=descriptionLetters(value);const digits=(value.match(/\d/g)||[]).length;const amounts=(value.match(/\d+[.,]\d{2}/g)||[]).length;let score=letters-digits*3-amounts*18;if(/\b(BAR|CAFE|CAFÉ|RESTAURANTE|SUPERMERCADO|ESTANCO|FARMACIA|TIENDA|HOTEL|MES[ÓO]N|TABERNA)\b/i.test(value))score+=35;return score;
+}
+
+function chooseMetadata(text:string,candidates:Candidate[],hint:DocumentTypeHint,totalAmount:number|null){
+  const final=inferDocumentMetadata(text,hint);const alternates=candidates.map(candidate=>inferDocumentMetadata(candidate.text,hint));const merchant=[final,...alternates].map(meta=>meta.merchant).reduce((best,value)=>merchantScore(value)>merchantScore(best)?value:best,null as string|null);
+  return{...final,documentDate:final.documentDate??alternates.map(meta=>meta.documentDate).find((value):value is string=>Boolean(value))??null,amount:totalAmount??final.amount??alternates.map(meta=>meta.amount).find((value):value is number=>value!==null)??null,merchant};
 }
 
 export async function recognizeTicketImage(
@@ -414,43 +484,42 @@ export async function recognizeTicketImage(
   const candidates: Candidate[] = [];
   let deskewAngle = 0;
   let perspectiveCorrected = false;
+  let prepared:Awaited<ReturnType<typeof variants>>|null=null;
   try {
-    onProgress(0.06, "Detectando bordes del ticket");
-    const prepared = await variants(file);
+    onProgress(0.05, "Preparando una lectura rápida del ticket");
+    prepared = await variants(file);
     deskewAngle = prepared.deskewAngle;
     perspectiveCorrected = prepared.perspectiveCorrected;
-    onProgress(0.2, perspectiveCorrected || deskewAngle ? "Corrigiendo perspectiva y giro" : "Preparando contraste del ticket");
-
-    onProgress(0.31, "Escaneando ticket · contraste adaptativo");
-    addCandidate(candidates, "adaptive_rectified_tsv", await read(worker, prepared.adaptive, "6"), hint);
-
-    onProgress(0.56, "Escaneando ticket · columnas y precios");
-    addCandidate(candidates, "columns_rectified_tsv", await read(worker, prepared.enhanced, "4"), hint);
-
+    onProgress(0.18, perspectiveCorrected || deskewAngle ? "Corrigiendo perspectiva, luz y giro" : "Corrigiendo luz y contraste");
+    onProgress(0.28, "Leyendo texto, columnas y precios");
+    addCandidate(candidates, "adaptive_local_psm6", await read(worker, prepared.adaptive, "6"), hint);
     if (shouldRefineReceiptCandidates(candidates, hint)) {
-      onProgress(0.76, "Contrastando una tercera lectura");
-      addCandidate(candidates, "natural_rectified_tsv", await read(worker, prepared.natural, "6"), hint);
-    }
-
-    const preliminary = candidates.reduce((current, candidate) => (candidate.score > current.score ? candidate : current));
-    const metadata = inferDocumentMetadata(preliminary.text, hint);
-    if (!metadata.documentDate || metadata.amount === null || !metadata.merchant || visibleChars(preliminary.text) < 100) {
-      onProgress(0.87, "Afinando caracteres dudosos");
-      addCandidate(candidates, "block_rectified_tsv", await read(worker, prepared.enhanced, "6"), hint);
+      onProgress(0.62, "Afinando únicamente los caracteres dudosos");
+      addCandidate(candidates, "adaptive_columns_psm4", await read(worker, prepared.adaptive, "4"), hint);
     }
   } catch {
-    onProgress(0.72, "Leyendo imagen original");
-    addCandidate(candidates, "original_tsv", await read(worker, file, "6"), hint);
+    onProgress(0.58, "Leyendo la imagen original");
+    addCandidate(candidates, "original_psm6", await read(worker, file, "6"), hint);
   }
 
   const best = candidates.reduce((current, candidate) => (candidate.score > current.score ? candidate : current));
+  let receiptLayout=best.receiptLayout;const textLayout=parseReceiptLayout(best.text);if((textLayout.items.length||0)>(receiptLayout?.items.length||0))receiptLayout=textLayout;receiptLayout=mergeReceiptLayouts(receiptLayout,candidates);
+  let totalAmount=receiptLayoutTotal(receiptLayout)??candidates.map(candidate=>inferDocumentMetadata(candidate.text,hint).amount).find((value):value is number=>value!==null)??null;let totalsPass:Awaited<ReturnType<typeof read>>|null=null;
+  if(prepared&&hint==="receipt"&&totalAmount===null){
+    onProgress(0.8,"Confirmando Base, IVA y Total");const zone=summaryZone(best.tsv,prepared.adaptive.width,prepared.adaptive.height);const canvas=scaleCanvas(cropCanvas(prepared.adaptive,zone.left,zone.top,zone.width,zone.height),1500);totalsPass=await read(worker,canvas,"6");totalAmount=extractReceiptTotal(totalsPass.text);
+  }
+  receiptLayout=withSummary(receiptLayout,totalsPass?.text||best.text,totalAmount);
+  const finalText=receiptLayout?.items.length?receiptLayoutToText(receiptLayout):best.text;
+  const metadata=chooseMetadata(finalText,candidates,hint,totalAmount);
   onProgress(0.97, "Validando comercio, fecha e importe");
   const result = {
-    text: best.text,
+    text: finalText,
     layoutText: best.layoutText,
     confidence: best.confidence,
-    method: `image_ocr_receipt_v307:${best.variant}`,
-    passes: candidates.map(({ variant, confidence, score }) => ({ variant, confidence, score: Math.round(score * 10) / 10 })),
+    method: `image_ocr_receipt_v501:${best.variant}`,
+    passes: [...candidates.map(({ variant, confidence, score }) => ({ variant, confidence, score: Math.round(score * 10) / 10 })),...(totalsPass?[{variant:"totals_zone_adaptive_psm6",confidence:totalsPass.confidence,score:totalAmount??0}]:[])],
+    receiptLayout,
+    metadata,
   } as ImageOcrResult & { deskewAngle?: number; perspectiveCorrected?: boolean };
   result.deskewAngle = deskewAngle;
   result.perspectiveCorrected = perspectiveCorrected;
