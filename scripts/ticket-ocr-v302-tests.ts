@@ -16,10 +16,12 @@ assert.ok(normalizeOcrText("  CAFETERIA   CENTRAL  ").includes("CAFETERIA CENTRA
 const textLayout=parseReceiptLayout(receipt);
 assert.equal(textLayout.items.length,2);
 assert.equal(receiptLayoutTotal(textLayout),7.5);
+assert.deepEqual(textLayout.summary.map(line=>[line.label,line.value]),[["Base","6.82"],["IVA","0.68"],["TOTAL","7.50"]]);
 const validated=validateReceiptFinancials(textLayout,[receipt]);
 assert.equal(validated.status,"complete");
 assert.equal(validated.itemSum,7.5);
 assert.equal(validated.printedTotal,7.5);
+assert.equal(validated.basePlusTax,7.5);
 
 const incomplete:ReceiptLayout={
   header:["CAFETERIA CENTRAL"],
@@ -28,7 +30,7 @@ const incomplete:ReceiptLayout={
   ],
   summary:[{label:"Base",value:"6.82"},{label:"IVA",value:"0.68"},{label:"Total",value:"7.50"}],
   footer:["Gracias"],
-  unparsedBody:[{text:"TOSTADA 2 2.50 5.00",top:130,bottom:150,sourceLine:"TOSTADA 2 2.50 5.00"}],
+  unparsedBody:[{text:"TOSTADA 2 2.50 5.00",top:130,bottom:150}],
   source:"geometry_tsv",
 };
 const incompleteValidation=validateReceiptFinancials(incomplete,[receipt]);
@@ -54,6 +56,7 @@ const tsv=[
   "5\t1\t1\t1\t4\t2\t820\t240\t50\t20\t96\t7.50",
 ].join("\n");
 const geometric=parseReceiptTsvLayout(tsv);
+assert.ok(geometric);
 assert.equal(geometric.items.length,2);
 assert.equal(geometric.items[0].description,"CAFE");
 assert.equal(geometric.items[1].description,"TOSTADA");
@@ -61,7 +64,7 @@ assert.equal(receiptLayoutTotal(geometric),7.5);
 
 const reconstructed=reconstructReceiptEvidence([receipt],[geometric],metadata.merchant);
 assert.ok(reconstructed.layout);
-assert.equal(reconstructed.layout?.items.length,2);
+assert.equal(reconstructed.layout.items.length,2);
 assert.equal(reconstructed.total,7.5);
 assert.equal(RECEIPT_OCR_REVISION,"canonical_integrity_v5");
 assert.ok(RECEIPT_OCR_METHOD_PREFIX.includes(RECEIPT_OCR_REVISION));
