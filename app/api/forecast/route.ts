@@ -35,6 +35,17 @@ export async function POST(request:NextRequest){
   return apiJson({ok:true,id:data});
 }
 
+export async function PATCH(request:NextRequest){
+  const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
+  let parsed:unknown;try{parsed=await request.json();}catch{return apiError("invalid_json");}
+  const body=asRecord(parsed);if(!body)return apiError("invalid_forecast_action");
+  if(body.action!=="restore")return apiError("unsupported_action");
+  const eventId=typeof body.eventId==="string"?body.eventId.trim():"";if(!eventId)return apiError("missing_event_id");
+  const{data,error}=await supabase.rpc("financial_app_restore_forecast_event",{p_event_id:eventId});
+  if(error)return apiFailure("forecast.restore",error,"forecast_restore_failed");
+  return apiJson({ok:true,restored:Boolean(data)});
+}
+
 export async function DELETE(request:NextRequest){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const eventId=request.nextUrl.searchParams.get("eventId")?.trim()||"";

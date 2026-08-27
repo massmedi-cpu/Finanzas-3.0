@@ -36,8 +36,8 @@ must(route.indexOf("financial_app_automate_transactions")<route.indexOf("financi
 const editor=readFileSync("app/movimientos/bulk-movement-editor.tsx","utf8");
 for(const token of ["Automatización 4.0","Automatizar seguro","Marcar revisados","$operation:\"automate-safe\"","nunca fuerza coincidencias ambiguas"])
   must(editor.includes(token),`interfaz 4.0 incompleta: ${token}`);
-const version=readFileSync("lib/app-version.ts","utf8");
-must(version.includes('APP_VERSION = "4.0.0"'),"APP_VERSION no está en 4.0.0");
+const version=readFileSync("lib/app-version.ts","utf8").match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/)?.slice(1).map(Number);
+must(Boolean(version)&&(version[0]>4||(version[0]===4&&version[1]>=0)),"APP_VERSION debe ser 4.0.0 o posterior");
 const oldBoundary=readFileSync("database/FINANCIAL_APP_3.4.4_DOCUMENT_AUTOLINK_BOUNDARY.sql","utf8");
 must(oldBoundary.includes("revoke execute on function financial_app.auto_link_documents_core() from public, anon, authenticated"),"se perdió la frontera histórica de autoenlace documental");
 if(errors.length){console.error("Financial App 4.0 audit FAILED");errors.forEach(error=>console.error(`- ${error}`));process.exit(1)}

@@ -3,58 +3,33 @@
 import { useMemo,useState } from "react";
 import { formatEuro } from "@/lib/format/es-es";
 import { madridToday } from "@/lib/time/madrid";
-import type { ForecastCalendarEvent,ForecastCalendarOverview } from "@/lib/financial/forecast-calendar";
+import type { ForecastCalendarEvent,ForecastCalendarOverview,ForecastProjectionMonth } from "@/lib/financial/forecast-calendar";
 
 const monthFmt=new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric"});
+const monthShortFmt=new Intl.DateTimeFormat("es-ES",{month:"short"});
 const dayFmt=new Intl.DateTimeFormat("es-ES",{weekday:"short",day:"2-digit",month:"short"});
 const fullDateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"long",year:"numeric"});
 const weekdays=["L","M","X","J","V","S","D"];
 const today=madridToday();
 
 function monthLabel(month:string){return monthFmt.format(new Date(`${month}-15T12:00:00`));}
+function shortMonthLabel(month:string){return monthShortFmt.format(new Date(`${month}-15T12:00:00`)).replace(".","");}
 function dateLabel(date:string){return fullDateFmt.format(new Date(`${date}T12:00:00`));}
 function addMonths(month:string,offset:number){const[y,m]=month.split("-").map(Number);return new Date(Date.UTC(y,m-1+offset,1)).toISOString().slice(0,7);}
 function daysInMonth(month:string){const[y,m]=month.split("-").map(Number);return new Date(Date.UTC(y,m,0)).getUTCDate();}
-function monthCells(month:string){
-  const[y,m]=month.split("-").map(Number);
-  const first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;
-  const cells:(string|null)[]=Array.from({length:first},()=>null);
-  for(let d=1;d<=daysInMonth(month);d++)cells.push(`${month}-${String(d).padStart(2,"0")}`);
-  while(cells.length%7)cells.push(null);
-  return cells;
-}
-function recurrenceLabel(value:ForecastCalendarEvent["frequency"]){
-  if(value==="once")return"Una vez";
-  if(value==="weekly")return"Semanal";
-  if(value==="bimonthly")return"Bimestral";
-  if(value==="quarterly")return"Trimestral";
-  if(value==="yearly")return"Anual";
-  return"Mensual";
-}
-function statusLabel(event:ForecastCalendarEvent){
-  if(event.status==="received")return"Recibido";
-  if(event.status==="late")return"Pendiente";
-  return"Esperado";
-}
-function sourceLabel(event:ForecastCalendarEvent){return event.source==="manual"?"Añadido por ti":"Detectado automáticamente";}
+function monthCells(month:string){const[y,m]=month.split("-").map(Number);const first=(new Date(Date.UTC(y,m-1,1)).getUTCDay()+6)%7;const cells:(string|null)[]=Array.from({length:first},()=>null);for(let d=1;d<=daysInMonth(month);d++)cells.push(`${month}-${String(d).padStart(2,"0")}`);while(cells.length%7)cells.push(null);return cells;}
+function recurrenceLabel(value:ForecastCalendarEvent["frequency"]){if(value==="once")return"Una vez";if(value==="weekly")return"Semanal";if(value==="bimonthly")return"Bimestral";if(value==="quarterly")return"Trimestral";if(value==="yearly")return"Anual";return"Mensual";}
+function statusLabel(event:ForecastCalendarEvent){if(event.status==="received")return"Confirmado";if(event.status==="late")return"Pendiente";return"Esperado";}
+function sourceLabel(event:ForecastCalendarEvent){if(event.source==="manual")return"Añadido por ti";if(event.explanation.source==="previous_year_seasonal"||event.explanation.source==="annual_tax_insurance_history")return"Detectado por historial anual";return"Detectado automáticamente";}
 function domId(id:string){return`forecast-${id.replace(/[^a-zA-Z0-9_-]/g,"-")}`;}
-function movementHref(event:ForecastCalendarEvent){
-  if(!event.actual)return"/movimientos";
-  const q=new URLSearchParams({from:event.actual.date,to:event.actual.date});
-  const search=(event.counterparty||event.actual.title||event.title).trim();
-  if(search)q.set("search",search);
-  return`/movimientos?${q.toString()}`;
-}
+function movementHref(event:ForecastCalendarEvent){if(!event.actual)return"/movimientos";const q=new URLSearchParams({from:event.actual.date,to:event.actual.date});const search=(event.counterparty||event.actual.title||event.title).trim();if(search)q.set("search",search);return`/movimientos?${q.toString()}`;}
 function effectiveAmount(event:ForecastCalendarEvent){return event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount;}
+function dayDifference(event:ForecastCalendarEvent){if(!event.actual)return 0;return Math.round((new Date(`${event.actual.date}T12:00:00`).getTime()-new Date(`${event.estimatedDate}T12:00:00`).getTime())/86400000);}
+function emptyProjection(month:string):ForecastProjectionMonth{return{month,actualIncome:0,actualExpenses:0,actualCashFlow:0,pendingIncome:0,pendingExpenses:0,pendingCashFlow:0,projectedIncome:0,projectedExpenses:0,projectedCashFlow:0,actualMovements:0,pendingEvents:0,receivedEvents:0};}
 
-type Editor={
-  title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;
-  counterparty:string;recurrence:"once"|"monthly"|"bimonthly"|"quarterly"|"yearly";until:string;notes:string;
-};
-function emptyEditor(month:string):Editor{
-  const date=month===today.slice(0,7)?today:`${month}-01`;
-  return{title:"",date,direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""};
-}
+type Editor={title:string;date:string;direction:"expense"|"income";amount:string;category:string;subcategory:string;counterparty:string;recurrence:"once"|"monthly"|"bimonthly"|"quarterly"|"yearly";until:string;notes:string;};
+type RecurrencePayload={frequency:"monthly"|"yearly";interval:number;until?:string};
+function emptyEditor(month:string):Editor{const date=month===today.slice(0,7)?today:`${month}-01`;return{title:"",date,direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""};}
 
 export function ForecastClient({initialData}:{initialData:ForecastCalendarOverview}){
   const[data,setData]=useState(initialData);
@@ -65,176 +40,52 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
   const[filter,setFilter]=useState<"all"|"expense"|"income">("all");
 
   const monthOptions=useMemo(()=>Array.from({length:data.months},(_,i)=>addMonths(data.startDate.slice(0,7),i)),[data.months,data.startDate]);
-  const allMonthEvents=useMemo(()=>data.events
-    .filter(event=>event.estimatedDate.startsWith(selectedMonth))
-    .sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)||Math.abs(b.estimatedAmount)-Math.abs(a.estimatedAmount)),[data.events,selectedMonth]);
+  const allMonthEvents=useMemo(()=>data.events.filter(event=>event.estimatedDate.startsWith(selectedMonth)).sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)||Math.abs(b.estimatedAmount)-Math.abs(a.estimatedAmount)),[data.events,selectedMonth]);
+  const dismissedMonthEvents=useMemo(()=>data.dismissedEvents.filter(event=>event.estimatedDate.startsWith(selectedMonth)).sort((a,b)=>a.estimatedDate.localeCompare(b.estimatedDate)),[data.dismissedEvents,selectedMonth]);
   const monthEvents=useMemo(()=>allMonthEvents.filter(event=>filter==="all"||(filter==="expense"?effectiveAmount(event)<0:effectiveAmount(event)>0)),[allMonthEvents,filter]);
   const eventsByDay=useMemo(()=>{const map=new Map<string,ForecastCalendarEvent[]>();for(const event of monthEvents){const list=map.get(event.estimatedDate)||[];list.push(event);map.set(event.estimatedDate,list);}return map;},[monthEvents]);
   const cells=useMemo(()=>monthCells(selectedMonth),[selectedMonth]);
-  const counts=useMemo(()=>({
-    total:allMonthEvents.length,
-    expected:allMonthEvents.filter(x=>x.status==="expected").length,
-    received:allMonthEvents.filter(x=>x.status==="received").length,
-    late:allMonthEvents.filter(x=>x.status==="late").length,
-  }),[allMonthEvents]);
-  const actualMonth=useMemo(()=>data.actualMonths.find(item=>item.month===selectedMonth)??{month:selectedMonth,income:0,expenses:0,cashFlow:0,movements:0},[data.actualMonths,selectedMonth]);
-  const estimatedFlow=useMemo(()=>{
-    const pendingFlow=allMonthEvents.filter(event=>event.status!=="received").reduce((acc,event)=>{
-      const amount=event.estimatedAmount;
-      acc.cashFlow+=amount;
-      if(amount>0)acc.income+=amount;
-      if(amount<0)acc.expenses+=Math.abs(amount);
-      return acc;
-    },{cashFlow:0,income:0,expenses:0});
-    return{
-      cashFlow:actualMonth.cashFlow+pendingFlow.cashFlow,
-      income:actualMonth.income+pendingFlow.income,
-      expenses:actualMonth.expenses+pendingFlow.expenses,
-    };
-  },[actualMonth,allMonthEvents]);
+  const counts=useMemo(()=>({total:allMonthEvents.length,expected:allMonthEvents.filter(x=>x.status==="expected").length,received:allMonthEvents.filter(x=>x.status==="received").length,late:allMonthEvents.filter(x=>x.status==="late").length}),[allMonthEvents]);
+  const projection=useMemo(()=>data.projectionMonths.find(item=>item.month===selectedMonth)??emptyProjection(selectedMonth),[data.projectionMonths,selectedMonth]);
 
-  async function load(){
-    setLoading(true);setFeedback(null);
-    try{
-      const response=await fetch("/api/forecast?months=12",{cache:"no-store"});
-      const json=await response.json();
-      if(!response.ok)throw new Error(json.error||"No se ha podido actualizar el calendario.");
-      setData(json);
-    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido actualizar el calendario.");}
-    finally{setLoading(false);}
-  }
+  async function load(){setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast?months=12",{cache:"no-store"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido actualizar el calendario.");setData(json);}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido actualizar el calendario.");}finally{setLoading(false);}}
   async function save(){
-    if(!editor)return;
-    const amount=Math.abs(Number(editor.amount.replace(",",".")));
-    if(!editor.title.trim()||!editor.date||!Number.isFinite(amount)||amount<=0){setFeedback("Indica un nombre, una fecha y un importe válidos.");return;}
-    let recurrence:any=null;
-    if(editor.recurrence!=="once"){
-      recurrence=editor.recurrence==="yearly"
-        ?{frequency:"yearly",interval:1}
-        :{frequency:"monthly",interval:editor.recurrence==="bimonthly"?2:editor.recurrence==="quarterly"?3:1};
-      if(editor.until)recurrence.until=editor.until;
-    }
-    setLoading(true);setFeedback(null);
-    try{
-      const response=await fetch("/api/forecast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
-        title:editor.title.trim(),date:editor.date,amount:editor.direction==="expense"?-amount:amount,
-        category:editor.category||null,subcategory:editor.subcategory||null,counterparty:editor.counterparty||null,
-        recurrence,notes:editor.notes||null,confidence:1,explanation:{source:"manual_calendar"},
-      })});
-      const json=await response.json();
-      if(!response.ok)throw new Error(json.error||"No se ha podido guardar.");
-      setEditor(null);await load();setFeedback("Movimiento esperado añadido al calendario.");
-    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido guardar.");setLoading(false);}
+    if(!editor)return;const amount=Math.abs(Number(editor.amount.replace(",",".")));if(!editor.title.trim()||!editor.date||!Number.isFinite(amount)||amount<=0){setFeedback("Indica un nombre, una fecha y un importe válidos.");return;}
+    let recurrence:RecurrencePayload|null=null;if(editor.recurrence!=="once"){recurrence=editor.recurrence==="yearly"?{frequency:"yearly",interval:1}:{frequency:"monthly",interval:editor.recurrence==="bimonthly"?2:editor.recurrence==="quarterly"?3:1};if(editor.until)recurrence.until=editor.until;}
+    setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({title:editor.title.trim(),date:editor.date,amount:editor.direction==="expense"?-amount:amount,category:editor.category||null,subcategory:editor.subcategory||null,counterparty:editor.counterparty||null,recurrence,notes:editor.notes||null,confidence:1,explanation:{source:"manual_calendar"}})});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido guardar.");setEditor(null);await load();setFeedback("Movimiento esperado añadido al calendario.");}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido guardar.");setLoading(false);}
   }
   async function removeEvent(event:ForecastCalendarEvent){
-    if(!window.confirm(`¿Eliminar “${event.title}” de esta previsión? Solo se descarta esta ocurrencia; el movimiento bancario real, si existe, no se modifica.`))return;
-    setLoading(true);setFeedback(null);
-    try{
-      const q=new URLSearchParams({eventId:event.id,patternId:event.patternId,date:event.estimatedDate,title:event.title});
-      const response=await fetch(`/api/forecast?${q.toString()}`,{method:"DELETE"});
-      const json=await response.json();
-      if(!response.ok)throw new Error(json.error||"No se ha podido eliminar.");
-      await load();setFeedback("Movimiento eliminado de la previsión. Ya no cuenta en los cálculos del mes.");
-    }catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido eliminar.");setLoading(false);}
+    if(!window.confirm(`¿Quitar “${event.title}” de la previsión? Podrás restaurarlo después. El movimiento bancario real, si existe, no se modifica.`))return;
+    setLoading(true);setFeedback(null);try{const q=new URLSearchParams({eventId:event.id,patternId:event.patternId,date:event.estimatedDate,title:event.title});const response=await fetch(`/api/forecast?${q.toString()}`,{method:"DELETE"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido quitar.");await load();setFeedback("Movimiento descartado de la previsión. Ya no cuenta en el cash flow estimado.");}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido quitar.");setLoading(false);}
   }
-  function stepMonth(offset:number){
-    const next=addMonths(selectedMonth,offset);
-    if(monthOptions.includes(next))setSelectedMonth(next);
+  async function restoreEvent(event:ForecastCalendarEvent){
+    setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast",{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"restore",eventId:event.id})});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido restaurar.");await load();setFeedback("Movimiento restaurado en la previsión y en los cálculos del mes.");}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido restaurar.");setLoading(false);}
   }
+  function stepMonth(offset:number){const next=addMonths(selectedMonth,offset);if(monthOptions.includes(next))setSelectedMonth(next);}
 
-  return <div className={`forecast-calendar-module ${loading?"is-loading":""}`}>
-    <section className="forecast-calendar-intro">
-      <div><p className="eyebrow">CALENDARIO</p><h2>Lo que debería llegar</h2><p>Las fechas son aproximadas. Seguros e impuestos se buscan también por comportamiento anual, aunque cambien de importe o no sean perfectamente regulares.</p></div>
-      <div className="forecast-calendar-legend" aria-label="Estados del calendario">
-        <span className="legend-expected">Esperado</span><span className="legend-received">Recibido</span><span className="legend-late">Pendiente</span>
-      </div>
-    </section>
+  return <div className={`forecast-calendar-module forecast-v410 ${loading?"is-loading":""}`}>
+    <section className="forecast-calendar-intro"><div><p className="eyebrow">PREVISIÓN MENSUAL</p><h2>Qué movimientos van a llegar</h2><p>El calendario aprende del historial, incluye patrones anuales de seguros e impuestos y sustituye cada previsión por el cargo o ingreso real cuando aparece una coincidencia inequívoca.</p></div><div className="forecast-calendar-legend" aria-label="Estados del calendario"><span className="legend-expected">Esperado</span><span className="legend-received">Confirmado</span><span className="legend-late">Pendiente</span></div></section>
 
-    <div className="forecast-calendar-toolbar">
-      <div className="forecast-month-nav">
-        <button type="button" className="ghost-action" onClick={()=>stepMonth(-1)} disabled={selectedMonth===monthOptions[0]}>←</button>
-        <label><span className="sr-only">Mes</span><select value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}>{monthOptions.map(month=><option key={month} value={month}>{monthLabel(month)}</option>)}</select></label>
-        <button type="button" className="ghost-action" onClick={()=>stepMonth(1)} disabled={selectedMonth===monthOptions.at(-1)}>→</button>
-      </div>
-      <div className="forecast-type-filter" aria-label="Tipo de movimiento">
-        <button type="button" className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>Todos</button>
-        <button type="button" className={filter==="expense"?"active":""} onClick={()=>setFilter("expense")}>Cargos</button>
-        <button type="button" className={filter==="income"?"active":""} onClick={()=>setFilter("income")}>Ingresos</button>
-      </div>
-      <button className="primary-action" type="button" onClick={()=>setEditor(emptyEditor(selectedMonth))}>+ Añadir movimiento esperado</button>
-    </div>
+    <section className="forecast-month-strip" aria-label="Resumen de los próximos meses">{monthOptions.map(month=>{const item=data.projectionMonths.find(x=>x.month===month)??emptyProjection(month);return <button key={month} type="button" className={month===selectedMonth?"active":""} onClick={()=>setSelectedMonth(month)} aria-current={month===selectedMonth?"date":undefined}><span>{shortMonthLabel(month)}</span><strong className={item.projectedCashFlow<0?"negative":item.projectedCashFlow>0?"positive":""}>{formatEuro(item.projectedCashFlow)}</strong><small>{item.pendingEvents} por llegar</small></button>;})}</section>
+
+    <div className="forecast-calendar-toolbar"><div className="forecast-month-nav"><button type="button" className="ghost-action" onClick={()=>stepMonth(-1)} disabled={selectedMonth===monthOptions[0]}>←</button><label><span className="sr-only">Mes</span><select value={selectedMonth} onChange={e=>setSelectedMonth(e.target.value)}>{monthOptions.map(month=><option key={month} value={month}>{monthLabel(month)}</option>)}</select></label><button type="button" className="ghost-action" onClick={()=>stepMonth(1)} disabled={selectedMonth===monthOptions.at(-1)}>→</button></div><div className="forecast-type-filter" aria-label="Tipo de movimiento"><button type="button" className={filter==="all"?"active":""} onClick={()=>setFilter("all")}>Todos</button><button type="button" className={filter==="expense"?"active":""} onClick={()=>setFilter("expense")}>Cargos</button><button type="button" className={filter==="income"?"active":""} onClick={()=>setFilter("income")}>Ingresos</button></div><button className="primary-action" type="button" onClick={()=>setEditor(emptyEditor(selectedMonth))}>+ Añadir movimiento esperado</button></div>
 
     {feedback&&<div className="forecast-feedback" role="status">{feedback}</div>}
 
     <section className="forecast-cashflow-summary" aria-label={`Estimación financiera de ${monthLabel(selectedMonth)}`}>
-      <article className="forecast-cashflow-main"><span>Cash Flow estimado</span><strong className={estimatedFlow.cashFlow<0?"negative":estimatedFlow.cashFlow>0?"positive":""}>{formatEuro(estimatedFlow.cashFlow)}</strong><small>Real acumulado del mes + movimientos pendientes estimados.</small></article>
-      <article><span>Ingresos estimados</span><strong className="positive">{formatEuro(estimatedFlow.income)}</strong><small>Ingresos reales ya recibidos + ingresos aún esperados.</small></article>
-      <article><span>Gastos estimados</span><strong className="negative">{formatEuro(estimatedFlow.expenses)}</strong><small>Gastos reales ya realizados + cargos pendientes estimados.</small></article>
+      <article className="forecast-cashflow-main"><span>Cash Flow estimado</span><strong className={projection.projectedCashFlow<0?"negative":projection.projectedCashFlow>0?"positive":""}>{formatEuro(projection.projectedCashFlow)}</strong><small>{formatEuro(projection.actualCashFlow)} real + {formatEuro(projection.pendingCashFlow)} todavía previsto.</small></article>
+      <article><span>Ingresos estimados</span><strong className="positive">{formatEuro(projection.projectedIncome)}</strong><small>{formatEuro(projection.actualIncome)} recibidos + {formatEuro(projection.pendingIncome)} pendientes.</small></article>
+      <article><span>Gastos estimados</span><strong className="negative">{formatEuro(projection.projectedExpenses)}</strong><small>{formatEuro(projection.actualExpenses)} realizados + {formatEuro(projection.pendingExpenses)} pendientes.</small></article>
     </section>
 
-    <section className="forecast-month-status" aria-label={`Estado de ${monthLabel(selectedMonth)}`}>
-      <div><span>Movimientos</span><strong>{counts.total}</strong></div>
-      <div><span>Esperados</span><strong>{counts.expected}</strong></div>
-      <div><span>Recibidos</span><strong className="positive">{counts.received}</strong></div>
-      <div><span>Pasados sin confirmar</span><strong className={counts.late?"negative":""}>{counts.late}</strong></div>
-    </section>
+    <section className="forecast-month-status" aria-label={`Estado de ${monthLabel(selectedMonth)}`}><div><span>Movimientos previstos</span><strong>{counts.total}</strong></div><div><span>Por llegar</span><strong>{counts.expected}</strong></div><div><span>Confirmados</span><strong className="positive">{counts.received}</strong></div><div><span>Pasados sin confirmar</span><strong className={counts.late?"negative":""}>{counts.late}</strong></div></section>
 
-    <section className="forecast-calendar" aria-label={`Calendario de ${monthLabel(selectedMonth)}`}>
-      <div className="forecast-weekdays" aria-hidden="true">{weekdays.map(day=><span key={day}>{day}</span>)}</div>
-      <div className="forecast-calendar-grid">{cells.map((date,index)=>{
-        if(!date)return <div key={`empty-${index}`} className="forecast-day empty" aria-hidden="true"/>;
-        const events=eventsByDay.get(date)||[];
-        const day=Number(date.slice(-2));
-        return <div key={date} className={`forecast-day ${date===today?"today":""} ${events.length?"has-events":""}`}>
-          <span className="forecast-day-number">{day}</span>
-          <div className="forecast-day-events">{events.map(event=><a
-            key={event.id}
-            href={`#${domId(event.id)}`}
-            className={`forecast-calendar-event ${event.status} ${effectiveAmount(event)<0?"expense":"income"}`}
-            aria-label={`${event.title}, ${statusLabel(event)}, ${formatEuro(effectiveAmount(event))}`}
-            title={`${event.title} · ${formatEuro(effectiveAmount(event))} · ${statusLabel(event)}`}
-          ><span>{event.title}</span><b>{formatEuro(effectiveAmount(event))}</b></a>)}</div>
-        </div>;
-      })}</div>
-    </section>
+    <section className="forecast-calendar" aria-label={`Calendario de ${monthLabel(selectedMonth)}`}><div className="forecast-weekdays" aria-hidden="true">{weekdays.map(day=><span key={day}>{day}</span>)}</div><div className="forecast-calendar-grid">{cells.map((date,index)=>{if(!date)return <div key={`empty-${index}`} className="forecast-day empty" aria-hidden="true"/>;const events=eventsByDay.get(date)||[];return <div key={date} className={`forecast-day ${date===today?"today":""} ${events.length?"has-events":""}`}><span className="forecast-day-number">{Number(date.slice(-2))}</span><div className="forecast-day-events">{events.map(event=><a key={event.id} href={`#${domId(event.id)}`} className={`forecast-calendar-event ${event.status} ${effectiveAmount(event)<0?"expense":"income"}`} aria-label={`${event.title}, ${statusLabel(event)}, ${formatEuro(effectiveAmount(event))}`} title={`${event.title} · ${formatEuro(effectiveAmount(event))} · ${statusLabel(event)}`}><span>{event.title}</span><b>{formatEuro(effectiveAmount(event))}</b></a>)}</div></div>;})}</div></section>
 
-    <section className="forecast-agenda" aria-labelledby="forecast-agenda-title">
-      <div className="forecast-agenda-head"><div><p className="eyebrow">AGENDA DEL MES</p><h2 id="forecast-agenda-title">{monthLabel(selectedMonth)}</h2></div><span>{allMonthEvents.length} movimientos</span></div>
-      {!monthEvents.length?<div className="forecast-empty"><strong>No hay movimientos previstos con este filtro.</strong><p>Puedes cambiar el filtro o añadir uno manualmente.</p></div>:
-      <div className="forecast-agenda-list">{monthEvents.map(event=><article id={domId(event.id)} key={event.id} className={`forecast-agenda-item ${event.status}`}>
-        <div className="forecast-agenda-date"><strong>{dayFmt.format(new Date(`${event.estimatedDate}T12:00:00`))}</strong><span>± {event.toleranceDays} días</span></div>
-        <div className="forecast-agenda-main">
-          <div className="forecast-agenda-title"><strong>{event.title}</strong><span>{sourceLabel(event)} · {recurrenceLabel(event.frequency)}</span></div>
-          <div className="forecast-agenda-meta"><span>{event.category||"Sin categoría"}{event.subcategory?` · ${event.subcategory}`:""}</span><span>Fecha estimada: {dateLabel(event.estimatedDate)}</span></div>
-          {event.status==="received"&&event.actual&&<div className="forecast-confirmation">
-            <strong>Confirmado por un movimiento real</strong>
-            <span>Previsto {formatEuro(event.estimatedAmount)} · recibido {formatEuro(event.actual.amount)} el {dateLabel(event.actual.date)}</span>
-            <a href={movementHref(event)}>Ver movimiento que lo confirma →</a>
-          </div>}
-          {event.status==="late"&&<div className="forecast-late-note">La fecha estimada ya pasó y todavía no aparece un movimiento compatible.</div>}
-          {event.status==="expected"&&<div className="forecast-expected-note">Aún no ha llegado. Se marcará como recibido cuando aparezca un movimiento bancario compatible.</div>}
-        </div>
-        <div className="forecast-agenda-side"><b className={effectiveAmount(event)<0?"negative":"positive"}>{formatEuro(effectiveAmount(event))}</b><span className={`forecast-status ${event.status}`}>{statusLabel(event)}</span><button type="button" className="forecast-delete-button" onClick={()=>removeEvent(event)}>Eliminar</button></div>
-      </article>)}</div>}
-    </section>
+    <section className="forecast-agenda" aria-labelledby="forecast-agenda-title"><div className="forecast-agenda-head"><div><p className="eyebrow">AGENDA DEL MES</p><h2 id="forecast-agenda-title">{monthLabel(selectedMonth)}</h2></div><span>{allMonthEvents.length} movimientos · {projection.pendingEvents} pendientes</span></div>{!monthEvents.length?<div className="forecast-empty"><strong>No hay movimientos previstos con este filtro.</strong><p>Puedes cambiar el filtro o añadir uno manualmente.</p></div>:<div className="forecast-agenda-list">{monthEvents.map(event=><article id={domId(event.id)} key={event.id} className={`forecast-agenda-item ${event.status}`}><div className="forecast-agenda-date"><strong>{dayFmt.format(new Date(`${event.estimatedDate}T12:00:00`))}</strong><span>± {event.toleranceDays} días</span></div><div className="forecast-agenda-main"><div className="forecast-agenda-title"><strong>{event.title}</strong><span>{sourceLabel(event)} · {recurrenceLabel(event.frequency)}</span></div><div className="forecast-agenda-meta"><span>{event.category||"Sin categoría"}{event.subcategory?` · ${event.subcategory}`:""}</span><span>Fecha estimada: {dateLabel(event.estimatedDate)}</span></div>{event.status==="received"&&event.actual&&<div className="forecast-confirmation"><strong>Confirmado por un movimiento real</strong><span>Previsto {formatEuro(event.estimatedAmount)} · real {formatEuro(event.actual.amount)} el {dateLabel(event.actual.date)}</span><small>Justificado por un movimiento real compatible 1↔1 · {dayDifference(event)===0?"misma fecha":`${Math.abs(dayDifference(event))} día${Math.abs(dayDifference(event))===1?"":"s"} de diferencia`} · diferencia de importe {formatEuro(Math.abs(event.actual.amount-event.estimatedAmount))}</small><a href={movementHref(event)}>Ver movimiento que lo confirma →</a></div>}{event.status==="late"&&<div className="forecast-late-note">La fecha estimada ya pasó y todavía no aparece un movimiento compatible.</div>}{event.status==="expected"&&<div className="forecast-expected-note">Se marcará como recibido cuando aparezca un movimiento bancario compatible, siempre que no compita con otra previsión.</div>}</div><div className="forecast-agenda-side"><b className={effectiveAmount(event)<0?"negative":"positive"}>{formatEuro(effectiveAmount(event))}</b><span className={`forecast-status ${event.status}`}>{statusLabel(event)}</span><button type="button" className="forecast-delete-button" onClick={()=>removeEvent(event)}>Descartar</button></div></article>)}</div>}</section>
 
-    {editor&&<div className="forecast-editor-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setEditor(null);}}>
-      <section className="forecast-editor" role="dialog" aria-modal="true" aria-label="Añadir movimiento esperado">
-        <div className="forecast-editor-head"><div><p className="eyebrow">MOVIMIENTO ESPERADO</p><h2>Añadir al calendario</h2></div><button type="button" className="icon-action" onClick={()=>setEditor(null)} aria-label="Cerrar">×</button></div>
-        <div className="forecast-editor-grid">
-          <label className="wide"><span>Nombre</span><input value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})} placeholder="Ej. Seguro del coche"/></label>
-          <label><span>Fecha estimada</span><input type="date" value={editor.date} onChange={e=>setEditor({...editor,date:e.target.value})}/></label>
-          <label><span>Tipo</span><select value={editor.direction} onChange={e=>setEditor({...editor,direction:e.target.value as Editor["direction"]})}><option value="expense">Cargo</option><option value="income">Ingreso</option></select></label>
-          <label><span>Importe estimado</span><input inputMode="decimal" value={editor.amount} onChange={e=>setEditor({...editor,amount:e.target.value})} placeholder="0,00"/></label>
-          <label><span>Repetición</span><select value={editor.recurrence} onChange={e=>setEditor({...editor,recurrence:e.target.value as Editor["recurrence"]})}><option value="once">Una vez</option><option value="monthly">Mensual</option><option value="bimonthly">Bimestral</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label>
-          <label><span>Categoría</span><input value={editor.category} onChange={e=>setEditor({...editor,category:e.target.value})} placeholder="Ej. Seguros"/></label>
-          <label><span>Subcategoría</span><input value={editor.subcategory} onChange={e=>setEditor({...editor,subcategory:e.target.value})}/></label>
-          <label className="wide"><span>Entidad / concepto</span><input value={editor.counterparty} onChange={e=>setEditor({...editor,counterparty:e.target.value})} placeholder="Ayuda a identificar el cargo real"/></label>
-          {editor.recurrence!=="once"&&<label><span>Repetir hasta</span><input type="date" value={editor.until} onChange={e=>setEditor({...editor,until:e.target.value})}/></label>}
-          <label className="wide"><span>Notas</span><textarea rows={3} value={editor.notes} onChange={e=>setEditor({...editor,notes:e.target.value})}/></label>
-        </div>
-        <div className="forecast-editor-actions"><button type="button" className="ghost-action" onClick={()=>setEditor(null)}>Cancelar</button><button type="button" className="primary-action" onClick={save} disabled={loading}>Guardar</button></div>
-      </section>
-    </div>}
+    <details className="forecast-dismissed"><summary>Descartados de {monthLabel(selectedMonth)} <span>{dismissedMonthEvents.length}</span></summary>{!dismissedMonthEvents.length?<p>No has descartado ningún movimiento de este mes.</p>:<div className="forecast-dismissed-list">{dismissedMonthEvents.map(event=><div key={event.id}><span><strong>{event.title}</strong><small>{dateLabel(event.estimatedDate)} · {formatEuro(event.estimatedAmount)}</small></span><button type="button" className="ghost-action" onClick={()=>restoreEvent(event)}>Restaurar</button></div>)}</div>}<small>Los descartados no cuentan en ingresos, gastos ni cash flow estimado. Restaurarlos vuelve a incluirlos.</small></details>
+
+    {editor&&<div className="forecast-editor-backdrop" role="presentation" onMouseDown={event=>{if(event.currentTarget===event.target)setEditor(null);}}><section className="forecast-editor" role="dialog" aria-modal="true" aria-label="Añadir movimiento esperado"><div className="forecast-editor-head"><div><p className="eyebrow">MOVIMIENTO ESPERADO</p><h2>Añadir al calendario</h2></div><button type="button" className="icon-action" onClick={()=>setEditor(null)} aria-label="Cerrar">×</button></div><div className="forecast-editor-grid"><label className="wide"><span>Nombre</span><input value={editor.title} onChange={e=>setEditor({...editor,title:e.target.value})} placeholder="Ej. Seguro del coche"/></label><label><span>Fecha estimada</span><input type="date" value={editor.date} onChange={e=>setEditor({...editor,date:e.target.value})}/></label><label><span>Tipo</span><select value={editor.direction} onChange={e=>setEditor({...editor,direction:e.target.value as Editor["direction"]})}><option value="expense">Cargo</option><option value="income">Ingreso</option></select></label><label><span>Importe estimado</span><input inputMode="decimal" value={editor.amount} onChange={e=>setEditor({...editor,amount:e.target.value})} placeholder="0,00"/></label><label><span>Repetición</span><select value={editor.recurrence} onChange={e=>setEditor({...editor,recurrence:e.target.value as Editor["recurrence"]})}><option value="once">Una vez</option><option value="monthly">Mensual</option><option value="bimonthly">Bimestral</option><option value="quarterly">Trimestral</option><option value="yearly">Anual</option></select></label><label><span>Categoría</span><input value={editor.category} onChange={e=>setEditor({...editor,category:e.target.value})} placeholder="Ej. Seguros"/></label><label><span>Subcategoría</span><input value={editor.subcategory} onChange={e=>setEditor({...editor,subcategory:e.target.value})}/></label><label className="wide"><span>Entidad / concepto</span><input value={editor.counterparty} onChange={e=>setEditor({...editor,counterparty:e.target.value})} placeholder="Ayuda a identificar el cargo real"/></label>{editor.recurrence!=="once"&&<label><span>Repetir hasta</span><input type="date" value={editor.until} onChange={e=>setEditor({...editor,until:e.target.value})}/></label>}<label className="wide"><span>Notas</span><textarea rows={3} value={editor.notes} onChange={e=>setEditor({...editor,notes:e.target.value})}/></label></div><div className="forecast-editor-actions"><button type="button" className="ghost-action" onClick={()=>setEditor(null)}>Cancelar</button><button type="button" className="primary-action" onClick={save} disabled={loading}>Guardar</button></div></section></div>}
   </div>;
 }
