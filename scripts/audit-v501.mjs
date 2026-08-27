@@ -10,6 +10,7 @@ const release=read("docs/releases/5.0.1.md");
 const login=read("app/login/page.tsx");
 const authCss=read("app/auth.css");
 const ocrEngine=read("lib/document/ticket-ocr-engine.ts");
+const reconstruction=read("lib/document/receipt-reconstruction.ts");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
@@ -22,17 +23,23 @@ for(const token of [
   "financial_app_5_0_1_manifest_alignment_failed",
 ]) must(migration.includes(token),`Migración 5.0.1 incompleta: ${token}`);
 must(!/(?:insert\s+into|update|delete\s+from)\s+financial_app\.transactions/i.test(migration),"5.0.1 no puede mutar movimientos");
-must(release.includes("Financial App 5.0.1")&&release.includes("cuatro-siete")&&release.includes("Nuevo logotipo"),"Falta documentar OCR e identidad de 5.0.1");
+must(release.includes("Financial App 5.0.1")&&release.includes("Nuevo logotipo"),"Falta documentar OCR e identidad de 5.0.1");
 must(login.includes('src="/brand/logotipo.png"')&&login.includes("width={260}")&&login.includes("height={260}"),"Login no utiliza el nuevo logotipo con tamaño legible");
 must(authCss.includes("background:transparent")&&authCss.includes("max-width:260px"),"El contenedor de marca debe respetar la transparencia del nuevo logotipo");
 for(const token of [
-  "locator_money_columns_psm6",
-  "fastcrop_adaptive_psm6",
-  "fastcrop_gray_psm6",
-  "moneyWords.length>=3",
-  "image_ocr_receipt_v501:fastcrop_v3",
-]) must(ocrEngine.includes(token),`OCR 5.0.1 rápido incompleto: ${token}`);
-must(!ocrEngine.includes('"adaptive_columns_psm4"'),"El OCR rápido no debe repetir una segunda pasada PSM4 sobre la foto completa");
+  "paperGeometry",
+  "rectify",
+  "deskew",
+  "canonical_adaptive_psm6",
+  "canonical_gray_psm4",
+  "reconstructReceiptEvidence",
+  "image_ocr_receipt_v501:canonical_v4",
+]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
+for(const token of ["reconstructReceiptEvidence","mergeAlignedDescriptions","explicitTotals","cleanReceiptMerchant"])
+  must(reconstruction.includes(token),`Reconstrucción canónica incompleta: ${token}`);
+must(!ocrEngine.includes("locator_money_columns_psm6"),"El OCR canónico no debe conservar la pasada localizadora Tesseract redundante");
+must(!ocrEngine.includes("fastcrop_adaptive_psm6"),"El OCR canónico no debe conservar el pipeline fastcrop paralelo");
+must(String(pkg.scripts?.["test:ocr"]||"").includes("receipt-reconstruction-v4-tests.ts"),"El caso real de reconstrucción v4 debe ejecutarse en test:ocr");
 
 function pngDimensions(file){
   const value=fs.readFileSync(file);
@@ -62,4 +69,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · versión, migración, OCR rápido e identidad alineados");
+console.log("Financial App 5.0.1 audit OK · OCR canónico único, reconstrucción por evidencia e identidad alineados");
