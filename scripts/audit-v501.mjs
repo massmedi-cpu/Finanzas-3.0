@@ -59,7 +59,7 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('canonical_integrity_v5'),"La revisión OCR debe identificar canonical_integrity_v5");
+must(revision.includes('canonical_integrity_v6'),"La revisión OCR debe identificar canonical_integrity_v6");
 must(preprocessor.includes("prepareReceiptImage"),"Falta preprocesador canónico de imagen");
 must(!ocrEngine.includes("locator_money_columns_psm6"),"El OCR canónico no debe conservar la pasada localizadora Tesseract redundante");
 must(!ocrEngine.includes("fastcrop_adaptive_psm6"),"El OCR canónico no debe conservar el pipeline fastcrop paralelo");
