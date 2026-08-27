@@ -30,7 +30,7 @@ for(const token of [
   "fastcrop_adaptive_psm6",
   "fastcrop_gray_psm6",
   "moneyWords.length>=3",
-  "image_ocr_receipt_v501:fastcrop_v2",
+  "image_ocr_receipt_v501:fastcrop_v3",
 ]) must(ocrEngine.includes(token),`OCR 5.0.1 rápido incompleto: ${token}`);
 must(!ocrEngine.includes('"adaptive_columns_psm4"'),"El OCR rápido no debe repetir una segunda pasada PSM4 sobre la foto completa");
 
