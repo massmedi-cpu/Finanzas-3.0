@@ -10,10 +10,11 @@ const release=read("docs/releases/5.0.1.md");
 const login=read("app/login/page.tsx");
 const authCss=read("app/auth.css");
 const ocrEngine=read("lib/document/ticket-ocr-engine.ts");
-const reconstruction=read("lib/document/receipt-reconstruction.ts");
+const archive=read("app/archivo/archive-client.tsx");
+const visual=read("app/archivo/receipt-geometry-preview.tsx");
+const loader=read("public/vendor/paddleocr-loader.mjs");
 const validator=read("lib/document/receipt-financial-validator.ts");
 const revision=read("lib/document/receipt-ocr-revision.ts");
-const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
@@ -31,24 +32,22 @@ must(login.includes('src="/brand/logotipo.png"')&&login.includes("width={260}")&
 must(authCss.includes("background:transparent")&&authCss.includes("max-width:260px"),"El contenedor de marca debe respetar la transparencia del nuevo logotipo");
 
 for(const token of [
-  "prepareReceiptImage",
+  "engine.predict(file",
+  "PP-OCRv5",
+  "groupRows",
+  "makeVisualLayout",
+  "strictReceiptLayout",
   "validateReceiptFinancials",
-  "shouldRunSecondary",
   "RECEIPT_OCR_METHOD_PREFIX",
   "rawText",
   "normalizedText",
-  "tsv",
   "passes",
 ]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
 
-for(const token of [
-  "reconstructReceiptEvidence",
-  "mergePhysicalRows",
-  "samePhysicalRow",
-  "unparsedBody",
-  "chooseTotal",
-  "cleanReceiptMerchant",
-]) must(reconstruction.includes(token),`Reconstrucción canónica incompleta: ${token}`);
+must(archive.includes("PaddleOCR.create")&&archive.includes("imagePreprocessing:false"),"Archivo no utiliza el nuevo motor PP-OCRv5 sin preprocesado heredado");
+must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"Tesseract no puede sobrevivir en el runtime OCR");
+must(loader.includes("@paddleocr/paddleocr-js@0.4.2"),"Falta PaddleOCR.js 0.4.2 en el loader canónico");
+must(visual.includes("ReceiptGeometryPreview")&&visual.includes("position: \"absolute\""),"La reconstrucción ya no conserva la maquetación espacial");
 
 for(const token of [
   "invalid_item_arithmetic",
@@ -59,13 +58,11 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('canonical_integrity_v6'),"La revisión OCR debe identificar canonical_integrity_v6");
-must(preprocessor.includes("prepareReceiptImage"),"Falta preprocesador canónico de imagen");
-must(!ocrEngine.includes("locator_money_columns_psm6"),"El OCR canónico no debe conservar la pasada localizadora Tesseract redundante");
-must(!ocrEngine.includes("fastcrop_adaptive_psm6"),"El OCR canónico no debe conservar el pipeline fastcrop paralelo");
-must(!/\b(?:ENERGY|CUBATA|GALICIA|CAÑA|AGUA CON GAS)\b/i.test(reconstruction),"La reconstrucción no puede contener vocabulario específico del ticket Ávila");
-must(!reconstruction.includes("numericAgreement"),"La reconstrucción no puede alinear filas por acuerdo numérico global");
-must(!reconstruction.includes("lexicalOverlap"),"La reconstrucción no puede alinear filas por similitud léxica");
+must(revision.includes('paddle_layout_v1'),"La revisión OCR debe identificar paddle_layout_v1");
+must(!ocrEngine.includes("prepareReceiptImage"),"El nuevo OCR no debe reutilizar el preprocesador anterior");
+must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar una segunda pasada de rescate");
+must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
+must(!/\b(?:ENERGY|CUBATA|GALICIA|CAÑA|AGUA CON GAS|AVILA BAR)\b/i.test(ocrEngine),"El OCR no puede contener vocabulario específico de un ticket");
 
 function pngDimensions(file){
   const value=fs.readFileSync(file);
@@ -95,4 +92,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · OCR canónico único, evidencia RAW preservada y validación financiera estricta");
+console.log("Financial App 5.0.1 audit OK · PP-OCRv5 único, geometría preservada, sin fallback Tesseract y validación financiera estricta");

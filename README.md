@@ -4,13 +4,14 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 
 ## Baseline 5.0.1
 
-5.0 cierra la evolución arquitectónica iniciada en 4.x y deja una única implementación runtime por responsabilidad. 5.0.1 refuerza el OCR documental con un único pipeline canónico, preservación de evidencia RAW/TSV y validación financiera estricta antes de persistir resultados como completos.
+5.0 cierra la evolución arquitectónica iniciada en 4.x y deja una única implementación runtime por responsabilidad. 5.0.1 refuerza el OCR documental con un único pipeline canónico, preservación de evidencia RAW y geométrica y validación financiera estricta antes de persistir resultados como completos.
 
 - Inicio usa `financial_app_home_pulse` como ruta crítica ligera y carga cuentas/secciones secundarias en paralelo.
 - Se retiran el dashboard monolítico y el antiguo home overview, tanto en loaders Next.js como en RPC PostgreSQL.
 - El release probe valida únicamente superficies canónicas: cuentas, home pulse, movimientos, previsión, archivo, matching e inteligencia.
-- El OCR de tickets conserva RAW, geometría y estructura por separado y marca contradicciones como revisión pendiente en lugar de inventar datos.
-- La revisión canónica del motor OCR es `canonical_integrity_v6`; primero conserva una lectura gris literal y usa su geometría para limitar la lectura de precisión al contenido físico del ticket. Los documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado.
+- El OCR de tickets conserva texto, confianza y polígonos por separado y marca contradicciones como revisión pendiente en lugar de inventar datos.
+- La revisión canónica del motor OCR es `paddle_layout_v1`: usa PaddleOCR.js 0.4.2 con PP-OCRv5 en español, realiza una sola inferencia sobre el original, no aplica el binarizado/preprocesado anterior, no ejecuta segundas pasadas y no utiliza Tesseract como fallback. Los documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado desde su original privado.
+- La vista reconstruida del ticket se maqueta con las coordenadas reales de las líneas OCR; las líneas no interpretadas conservan su posición en vez de desplazarse a un bloque de residuos.
 - Los gates históricos siguen activos de forma forward-compatible.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` describen la arquitectura real 5.0; migraciones y auditorías antiguas quedan como historial, no como runtime.
 
@@ -61,7 +62,7 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 - Originales de Drive preservados.
 - Deduplicación y matching conservador.
 - Autoenlace únicamente en coincidencias inequívocas; casos ambiguos a revisión.
-- OCR local/first-party cuando es necesario.
+- OCR de imagen ejecutado en el navegador con PP-OCRv5; la imagen no se envía a un servicio OCR externo.
 
 ### Inteligencia y Control
 
