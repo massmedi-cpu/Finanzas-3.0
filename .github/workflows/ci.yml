@@ -88,6 +88,8 @@ jobs:
         run: npm run audit:home-streaming
       - name: Movements automation 4.0 audit
         run: npm run audit:v400
+      - name: Forecast ledger 4.1 audit
+        run: npm run audit:v410
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
