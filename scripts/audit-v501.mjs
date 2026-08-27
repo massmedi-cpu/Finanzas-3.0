@@ -33,7 +33,7 @@ must(authCss.includes("background:transparent")&&authCss.includes("max-width:260
 
 for(const token of [
   "engine.predict(file",
-  "PP-OCRv5",
+  "PP-OCRv6",
   "groupRows",
   "makeVisualLayout",
   "strictReceiptLayout",
@@ -44,7 +44,9 @@ for(const token of [
   "passes",
 ]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
 
-must(archive.includes("PaddleOCR.create")&&archive.includes("imagePreprocessing:false"),"Archivo no utiliza el nuevo motor PP-OCRv5 sin preprocesado heredado");
+must(archive.includes("PaddleOCR.create")&&archive.includes("imagePreprocessing:false"),"Archivo no utiliza el motor PaddleOCR sin preprocesado heredado");
+must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"Archivo debe usar una combinación de idioma/modelo soportada por PaddleOCR.js para español");
+must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en PaddleOCR.js 0.4.2 y no puede volver al runtime");
 must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"Tesseract no puede sobrevivir en el runtime OCR");
 must(loader.includes("@paddleocr/paddleocr-js@0.4.2"),"Falta PaddleOCR.js 0.4.2 en el loader canónico");
 must(visual.includes("ReceiptGeometryPreview")&&visual.includes("position: \"absolute\""),"La reconstrucción ya no conserva la maquetación espacial");
@@ -58,7 +60,7 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('paddle_layout_v1'),"La revisión OCR debe identificar paddle_layout_v1");
+must(revision.includes('paddle_layout_v2'),"La revisión OCR debe identificar paddle_layout_v2");
 must(!ocrEngine.includes("prepareReceiptImage"),"El nuevo OCR no debe reutilizar el preprocesador anterior");
 must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar una segunda pasada de rescate");
 must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
@@ -92,4 +94,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · PP-OCRv5 único, geometría preservada, sin fallback Tesseract y validación financiera estricta");
+console.log("Financial App 5.0.1 audit OK · PP-OCRv6 español soportado, geometría preservada, sin fallback Tesseract y validación financiera estricta");
