@@ -43,8 +43,8 @@ const progress:Array<[number,string]>=[];
 const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push([value,label]),"receipt");
 
 assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia sobre el original");
-assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv5_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v1");
+assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v2");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -64,6 +64,6 @@ assert.ok(pass.visualLayout);
 assert.equal(pass.visualLayout?.lines?.length,fakePaddleResult.items.length);
 assert.ok((pass.visualLayout?.bounds?.width||0)>0);
 assert.ok((pass.visualLayout?.bounds?.height||0)>0);
-assert.ok(progress.some(([,label])=>label.includes("PP-OCRv5")));
+assert.ok(progress.some(([,label])=>label.includes("PP-OCRv6")));
 
-console.log("ticket-ocr PP-OCRv5 geometry tests OK");
+console.log("ticket-ocr PP-OCRv6 geometry tests OK");
