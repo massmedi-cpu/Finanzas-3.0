@@ -3,7 +3,6 @@ import fs from "node:fs";
 function must(condition,message){if(!condition)throw new Error(message)}
 const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 const engine=fs.readFileSync("lib/document/ticket-ocr-engine.ts","utf8");
-const geometry=fs.readFileSync("lib/document/ticket-ocr-geometry.ts","utf8");
 const receiptLayout=fs.readFileSync("lib/document/receipt-layout.ts","utf8");
 const baseOcr=fs.readFileSync("lib/document/ticket-ocr.ts","utf8");
 const archiveLib=fs.readFileSync("lib/financial/archive.ts","utf8");
@@ -25,18 +24,19 @@ must(client.includes("OCR automático completado al importar"),"La interfaz debe
 must(client.includes("needsOcrUpgrade")&&client.includes("upgradeExistingOcr")&&client.includes("image_ocr_receipt_v501:"),"Los tickets guardados con un OCR anterior deben poder actualizarse automáticamente al abrirlos");
 must(client.includes("No necesitas volver a subir la foto"),"La actualización del OCR anterior no debe exigir nueva importación manual");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"La app debe importar OCR mediante alias estable");
-must(engine.includes('from "./ticket-ocr-geometry"')&&engine.includes("recognizeOptimizedTicket"),"El motor canónico debe delegar una sola vez en la capa OCR optimizada");
+
+must(engine.includes("worker.recognize(")&&engine.includes("prepareReceiptCanvas")&&engine.includes("readPass"),"El motor canónico debe ejecutar OCR local directamente y preparar una única superficie de trabajo");
+must(engine.includes("normalizeRawText")&&engine.includes("joinTinyHeaderContinuations"),"El texto bruto completo debe permanecer como fuente canónica y reparar cortes mínimos de cabecera");
+must(engine.includes("shouldRunFallback")&&engine.includes("adaptive_crop_psm4"),"La segunda lectura debe ser condicional y solo actuar como fallback");
+must(engine.includes('"gray_crop_psm6"')&&engine.includes("tessedit_pageseg_mode"),"La lectura principal debe usar una sola pasada PSM6 sobre ticket preparado");
+must(engine.includes("parseReceiptTsvLayout")&&engine.includes("parseReceiptLayout")&&engine.includes("receiptLayoutTotal"),"La reconstrucción estructurada debe complementar, no sustituir, el texto OCR");
+must(engine.includes("mergeReceiptTexts")&&engine.includes("numericSignature")&&engine.includes("lineQuality")&&engine.includes("lexicalOverlap"),"El consenso textual debe permanecer como fallback seguro");
+must(engine.includes("targetAspect=.62")&&engine.includes("aspect>.68"),"Las fotos verticales anchas de tickets deben recortar fondo lateral antes de OCR");
+must(engine.includes("image_ocr_receipt_v501:r2:"),"El método OCR corregido debe quedar identificado de forma auditable");
+must(!engine.includes("totalsZonePass")&&!engine.includes("geometryReceiptPass"),"El motor canónico no debe reintroducir pasadas completas redundantes");
 must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe reaparecer un motor OCR runtime versionado");
-must(engine.includes("detectReceiptTextBounds")&&!engine.includes("geometryReceiptPass")&&!engine.includes("totalsZonePass"),"El motor canónico no debe repetir lecturas completas después de la capa optimizada");
-must(geometry.includes("localAdaptiveThreshold")&&geometry.includes('"adaptive_local_psm6"'),"La lectura principal debe usar umbral local continuo y una sola pasada PSM6");
-must(geometry.includes("shouldRefineReceiptCandidates")&&geometry.includes("estimatedTableRows")&&geometry.includes('"adaptive_columns_psm4"'),"La segunda lectura completa debe ser condicional y responder a filas realmente ausentes");
-must(geometry.includes("summaryZone")&&geometry.includes("extractReceiptTotal")&&geometry.includes("reconcileReceiptSummary"),"Base/IVA/Total deben tener lectura focalizada y reconciliación aritmética segura");
-must(geometry.includes("parseReceiptTsvLayout")&&geometry.includes("receiptLayoutToText")&&geometry.includes("image_ocr_receipt_v501:"),"La reconstrucción rápida debe usar coordenadas TSV y método auditable");
+
 must(receiptLayout.includes("inferredQuantity")&&receiptLayout.includes("U[DO0]S"),"Las columnas deben sobrevivir a cabeceras OCR imperfectas y recuperar cantidades solo por aritmética válida");
-must(engine.includes("mergeReceiptTexts")&&engine.includes("numericSignature")&&engine.includes("lineQuality")&&engine.includes("lexicalOverlap"),"El consenso textual debe permanecer como fallback");
-must(geometry.includes("reconstructTsvReceipt")&&geometry.includes("tsv: true"),"La base geométrica debe usar posiciones y confianza TSV");
-must(geometry.includes("estimateDeskewFromSamples")&&geometry.includes("function deskew("),"La base OCR debe enderezar tickets");
-must(geometry.includes("function paperGeometry(")&&geometry.includes("function rectify("),"La corrección de perspectiva debe permanecer activa");
 must(baseOcr.includes("documentType!==\"receipt\"")&&!baseOcr.includes("Hora"),"El extractor de tickets no debe caer al mayor decimal arbitrario");
 must(baseOcr.includes("tel[eé]fono")&&baseOcr.includes("raz[oó]n\\s+social"),"Razón social, dirección y teléfono deben excluirse como nombre comercial");
 must(baseOcr.includes("tomorrow")&&baseOcr.includes("documentType===\"receipt\""),"Las fechas futuras imposibles de tickets deben rechazarse");
@@ -62,4 +62,4 @@ must(nextConfig.includes("public, max-age=0, must-revalidate"),"El manifest no d
 must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar APP_VERSION");
 must(css.includes("width:min(920px"),"La revisión documental debe conservar ancho usable");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
-console.log(`audit-ticket-ocr-v302 OK · OCR geométrico canónico · total seguro · auto-upgrade · producto ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`audit-ticket-ocr-v302 OK · OCR local rápido · texto bruto canónico · fallback condicional · producto ${versionMatch?.[0]||"APP_VERSION"}`);
