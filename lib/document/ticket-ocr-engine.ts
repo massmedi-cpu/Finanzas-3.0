@@ -18,7 +18,6 @@ import {
   parseReceiptTsvLayout,
   parseTsvWords,
   receiptLayoutToText,
-  tsvLines,
   type ReceiptLayout,
 } from "./receipt-layout";
 import { cleanReceiptMerchant, reconstructReceiptEvidence } from "./receipt-reconstruction";
