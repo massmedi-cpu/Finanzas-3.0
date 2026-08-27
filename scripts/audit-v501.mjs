@@ -10,6 +10,7 @@ const release=read("docs/releases/5.0.1.md");
 const login=read("app/login/page.tsx");
 const authCss=read("app/auth.css");
 const ocrEngine=read("lib/document/ticket-ocr-engine.ts");
+const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
 const archive=read("app/archivo/archive-client.tsx");
 const visual=read("app/archivo/receipt-geometry-preview.tsx");
 const loader=read("public/vendor/paddleocr-loader.mjs");
@@ -32,19 +33,22 @@ must(login.includes('src="/brand/logotipo.png"')&&login.includes("width={260}")&
 must(authCss.includes("background:transparent")&&authCss.includes("max-width:260px"),"El contenedor de marca debe respetar la transparencia del nuevo logotipo");
 
 for(const token of [
-  "engine.predict(file",
+  "engine.predict(input",
   "PP-OCRv6",
   "groupRows",
   "makeVisualLayout",
   "strictReceiptLayout",
+  "filterReceiptBoxes",
   "validateReceiptFinancials",
   "RECEIPT_OCR_METHOD_PREFIX",
   "rawText",
   "normalizedText",
+  "literalText",
+  "trustedText",
   "passes",
 ]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
 
-must(archive.includes("PaddleOCR.create")&&archive.includes("imagePreprocessing:false"),"Archivo no utiliza el motor PaddleOCR sin preprocesado heredado");
+must(archive.includes("PaddleOCR.create")&&archive.includes("sharedWorkerPromise")&&archive.includes("workerReuse:true"),"Archivo no utiliza el motor PaddleOCR canónico reutilizable");
 must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"Archivo debe usar una combinación de idioma/modelo soportada por PaddleOCR.js para español");
 must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en PaddleOCR.js 0.4.2 y no puede volver al runtime");
 must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"Tesseract no puede sobrevivir en el runtime OCR");
@@ -60,8 +64,11 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('paddle_layout_v2'),"La revisión OCR debe identificar paddle_layout_v2");
-must(!ocrEngine.includes("prepareReceiptImage"),"El nuevo OCR no debe reutilizar el preprocesador anterior");
+must(revision.includes('paddle_layout_v3'),"La revisión OCR debe identificar paddle_layout_v3");
+must(ocrEngine.includes("prepareReceiptImage")&&ocrEngine.includes("if (prepared.paperDetected)")&&ocrEngine.includes("input = prepared.grayscale"),"El OCR debe aislar el papel únicamente cuando la detección sea segura");
+must(ocrEngine.includes("input = file")&&!ocrEngine.includes("input = prepared.adaptive"),"El aislamiento de papel debe tener fallback al original y no usar binarización destructiva");
+must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia PP-OCRv6");
+must(preprocessor.includes("detectPaper")&&preprocessor.includes("rectifyPaper")&&preprocessor.includes("perspectiveCorrected"),"El aislamiento de papel no conserva sus garantías geométricas");
 must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar una segunda pasada de rescate");
 must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
 must(!/\b(?:ENERGY|CUBATA|GALICIA|CAÑA|AGUA CON GAS|AVILA BAR)\b/i.test(ocrEngine),"El OCR no puede contener vocabulario específico de un ticket");
@@ -94,4 +101,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · PP-OCRv6 español soportado, geometría preservada, sin fallback Tesseract y validación financiera estricta");
+console.log("Financial App 5.0.1 audit OK · PP-OCRv6 español · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");
