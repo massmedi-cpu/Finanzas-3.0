@@ -25,7 +25,13 @@ if(av==="3.1.0"){
 }
 
 const home=readFileSync("app/page.tsx","utf8");
-for(const contract of ["getFinancialDashboard","getHomeControlSummary","getHomeReconciliationSummary","Suspense"])if(!home.includes(contract))errors.push(`Inicio no respeta arquitectura progresiva 3.9.1: falta ${contract}`);
+for(const contract of ["getHomeControlSummary","getHomeReconciliationSummary","Suspense"])if(!home.includes(contract))errors.push(`Inicio no respeta arquitectura progresiva: falta ${contract}`);
+const modernPulse=/^(?:4\.[5-9]|[5-9]\.|\d{2,}\.)/.test(av||"");
+if(modernPulse){
+  if(!home.includes("getHomePulse"))errors.push("Inicio 4.5+ debe usar el núcleo crítico ligero getHomePulse");
+  if(home.includes("getFinancialDashboard"))errors.push("Inicio 4.5+ no puede volver a bloquear por getFinancialDashboard");
+  if(!existsSync("lib/financial/home-pulse.ts"))errors.push("Falta lib/financial/home-pulse.ts para la ruta crítica 4.5+");
+}else if(!home.includes("getFinancialDashboard"))errors.push("Inicio pre-4.5 ha perdido su núcleo crítico dashboard");
 if(home.includes("getHomeOverview"))errors.push("Inicio ha regresado al home overview monolítico");
 const movementApi=readFileSync("app/api/movements/route.ts","utf8");
 if(movementApi.split("export async function POST")[0].includes("financial_app_mark_new_seen"))errors.push("GET movimientos escribe estado");
