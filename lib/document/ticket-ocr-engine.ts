@@ -97,8 +97,10 @@ export function mergeReceiptTexts(primaryText:string,alternateText:string){
       if(fit>bestFit){bestFit=fit;bestIndex=index;}
     }
     if(bestIndex<0||bestFit<1.5)return repairReceiptNumbers(source);
-    const candidate=alternate[bestIndex];
-    if(lineQuality(candidate)>lineQuality(source)+.9){used.add(bestIndex);return repairReceiptNumbers(candidate);}
+    const candidate=alternate[bestIndex];const candidateSignature=numericSignature(candidate);
+    const sourceQuality=lineQuality(source);const candidateQuality=lineQuality(candidate);const sameNumbers=Boolean(signature)&&candidateSignature===signature;
+    const richerMatchingLine=sameNumbers&&candidateQuality>=sourceQuality-.35&&(letterCount(candidate)>=letterCount(source)+1||wordCount(candidate)>=wordCount(source)+1);
+    if(candidateQuality>sourceQuality+.9||richerMatchingLine){used.add(bestIndex);return repairReceiptNumbers(candidate);}
     return repairReceiptNumbers(source);
   });
   for(let index=0;index<alternate.length;index+=1){
