@@ -5,6 +5,7 @@ import { asRecord } from "@/lib/validation/json";
 
 export const dynamic = "force-dynamic";
 const MAX_BULK_MOVEMENTS = 200;
+const AUTOMATION_OPERATION = "automate-safe";
 
 export async function POST(request: NextRequest) {
   const supabase = await getAuthorizedClient();
@@ -29,8 +30,16 @@ export async function POST(request: NextRequest) {
   const patch = asRecord(input.patch);
   if (!ids.length) return apiError("no_transactions_selected");
   if (ids.length > MAX_BULK_MOVEMENTS) return apiError("bulk_limit_exceeded",400,{limit:MAX_BULK_MOVEMENTS});
-  if (!Object.keys(patch).length) return apiError("invalid_patch");
 
+  const operation = typeof patch.$operation === "string" ? patch.$operation : null;
+  if (operation) {
+    if (operation !== AUTOMATION_OPERATION || Object.keys(patch).some(key=>key!=="$operation")) return apiError("unsupported_bulk_operation");
+    const { data, error } = await supabase.rpc("financial_app_automate_transactions", { p_transaction_ids:ids });
+    if (error || !data) return apiFailure("movements.bulk.automation",error,"movement_automation_failed");
+    return apiJson(data);
+  }
+
+  if (!Object.keys(patch).length) return apiError("invalid_patch");
   const { data, error } = await supabase.rpc("financial_app_bulk_update_transactions", {p_transaction_ids: ids,p_patch: patch});
   if (error || !data) return apiFailure("movements.bulk.apply",error,"bulk_update_failed");
   return apiJson(data);
