@@ -47,9 +47,11 @@ for (const [name, version] of Object.entries(expected)) {
 }
 check(Boolean(lockedVersion("tesseract.js-core")), "tesseract.js-core no está resuelto en package-lock");
 
-for (const scriptName of ["postinstall", "predev", "prebuild", "prepare:document-engine"]) {
+for (const scriptName of ["postinstall", "predev", "prepare:document-engine"]) {
   check(packageJson.scripts?.[scriptName] === "node scripts/prepare-document-engine.mjs", `${scriptName} no prepara el motor documental`);
 }
+const prebuildSteps=String(packageJson.scripts?.prebuild??"").split("&&").map((step)=>step.trim()).filter(Boolean);
+check(prebuildSteps.at(-1) === "node scripts/prepare-document-engine.mjs", "prebuild no termina preparando el motor documental");
 check(packageJson.scripts?.["audit:v19"] === "node scripts/audit-v19.mjs", "falta audit:v19");
 check(gitignore.includes("public/vendor/document-engine/"), "los assets generados no están excluidos de Git");
 
