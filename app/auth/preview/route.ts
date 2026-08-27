@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { POST as runSync } from "@/app/api/sync/route";
+import { getAuthenticatedReleaseProbe } from "@/lib/financial/release-probe";
 import { createClient } from "@/lib/supabase/server";
 import { SUPABASE_URL } from "@/lib/supabase/config";
 import { hasFinancialAppAccess, normalizeEmail } from "@/lib/auth/access";
@@ -54,12 +54,12 @@ export async function GET(request: NextRequest) {
       return backToLogin(request);
     }
 
-    // E2E de preview: una única petición consume el token, crea la sesión y ejecuta
-    // exactamente el mismo handler POST que usa el botón de sincronización.
-    if (target === "/api/sync") {
-      const response = await runSync();
+    // Probe E2E de Preview: autentica y comprueba lecturas privadas reales en la misma petición.
+    // Solo devuelve versión y booleanos; nunca expone saldos, importes, movimientos ni documentos.
+    if (target === "/api/release-probe") {
+      const response = NextResponse.json(await getAuthenticatedReleaseProbe());
       response.headers.set("Cache-Control", "private, no-store");
-      response.headers.set("X-Financial-App-Preview-Probe", "sync");
+      response.headers.set("X-Financial-App-Preview-Probe", "authenticated-read");
       return response;
     }
 
