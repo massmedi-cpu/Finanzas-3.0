@@ -25,18 +25,25 @@ must(client.includes("OCR automático completado al importar"),"La interfaz debe
 must(client.includes("needsOcrUpgrade")&&client.includes("upgradeExistingOcr")&&client.includes("image_ocr_receipt_v501:"),"Los tickets guardados con un OCR anterior deben poder actualizarse automáticamente al abrirlos");
 must(client.includes("No necesitas volver a subir la foto"),"La actualización del OCR anterior no debe exigir nueva importación manual");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"La app debe importar OCR mediante alias estable");
-must(engine.includes('from "./ticket-ocr-geometry"')&&engine.includes("recognizeOptimizedTicket"),"El motor canónico debe delegar una sola vez en la capa OCR optimizada");
+const legacyDelegation=engine.includes("recognizeOptimizedTicket");
+const croppedPrecisionPipeline=engine.includes("locator_money_columns_psm6")&&engine.includes("fastcrop_adaptive_psm6")&&engine.includes("image_ocr_receipt_v501:fastcrop_v2");
+must(engine.includes('from "./ticket-ocr-geometry"')&&(legacyDelegation||croppedPrecisionPipeline),"El motor canónico debe usar una única estrategia OCR local y auditable");
 must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe reaparecer un motor OCR runtime versionado");
-must(engine.includes("detectReceiptTextBounds")&&!engine.includes("geometryReceiptPass")&&!engine.includes("totalsZonePass"),"El motor canónico no debe repetir lecturas completas después de la capa optimizada");
-must(geometry.includes("localAdaptiveThreshold")&&geometry.includes('"adaptive_local_psm6"'),"La lectura principal debe usar umbral local continuo y una sola pasada PSM6");
-must(geometry.includes("shouldRefineReceiptCandidates")&&geometry.includes("estimatedTableRows")&&geometry.includes('"adaptive_columns_psm4"'),"La segunda lectura completa debe ser condicional y responder a filas realmente ausentes");
-must(geometry.includes("summaryZone")&&geometry.includes("extractReceiptTotal")&&geometry.includes("reconcileReceiptSummary"),"Base/IVA/Total deben tener lectura focalizada y reconciliación aritmética segura");
-must(geometry.includes("parseReceiptTsvLayout")&&geometry.includes("receiptLayoutToText")&&geometry.includes("image_ocr_receipt_v501:"),"La reconstrucción rápida debe usar coordenadas TSV y método auditable");
+must(engine.includes("detectReceiptTextBounds")&&!engine.includes("geometryReceiptPass")&&!engine.includes("totalsZonePass"),"El motor canónico no debe repetir lecturas completas después de localizar el ticket");
+must(geometry.includes("localAdaptiveThreshold")&&geometry.includes('"adaptive_local_psm6"'),"La capa de compatibilidad debe conservar umbral local continuo y PSM6");
+must(geometry.includes("shouldRefineReceiptCandidates")&&geometry.includes("estimatedTableRows")&&geometry.includes('"adaptive_columns_psm4"'),"La compatibilidad histórica debe seguir respondiendo a filas realmente ausentes");
+must(geometry.includes("summaryZone")&&geometry.includes("extractReceiptTotal")&&geometry.includes("reconcileReceiptSummary"),"Base/IVA/Total deben conservar lectura focalizada y reconciliación aritmética segura");
+must(geometry.includes("parseReceiptTsvLayout")&&geometry.includes("receiptLayoutToText")&&geometry.includes("image_ocr_receipt_v501:"),"La reconstrucción geométrica de compatibilidad debe usar coordenadas TSV y método auditable");
+if(croppedPrecisionPipeline){
+  must(engine.includes("moneyWords.length>=3"),"El recorte rápido debe anclarse en columnas monetarias y no solo en papel blanco");
+  must(engine.includes("fastcrop_gray_psm6")&&engine.includes("shouldRefineReceiptCandidates"),"Las letras débiles deben tener una lectura gris condicional, no otra lectura completa idéntica");
+  must(!engine.includes('"adaptive_columns_psm4"'),"El motor rápido no debe volver a leer la foto completa con PSM4");
+}
 must(receiptLayout.includes("inferredQuantity")&&receiptLayout.includes("U[DO0]S"),"Las columnas deben sobrevivir a cabeceras OCR imperfectas y recuperar cantidades solo por aritmética válida");
 must(engine.includes("mergeReceiptTexts")&&engine.includes("numericSignature")&&engine.includes("lineQuality")&&engine.includes("lexicalOverlap"),"El consenso textual debe permanecer como fallback");
 must(geometry.includes("reconstructTsvReceipt")&&geometry.includes("tsv: true"),"La base geométrica debe usar posiciones y confianza TSV");
-must(geometry.includes("estimateDeskewFromSamples")&&geometry.includes("function deskew("),"La base OCR debe enderezar tickets");
-must(geometry.includes("function paperGeometry(")&&geometry.includes("function rectify("),"La corrección de perspectiva debe permanecer activa");
+must(geometry.includes("estimateDeskewFromSamples")&&geometry.includes("function deskew("),"La base OCR debe conservar enderezado como fallback");
+must(geometry.includes("function paperGeometry(")&&geometry.includes("function rectify("),"La corrección de perspectiva histórica debe permanecer disponible");
 must(baseOcr.includes("documentType!==\"receipt\"")&&!baseOcr.includes("Hora"),"El extractor de tickets no debe caer al mayor decimal arbitrario");
 must(baseOcr.includes("tel[eé]fono")&&baseOcr.includes("raz[oó]n\\s+social"),"Razón social, dirección y teléfono deben excluirse como nombre comercial");
 must(baseOcr.includes("tomorrow")&&baseOcr.includes("documentType===\"receipt\""),"Las fechas futuras imposibles de tickets deben rechazarse");
@@ -62,4 +69,4 @@ must(nextConfig.includes("public, max-age=0, must-revalidate"),"El manifest no d
 must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar APP_VERSION");
 must(css.includes("width:min(920px"),"La revisión documental debe conservar ancho usable");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
-console.log(`audit-ticket-ocr-v302 OK · OCR geométrico canónico · total seguro · auto-upgrade · producto ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`audit-ticket-ocr-v302 OK · OCR local recortado/geométrico · total seguro · auto-upgrade · producto ${versionMatch?.[0]||"APP_VERSION"}`);
