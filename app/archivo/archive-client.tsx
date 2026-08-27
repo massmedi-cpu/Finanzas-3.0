@@ -19,6 +19,7 @@ type ActionKind="search"|"open"|"upload"|"ocr-upgrade"|"save"|"link"|"unlink"|"d
 type ActionState={kind:ActionKind;target?:string}|null;
 const MAX_FILE=20*1024*1024;
 const PAGE_SIZE=200;
+const CURRENT_RECEIPT_OCR_PREFIX="image_ocr_receipt_v501:fastcrop_v3:";
 const allowed=new Set(["application/pdf","image/jpeg","image/png","image/webp","image/heic","image/heif"]);
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 
@@ -29,7 +30,7 @@ function editFromDocument(document:ArchiveDetail):ArchiveEdit{return{documentTyp
 function receiptValue(value:string){return value.replace(/\bEUR\b/gi,"€").replace(/(\d)\.(\d{2})(?!\d)/g,"$1,$2")}
 function reconstructionReceiptLayout(document:ArchiveDetail|null){if(!document?.digitalReconstruction||typeof document.digitalReconstruction!=="object")return null;const raw=(document.digitalReconstruction as Record<string,unknown>).receiptLayout;if(!raw||typeof raw!=="object")return null;const value=raw as Partial<ReceiptLayout>;return Array.isArray(value.header)&&Array.isArray(value.items)&&Array.isArray(value.summary)&&Array.isArray(value.footer)?value as ReceiptLayout:null;}
 function ocrMethod(document:ArchiveDetail){return document.ocrData&&typeof document.ocrData==="object"?String((document.ocrData as Record<string,unknown>).method||""):""}
-function needsOcrUpgrade(document:ArchiveDetail){return Boolean(document.mimeType?.startsWith("image/")&&document.ocrStatus==="complete"&&!ocrMethod(document).startsWith("image_ocr_receipt_v501:"));}
+function needsOcrUpgrade(document:ArchiveDetail){return Boolean(document.mimeType?.startsWith("image/")&&document.ocrStatus==="complete"&&!ocrMethod(document).startsWith(CURRENT_RECEIPT_OCR_PREFIX));}
 async function sha256(file:File){const bytes=await file.arrayBuffer();const digest=await crypto.subtle.digest("SHA-256",bytes);return Array.from(new Uint8Array(digest),b=>b.toString(16).padStart(2,"0")).join("")}
 function loadScript(src:string,id:string){return new Promise<void>((resolve,reject)=>{if(document.getElementById(id)){resolve();return}const script=document.createElement("script");script.id=id;script.src=src;script.async=true;script.onload=()=>resolve();script.onerror=()=>reject(new Error("No se pudo cargar el motor OCR"));document.head.appendChild(script)})}
 async function loadPdfJs(){if(window.__financialPdfjs)return window.__financialPdfjs;return new Promise<any>((resolve,reject)=>{const existing=document.getElementById("financial-pdfjs-loader");const onReady=()=>{cleanup();window.__financialPdfjs?resolve(window.__financialPdfjs):reject(new Error("PDF.js no disponible"))};const cleanup=()=>window.removeEventListener("financial-pdfjs-ready",onReady);window.addEventListener("financial-pdfjs-ready",onReady,{once:true});if(!existing){const script=document.createElement("script");script.id="financial-pdfjs-loader";script.type="module";script.src="/vendor/pdfjs-loader.mjs";script.onerror=()=>{cleanup();reject(new Error("No se pudo cargar el lector PDF"))};document.head.appendChild(script)}})}

@@ -53,7 +53,7 @@ const engineRecognizesLocally =
   (engine.includes("localAdaptiveThreshold") || geometry.includes("localAdaptiveThreshold"));
 const canonicalPipeline =
   (engine.includes("recognizeOptimizedTicket") && engine.includes("return recognizeOptimizedTicket(file,worker,onProgress,hint)")) ||
-  (engine.includes("locator_money_columns_psm6") && engine.includes("fastcrop_adaptive_psm6") && engine.includes("image_ocr_receipt_v501:fastcrop_v2"));
+  (engine.includes("locator_money_columns_psm6") && engine.includes("fastcrop_adaptive_psm6") && engine.includes("image_ocr_receipt_v501:fastcrop_v"));
 const browserOcr =
   archiveUsesCanonicalBrowserEngine &&
   engineIsMapped &&
