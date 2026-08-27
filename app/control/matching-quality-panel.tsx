@@ -1,9 +1,10 @@
+import { formatNumber, formatPercent } from "@/lib/format/es-es";
 import type { MatchingObservability, MatchingQualityStatus } from "@/lib/financial/matching-observability";
 
 const label=(status:MatchingQualityStatus)=>status==="healthy"?"Saludable":status==="watch"?"Vigilar":status==="degraded"?"Degradado":"Sin muestra";
-const pct=(value:number)=>`${(value*100).toLocaleString("es-ES",{maximumFractionDigits:1})} %`;
-const signedPct=(value:number)=>`${value>0?"+":""}${(value*100).toLocaleString("es-ES",{maximumFractionDigits:1})} pp`;
-const signedDays=(value:number)=>`${value>0?"+":""}${value.toLocaleString("es-ES",{maximumFractionDigits:1})} días`;
+const pct=(value:number)=>formatPercent(value*100,1);
+const signedPct=(value:number)=>`${value>0?"+":""}${formatNumber(value*100,{maximumFractionDigits:1})} pp`;
+const signedDays=(value:number)=>`${value>0?"+":""}${formatNumber(value,{maximumFractionDigits:1})} días`;
 
 function Status({value}:{value:MatchingQualityStatus}){return <span className={`matching-status status-${value}`}>{label(value)}</span>}
 
@@ -23,7 +24,7 @@ export function MatchingQualityPanel({data}:{data:MatchingObservability}){
         <div className="matching-card-head"><div><span>Previsión</span><strong>¿Los cargos esperados se justifican bien?</strong></div><Status value={data.forecast.status}/></div>
         <div className="matching-metrics">
           <div><span>Aciertos maduros</span><strong>{pct(data.forecast.recent.matchRate)}</strong><small>{data.forecast.recent.received} de {data.forecast.recent.matured}</small></div>
-          <div><span>Error mediano de fecha</span><strong>{data.forecast.recent.medianDateErrorDays.toLocaleString("es-ES",{maximumFractionDigits:1})} días</strong><small>solo eventos justificados</small></div>
+          <div><span>Error mediano de fecha</span><strong>{formatNumber(data.forecast.recent.medianDateErrorDays,{maximumFractionDigits:1})} días</strong><small>solo eventos justificados</small></div>
           <div><span>Error mediano de importe</span><strong>{pct(data.forecast.recent.medianAmountErrorRatio)}</strong><small>relativo al importe previsto</small></div>
           <div><span>Matches débiles</span><strong>{pct(data.forecast.recent.weakIdentityRate)}</strong><small>identidad de rango 3 o superior</small></div>
         </div>
@@ -33,7 +34,7 @@ export function MatchingQualityPanel({data}:{data:MatchingObservability}){
       <article className="matching-quality-card">
         <div className="matching-card-head"><div><span>Conciliación</span><strong>¿Las parejas confirmadas siguen siendo fiables?</strong></div><Status value={data.reconciliation.status}/></div>
         <div className="matching-metrics">
-          <div><span>Confianza media</span><strong>{data.reconciliation.recent.averageConfidence.toLocaleString("es-ES",{maximumFractionDigits:1})}</strong><small>parejas activas del periodo</small></div>
+          <div><span>Confianza media</span><strong>{formatNumber(data.reconciliation.recent.averageConfidence,{maximumFractionDigits:1})}</strong><small>parejas activas del periodo</small></div>
           <div><span>Cancelaciones</span><strong>{pct(data.reconciliation.recent.cancelRate)}</strong><small>{data.reconciliation.recent.pairsCancelled} canceladas</small></div>
           <div><span>Decisiones repetidas</span><strong>{pct(data.reconciliation.recent.repeatDecisionRate)}</strong><small>señal de corrección manual</small></div>
           <div><span>Confianza baja</span><strong>{pct(data.reconciliation.recent.lowConfidenceRate)}</strong><small>parejas por debajo de 90</small></div>
