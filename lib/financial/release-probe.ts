@@ -1,4 +1,5 @@
 import { APP_VERSION } from "@/lib/app-version";
+import { getActionableIntelligence } from "@/lib/financial/actionable-intelligence";
 import { getArchiveOverview } from "@/lib/financial/archive";
 import { getFinancialDashboard } from "@/lib/financial/dashboard";
 import { getForecastCalendar } from "@/lib/financial/forecast-calendar";
@@ -17,16 +18,19 @@ export type AuthenticatedReleaseProbe = {
     forecastContracts: boolean;
     matchingObservabilityReadable: boolean;
     matchingQualityGate: boolean;
+    intelligenceReadable: boolean;
+    intelligenceContracts: boolean;
   };
 };
 
 export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedReleaseProbe> {
-  const [dashboard, movements, forecast, archive, matching] = await Promise.all([
+  const [dashboard, movements, forecast, archive, matching, intelligence] = await Promise.all([
     getFinancialDashboard(),
     getMovements({ page: 1, pageSize: 1 }),
     getForecastCalendar(1),
     getArchiveOverview(null),
     getMatchingObservability(90),
+    getActionableIntelligence(400),
   ]);
 
   const checks = {
@@ -44,6 +48,18 @@ export async function getAuthenticatedReleaseProbe(): Promise<AuthenticatedRelea
       matching.rules.derivedFromCanonicalHistory === true &&
       matching.releaseGate.sampleAware === true,
     matchingQualityGate: matching.releaseGate.pass === true,
+    intelligenceReadable:
+      intelligence.version === APP_VERSION &&
+      Array.isArray(intelligence.anomalies) &&
+      Array.isArray(intelligence.recurring) &&
+      Array.isArray(intelligence.rising) &&
+      Array.isArray(intelligence.opportunities),
+    intelligenceContracts:
+      intelligence.rules.sourceReadOnly === true &&
+      intelligence.rules.reusesControlAlertStates === true &&
+      intelligence.rules.financialValuesPersisted === false &&
+      intelligence.rules.usesCompleteMonthsForTrends === true &&
+      intelligence.rules.savingsScenarioPercent === 10,
   };
 
   if (!Object.values(checks).every(Boolean)) throw new Error("release_probe_contract_failed");
