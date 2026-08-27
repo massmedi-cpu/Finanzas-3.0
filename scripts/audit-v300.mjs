@@ -84,7 +84,7 @@ must(intentLink.includes('data-nav-pending={pending?"true":undefined}')&&intentL
 for(const token of ["home-accounts-section","home-account-ledger","home-month-pulse","home-flow-section","home-forecast-section","home-decision-grid"])
   must(homeSurface.includes(token),`Inicio ha perdido su secuencia narrativa: ${token}`);
 must(!homeSurface.includes("home-kpis")&&!homeSurface.includes("home-account-card")&&!homeSurface.includes('className="panel home-'),"Inicio no debe volver al patrón card + KPI + panel");
-must(home.includes("getFinancialDashboard")&&homeSections.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos, el gráfico de evolución y mostrar la versión canónica del producto");
+must((home.includes("getHomePulse")||home.includes("getFinancialDashboard"))&&homeSections.includes("CashFlowChart")&&home.includes("APP_VERSION"),"Inicio debe conservar los datos canónicos, el gráfico de evolución y mostrar la versión canónica del producto");
 must(home.includes("Suspense")&&home.includes("getHomeControlSummary")&&home.includes("getHomeReconciliationSummary"),"Inicio debe conservar la arquitectura progresiva 3.9.1");
 must(!homeSurface.includes("home.version")&&!homeSurface.includes("dashboard.totalAvailable")&&!homeSurface.includes("home-balance-primary"),"Inicio no debe mostrar la versión interna del RPC ni el saldo total como protagonista");
 must(homeCss.includes(".home-account-row")&&homeCss.includes("border-bottom:1px solid var(--border)"),"las cuentas deben leerse como ledger continuo");
