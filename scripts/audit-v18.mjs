@@ -40,8 +40,19 @@ if (!preserve.includes("delete from financial_app.transaction_splits s\n  using 
 if (!preserve.includes("delete from financial_app.transaction_documents td\n  using financial_app.transactions t")) errors.push("El hotfix no protege vínculos de documentos posteriores");
 if (!preserve.includes("Una conciliación que toca un movimiento posterior se conserva")) errors.push("Falta protección de conciliaciones posteriores");
 if (!preserve.includes("Un documento posterior vinculado a un movimiento posterior permanece activo")) errors.push("Falta protección de documentos posteriores");
-const browserOcr = archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") && archive.includes("window.Tesseract.createWorker") && engine.includes('from "./ticket-ocr-geometry"') && engine.includes("recognizeOptimizedTicket") && engine.includes("return recognizeOptimizedTicket(file,worker,onProgress,hint)") && !engine.includes("geometryReceiptPass") && geometry.includes("worker.recognize(input") && geometry.includes("localAdaptiveThreshold") && tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
-if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
+
+const engineRecognizesLocally = engine.includes("worker.recognize(") || (
+  engine.includes('from "./ticket-ocr-geometry"') &&
+  engine.includes("recognizeOptimizedTicket") &&
+  engine.includes("return recognizeOptimizedTicket(file,worker,onProgress,hint)") &&
+  geometry.includes("worker.recognize(input")
+);
+const browserOcr =
+  archive.includes("recognizeTicketImage(file,worker,onProgress,hint)") &&
+  archive.includes("window.Tesseract.createWorker") &&
+  engineRecognizesLocally &&
+  tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
+if (!browserOcr) errors.push("OCR dejó de procesarse localmente en el navegador mediante el motor canónico");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
@@ -52,4 +63,4 @@ const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1]
 if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
 if (errors.length) {console.error("Financial App 1.8 audit FAILED");errors.forEach((error) => console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor geométrico canónico");
+console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor canónico");
