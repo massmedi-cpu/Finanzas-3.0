@@ -1,44 +1,11 @@
 import fs from "node:fs";
-
-const read=path=>fs.readFileSync(path,"utf8");
-const failures=[];
-const must=(condition,message)=>{if(!condition)failures.push(message)};
-const versionSource=read("lib/app-version.ts");
-const db=read("database/FINANCIAL_APP_4.3.0_MATCHING_OBSERVABILITY.sql");
-const lib=read("lib/financial/matching-observability.ts");
-const page=read("app/control/page.tsx");
-const panel=read("app/control/matching-quality-panel.tsx");
-const styles=read("app/control/matching-quality.css");
-const route=read("app/api/control/matching-quality/route.ts");
-const probe=read("lib/financial/release-probe.ts");
-const e2e=read("scripts/authenticated-preview-e2e.mjs");
-const pkg=JSON.parse(read("package.json"));
-const ci=read(".github/workflows/ci.yml");
-const smoke=read(".github/workflows/production-smoke.yml");
-
-const version=versionSource.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
-const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
-const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
+const read=path=>fs.readFileSync(path,"utf8");const failures=[];const must=(condition,message)=>{if(!condition)failures.push(message)};
+const versionSource=read("lib/app-version.ts"),db=read("database/FINANCIAL_APP_4.3.0_MATCHING_OBSERVABILITY.sql"),lib=read("lib/financial/matching-observability.ts"),page=read("app/control/page.tsx"),panel=read("app/control/matching-quality-panel.tsx"),styles=read("app/control/matching-quality.css"),route=read("app/api/control/matching-quality/route.ts"),probe=read("lib/financial/release-probe.ts"),e2e=read("scripts/authenticated-preview-e2e.mjs"),pkg=JSON.parse(read("package.json")),ci=read(".github/workflows/ci.yml"),smoke=read(".github/workflows/production-smoke.yml");
+const version=versionSource.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
 must(atLeast(version,"4.3.0"),"La versión visible debe ser 4.3.0 o posterior");
-for(const token of ["matching_observability_core","forecast_calendar_visible_core","reconciliation_decisions","reconciliation_pairs","sampleAware","noFinancialValuesStored","derivedFromCanonicalHistory","forecast_quality_degraded","reconciliation_quality_degraded"])
-  must(db.includes(token),`Observabilidad SQL incompleta: ${token}`);
-must(!/create\s+table/i.test(db),"4.3 no debe crear una copia de telemetría ni duplicar datos financieros");
-must(db.includes("v_recent_matured>=8")&&db.includes("v_recent_pairs>=10 or v_recent_decisions>=5"),"Los umbrales deben exigir muestra mínima");
-must(db.includes("v_previous_match_rate-v_recent_match_rate>=.20")&&db.includes("v_recent_amount_error>.40"),"El gate debe detectar degradación real frente a baseline y error de importe");
-must(db.includes("revoke all on function public.financial_app_matching_observability(integer) from public,anon")&&db.includes("grant execute on function public.financial_app_matching_observability(integer) to authenticated,service_role"),"RPC de calidad debe permanecer autenticado");
-for(const token of ["MatchingQualityStatus","ForecastQualityStats","ReconciliationQualityStats","releaseGate","noFinancialValuesStored","derivedFromCanonicalHistory","financial_app_matching_observability"])
-  must(lib.includes(token),`Contrato TypeScript de observabilidad incompleto: ${token}`);
-for(const token of ["Calidad de decisiones","Aciertos maduros","Error mediano de fecha","Decisiones repetidas","Todavía no existe una ventana anterior","muestra suficiente"])
-  must(panel.includes(token),`Panel de calidad incompleto: ${token}`);
-must(page.includes("getMatchingObservability(90)")&&page.includes("<MatchingQualityPanel data={matching}/>"),"Control debe cargar el panel de calidad en servidor");
-must(styles.includes("matching-quality-grid")&&styles.includes("status-degraded")&&styles.includes("@media"),"Faltan estilos responsive/estado del panel 4.3");
-must(route.includes("getAuthorizedClient")&&route.includes("apiUnauthorized")&&route.includes("apiFailure")&&route.includes("financial_app_matching_observability"),"API de matching quality debe usar el boundary autenticado común");
-must(probe.includes("matchingObservabilityReadable")&&probe.includes("matchingQualityGate")&&probe.includes("matching.releaseGate.pass === true"),"El release probe debe bloquear una degradación confirmada");
-must(e2e.includes('payload.version!=="4.3.0"')&&e2e.includes("matchingObservabilityReadable")&&e2e.includes("matchingQualityGate"),"E2E autenticada debe comprobar observabilidad y quality gate");
-must(smoke.includes("/api/control/matching-quality"),"Production smoke debe comprobar que la API de calidad rechaza anónimos");
-must(pkg.scripts?.["audit:v430"]==="node scripts/audit-v430.mjs","Falta script audit:v430");
-must(String(pkg.scripts?.prebuild||"").includes("audit-v430.mjs"),"prebuild debe ejecutar el gate 4.3");
-must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v430.mjs"),"audit:current debe ejecutar el gate 4.3");
-must(ci.includes("Matching observability 4.3 audit")&&ci.includes("npm run audit:v430"),"CI debe ejecutar el gate 4.3");
-if(failures.length){console.error("Financial App 4.3 matching observability audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Financial App 4.3 audit OK · calidad de matching derivada, sample-aware, visible en Control y conectada al release gate");
+for(const token of ["matching_observability_core","forecast_calendar_visible_core","reconciliation_decisions","reconciliation_pairs","sampleAware","noFinancialValuesStored","derivedFromCanonicalHistory","forecast_quality_degraded","reconciliation_quality_degraded"])must(db.includes(token),`Observabilidad SQL incompleta: ${token}`);
+must(!/create\s+table/i.test(db),"4.3 no debe crear una copia de telemetría ni duplicar datos financieros");must(db.includes("v_recent_matured>=8")&&db.includes("v_recent_pairs>=10 or v_recent_decisions>=5"),"Los umbrales deben exigir muestra mínima");must(db.includes("v_previous_match_rate-v_recent_match_rate>=.20")&&db.includes("v_recent_amount_error>.40"),"El gate debe detectar degradación real frente a baseline y error de importe");must(db.includes("revoke all on function public.financial_app_matching_observability(integer) from public,anon")&&db.includes("grant execute on function public.financial_app_matching_observability(integer) to authenticated,service_role"),"RPC de calidad debe permanecer autenticado");
+for(const token of ["MatchingQualityStatus","ForecastQualityStats","ReconciliationQualityStats","releaseGate","noFinancialValuesStored","derivedFromCanonicalHistory","financial_app_matching_observability"])must(lib.includes(token),`Contrato TypeScript de observabilidad incompleto: ${token}`);
+for(const token of ["CALIDAD DE DECISIONES","Aciertos maduros","Error mediano de fecha","Decisiones repetidas","Todavía no existe una ventana anterior","muestra suficiente"])must(panel.includes(token),`Panel de calidad incompleto: ${token}`);
+must(page.includes("getMatchingObservability(90)")&&page.includes("<MatchingQualityPanel data={matching}/>"),"Control debe cargar el panel de calidad en servidor");must(styles.includes("matching-quality-grid")&&styles.includes("status-degraded")&&styles.includes("@media"),"Faltan estilos responsive/estado del panel 4.3");must(route.includes("getAuthorizedClient")&&route.includes("apiUnauthorized")&&route.includes("apiFailure")&&route.includes("financial_app_matching_observability"),"API de matching quality debe usar el boundary autenticado común");must(probe.includes("matchingObservabilityReadable")&&probe.includes("matchingQualityGate")&&probe.includes("matching.releaseGate.pass === true"),"El release probe debe bloquear una degradación confirmada");must(e2e.includes('payload.version!=="4.3.0"')&&e2e.includes("matchingObservabilityReadable")&&e2e.includes("matchingQualityGate"),"E2E autenticada debe comprobar observabilidad y quality gate");must(smoke.includes("/api/control/matching-quality"),"Production smoke debe comprobar que la API de calidad rechaza anónimos");must(pkg.scripts?.["audit:v430"]==="node scripts/audit-v430.mjs","Falta script audit:v430");must(String(pkg.scripts?.prebuild||"").includes("audit-v430.mjs"),"prebuild debe ejecutar el gate 4.3");must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v430.mjs"),"audit:current debe ejecutar el gate 4.3");must(ci.includes("Matching observability 4.3 audit")&&ci.includes("npm run audit:v430"),"CI debe ejecutar el gate 4.3");
+if(failures.length){console.error("Financial App 4.3 matching observability audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}console.log("Financial App 4.3 audit OK · calidad de matching derivada, sample-aware, visible en Control y conectada al release gate");
