@@ -1,4 +1,30 @@
-# Changelog canónico — Finanzas 3.0
+# Changelog canónico — Financial App
+
+Las entradas anteriores se conservan como historial de evolución. La arquitectura runtime vigente está definida por la baseline 5.0.0 y por `docs/CANONICAL_ARCHITECTURE.md`.
+
+## V5.0.0 — cierre arquitectónico
+
+### Runtime
+- Inicio queda compuesto por `home_pulse` como ruta crítica y cuentas/secciones independientes en paralelo.
+- Se retiran `lib/financial/dashboard.ts` y `lib/financial/home.ts`.
+- Se retiran `public.financial_app_dashboard(date)`, `financial_app.dashboard_rpc(date)`, `public.financial_app_home_overview()` y `financial_app.home_overview_core()` mediante `DROP ... RESTRICT`.
+- El release probe deja de mantener vivo el dashboard sustituido y valida `accountsReadable` + `homePulseReadable` junto al resto de superficies canónicas.
+
+### Contratos y release
+- El runner E2E resuelve dinámicamente `APP_VERSION` y deja de acoplarse a una versión concreta.
+- Gates 4.2 y 4.5 quedan forward-compatible sin rebajar sus garantías históricas.
+- Nuevo `audit:v500` impide reintroducir loaders/RPC retirados y prohíbe `CASCADE` en el cierre 5.0.
+- CI incorpora el gate de cierre arquitectónico antes de los controles finales de build.
+- Validación de cierre previa al merge: Supabase declara `app_version=5.0.0` y `target_version=5.0.0`; se conservan 3.150 movimientos; las cuatro funciones retiradas ya no existen y `financial_app_home_pulse(date)` permanece disponible.
+
+### Documentación
+- `README.md`, `ARCHITECTURE.md` y `CANONICAL_ARCHITECTURE.md` pasan a describir una única arquitectura 5.0.0.
+- La arquitectura V3 antigua queda únicamente como historial en documentos/migraciones anteriores, no como alternativa runtime vigente.
+- El roadmap 4.x queda cerrado; futuras evoluciones parten de necesidades medibles sobre la baseline 5.0.0.
+
+### Datos
+- 5.0 no modifica movimientos, importes, categorías, documentos ni la fuente externa.
+- El cambio de base se limita a retirar funciones sustituidas y alinear `app_version`/`target_version` a 5.0.0.
 
 ## V3.0.0 — release integral
 

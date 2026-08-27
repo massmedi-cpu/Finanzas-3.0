@@ -1,7 +1,7 @@
 import{existsSync,readFileSync,readdirSync,statSync}from"node:fs";
 import{join}from"node:path";
 
-const required=["app/page.tsx","app/manifest.ts","app/control/page.tsx","app/cuentas/page.tsx","app/movimientos/page.tsx","app/reglas/page.tsx","app/cash-flow/page.tsx","app/presupuesto/page.tsx","app/prevision/page.tsx","app/patrimonio/page.tsx","app/analisis/page.tsx","app/archivo/page.tsx","app/configuracion/page.tsx","app/api/backup/route.ts","app/api/control/route.ts","app/api/movements/route.ts","app/api/rules/route.ts","components/app-chrome.tsx","lib/app-version.ts","lib/auth/authorized-client.ts","lib/financial/home.ts","supabase/functions/financial-app-sync/index.ts","supabase/functions/financial-app-initial-import/index.ts","database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql","database/FINANCIAL_APP_1.7.0_VERSION.sql"];
+const required=["app/page.tsx","app/manifest.ts","app/control/page.tsx","app/cuentas/page.tsx","app/movimientos/page.tsx","app/reglas/page.tsx","app/cash-flow/page.tsx","app/presupuesto/page.tsx","app/prevision/page.tsx","app/patrimonio/page.tsx","app/analisis/page.tsx","app/archivo/page.tsx","app/configuracion/page.tsx","app/api/backup/route.ts","app/api/control/route.ts","app/api/movements/route.ts","app/api/rules/route.ts","components/app-chrome.tsx","lib/app-version.ts","lib/auth/authorized-client.ts","lib/financial/home-pulse.ts","supabase/functions/financial-app-sync/index.ts","supabase/functions/financial-app-initial-import/index.ts","database/FINANCIAL_APP_1.6.0_RULES_ENGINE.sql","database/FINANCIAL_APP_1.7.0_ARCHITECTURE_FOUNDATION.sql","database/FINANCIAL_APP_1.7.0_VERSION.sql"];
 const errors=[];
 for(const p of required)if(!existsSync(p))errors.push(`Falta ${p}`);
 if(existsSync("src"))errors.push("Legado no permitido: src");
@@ -31,6 +31,7 @@ if(modernPulse){
   if(!home.includes("getHomePulse"))errors.push("Inicio 4.5+ debe usar el núcleo crítico ligero getHomePulse");
   if(home.includes("getFinancialDashboard"))errors.push("Inicio 4.5+ no puede volver a bloquear por getFinancialDashboard");
   if(!existsSync("lib/financial/home-pulse.ts"))errors.push("Falta lib/financial/home-pulse.ts para la ruta crítica 4.5+");
+  if(/^(?:[5-9]\.|\d{2,}\.)/.test(av||"")&&existsSync("lib/financial/home.ts"))errors.push("Inicio 5.0+ no puede conservar el loader home.ts sustituido");
 }else if(!home.includes("getFinancialDashboard"))errors.push("Inicio pre-4.5 ha perdido su núcleo crítico dashboard");
 if(home.includes("getHomeOverview"))errors.push("Inicio ha regresado al home overview monolítico");
 const movementApi=readFileSync("app/api/movements/route.ts","utf8");

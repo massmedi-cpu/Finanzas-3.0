@@ -23,8 +23,16 @@ for(const token of ['process.env.VERCEL_ENV !== "preview"','token.length < 32 ||
 must(!previewRoute.includes("runSync")&&!previewRoute.includes('target === "/api/sync"'),"El probe de release no puede ejecutar sincronizaciones ni mutaciones");
 must(previewRoute.includes('target.origin !== request.nextUrl.origin')&&previewRoute.includes('target.pathname.startsWith("/auth/")'),"El destino temporal debe seguir limitado al mismo origen y fuera de /auth");
 
-for(const token of ["getFinancialDashboard","getMovements","getForecastCalendar","getArchiveOverview","dashboardReadable","movementsReadable","forecastReadable","archiveReadable","forecastContracts","privateSession: true"])
-  must(releaseProbe.includes(token),`Probe autenticado incompleto: ${token}`);
+const commonProbeTokens=["getMovements","getForecastCalendar","getArchiveOverview","movementsReadable","forecastReadable","archiveReadable","forecastContracts","privateSession: true"];
+for(const token of commonProbeTokens)must(releaseProbe.includes(token),`Probe autenticado incompleto: ${token}`);
+if(atLeast(version,"5.0.0")){
+  for(const token of ["getAccountsOverview","getHomePulse","accountsReadable","homePulseReadable"])
+    must(releaseProbe.includes(token),`Probe 5.0 no usa superficies canónicas: ${token}`);
+  must(!releaseProbe.includes("getFinancialDashboard")&&!releaseProbe.includes("dashboardReadable"),"5.0 no puede conservar el dashboard sustituido dentro del probe");
+}else{
+  for(const token of ["getFinancialDashboard","dashboardReadable"])
+    must(releaseProbe.includes(token),`Probe histórico incompleto: ${token}`);
+}
 for(const forbidden of ["totalAvailable","estimatedAmount","actualAmount","documentCount","fileName","ocrText","sourceOriginalConcept"])
   must(!releaseProbe.includes(forbidden),`El probe no debe serializar datos financieros/documentales: ${forbidden}`);
 must(releaseProbe.includes("getMovements({ page: 1, pageSize: 1 })")&&releaseProbe.includes("getForecastCalendar(1)"),"El probe debe minimizar el volumen de lectura");

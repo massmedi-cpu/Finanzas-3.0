@@ -1,77 +1,98 @@
-# Arquitectura canónica — Finanzas 3.0 V3.0.0
+# Financial App 5.0.0 — Arquitectura vigente
 
-## Flujo de datos
+`docs/CANONICAL_ARCHITECTURE.md` es la referencia normativa. Este documento describe el flujo operativo actual con suficiente detalle para mantenimiento y auditoría.
 
-`Google Drive / XLSX maestro (solo lectura)` → `finanzas-v3-bridge` → `finance_v3_current + snapshots` → `finanzas-v3-normalized` → tablas `finance_*` normalizadas → RPC analíticas/privadas → Edge Functions → Next.js/Vercel.
+## 1. Flujo de datos
 
-El snapshot JSON se conserva como procedencia, validación y rollback. Las superficies de producto migradas no dependen de transportar el histórico completo.
+`Google Drive / fuente financiera externa (solo lectura)` → `financial-app-sync` → esquema privado `financial_app` → motores SQL/RPC canónicos → loaders de servidor Next.js → UI privada en Vercel.
 
-## Sincronización
-`finanzas-v3-normalized` valida la sesión privada, comprueba `modifiedTime` de Drive con caché corta y solo fuerza descarga/reparseo cuando la fuente cambia. `finance_v210_sync_current_snapshot` es idempotente y conserva versiones. El XLSX original nunca se edita.
+La aplicación nunca escribe en la fuente bancaria o documental original. Los enriquecimientos privados se almacenan aparte y son trazables.
 
-## Identidad y frontera de confianza
-`finance_principals` representa la identidad financiera de dominio y permite mantener la sesión privada actual sin acoplarla a Supabase Auth. El navegador no recibe credenciales Google ni `SUPABASE_SERVICE_ROLE_KEY`.
+## 2. Sincronización
 
-Las tablas privadas usan RLS deny-by-default. Las operaciones privilegiadas se ejecutan exclusivamente desde Edge Functions tras validar la sesión privada. En V3.0 las funciones históricas `data`, `recurring` y `splits` también son fail-closed: solo 2xx o el 404 autenticado esperado del probe legado autorizan; cualquier 5xx, 401/403 o fallo de red deniega.
+La Edge Function `financial-app-sync` comprueba el estado de la fuente y procesa únicamente cambios relevantes. La sincronización:
 
-## Capas de datos
+- es incremental;
+- evita reparseos cuando Drive no cambia;
+- preserva IDs y procedencia;
+- no elimina originales de Google Drive;
+- registra ejecuciones y resultados para Control/Inicio;
+- no se dispara automáticamente al montar Inicio en 4.5+.
 
-### Fuente/normalización
-- `finance_sources`
-- `finance_accounts`
-- `finance_source_transactions`
-- `finance_source_transaction_versions`
-- `finance_sync_runs`
-- `finance_audit_events`
+La actualización manual refresca la UI únicamente cuando la sincronización informa de cambios reales.
 
-### Capa privada editable
-- `finance_v3_movement_overrides`
-- `finance_v3_movement_splits`
-- `finance_v3_budgets`
-- `finance_v3_goals`
-- `finance_v3_future_events`
-- `finance_v3_scenarios`
-- `finance_v3_recurring_preferences`
-- `finance_v3_classification_rules`
-- `finance_v3_month_closures`
-- `finance_v3_system_audits`
-- `finance_v3_private_backups`
+## 3. Identidad y frontera de confianza
 
-La precedencia efectiva de clasificación es `split > manual > regla > fuente`.
+- Google OAuth autentica al usuario.
+- La autorización privada se valida en servidor mediante la allowlist vigente.
+- El navegador utiliza únicamente la clave publicable de Supabase.
+- `service_role` y secretos Google permanecen en servidor/Edge Functions.
+- Las superficies sensibles validan sesión y autorización antes de leer o mutar datos privados.
 
-## Analítica
-`finance_v220_effective_rows` resuelve overlays, reglas, exclusiones, traspasos y splits antes de agregar. Informes, Presupuestos, Revisión, Plan, Previsión e Inicio consumen resultados compactos SQL.
+## 4. PostgreSQL y RPC
 
-Movimientos usa paginación keyset/cursor. El histórico no se renderiza ni se transporta de una sola vez.
+El esquema `financial_app` contiene tablas y funciones internas. Los wrappers `public.financial_app_*` forman la API SQL que consume la aplicación cuando corresponde.
 
-## Planificación
-El motor de largo horizonte proyecta hasta 60 meses por ventanas de 12 meses, deduplica ocurrencias y alimenta calendario mensual, resumen anual, escenarios y capacidad de objetivos. Los cálculos de objetivos y prioridades son deterministas y están cubiertos por regresiones.
+Regla 5.0: cada responsabilidad runtime tiene una única superficie canónica. Las funciones sustituidas se eliminan con `DROP ... RESTRICT`, nunca con `CASCADE`.
 
-## Cierre y control
-- Cierre mensual persistente/reabrible con snapshot y detección de drift.
-- Centro de Control con checksum, sincronización, calidad e inventario de capas privadas.
-- Reglas con preview obligatorio y explicabilidad.
-- Backup privado portable sin incluir la fuente bancaria; restore transaccional condicionado a compatibilidad de checksum, filas y referencias.
+### Inicio
 
-## Edge Functions V3
-- `finanzas-v3-bridge`
-- `finanzas-v3-data`
-- `finanzas-v3-recurring`
-- `finanzas-v3-splits`
-- `finanzas-v3-normalized`
-- `finanzas-v3-analytics`
-- `finanzas-v3-closure`
-- `finanzas-v3-rules`
-- `finanzas-v3-explainability`
-- `finanzas-v3-control`
-- `finanzas-v3-backup`
+- Ruta crítica: `public.financial_app_home_pulse(date)` → `financial_app.home_pulse_core(date)`.
+- Cuentas: `public.financial_app_accounts(...)` a través de `getAccountsOverview()`.
+- Las secciones secundarias se resuelven en paralelo/streaming.
 
-## Plataforma y release
-- Next.js / React con Node 22.
-- Vercel región `cdg1`; Supabase `eu-west-3`.
-- Dependencias fijadas y lockfile npm v3.
-- CI: invariantes → regresiones financieras/funcionales/seguridad → TypeScript → build → smoke del servidor compilado.
-- Release V3.0: un único preview del HEAD final, health 3.0.0, runtime limpio y promoción posterior a producción.
+Retirado en 5.0.0:
 
-## Rollback
-Cada fase conserva checkpoints Git. La fuente bancaria no se modifica y la capa privada dispone además de exportación/checkpoints/restauración V2.9+, por lo que rollback de código y recuperación de datos privados son mecanismos separados.
+- `public.financial_app_dashboard(date)`;
+- `financial_app.dashboard_rpc(date)`;
+- `public.financial_app_home_overview()`;
+- `financial_app.home_overview_core()`;
+- `lib/financial/dashboard.ts`;
+- `lib/financial/home.ts`.
+
+Estas implementaciones permanecen únicamente en migraciones históricas anteriores a 5.0, no en runtime.
+
+## 5. Motores financieros
+
+- Movimientos: consulta paginada, edición individual/masiva, splits, reglas y automatización trazable.
+- Cash Flow: agregación canónica excluyendo duplicados, traspasos internos y movimientos fuera del contrato financiero.
+- Presupuesto y Plan: motores de servidor reutilizados por UI; no se recalculan cifras con fórmulas paralelas en cliente.
+- Previsión: calendario/ledger, matching 1↔1 con movimientos reales, descartes reversibles y proyección mensual de servidor.
+- Conciliación: matching controlado y workbench de revisión.
+- Inteligencia: anomalías, recurrencias, subidas y oportunidades derivadas de señales canónicas.
+- Control: integridad, calidad de matching, sincronización, cierre y auditorías.
+
+## 6. Documentos
+
+- Archivo documental privado con originales externos preservados.
+- Google Drive se trata como proveedor de almacenamiento/origen, no como una carpeta gestionada destructivamente por Financial App.
+- Vinculación movimiento↔documento conservadora, con autoenlace únicamente cuando la evidencia es inequívoca.
+- Casos ambiguos quedan visibles para revisión.
+- OCR local/first-party se utiliza cuando hace falta extraer texto de tickets o imágenes.
+
+## 7. Next.js
+
+- App Router.
+- Server Components por defecto y Client Components solo para interacción.
+- `app/page.tsx` obtiene `getHomePulse()` en la ruta crítica y transmite cuentas/secciones independientes.
+- `IntentLink` calienta rutas privadas por intención/touch sin reintroducir prefetch indiscriminado.
+- La sincronización manual no bloquea la primera pintura.
+
+## 8. Estilos y responsive
+
+- Sistema visual común en hojas semánticas no versionadas.
+- Cada módulo es propietario de sus estilos específicos.
+- Mobile-first y tablet/desktop responsive.
+- Modo claro/oscuro y controles compartidos protegidos por gates de regresión.
+
+## 9. Release y rollback
+
+CI ejecuta AXIOMA, arquitectura actual, regresiones históricas, gate de la versión, seguridad de dependencias, lint, typecheck y build.
+
+Una release se publica solo desde el mismo SHA que ha superado CI y Preview. Tras el merge se comprueba despliegue de producción y smoke HTTP.
+
+Las migraciones históricas se conservan para reconstrucción/auditoría. El rollback de código no implica reescribir la fuente financiera externa.
+
+## 10. Baseline 5.0.0
+
+5.0.0 es la baseline arquitectónica posterior a los bloques funcionales 4.0–4.5. A partir de aquí, cualquier evolución debe reutilizar las superficies canónicas existentes o sustituirlas de forma completa, eliminando la implementación anterior y actualizando sus gates forward-compatible.

@@ -1,140 +1,114 @@
-# Financial App 3.0.0
+# Financial App 5.0.0
 
-Aplicación financiera personal privada para control, presupuesto, planificación y análisis basados en datos reales.
+Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
+
+## Baseline 5.0.0
+
+5.0 cierra la evolución arquitectónica iniciada en 4.x y deja una única implementación runtime por responsabilidad.
+
+- Inicio usa `financial_app_home_pulse` como ruta crítica ligera y carga cuentas/secciones secundarias en paralelo.
+- Se retiran el dashboard monolítico y el antiguo home overview, tanto en loaders Next.js como en RPC PostgreSQL.
+- El release probe valida únicamente superficies canónicas: cuentas, home pulse, movimientos, previsión, archivo, matching e inteligencia.
+- Los gates históricos siguen activos de forma forward-compatible.
+- `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` describen la arquitectura real 5.0; migraciones y auditorías antiguas quedan como historial, no como runtime.
 
 ## Principios permanentes
-- Fuente bancaria externa exclusivamente en modo lectura.
+
+- Fuente bancaria/documental externa exclusivamente en solo lectura.
 - El origen nunca se reescribe desde la aplicación.
 - Datos originales y enriquecimientos privados permanecen separados.
-- Traspasos internos, duplicados y ahorro se excluyen según las reglas financieras validadas.
-- Ediciones, splits, reglas, conciliación y cierres son trazables y reversibles.
-- Acceso privado obligatorio y allowlist de servidor.
-- Responsive mobile-first, accesibilidad, pruebas de regresión, typecheck y build reproducible.
+- Traspasos internos, duplicados y ahorro se excluyen según contratos financieros validados.
+- Ediciones, splits, reglas, conciliación, automatizaciones y cierres son trazables y reversibles cuando corresponde.
+- Acceso privado mediante Google OAuth y allowlist de servidor.
+- Responsive mobile-first, modo claro/oscuro, accesibilidad y pruebas de regresión.
+- Una corrección sustituye la causa raíz; no se acumulan capas runtime para mantener compatibilidad.
 
 Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 
-## 2.0 — Plan Financiero unificado
-- Ruta `/plan` como capa de decisión única sobre presupuesto, previsión, objetivos, patrimonio y Control.
-- Una única llamada a `financial_app_plan_overview` agrega resumen, estado, capacidad y prioridades explicables.
-- La capa Plan es de solo lectura y reutiliza motores financieros canónicos.
-- Se preservan rendimiento 1.7, recuperación 1.8 y motor documental first-party 1.9.
+## Arquitectura actual
 
-## 2.0.1 — estabilización
-- Google OAuth activo y validado con sesión real.
-- Supabase usa el dominio de producción y no retorna a localhost.
-- Lecturas críticas protegidas contra efectos secundarios.
-- Smoke real y gate `audit:v201` para impedir regresiones.
+`Google Drive / fuente externa` → `financial-app-sync` → PostgreSQL privado `financial_app` → RPC canónicos → loaders de servidor Next.js → UI privada en Vercel.
 
-## 2.1.0 — rendimiento, legibilidad y coherencia
-- Navegación privada con prefetch por intención.
-- Tipografía compacta reforzada y shell persistente con un único sidebar.
-- Movimientos evita reenviar facetas repetidas en paginaciones y filtros posteriores.
-- Plan auditado contra Presupuesto, Previsión, Objetivos, Patrimonio y Control.
-- Gate `audit:v210`.
+### Inicio
 
-## 2.2.0 — analítica comparativa
-- Análisis compara únicamente periodos completos cuando corresponde.
-- Medias, tasa de ahorro, variabilidad, tendencia, concentración y cobertura derivan del overview canónico.
-- Ninguna métrica analítica escribe movimientos ni altera el origen.
-- Gates `audit:v220` y `test:analytics`.
+- Pulso crítico: `lib/financial/home-pulse.ts` → `financial_app_home_pulse`.
+- Cuentas: `lib/financial/accounts.ts` → `financial_app_accounts`.
+- Secciones no críticas: streaming/paralelo.
+- Sin sincronización automática disruptiva al montar Inicio.
+- Navegación privada con precalentamiento por intención/touch.
 
-## 2.3.0 — inteligencia financiera explicable
-- Señales deterministas sobre liquidez, presupuesto, objetivos, patrimonio, Control y contexto analítico.
-- Sin modelos externos para inventar cifras ni mutaciones financieras.
-- Cada señal conserva trazabilidad al módulo de origen.
-- Gates `audit:v230` y `test:intelligence`.
+### Movimientos
 
-## 2.4.0 — horizonte de planificación
-- Capacidad visible a 3, 6 y 12 meses.
-- La proyección de capacidad es lineal y explícita; no se presenta como saldo bancario futuro.
-- Previsión bancaria y patrimonio previsto continúan limitados a 90 días.
-- Ruta privada `/plan/horizonte` y gates `audit:v240` + `test:horizon`.
+- Paginación y filtros en servidor.
+- Edición individual y masiva por IDs seleccionados.
+- Deshacer/historial en operaciones compatibles.
+- Splits, reglas deterministas, conciliación y automatizaciones auditables.
+- Vinculación de documentos y facturas al movimiento.
 
-## 2.5.0 — cierre mensual y formato España
-- Se preservan las reglas y bloqueos del cierre mensual existente y su trazabilidad.
-- Formato numérico español centralizado: miles con punto y decimales con coma (`1.234.567,89`).
-- Euros, porcentajes, enteros y cifras con signo usan la misma capa de formato.
-- El cambio es de presentación: no modifica importes, fórmulas financieras ni datos de origen.
-- Gates `audit:v250` y `test:format`.
+### Previsión
 
-## 2.6.0 — reglas seguras y deterministas
-- Reglas con preview obligatorio y sin escritura sobre la fuente bancaria.
-- Prioridad determinista, cuenta/dirección opcionales y protección frente a formularios modificados tras el preview.
-- Overrides manuales y splits conservan precedencia sobre automatismos.
-- Pausar, reactivar y eliminar reglas es reversible y auditado.
-- Tratamiento horario centralizado para Europe/Madrid y pruebas `test:time`.
-- Gate `audit:v260`.
+- Calendario mensual de movimientos esperados.
+- Matching automático 1↔1 con movimientos reales.
+- Ingresos, gastos y cash flow proyectados calculados en servidor.
+- Seguros/impuestos anuales reforzados.
+- Descartes reversibles que no modifican el movimiento bancario real.
 
-## 2.7.0 — explicabilidad y procedencia
-- Cada clasificación puede identificar su procedencia: fuente, regla, ajuste manual o split.
-- Las sugerencias son conservadoras, no escriben datos automáticamente y exigen preview antes de convertirse en regla.
-- Nueva superficie privada `/explicabilidad` con trazabilidad al dato de origen.
-- Edge/RPC privilegiadas permanecen fail-closed y service-role only.
-- Gates `audit:v270` y `test:explainability`.
+### Documentos y Google Drive
 
-## 2.8.0 — Centro de Control e integridad
-- Centro de Control ampliado con snapshot técnico rápido y read-only.
-- Auditoría profunda únicamente bajo acción explícita del usuario.
-- Comprobaciones de checksum de fuente, fingerprint estructural, IDs, cuentas, sincronización, continuidad, calidad y archivo privado.
-- Historial de auditorías persistente protegido por RLS.
-- La auditoría no modifica movimientos, presupuestos ni la fuente bancaria.
-- Gates `audit:v280` y `test:integrity`, acumulados sobre todas las auditorías 1.7 → 2.7.
+- Sincronización incremental.
+- Originales de Drive preservados.
+- Deduplicación y matching conservador.
+- Autoenlace únicamente en coincidencias inequívocas; casos ambiguos a revisión.
+- OCR local/first-party cuando es necesario.
 
-## 2.8.1 — hotfix visual de Cash Flow
-- `CashFlowChart` carga siempre sus estilos tanto en Inicio como en la sección Cash Flow.
-- Ingresos y gastos se representan como barras con contraste válido en claro y oscuro.
-- El acumulado se representa exclusivamente como línea sin relleno y con escala/eje derecho independiente.
-- Se añaden grid, títulos y referencias de ambos ejes sin modificar los datos ni las fórmulas financieras.
-- Se conserva tooltip, alternancia de series, tabla accesible y drill-down a Movimientos.
-- Gate `audit:v281` evita volver a publicar el gráfico sin sus estilos o con área rellena.
+### Inteligencia y Control
 
-## 3.0.0 — consolidación profesional del producto
-- Base visual común `visual-v300.css` para semántica financiera, radios, jerarquía y gráficos.
-- Paleta de gráficos estable y explícita para modo claro/oscuro: ingresos, gastos, serie principal, comparación y grid.
-- Inicio adopta jerarquía ejecutiva: ingresos, gastos y Cash Flow tienen prioridad visual; revisión, conciliación y alertas quedan en una segunda fila operativa sin duplicar datos.
-- Cash Flow, Análisis, histórico de saldo y Patrimonio reutilizan la misma semántica visual sin cambiar sus motores de cálculo.
-- La corrección 2.8.1 de Cash Flow queda protegida: barras para ingresos/gastos, acumulado como línea y doble eje independiente.
-- El shell privado permanece visible durante cambios de sección; la carga global se sustituye por skeleton local y accesible.
-- Los skeletons respetan `prefers-reduced-motion`.
-- La versión no introduce nuevas fuentes de verdad ni nuevas fórmulas financieras: consolida presentación, lectura y navegación sobre los motores canónicos existentes.
-- Gate permanente `audit:v300` protege sistema visual, jerarquía de Inicio, gráficos, temas, shell persistente, carga local y bloqueo de Preview de desarrollo.
+- Anomalías, recurrencias, incrementos de gasto y oportunidades de ahorro derivadas de señales canónicas.
+- Observabilidad de matching sin persistir valores financieros derivados.
+- Centro de Control para integridad, calidad, sincronización y cierre.
 
-## Funciones principales
-- Inicio financiero con cuentas, Cash Flow, presupuesto, previsión, categorías y Control.
-- Plan Financiero unificado con prioridades explicables y capacidad para objetivos.
-- Movimientos editables y trazables, filtros avanzados, splits, documentos y conciliación.
-- Reglas automáticas seguras con preview, prioridad y reversibilidad.
-- Explicabilidad de clasificaciones y sugerencias conservadoras.
-- Presupuesto mensual/anual, previsiones, escenarios, objetivos y patrimonio.
-- Centro de Control con integridad del sistema y cierre/reapertura mensual.
-- Archivo documental privado con OCR local y asociaciones a movimientos.
-- Configuración, tema y copia portable/restaurable de la capa privada.
+## Seguridad
+
+- El navegador nunca recibe `SUPABASE_SERVICE_ROLE_KEY` ni secretos Google.
+- RLS y privilegios mantienen las superficies privadas cerradas por defecto.
+- Preview autenticada mediante token one-time y deshabilitada en producción.
+- Las funciones privilegiadas se revisan mediante gates y advisors antes de release.
+
+## Release
+
+Una versión solo llega a `main` después de superar:
+
+1. AXIOMA y arquitectura canónica.
+2. Gates históricos de regresión.
+3. Gate de la versión actual.
+4. Auditoría de dependencias.
+5. Lint, TypeScript y build reproducible.
+6. Preview del mismo SHA validado.
+7. Migración Supabase verificada.
+8. Smoke de producción tras el merge.
+
+## Versionado
+
+- Producto visible: `lib/app-version.ts` → **5.0.0**.
+- Paquete npm técnico: **3.4.8**.
+
+Ambos versionados son deliberadamente independientes.
 
 ## Producción
-- Acceso mediante Google OAuth y allowlist de servidor.
-- Vercel: región `cdg1`.
-- Dominio público: `financialapp-home.vercel.app`.
-- Las ramas de desarrollo mantienen el despliegue automático deshabilitado para evitar previews y consumo innecesario.
-- Una release sólo se promociona a `main` después de superar CI completo y el gate de release.
+
+- Dominio: `financialapp-home.vercel.app`.
+- Vercel región `cdg1`.
+- Node 22.
+- Las ramas de desarrollo no deben consumir previews innecesarios; la publicación se concentra en el HEAD final validado.
+
+## Documentación vigente
+
+- `docs/CANONICAL_ARCHITECTURE.md`
+- `docs/ARCHITECTURE.md`
+- `docs/PROJECT_AXIOMS.md`
+- `docs/PROJECT_CHANGELOG.md`
+- `docs/TEST_MATRIX.md`
+
+Las migraciones y documentos de releases anteriores se conservan como registro histórico. No deben interpretarse como una arquitectura runtime paralela.
 
 No se deben subir al repositorio credenciales, claves privadas, extractos bancarios, CSV/XLSX/PDF personales, backups financieros reales ni binarios generados del motor documental.
-
-## Documentación actual
-- `docs/PROJECT_AXIOMS.md`
-- `docs/AUDIT_FINANCIAL_APP_1.7.0.md`
-- `docs/AUDIT_FINANCIAL_APP_1.8.0.md`
-- `docs/AUDIT_FINANCIAL_APP_1.9.0.md`
-- `docs/AUDIT_FINANCIAL_APP_2.0.0.md`
-- `docs/AUDIT_FINANCIAL_APP_2.0.1.md`
-- `docs/PERFORMANCE_V2.1.0.md`
-- `docs/COHERENCE_V2.1.0.md`
-- `docs/RELEASE_GATE_V2.2.0.md`
-- `docs/RELEASE_GATE_V2.3.0.md`
-- `docs/RELEASE_GATE_V2.4.0.md`
-- `docs/RELEASE_GATE_V2.5.0.md`
-- `docs/RELEASE_GATE_V2.6.0.md`
-- `docs/RELEASE_GATE_V2.7.0.md`
-- `docs/RELEASE_GATE_V2.8.0.md`
-- `docs/RELEASE_GATE_V2.8.1.md`
-- `docs/RELEASE_GATE_V3.0.0.md`
-- `supabase/README.md`

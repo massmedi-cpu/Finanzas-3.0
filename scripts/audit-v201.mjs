@@ -21,6 +21,8 @@ const forecastRoute=read("app/api/forecast/route.ts");
 const ci=read(".github/workflows/ci.yml");
 const vercel=read("vercel.json");
 const readme=read("README.md");
+const releaseDoc=read("docs/RELEASE_V2.0.1.md");
+const auditDoc=read("docs/AUDIT_FINANCIAL_APP_2.0.1.md");
 const pkg=JSON.parse(read("package.json")||"{}");
 
 const semver=(value)=>String(value||"").split(".").map(part=>Number.parseInt(part,10)||0);
@@ -66,7 +68,10 @@ if(pkg.scripts?.["audit:v201"]!=="node scripts/audit-v201.mjs")errors.push("Falt
 if(!ci.includes("npm run audit:v201"))errors.push("CI no ejecuta la auditoría 2.0.1");
 if(!vercel.includes('"financial-app-rebuild": false'))errors.push("La rama de estabilización puede gastar previews de Vercel");
 if(!readme.includes("financialapp-home.vercel.app"))errors.push("README no refleja el dominio público actual");
-if(!readme.includes("## 2.0.1 — estabilización"))errors.push("README ya no documenta las garantías de la release 2.0.1");
+if(atLeast(productVersion,"5.0.0")){
+  if(!readme.includes("Financial App 5.0.0")||!readme.includes("migraciones y documentos de releases anteriores"))errors.push("README 5.0 no declara la preservación del historial de releases");
+  if(!releaseDoc.includes("2.0.1")||!auditDoc.includes("2.0.1"))errors.push("La documentación histórica 2.0.1 no conserva su release/auditoría");
+}else if(!readme.includes("## 2.0.1 — estabilización"))errors.push("README ya no documenta las garantías de la release 2.0.1");
 
 if(errors.length){
   console.error("Financial App 2.0.1 stabilization audit FAILED");
