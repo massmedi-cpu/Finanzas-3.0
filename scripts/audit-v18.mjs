@@ -9,8 +9,11 @@ const need = [
   "scripts/backup-recovery-tests.ts",
   "docs/AUDIT_FINANCIAL_APP_1.8.0.md",
   "lib/document/ticket-ocr-engine.ts",
-  "lib/document/ticket-ocr-geometry.ts",
+  "lib/document/receipt-image-preprocessor.ts",
+  "lib/document/receipt-layout.ts",
   "lib/document/receipt-reconstruction.ts",
+  "lib/document/receipt-financial-validator.ts",
+  "lib/document/receipt-ocr-revision.ts",
 ];
 for (const file of need) if (!existsSync(file)) errors.push(`Falta ${file}`);
 
@@ -20,8 +23,10 @@ const migration = existsSync("database/FINANCIAL_APP_1.8.0_RECOVERY.sql") ? read
 const preserve = existsSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql") ? readFileSync("database/FINANCIAL_APP_1.8.0_PRESERVE_NEWER_SOURCE_PRIVATE_STATE.sql", "utf8") : "";
 const archive = readFileSync("app/archivo/archive-client.tsx", "utf8");
 const engine = existsSync("lib/document/ticket-ocr-engine.ts") ? readFileSync("lib/document/ticket-ocr-engine.ts", "utf8") : "";
-const geometry = existsSync("lib/document/ticket-ocr-geometry.ts") ? readFileSync("lib/document/ticket-ocr-geometry.ts", "utf8") : "";
+const preprocessor = existsSync("lib/document/receipt-image-preprocessor.ts") ? readFileSync("lib/document/receipt-image-preprocessor.ts", "utf8") : "";
 const reconstruction = existsSync("lib/document/receipt-reconstruction.ts") ? readFileSync("lib/document/receipt-reconstruction.ts", "utf8") : "";
+const validator = existsSync("lib/document/receipt-financial-validator.ts") ? readFileSync("lib/document/receipt-financial-validator.ts", "utf8") : "";
+const revision = existsSync("lib/document/receipt-ocr-revision.ts") ? readFileSync("lib/document/receipt-ocr-revision.ts", "utf8") : "";
 const tsconfig = readFileSync("tsconfig.json", "utf8");
 const vercel = readFileSync("vercel.json", "utf8");
 const version = readFileSync("lib/app-version.ts", "utf8");
@@ -51,19 +56,23 @@ const archiveUsesCanonicalBrowserEngine =
 const engineIsMapped = tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]');
 const engineRecognizesLocally =
   engine.includes("worker.recognize(input") &&
-  engine.includes("localAdaptiveThreshold") &&
-  engine.includes("paperGeometry") &&
-  engine.includes("deskew");
+  engine.includes("prepareReceiptImage") &&
+  engine.includes("adaptive_psm6") &&
+  engine.includes("grayscale_psm4");
 const canonicalPipeline =
-  engine.includes("canonical_adaptive_psm6") &&
-  engine.includes("image_ocr_receipt_v501:canonical_v4") &&
   engine.includes("reconstructReceiptEvidence") &&
-  reconstruction.includes("mergeAlignedDescriptions");
-const browserOcr = archiveUsesCanonicalBrowserEngine && engineIsMapped && engineRecognizesLocally && canonicalPipeline && !engine.includes("geometryReceiptPass");
+  engine.includes("validateReceiptFinancials") &&
+  engine.includes("RECEIPT_OCR_METHOD_PREFIX") &&
+  reconstruction.includes("samePhysicalRow") &&
+  reconstruction.includes("mergePhysicalRows") &&
+  validator.includes('"needs_review"') &&
+  revision.includes('canonical_integrity_v5');
+const noLegacyFallback = !engine.includes("recognizeLegacyTicket") && !engine.includes("geometryReceiptPass");
+const browserOcr = archiveUsesCanonicalBrowserEngine && engineIsMapped && engineRecognizesLocally && canonicalPipeline && noLegacyFallback;
 if (!browserOcr) errors.push("OCR dejó de procesarse en el navegador mediante el motor canónico local");
 if (!archive.includes("localProcessing:true")) errors.push("Archivo no declara procesamiento OCR local");
 if (!archive.includes("automaticOnImport:true")) errors.push("El OCR local ya no se completa automáticamente al importar");
-if (!geometry.includes("estimateDeskewFromSamples")) errors.push("Se perdió la garantía histórica de corrección de giro");
+if (!preprocessor.includes("estimateDeskewFromSamples") || !preprocessor.includes("localAdaptiveThreshold") || !preprocessor.includes("rectifyPaper")) errors.push("Se perdió la garantía histórica de corrección geométrica, giro o iluminación");
 if (!vercel.includes('"financial-app-rebuild": false')) errors.push("La rama de trabajo volvería a consumir previews de Vercel");
 
 const match = version.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);
@@ -72,4 +81,4 @@ const supports18 = current && (current[0] > 1 || (current[0] === 1 && current[1]
 if (!supports18) errors.push("La auditoría 1.8 solo puede ejecutarse en Financial App >= 1.8.0");
 
 if (errors.length) {console.error("Financial App 1.8 audit FAILED");errors.forEach((error) => console.error(`- ${error}`));process.exit(1)}
-console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor canónico");
+console.log("Financial App 1.8 audit OK · recuperación y OCR local automático preservados en motor canónico de integridad");
