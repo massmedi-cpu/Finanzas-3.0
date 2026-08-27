@@ -18,7 +18,7 @@ const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
 must(version.includes('APP_VERSION = "4.5.0"'),"APP_VERSION no es 4.5.0");
-for(const token of ["transactions_latest_source_balance_idx","include (source_balance, account_id)","home_pulse_core","financial_app_home_pulse","singleTransactionPass','true","accountsExcludedFromCriticalPath','true","revoke all on function public.financial_app_home_pulse(date) from public,anon","grant execute on function public.financial_app_home_pulse(date) to authenticated,service_role"])
+for(const token of ["transactions_latest_source_balance_idx","include (source_balance, account_id)","home_pulse_core","financial_app_home_pulse","'singleTransactionPass',true","'accountsExcludedFromCriticalPath',true","revoke all on function public.financial_app_home_pulse(date) from public,anon","grant execute on function public.financial_app_home_pulse(date) to authenticated,service_role"])
   must(migration.includes(token),`Falta garantía SQL 4.5: ${token}`);
 must(!/insert\s+into\s+financial_app\.transactions/i.test(migration)&&!/update\s+financial_app\.transactions/i.test(migration)&&!/delete\s+from\s+financial_app\.transactions/i.test(migration),"4.5 no puede mutar movimientos");
 
