@@ -12,6 +12,7 @@ const client=read("app/prevision/forecast-client.tsx");
 const route=read("app/api/forecast/route.ts");
 const lib=read("lib/financial/forecast-calendar.ts");
 const layout=read("app/prevision/layout.tsx");
+const styles=read("app/forecast-ledger.css");
 
 expect(version.includes('APP_VERSION = "4.1.0"'),"versión canónica 4.1.0");
 expect(db.includes("oneToOneActualMatching")&&db.includes("event_rank=1 and transaction_rank=1"),"conciliación prevista↔real estrictamente 1↔1");
@@ -22,7 +23,7 @@ expect(route.includes("export async function PATCH")&&route.includes("financial_
 expect(lib.includes("ForecastProjectionMonth")&&lib.includes("dismissedEvents:ForecastCalendarEvent[]")&&lib.includes("oneToOneActualMatching"),"contrato TypeScript 4.1 completo");
 expect(client.includes("forecast-month-strip")&&client.includes("projectionMonths")&&client.includes("restoreEvent")&&client.includes("Descartados"),"UI mensual, proyección y restauración visibles");
 expect(client.includes("Justificado por un movimiento real")&&client.includes("no compite con otra previsión"),"confirmación real explicable y conservadora");
-expect(layout.includes('forecast-v410.css'),"estilos 4.1 encapsulados sin pisar la base anterior");
+expect(layout.includes('forecast-ledger.css')&&styles.includes("forecast-month-strip")&&styles.includes("forecast-dismissed"),"estilos de ledger con nombre funcional no versionado");
 
 if(checks.some(check=>!check.condition))process.exit(1);
 console.log(`Financial App 4.1 audit OK · ${checks.length}/${checks.length} garantías`);
