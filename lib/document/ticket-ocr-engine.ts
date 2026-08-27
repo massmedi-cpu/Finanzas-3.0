@@ -17,6 +17,7 @@ import {
 } from "./receipt-layout";
 import { validateReceiptFinancials } from "./receipt-financial-validator";
 import { RECEIPT_OCR_METHOD_PREFIX } from "./receipt-ocr-revision";
+import { prepareReceiptImage } from "./receipt-image-preprocessor";
 
 export {
   inferDocumentMetadata,
@@ -109,7 +110,7 @@ function pointsFromPoly(poly: unknown): Point[] {
 }
 
 function boxFromItem(item: PaddleItem): Box | null {
-  const text = String(item.text ?? "").replace(/\r?\n/g, " ").trim();
+  const text = String(item.text ?? "").replace(/\r?\n/g, " ").normalize("NFKC").trim();
   if (!text) return null;
   const points = pointsFromPoly(item.poly);
   if (points.length < 2) return null;
@@ -186,6 +187,68 @@ function groupRows(boxes: Box[]) {
   return rows.sort((a, b) => a.top - b.top || a.left - b.left);
 }
 
+function normalizedKey(value: string) {
+  return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+}
+
+function isReceiptTableHeader(row: VisualRow) {
+  const key = normalizedKey(row.text);
+  return key.includes("DESCRIP") && key.includes("PRECI") && (key.includes("IMPORTE") || key.includes("TOTAL") || key.includes("UDS"));
+}
+
+function obviousRecognitionNoise(box: Box) {
+  const visible = box.text.replace(/\s/g, "");
+  if (!visible) return true;
+  if (box.score < 20) return true;
+
+  const latinLetters = (visible.match(/\p{Script=Latin}/gu) || []).length;
+  const unsupportedCjk = (visible.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/gu) || []).length;
+  if (unsupportedCjk > 0 && latinLetters === 0) return true;
+
+  const digits = (visible.match(/\d/g) || []).length;
+  const letters = (visible.match(/\p{L}/gu) || []).length;
+  const symbols = Math.max(0, visible.length - digits - letters);
+  if (visible.length >= 18 && digits / visible.length >= 0.78 && symbols <= 5 && box.score < 65) return true;
+  if (box.score < 35 && visible.length >= 5 && (letters + digits) / visible.length < 0.65) return true;
+  return false;
+}
+
+function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: number) {
+  const rows = groupRows(boxes);
+  const tableIndex = rows.findIndex(isReceiptTableHeader);
+  let corridor: { left: number; right: number } | null = null;
+  let bottomLimit = sourceHeight;
+
+  if (tableIndex >= 0) {
+    const table = rows[tableIndex];
+    const width = Math.max(1, table.right - table.left);
+    const margin = Math.max(width * 0.16, sourceWidth * 0.025);
+    corridor = {
+      left: clamp(table.left - margin, 0, sourceWidth),
+      right: clamp(table.right + margin, 0, sourceWidth),
+    };
+
+    const footerRows = rows.slice(tableIndex + 1).filter((row) => /\b(TOTAL|PENDIENTE|PAGADO|GRACIAS|EFECTIVO|TARJETA)\b/i.test(normalizedKey(row.text)));
+    const lastFooter = footerRows.at(-1);
+    if (lastFooter) bottomLimit = Math.min(sourceHeight, lastFooter.bottom + Math.max(lastFooter.height * 4, sourceHeight * 0.045));
+  }
+
+  const accepted: Box[] = [];
+  const discarded: Box[] = [];
+  for (const box of boxes) {
+    let reject = obviousRecognitionNoise(box);
+    if (!reject && corridor) {
+      const overlap = Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left));
+      const overlapRatio = overlap / Math.max(1, box.width);
+      const semantic = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+      if (overlapRatio < 0.28 && !semantic) reject = true;
+      if (box.top > bottomLimit && !semantic) reject = true;
+    }
+    (reject ? discarded : accepted).push(box);
+  }
+  return { accepted: accepted.length ? accepted : boxes, discarded };
+}
+
 function visualBounds(boxes: Box[], sourceWidth: number, sourceHeight: number) {
   const rawLeft = Math.min(...boxes.map((box) => box.left));
   const rawTop = Math.min(...boxes.map((box) => box.top));
@@ -257,10 +320,7 @@ function itemArithmeticValid(quantity: string, unitPrice: string, total: string)
 }
 
 function strictReceiptLayout(rows: VisualRow[]): ReceiptLayout | null {
-  const tableHeader = rows.findIndex((row) => {
-    const key = row.text.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    return key.includes("DESCRIP") && key.includes("PRECI") && (key.includes("IMPORTE") || key.includes("TOTAL") || key.includes("UDS"));
-  });
+  const tableHeader = rows.findIndex(isReceiptTableHeader);
   if (tableHeader < 0) return null;
 
   const header = rows.slice(0, tableHeader).map((row) => cleanSpaces(row.text)).filter(Boolean);
@@ -307,13 +367,13 @@ function strictReceiptLayout(rows: VisualRow[]): ReceiptLayout | null {
   return { header, items, summary, footer, unparsedBody, source: "geometry_tsv" };
 }
 
-function chooseReceiptLayout(rows: VisualRow[], rawText: string) {
+function chooseReceiptLayout(rows: VisualRow[], text: string) {
   const geometric = strictReceiptLayout(rows);
-  const text = parseReceiptLayout(rawText);
-  if (!geometric) return text.items.length || (text.unparsedBody?.length || 0) ? text : null;
+  const parsed = parseReceiptLayout(text);
+  if (!geometric) return parsed.items.length || (parsed.unparsedBody?.length || 0) ? parsed : null;
   const geometricScore = geometric.items.length * 10 - (geometric.unparsedBody?.length || 0) * 2 + geometric.summary.length * 3;
-  const textScore = text.items.length * 10 - (text.unparsedBody?.length || 0) * 2 + text.summary.length * 3;
-  return geometricScore >= textScore ? geometric : text;
+  const textScore = parsed.items.length * 10 - (parsed.unparsedBody?.length || 0) * 2 + parsed.summary.length * 3;
+  return geometricScore >= textScore ? geometric : parsed;
 }
 
 function averageConfidence(boxes: Box[]) {
@@ -324,10 +384,10 @@ function averageConfidence(boxes: Box[]) {
 /**
  * Canonical receipt OCR based on PP-OCRv6 geometry.
  *
- * There is deliberately one recognition pass over the original image. No
- * thresholded copy, no second OCR engine and no text invented from a merchant
- * dictionary. The PaddleOCR line polygons are preserved and are the source of
- * the reconstructed visual ticket.
+ * A single recognition pass is preserved. When a paper contour can be detected
+ * safely, PP-OCRv6 receives the rectified grayscale receipt instead of the full
+ * camera frame. Literal recognition evidence is retained separately from the
+ * trusted text used by the UI and financial parser.
  */
 export async function recognizeTicketImage(
   file: File,
@@ -336,30 +396,58 @@ export async function recognizeTicketImage(
   hint: DocumentTypeHint = "receipt",
 ): Promise<ImageOcrResult> {
   const started = now();
-  onProgress(0.08, "Leyendo el original con PP-OCRv6");
-  const results = await engine.predict(file, {
-    textRecScoreThresh: 0,
+  let input: Blob | HTMLCanvasElement = file;
+  let preprocessMs = 0;
+  let deskewAngle = 0;
+  let perspectiveCorrected = false;
+  let paperDetected = false;
+
+  onProgress(0.04, "Detectando el papel y aislando el fondo");
+  try {
+    const preprocessStarted = now();
+    const prepared = await prepareReceiptImage(file);
+    if (prepared.paperDetected) {
+      input = prepared.grayscale;
+      preprocessMs = prepared.durationMs || elapsed(preprocessStarted);
+      deskewAngle = prepared.deskewAngle;
+      perspectiveCorrected = prepared.perspectiveCorrected;
+      paperDetected = true;
+    }
+  } catch {
+    input = file;
+    preprocessMs = 0;
+  }
+
+  onProgress(0.12, paperDetected ? "Leyendo solo el ticket con PP-OCRv6" : "Leyendo el original con PP-OCRv6");
+  const results = await engine.predict(input, {
+    textRecScoreThresh: 0.2,
     textDetMaxSideLimit: 4000,
   });
   const result = results?.[0];
   if (!result) throw new Error("PP-OCRv6 no devolvió resultado");
 
-  const boxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
-  if (!boxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
-  onProgress(0.72, "Ordenando líneas por su posición real");
+  const allBoxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
+  if (!allBoxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
+
+  const sourceWidth = Math.max(1, numberValue(result.image?.width) || Math.ceil(Math.max(...allBoxes.map((box) => box.right))));
+  const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...allBoxes.map((box) => box.bottom))));
+  const literalRows = groupRows(allBoxes);
+  const literalText = literalRows.map((row) => row.text).join("\n").trim();
+
+  const filtered = filterReceiptBoxes(allBoxes, sourceWidth, sourceHeight);
+  const boxes = filtered.accepted;
+  onProgress(0.72, filtered.discarded.length ? "Quitando ruido del fondo y ordenando líneas" : "Ordenando líneas por su posición real");
 
   const rows = groupRows(boxes);
-  const sourceWidth = Math.max(1, numberValue(result.image?.width) || Math.ceil(Math.max(...boxes.map((box) => box.right))));
-  const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...boxes.map((box) => box.bottom))));
   const visualLayout = makeVisualLayout(boxes, sourceWidth, sourceHeight);
-  const rawText = rows.map((row) => row.text).join("\n").trim();
-  const normalizedText = normalizeOcrText(rawText);
-  const layoutText = monospacedLayout(rows, visualLayout.bounds) || preserveOcrLayout(rawText);
-  const receiptLayout = chooseReceiptLayout(rows, rawText);
-  const validation = validateReceiptFinancials(receiptLayout, [rawText]);
+  const trustedText = rows.map((row) => row.text).join("\n").trim();
+  const normalizedText = normalizeOcrText(trustedText);
+  const layoutText = monospacedLayout(rows, visualLayout.bounds) || preserveOcrLayout(trustedText);
+  const receiptLayout = chooseReceiptLayout(rows, trustedText);
+  const validation = validateReceiptFinancials(receiptLayout, [trustedText]);
   onProgress(0.86, "Validando fecha, comercio e importes");
 
-  const inferred = inferDocumentMetadata(rawText, hint);
+  const inferred = inferDocumentMetadata(trustedText, hint);
   const metadata: DocumentMetadata = {
     ...inferred,
     amount: validation.printedTotal ?? inferred.amount,
@@ -367,41 +455,44 @@ export async function recognizeTicketImage(
   };
   const confidence = Math.round(averageConfidence(boxes) * 10) / 10;
   const sdkMetrics = result.metrics || {};
-  const totalMs = numberValue(sdkMetrics.totalMs) ?? elapsed(started);
+  const primaryMs = numberValue(sdkMetrics.totalMs) ?? Math.max(0, elapsed(started) - preprocessMs);
   const metrics = {
-    preprocessMs: 0,
-    primaryMs: Math.round(totalMs * 10) / 10,
+    preprocessMs: Math.round(preprocessMs * 10) / 10,
+    primaryMs: Math.round(primaryMs * 10) / 10,
     secondaryMs: 0,
-    reconstructionMs: Math.max(0, elapsed(started) - totalMs),
+    reconstructionMs: Math.max(0, elapsed(started) - preprocessMs - primaryMs),
     totalMs: elapsed(started),
   };
   const pass: OcrPassEvidence & Record<string, unknown> = {
-    variant: "ppocrv6_es_geometry",
+    variant: paperDetected ? "ppocrv6_es_paper_geometry" : "ppocrv6_es_geometry",
     confidence,
     score: confidence,
-    rawText,
+    rawText: literalText,
     normalizedText,
     durationMs: metrics.primaryMs,
     visualLayout,
     sdkMetrics,
     runtime: result.runtime ?? null,
+    paperDetected,
+    discardedBoxCount: filtered.discarded.length,
+    discardedBoxes: filtered.discarded.slice(0, 30).map((box) => ({ text: box.text, score: Math.round(box.score * 10) / 10 })),
   };
 
   onProgress(0.97, validation.status === "complete" ? "Ticket validado" : "Conservando líneas para revisión");
   return {
-    text: rawText,
-    rawText,
+    text: trustedText,
+    rawText: literalText,
     normalizedText,
     layoutText,
     tsv: "",
     confidence,
-    method: `${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`,
+    method: `${RECEIPT_OCR_METHOD_PREFIX}${paperDetected ? "ppocrv6_es_paper_geometry" : "ppocrv6_es_geometry"}`,
     passes: [pass],
     receiptLayout,
     metadata,
     validation,
     metrics,
-    deskewAngle: 0,
-    perspectiveCorrected: false,
+    deskewAngle,
+    perspectiveCorrected,
   };
 }
