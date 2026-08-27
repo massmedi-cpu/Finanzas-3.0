@@ -22,11 +22,11 @@ must(client.includes('upload(e.target.files[0],"receipt")'),"Cámara y galería 
 must(client.includes("automaticOnImport:true"),"El resultado OCR debe registrar que se ejecutó automáticamente al importar");
 must(!client.includes("Reprocesar OCR mejorado"),"La experiencia principal no debe obligar a reprocesar manualmente el OCR");
 must(client.includes("OCR automático completado al importar"),"La interfaz debe dejar claro que el OCR termina durante la importación");
-must(client.includes("needsOcrUpgrade")&&client.includes("upgradeExistingOcr")&&client.includes("image_ocr_receipt_v501:"),"Los tickets guardados con un OCR anterior deben poder actualizarse automáticamente al abrirlos");
+must(client.includes('CURRENT_RECEIPT_OCR_PREFIX="image_ocr_receipt_v501:fastcrop_v3:"')&&client.includes("needsOcrUpgrade")&&client.includes("upgradeExistingOcr")&&client.includes("startsWith(CURRENT_RECEIPT_OCR_PREFIX)"),"Los tickets guardados con una revisión OCR anterior deben actualizarse automáticamente al abrirlos");
 must(client.includes("No necesitas volver a subir la foto"),"La actualización del OCR anterior no debe exigir nueva importación manual");
 must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"La app debe importar OCR mediante alias estable");
 const legacyDelegation=engine.includes("recognizeOptimizedTicket");
-const croppedPrecisionPipeline=engine.includes("locator_money_columns_psm6")&&engine.includes("fastcrop_adaptive_psm6")&&engine.includes("image_ocr_receipt_v501:fastcrop_v2");
+const croppedPrecisionPipeline=engine.includes("locator_money_columns_psm6")&&engine.includes("fastcrop_adaptive_psm6")&&engine.includes("image_ocr_receipt_v501:fastcrop_v3");
 must(engine.includes('from "./ticket-ocr-geometry"')&&(legacyDelegation||croppedPrecisionPipeline),"El motor canónico debe usar una única estrategia OCR local y auditable");
 must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe reaparecer un motor OCR runtime versionado");
 must(engine.includes("detectReceiptTextBounds")&&!engine.includes("geometryReceiptPass")&&!engine.includes("totalsZonePass"),"El motor canónico no debe repetir lecturas completas después de localizar el ticket");
@@ -69,4 +69,4 @@ must(nextConfig.includes("public, max-age=0, must-revalidate"),"El manifest no d
 must(settings.includes("version:APP_VERSION"),"Configuración debe mostrar APP_VERSION");
 must(css.includes("width:min(920px"),"La revisión documental debe conservar ancho usable");
 must(css.includes(".receipt-paper")&&client.includes("Vista reconstruida del ticket"),"La reconstrucción debe seguir presentándose como ticket");
-console.log(`audit-ticket-ocr-v302 OK · OCR local recortado/geométrico · total seguro · auto-upgrade · producto ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`audit-ticket-ocr-v302 OK · OCR local recortado/geométrico · revisión fastcrop_v3 · auto-upgrade · producto ${versionMatch?.[0]||"APP_VERSION"}`);
