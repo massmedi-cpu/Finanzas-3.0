@@ -9,7 +9,8 @@ if(getPart.includes("financial_app_mark_new_seen"))errors.push("GET /api/movemen
 if(!movements.includes('body?.kind!=="seen"'))errors.push("Falta acknowledgement explícito de nuevos movimientos");
 
 const home=readFileSync("app/page.tsx","utf8");
-const progressiveHome=["getFinancialDashboard","getHomeControlSummary","getHomeReconciliationSummary","Suspense"].every(contract=>home.includes(contract));
+const criticalRead=home.includes("getHomePulse")||home.includes("getFinancialDashboard");
+const progressiveHome=criticalRead&&["getHomeControlSummary","getHomeReconciliationSummary","Suspense"].every(contract=>home.includes(contract));
 const unifiedHome=home.includes("getHomeOverview");
 if(!unifiedHome&&!progressiveHome)errors.push("Inicio no usa una arquitectura de lectura financiera canónica");
 if(!progressiveHome&&/getAccountsOverview|getBudgetMonth|getForecastOverview|getAnalysisOverview|getReconciliationOverview/.test(home))errors.push("Inicio conserva lecturas financieras paralelas antiguas fuera de la arquitectura progresiva");
