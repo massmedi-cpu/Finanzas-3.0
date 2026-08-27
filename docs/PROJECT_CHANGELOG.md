@@ -15,6 +15,7 @@ Las entradas anteriores se conservan como historial de evolución. La arquitectu
 - Gates 4.2 y 4.5 quedan forward-compatible sin rebajar sus garantías históricas.
 - Nuevo `audit:v500` impide reintroducir loaders/RPC retirados y prohíbe `CASCADE` en el cierre 5.0.
 - CI incorpora el gate de cierre arquitectónico antes de los controles finales de build.
+- Validación de cierre previa al merge: Supabase declara `app_version=5.0.0` y `target_version=5.0.0`; se conservan 3.150 movimientos; las cuatro funciones retiradas ya no existen y `financial_app_home_pulse(date)` permanece disponible.
 
 ### Documentación
 - `README.md`, `ARCHITECTURE.md` y `CANONICAL_ARCHITECTURE.md` pasan a describir una única arquitectura 5.0.0.
