@@ -14,7 +14,10 @@ const lib=read("lib/financial/forecast-calendar.ts");
 const layout=read("app/prevision/layout.tsx");
 const styles=read("app/forecast-ledger.css");
 
-expect(version.includes('APP_VERSION = "4.1.0"'),"versión canónica 4.1.0");
+const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
+expect(atLeast(currentVersion,"4.1.0"),"versión canónica 4.1.0 o posterior");
 expect(db.includes("oneToOneActualMatching")&&db.includes("event_rank=1 and transaction_rank=1"),"conciliación prevista↔real estrictamente 1↔1");
 expect(db.includes("annual_tax_insurance_history")&&db.includes("forecast_is_annual_signal"),"seguros e impuestos anuales detectados también por señal textual fuerte");
 expect(db.includes("projectionMonths")&&db.includes("pendingEvents")&&db.includes("confirmedEventsNotDoubleCounted"),"proyección mensual de servidor sin doble conteo");

@@ -69,4 +69,12 @@ jobs:
           for path in /api/archive /api/settings /api/forecast; do
             check_api_unauthorized "$path"
           done
-          echo "Production smoke passed: login, protected routes and API auth contract are healthy."
+
+          preview_code=$(curl -sS -o /tmp/preview-auth-body -w '%{http_code}' --max-time 15 "$BASE_URL/auth/preview?token=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx&next=%2Fapi%2Frelease-probe" || true)
+          if [ "$preview_code" != "404" ]; then
+            echo "Expected preview auth to stay disabled in production, got $preview_code"
+            cat /tmp/preview-auth-body
+            exit 1
+          fi
+
+          echo "Production smoke passed: login, protected routes, API auth contract and preview-only E2E boundary are healthy."

@@ -90,6 +90,8 @@ jobs:
         run: npm run audit:v400
       - name: Forecast ledger 4.1 audit
         run: npm run audit:v410
+      - name: Authenticated release E2E 4.2 audit
+        run: npm run audit:v420
       - name: Visual debt audit
         run: npm run audit:visual-debt
       - name: Forecast calendar 3.6 audit
