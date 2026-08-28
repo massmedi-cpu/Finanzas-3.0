@@ -29,6 +29,7 @@ const itemRegex = new RegExp(`^(.+?)\\s+(${qtyPattern})\\s+(${moneyPattern})\\s+
 const summaryRegex = /^(base(?:\s+imponible)?|subtotal|total\s+iva|iva(?:\s*\([^)]*\)|\s+\d+(?:[.,]\d+)?%)?|total(?:\s+a\s+pagar)?|importe\s+total|efectivo|tarjeta)\s*:?[\s-]*(.+)$/i;
 const columnHeader = /^(descripci[oó]n\s+)?u(?:d|ds|ds\.)\s+precio\s+(?:total|importe)$/i;
 const commercialColumnHeader = /\bCANTIDAD\b.*\bC[ÓO]DIGO\b.*\bART[IÍ]CULO\b.*\bPRECIO\b.*\bIVA\b.*\bSUBTOTAL\b/i;
+const commercialSummaryMarker = /\bBASE\s+IMPONIBLE\b|\bIMPORTE\s+IVA\b|\bTOTAL\s+(?:ALBAR[AÁ]N|FACTURA|A\s+PAGAR)\b|^\s*TOTAL\b|\b\d{1,3}[.,]\d{2,3}\s*%\s*IVA\s+sobre\b/i;
 
 function cleanLine(value: string) { return value.replace(/[|]+/g, " ").replace(/\s+/g, " ").trim(); }
 function normalizeNumeric(value: string) { return value.replace(/O/gi, "0").replace(/,(?=\d{1,2}$)/, "."); }
@@ -77,11 +78,140 @@ function commercialQuantity(value: string) {
   return parsed.toFixed(3).replace(/0+$/g, "").replace(/[.,]$/g, "").replace(".", ",");
 }
 
+function normalizedCommercialCode(value: string) {
+  return value.replace(/^0+(?=\d)/, "") || value;
+}
+
 function commercialItemLead(line: string) {
-  const compact = line.match(/^(\d{1,3}[.,]\d{3})(\d{4,10})\s+(.+)$/);
-  if (compact) return { quantity: compact[1], code: compact[2], description: compact[3].trim() };
-  const spaced = line.match(/^(\d{1,3}(?:[.,]\d{3})?)\s+(\d{3,10})\s+(.+)$/);
-  return spaced ? { quantity: spaced[1], code: spaced[2], description: spaced[3].trim() } : null;
+  const compact = line.match(/^(\d{1,3}[.,]\d{3})(\d{1,10})\s+(.+)$/);
+  if (compact) return { quantity: compact[1], code: normalizedCommercialCode(compact[2]), description: compact[3].trim() };
+  const spaced = line.match(/^(\d{1,3}(?:[.,]\d{1,3})?)\s+(\d{1,10})\s+(.+)$/);
+  return spaced ? { quantity: spaced[1], code: normalizedCommercialCode(spaced[2]), description: spaced[3].trim() } : null;
+}
+
+function splitMergedCommercialToken(token: string, unitPrice: number, total: number) {
+  const match = token.match(/^(\d{1,3})([.,])(\d+)$/);
+  if (!match) return null;
+  const [, whole, separator, tail] = match;
+  const candidates: Array<{ error: number; fractionalDigits: number; quantity: string; code: string }> = [];
+  const maxFractionalDigits = Math.min(3, Math.max(0, tail.length - 1));
+  for (let fractionalDigits = 0; fractionalDigits <= maxFractionalDigits; fractionalDigits += 1) {
+    const code = tail.slice(fractionalDigits);
+    if (!code) continue;
+    const quantity = `${whole}${fractionalDigits ? `${separator}${tail.slice(0, fractionalDigits)}` : ""}`;
+    const numericQuantity = commercialNumber(quantity);
+    if (numericQuantity === null || numericQuantity <= 0) continue;
+    const error = Math.abs(numericQuantity * unitPrice - total);
+    if (error <= Math.max(0.03, Math.abs(total) * 0.01)) {
+      candidates.push({ error, fractionalDigits, quantity, code: normalizedCommercialCode(code) });
+    }
+  }
+  candidates.sort((a, b) => a.error - b.error || b.fractionalDigits - a.fractionalDigits || b.code.length - a.code.length);
+  return candidates[0] || null;
+}
+
+function parseCommercialFullRow(line: string, rowTop: number): ReceiptLineItem | null {
+  const numericTokens = [...line.matchAll(/\d{1,7}[.,]\d{2,3}\b/g)];
+  if (numericTokens.length < 3) return null;
+  const unitToken = numericTokens.at(-3)!;
+  const vatToken = numericTokens.at(-2)!;
+  const totalToken = numericTokens.at(-1)!;
+  const unitPrice = commercialNumber(unitToken[0]);
+  const vatRate = commercialNumber(vatToken[0]);
+  const total = commercialNumber(totalToken[0]);
+  if (unitPrice === null || vatRate === null || total === null || unitPrice < 0 || total < 0 || vatRate < 0 || vatRate > 100) return null;
+
+  const prefix = cleanLine(line.slice(0, unitToken.index || 0));
+  let quantityRaw: string | null = null;
+  let code: string | null = null;
+  let description: string | null = null;
+
+  const spaced = prefix.match(/^(\d{1,3}(?:[.,]\d{1,3})?)\s+(\d{1,10})\s+(.+)$/);
+  if (spaced) {
+    const quantity = commercialNumber(spaced[1]);
+    if (quantity !== null && quantity > 0 && Math.abs(quantity * unitPrice - total) <= Math.max(0.03, Math.abs(total) * 0.01)) {
+      quantityRaw = spaced[1];
+      code = normalizedCommercialCode(spaced[2]);
+      description = spaced[3];
+    }
+  }
+
+  if (!quantityRaw || !code || !description) {
+    const merged = prefix.match(/^(\d{1,3}[.,]\d+)\s+(.+)$/);
+    if (!merged) return null;
+    const split = splitMergedCommercialToken(merged[1], unitPrice, total);
+    if (!split) return null;
+    quantityRaw = split.quantity;
+    code = split.code;
+    description = merged[2];
+  }
+
+  const quantity = commercialQuantity(quantityRaw);
+  const unit = commercialMoney(unitToken[0]);
+  const sum = commercialMoney(totalToken[0]);
+  if (!quantity || !unit || !sum || !recognizableDescription(description)) return null;
+  return {
+    description: cleanLine(`${code} · ${description}`),
+    quantity,
+    unitPrice: unit,
+    total: sum,
+    top: rowTop,
+    bottom: rowTop,
+    sourceLine: line,
+  };
+}
+
+function commercialSummary(lines: string[], startIndex: number) {
+  let base: number | null = null;
+  let tax: number | null = null;
+  let baseTop = startIndex;
+  let taxTop = startIndex;
+
+  for (let index = startIndex; index < lines.length; index += 1) {
+    const line = lines[index];
+    const baseMatch = line.match(/\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+    const taxMatch = line.match(/\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+    const vatOnBase = line.match(/(\d{1,3}[.,]\d{2,3})\s*%\s*IVA\s+sobre\s+(\d{1,7}[.,]\d{2,3})\s+(\d{1,7}[.,]\d{2,3})/i);
+    if (base === null && baseMatch) { base = commercialNumber(baseMatch[1]); baseTop = index; }
+    if (tax === null && taxMatch) { tax = commercialNumber(taxMatch[1]); taxTop = index; }
+    if (vatOnBase) {
+      if (base === null) { base = commercialNumber(vatOnBase[2]); baseTop = index; }
+      if (tax === null) { tax = commercialNumber(vatOnBase[3]); taxTop = index; }
+    }
+  }
+
+  let total: number | null = null;
+  let totalTop = startIndex;
+  if (base !== null && tax !== null) {
+    const expectedGross = Math.round((base + tax) * 100) / 100;
+    const candidates: Array<{ value: number; top: number; error: number }> = [];
+    for (let index = startIndex; index < Math.min(lines.length, startIndex + 6); index += 1) {
+      for (const match of lines[index].matchAll(/\d{1,7}[.,]\d{2,3}\b/g)) {
+        const value = commercialNumber(match[0]);
+        if (value === null) continue;
+        const error = Math.abs(value - expectedGross);
+        if (error <= 0.03) candidates.push({ value, top: index, error });
+      }
+    }
+    candidates.sort((a, b) => a.error - b.error || a.top - b.top);
+    if (candidates.length) { total = candidates[0].value; totalTop = candidates[0].top; }
+  }
+
+  if (total === null) {
+    for (let index = startIndex; index < lines.length; index += 1) {
+      const explicit = lines[index].match(/\bTOTAL(?:\s+(?:A\s+PAGAR|ALBAR[AÁ]N|FACTURA|TICKET))?\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+      if (!explicit) continue;
+      total = commercialNumber(explicit[1]);
+      totalTop = index;
+      if (total !== null) break;
+    }
+  }
+
+  const summary: ReceiptSummaryLine[] = [];
+  if (base !== null) summary.push({ label: "Base", value: commercialMoney(String(base))!, top: baseTop });
+  if (tax !== null) summary.push({ label: "IVA", value: commercialMoney(String(tax))!, top: taxTop });
+  if (total !== null) summary.push({ label: "Total", value: commercialMoney(String(total))!, top: totalTop });
+  return summary;
 }
 
 function parseCommercialLayout(text: string): ReceiptLayout | null {
@@ -91,50 +221,31 @@ function parseCommercialLayout(text: string): ReceiptLayout | null {
 
   const header = lines.slice(0, tableIndex);
   const items: ReceiptLineItem[] = [];
-  const summary: ReceiptSummaryLine[] = [];
   const footer: string[] = [];
   const unparsedBody: ReceiptUnparsedRow[] = [];
   let pending: { quantity: string; code: string; description: string; sourceLine: string; top: number } | null = null;
-  let tableEnded = false;
+  let summaryStart = -1;
 
   for (let index = tableIndex + 1; index < lines.length; index += 1) {
     const line = lines[index];
     const rowTop = index - tableIndex - 1;
 
-    if (tableEnded) {
-      footer.push(line);
-      continue;
-    }
-
-    const vatSummary = line.match(/(\d{1,3}[.,]\d{2,3})\s*%\s*IVA\s+sobre\s+(\d{1,7}[.,]\d{2,3})\s+(\d{1,7}[.,]\d{2,3})/i);
-    if (vatSummary) {
+    if (commercialSummaryMarker.test(line)) {
       if (pending) {
         unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
         pending = null;
       }
-      const base = commercialMoney(vatSummary[2]);
-      const tax = commercialMoney(vatSummary[3]);
-      if (base) summary.push({ label: "Base", value: base, top: rowTop });
-      if (tax) summary.push({ label: "IVA", value: tax, top: rowTop });
-      continue;
+      summaryStart = index;
+      break;
     }
 
-    const totalSummary = line.match(/^TOTAL(?:\s+A\s+PAGAR)?\s*:?[\s-]*(\d{1,7}[.,]\d{2,3})\b/i);
-    if (totalSummary) {
+    const fullRow = parseCommercialFullRow(line, rowTop);
+    if (fullRow) {
       if (pending) {
         unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
         pending = null;
       }
-      const total = commercialMoney(totalSummary[1]);
-      if (total) summary.push({ label: "Total", value: total, top: rowTop });
-      tableEnded = true;
-      continue;
-    }
-
-    const lead = commercialItemLead(line);
-    if (lead) {
-      if (pending) unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
-      pending = { ...lead, sourceLine: line, top: rowTop };
+      items.push(fullRow);
       continue;
     }
 
@@ -173,20 +284,29 @@ function parseCommercialLayout(text: string): ReceiptLayout | null {
       }
     }
 
-    if (/^(?:PORTES|OBSERVACIONES?)\b/i.test(line)) {
-      if (pending) {
-        unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
-        pending = null;
-      }
-      footer.push(line);
+    const lead = commercialItemLead(line);
+    if (lead && !/^(?:PORTES|OBSERVACIONES?)\b/i.test(line)) {
+      if (pending) unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+      pending = { ...lead, sourceLine: line, top: rowTop };
       continue;
     }
 
-    if (hasUsefulText(line)) unparsedBody.push({ text: line, top: rowTop, bottom: rowTop });
+    if (items.length > 0 && !pending) footer.push(line);
+    else if (hasUsefulText(line)) unparsedBody.push({ text: line, top: rowTop, bottom: rowTop });
   }
 
   if (pending) unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
   if (!items.length) return null;
+
+  const summaryIndex = summaryStart >= 0 ? summaryStart : lines.length;
+  const summary = summaryStart >= 0 ? commercialSummary(lines, summaryStart) : [];
+  if (summaryStart >= 0) {
+    for (const line of lines.slice(summaryStart)) {
+      if (/\bBASE\s+IMPONIBLE\b|\bIMPORTE\s+IVA\b|\bTOTAL\s+(?:ALBAR[AÁ]N|FACTURA|A\s+PAGAR)\b|^\s*TOTAL\b|\b\d{1,3}[.,]\d{2,3}\s*%\s*IVA\s+sobre\b/i.test(line)) continue;
+      footer.push(line);
+    }
+  }
+  void summaryIndex;
   return { header, items, summary, footer, unparsedBody, source: "text" };
 }
 
