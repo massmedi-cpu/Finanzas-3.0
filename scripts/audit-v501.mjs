@@ -67,7 +67,8 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('paddle_layout_v4'),"La revisión OCR debe identificar paddle_layout_v4");
+const ocrRevisionNumber=Number.parseInt(revision.match(/paddle_layout_v(\d+)/)?.[1]||"0",10);
+must(ocrRevisionNumber>=4,"La revisión OCR debe conservar como mínimo el baseline paddle_layout_v4");
 must(ocrEngine.includes("prepareReceiptImage")&&ocrEngine.includes("if (prepared.paperDetected)")&&ocrEngine.includes("input = prepared.grayscale"),"El OCR debe aislar el papel únicamente cuando la detección sea segura");
 must(ocrEngine.includes("input = file")&&!ocrEngine.includes("input = prepared.adaptive"),"El aislamiento de papel debe tener fallback al original y no usar binarización destructiva");
 must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia PP-OCRv6");
