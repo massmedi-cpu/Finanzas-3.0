@@ -53,7 +53,7 @@ must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"A
 must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en PaddleOCR.js 0.4.2 y no puede volver al runtime");
 must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"Tesseract no puede sobrevivir en el runtime OCR");
 must(loader.includes("@paddleocr/paddleocr-js@0.4.2"),"Falta PaddleOCR.js 0.4.2 en el loader canónico");
-must(visual.includes("ReceiptGeometryPreview")&&visual.includes("position: \"absolute\""),"La reconstrucción ya no conserva la maquetación espacial");
+must(visual.includes("ReceiptGeometryPreview")&&visual.includes("viewBox")&&visual.includes("textLength")&&visual.includes('lengthAdjust="spacingAndGlyphs"'),"La reconstrucción ya no conserva la maquetación espacial");
 
 for(const token of [
   "invalid_item_arithmetic",
@@ -64,7 +64,7 @@ for(const token of [
   '"failed"',
 ]) must(validator.includes(token),`Validador financiero incompleto: ${token}`);
 
-must(revision.includes('paddle_layout_v3'),"La revisión OCR debe identificar paddle_layout_v3");
+must(revision.includes('paddle_layout_v4'),"La revisión OCR debe identificar paddle_layout_v4");
 must(ocrEngine.includes("prepareReceiptImage")&&ocrEngine.includes("if (prepared.paperDetected)")&&ocrEngine.includes("input = prepared.grayscale"),"El OCR debe aislar el papel únicamente cuando la detección sea segura");
 must(ocrEngine.includes("input = file")&&!ocrEngine.includes("input = prepared.adaptive"),"El aislamiento de papel debe tener fallback al original y no usar binarización destructiva");
 must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia PP-OCRv6");

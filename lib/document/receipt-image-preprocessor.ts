@@ -28,6 +28,12 @@ type PaperTrack = {
   lastGridRow: number;
 };
 
+type PaperEdgeLine = {
+  center: number;
+  slope: number;
+  score: number;
+};
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const median = (values: number[]) => {
   if (!values.length) return 0;
@@ -52,7 +58,7 @@ function neutralLuminance(red: number, green: number, blue: number) {
  * claros de la fotografía. Esto evita incorporar carteles, pantallas, sobres u
  * otras superficies claras con texto que estén detrás del ticket.
  */
-export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
+function detectPaperFromLightRuns(data: ImageData, width: number, height: number): PaperGeometry | null {
   const step = Math.max(4, Math.floor(Math.max(width, height) / 700));
   const rows = Math.ceil(height / step);
   const columns = Math.ceil(width / step);
@@ -220,6 +226,179 @@ export function detectPaper(data: ImageData, width: number, height: number): Pap
   const ratio = Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth));
   if (ratio > 1.6) return null;
   return { top, bottom, topLeft, topRight, bottomLeft, bottomRight };
+}
+
+function strongestEdgeLine(
+  signal: Float32Array,
+  gridWidth: number,
+  gridHeight: number,
+  startRatio: number,
+  endRatio: number,
+): PaperEdgeLine | null {
+  const yStart = Math.round(gridHeight * 0.04);
+  const yEnd = Math.round(gridHeight * 0.96);
+  let best: PaperEdgeLine | null = null;
+
+  for (let slope = -0.18; slope <= 0.1801; slope += 0.02) {
+    for (let center = Math.round(gridWidth * startRatio); center <= Math.round(gridWidth * endRatio); center += 1) {
+      let score = 0;
+      for (let y = yStart; y < yEnd; y += 1) {
+        const projected = Math.round(center + slope * (y - gridHeight / 2));
+        let strongest = 0;
+        for (let delta = -1; delta <= 1; delta += 1) {
+          const x = projected + delta;
+          if (x >= 0 && x < gridWidth) strongest = Math.max(strongest, signal[y * gridWidth + x]);
+        }
+        score += strongest;
+      }
+      score /= Math.max(1, yEnd - yStart);
+      if (!best || score > best.score) best = { center, slope, score };
+    }
+  }
+
+  return best;
+}
+
+function lineX(line: PaperEdgeLine, y: number, gridHeight: number) {
+  return line.center + line.slope * (y - gridHeight / 2);
+}
+
+/**
+ * Fallback geométrico para tickets grises, arrugados o apoyados sobre otra
+ * superficie clara. Busca dos bordes largos y de polaridad opuesta: entrada al
+ * papel por la izquierda y salida por la derecha. El texto del fondo produce
+ * trazos cortos, pero no dos líneas paralelas durante casi toda la fotografía.
+ */
+function detectPaperFromLongEdges(data: ImageData, width: number, height: number): PaperGeometry | null {
+  const step = clamp(Math.round(Math.max(width, height) / 500), 3, 8);
+  const gridWidth = Math.ceil(width / step);
+  const gridHeight = Math.ceil(height / step);
+  if (gridWidth < 80 || gridHeight < 100) return null;
+
+  const luminance = new Float32Array(gridWidth * gridHeight);
+  for (let y = 0; y < gridHeight; y += 1) {
+    const sourceY = Math.min(height - 1, y * step);
+    for (let x = 0; x < gridWidth; x += 1) {
+      const sourceX = Math.min(width - 1, x * step);
+      const offset = (sourceY * width + sourceX) * 4;
+      luminance[y * gridWidth + x] = data.data[offset] * 0.2126
+        + data.data[offset + 1] * 0.7152
+        + data.data[offset + 2] * 0.0722;
+    }
+  }
+
+  const integralWidth = gridWidth + 1;
+  const integral = new Float64Array(integralWidth * (gridHeight + 1));
+  for (let y = 1; y <= gridHeight; y += 1) {
+    let row = 0;
+    for (let x = 1; x <= gridWidth; x += 1) {
+      row += luminance[(y - 1) * gridWidth + x - 1];
+      integral[y * integralWidth + x] = integral[(y - 1) * integralWidth + x] + row;
+    }
+  }
+
+  const mean = (left: number, top: number, right: number, bottom: number) => {
+    const x1 = clamp(left, 0, gridWidth - 1);
+    const x2 = clamp(right, x1 + 1, gridWidth);
+    const y1 = clamp(top, 0, gridHeight - 1);
+    const y2 = clamp(bottom, y1 + 1, gridHeight);
+    const sum = integral[y2 * integralWidth + x2]
+      - integral[y1 * integralWidth + x2]
+      - integral[y2 * integralWidth + x1]
+      + integral[y1 * integralWidth + x1];
+    return sum / Math.max(1, (x2 - x1) * (y2 - y1));
+  };
+
+  const positive = new Float32Array(gridWidth * gridHeight);
+  const negative = new Float32Array(gridWidth * gridHeight);
+  const window = 4;
+  const gap = 1;
+  const verticalRadius = 2;
+  for (let y = verticalRadius; y < gridHeight - verticalRadius; y += 1) {
+    for (let x = window + gap; x < gridWidth - window - gap; x += 1) {
+      const before = mean(x - gap - window, y - verticalRadius, x - gap, y + verticalRadius + 1);
+      const after = mean(x + gap, y - verticalRadius, x + gap + window, y + verticalRadius + 1);
+      const difference = after - before;
+      positive[y * gridWidth + x] = Math.max(0, difference);
+      negative[y * gridWidth + x] = Math.max(0, -difference);
+    }
+  }
+
+  const left = strongestEdgeLine(positive, gridWidth, gridHeight, 0.025, 0.55);
+  const right = strongestEdgeLine(negative, gridWidth, gridHeight, 0.45, 0.975);
+  if (!left || !right || left.score < 10 || right.score < 10 || left.score + right.score < 28) return null;
+
+  const centerWidth = right.center - left.center;
+  if (centerWidth < gridWidth * 0.28 || centerWidth > gridWidth * 0.9) return null;
+  const center = (left.center + right.center) / 2;
+  if (Math.abs(center - gridWidth / 2) > gridWidth * 0.24) return null;
+
+  const support = new Float32Array(gridHeight);
+  for (let y = 0; y < gridHeight; y += 1) {
+    const leftX = Math.round(lineX(left, y, gridHeight));
+    const rightX = Math.round(lineX(right, y, gridHeight));
+    let leftStrength = 0;
+    let rightStrength = 0;
+    for (let delta = -2; delta <= 2; delta += 1) {
+      const lx = leftX + delta;
+      const rx = rightX + delta;
+      if (lx >= 0 && lx < gridWidth) leftStrength = Math.max(leftStrength, positive[y * gridWidth + lx]);
+      if (rx >= 0 && rx < gridWidth) rightStrength = Math.max(rightStrength, negative[y * gridWidth + rx]);
+    }
+    support[y] = Math.max(leftStrength / Math.max(10, left.score), rightStrength / Math.max(10, right.score));
+  }
+
+  const smoothed = new Float32Array(gridHeight);
+  for (let y = 0; y < gridHeight; y += 1) {
+    const start = Math.max(0, y - 4);
+    const end = Math.min(gridHeight, y + 5);
+    let sum = 0;
+    for (let index = start; index < end; index += 1) sum += support[index];
+    smoothed[y] = sum / Math.max(1, end - start);
+  }
+
+  const segments: Array<{ start: number; end: number }> = [];
+  for (let y = 0; y < gridHeight;) {
+    if (smoothed[y] < 0.12) { y += 1; continue; }
+    const start = y;
+    while (y < gridHeight && smoothed[y] >= 0.12) y += 1;
+    segments.push({ start, end: y - 1 });
+  }
+  const longest = segments.sort((a, b) => (b.end - b.start) - (a.end - a.start))[0];
+  if (!longest || longest.end - longest.start < gridHeight * 0.38) return null;
+
+  const extension = Math.round(gridHeight * 0.015);
+  const topGrid = clamp(longest.start - extension, 0, gridHeight - 2);
+  const bottomGrid = clamp(longest.end + extension, topGrid + 1, gridHeight - 1);
+  const leftTop = lineX(left, topGrid, gridHeight);
+  const leftBottom = lineX(left, bottomGrid, gridHeight);
+  const rightTop = lineX(right, topGrid, gridHeight);
+  const rightBottom = lineX(right, bottomGrid, gridHeight);
+  const topWidth = rightTop - leftTop;
+  const bottomWidth = rightBottom - leftBottom;
+  if (Math.min(topWidth, bottomWidth) < gridWidth * 0.28) return null;
+  if (Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth)) > 1.6) return null;
+
+  const verticalExtent = bottomGrid - topGrid;
+  const aspect = verticalExtent / Math.max(1, (topWidth + bottomWidth) / 2);
+  if (aspect < 0.8 || aspect > 6) return null;
+
+  // Un pequeño margen hacia el interior elimina la sombra del canto y evita
+  // que una letra pegada al papel vecino entre en el recorte rectificado.
+  const horizontalInset = Math.max(1, centerWidth * 0.008);
+
+  return {
+    top: topGrid * step,
+    bottom: Math.min(height - 1, bottomGrid * step),
+    topLeft: clamp((leftTop + horizontalInset) * step, 0, width - 2),
+    topRight: clamp((rightTop - horizontalInset) * step, 1, width - 1),
+    bottomLeft: clamp((leftBottom + horizontalInset) * step, 0, width - 2),
+    bottomRight: clamp((rightBottom - horizontalInset) * step, 1, width - 1),
+  };
+}
+
+export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
+  return detectPaperFromLongEdges(data, width, height) || detectPaperFromLightRuns(data, width, height);
 }
 
 function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null) {

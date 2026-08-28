@@ -10,7 +10,7 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - Se retiran el dashboard monolítico y el antiguo home overview, tanto en loaders Next.js como en RPC PostgreSQL.
 - El release probe valida únicamente superficies canónicas: cuentas, home pulse, movimientos, previsión, archivo, matching e inteligencia.
 - El OCR de tickets conserva texto, confianza y polígonos por separado y marca contradicciones como revisión pendiente en lugar de inventar datos.
-- La revisión canónica del motor OCR es `paddle_layout_v1`: usa PaddleOCR.js 0.4.2 con PP-OCRv5 en español, realiza una sola inferencia sobre el original, no aplica el binarizado/preprocesado anterior, no ejecuta segundas pasadas y no utiliza Tesseract como fallback. Los documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado desde su original privado.
+- La revisión canónica del motor OCR es `paddle_layout_v4`: usa PaddleOCR.js 0.4.2 con PP-OCRv6 en español, detecta dos bordes físicos largos para rectificar únicamente el papel cuando existe un contorno fiable, realiza una sola inferencia y no utiliza Tesseract como fallback. Los documentos procesados con revisiones anteriores se consideran candidatos a reprocesado controlado desde su original privado.
 - La vista reconstruida del ticket se maqueta con las coordenadas reales de las líneas OCR; las líneas no interpretadas conservan su posición en vez de desplazarse a un bloque de residuos.
 - Los gates históricos siguen activos de forma forward-compatible.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` describen la arquitectura real 5.0; migraciones y auditorías antiguas quedan como historial, no como runtime.

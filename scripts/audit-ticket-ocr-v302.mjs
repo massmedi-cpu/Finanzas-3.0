@@ -40,12 +40,12 @@ must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe existir un segun
 must(!fs.existsSync("lib/document/ticket-ocr-geometry.ts"),"El motor geométrico legado debe estar eliminado, no dormido en runtime");
 
 must(loader.includes("@paddleocr/paddleocr-js@0.4.2")&&loader.includes("financial-paddleocr-ready"),"Falta loader estable de PaddleOCR.js");
-must(visual.includes("isReceiptVisualLayout")&&visual.includes("ReceiptGeometryPreview")&&visual.includes("position: \"absolute\""),"La vista del ticket no reconstruye su maquetación desde coordenadas");
+must(visual.includes("isReceiptVisualLayout")&&visual.includes("ReceiptGeometryPreview")&&visual.includes("viewBox")&&visual.includes("textLength")&&visual.includes('lengthAdjust="spacingAndGlyphs"'),"La vista del ticket no reconstruye su maquetación desde coordenadas");
 must(receiptLayout.includes("unparsedBody")&&receiptLayout.includes("top")&&receiptLayout.includes("bottom"),"El contrato de layout debe conservar filas no interpretadas y geometría");
 
 for(const token of ["needs_review","failed","invalid_item_arithmetic","unparsed_body_rows","items_total_mismatch","base_tax_total_mismatch"])
   must(validator.includes(token),`Validador financiero incompleto: ${token}`);
-must(revision.includes('paddle_layout_v3')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR PP-OCRv6 no está identificada de forma estable");
+must(revision.includes('paddle_layout_v4')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR PP-OCRv6 no está identificada de forma estable");
 
 for(const token of ["rawText","normalizedText","layoutText","tsv","validation","metrics"])
   must(baseOcr.includes(token),`El contrato OCR ha perdido ${token}`);

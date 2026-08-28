@@ -135,6 +135,41 @@ function boxFromItem(item: PaddleItem): Box | null {
   };
 }
 
+function replacementWithOriginalCase(original: string, replacement: string) {
+  if (original === original.toUpperCase()) return replacement.toUpperCase();
+  if (original === original.toLowerCase()) return replacement.toLowerCase();
+  return replacement;
+}
+
+/**
+ * Corrige únicamente firmas inequívocas de software de caja. La evidencia
+ * literal del motor se conserva antes de aplicar estas correcciones, de modo
+ * que nunca se oculta lo que PP-OCRv6 leyó realmente.
+ */
+function correctTrustedReceiptText(value: string) {
+  return value
+    .replace(/\bPovered(?=\s+by\b)/giu, (match) => replacementWithOriginalCase(match, "Powered"))
+    .replace(/\bgamarero\.com\b/giu, (match) => replacementWithOriginalCase(match, "qamarero.com"));
+}
+
+function metadataTextFromRows(rows: VisualRow[], sourceWidth: number) {
+  const lines = rows.map((row) => row.text);
+  const first = rows[0];
+  const continuation = rows[1];
+  if (!first || !continuation || !/^\p{L}$/u.test(continuation.text) || first.text.length < 3) return lines.join("\n");
+
+  const firstCenter = (first.left + first.right) / 2;
+  const continuationCenter = (continuation.left + continuation.right) / 2;
+  const gap = continuation.top - first.bottom;
+  const referenceHeight = Math.max(first.height, continuation.height);
+  const visuallyWrapped = Math.abs(firstCenter - continuationCenter) <= Math.max(sourceWidth * 0.08, first.height * 1.2)
+    && gap >= -referenceHeight * 0.35
+    && gap <= referenceHeight * 0.55
+    && continuation.height >= first.height * 0.55;
+  if (!visuallyWrapped) return lines.join("\n");
+  return [`${first.text}${continuation.text}`, ...lines.slice(2)].join("\n");
+}
+
 function verticalOverlap(a: Box, row: VisualRow) {
   const overlap = Math.max(0, Math.min(a.bottom, row.bottom) - Math.max(a.top, row.top));
   return overlap / Math.max(1, Math.min(a.height, row.height));
@@ -329,7 +364,7 @@ function strictReceiptLayout(rows: VisualRow[]): ReceiptLayout | null {
   const footer: string[] = [];
   const unparsedBody: ReceiptUnparsedRow[] = [];
   const itemPattern = /^(.+?)\s+(\d{1,3}(?:[.,]\d+)?)\s+(\d{1,7}[.,]\d{2})\s+(\d{1,7}[.,]\d{2})(?:\s*(?:EUR|€))?$/i;
-  const summaryLabel = /\b(base(?:\s+imponible)?|subtotal|iva|total(?:\s+a\s+pagar)?|importe\s+total)\b/i;
+  const summaryLabel = /\b(base(?:\s+imponible)?|subtotal|total\s+iva|iva|total(?:\s+a\s+pagar)?|importe\s+total)\b/i;
   let summaryStarted = false;
 
   for (const row of rows.slice(tableHeader + 1)) {
@@ -426,13 +461,17 @@ export async function recognizeTicketImage(
   const result = results?.[0];
   if (!result) throw new Error("PP-OCRv6 no devolvió resultado");
 
-  const allBoxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
-  if (!allBoxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
+  const literalBoxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
+  if (!literalBoxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
 
-  const sourceWidth = Math.max(1, numberValue(result.image?.width) || Math.ceil(Math.max(...allBoxes.map((box) => box.right))));
-  const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...allBoxes.map((box) => box.bottom))));
-  const literalRows = groupRows(allBoxes);
+  const sourceWidth = Math.max(1, numberValue(result.image?.width) || Math.ceil(Math.max(...literalBoxes.map((box) => box.right))));
+  const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...literalBoxes.map((box) => box.bottom))));
+  const literalRows = groupRows(literalBoxes);
   const literalText = literalRows.map((row) => row.text).join("\n").trim();
+  const allBoxes = literalBoxes.map((box) => {
+    const text = correctTrustedReceiptText(box.text);
+    return text === box.text ? box : { ...box, text };
+  });
 
   const filtered = filterReceiptBoxes(allBoxes, sourceWidth, sourceHeight);
   const boxes = filtered.accepted;
@@ -447,7 +486,7 @@ export async function recognizeTicketImage(
   const validation = validateReceiptFinancials(receiptLayout, [trustedText]);
   onProgress(0.86, "Validando fecha, comercio e importes");
 
-  const inferred = inferDocumentMetadata(trustedText, hint);
+  const inferred = inferDocumentMetadata(metadataTextFromRows(rows, sourceWidth), hint);
   const metadata: DocumentMetadata = {
     ...inferred,
     amount: validation.printedTotal ?? inferred.amount,

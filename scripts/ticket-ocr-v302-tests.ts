@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { recognizeTicketImage } from "../lib/document/ticket-ocr-engine";
 import { inferDocumentMetadata, normalizeOcrText } from "../lib/document/ticket-ocr";
 import { RECEIPT_OCR_METHOD_PREFIX, RECEIPT_OCR_REVISION } from "../lib/document/receipt-ocr-revision";
+import { detectPaper } from "../lib/document/receipt-image-preprocessor";
 
 const receipt=`CAFETERIA CENTRAL\n21/08/2026 18:42\nDESCRIPCION UDS PRECIO TOTAL\nCAFE 1 2.50 2.50\nTOSTADA 2 2.50 5.00\nBase 6.82\nIVA 0.68\nTOTAL 7.50`;
 const metadata=inferDocumentMetadata(receipt,"receipt");
@@ -28,7 +29,7 @@ const fakePaddleResult={
     item("Base",680,250,70),item("6.82",825,250,55),
     item("IVA",690,285,55),item("0.68",825,285,55),
     item("TOTAL",665,325,85),item("7.50",825,325,55),
-    item("Gracias",430,370,100),
+    item("Povered by gamarero.com",350,370,300),
   ],
   metrics:{detMs:120,recMs:170,totalMs:290,detectedBoxes:20,recognizedCount:20},
   runtime:{backend:"wasm",provider:"wasm"},
@@ -44,7 +45,7 @@ const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push
 
 assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia");
 assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v3");
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v4");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -57,6 +58,9 @@ assert.deepEqual(result.receiptLayout?.items.map(row=>[row.description,row.quant
 assert.equal(result.receiptLayout?.summary.at(-1)?.value,"7.50");
 assert.ok(result.rawText.includes("CAFETERIA CENTRAL"));
 assert.ok(result.rawText.includes("TOSTADA"));
+assert.ok(result.rawText.includes("Povered by gamarero.com"),"La evidencia literal no puede reescribirse");
+assert.ok(result.text.includes("Powered by qamarero.com"),"El texto fiable debe corregir la firma inequívoca del TPV");
+assert.ok(result.receiptLayout?.footer.includes("Powered by qamarero.com"));
 assert.equal(result.metrics?.secondaryMs,0,"No puede existir una segunda pasada OCR de rescate");
 assert.equal(result.metrics?.preprocessMs,0,"En Node sin canvas debe conservarse el fallback no destructivo");
 const pass=result.passes[0] as typeof result.passes[0]&{visualLayout?:{lines?:unknown[];bounds?:{width:number;height:number}}};
@@ -87,4 +91,20 @@ const noisyPass=noisy.passes[0] as typeof noisy.passes[0]&{discardedBoxCount?:nu
 assert.ok((noisyPass.discardedBoxCount||0)>=3);
 assert.ok(!(noisyPass.visualLayout?.lines||[]).some(line=>String(line.text||"").includes("WOOKISHVAR")));
 
-console.log("ticket-ocr PP-OCRv6 geometry tests OK");
+const photoWidth=320;const photoHeight=480;const pixels=new Uint8ClampedArray(photoWidth*photoHeight*4);
+for(let y=0;y<photoHeight;y+=1){
+  const paperLeft=Math.round(46+y*.012);const paperRight=Math.round(247+y*.045);
+  for(let x=0;x<photoWidth;x+=1){
+    const inside=x>=paperLeft&&x<=paperRight&&y<446;let value=inside?174:x<paperLeft?48:82;
+    if(inside&&y>35&&y<410&&y%34<4&&x>paperLeft+18&&x<paperRight-18)value=38;
+    if(!inside&&x>paperRight+16&&y%29<5)value=220;
+    const offset=(y*photoWidth+x)*4;pixels[offset]=pixels[offset+1]=pixels[offset+2]=value;pixels[offset+3]=255;
+  }
+}
+const isolated=detectPaper({data:pixels,width:photoWidth,height:photoHeight,colorSpace:"srgb"} as ImageData,photoWidth,photoHeight);
+assert.ok(isolated,"el detector debe aislar un ticket gris aunque haya una superficie con trazos detrás");
+assert.ok((isolated?.topLeft||0)>=40&&(isolated?.topLeft||0)<=65);
+assert.ok((isolated?.topRight||0)>=225&&(isolated?.topRight||0)<=265);
+assert.ok((isolated?.bottom||0)>=420&&(isolated?.bottom||0)<photoHeight);
+
+console.log("ticket-ocr PP-OCRv6 geometry tests OK · contorno físico aislado");
