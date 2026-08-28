@@ -48,6 +48,7 @@ const priority=(value:unknown):DocumentMatchingPriority=>{
 };
 const nullableNumber=(value:unknown):number|null=>value==null?null:asNumber(value);
 const nullableString=(value:unknown):string|null=>value==null?null:asString(value)||null;
+const booleanOr=(value:unknown,fallback:boolean):boolean=>typeof value==="boolean"?asBoolean(value):fallback;
 
 const movement=(value:unknown):ArchiveMovementRef=>{
   const x=asRecord(value);
@@ -105,8 +106,8 @@ export async function getDocumentMatchingObservability(limit=8):Promise<Document
     rules:{
       safeAutoMinimumScore:asNumber(rules.safeAutoMinimumScore,93),
       safeAutoMinimumMargin:asNumber(rules.safeAutoMinimumMargin,8),
-      requiresMerchantMatch:asBoolean(rules.requiresMerchantMatch,true),
-      readOnlyObservability:asBoolean(rules.readOnlyObservability,true),
+      requiresMerchantMatch:booleanOr(rules.requiresMerchantMatch,true),
+      readOnlyObservability:booleanOr(rules.readOnlyObservability,true),
     },
   };
 }
