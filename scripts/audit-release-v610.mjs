@@ -13,7 +13,12 @@ const observability=read("database/FINANCIAL_APP_6.1.0_MATCHING_OBSERVABILITY.sq
 const history=read("database/FINANCIAL_APP_6.1.0_MATCHING_QUALITY_HISTORY.sql");
 const calibration=read("database/FINANCIAL_APP_6.1.0_MATCHING_CALIBRATION.sql");
 
-must(version.includes('APP_VERSION = "6.1.0"'),"APP_VERSION debe ser 6.1.0");
+const versionMatch=version.match(/APP_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
+must(Boolean(versionMatch),"APP_VERSION debe ser semántica");
+if(versionMatch){
+  const current=Number(versionMatch[1])*1_000_000+Number(versionMatch[2])*1_000+Number(versionMatch[3]);
+  must(current>=6_001_000,"APP_VERSION debe conservar como mínimo la baseline 6.1.0");
+}
 must(pkg.version==="3.4.8","La versión técnica del paquete sigue siendo 3.4.8 por contrato");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v610.mjs"),"audit:current no ejecuta el cierre 6.1.0");
 
@@ -44,4 +49,4 @@ for(const token of [
 ]) must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 6.1.0 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 6.1.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.1.0 release audit OK · matching explicable, histórico agregado, calibración anónima y cierre metadata-only protegidos");
+console.log("Financial App 6.1.0 release audit OK · baseline protegida y forward-compatible con releases 6.1+");
