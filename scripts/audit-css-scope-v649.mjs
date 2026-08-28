@@ -7,14 +7,17 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 const rootLayout=read("app/layout.tsx");
 const homePage=read("app/page.tsx");
 const archiveLayout=read("app/archivo/layout.tsx");
+const movementsLayout=read("app/movimientos/layout.tsx");
 const homeCss=fs.statSync("app/home.css").size;
 const archiveReviewCss=fs.statSync("app/archive-review.css").size;
+const linkingGlobal=rootLayout.includes('import "./document-linking.css";');
+const linkingScoped=archiveLayout.includes('import "../document-linking.css";')&&movementsLayout.includes('import "../document-linking.css";');
 
 must(!rootLayout.includes('"./home.css"'),"home.css no debe cargarse desde el layout raíz");
 must(!rootLayout.includes('"./archive-review.css"'),"archive-review.css no debe cargarse desde el layout raíz");
 must(homePage.includes('import "./home.css";'),"Inicio debe cargar home.css de forma local");
 must(archiveLayout.includes('import "../archive-review.css";'),"Archivo debe cargar archive-review.css desde su layout");
-must(rootLayout.includes('import "./document-linking.css";'),"document-linking.css debe seguir global mientras lo comparten Archivo y Movimientos");
+must(linkingGlobal||linkingScoped,"document-linking.css debe seguir disponible para Archivo y Movimientos");
 must(homeCss+archiveReviewCss>=11000,`El aislamiento esperado debe sacar al menos 11 KB del ámbito raíz; detectados ${homeCss+archiveReviewCss} bytes`);
 
 if(failures.length){
