@@ -14,11 +14,15 @@ begin
       raise exception 'financial_app_6_4_4_legacy_automation_has_history';
     end if;
   end if;
+
+  if to_regprocedure('public.financial_app_automate_transactions(uuid[])') is not null then
+    execute 'revoke all on function public.financial_app_automate_transactions(uuid[]) from public,anon,authenticated,service_role';
+  end if;
+  if to_regprocedure('financial_app.automate_transactions_core(uuid[])') is not null then
+    execute 'revoke all on function financial_app.automate_transactions_core(uuid[]) from public,anon,authenticated,service_role';
+  end if;
 end
 $$;
-
-revoke all on function public.financial_app_automate_transactions(uuid[]) from public,anon,authenticated,service_role;
-revoke all on function financial_app.automate_transactions_core(uuid[]) from public,anon,authenticated,service_role;
 
 drop function if exists public.financial_app_automate_transactions(uuid[]);
 drop function if exists financial_app.automate_transactions_core(uuid[]);
