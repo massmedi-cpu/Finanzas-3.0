@@ -22,7 +22,7 @@ begin
   v_limit:=greatest(1,least(coalesce(p_limit,8),20));
 
   with docs as (
-    select d.id,d.file_name,d.document_date,d.amount,d.merchant,d.created_at
+    select d.id,d.file_name,d.document_type,d.storage_provider,d.storage_url,d.document_date,d.amount,d.merchant,d.created_at
     from financial_app.documents d
     where d.archived_at is null
       and not exists(select 1 from financial_app.transaction_documents td where td.document_id=d.id)
@@ -62,6 +62,9 @@ begin
     select coalesce(jsonb_agg(jsonb_build_object(
       'id',p.id,
       'fileName',p.file_name,
+      'documentType',p.document_type,
+      'storageProvider',p.storage_provider,
+      'storageUrl',p.storage_url,
       'documentDate',p.document_date,
       'amount',p.amount,
       'merchant',p.merchant,
