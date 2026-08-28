@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import {versionAtLeast} from "./lib/version-baseline.mjs";
 
 const read=file=>fs.readFileSync(file,"utf8");
 const failures=[];
@@ -10,9 +11,8 @@ const migration=read("database/FINANCIAL_APP_6.4.8_FORECAST_PRECISION.sql");
 const release=read("database/FINANCIAL_APP_6.4.8_RELEASE.sql");
 const notes=read("docs/releases/6.4.8.md");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
-const family=currentVersion.match(/^6\.4\.(\d+)$/);
 
-must(Boolean(family)&&Number(family?.[1]||0)>=8,"APP_VERSION debe pertenecer a 6.4.x desde patch 8");
+must(versionAtLeast(currentVersion,"6.4.8"),"APP_VERSION debe preservar como mínimo la baseline 6.4.8");
 must(pkg.version==="3.4.8","La versión técnica npm debe permanecer en 3.4.8");
 const current=String(pkg.scripts?.["audit:current"]||"");
 must(current.includes("audit-forecast-precision-v648.mjs"),"audit:current no ejecuta el gate funcional 6.4.8");
