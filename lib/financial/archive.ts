@@ -25,6 +25,22 @@ async function archiveOverview(search:string|null,includeArchived:boolean,limit=
   return {...overview,hasMore:overview.documents.length>=limit};
 }
 
+async function archiveOverviewAllPages(search:string|null,includeArchived:boolean,limit=200):Promise<ArchiveOverview>{
+  const first=await archiveOverview(search,includeArchived,limit,0);
+  if(first.documents.length>=first.total||first.documents.length<limit)return {...first,hasMore:false};
+
+  const documents=[...first.documents];
+  let offset=documents.length;
+  while(offset<first.total){
+    const page=await archiveOverview(search,includeArchived,limit,offset);
+    if(page.documents.length===0)break;
+    documents.push(...page.documents);
+    offset+=page.documents.length;
+    if(page.documents.length<limit)break;
+  }
+  return {...first,hasMore:documents.length<first.total,documents};
+}
+
 export async function getArchiveOverview(search:string|null=null):Promise<ArchiveOverview>{
   return archiveOverview(search,false);
 }
@@ -34,14 +50,22 @@ export async function getArchiveAllOverview(search:string|null=null):Promise<Arc
 }
 
 export async function getArchivedDocuments(search:string|null=null):Promise<ArchiveOverview>{
-  const all=await archiveOverview(search,true);
-  const active=await archiveOverview(search,false);
+  const [all,active]=await Promise.all([
+    archiveOverviewAllPages(search,true),
+    archiveOverview(search,false,1,0),
+  ]);
   const archived=all.documents.filter(document=>Boolean(document.archivedAt));
-  return {...all,total:Math.max(0,all.total-active.total),processed:archived.filter(document=>["complete","manual","not_required"].includes(document.ocrStatus)).length,linked:archived.filter(document=>document.links.length>0).length,hasMore:false,documents:archived};
+  return {
+    ...all,
+    total:Math.max(0,all.total-active.total),
+    processed:archived.filter(document=>["complete","manual","not_required"].includes(document.ocrStatus)).length,
+    linked:archived.filter(document=>document.links.length>0).length,
+    documents:archived,
+  };
 }
 
 export async function getArchiveReviewQueue():Promise<ArchiveReviewQueue>{
-  const overview=await archiveOverview(null,false,200,0);
+  const overview=await archiveOverviewAllPages(null,false);
   const documents=overview.documents
     .filter(document=>!document.archivedAt&&document.links.length===0&&document.suggestions.length>0)
     .sort((a,b)=>{

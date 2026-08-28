@@ -4,7 +4,7 @@
   .topbar>div{min-width:0}
   .topbar .home-top-actions{margin-left:auto;flex-wrap:wrap;justify-content:flex-end}
   .route-loading-v300{max-width:none;padding:26px clamp(18px,3vw,34px) 52px}
-  .detail-loading{position:static;inset:auto;z-index:auto;display:inline-flex;align-items:center;justify-self:start;margin:0;padding:9px 12px;border:1px solid var(--border);background:var(--surface);color:var(--muted);box-shadow:none;border-radius:var(--radius-control)}
+  .detail-loading{position:static;inset:auto;z-index:auto;display:inline-flex;align-items:center;justify-self:start;margin:0;padding:9px 12px;border:1px solid var(--border-subtle);background:var(--surface-primary);color:var(--text-tertiary);box-shadow:none;border-radius:var(--radius-control)}
   .movement-drawer{width:100%;max-width:none;border-left:0;box-shadow:none}
   .movement-table-wrap{max-width:100%;overscroll-behavior-x:contain}
   .movement-filters,.archive-toolbar,.archive-import-actions,.editor-actions{min-width:0}

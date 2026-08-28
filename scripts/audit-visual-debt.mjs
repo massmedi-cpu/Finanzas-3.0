@@ -25,7 +25,8 @@ const redesigned=[
   "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/net-worth.css",
   "app/control.css","app/goals.css","app/rules.css","app/archive.css","app/archive-review.css","app/document-linking.css",
   "app/settings.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
-  "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css"
+  "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css",
+  "app/system-state.css","app/visual.css","app/tablet.css"
 ];
 for(const file of redesigned){if(!fs.existsSync(file))failures.push(`Falta hoja de producto: ${file}`);}
 
