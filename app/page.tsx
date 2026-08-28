@@ -44,7 +44,7 @@ export default async function Home(){
   const pulse=await pulsePromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace home-workspace">
-    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><SyncButton/></div></header>
+    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/></div></header>
 
     <Suspense fallback={<HomeAccountsFallback/>}><HomeAccountsSection data={accountsPromise}/></Suspense>
 
