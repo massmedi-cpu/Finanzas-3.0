@@ -11,7 +11,7 @@ const migration=read("database/FINANCIAL_APP_6.4.1_MATCHING_POLICY_INDEX.sql");
 const notes=read("docs/releases/6.4.1.md");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
 
-must(currentVersion==="6.4.1","APP_VERSION debe ser exactamente 6.4.1");
+must(["6.4.1","6.4.2"].includes(currentVersion),"APP_VERSION debe preservar la baseline 6.4.1 o su hardening 6.4.2");
 must(pkg.version==="3.4.8","La versión técnica del paquete permanece 3.4.8 por contrato");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-hardening-v641.mjs"),"audit:current no ejecuta hardening 6.4.1");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v641.mjs"),"audit:current no ejecuta el cierre 6.4.1");
@@ -23,4 +23,4 @@ for(const token of ["Financial App 6.4.1","hardening medido","supersedes_policy_
   must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 6.4.1 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.1 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.1 release audit OK · índice medido, contratos canónicos y transición 6.4.0→6.4.1 protegidos");
+console.log("Financial App 6.4.1 release audit OK · baseline preservada por 6.4.2, índice medido y contratos canónicos protegidos");
