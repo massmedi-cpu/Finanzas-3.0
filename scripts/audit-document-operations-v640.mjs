@@ -1,0 +1,44 @@
+import fs from "node:fs";
+
+const read=file=>fs.readFileSync(file,"utf8");
+const failures=[];
+const must=(ok,message)=>{if(!ok)failures.push(message)};
+
+const migration=read("database/FINANCIAL_APP_6.4.0_DOCUMENT_OPERATIONS.sql");
+const loader=read("lib/financial/document-operations.ts");
+const api=read("app/api/archive/operations/route.ts");
+const page=read("app/archivo/revision/page.tsx");
+const client=read("app/archivo/revision/triage-client.tsx");
+const css=read("app/archivo/revision/triage.css");
+const lower=migration.toLowerCase();
+
+for(const token of [
+  "document_operations_core","document_operation_core","document_operations_batch_core","document_triage_core",
+  "document_match_candidates_rows_core","auto_eligible","archive_link_calibrated_core","for update","document_history",
+  "safe_match_no_longer_valid","archive_requires_linked_document","explicitApprovalRequired","serverRevalidationRequired",
+  "ambiguousBatchActions","maxBatchSize",">50","security definer"
+])must(migration.includes(token)||lower.includes(token.toLowerCase()),`Contrato operativo 6.4 incompleto: ${token}`);
+
+must(!/grant\s+execute[^;]+\s+to\s+anon/i.test(migration),"6.4 no puede conceder ejecución a anon");
+for(const signature of ["financial_app.document_operations_core(integer)","financial_app.document_operation_core(uuid,text,text)","financial_app.document_operations_batch_core(jsonb)"])
+  must(migration.includes(`revoke all on function ${signature} from public,anon,authenticated,service_role`),`Core privado sin revoke estricto: ${signature}`);
+for(const wrapper of ["financial_app_document_operations","financial_app_document_operation","financial_app_document_operations_batch"])
+  must(migration.includes(wrapper),`Falta wrapper público 6.4: ${wrapper}`);
+must(migration.includes("exception when others"),"El lote debe aislar los rechazos por operación");
+must(migration.includes("v_rejected:=v_rejected+1"),"El lote debe contabilizar operaciones rechazadas");
+
+for(const token of ["DocumentSafeOperation","DocumentOperationDocument","DocumentOperations","parseDocumentOperations","financial_app_document_operations","getDocumentOperations"])
+  must(loader.includes(token),`Loader 6.4 incompleto: ${token}`);
+for(const token of ["financial_app_document_operations_batch","invalid_document_operations","operations.length>50"])
+  must(api.includes(token),`API 6.4 incompleta: ${token}`);
+for(const token of ["Centro de operaciones documentales","getDocumentOperations","DocumentTriageClient"])
+  must(page.includes(token),`Página 6.4 incompleta: ${token}`);
+for(const token of ["Seleccionar seguras","Aplicar ${selected.length","window.confirm","/api/archive/operations","servidor vuelve a validar","Deshacer ${lastApplied.length","?action=restore","method:\"DELETE\""])
+  must(client.includes(token),`Cliente operativo 6.4 incompleto: ${token}`);
+must(!client.includes('body:JSON.stringify({action:"archive"})'),"No puede reaparecer el archivado roto que enviaba action en el body");
+must(client.includes("filter(document=>document.safeOperation)"),"La selección múltiple debe limitarse a operaciones marcadas seguras por servidor");
+for(const token of [".operations-summary",".operations-toolbar",".operation-check",".operation-safe-badge",".operation-safe-note","min-height:44px"])
+  must(css.includes(token),`Estilos operativos 6.4 incompletos: ${token}`);
+
+if(failures.length){console.error("Document operations v6.4 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
+console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, ambigüedad manual y reversibilidad protegidas");
