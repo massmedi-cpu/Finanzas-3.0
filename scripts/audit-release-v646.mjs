@@ -10,8 +10,9 @@ const migration=read("database/FINANCIAL_APP_6.4.6_DRIVE_RECONCILIATION.sql");
 const release=read("database/FINANCIAL_APP_6.4.6_RELEASE.sql");
 const notes=read("docs/releases/6.4.6.md");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
+const family=currentVersion.match(/^6\.4\.(\d+)$/);
 
-must(currentVersion==="6.4.6","APP_VERSION debe ser exactamente 6.4.6");
+must(Boolean(family)&&Number(family?.[1]||0)>=6,"APP_VERSION debe pertenecer a 6.4.x desde patch 6");
 must(pkg.version==="3.4.8","La versión técnica npm debe permanecer en 3.4.8");
 const current=String(pkg.scripts?.["audit:current"]||"");
 must(current.includes("audit-drive-reconciliation-v646.mjs"),"audit:current no ejecuta el gate funcional 6.4.6");
@@ -40,4 +41,4 @@ for(const token of [
 ]) must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 6.4.6 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.6 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.6 release audit OK · reconciliación Drive y transición 6.4.5→6.4.6 protegidas");
+console.log(`Financial App 6.4.6 release audit OK · baseline preservada por ${currentVersion} · reconciliación Drive y transición 6.4.5→6.4.6 protegidas`);
