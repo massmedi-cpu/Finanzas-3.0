@@ -15,15 +15,20 @@ for(const token of [
   "p_required_functions",
   "payload.appVersion",
   "payload.targetVersion",
-  "RPCs ausentes"
+  "RPCs ausentes",
+  "baselineVersion",
+  "acceptedVersions",
+  "--exact"
 ]) must(script.includes(token),`Preflight ha perdido la garantía: ${token}`);
 
 must(!/service[_-]?role/i.test(script),"El preflight de build no puede depender de service_role");
 const prebuild=String(pkg.scripts?.prebuild||"");
 const release=String(pkg.scripts?.["audit:release"]||"");
 const livePreflight=String(pkg.scripts?.["preflight:supabase"]||"");
+const exactPreflight=String(pkg.scripts?.["preflight:supabase:release"]||"");
 must(prebuild.includes("audit:release")&&release.includes("audit-release-preflight.mjs"),"La auditoría del preflight debe ejecutarse en cada build mediante audit:release");
-must(prebuild.includes("audit:release")&&release.includes("preflight:supabase")&&livePreflight.includes("preflight-supabase-contract.mjs"),"El preflight vivo debe ejecutarse en cada build mediante audit:release");
+must(prebuild.includes("audit:release")&&release.includes("preflight:supabase")&&livePreflight.includes("preflight-supabase-contract.mjs"),"El preflight vivo de candidato debe ejecutarse en cada build mediante audit:release");
+must(exactPreflight.includes("preflight-supabase-contract.mjs")&&exactPreflight.includes("--exact"),"Debe existir un preflight Supabase exacto reservado al cierre de publicación");
 
 for(const token of [
   "create table if not exists public.financial_app_release_manifest",
@@ -49,4 +54,4 @@ if(failures.length){
   for(const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App release preflight audit OK · invoker público mínimo, manifiesto RLS y sin service_role en build");
+console.log("Financial App release preflight audit OK · candidato compatible con baseline, cierre exacto separado, invoker público mínimo y sin service_role en build");

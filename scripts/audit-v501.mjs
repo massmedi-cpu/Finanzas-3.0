@@ -19,7 +19,10 @@ const revision=read("lib/document/receipt-ocr-revision.ts");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
-must(/APP_VERSION\s*=\s*["']5\.0\.1["']/.test(version),"APP_VERSION debe ser exactamente 5.0.1");
+const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
+const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
+const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
+must(atLeast(currentVersion,"5.0.1"),"APP_VERSION debe conservar como mínimo el baseline 5.0.1");
 for(const token of [
   "financial_app_5_0_1_requires_5_0_baseline",
   "'app_version',to_jsonb('5.0.1'::text)",
@@ -98,8 +101,8 @@ must(String(pkg.scripts?.prebuild||"").includes("audit:release"),"prebuild debe 
 must(ci.includes("npm run build"),"CI debe ejecutar el build, que aplica el prebuild consolidado");
 
 if(failures.length){
-  console.error("Financial App 5.0.1 audit FAILED");
+  console.error("Financial App 5.0.1 baseline audit FAILED");
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 audit OK · PP-OCRv6 español · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");
+console.log("Financial App 5.0.1 baseline audit OK · PP-OCRv6 español · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");

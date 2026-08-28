@@ -17,7 +17,9 @@ export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get("search");
   const limit = boundedInteger(request.nextUrl.searchParams.get("limit"), 200, 1, 200);
   const offset = boundedInteger(request.nextUrl.searchParams.get("offset"), 0, 0, 1_000_000);
-  const includeArchived = request.nextUrl.searchParams.get("archived") !== "0";
+  // v6: active documents are the safe/default API scope. Historical records must
+  // be requested explicitly; the old ambiguous `archived` flag is intentionally ignored.
+  const includeArchived = request.nextUrl.searchParams.get("includeArchived") === "1";
   const { data, error } = await supabase.rpc("financial_app_archive_overview", {
     p_search: search || null,
     p_limit: limit,
