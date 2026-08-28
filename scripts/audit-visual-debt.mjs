@@ -31,7 +31,7 @@ const redesigned=[
   "app/movimientos/conciliacion/reconciliation-workbench.css","app/movimientos/movement-documents.css","app/movimientos/split-editor.css",
   "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/forecast-ledger.css","app/net-worth.css",
   "app/control.css","app/control/integrity.css","app/control/matching-quality.css","app/control/document-matching-history.css","app/control/document-matching-calibration.css","app/control/document-matching-policy.css","app/goals.css","app/rules.css",
-  "app/archive.css","app/archive-lifecycle.css","app/archive-review.css","app/document-linking.css",
+  "app/archive.css","app/archive-lifecycle.css","app/archive-review.css","app/archivo/revision/triage.css","app/document-linking.css",
   "app/settings.css","app/auth.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
   "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css",
   "app/system-state.css","app/visual.css","app/tablet.css"
