@@ -17,6 +17,9 @@ export type DocumentMatchingSummary={
 export type DocumentMatchingDocument={
   id:string;
   fileName:string;
+  documentType:string;
+  storageProvider:string|null;
+  storageUrl:string|null;
   documentDate:string|null;
   amount:number|null;
   merchant:string|null;
@@ -90,6 +93,9 @@ export async function getDocumentMatchingObservability(limit=8):Promise<Document
     documents:asArray(r.documents).map(value=>{const x=asRecord(value);return{
       id:asString(x.id),
       fileName:asString(x.fileName),
+      documentType:asString(x.documentType,"documento"),
+      storageProvider:nullableString(x.storageProvider),
+      storageUrl:nullableString(x.storageUrl),
       documentDate:nullableString(x.documentDate),
       amount:nullableNumber(x.amount),
       merchant:nullableString(x.merchant),
