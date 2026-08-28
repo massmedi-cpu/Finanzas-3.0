@@ -1,13 +1,13 @@
 .home-stream-loading{color:inherit}
-.home-stream-lines{display:grid;border-top:1px solid var(--border)}
-.home-stream-lines i{display:block;height:64px;border-bottom:1px solid var(--border);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--surface-2) 72%,transparent),transparent);opacity:.72}
+.home-stream-lines{display:grid;border-top:1px solid var(--border-subtle)}
+.home-stream-lines i{display:block;height:64px;border-bottom:1px solid var(--border-subtle);background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--surface-secondary) 72%,transparent),transparent);opacity:.72}
 .home-stream-lines.short i{height:50px}
-.home-stream-chart{min-height:260px;border-block:1px solid var(--border);background:linear-gradient(180deg,color-mix(in srgb,var(--surface-2) 48%,transparent),transparent)}
-.home-stream-pulse-placeholder{min-width:0;padding:16px 14px 17px;border-right:1px solid var(--border)}
+.home-stream-chart{min-height:260px;border-block:1px solid var(--border-subtle);background:linear-gradient(180deg,color-mix(in srgb,var(--surface-secondary) 48%,transparent),transparent)}
+.home-stream-pulse-placeholder{min-width:0;padding:16px 14px 17px;border-right:1px solid var(--border-subtle)}
 .home-stream-pulse-placeholder span,.home-stream-pulse-placeholder strong,.home-stream-pulse-placeholder small{display:block}
-.home-stream-pulse-placeholder span{color:var(--muted);font-size:12px;font-weight:730}
-.home-stream-pulse-placeholder strong{margin:4px 0 2px;font-size:clamp(19px,1.6vw,22px);letter-spacing:-.025em}
-.home-stream-pulse-placeholder small{min-height:2.5em;color:var(--muted);font-size:12px;line-height:1.35}
+.home-stream-pulse-placeholder span{color:var(--text-tertiary);font-size:14px;font-weight:730}
+.home-stream-pulse-placeholder strong{margin:4px 0 2px;font-size:clamp(20px,1.6vw,24px);letter-spacing:-.025em}
+.home-stream-pulse-placeholder small{min-height:2.5em;color:var(--text-tertiary);font-size:14px;line-height:1.4}
 .home-stream-pulse-placeholder:last-child{padding-right:0;border-right:0}
 @media(max-width:1180px){.home-stream-pulse-placeholder:first-of-type{padding-left:0}.home-stream-pulse-placeholder{border-bottom:0}}
-@media(max-width:680px){.home-stream-pulse-placeholder{padding:13px 10px}.home-stream-pulse-placeholder:first-of-type{padding-left:0;border-bottom:1px solid var(--border)}.home-stream-pulse-placeholder:last-child{padding-right:0}.home-stream-chart{min-height:210px}}
+@media(max-width:680px){.home-stream-pulse-placeholder{padding:13px 10px}.home-stream-pulse-placeholder:first-of-type{padding-left:0;border-bottom:1px solid var(--border-subtle)}.home-stream-pulse-placeholder:last-child{padding-right:0}.home-stream-chart{min-height:210px}}

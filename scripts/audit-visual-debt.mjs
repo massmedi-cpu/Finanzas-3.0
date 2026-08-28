@@ -21,10 +21,10 @@ for(const file of cssFiles){
 }
 
 const redesigned=[
-  "app/globals.css","app/typography.css","app/controls.css","app/chrome.css","app/home.css","app/movements.css",
+  "app/globals.css","app/typography.css","app/controls.css","app/chrome.css","app/home.css","app/home-streaming.css","app/movements.css",
   "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/net-worth.css",
   "app/control.css","app/goals.css","app/rules.css","app/archive.css","app/archive-review.css","app/document-linking.css",
-  "app/settings.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
+  "app/settings.css","app/auth.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
   "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css",
   "app/system-state.css","app/visual.css","app/tablet.css"
 ];
