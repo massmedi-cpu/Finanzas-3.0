@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.11. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.5.0. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -70,13 +70,17 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Las asociaciones reutilizan el core calibrado y el archivado conserva historial reversible.
 - Los casos ambiguos, OCR fallido, metadatos incompletos o decisiones manuales permanecen fuera de la automatización segura.
 
-## Estilos
+## Estilos y runtime visual
 
-- Shell y primitivas compartidas: `app/globals.css`, `app/controls.css`, `app/chrome.css`, `app/typography.css`, `app/visual.css`.
+- Shell y primitivas compartidas: `app/globals.css`, `app/controls.css`, `app/chrome.css`, `app/typography.css`, `app/system-state.css`, `app/route-loading.css` y el contrato responsive raíz de `app/tablet.css`.
 - Cada módulo carga sus estilos desde su propio layout o superficie.
 - Desde 6.4.9 los estilos exclusivos de Inicio (`home.css`) y Revisión de Archivo (`archive-review.css`) no forman parte del layout raíz; se importan únicamente en sus rutas.
 - Desde 6.4.10 `document-linking.css` tampoco pertenece al layout raíz: la misma hoja compartida se importa únicamente desde Archivo y Movimientos, sus dos consumidores reales, sin duplicación de reglas.
 - Desde 6.4.11 `app/tablet.css` conserva solo contratos responsive compartidos; Archivo y Movimientos cargan sus reglas tablet exclusivas desde hojas locales de ruta, manteniendo el orden de cascada anterior. La regla muerta `.topbar .home-top-actions` queda retirada.
+- Desde 6.5.0 `app/visual.css` deja de formar parte del runtime y se elimina. Sus 3.292 bytes mezclaban skeleton global con tokens/selectores de gráficas que ya tenían consumidores concretos.
+- El skeleton compartido vive en `app/route-loading.css` y conserva su posición anterior en la cascada antes de `tablet.css`.
+- Los tokens `--chart-*` de Análisis viven en `app/analisis/chart-tokens.css`, acotados a `.analysis-workspace`; Cash Flow, Cuentas y Patrimonio mantienen sus contratos visuales en sus hojas canónicas de ruta.
+- Los 24 gráficos del panel visual de Análisis conservan contenido e interacciones. Las tarjetas usan `content-visibility:auto` con tamaño intrínseco de reserva para diferir trabajo de layout/pintura fuera del viewport sin cambiar la semántica ni crear lazy loaders de datos paralelos.
 - No deben existir hojas runtime `*-vNNN.css` ni `*-advanced.css`.
 
 ## Seguridad
@@ -97,7 +101,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 Toda release debe superar, como mínimo:
 
 1. AXIOMA estructural y arquitectura canónica.
-2. Gates históricos forward-compatible; dentro de una misma familia de patch deben proteger la baseline por rango mínimo y no por enumeración manual de cada versión futura.
+2. Gates históricos forward-compatible. Desde 6.5.0 las baselines 6.4.0–6.4.11 se comparan mediante un helper semántico común (`versionAtLeast`), de forma que una familia posterior mantiene todas las pruebas históricas sin quedar bloqueada por una regex de versión.
 3. Gate de la versión actual.
 4. Auditoría de dependencias, lint, TypeScript y build reproducible.
 5. Migración Supabase compatible y verificada sin mutar datos de origen cuando exista cambio de base de datos.
