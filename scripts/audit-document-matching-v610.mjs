@@ -14,6 +14,8 @@ const archiveType=read("lib/financial/archive.ts");
 const observabilityLoader=read("lib/financial/document-matching-observability.ts");
 const controlPage=read("app/control/page.tsx");
 const panel=read("app/control/document-matching-panel.tsx");
+const reviewPage=read("app/archivo/revision/page.tsx");
+const reviewClient=read("app/archivo/revision/review-client.tsx");
 const css=read("app/control/matching-quality.css");
 const smoke=read(".github/workflows/production-smoke.yml");
 
@@ -54,6 +56,8 @@ for(const token of [
   "readOnlyObservability",
   "document_match_candidates_rows_core(d.id,2)",
   "document_match_candidates_json_core(p.id,3)",
+  "'documentType',p.document_type",
+  "'storageUrl',p.storage_url",
 ]) must(observability.includes(token),`Observabilidad matching 6.1 incompleta: ${token}`);
 for(const forbidden of ["insert into financial_app.transaction_documents","update financial_app.documents","delete from financial_app.transaction_documents"])
   must(!observability.toLowerCase().includes(forbidden),`La observabilidad no puede mutar datos: ${forbidden}`);
@@ -69,12 +73,18 @@ for(const token of [
   "autoEligible?:boolean",
   "reasons?:string[]",
 ]) must(archiveType.includes(token),`Tipado explicable incompleto: ${token}`);
-for(const token of ["DocumentMatchingObservability","activeUnlinked","ambiguous","financial_app_document_matching_observability","readOnlyObservability"])
+must(!archiveType.includes("getArchiveReviewQueue")&&!archiveType.includes("archiveOverviewAllPages"),"Archivo no puede conservar el escaneo completo en Node para construir la cola de revisión");
+for(const token of ["DocumentMatchingObservability","activeUnlinked","ambiguous","financial_app_document_matching_observability","readOnlyObservability","documentType:string","storageUrl:string|null"])
   must(observabilityLoader.includes(token),`Loader de observabilidad incompleto: ${token}`);
 
 for(const token of ["getDocumentMatchingObservability","DocumentMatchingPanel","documentMatching"])
   must(controlPage.includes(token),`Centro de control no integra observabilidad documental server-side: ${token}`);
 must(!controlPage.includes("getArchiveOverview"),"Centro de control no puede volver a inferir matching desde una página parcial de Archivo");
+for(const token of ["getDocumentMatchingObservability(20)","ArchiveReviewClient","data.summary.withCandidates"])
+  must(reviewPage.includes(token),`Cola de revisión no consume la priorización server-side: ${token}`);
+must(!reviewPage.includes("getArchiveReviewQueue"),"La revisión no puede volver al escaneo completo de Archivo");
+for(const token of ["DocumentMatchingObservability","candidate.reasons","candidate.scoreMargin","document.storageUrl","priority-${document.priority}"])
+  must(reviewClient.includes(token),`Revisión explicable incompleta: ${token}`);
 for(const token of [
   "Matching documental · explicable",
   "confidenceTier",
@@ -100,4 +110,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Document matching v6.1 audit OK · score único, ambigüedad explícita, observabilidad server-side de solo lectura y autoenlace conservador");
+console.log("Document matching v6.1 audit OK · score único, ambigüedad explícita, cola server-side de solo lectura y autoenlace conservador");
