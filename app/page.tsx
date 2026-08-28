@@ -1,3 +1,4 @@
+import "./home.css";
 import "./cash-flow.css";
 import "./home-streaming.css";
 import { Suspense } from "react";

@@ -5,11 +5,9 @@ import "./globals.css";
 import "./typography.css";
 import "./controls.css";
 import "./chrome.css";
-import "./home.css";
 import "./system-state.css";
 import "./visual.css";
 import "./document-linking.css";
-import "./archive-review.css";
 import "./tablet.css";
 
 export const metadata:Metadata={
