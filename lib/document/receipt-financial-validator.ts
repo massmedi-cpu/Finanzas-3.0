@@ -24,11 +24,16 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 
 function numberValue(value: string | null | undefined) {
   if (!value) return null;
-  const normalized = String(value)
+  let normalized = String(value)
     .replace(/\s/g, "")
     .replace(/O/gi, "0")
-    .replace(/,(?=\d{1,2}$)/, ".")
-    .replace(/[^\d.+-]/g, "");
+    .replace(/[^\d,.*+\-]/g, "")
+    .replace(/\*/g, "");
+  const comma = normalized.lastIndexOf(",");
+  const dot = normalized.lastIndexOf(".");
+  if (comma > dot) normalized = normalized.replace(/\./g, "").replace(/,([^,]*)$/, ".$1").replace(/,/g, "");
+  else if (dot > comma && comma >= 0) normalized = normalized.replace(/,/g, "");
+  else if (comma >= 0) normalized = normalized.replace(",", ".");
   const parsed = Number(normalized);
   return Number.isFinite(parsed) ? parsed : null;
 }
@@ -61,6 +66,18 @@ function itemArithmetic(item: ReceiptLineItem) {
 
 function hasAdjustmentEvidence(rawTexts: string[]) {
   return rawTexts.some((text) => /\b(?:descuento|dto\.?|promoci[oó]n|bonificaci[oó]n|cup[oó]n|ajuste|redondeo)\b/i.test(text));
+}
+
+function hasCommercialNetPricing(rawTexts: string[]) {
+  return rawTexts.some((text) => String(text || "").split(/\r?\n/).some((line) => {
+    const normalized = line.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    return normalized.includes("CANTIDAD")
+      && normalized.includes("CODIGO")
+      && normalized.includes("ARTICULO")
+      && normalized.includes("PRECIO")
+      && normalized.includes("IVA")
+      && normalized.includes("SUBTOTAL");
+  }));
 }
 
 export function validateReceiptFinancials(layout: ReceiptLayout | null | undefined, rawTexts: string[] = []): ReceiptValidation {
@@ -132,12 +149,21 @@ export function validateReceiptFinancials(layout: ReceiptLayout | null | undefin
       message: `Base + IVA (${basePlusTax.toFixed(2)}) contradice el total impreso (${printedTotal.toFixed(2)}).`,
     });
   }
-  if (printedTotal !== null && layout.items.length && !hasAdjustmentEvidence(rawTexts) && Math.abs(itemSum - printedTotal) > 0.05) {
-    contradictions.push({
-      code: "items_total_mismatch",
-      severity: "critical",
-      message: `La suma de líneas (${itemSum.toFixed(2)}) contradice el total impreso (${printedTotal.toFixed(2)}).`,
-    });
+  if (printedTotal !== null && layout.items.length && !hasAdjustmentEvidence(rawTexts)) {
+    const commercialNetPricing = hasCommercialNetPricing(rawTexts)
+      && base !== null
+      && basePlusTax !== null
+      && Math.abs(printedTotal - basePlusTax) <= 0.03;
+    const expectedItemSum = commercialNetPricing ? base : printedTotal;
+    if (expectedItemSum !== null && Math.abs(itemSum - expectedItemSum) > 0.05) {
+      contradictions.push({
+        code: commercialNetPricing ? "items_base_mismatch" : "items_total_mismatch",
+        severity: "critical",
+        message: commercialNetPricing
+          ? `La suma de líneas (${itemSum.toFixed(2)}) contradice la base imponible (${expectedItemSum.toFixed(2)}).`
+          : `La suma de líneas (${itemSum.toFixed(2)}) contradice el total impreso (${expectedItemSum.toFixed(2)}).`,
+      });
+    }
   }
 
   const critical = contradictions.filter((item) => item.severity === "critical").length;
