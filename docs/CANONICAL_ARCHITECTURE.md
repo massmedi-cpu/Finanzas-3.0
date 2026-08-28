@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.7. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.8. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -48,6 +48,9 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 ## Previsión e inteligencia
 
 - Previsión usa el ledger/calendario canónico con matching real 1↔1, descartes reversibles y proyección mensual calculada en servidor.
+- El suplemento histórico anual no constituye un segundo motor: alimenta `forecast_calendar_visible_core` sobre el resultado de `forecast_calendar_core` y conserva el mismo matching, descarte y cálculo mensual.
+- Desde 6.4.8 una categoría fiscal genérica sin señal textual explícita solo puede generar una previsión anual si la misma identidad normalizada aparece en al menos dos años distintos. Esto evita convertir cargos puntuales mal o genéricamente categorizados en recurrencias anuales.
+- Seguros y señales fiscales textuales explícitas —domiciliación de impuesto, IRPF, IBI, IVTM, tributo o tasa municipal— siguen pudiendo proyectarse desde una observación cuando el contrato anual las identifica.
 - Matching observability mide calidad sin persistir valores financieros derivados.
 - Inteligencia financiera reutiliza señales canónicas para anomalías, recurrencias, subidas y oportunidades, sin inventar cifras ni mutar movimientos.
 
