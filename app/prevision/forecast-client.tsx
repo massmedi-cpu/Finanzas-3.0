@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo,useState } from "react";
+import { useRouter } from "next/navigation";
 import { formatEuro } from "@/lib/format/es-es";
 import { madridToday } from "@/lib/time/madrid";
 import type { ForecastCalendarEvent,ForecastCalendarOverview,ForecastProjectionMonth } from "@/lib/financial/forecast-calendar";
@@ -32,6 +33,7 @@ type RecurrencePayload={frequency:"monthly"|"yearly";interval:number;until?:stri
 function emptyEditor(month:string):Editor{const date=month===today.slice(0,7)?today:`${month}-01`;return{title:"",date,direction:"expense",amount:"",category:"",subcategory:"",counterparty:"",recurrence:"once",until:"",notes:""};}
 
 export function ForecastClient({initialData}:{initialData:ForecastCalendarOverview}){
+  const router=useRouter();
   const[data,setData]=useState(initialData);
   const[selectedMonth,setSelectedMonth]=useState(today.slice(0,7));
   const[editor,setEditor]=useState<Editor|null>(null);
@@ -48,7 +50,7 @@ export function ForecastClient({initialData}:{initialData:ForecastCalendarOvervi
   const counts=useMemo(()=>({total:allMonthEvents.length,expected:allMonthEvents.filter(x=>x.status==="expected").length,received:allMonthEvents.filter(x=>x.status==="received").length,late:allMonthEvents.filter(x=>x.status==="late").length}),[allMonthEvents]);
   const projection=useMemo(()=>data.projectionMonths.find(item=>item.month===selectedMonth)??emptyProjection(selectedMonth),[data.projectionMonths,selectedMonth]);
 
-  async function load(){setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast?months=12",{cache:"no-store"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido actualizar el calendario.");setData(json);}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido actualizar el calendario.");}finally{setLoading(false);}}
+  async function load(){setLoading(true);setFeedback(null);try{const response=await fetch("/api/forecast?months=12",{cache:"no-store"});const json=await response.json();if(!response.ok)throw new Error(json.error||"No se ha podido actualizar el calendario.");setData(json);router.refresh();}catch(error){setFeedback(error instanceof Error?error.message:"No se ha podido actualizar el calendario.");}finally{setLoading(false);}}
   async function save(){
     if(!editor)return;const amount=Math.abs(Number(editor.amount.replace(",",".")));if(!editor.title.trim()||!editor.date||!Number.isFinite(amount)||amount<=0){setFeedback("Indica un nombre, una fecha y un importe válidos.");return;}
     let recurrence:RecurrencePayload|null=null;if(editor.recurrence!=="once"){recurrence=editor.recurrence==="yearly"?{frequency:"yearly",interval:1}:{frequency:"monthly",interval:editor.recurrence==="bimonthly"?2:editor.recurrence==="quarterly"?3:1};if(editor.until)recurrence.until=editor.until;}
