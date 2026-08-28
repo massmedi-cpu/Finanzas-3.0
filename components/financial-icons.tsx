@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 export type FinancialIconName =
   | "home" | "cash-flow" | "movements" | "analysis" | "archive" | "more"
@@ -10,7 +10,7 @@ export type FinancialIconName =
 
 type Props = SVGProps<SVGSVGElement> & { name: FinancialIconName; active?: boolean };
 
-const paths: Record<FinancialIconName, React.ReactNode> = {
+const paths: Record<FinancialIconName, ReactNode> = {
   home:<><path d="M3.5 10.5 12 3.6l8.5 6.9"/><path d="M5.8 9.2v10.2h12.4V9.2M9.3 19.4v-6.2h5.4v6.2"/></>,
   "cash-flow":<><path d="M4 7.2h13.5"/><path d="m14.8 4.5 2.8 2.7-2.8 2.7"/><path d="M20 16.8H6.5"/><path d="m9.2 14.1-2.8 2.7 2.8 2.7"/></>,
   movements:<><path d="M5 5.5h14M5 12h14M5 18.5h14"/><path d="M8 3.8v3.4M15.5 10.3v3.4M10.5 16.8v3.4"/></>,
@@ -23,7 +23,7 @@ const paths: Record<FinancialIconName, React.ReactNode> = {
   automation:<><path d="M7 5.5A8 8 0 0 1 20 12"/><path d="m17 4.5 3 1-1 3M17 18.5A8 8 0 0 1 4 12"/><path d="m7 19.5-3-1 1-3"/><path d="M12 8.5v4l2.5 1.5"/></>,
   import:<><path d="M12 3.5v11"/><path d="m8.5 11 3.5 3.5 3.5-3.5"/><path d="M4.5 16.5v3h15v-3"/></>,
   scan:<><path d="M8 4H4v4M16 4h4v4M8 20H4v-4M16 20h4v-4"/><path d="M7 12h10M8.5 9.5h7M9.5 14.5h5"/></>,
-  integrations:<><path d="M8.5 8.5 5.8 5.8a2.3 2.3 0 0 0-3.3 3.3l3.7 3.7a2.3 2.3 0 0 0 3.3 0l2.2-2.2"/><path d="m15.5 15.5 2.7 2.7a2.3 2.3 0 0 0 3.3-3.3l-3.7-3.7a2.3 2.3 0 0 0-3.3 0l-2.2 2.2"/><path d="m9 15 6-6"/></>,
+  integrations:<><path d="M8.5 8.5 5.8 5.8a2.3 2.3 0 0 0-3.3 3.3l3.7 3.7a2.3 2.3 0 0 0 3.3 0l2.2-2.2"/><path d="m15.5 15.5 2.7 2.7a2.3 2.3 0 1 0 3.3-3.3l-3.7-3.7a2.3 2.3 0 0 0-3.3 0l-2.2 2.2"/><path d="m9 15 6-6"/></>,
   control:<><path d="M12 3.5 19 6v5.4c0 4.1-2.4 7.3-7 9.1-4.6-1.8-7-5-7-9.1V6z"/><path d="m8.8 12 2.1 2.1 4.5-4.6"/></>,
   settings:<><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3v-.2h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
   help:<><circle cx="12" cy="12" r="9"/><path d="M9.7 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.2.9-1.2 1.7v.5"/><path d="M12 17.2h.01"/></>,
