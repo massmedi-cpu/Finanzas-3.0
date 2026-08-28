@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.3. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.4. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -35,9 +35,12 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 ## Datos y movimientos
 
 - `financial_app.transactions` conserva el dato normalizado y la procedencia de origen.
-- Ajustes privados, reglas, splits, conciliación y automatizaciones respetan precedencia explícita y trazabilidad.
+- Ajustes privados, reglas, splits y conciliación respetan precedencia explícita y trazabilidad.
 - Traspasos internos, duplicados, movimientos ausentes en origen y exclusiones de cash flow se tratan en los motores canónicos de servidor.
-- Las operaciones masivas usan IDs seleccionados, historial y deshacer cuando corresponde.
+- Las operaciones masivas de edición usan IDs seleccionados, límite de 200, bloqueo determinista, historial por movimiento y deshacer seguro cuando ningún elemento cambió después.
+- La selección masiva puede conservarse al paginar o cambiar filtros; el contador mostrado representa siempre el lote completo que se enviará al servidor.
+- Desde 6.4.4 la automatización masiva 4.0 no forma parte del runtime activo. Su migración histórica se conserva únicamente como trazabilidad.
+- Movimientos no ejecuta matching documental propio ni una orquestación paralela de reglas/documentos/conciliación.
 
 ## Previsión e inteligencia
 
@@ -48,7 +51,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 ## Documentos, OCR y Google Drive
 
 - La sincronización de Drive es incremental y preserva el original externo.
-- Los documentos se deduplican por identidad/contenido y se vinculan a movimientos mediante matching conservador.
+- Los documentos se deduplican por identidad/contenido y se vinculan a movimientos mediante un único matching documental supervisado.
 - PP-OCRv6 preserva geometría y reconstrucción de tickets/documentos comerciales sin convertir la imagen en una segunda fuente financiera.
 - `document_triage_core` es la cola canónica de prioridad documental.
 - El matching usa una política supervisada versionada. Los umbrales no se autoajustan ni se relajan automáticamente.
@@ -74,6 +77,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - `financial_app_document_matching_dashboard` sigue este patrón desde 6.4.2: el wrapper público es invoker y el core privilegiado permanece en `financial_app` con autorización explícita.
 - La condición `authenticated` no equivale a autorización: una frontera privilegiada debe verificar además la identidad permitida.
 - Los advisors de Supabase forman parte de la verificación tras cambios de esquema; sus avisos se corrigen con alcance medido, no mediante cambios masivos sin evidencia.
+- Código sin uso que conserve permisos privilegiados o una lógica paralela se retira del runtime cuando la evidencia demuestra que ya no es necesario.
 
 ## Release
 
