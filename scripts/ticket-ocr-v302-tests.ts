@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { recognizeTicketImage } from "../lib/document/ticket-ocr-engine";
 import { inferDocumentMetadata, normalizeOcrText } from "../lib/document/ticket-ocr";
+import { parseReceiptLayout } from "../lib/document/receipt-layout";
+import { validateReceiptFinancials } from "../lib/document/receipt-financial-validator";
 import { RECEIPT_OCR_METHOD_PREFIX, RECEIPT_OCR_REVISION } from "../lib/document/receipt-ocr-revision";
 import { detectPaper } from "../lib/document/receipt-image-preprocessor";
 
@@ -11,6 +13,33 @@ assert.equal(metadata.documentDate,"2026-08-21");
 assert.equal(metadata.amount,7.5);
 assert.equal(metadata.merchant,"CAFETERIA CENTRAL");
 assert.ok(normalizeOcrText("  CAFETERIA   CENTRAL  ").includes("CAFETERIA CENTRAL"));
+
+const commercialDocument=`www.sinfibanda.com\nCami Can Calders 10\n08173 Sant Cugat\nB67148637\n936 565 551\nMETALES MONGAY SL\nC/POLIGONO ELS DOLORS S/N\nMANRESA\nB59107948\nALBARAN Factura Cliente Fecha\n7810018883 F260816162 STC170157 28/08/2026\nCantidad Código Articulo Precio IVA Subtotal\n5,0009745 CHAPA INOX AISI316L\nG:3MM 1000X2000 DECAPADA 125,320 21,00 626,600 S.5\n2,00080122 VENTILADOR HELICOIDAL\nCXV-56/4-6T 1 Vel. 0,75 26,300 21,00 52,600\nPORTES 21,00\n21,00 % IVA sobre 679,20 142,63\nTotal 821,830`;
+const commercialLayout=parseReceiptLayout(commercialDocument);
+assert.equal(commercialLayout.items.length,2,"Los albaranes con cantidad+código unidos deben reconstruir sus líneas");
+assert.deepEqual(commercialLayout.items.map(row=>[row.quantity,row.unitPrice,row.total]),[
+  ["5","125,32","626,60"],
+  ["2","26,30","52,60"],
+]);
+assert.ok(commercialLayout.items[0].description.includes("9745"));
+assert.ok(commercialLayout.items[1].description.includes("80122"));
+assert.deepEqual(commercialLayout.summary.map(row=>[row.label,row.value]),[
+  ["Base","679,20"],
+  ["IVA","142,63"],
+  ["Total","821,83"],
+]);
+assert.equal(commercialLayout.unparsedBody?.length,0);
+const commercialValidation=validateReceiptFinancials(commercialLayout,[commercialDocument]);
+assert.equal(commercialValidation.status,"complete","Una factura neta debe validar líneas contra base y base+IVA contra total");
+assert.equal(commercialValidation.itemSum,679.2);
+assert.equal(commercialValidation.base,679.2);
+assert.equal(commercialValidation.tax,142.63);
+assert.equal(commercialValidation.printedTotal,821.83);
+assert.equal(commercialValidation.contradictions.length,0);
+const commercialMetadata=inferDocumentMetadata(commercialDocument,"receipt");
+assert.equal(commercialMetadata.documentType,"invoice");
+assert.equal(commercialMetadata.documentDate,"2026-08-28");
+assert.equal(commercialMetadata.amount,821.83);
 
 const item=(text:string,left:number,top:number,width:number,score=.98)=>({
   text,
@@ -45,7 +74,7 @@ const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push
 
 assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia");
 assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v4");
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v5");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -107,4 +136,4 @@ assert.ok((isolated?.topLeft||0)>=40&&(isolated?.topLeft||0)<=65);
 assert.ok((isolated?.topRight||0)>=225&&(isolated?.topRight||0)<=265);
 assert.ok((isolated?.bottom||0)>=420&&(isolated?.bottom||0)<photoHeight);
 
-console.log("ticket-ocr PP-OCRv6 geometry tests OK · contorno físico aislado");
+console.log("ticket-ocr PP-OCRv6 geometry tests OK · tickets y documentos comerciales");
