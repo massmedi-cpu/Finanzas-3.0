@@ -9,6 +9,7 @@ const globals=read("app/globals.css");
 const navigation=read("components/app-navigation.tsx");
 const client=read("app/prevision/forecast-client.tsx");
 const css=read("app/forecast.css");
+const cashFlowPage=read("app/cash-flow/page.tsx");
 const api=read("app/api/forecast/route.ts");
 const lib=read("lib/financial/forecast-calendar.ts");
 const migration=read("database/FINANCIAL_APP_3.7.0_FORECAST_DISMISSALS.sql");
@@ -19,20 +20,26 @@ const ledger410=fs.existsSync("database/FINANCIAL_APP_4.1.0_FORECAST_LEDGER.sql"
 const version=appVersion.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"";
 const semver=value=>String(value).split(".").map(part=>Number.parseInt(part,10)||0);
 const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let i=0;i<3;i++){if((a[i]||0)!==(b[i]||0))return(a[i]||0)>(b[i]||0)}return true};
-must(atLeast(version,"3.7.2"),"La versión visible debe ser 3.7.2 o posterior");
-for(const token of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b4f8a","--accent:#4c9bff","--focus:#4c9bff"])
-  must(globals.includes(token),`Falta identidad azul canónica: ${token}`);
+must(atLeast(version,"3.7.2"),"La versión visible debe conservar como mínimo los contratos funcionales de 3.7.2");
+
+// v6 replaces the old blue product identity. Blue remains semantic info only.
+for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-muted:","--gold-hover:","--gold-active:","--accent:var(--gold-primary)","--focus:"])
+  must(globals.includes(token),`Falta identidad premium canónica: ${token}`);
+for(const legacyBlue of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b4f8a","--accent:#4c9bff","--focus:#4c9bff"])
+  must(!globals.includes(legacyBlue),`La identidad azul 3.7 no puede volver a dominar: ${legacyBlue}`);
 for(const legacy of ["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"])
   must(!globals.toLowerCase().includes(legacy),`globals.css conserva marrón retirado: ${legacy}`);
-must(navigation.includes('["Previsión","/prevision"]'),"Previsión debe existir en navegación");
+
 const primaryBlock=navigation.split("const secondary")[0];
-const secondaryBlock=navigation.split("const secondary")[1]?.split("const mobilePrimary")[0]||"";
-const mobileBlock=navigation.split("const mobilePrimary")[1]?.split("function matches")[0]||"";
-must(primaryBlock.includes('["Previsión","/prevision"]'),"Previsión debe ser destino primario en escritorio");
-must(!secondaryBlock.includes('["Previsión","/prevision"]'),"Previsión no debe seguir duplicada en el menú secundario");
-must(mobileBlock.includes('["Previsión","/prevision"]'),"Previsión debe ser destino principal en móvil");
+const secondaryBlock=navigation.split("const secondary")[1]?.split("function routeOf")[0]||"";
+for(const [label,href] of [["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Archivo","/archivo"]])
+  must(primaryBlock.includes(`["${label}","${href}"`),`Navegación primaria 6.0 incompleta: ${label}`);
+must(!primaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe volver a ser un sexto destino primario");
+must(secondaryBlock.includes('["Previsión","/prevision"'),"Previsión debe permanecer accesible desde Más");
+must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecastOverview"),"Cash Flow debe integrar el calendario/previsión sin duplicar su lógica");
+
 for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)"])
-  must(client.includes(token),`Previsión 3.7 ha perdido contrato: ${token}`);
+  must(client.includes(token),`Previsión ha perdido contrato funcional: ${token}`);
 must(client.includes("Ya no cuenta en los cálculos del mes")||client.includes("Ya no cuenta en el cash flow estimado"),"Previsión debe informar que un descarte deja de contar en los cálculos");
 must(client.includes('event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount'),"Los confirmados deben usar importe real y los demás estimado");
 
@@ -50,12 +57,12 @@ const serverProjection=
   ledger410.includes("coalesce(a.income,0)+coalesce(p.income,0)")&&
   ledger410.includes("coalesce(a.expenses,0)+coalesce(p.expenses,0)")&&
   ledger410.includes("confirmedEventsNotDoubleCounted")&&ledger410.includes("dismissedEventsExcludedFromMetrics");
-must(legacyClientProjection||serverProjection,"La proyección mensual debe sumar real + pendiente, excluir confirmados del pendiente y excluir descartados, en cliente legado o contrato canónico de servidor");
+must(legacyClientProjection||serverProjection,"La proyección mensual debe sumar real + pendiente, excluir confirmados del pendiente y excluir descartados");
 must(client.includes("real +")&&client.includes("todavía previsto"),"La UI debe explicar la composición real + pendiente del Cash Flow estimado");
 
 must(api.includes("financial_app_dismiss_forecast_event")&&api.includes("eventId")&&api.includes("p_estimated_date"),"DELETE de Previsión debe descartar una ocurrencia persistente");
 for(const token of ["actualMonths","ForecastActualMonth","normalizedCategoryFallbackMatching","actualExpensesIncludedInProjection","confirmedEventsNotDoubleCounted"])
-  must(lib.includes(token),`Contrato tipado 3.7.2 incompleto: ${token}`);
+  must(lib.includes(token),`Contrato tipado de previsión incompleto: ${token}`);
 for(const token of ["forecast_event_overrides","dismiss_forecast_event","financial_app_dismiss_forecast_event","dismissibleOccurrences","dismissedEventsExcludedFromMetrics","o.event_id=x.item->>'id'"])
   must(migration.includes(token),`Migración 3.7 incompleta: ${token}`);
 must(migration.includes("revoke all on table financial_app.forecast_event_overrides from public,anon,authenticated")&&migration.includes("grant execute on function public.financial_app_dismiss_forecast_event"),"La persistencia de descartes debe mantener frontera de autorización");
@@ -80,5 +87,5 @@ for(const root of roots){
   walk(root);
 }
 
-if(failures.length){console.error("Forecast and blue identity 3.7 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast and blue identity 3.7 audit OK · azul canónico, Previsión primaria, descartes persistentes, lectura autenticada, conciliación real y proyección mensual completa protegidos");
+if(failures.length){console.error("Forecast/Cash Flow v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
+console.log("Forecast/Cash Flow v6 audit OK · identidad dorada, cinco destinos primarios, previsión accesible e integrada, descartes y proyección protegidos");
