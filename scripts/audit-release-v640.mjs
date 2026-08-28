@@ -11,7 +11,7 @@ const operations=read("database/FINANCIAL_APP_6.4.0_DOCUMENT_OPERATIONS.sql");
 const notes=read("docs/releases/6.4.0.md");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
 
-must(["6.4.0","6.4.1","6.4.2"].includes(currentVersion),"APP_VERSION debe preservar la baseline 6.4.0 o su hardening 6.4.x");
+must(/^6\.4\.\d+$/.test(currentVersion),"APP_VERSION debe preservar la familia 6.4.x de la baseline 6.4.0");
 must(pkg.version==="3.4.8","La versión técnica del paquete permanece 3.4.8 por contrato");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-document-operations-v640.mjs"),"audit:current no ejecuta el contrato operativo 6.4");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v640.mjs"),"audit:current no ejecuta el cierre 6.4");
@@ -23,4 +23,4 @@ for(const token of ["Financial App 6.4.0","Centro de operaciones documentales","
   must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 6.4 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.0 release audit OK · baseline preservada por 6.4.x, operaciones supervisadas, lote revalidado y reversibilidad protegidas");
+console.log("Financial App 6.4.0 release audit OK · familia 6.4.x, operaciones supervisadas, lote revalidado y reversibilidad protegidas");

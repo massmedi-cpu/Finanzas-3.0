@@ -1,10 +1,10 @@
-# Financial App 6.4.2
+# Financial App 6.4.3
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 6.4.2
+## Baseline 6.4.3
 
-5.0.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales. 6.4.1 añade hardening medido del historial de políticas y alinea contratos canónicos. 6.4.2 endurece la frontera pública del dashboard de calidad de matching sin cambiar su comportamiento ni sus datos.
+5.0.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales. 6.4.1 añade hardening medido del historial de políticas y alinea contratos canónicos. 6.4.2 endurece la frontera pública del dashboard de calidad de matching sin cambiar su comportamiento ni sus datos. 6.4.3 endurece la fiabilidad de publicación para que Production Smoke espere coherencia global de versión y los gates históricos 6.4.x no bloqueen futuros patches por enumeración manual.
 
 - Navegación principal con cinco destinos exactos: Inicio, Cash Flow, Movimientos, Análisis y Archivo.
 - Previsión permanece accesible desde Más y su calendario canónico se integra dentro de Cash Flow.
@@ -38,9 +38,9 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - La revisión canónica del motor OCR es `paddle_layout_v6`, con PaddleOCR.js 0.4.2 y PP-OCRv6 en español, una sola inferencia y fallback seguro al original si no hay contorno fiable.
 - La regresión OCR incluye la evidencia literal del albarán real que permanecía pendiente tras 6.3.1.
 - Archivo conserva un histórico reversible y los documentos del corte 6.0.0 permanecen archivados sin alterar sus valores ni asociaciones.
-- Los gates históricos siguen activos de forma forward-compatible.
+- Los gates históricos siguen activos de forma forward-compatible y los de la familia 6.4.x validan el mínimo de patch en lugar de enumerar cada release futura.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` siguen describiendo la arquitectura canónica iniciada en 5.0.0; 6.x mejora el producto sin crear una arquitectura runtime paralela.
-- El flujo de publicación actual valida en rama, integra en `main`, espera el deployment de producción READY y ejecuta smoke exacto; las previews automáticas están bloqueadas.
+- El flujo de publicación valida en rama, integra en `main`, espera el deployment de producción READY y ejecuta smoke exacto. Desde 6.4.3 el smoke exige dos pasadas consecutivas con la misma versión en login, rutas privadas y APIs protegidas antes de declarar estable la propagación. Las previews automáticas están bloqueadas.
 
 ## Principios permanentes
 
