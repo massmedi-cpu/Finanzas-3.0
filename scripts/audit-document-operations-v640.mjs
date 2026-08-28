@@ -5,6 +5,7 @@ const failures=[];
 const must=(ok,message)=>{if(!ok)failures.push(message)};
 
 const migration=read("database/FINANCIAL_APP_6.4.0_DOCUMENT_OPERATIONS.sql");
+const permissions=read("database/FINANCIAL_APP_6.4.0_OPERATION_PERMISSIONS.sql");
 const loader=read("lib/financial/document-operations.ts");
 const api=read("app/api/archive/operations/route.ts");
 const page=read("app/archivo/revision/page.tsx");
@@ -19,11 +20,16 @@ for(const token of [
   "ambiguousBatchActions","maxBatchSize",">50","security definer"
 ])must(migration.includes(token)||lower.includes(token.toLowerCase()),`Contrato operativo 6.4 incompleto: ${token}`);
 
-must(!/grant\s+execute[^;]+\s+to\s+anon/i.test(migration),"6.4 no puede conceder ejecución a anon");
-for(const signature of ["financial_app.document_operations_core(integer)","financial_app.document_operation_core(uuid,text,text)","financial_app.document_operations_batch_core(jsonb)"])
-  must(migration.includes(`revoke all on function ${signature} from public,anon,authenticated,service_role`),`Core privado sin revoke estricto: ${signature}`);
-for(const wrapper of ["financial_app_document_operations","financial_app_document_operation","financial_app_document_operations_batch"])
+must(!/grant\s+execute[^;]+\s+to\s+anon/i.test(`${migration}\n${permissions}`),"6.4 no puede conceder ejecución a anon");
+for(const signature of ["financial_app.document_operations_core(integer)","financial_app.document_operation_core(uuid,text,text)","financial_app.document_operations_batch_core(jsonb)"]){
+  must(migration.includes(`revoke all on function ${signature} from public,anon,authenticated,service_role`),`Instalación inicial sin revoke estricto: ${signature}`);
+  must(permissions.includes(`grant execute on function ${signature} to authenticated`),`El wrapper invoker necesita core autenticado: ${signature}`);
+  must(permissions.includes(`revoke all on function ${signature} from anon`),`Core 6.4 no puede quedar accesible a anon: ${signature}`);
+}
+for(const wrapper of ["financial_app_document_operations","financial_app_document_operation","financial_app_document_operations_batch"]){
   must(migration.includes(wrapper),`Falta wrapper público 6.4: ${wrapper}`);
+  must(permissions.includes(`alter function public.${wrapper}`)&&permissions.includes("security invoker"),`Wrapper 6.4 debe quedar SECURITY INVOKER: ${wrapper}`);
+}
 must(migration.includes("exception when others"),"El lote debe aislar los rechazos por operación");
 must(migration.includes("v_rejected:=v_rejected+1"),"El lote debe contabilizar operaciones rechazadas");
 
@@ -41,4 +47,4 @@ for(const token of [".operations-summary",".operations-toolbar",".operation-chec
   must(css.includes(token),`Estilos operativos 6.4 incompletos: ${token}`);
 
 if(failures.length){console.error("Document operations v6.4 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, ambigüedad manual y reversibilidad protegidas");
+console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, wrapper invoker, allowlist y reversibilidad protegidas");
