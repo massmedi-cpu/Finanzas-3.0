@@ -72,12 +72,8 @@ const movement=(value:unknown):ArchiveMovementRef=>{
   };
 };
 
-export async function getDocumentMatchingObservability(limit=8):Promise<DocumentMatchingObservability>{
-  const safeLimit=Math.max(1,Math.min(20,Number.isFinite(limit)?Math.trunc(limit):8));
-  const supabase=await createClient();
-  const {data,error}=await supabase.rpc("financial_app_document_matching_observability",{p_limit:safeLimit});
-  if(error||!data)throw new Error(error?.message||"document_matching_observability_unavailable");
-  const r=asRecord(data),summary=asRecord(r.summary),rules=asRecord(r.rules);
+export function parseDocumentMatchingObservability(value:unknown):DocumentMatchingObservability{
+  const r=asRecord(value),summary=asRecord(r.summary),rules=asRecord(r.rules);
   return{
     version:asString(r.version,APP_VERSION),
     generatedAt:asString(r.generatedAt),
@@ -91,7 +87,7 @@ export async function getDocumentMatchingObservability(limit=8):Promise<Document
       lowConfidence:asNumber(summary.lowConfidence),
       noCandidates:asNumber(summary.noCandidates),
     },
-    documents:asArray(r.documents).map(value=>{const x=asRecord(value);return{
+    documents:asArray(r.documents).map(item=>{const x=asRecord(item);return{
       id:asString(x.id),
       fileName:asString(x.fileName),
       documentType:asString(x.documentType,"documento"),
@@ -110,4 +106,12 @@ export async function getDocumentMatchingObservability(limit=8):Promise<Document
       readOnlyObservability:booleanOr(rules.readOnlyObservability,true),
     },
   };
+}
+
+export async function getDocumentMatchingObservability(limit=8):Promise<DocumentMatchingObservability>{
+  const safeLimit=Math.max(1,Math.min(20,Number.isFinite(limit)?Math.trunc(limit):8));
+  const supabase=await createClient();
+  const {data,error}=await supabase.rpc("financial_app_document_matching_observability",{p_limit:safeLimit});
+  if(error||!data)throw new Error(error?.message||"document_matching_observability_unavailable");
+  return parseDocumentMatchingObservability(data);
 }
