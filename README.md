@@ -1,10 +1,10 @@
-# Financial App 6.4.0
+# Financial App 6.4.1
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 6.4.0
+## Baseline 6.4.1
 
-5.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales: identifica qué acciones son seguras, permite resolver varias a la vez, vuelve a validarlas en servidor al confirmar y conserva los casos ambiguos como decisiones manuales.
+5.0.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales: identifica qué acciones son seguras, permite resolver varias a la vez, vuelve a validarlas en servidor al confirmar y conserva los casos ambiguos como decisiones manuales. 6.4.1 endurece esa misma arquitectura con el índice medido de supersesión de políticas y alinea los contratos canónicos de seguridad y publicación.
 
 - Navegación principal con cinco destinos exactos: Inicio, Cash Flow, Movimientos, Análisis y Archivo.
 - Previsión permanece accesible desde Más y su calendario canónico se integra dentro de Cash Flow.
@@ -23,6 +23,7 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - El archivado seguro registra `document_history` y puede restaurarse; las asociaciones pueden deshacerse mediante unlink.
 - La última tanda segura aplicada puede revertirse desde el propio centro de operaciones.
 - `anon` no puede ejecutar operaciones 6.4. Los wrappers `public` son `SECURITY INVOKER`; los cores `SECURITY DEFINER` quedan fuera del API público, requieren rol autenticado y vuelven a comprobar la allowlist mediante `authorized_email()`.
+- La FK `document_matching_policies.supersedes_policy_id` dispone desde 6.4.1 de un índice B-tree dedicado para que el historial de políticas y rollback pueda crecer sin escaneos evitables.
 - Archivo y Centro de control comparten el mismo motor server-side de matching documental; no existe una segunda fórmula de scoring en React/Node.
 - El matching expone score, confianza, margen frente al segundo candidato, coincidencia de comercio, razones y autoelegibilidad.
 - Los casos ambiguos nunca se consideran autoenlace seguro ni pueden incorporarse a un lote.
@@ -37,7 +38,8 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - La regresión OCR incluye la evidencia literal del albarán real que permanecía pendiente tras 6.3.1.
 - Archivo conserva un histórico reversible y los documentos del corte 6.0.0 permanecen archivados sin alterar sus valores ni asociaciones.
 - Los gates históricos siguen activos de forma forward-compatible.
-- `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` siguen describiendo la arquitectura canónica iniciada en 5.0; 6.x mejora el producto sin crear una arquitectura runtime paralela.
+- `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` siguen describiendo la arquitectura canónica iniciada en 5.0.0; 6.x mejora el producto sin crear una arquitectura runtime paralela.
+- El flujo de publicación actual valida en rama, integra en `main`, espera el deployment de producción READY y ejecuta smoke exacto; las previews automáticas están bloqueadas.
 
 ## Principios permanentes
 

@@ -1,10 +1,10 @@
-# Finanzas 3.0 — Axiomas permanentes del proyecto
+# Financial App — Axiomas permanentes del proyecto
 
-Estado: vigente desde V2.0.1 y aplicable a cualquier cambio futuro.
+Estado: vigente y aplicable a cualquier cambio futuro. Actualizado en 6.4.1 para reflejar la arquitectura canónica actual sin alterar las garantías históricas.
 
 ## 1. Jerarquía
 
-Este documento consolida las reglas técnicas que deben acompañar siempre al Prompt Maestro/Axioma de Finanzas 3.0 y al prompt permanente de auditoría y protección de regresiones. Una mejora nueva no puede invalidar silenciosamente una función, decisión financiera, requisito visual o garantía técnica ya validada.
+Este documento consolida las reglas técnicas que deben acompañar siempre al Prompt Maestro/Axioma de Financial App y al prompt permanente de auditoría y protección de regresiones. Una mejora nueva no puede invalidar silenciosamente una función, decisión financiera, requisito visual o garantía técnica ya validada.
 
 ## 2. Integridad financiera
 
@@ -21,9 +21,13 @@ Este documento consolida las reglas técnicas que deben acompañar siempre al Pr
 
 - Acceso privado obligatorio antes de mostrar datos financieros.
 - Credenciales, contraseñas, service-role keys, claves privadas, identificadores privados y datos bancarios no se versionan.
-- Los secretos se gestionan fuera del repositorio.
-- RLS permanece habilitado en las tablas privadas. En el diseño actual no existen políticas públicas: el acceso directo de `anon` y `authenticated` está deliberadamente denegado y el backend autorizado usa `service_role`.
-- Las RPC privilegiadas no pueden ser ejecutables por `anon` ni `authenticated`.
+- Los secretos se gestionan fuera del repositorio y nunca llegan al navegador.
+- RLS permanece habilitado en las tablas privadas. El acceso directo a tablas desde `anon` y `authenticated` permanece cerrado salvo contrato explícito, mínimo y auditado.
+- `anon` no puede ejecutar operaciones financieras privilegiadas.
+- Los wrappers necesarios del esquema API público deben preferir `SECURITY INVOKER` y permisos mínimos.
+- Un core `SECURITY DEFINER` solo se admite fuera del API público cuando existe una necesidad concreta, tiene `search_path` cerrado, comprueba autorización de servidor —actualmente mediante `authorized_email()` cuando corresponda— y restringe `EXECUTE` a los roles estrictamente necesarios.
+- Que `authenticated` pueda invocar un core privado no sustituye la autorización: cada frontera privilegiada debe volver a comprobar la identidad permitida antes de leer o escribir.
+- `service_role` puede usarse únicamente en backend para tareas que realmente lo requieran y nunca como atajo para relajar permisos del navegador.
 - Las cookies de sesión deben ser `HttpOnly`, `SameSite=Strict` y `Secure` en producción.
 - El repositorio no puede incluir exportaciones CSV/XLSX/PDF, bases de datos, backups privados ni ZIP históricos de la aplicación.
 
@@ -36,16 +40,19 @@ Este documento consolida las reglas técnicas que deben acompañar siempre al Pr
 - No provocar una recarga completa de servidor cuando el estado local ya contiene la respuesta válida.
 - No renderizar miles de filas simultáneamente; el histórico debe poder evolucionar a paginación/virtualización real.
 - La arquitectura debe poder evolucionar a decenas o cientos de miles de movimientos sin rehacer el dominio financiero.
+- Los índices se añaden o retiran por relaciones, consultas y métricas observadas; un aviso de “índice no usado” por sí solo no autoriza a borrarlo.
 
 ## 5. Desarrollo y regresiones
 
-- Flujo obligatorio: rama de trabajo → pruebas → typecheck → build → preview → validación → producción.
+- Flujo obligatorio: rama de trabajo → pruebas/regresiones → typecheck/lint → build reproducible → CI verde → merge a `main` → despliegue de producción READY → smoke exacto de producción.
 - `main` es producción; el trabajo se realiza fuera de `main`.
+- Las previews automáticas de Vercel permanecen bloqueadas para evitar builds innecesarios; una preview solo se crea de forma deliberada cuando una validación concreta la necesita.
 - Mantener un checkpoint recuperable antes de cambios de riesgo.
-- Versionado SemVer MAJOR.MINOR.PATCH.
+- Versionado SemVer MAJOR.MINOR.PATCH para la versión visible del producto; la versión técnica del paquete puede evolucionar de forma independiente cuando el contrato lo requiera.
 - Cada corrección funcional debe incorporar una prueba de regresión cuando sea razonablemente automatizable.
 - CI debe utilizar dependencias reproducibles mediante lockfile.
-- No se declara una versión validada si CI o la comprobación funcional correspondiente falla.
+- No se declara una versión validada si CI, el despliegue READY o la comprobación funcional correspondiente falla.
+- Las migraciones compatibles se pueden instalar antes del cierre de versión cuando el release gate necesite comprobar el contrato real; la metadata de versión solo se alinea al final del despliegue validado.
 
 ## 6. UX y diseño
 
@@ -65,4 +72,5 @@ Antes de cerrar cualquier mejora se comprueba:
 5. responsive y legibilidad;
 6. CI/typecheck/build;
 7. documentación y changelog;
-8. posibilidad de rollback.
+8. despliegue READY y smoke exacto cuando hay publicación;
+9. posibilidad de rollback.
