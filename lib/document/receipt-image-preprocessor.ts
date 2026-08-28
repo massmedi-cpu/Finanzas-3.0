@@ -16,50 +16,209 @@ type PaperGeometry = {
   bottomRight: number;
 };
 
+type PaperSpan = {
+  y: number;
+  left: number;
+  right: number;
+  meanLuminance: number;
+};
+
+type PaperTrack = {
+  spans: PaperSpan[];
+  lastGridRow: number;
+};
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const median = (values: number[]) => {
   if (!values.length) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 };
+const quantile = (values: number[], ratio: number) => {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor((sorted.length - 1) * clamp(ratio, 0, 1))];
+};
 
-function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
+function neutralLuminance(red: number, green: number, blue: number) {
+  const high = Math.max(red, green, blue);
+  const low = Math.min(red, green, blue);
+  const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
+  return { luminance, chroma: high - low };
+}
+
+/**
+ * Detecta un único componente físico de papel, no la unión de todos los píxeles
+ * claros de la fotografía. Esto evita incorporar carteles, pantallas, sobres u
+ * otras superficies claras con texto que estén detrás del ticket.
+ */
+export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
   const step = Math.max(4, Math.floor(Math.max(width, height) / 700));
   const rows = Math.ceil(height / step);
   const columns = Math.ceil(width / step);
-  const minHits = Math.max(4, Math.round(columns * 0.14));
-  const spans: Array<{ y: number; left: number; right: number }> = [];
+
+  // Umbral adaptado a la iluminación de la foto. Solo se calcula con muestras
+  // relativamente neutras para no confundir superficies de color con papel.
+  const neutralSamples: number[] = [];
+  const sampleStrideY = Math.max(1, Math.floor(rows / 90));
+  const sampleStrideX = Math.max(1, Math.floor(columns / 90));
+  for (let gridY = 0; gridY < rows; gridY += sampleStrideY) {
+    const y = Math.min(height - 1, gridY * step);
+    for (let gridX = 0; gridX < columns; gridX += sampleStrideX) {
+      const x = Math.min(width - 1, gridX * step);
+      const offset = (y * width + x) * 4;
+      const sample = neutralLuminance(data.data[offset], data.data[offset + 1], data.data[offset + 2]);
+      if (sample.chroma <= 90) neutralSamples.push(sample.luminance);
+    }
+  }
+  const luminanceThreshold = clamp(Math.round(quantile(neutralSamples, 0.65) + 18), 140, 205);
+  const maxGapCells = Math.max(1, Math.round(columns * 0.012));
+  const minimumRunWidth = Math.max(step * 4, Math.round(width * 0.22));
+  const rowRuns: PaperSpan[][] = [];
 
   for (let gridY = 0; gridY < rows; gridY += 1) {
     const y = Math.min(height - 1, gridY * step);
-    let hits = 0; let left = width; let right = 0;
+    const points: Array<{ gridX: number; x: number; luminance: number }> = [];
+
     for (let gridX = 0; gridX < columns; gridX += 1) {
       const x = Math.min(width - 1, gridX * step);
       const offset = (y * width + x) * 4;
-      const red = data.data[offset]; const green = data.data[offset + 1]; const blue = data.data[offset + 2];
-      const high = Math.max(red, green, blue); const low = Math.min(red, green, blue);
-      const luminance = red * 0.2126 + green * 0.7152 + blue * 0.0722;
-      const lowSaturation = high - low <= 78;
-      if (luminance >= 135 && lowSaturation) {
-        hits += 1; left = Math.min(left, x); right = Math.max(right, x);
+      const sample = neutralLuminance(data.data[offset], data.data[offset + 1], data.data[offset + 2]);
+      if (sample.luminance >= luminanceThreshold && sample.chroma <= 72) {
+        points.push({ gridX, x, luminance: sample.luminance });
       }
     }
-    if (hits >= minHits && right > left) spans.push({ y, left, right });
+
+    const runs: PaperSpan[] = [];
+    for (let start = 0; start < points.length;) {
+      let end = start;
+      while (end + 1 < points.length && points[end + 1].gridX - points[end].gridX <= maxGapCells + 1) end += 1;
+      const group = points.slice(start, end + 1);
+      const left = group[0]?.x ?? 0;
+      const right = group.at(-1)?.x ?? left;
+      const gridSlots = Math.max(1, (group.at(-1)?.gridX ?? 0) - (group[0]?.gridX ?? 0) + 1);
+      const density = group.length / gridSlots;
+      if (right - left >= minimumRunWidth && density >= 0.5) {
+        runs.push({
+          y,
+          left,
+          right,
+          meanLuminance: group.reduce((sum, point) => sum + point.luminance, 0) / Math.max(1, group.length),
+        });
+      }
+      start = end + 1;
+    }
+    rowRuns.push(runs);
   }
 
-  if (spans.length < rows * 0.2) return null;
-  const top = spans[0].y; const bottom = spans.at(-1)!.y;
-  if (bottom - top < height * 0.38) return null;
+  // Une únicamente franjas que pertenecen al mismo componente continuo. El
+  // detector anterior tomaba el mínimo/máximo de cada fila y podía fusionar
+  // el ticket con una imagen clara situada al fondo.
+  const tracks: PaperTrack[] = [];
+  for (let gridY = 0; gridY < rowRuns.length; gridY += 1) {
+    const usedTracks = new Set<number>();
+    for (const run of rowRuns[gridY]) {
+      const runWidth = Math.max(1, run.right - run.left);
+      const runCenter = (run.left + run.right) / 2;
+      let bestTrack = -1;
+      let bestScore = Number.NEGATIVE_INFINITY;
+
+      for (let index = 0; index < tracks.length; index += 1) {
+        if (usedTracks.has(index)) continue;
+        const track = tracks[index];
+        if (gridY - track.lastGridRow > 4) continue;
+        const previous = track.spans.at(-1);
+        if (!previous) continue;
+        const previousWidth = Math.max(1, previous.right - previous.left);
+        const widthRatio = Math.max(runWidth, previousWidth) / Math.max(1, Math.min(runWidth, previousWidth));
+        if (widthRatio > 1.7) continue;
+
+        const overlap = Math.max(0, Math.min(run.right, previous.right) - Math.max(run.left, previous.left));
+        const overlapRatio = overlap / Math.max(1, Math.min(runWidth, previousWidth));
+        const previousCenter = (previous.left + previous.right) / 2;
+        const centerDelta = Math.abs(runCenter - previousCenter) / Math.max(runWidth, previousWidth);
+        if (overlapRatio < 0.22 && centerDelta > 0.34) continue;
+
+        const score = overlapRatio - centerDelta * 0.8;
+        if (score > bestScore) {
+          bestScore = score;
+          bestTrack = index;
+        }
+      }
+
+      if (bestTrack < 0) {
+        tracks.push({ spans: [run], lastGridRow: gridY });
+        usedTracks.add(tracks.length - 1);
+      } else {
+        tracks[bestTrack].spans.push(run);
+        tracks[bestTrack].lastGridRow = gridY;
+        usedTracks.add(bestTrack);
+      }
+    }
+  }
+
+  const candidates = tracks.flatMap((track) => {
+    const spans = track.spans;
+    if (spans.length < rows * 0.18) return [];
+    const top = spans[0].y;
+    const bottom = spans.at(-1)!.y;
+    const verticalExtent = bottom - top;
+    if (verticalExtent < height * 0.38) return [];
+
+    const widths = spans.map((span) => span.right - span.left);
+    const medianWidth = median(widths);
+    if (medianWidth < width * 0.24) return [];
+    const expectedRows = verticalExtent / step + 1;
+    const coverage = spans.length / Math.max(1, expectedRows);
+    if (coverage < 0.52) return [];
+
+    const widthQ10 = quantile(widths, 0.1);
+    const widthQ90 = quantile(widths, 0.9);
+    if (widthQ90 / Math.max(1, widthQ10) > 1.6) return [];
+
+    const whiteness = median(spans.map((span) => span.meanLuminance)) / 255;
+    const center = median(spans.map((span) => (span.left + span.right) / 2));
+    const centerBonus = 1 - Math.min(1, Math.abs(center - width / 2) / Math.max(1, width / 2));
+    const aspect = verticalExtent / Math.max(1, medianWidth);
+    const medianLeft = median(spans.map((span) => span.left));
+    const medianRight = median(spans.map((span) => span.right));
+
+    // Una superficie que llega al borde de la fotografía es mucho más probable
+    // que sea el fondo que el ticket fotografiado. Se penaliza, pero no se
+    // rechaza de forma absoluta para mantener el fallback en fotos recortadas.
+    const borderTouches = Number(top < height * 0.025)
+      + Number(bottom > height * 0.975)
+      + Number(medianLeft < width * 0.025)
+      + Number(medianRight > width * 0.975);
+
+    const score = verticalExtent / height * 3
+      + coverage * 2
+      + whiteness * 1.2
+      + Math.min(1.5, aspect) * 0.55
+      + centerBonus * 0.45
+      + medianWidth / width * 0.25
+      - borderTouches * 0.95;
+
+    return [{ track, score }];
+  }).sort((a, b) => b.score - a.score);
+
+  const best = candidates[0]?.track;
+  if (!best) return null;
+  const spans = best.spans;
+  const top = spans[0].y;
+  const bottom = spans.at(-1)!.y;
   const band = Math.max(4, Math.round(spans.length * 0.14));
-  const topBand = spans.slice(0, band); const bottomBand = spans.slice(-band);
+  const topBand = spans.slice(0, band);
+  const bottomBand = spans.slice(-band);
   const topLeft = median(topBand.map((span) => span.left));
   const topRight = median(topBand.map((span) => span.right));
   const bottomLeft = median(bottomBand.map((span) => span.left));
   const bottomRight = median(bottomBand.map((span) => span.right));
-  const topWidth = topRight - topLeft; const bottomWidth = bottomRight - bottomLeft;
-  if (Math.min(topWidth, bottomWidth) < width * 0.3) return null;
+  const topWidth = topRight - topLeft;
+  const bottomWidth = bottomRight - bottomLeft;
+  if (Math.min(topWidth, bottomWidth) < width * 0.24) return null;
   const ratio = Math.max(topWidth, bottomWidth) / Math.max(1, Math.min(topWidth, bottomWidth));
-  if (ratio > 1.55) return null;
+  if (ratio > 1.6) return null;
   return { top, bottom, topLeft, topRight, bottomLeft, bottomRight };
 }
 
@@ -73,7 +232,7 @@ function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null)
   const topWidth = geometry.topRight - geometry.topLeft;
   const bottomWidth = geometry.bottomRight - geometry.bottomLeft;
   const targetWidth = Math.max(1, Math.round((topWidth + bottomWidth) / 2));
-  const marginX = Math.round(targetWidth * 0.055); const marginY = Math.round(sourceHeight * 0.035);
+  const marginX = Math.round(targetWidth * 0.04); const marginY = Math.round(sourceHeight * 0.025);
   const output = document.createElement("canvas"); output.width = targetWidth + marginX * 2; output.height = sourceHeight + marginY * 2;
   const context = output.getContext("2d"); if (!context) throw new Error("Canvas no disponible");
   context.fillStyle = "#fff"; context.fillRect(0, 0, output.width, output.height);
