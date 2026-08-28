@@ -18,7 +18,8 @@ const dashboardLoader=read("lib/financial/document-matching-dashboard.ts");
 const controlPage=read("app/control/page.tsx");
 const panel=read("app/control/document-matching-panel.tsx");
 const reviewPage=read("app/archivo/revision/page.tsx");
-const reviewClient=read("app/archivo/revision/review-client.tsx");
+const usesTriage=fs.existsSync("app/archivo/revision/triage-client.tsx");
+const reviewClient=read(usesTriage?"app/archivo/revision/triage-client.tsx":"app/archivo/revision/review-client.tsx");
 const css=read("app/control/matching-quality.css");
 const historyCss=read("app/control/document-matching-history.css");
 const controlLayout=read("app/control/layout.tsx");
@@ -87,11 +88,19 @@ for(const token of ["DocumentMatchingDashboard","DocumentMatchingQualityPoint","
 for(const token of ["getDocumentMatchingDashboard","DocumentMatchingPanel","documentMatchingDashboard"])
   must(controlPage.includes(token),`Centro de control no integra el dashboard documental único: ${token}`);
 must(!controlPage.includes("getArchiveOverview")&&!controlPage.includes("getDocumentMatchingObservability("),"Centro de control no puede recalcular matching por una segunda vía");
-for(const token of ["getDocumentMatchingObservability(20)","ArchiveReviewClient","data.summary.withCandidates"])
-  must(reviewPage.includes(token),`Cola de revisión no consume la priorización server-side: ${token}`);
-must(!reviewPage.includes("getArchiveReviewQueue"),"La revisión no puede volver al escaneo completo de Archivo");
-for(const token of ["DocumentMatchingObservability","candidate.reasons","candidate.scoreMargin","document.storageUrl","priority-${document.priority}"])
-  must(reviewClient.includes(token),`Revisión explicable incompleta: ${token}`);
+if(usesTriage){
+  for(const token of ["getDocumentTriage","DocumentTriageClient"])
+    must(reviewPage.includes(token),`La bandeja 6.3 debe conservar la priorización server-side del matching dentro del triage: ${token}`);
+  must(!reviewPage.includes("getDocumentMatchingObservability(")&&!reviewPage.includes("getArchiveReviewQueue"),"La revisión 6.3 no puede recuperar una segunda cola matching-only");
+  for(const token of ["ArchiveMovementRef","candidate.reasons","candidate.scoreMargin","document.storageUrl","document.suggestions"])
+    must(reviewClient.includes(token),`Triage 6.3 ha perdido la explicabilidad del matching 6.1: ${token}`);
+}else{
+  for(const token of ["getDocumentMatchingObservability(20)","ArchiveReviewClient","data.summary.withCandidates"])
+    must(reviewPage.includes(token),`Cola de revisión no consume la priorización server-side: ${token}`);
+  must(!reviewPage.includes("getArchiveReviewQueue"),"La revisión no puede volver al escaneo completo de Archivo");
+  for(const token of ["DocumentMatchingObservability","candidate.reasons","candidate.scoreMargin","document.storageUrl","priority-${document.priority}"])
+    must(reviewClient.includes(token),`Revisión explicable incompleta: ${token}`);
+}
 for(const token of [
   "Matching documental · explicable","confidenceTier","scoreMargin","merchantMatch","autoEligible","candidate.reasons",
   "Cumple autoenlace seguro","Ambiguos","Los casos ambiguos nunca se consideran autoenlace seguro",
@@ -114,4 +123,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Document matching v6.1 audit OK · score único, cola server-side, histórico agregado sin datos financieros y una sola evaluación por dashboard");
+console.log(`Document matching v6.1 audit OK · score único, ${usesTriage?"triage 6.3":"cola 6.1"} server-side, histórico agregado sin datos financieros y una sola evaluación por dashboard`);
