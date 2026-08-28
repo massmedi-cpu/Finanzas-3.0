@@ -53,7 +53,7 @@ function cleanLine(value: string) {
 
 function merchantDisplayLine(value: string) {
   const line = cleanLine(value);
-  const domain = line.match(/^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.[a-z]{2,}(?:\/.*)?$/i);
+  const domain = line.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.(?:com|net|es|org|eu)(?:\b|\/)/i);
   if (!domain) return line;
   return domain[1]
     .split(/[-_]+/g)
@@ -127,7 +127,7 @@ function parseDate(text: string, receipt = false) {
       if (!validDate(year, month, day, receipt)) continue;
       const start = Math.max(0, (match.index || 0) - 24);
       const before = text.slice(start, match.index || 0);
-      const context = /\b(fecha|hora|pedido|ticket|recibo)\b/i.test(before) ? 2 : 0;
+      const context = /\b(fecha|hora|pedido|ticket|recibo|albar[aá]n|factura)\b/i.test(before) ? 2 : 0;
       candidates.push({ value: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`, context });
     }
   }
@@ -137,7 +137,7 @@ function parseDate(text: string, receipt = false) {
 
 function extractAmounts(line: string) {
   if (/\b(hora|tel[eé]fono|nif|cif)\b/i.test(line) && !/(total|importe|pagar)/i.test(line)) return [];
-  const pattern = /-?\d{1,5}(?:[.\s]\d{3})*(?:,\d{2}|\.\d{2})(?:\s*(?:€|EUR))?/gi;
+  const pattern = /-?\d{1,5}(?:[.\s]\d{3})*(?:,\d{2,3}|\.\d{2,3})(?:\s*(?:€|EUR))?/gi;
   const values: number[] = [];
   for (const match of line.matchAll(pattern)) {
     const index = match.index || 0;
@@ -151,7 +151,15 @@ function extractAmounts(line: string) {
 }
 
 function likelyMerchant(lines: string[]) {
-  const blocked = /(factura|ticket|recibo|fecha|hora|total|subtotal|iva|base|cif|nif|n\.?i\.?f|nº|num\.?|importe|pago|tarjeta|cambio|efectivo|gracias|cliente|copia|documento|unidades?|precio|raz[oó]n\s+social|direcci[oó]n|tel[eé]fono|pedido\s+por|camarero|staff|mesa)/i;
+  const technicalDomains = new Set(["qamarero", "gamarero", "veritas"]);
+  for (const raw of lines.slice(0, 18)) {
+    const match = raw.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.(?:com|net|es|org|eu)(?:\b|\/)/i);
+    if (!match || technicalDomains.has(match[1].toLowerCase())) continue;
+    const domainName = merchantDisplayLine(match[0]);
+    if (domainName.length >= 3) return domainName;
+  }
+
+  const blocked = /(factura|albar[aá]n|ticket|recibo|fecha|hora|total|subtotal|iva|base|cif|nif|n\.?i\.?f|nº|num\.?|importe|pago|tarjeta|cambio|efectivo|gracias|cliente|copia|documento|unidades?|precio|raz[oó]n\s+social|direcci[oó]n|tel[eé]fono|pedido\s+por|camarero|staff|mesa)/i;
   let best: { line: string; score: number } | null = null;
   for (const [index, raw] of lines.slice(0, 18).entries()) {
     const line = cleanLine(raw);
@@ -171,12 +179,23 @@ function likelyMerchant(lines: string[]) {
   return best ? merchantDisplayLine(best.line) : null;
 }
 
+function labeledAmount(lines: string[], pattern: RegExp) {
+  for (const line of lines) {
+    pattern.lastIndex = 0;
+    const match = pattern.exec(line);
+    if (!match) continue;
+    const value = parseEuroValue(match[1]);
+    if (value !== null) return value;
+  }
+  return null;
+}
+
 export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = null): DocumentMetadata {
   const text = normalizeOcrText(rawText);
   const lines = text.split(/\r?\n/).filter(Boolean);
   const lower = text.toLowerCase();
   let documentType = hint || "other";
-  if (/\bfactura\b/.test(lower)) documentType = "invoice";
+  if (/\b(factura|albar[aá]n)\b/.test(lower)) documentType = "invoice";
   else if (/\b(ticket|recibo|justificante|tique)\b/.test(lower) || hint === "receipt") documentType = "receipt";
   else if (/\bcontrato\b/.test(lower)) documentType = "contract";
   else if (/\bextracto\b/.test(lower)) documentType = "statement";
@@ -184,7 +203,7 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
 
   const documentDate = parseDate(text, documentType === "receipt");
   const totalMatchers = [
-    /^\s*total\s*(?::|a\s*pagar|ticket)?\b/i,
+    /^\s*total\s*(?::|a\s*pagar|ticket|albar[aá]n|factura)?\b/i,
     /\b(importe\s*total|a\s*pagar|total\s*ticket)\b/i,
     /\b(pagado|tarjeta|efectivo)\b/i,
   ];
@@ -201,6 +220,16 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
   if (amount === null && documentType !== "receipt") {
     const allAmounts = lines.flatMap(extractAmounts).filter((value) => Math.abs(value) <= 100_000);
     if (allAmounts.length) amount = allAmounts.reduce((best, value) => Math.abs(value) > Math.abs(best) ? value : best, allAmounts[0]);
+  }
+
+  if (documentType === "invoice") {
+    const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+    const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+    if (base !== null && tax !== null) {
+      const gross = Math.round((base + tax) * 100) / 100;
+      const candidates = lines.flatMap(extractAmounts);
+      if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
+    }
   }
 
   return { documentType, documentDate, amount, merchant: likelyMerchant(lines), lines };
