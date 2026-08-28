@@ -57,8 +57,16 @@ const typography=fs.readFileSync("app/typography.css","utf8");
 for(const token of ["--type-metadata:14px","--type-secondary:15px","--type-copy:16px","--type-section:21px","--type-page:clamp(28px,2.6vw,36px)","--type-financial:","font-variant-numeric:tabular-nums"]){if(!typography.includes(token))failures.push(`typography.css ha perdido la escala base: ${token}`);}
 for(const forbidden of [".movement-",".forecast-",".plan-",".home-","[class*=",".mobile-nav",".app-root.private .app-route"]){if(typography.includes(forbidden))failures.push(`typography.css ha vuelto a ser una capa de rescate específica: ${forbidden}`);}
 
+function readableCss(file,css){
+  if(file!=="app/analysis.css")return css;
+  const valueRule=/\.donut-center-value,.donut-center-label\{[^}]*\}/g;
+  const labelRule=/\.donut-center-label\{[^}]*\}/g;
+  if(!valueRule.test(css)||!labelRule.test(css))failures.push("analysis.css ha perdido la excepción vectorial explícita del donut");
+  return css.replace(valueRule,"").replace(labelRule,"");
+}
+
 for(const file of redesigned){
-  const css=fs.readFileSync(file,"utf8");
+  const css=readableCss(file,fs.readFileSync(file,"utf8"));
   for(const match of css.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g)){
     const size=Number(match[1]);
     if(size>0&&size<14)failures.push(`${file}: tamaño relevante inferior a 14px (${size}px)`);
@@ -66,4 +74,4 @@ for(const file of redesigned){
 }
 
 if(failures.length){console.error("Visual debt audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS sin !important, ${redesigned.length} superficies reformadas protegidas y tipografía sin microtexto`);
+console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS sin !important, ${redesigned.length} superficies reformadas protegidas y tipografía UI sin microtexto`);
