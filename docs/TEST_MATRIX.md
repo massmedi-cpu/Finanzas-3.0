@@ -1,84 +1,84 @@
-# Matriz de pruebas — Finanzas 3.0
+# Matriz de pruebas — Financial App 6.0.0
 
 ## Gate automatizado obligatorio
 
-Cada commit/PR de desarrollo o release ejecuta:
-1. instalación bloqueada con `npm ci`;
-2. invariantes del proyecto;
-3. regresiones financieras base;
-4. horizonte largo;
-5. cierre mensual;
-6. reglas de clasificación;
-7. explicabilidad;
-8. auditoría del sistema;
-9. portabilidad/backup;
-10. seguridad V3.0 fail-closed;
-11. TypeScript;
-12. build de producción;
-13. arranque del build real;
-14. smoke HTTP del servidor compilado.
+Cada commit/PR candidato ejecuta en GitHub CI, sin crear deployments de Vercel:
+1. instalación reproducible con `npm ci`;
+2. coherencia de manifest y lockfile;
+3. auditoría de dependencias;
+4. regresiones financieras y documentales;
+5. OCR PP-OCRv6 y reconstrucción física del ticket;
+6. TypeScript y código no utilizado;
+7. AXIOMA y arquitectura canónica;
+8. contratos RPC y fronteras API;
+9. gates 5.0.0, 5.0.1 y 6.0.0;
+10. auditoría visual de las superficies reformadas;
+11. accesibilidad;
+12. preflight Supabase de candidato sobre la baseline activa;
+13. build de producción;
+14. reproducibilidad del release.
 
 ## Regresiones de dominio
 
 | Área | Prueba | Resultado esperado |
 |---|---|---|
-| Cash flow | Traspaso interno | excluido de ingresos/gastos |
-| Cash flow | Transferencia bancaria externa | permanece como gasto/ingreso real |
+| Cash Flow | traspaso interno | excluido de ingresos/gastos |
+| Cash Flow | transferencia externa | permanece como gasto/ingreso real |
+| Previsión | evento esperado | calendario y proyección coherentes |
 | Duplicados | dos operaciones idénticas | un grupo candidato |
-| Capa privada | categoría corregida | desaparece alerta correspondiente |
+| Capa privada | categoría corregida | prevalece sobre fuente/regla |
 | Objetivos | ritmo insuficiente | aportación requerida y déficit correctos |
-| Horizonte | escenario 60 meses | no se trunca a 12/24 meses |
+| Horizonte | escenario largo | cálculo no truncado por la vista |
 | Cierre | pendientes/no conciliados | cierre bloqueado |
 | Cierre | drift posterior | exige reapertura/revisión |
 | Reglas | coincidencia automática | regla aplicada sin pisar manual |
 | Reglas | override manual | manual gana a regla |
-| Explicabilidad | sugerencia conservadora | requiere preview antes de crear regla |
+| Explicabilidad | sugerencia conservadora | requiere revisión antes de crear regla |
 | Auditoría | checksum/filas divergentes | estado error |
 | Backup | esquema/checksum incompatible | restore bloqueado |
 | Backup | round-trip válido | capa privada restaurada exactamente |
-| Seguridad | probe 5xx/fallo de red | acceso denegado |
+| OCR | ticket legible | una inferencia PP-OCRv6, geometría preservada y validación estricta |
+| Archivo | archivar/desarchivar | reversible sin alterar valores o enlaces |
 
-## Gate de datos normalizados
-- `currentRows == normalizedRows`.
-- checksum snapshot/normalizado idéntico.
-- sincronización idempotente.
-- traspasos excluidos con la semántica validada.
-- overlays/splits/reglas resueltos con precedencia `split > manual > regla > fuente`.
+## Gate de integridad financiera
 
-## Gate de rendimiento
-- Movimientos conserva paginación keyset/cursor.
-- Superficies protegidas no pueden usar `loadValidatedSource`.
-- Analítica principal usa RPC agregados.
-- Previsión proyecta por ventanas y limita el detalle visual sin truncar cálculo.
-- FK de eventos de reglas tiene índice de cobertura V3.0.
+- Los cálculos antes/después deben conservar los mismos movimientos y resultados salvo correcciones funcionales documentadas.
+- Traspasos internos, duplicados y ahorro mantienen su semántica validada.
+- Ediciones, splits y reglas conservan precedencia `split > manual > regla > fuente`.
+- La migración documental 6.0.0 es idempotente y no modifica movimientos ni asociaciones documento–movimiento.
+- La migración de release 6.0.0 no modifica tablas financieras.
 
-## Gate de seguridad V3.0
-- `finanzas-v3-data`, `finanzas-v3-recurring` y `finanzas-v3-splits` no contienen autorización fail-open.
-- 2xx/404 autenticado esperado son los únicos resultados válidos del probe legado.
-- 401/403, 5xx y excepciones deniegan acceso.
-- Service role y credenciales Google solo existen en backend.
-- RLS deny-by-default preservado.
+## Gate visual y responsive
 
-## Smoke del servidor compilado
-Comprueba sin sesión:
-- `/api/health` 200 y versión exacta;
-- rutas privadas redirigen a `/login`;
-- APIs privadas inaccesibles;
-- `/login` renderiza formulario;
-- manifest/icono/robots;
-- cabeceras de seguridad;
-- ausencia de `X-Powered-By`.
+- No existe microtexto UI inferior a 14 px en las 25 superficies reformadas.
+- No se reintroduce `!important` como capa correctiva.
+- Navegación principal: Inicio, Cash Flow, Movimientos, Análisis y Archivo, exactamente en ese orden.
+- Sidebar en escritorio y bottom navigation en móvil.
+- Objetivos táctiles críticos de al menos 44 px.
+- Modo claro/oscuro, foco visible y `prefers-reduced-motion` protegidos.
 
-Incluye las superficies V3: Cierre, Reglas, Explicabilidad, Control y Copias.
+## Gate de seguridad
 
-## Gate Vercel/producción
-- un único preview del HEAD final V3.0.0;
-- deployment READY en región configurada;
-- health `3.0.0`;
-- sin errores/fatales runtime;
-- promoción posterior a `main`;
-- deployment producción del SHA fusionado;
-- health producción `3.0.0` y navegación crítica funcional.
+- Google OAuth + allowlist es el único flujo interactivo de acceso.
+- No existe ruta `/auth/preview`, script E2E de Preview ni Edge Function activa de sesión Preview en el código.
+- `financial_app_claim_preview_login` y `financial_app.preview_login_tokens` quedan retirados por el cierre 6.0.0.
+- Service role y credenciales Google nunca llegan al navegador.
+- APIs privadas responden 401 sin sesión y rutas privadas redirigen al login.
+- RLS, privilegios y funciones privilegiadas permanecen cubiertos por gates/advisors.
+
+## Gate de publicación directa
+
+No existe preview intermedia.
+
+1. El HEAD candidato debe tener GitHub CI completamente verde.
+2. Supabase de producción permanece en la baseline activa mientras se desarrolla.
+3. Al publicar, se aplica únicamente la migración de release necesaria y se ejecuta `preflight:supabase:release` exacto.
+4. Se fusiona a `main`; `vercel.json` impide que cualquier otra rama genere deployments.
+5. Vercel construye directamente producción con recursos gratuitos disponibles.
+6. El smoke espera `X-Financial-App-Version` igual a la `APP_VERSION` del commit fusionado, evitando validar accidentalmente el deployment anterior.
+7. Se comprueban en `financialapp-home.vercel.app` Inicio, Cash Flow, Movimientos, Análisis, Archivo, Configuración y APIs privadas.
+8. Se revisan errores runtime nuevos tras el deployment.
 
 ## Principio de fallo
-Si falta una capa requerida para exactitud o seguridad, la aplicación debe mostrar error explícito y no cifras parciales ni restauraciones parciales.
+
+Si falta una capa requerida para exactitud, seguridad o coherencia, la publicación se detiene. No se sustituyen datos reales por mocks ni se relajan gates para conseguir un build verde.
