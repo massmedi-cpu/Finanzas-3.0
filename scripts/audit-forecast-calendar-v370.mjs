@@ -36,7 +36,7 @@ for(const [label,href] of [["Inicio","/"],["Cash Flow","/cash-flow"],["Movimient
   must(primaryBlock.includes(`["${label}","${href}"`),`Navegación primaria 6.0 incompleta: ${label}`);
 must(!primaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe volver a ser un sexto destino primario");
 must(secondaryBlock.includes('["Previsión","/prevision"'),"Previsión debe permanecer accesible desde Más");
-must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecastOverview"),"Cash Flow debe integrar el calendario/previsión sin duplicar su lógica");
+must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecastCalendar")&&cashFlowPage.includes("Promise.all"),"Cash Flow debe integrar el calendario/previsión canónico sin duplicar su lógica");
 
 for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)"])
   must(client.includes(token),`Previsión ha perdido contrato funcional: ${token}`);
