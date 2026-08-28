@@ -6,7 +6,7 @@
 .analysis-diverging-track,.analysis-average-deviation>div>div{position:relative;height:12px;border-radius:var(--radius-full);background:linear-gradient(90deg,var(--background-tertiary) 0 49.6%,var(--border-strong) 49.6% 50.4%,var(--background-tertiary) 50.4% 100%);overflow:hidden}
 .analysis-diverging-track i,.analysis-average-deviation i{position:absolute;top:2px;height:8px;border-radius:var(--radius-full)}
 .analysis-diverging .positive-bar{background:var(--positive)}
-.analysis-diverging .negative-bar{background:var(--expense)}
+.analysis-diverging .negative-bar{background:var(--negative)}
 .analysis-average-deviation .above{background:var(--gold-primary)}
 .analysis-average-deviation .below{background:color-mix(in srgb,var(--chart-prior) 70%,transparent)}
 .analysis-average-deviation small{color:var(--text-tertiary);font-size:14px;text-align:right}

@@ -4,9 +4,9 @@
 .login-logo-wrap img{display:block;width:100%;height:auto}
 .login-copy{margin:6px auto 24px;max-width:340px;color:var(--text-tertiary);font-size:16px;line-height:1.55}
 .auth-alert{margin:0 0 18px;padding:12px 0;border:0;border-block:1px solid color-mix(in srgb,var(--negative) 38%,var(--border-subtle));background:transparent;color:var(--negative);font-size:14px;text-align:left}
-.google-button{width:100%;min-height:48px;border:1px solid var(--border-strong);border-radius:var(--radius-control);background:var(--text-primary);color:var(--background-primary);font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px}
+.google-button{width:100%;min-height:48px;border:1px solid var(--border-strong);border-radius:var(--radius-small);background:var(--text-primary);color:var(--background-primary);font-weight:750;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:12px}
 .google-button:disabled{cursor:not-allowed;opacity:.55}
 .google-g{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:var(--surface-primary);color:var(--text-primary);font-weight:900}
 .login-note{display:block;margin-top:18px;color:var(--text-tertiary);font-size:14px;line-height:1.5}
-.signout-button{margin-top:20px;border:1px solid var(--border-subtle);border-radius:var(--radius-control);background:transparent;color:var(--text-primary);padding:11px 15px;font-weight:750;cursor:pointer}
+.signout-button{margin-top:20px;border:1px solid var(--border-subtle);border-radius:var(--radius-small);background:transparent;color:var(--text-primary);padding:11px 15px;font-weight:750;cursor:pointer}
 @media(max-width:520px){.login-card{padding:24px 0 28px}.login-logo-wrap{max-width:220px}}
