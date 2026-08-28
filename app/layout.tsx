@@ -7,7 +7,6 @@ import "./controls.css";
 import "./chrome.css";
 import "./system-state.css";
 import "./visual.css";
-import "./document-linking.css";
 import "./tablet.css";
 
 export const metadata:Metadata={
