@@ -11,10 +11,12 @@ const policy=read("database/FINANCIAL_APP_6.2.0_SUPERVISED_MATCHING_POLICY.sql")
 const activation=read("database/FINANCIAL_APP_6.2.0_POLICY_DRIVEN_MATCHING.sql");
 const notes=read("docs/releases/6.2.0.md");
 
-must(version.includes('APP_VERSION = "6.2.0"'),"APP_VERSION debe ser 6.2.0");
+const current=version.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/)?.slice(1).map(Number)||[];
+const atLeast620=current.length===3&&(current[0]>6||(current[0]===6&&current[1]>=2));
+must(atLeast620,"APP_VERSION debe conservar la baseline 6.2.0 o una versión posterior");
 must(pkg.version==="3.4.8","La versión técnica del paquete permanece 3.4.8 por contrato");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-supervised-matching-v620.mjs"),"audit:current no ejecuta el contrato supervisado 6.2");
-must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v620.mjs"),"audit:current no ejecuta el cierre 6.2");
+must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v620.mjs"),"audit:current no ejecuta el baseline 6.2");
 
 for(const token of [
   "financial_app_6_2_0_requires_6_1_0_baseline",
@@ -32,4 +34,4 @@ for(const token of ["Financial App 6.2.0","política supervisada","20 decisiones
   must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 6.2 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 6.2.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.2.0 release audit OK · política supervisada, motor gobernado, aprobación explícita y cierre metadata-only protegidos");
+console.log("Financial App 6.2.0 release audit OK · baseline forward-compatible, política supervisada, motor gobernado y aprobación explícita protegidos");
