@@ -28,6 +28,7 @@ const qtyPattern = "\\d+(?:[.,]\\d+)?";
 const itemRegex = new RegExp(`^(.+?)\\s+(${qtyPattern})\\s+(${moneyPattern})\\s+(${moneyPattern})(?:\\s*(?:EUR|€))?$`, "i");
 const summaryRegex = /^(base(?:\s+imponible)?|subtotal|total\s+iva|iva(?:\s*\([^)]*\)|\s+\d+(?:[.,]\d+)?%)?|total(?:\s+a\s+pagar)?|importe\s+total|efectivo|tarjeta)\s*:?[\s-]*(.+)$/i;
 const columnHeader = /^(descripci[oó]n\s+)?u(?:d|ds|ds\.)\s+precio\s+(?:total|importe)$/i;
+const commercialColumnHeader = /\bCANTIDAD\b.*\bC[ÓO]DIGO\b.*\bART[IÍ]CULO\b.*\bPRECIO\b.*\bIVA\b.*\bSUBTOTAL\b/i;
 
 function cleanLine(value: string) { return value.replace(/[|]+/g, " ").replace(/\s+/g, " ").trim(); }
 function normalizeNumeric(value: string) { return value.replace(/O/gi, "0").replace(/,(?=\d{1,2}$)/, "."); }
@@ -58,9 +59,143 @@ function normalizeKey(value: string) { return value.toUpperCase().normalize("NFD
 function hasUsefulText(value: string) { return (value.match(/[\p{L}\d]/gu) || []).length >= 2; }
 function recognizableDescription(value: string) { return /\p{L}[\p{L}\d]{1,}/u.test(cleanLine(value)); }
 
+function commercialNumber(value: string) {
+  const normalized = cleanLine(value).replace(/\s+/g, "").replace(/O/gi, "0").replace(",", ".").replace(/[^\d.+-]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function commercialMoney(value: string) {
+  const parsed = commercialNumber(value);
+  return parsed === null ? null : parsed.toFixed(2).replace(".", ",");
+}
+
+function commercialQuantity(value: string) {
+  const parsed = commercialNumber(value);
+  if (parsed === null || parsed <= 0) return null;
+  if (Number.isInteger(parsed)) return String(parsed);
+  return parsed.toFixed(3).replace(/0+$/g, "").replace(/[.,]$/g, "").replace(".", ",");
+}
+
+function commercialItemLead(line: string) {
+  const compact = line.match(/^(\d{1,3}[.,]\d{3})(\d{4,10})\s+(.+)$/);
+  if (compact) return { quantity: compact[1], code: compact[2], description: compact[3].trim() };
+  const spaced = line.match(/^(\d{1,3}(?:[.,]\d{3})?)\s+(\d{3,10})\s+(.+)$/);
+  return spaced ? { quantity: spaced[1], code: spaced[2], description: spaced[3].trim() } : null;
+}
+
+function parseCommercialLayout(text: string): ReceiptLayout | null {
+  const lines = String(text || "").split(/\r?\n/).map(cleanLine).filter(Boolean);
+  const tableIndex = lines.findIndex((line) => commercialColumnHeader.test(line));
+  if (tableIndex < 0) return null;
+
+  const header = lines.slice(0, tableIndex);
+  const items: ReceiptLineItem[] = [];
+  const summary: ReceiptSummaryLine[] = [];
+  const footer: string[] = [];
+  const unparsedBody: ReceiptUnparsedRow[] = [];
+  let pending: { quantity: string; code: string; description: string; sourceLine: string; top: number } | null = null;
+  let tableEnded = false;
+
+  for (let index = tableIndex + 1; index < lines.length; index += 1) {
+    const line = lines[index];
+    const rowTop = index - tableIndex - 1;
+
+    if (tableEnded) {
+      footer.push(line);
+      continue;
+    }
+
+    const vatSummary = line.match(/(\d{1,3}[.,]\d{2,3})\s*%\s*IVA\s+sobre\s+(\d{1,7}[.,]\d{2,3})\s+(\d{1,7}[.,]\d{2,3})/i);
+    if (vatSummary) {
+      if (pending) {
+        unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+        pending = null;
+      }
+      const base = commercialMoney(vatSummary[2]);
+      const tax = commercialMoney(vatSummary[3]);
+      if (base) summary.push({ label: "Base", value: base, top: rowTop });
+      if (tax) summary.push({ label: "IVA", value: tax, top: rowTop });
+      continue;
+    }
+
+    const totalSummary = line.match(/^TOTAL(?:\s+A\s+PAGAR)?\s*:?[\s-]*(\d{1,7}[.,]\d{2,3})\b/i);
+    if (totalSummary) {
+      if (pending) {
+        unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+        pending = null;
+      }
+      const total = commercialMoney(totalSummary[1]);
+      if (total) summary.push({ label: "Total", value: total, top: rowTop });
+      tableEnded = true;
+      continue;
+    }
+
+    const lead = commercialItemLead(line);
+    if (lead) {
+      if (pending) unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+      pending = { ...lead, sourceLine: line, top: rowTop };
+      continue;
+    }
+
+    if (pending) {
+      const numericTokens = [...line.matchAll(/\d{1,7}[.,]\d{2,3}\b/g)];
+      if (numericTokens.length >= 3) {
+        const unitToken = numericTokens.at(-3)!;
+        const vatToken = numericTokens.at(-2)!;
+        const totalToken = numericTokens.at(-1)!;
+        const quantity = commercialNumber(pending.quantity);
+        const unitPrice = commercialNumber(unitToken[0]);
+        const vatRate = commercialNumber(vatToken[0]);
+        const total = commercialNumber(totalToken[0]);
+        const arithmeticValid = quantity !== null && unitPrice !== null && total !== null
+          && Math.abs(quantity * unitPrice - total) <= Math.max(0.03, Math.abs(total) * 0.01);
+        if (arithmeticValid && vatRate !== null && vatRate >= 0 && vatRate <= 100) {
+          const continuation = cleanLine(line.slice(0, unitToken.index || 0));
+          const description = cleanLine(`${pending.code} · ${pending.description}${continuation ? ` ${continuation}` : ""}`);
+          const quantityText = commercialQuantity(pending.quantity);
+          const unitText = commercialMoney(unitToken[0]);
+          const totalText = commercialMoney(totalToken[0]);
+          if (quantityText && unitText && totalText) {
+            items.push({
+              description,
+              quantity: quantityText,
+              unitPrice: unitText,
+              total: totalText,
+              top: pending.top,
+              bottom: rowTop,
+              sourceLine: `${pending.sourceLine} ${line}`,
+            });
+            pending = null;
+            continue;
+          }
+        }
+      }
+    }
+
+    if (/^(?:PORTES|OBSERVACIONES?)\b/i.test(line)) {
+      if (pending) {
+        unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+        pending = null;
+      }
+      footer.push(line);
+      continue;
+    }
+
+    if (hasUsefulText(line)) unparsedBody.push({ text: line, top: rowTop, bottom: rowTop });
+  }
+
+  if (pending) unparsedBody.push({ text: pending.sourceLine, top: pending.top, bottom: pending.top });
+  if (!items.length) return null;
+  return { header, items, summary, footer, unparsedBody, source: "text" };
+}
+
 export function receiptDisplayNumber(value: string) { return value.replace(".", ","); }
 
 export function parseReceiptLayout(text: string): ReceiptLayout {
+  const commercial = parseCommercialLayout(text);
+  if (commercial) return commercial;
+
   const header: string[] = []; const items: ReceiptLineItem[] = []; const summary: ReceiptSummaryLine[] = []; const footer: string[] = []; const unparsedBody: ReceiptUnparsedRow[] = [];
   let seenTable = false; let tableEnded = false; let rowIndex = 0;
   for (const raw of String(text || "").split(/\r?\n/)) {
