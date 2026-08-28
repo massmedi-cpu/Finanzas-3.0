@@ -51,9 +51,9 @@
   --motion-micro:150ms;--motion-panel:220ms;--ease-standard:cubic-bezier(.2,.8,.2,1);
   --content-max:1540px;
 
-  /* Compatibility aliases while legacy page modules are refactored onto semantic tokens. */
+  /* Temporary aliases let legacy modules migrate to the semantic system without visual forks. */
   --bg:var(--background-primary);--surface:var(--surface-primary);--surface-2:var(--surface-secondary);--surface-3:var(--background-tertiary);
-  --text:var(--text-primary);--muted:var(--text-tertiary);--border:var(--border-subtle);--border-strong:var(--border-strong);
+  --text:var(--text-primary);--muted:var(--text-tertiary);--border:var(--border-subtle);
   --accent:var(--gold-primary);--accent-contrast:var(--text-inverse);--accent-soft:var(--gold-muted);
   --success:var(--positive);--success-soft:var(--positive-muted);--expense:var(--negative);--expense-soft:var(--negative-muted);
   --info-soft:var(--info-muted);--warning-soft:var(--warning-muted);--shadow-float:var(--shadow-overlay);
