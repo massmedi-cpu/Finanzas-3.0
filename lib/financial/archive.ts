@@ -1,6 +1,27 @@
 import { createClient } from "@/lib/supabase/server";
 
-export type ArchiveMovementRef = { sourceId:string; date:string|null; amount:number|null; concept:string|null; counterparty:string|null; score?:number; associationOrigin?:string|null; confidence?:number|null };
+export type ArchiveMatchConfidence="exact"|"high"|"medium"|"low";
+export type ArchiveMatchMode="standard"|"installment";
+export type ArchiveMovementRef = {
+  sourceId:string;
+  date:string|null;
+  amount:number|null;
+  concept:string|null;
+  counterparty:string|null;
+  score?:number;
+  associationOrigin?:string|null;
+  confidence?:number|null;
+  confidenceTier?:ArchiveMatchConfidence;
+  matchMode?:ArchiveMatchMode;
+  amountDiff?:number|null;
+  daysDiff?:number|null;
+  merchantMatch?:boolean;
+  candidateRank?:number;
+  candidateCount?:number;
+  scoreMargin?:number|null;
+  autoEligible?:boolean;
+  reasons?:string[];
+};
 export type ArchiveDocument = {
   id:string; fileName:string; mimeType:string|null; storageProvider?:string|null; storageUrl?:string|null; storagePath:string|null; fileSize:number|null; contentHash:string|null;
   documentType:string; documentDate:string|null; amount:number|null; merchant:string|null; ocrStatus:string; hasOcrText:boolean;
