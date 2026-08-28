@@ -1,10 +1,19 @@
 import { formatEuro, formatInteger } from "@/lib/format/es-es";
 import type { ArchiveMatchConfidence, ArchiveMovementRef } from "@/lib/financial/archive";
-import type { DocumentMatchingObservability, DocumentMatchingPriority } from "@/lib/financial/document-matching-observability";
+import type { DocumentMatchingDashboard } from "@/lib/financial/document-matching-dashboard";
+import type { DocumentMatchingPriority } from "@/lib/financial/document-matching-observability";
 
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
+const percents=new Intl.NumberFormat("es-ES",{style:"percent",maximumFractionDigits:0});
 const dateLabel=(value:string|null)=>value?dates.format(new Date(`${value}T12:00:00`)):"Sin fecha";
 const moneyLabel=(value:number|null)=>value==null?"Sin importe":formatEuro(value);
+const percentLabel=(value:number)=>percents.format(Math.max(0,Math.min(1,value)));
+const deltaLabel=(current:number,previous:number|undefined)=>{
+  if(previous==null)return"Primer dato";
+  const delta=(current-previous)*100;
+  const rounded=Math.round(delta);
+  return `${rounded>0?"+":""}${formatInteger(rounded)} pt`;
+};
 const confidenceLabel=(value:ArchiveMatchConfidence|undefined,score:number)=>{
   if(value==="exact")return"Exacta";
   if(value==="high")return"Alta";
@@ -44,8 +53,12 @@ function Candidate({candidate}:{candidate:ArchiveMovementRef}){
   </article>;
 }
 
-export function DocumentMatchingPanel({data}:{data:DocumentMatchingObservability}){
+export function DocumentMatchingPanel({dashboard}:{dashboard:DocumentMatchingDashboard}){
+  const data=dashboard.observability;
   const s=data.summary;
+  const latest=dashboard.history[dashboard.history.length-1];
+  const previous=dashboard.history.length>1?dashboard.history[dashboard.history.length-2]:undefined;
+  const recent=[...dashboard.history].slice(-7).reverse();
   return <section className="document-matching-panel" aria-labelledby="document-matching-title">
     <div className="matching-quality-head">
       <div>
@@ -65,6 +78,25 @@ export function DocumentMatchingPanel({data}:{data:DocumentMatchingObservability
     </div>
 
     <p className="document-matching-policy">Autoenlace: score ≥ {formatInteger(data.rules.safeAutoMinimumScore)}, margen ≥ {formatInteger(data.rules.safeAutoMinimumMargin)} puntos y comercio confirmado. Los casos ambiguos nunca se consideran autoenlace seguro.</p>
+
+    <section className="document-matching-history" aria-labelledby="document-matching-history-title">
+      <div className="document-matching-history-head">
+        <div><p className="eyebrow">CALIDAD HISTÓRICA</p><h3 id="document-matching-history-title">Evolución del motor</h3></div>
+        <span>{dashboard.storedNoFinancialValues?"Solo métricas agregadas":"Histórico no verificado"}</span>
+      </div>
+      {!latest?<div className="document-matching-empty"><strong>Histórico aún sin datos</strong><span>La primera apertura de Centro de control iniciará la serie diaria de calidad.</span></div>:<>
+        <div className="document-matching-history-grid">
+          <div><span>Cobertura de candidatos</span><strong>{percentLabel(latest.candidateRate)}</strong><small>{deltaLabel(latest.candidateRate,previous?.candidateRate)}</small></div>
+          <div><span>Autoelegibles entre candidatos</span><strong>{percentLabel(latest.safeAutoRate)}</strong><small>{deltaLabel(latest.safeAutoRate,previous?.safeAutoRate)}</small></div>
+          <div><span>Ambigüedad entre candidatos</span><strong>{percentLabel(latest.ambiguityRate)}</strong><small>{deltaLabel(latest.ambiguityRate,previous?.ambiguityRate)}</small></div>
+        </div>
+        <div className="document-matching-history-table" role="table" aria-label="Últimos estados diarios del matching documental">
+          <div className="document-matching-history-row document-matching-history-labels" role="row"><span role="columnheader">Día</span><span role="columnheader">Cobertura</span><span role="columnheader">Autoelegible</span><span role="columnheader">Ambigua</span></div>
+          {recent.map(point=><div className="document-matching-history-row" role="row" key={point.date}><span role="cell">{dateLabel(point.date)}</span><span role="cell">{percentLabel(point.candidateRate)}</span><span role="cell">{percentLabel(point.safeAutoRate)}</span><span role="cell">{percentLabel(point.ambiguityRate)}</span></div>)}
+        </div>
+        {dashboard.history.length<2&&<p className="document-matching-history-note">Histórico iniciado hoy. La tendencia aparecerá cuando exista más de una fotografía diaria comparable.</p>}
+      </>}
+    </section>
 
     {data.documents.length===0?<div className="document-matching-empty"><strong>Sin coincidencias pendientes</strong><span>No hay documentos activos con candidatos que necesiten explicación o revisión.</span></div>:
       <div className="document-matching-list">{data.documents.map(document=><article className={`document-match-document priority-${document.priority}`} key={document.id}>
