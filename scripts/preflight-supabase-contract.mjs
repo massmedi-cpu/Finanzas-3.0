@@ -26,7 +26,7 @@ if(!version){
   process.exit(1);
 }
 
-const releaseMigrationPath=path.join(root,"database",`FINANCIAL_APP_${version.replaceAll(".","_")}_RELEASE.sql`);
+const releaseMigrationPath=path.join(root,"database",`FINANCIAL_APP_${version}_RELEASE.sql`);
 let baselineVersion=version;
 if(fs.existsSync(releaseMigrationPath)){
   const releaseMigration=fs.readFileSync(releaseMigrationPath,"utf8");
