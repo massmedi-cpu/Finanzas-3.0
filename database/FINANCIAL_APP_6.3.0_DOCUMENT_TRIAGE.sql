@@ -3,6 +3,7 @@ begin;
 -- Financial App 6.3.0 — triage documental inteligente y explicable.
 -- Solo lectura: clasifica documentos activos por la siguiente acción útil.
 -- No ejecuta OCR, asociaciones, archivado ni modificaciones de metadatos.
+-- La ambigüedad se evalúa con la política supervisada activa de matching, sin umbrales duplicados.
 
 create or replace function financial_app.document_triage_core(
   p_limit integer default 30
@@ -29,6 +30,8 @@ begin
       (select count(*)::int from financial_app.transaction_documents td where td.document_id=d.id) as link_count
     from financial_app.documents d
     where d.archived_at is null
+  ), policy as (
+    select coalesce((financial_app.document_matching_active_policy_core()->>'minMargin')::numeric,8) as min_margin
   ), top_candidate as (
     select d.id document_id,c.source_id,c.score,c.confidence_tier,c.candidate_count,c.score_margin,c.auto_eligible,c.reasons
     from docs d
@@ -40,7 +43,7 @@ begin
         when d.document_date is null or d.amount is null or d.merchant is null or btrim(d.merchant)='' then 'complete_metadata'
         when d.link_count>0 then 'archive_candidate'
         when coalesce(tc.auto_eligible,false) then 'ready_to_link'
-        when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<8 then 'review_match'
+        when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<pol.min_margin then 'review_match'
         when tc.source_id is not null then 'review_match'
         else 'investigate_no_match'
       end as action,
@@ -48,7 +51,7 @@ begin
         when d.ocr_status='failed' then 100
         when d.document_date is null or d.amount is null or d.merchant is null or btrim(d.merchant)='' then 90
         when coalesce(tc.auto_eligible,false) then 80
-        when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<8 then 75
+        when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<pol.min_margin then 75
         when tc.source_id is not null then 65
         when d.link_count=0 then 55
         else 30
@@ -60,12 +63,13 @@ begin
         case when d.merchant is null or btrim(d.merchant)='' then 'Falta identificar el comercio o emisor' end,
         case when d.link_count>0 then 'El documento ya tiene un movimiento asociado' end,
         case when coalesce(tc.auto_eligible,false) then 'Existe un candidato que cumple la política supervisada activa' end,
-        case when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<8 then 'Hay candidatos demasiado próximos y requiere decisión manual' end,
+        case when tc.source_id is not null and coalesce(tc.candidate_count,0)>1 and coalesce(tc.score_margin,0)<pol.min_margin then 'Hay candidatos demasiado próximos según la política activa y requiere decisión manual' end,
         case when tc.source_id is not null and not coalesce(tc.auto_eligible,false) then 'Existe una coincidencia posible, pero no es segura para autoenlace' end,
         case when tc.source_id is null and d.link_count=0 and d.ocr_status<>'failed' and d.document_date is not null and d.amount is not null then 'No se ha encontrado un movimiento candidato con la evidencia actual' end
       ]::text[],null)) as triage_reasons
     from docs d
     left join top_candidate tc on tc.document_id=d.id
+    cross join policy pol
   ), summary as (
     select
       count(*)::int active,
