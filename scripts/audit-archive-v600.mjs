@@ -10,10 +10,10 @@ const data=read("lib/financial/archive.ts");
 const migration=read("database/FINANCIAL_APP_6.0.0_ARCHIVE_EXISTING_DOCUMENTS.sql");
 const layout=read("app/archivo/layout.tsx");
 
-for(const token of ["getArchiveOverview","getArchivedDocuments","ArchiveLifecycleClient",'view==="new"','view==="pending"','view==="archived"'])if(!page.includes(token))failures.push(`Archivo ha perdido su ciclo documental: ${token}`);
+for(const token of ["getArchiveOverview","getArchiveLifecycleOverview","ArchiveLifecycleClient",'view==="new"','view==="pending"'])if(!page.includes(token))failures.push(`Archivo ha perdido su ciclo documental: ${token}`);
 for(const token of [">Nuevas<",">Pendientes<",">Archivadas<","Archivar","Desarchivar",'action:"archive"|"restore"','router.refresh()'])if(!lifecycle.includes(token))failures.push(`Ciclo documental incompleto: ${token}`);
 for(const token of ['fill="none"','className="financial-icon"','status-badge'])if(!lifecycle.includes(token))failures.push(`Iconografía/estado documental incompleto: ${token}`);
-for(const token of ['getArchiveOverview','archiveOverview(search,false)','getArchivedDocuments','Boolean(document.archivedAt)','archiveOverviewAllPages','while(offset<first.total)','archiveOverviewAllPages(null,false)'])if(!data.includes(token))failures.push(`Consulta documental sin separación/paginación completa: ${token}`);
+for(const token of ['getArchiveOverview','archiveOverview(search,false','getArchiveLifecycleOverview','financial_app_archive_lifecycle_overview','getArchivedDocuments','archiveOverviewAllPages(null,false)'])if(!data.includes(token))failures.push(`Consulta documental sin separación segura: ${token}`);
 if(!api.includes('request.nextUrl.searchParams.get("includeArchived") === "1"'))failures.push("La API de Archivo debe excluir archivados por defecto y exigir includeArchived=1 explícito");
 if(api.includes('searchParams.get("archived") !== "0"'))failures.push("La API ha recuperado el flag ambiguo archived de versiones anteriores");
 for(const token of ['action==="archive"','financial_app_archive_archive','action==="restore"','financial_app_archive_restore'])if(!detailApi.includes(token))failures.push(`Endpoint reversible de Archivo incompleto: ${token}`);
@@ -28,4 +28,4 @@ for(const token of [
 if(!layout.includes('import "../archive-lifecycle.css";'))failures.push("Archivo debe cargar su hoja propietaria de ciclo documental");
 
 if(failures.length){console.error("Archive v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Archive v6 audit OK · Nuevas/Pendientes/Archivadas separados, histórico reversible, paginación completa y migración idempotente protegidos");
+console.log("Archive v6 audit OK · Nuevas/Pendientes/Archivadas separados, histórico reversible y ciclo documental protegido");

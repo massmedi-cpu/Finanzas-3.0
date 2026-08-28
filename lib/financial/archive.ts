@@ -16,13 +16,16 @@ export type ArchiveDetail = ArchiveDocument & {
   history:Array<{action:string;before:unknown;after:unknown;changedBy:string|null;changedAt:string}>;
 };
 export type ArchiveReviewQueue = { version:string; total:number; documents:ArchiveDocument[] };
+export type ArchiveLifecycleState="new"|"pending"|"archived";
+export type ArchiveLifecycleCounts={new:number;pending:number;archived:number};
+export type ArchiveLifecycleOverview=ArchiveOverview&{state:ArchiveLifecycleState;counts:ArchiveLifecycleCounts};
 
 async function archiveOverview(search:string|null,includeArchived:boolean,limit=200,offset=0):Promise<ArchiveOverview>{
   const supabase=await createClient();
   const {data,error}=await supabase.rpc("financial_app_archive_overview",{p_search:search,p_limit:limit,p_offset:offset,p_include_archived:includeArchived});
   if(error||!data)throw new Error(error?.message||"archive_unavailable");
   const overview=data as ArchiveOverview;
-  return {...overview,hasMore:overview.documents.length>=limit};
+  return {...overview,hasMore:offset+overview.documents.length<overview.total};
 }
 
 async function archiveOverviewAllPages(search:string|null,includeArchived:boolean,limit=200):Promise<ArchiveOverview>{
@@ -41,27 +44,45 @@ async function archiveOverviewAllPages(search:string|null,includeArchived:boolea
   return {...first,hasMore:documents.length<first.total,documents};
 }
 
-export async function getArchiveOverview(search:string|null=null):Promise<ArchiveOverview>{
-  return archiveOverview(search,false);
+export async function getArchiveOverview(search:string|null=null,limit=200,offset=0):Promise<ArchiveOverview>{
+  return archiveOverview(search,false,limit,offset);
 }
 
-export async function getArchiveAllOverview(search:string|null=null):Promise<ArchiveOverview>{
-  return archiveOverview(search,true);
+export async function getArchiveAllOverview(search:string|null=null,limit=200,offset=0):Promise<ArchiveOverview>{
+  return archiveOverview(search,true,limit,offset);
+}
+
+export async function getArchiveLifecycleOverview(
+  state:ArchiveLifecycleState,
+  search:string|null=null,
+  limit=40,
+  offset=0,
+):Promise<ArchiveLifecycleOverview>{
+  const supabase=await createClient();
+  const {data,error}=await supabase.rpc("financial_app_archive_lifecycle_overview",{
+    p_state:state,
+    p_search:search,
+    p_limit:limit,
+    p_offset:offset,
+  });
+  if(error||!data)throw new Error(error?.message||"archive_lifecycle_unavailable");
+  const overview=data as ArchiveLifecycleOverview;
+  return {...overview,hasMore:offset+overview.documents.length<overview.total};
 }
 
 export async function getArchivedDocuments(search:string|null=null):Promise<ArchiveOverview>{
-  const [all,active]=await Promise.all([
-    archiveOverviewAllPages(search,true),
-    archiveOverview(search,false,1,0),
-  ]);
-  const archived=all.documents.filter(document=>Boolean(document.archivedAt));
-  return {
-    ...all,
-    total:Math.max(0,all.total-active.total),
-    processed:archived.filter(document=>["complete","manual","not_required"].includes(document.ocrStatus)).length,
-    linked:archived.filter(document=>document.links.length>0).length,
-    documents:archived,
-  };
+  const first=await getArchiveLifecycleOverview("archived",search,100,0);
+  if(!first.hasMore)return first;
+  const documents=[...first.documents];
+  let offset=documents.length;
+  while(offset<first.total){
+    const page=await getArchiveLifecycleOverview("archived",search,100,offset);
+    if(page.documents.length===0)break;
+    documents.push(...page.documents);
+    offset+=page.documents.length;
+    if(!page.hasMore)break;
+  }
+  return {...first,documents,hasMore:documents.length<first.total};
 }
 
 export async function getArchiveReviewQueue():Promise<ArchiveReviewQueue>{
