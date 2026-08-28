@@ -8,7 +8,7 @@ const policy=read("database/FINANCIAL_APP_6.2.0_SUPERVISED_MATCHING_POLICY.sql")
 const activation=read("database/FINANCIAL_APP_6.2.0_POLICY_DRIVEN_MATCHING.sql");
 const loader=read("lib/financial/document-matching-policy.ts");
 const panel=read("app/control/document-matching-policy-panel.tsx");
-const api=read("app/api/control/matching-policy/route.ts");
+const api=read("app/api/control/document-matching-policy/route.ts");
 const page=read("app/control/page.tsx");
 const layout=read("app/control/layout.tsx");
 
