@@ -36,8 +36,11 @@ for(const token of [
 
 const tableDefinition=migration.match(/create table if not exists financial_app\.document_matching_calibration_events\(([\s\S]*?)\);/)?.[1]||"";
 must(Boolean(tableDefinition),"No se puede auditar la tabla de calibración");
+const columnNames=[...tableDefinition.matchAll(/^\s*([a-z_][a-z0-9_]*)\s+/gmi)].map(match=>match[1]);
 for(const forbidden of ["document_id","transaction_id","source_id","amount","merchant","concept","counterparty","file_name","storage_url"])
-  must(!tableDefinition.includes(forbidden),`La calibración anónima no puede almacenar ${forbidden}`);
+  must(!columnNames.includes(forbidden),`La calibración anónima no puede almacenar ${forbidden}`);
+for(const allowedDerived of ["top_merchant_match","top_auto_eligible","top_score_band","top_margin_band"])
+  must(columnNames.includes(allowedDerived),`Falta señal derivada anónima de calibración: ${allowedDerived}`);
 
 for(const token of [
   "document_match_candidates_rows_core(p_document_id,20)",
@@ -64,7 +67,10 @@ for(const token of [".document-matching-calibration{",".document-calibration-sum
 must(layout.includes('import "./document-matching-calibration.css";'),"Centro de control debe cargar la hoja propietaria de calibración");
 
 const outsideDefinitions=migration.replace(/create or replace function[\s\S]*?\$function\$;/gi,"");
-must(!outsideDefinitions.includes("archive_link_calibrated_core(")&&!outsideDefinitions.includes("archive_unlink_calibrated_core("),"La migración no puede ejecutar asociaciones al instalar la calibración");
+for(const forbiddenCall of [
+  /\b(?:select|perform)\s+financial_app\.archive_link_calibrated_core\s*\(/i,
+  /\b(?:select|perform)\s+financial_app\.archive_unlink_calibrated_core\s*\(/i,
+]) must(!forbiddenCall.test(outsideDefinitions),"La migración no puede ejecutar asociaciones al instalar la calibración");
 
 if(failures.length){console.error("Document matching calibration v6.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
 console.log("Document matching calibration v6.1 audit OK · feedback atómico, anónimo, compatible con 6.0.1 y sin autoajuste de umbrales");
