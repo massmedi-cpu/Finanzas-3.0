@@ -1,10 +1,10 @@
-# Financial App 6.4.4
+# Financial App 6.4.5
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 6.4.4
+## Baseline 6.4.5
 
-5.0.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales. 6.4.1 añade hardening medido del historial de políticas y alinea contratos canónicos. 6.4.2 endurece la frontera pública del dashboard de calidad de matching. 6.4.3 endurece la fiabilidad de publicación. 6.4.4 retira del runtime la automatización masiva 4.0 sin uso que conservaba un segundo matching documental hardcodeado y mantiene Movimientos únicamente sobre operaciones masivas reversibles.
+5.0.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo y amplió los gates. 6.1.0 añadió matching documental explicable y calibración anónima. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal y 6.3.1–6.3.2 cerraron la reconstrucción real de documentos comerciales. 6.4.0 convierte ese triage en un Centro de operaciones documentales. 6.4.1 añade hardening medido del historial de políticas y alinea contratos canónicos. 6.4.2 endurece la frontera pública del dashboard de calidad de matching. 6.4.3 endurece la fiabilidad de publicación. 6.4.4 retira del runtime la automatización masiva 4.0 sin uso que conservaba un segundo matching documental hardcodeado. 6.4.5 normaliza en la frontera canónica de ingesta la convención real de nombres compactos de Drive para que el matching 6.x reciba fecha, importe y comercio correctos sin crear otro motor.
 
 - Navegación principal con cinco destinos exactos: Inicio, Cash Flow, Movimientos, Análisis y Archivo.
 - Previsión permanece accesible desde Más y su calendario canónico se integra dentro de Cash Flow.
@@ -14,6 +14,7 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - Movimientos conserva edición múltiple de hasta 200 elementos con bloqueo determinista, historial por movimiento y deshacer seguro del último lote.
 - El contador de selección masiva representa el lote completo y la interfaz recuerda que puede incluir selecciones conservadas al cambiar de página o filtros.
 - Desde 6.4.4 Movimientos no expone la automatización monolítica 4.0 ni un matching documental alternativo; reglas, documentos y conciliación usan sus superficies y motores canónicos actuales.
+- La ingesta documental 6.4.5 reconoce como fallback nombres reales de Drive del tipo `20250826 Mercadona 23,49 €.pdf`; completa fecha, importe y comercio antes del matching supervisado y mantiene Google Drive exclusivamente en solo lectura.
 - Archivo pagina en servidor los estados Nuevas/Pendientes/Archivadas y calcula búsqueda y conteos con el mismo filtro.
 - `Centro de operaciones documentales` evoluciona la antigua Atención documental sin crear un segundo triage: `document_triage_core` sigue determinando prioridades.
 - El orden de atención prioriza OCR fallido, metadatos incompletos, asociación segura, matching manual, ausencia de candidato y archivado.

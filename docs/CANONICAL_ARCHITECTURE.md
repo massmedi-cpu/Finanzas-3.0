@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.4. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.5. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -51,6 +51,8 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 ## Documentos, OCR y Google Drive
 
 - La sincronización de Drive es incremental y preserva el original externo.
+- La frontera canónica de normalización de metadatos de Drive es `financial_app.drive_document_rows(jsonb)`. Desde 6.4.5 admite como fallback la convención real `YYYYMMDD Comercio importe` además del formato con guiones, de modo que fecha, importe y comercio se normalizan antes del matching.
+- La normalización de nombres no crea asociaciones ni un motor de scoring: entrega metadatos al matching documental 6.x ya existente.
 - Los documentos se deduplican por identidad/contenido y se vinculan a movimientos mediante un único matching documental supervisado.
 - PP-OCRv6 preserva geometría y reconstrucción de tickets/documentos comerciales sin convertir la imagen en una segunda fuente financiera.
 - `document_triage_core` es la cola canónica de prioridad documental.
