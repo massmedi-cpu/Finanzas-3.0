@@ -2,11 +2,13 @@ import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getControlCenter } from "@/lib/financial/control";
 import { getDocumentMatchingCalibration } from "@/lib/financial/document-matching-calibration";
 import { getDocumentMatchingDashboard } from "@/lib/financial/document-matching-dashboard";
+import { getDocumentMatchingPolicyDashboard } from "@/lib/financial/document-matching-policy";
 import { getSystemIntegrityOverview } from "@/lib/financial/integrity";
 import { getMatchingObservability } from "@/lib/financial/matching-observability";
 import { ControlClient } from "./control-client";
 import { DocumentMatchingCalibrationPanel } from "./document-matching-calibration-panel";
 import { DocumentMatchingPanel } from "./document-matching-panel";
+import { DocumentMatchingPolicyPanel } from "./document-matching-policy-panel";
 import { IntegrityPanel } from "./integrity-panel";
 import { MatchingQualityPanel } from "./matching-quality-panel";
 
@@ -17,11 +19,12 @@ export default async function ControlPage({searchParams}:{searchParams:Promise<R
   await requireAuthorizedUser();
   const params=await searchParams;
   const month=MONTH_RE.test(params.month||"")?params.month!:null;
-  const [data,matching,documentMatchingDashboard,calibration,integrity]=await Promise.all([
+  const [data,matching,documentMatchingDashboard,calibration,policy,integrity]=await Promise.all([
     getControlCenter(month),
     getMatchingObservability(90),
     getDocumentMatchingDashboard(8,90),
     getDocumentMatchingCalibration(90),
+    getDocumentMatchingPolicyDashboard(90),
     getSystemIntegrityOverview(),
   ]);
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace control-workspace">
@@ -30,6 +33,7 @@ export default async function ControlPage({searchParams}:{searchParams:Promise<R
     <MatchingQualityPanel data={matching}/>
     <DocumentMatchingPanel dashboard={documentMatchingDashboard}/>
     <DocumentMatchingCalibrationPanel data={calibration}/>
+    <DocumentMatchingPolicyPanel data={policy}/>
     <IntegrityPanel initialData={integrity}/>
   </section></main>;
 }
