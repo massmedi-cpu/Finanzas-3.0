@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.10. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.11. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -76,6 +76,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Cada módulo carga sus estilos desde su propio layout o superficie.
 - Desde 6.4.9 los estilos exclusivos de Inicio (`home.css`) y Revisión de Archivo (`archive-review.css`) no forman parte del layout raíz; se importan únicamente en sus rutas.
 - Desde 6.4.10 `document-linking.css` tampoco pertenece al layout raíz: la misma hoja compartida se importa únicamente desde Archivo y Movimientos, sus dos consumidores reales, sin duplicación de reglas.
+- Desde 6.4.11 `app/tablet.css` conserva solo contratos responsive compartidos; Archivo y Movimientos cargan sus reglas tablet exclusivas desde hojas locales de ruta, manteniendo el orden de cascada anterior. La regla muerta `.topbar .home-top-actions` queda retirada.
 - No deben existir hojas runtime `*-vNNN.css` ni `*-advanced.css`.
 
 ## Seguridad
