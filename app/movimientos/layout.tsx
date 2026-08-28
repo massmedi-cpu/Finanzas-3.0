@@ -1,3 +1,4 @@
+import "./tablet.css";
 import "../movements.css";
 import "../document-linking.css";
 import "./movement-documents.css";

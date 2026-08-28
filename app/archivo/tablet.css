@@ -1,0 +1,4 @@
+@media (min-width:681px) and (max-width:1180px){
+  .archive-toolbar,.archive-import-actions{min-width:0}
+  .archive-workspace{max-width:none}
+}
