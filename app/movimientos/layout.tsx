@@ -1,5 +1,4 @@
 import "../movements.css";
-import "./movement-documents.css";
-import "./conciliacion/reconciliation-workbench.css";
+import "../document-linking.css";
 
 export default function Layout({children}:{children:React.ReactNode}){return children}
