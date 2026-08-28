@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.5. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.7. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -39,6 +39,9 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Traspasos internos, duplicados, movimientos ausentes en origen y exclusiones de cash flow se tratan en los motores canónicos de servidor.
 - Las operaciones masivas de edición usan IDs seleccionados, límite de 200, bloqueo determinista, historial por movimiento y deshacer seguro cuando ningún elemento cambió después.
 - La selección masiva puede conservarse al paginar o cambiar filtros; el contador mostrado representa siempre el lote completo que se enviará al servidor.
+- Desde 6.4.7 la edición múltiple ofrece también concepto normalizado, comercio/contraparte, descripción y notas mediante opt-in explícito; un campo no activado nunca se modifica y un valor vacío restaura/elimina únicamente el override privado conforme al contrato individual existente.
+- La fecha efectiva no se ofrece en lote: permanece como edición individual para evitar asignar accidentalmente una misma fecha a movimientos diferentes.
+- El lote sigue delegando cada modificación en `update_transaction_rpc`; no existe un segundo motor de edición masiva ni una semántica paralela para historial o deshacer.
 - Desde 6.4.4 la automatización masiva 4.0 no forma parte del runtime activo. Su migración histórica se conserva únicamente como trazabilidad.
 - Movimientos no ejecuta matching documental propio ni una orquestación paralela de reglas/documentos/conciliación.
 
@@ -53,6 +56,8 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - La sincronización de Drive es incremental y preserva el original externo.
 - La frontera canónica de normalización de metadatos de Drive es `financial_app.drive_document_rows(jsonb)`. Desde 6.4.5 admite como fallback la convención real `YYYYMMDD Comercio importe` además del formato con guiones, de modo que fecha, importe y comercio se normalizan antes del matching.
 - La normalización de nombres no crea asociaciones ni un motor de scoring: entrega metadatos al matching documental 6.x ya existente.
+- Desde 6.4.6, si una migración de ciclo de vida deja documentos de Drive archivados después de inicializar el cursor incremental, la reconciliación invalida una sola vez ese cursor y el siguiente sync autenticado hace un full scan. Solo se reactivan IDs que Google Drive confirma presentes; nunca hay desarchivado masivo por suposición.
+- Mientras esa reconciliación está pendiente, Inicio expone el estado sin presentar la invalidación del cursor como una sincronización real.
 - Los documentos se deduplican por identidad/contenido y se vinculan a movimientos mediante un único matching documental supervisado.
 - PP-OCRv6 preserva geometría y reconstrucción de tickets/documentos comerciales sin convertir la imagen en una segunda fuente financiera.
 - `document_triage_core` es la cola canónica de prioridad documental.
