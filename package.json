@@ -32,7 +32,6 @@
     "audit:forecast": "node scripts/audit-forecast-calendar-v370.mjs",
     "audit:sync": "node scripts/audit-sync-v301.mjs",
     "audit:ocr": "node scripts/audit-ticket-ocr-v302.mjs",
-    "e2e:preview": "node scripts/authenticated-preview-e2e.mjs",
     "test:backup": "tsx scripts/backup-recovery-tests.ts",
     "test:analytics": "tsx scripts/analytics-v220-tests.ts",
     "test:intelligence": "tsx scripts/intelligence-v230-tests.ts",

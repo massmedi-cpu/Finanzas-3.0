@@ -1,6 +1,6 @@
 begin;
 
--- Financial App 6.0.0 — alineación de metadatos de release.
+-- Financial App 6.0.0 — cierre de release.
 -- No modifica movimientos, importes, cuentas, documentos ni asociaciones.
 do $$
 declare
@@ -21,6 +21,11 @@ begin
   end if;
 end
 $$;
+
+-- El acceso temporal de Preview queda retirado definitivamente en 6.0.0.
+-- Estas operaciones son idempotentes y no afectan Google OAuth ni datos financieros.
+drop function if exists public.financial_app_claim_preview_login(text,text);
+drop table if exists financial_app.preview_login_tokens;
 
 insert into financial_app.app_meta(key,value,updated_at)
 values
@@ -53,6 +58,11 @@ begin
       and target_version='6.0.0'
   ) then
     raise exception 'financial_app_6_0_0_manifest_alignment_failed';
+  end if;
+
+  if to_regprocedure('public.financial_app_claim_preview_login(text,text)') is not null
+    or to_regclass('financial_app.preview_login_tokens') is not null then
+    raise exception 'financial_app_6_0_0_preview_auth_retirement_failed';
   end if;
 end
 $$;

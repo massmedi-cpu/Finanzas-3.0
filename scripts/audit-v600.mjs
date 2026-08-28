@@ -9,6 +9,10 @@ const pkg=JSON.parse(read("package.json"));
 const navigation=read("components/app-navigation.tsx");
 const globals=read("app/globals.css");
 const cashFlow=read("app/cash-flow/page.tsx");
+const login=read("app/login/page.tsx");
+const nextConfig=read("next.config.ts");
+const productionSmoke=read(".github/workflows/production-smoke.yml");
+const testMatrix=read("docs/TEST_MATRIX.md");
 const releaseMigration=read("database/FINANCIAL_APP_6.0.0_RELEASE.sql");
 const archiveMigration=read("database/FINANCIAL_APP_6.0.0_ARCHIVE_EXISTING_DOCUMENTS.sql");
 const releaseNotes=read("docs/releases/6.0.0.md");
@@ -19,11 +23,23 @@ must(pkg.version==="3.4.8","La versión técnica del paquete debe conservar el b
 must(pkg.scripts?.["audit:v600"]==="node scripts/audit-v600.mjs","Falta script audit:v600");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v600.mjs"),"audit:current no protege el gate 6.0.0");
 must(pkg.scripts?.["preflight:supabase:release"]==="node scripts/preflight-supabase-contract.mjs --exact","Falta preflight Supabase exacto para el cierre de publicación");
+must(!Object.prototype.hasOwnProperty.call(pkg.scripts||{},"e2e:preview"),"La 6.0.0 no puede conservar un script E2E de Preview");
 const deploymentEnabled=vercel?.git?.deploymentEnabled;
 must(deploymentEnabled?.["**"]===false&&deploymentEnabled?.main===true,"Vercel debe bloquear todas las ramas y permitir despliegues Git únicamente desde main");
 
+for(const retiredPath of [
+  "app/auth/preview/route.ts",
+  "scripts/authenticated-preview-e2e.mjs",
+  "supabase/functions/financial-app-preview-session/index.ts",
+]) must(!fs.existsSync(retiredPath),`Infraestructura de Preview retirada ha vuelto al runtime: ${retiredPath}`);
+must(!login.toLowerCase().includes("preview"),"Login no puede ofrecer ni anunciar acceso temporal de Preview");
+must(nextConfig.includes("X-Financial-App-Version")&&nextConfig.includes("APP_VERSION"),"La producción debe exponer la APP_VERSION como cabecera técnica para el smoke exacto");
+
 for(const token of [
   "financial_app_6_0_0_requires_5_0_1_baseline",
+  "drop function if exists public.financial_app_claim_preview_login(text,text)",
+  "drop table if exists financial_app.preview_login_tokens",
+  "financial_app_6_0_0_preview_auth_retirement_failed",
   "'app_version',to_jsonb('6.0.0'::text)",
   "'target_version',to_jsonb('6.0.0'::text)",
   "financial_app_release_manifest",
@@ -56,7 +72,12 @@ for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-hov
 must(!globals.includes("--accent:#0b4f8a")&&!globals.includes("--accent:#4c9bff"),"La identidad azul no puede volver a dominar el producto");
 must(cashFlow.includes("ForecastClient")&&cashFlow.includes("getForecastCalendar")&&cashFlow.includes("Promise.all"),"Cash Flow debe integrar la previsión canónica sin duplicarla");
 
-for(const token of ["Financial App 6.0.0","Cinco destinos principales","APP_VERSION","microtexto inferior a 14 px"])
+for(const token of ["financialapp-home.vercel.app","EXPECTED_VERSION","X-Financial-App-Version","/cash-flow","/movimientos","/analisis","/archivo","/configuracion"])
+  must(productionSmoke.includes(token),`Smoke de producción 6.0.0 incompleto: ${token}`);
+must(!productionSmoke.includes("finanzas-3-0.vercel.app")&&!productionSmoke.includes("/ajustes")&&!productionSmoke.includes("/auth/preview"),"Smoke de producción conserva alias/rutas o autenticación Preview obsoletos");
+must(!/un único preview|preview del HEAD|promoción posterior a `main`/i.test(testMatrix),"La matriz de pruebas no puede exigir previews ni promoción posterior a main");
+
+for(const token of ["Financial App 6.0.0","Cinco destinos principales","APP_VERSION","microtexto inferior a 14 px","Publicación sin previews"])
   must(releaseNotes.includes(token),`Release notes 6.0.0 incompletas: ${token}`);
 
 if(failures.length){
@@ -64,4 +85,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 6.0.0 audit OK · versión, navegación, identidad, previsión integrada, publicación solo desde main y migraciones seguras protegidas");
+console.log("Financial App 6.0.0 audit OK · versión, navegación, identidad, Preview retirada, smoke exacto, publicación solo desde main y migraciones seguras protegidas");
