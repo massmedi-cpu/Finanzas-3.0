@@ -14,7 +14,7 @@ function formatDate(value:string|null,createdAt:string){const raw=value?`${value
 function isPending(document:ArchiveDocument){return ["pending","processing","needs_review","failed","error"].includes(document.ocrStatus)||(document.links.length===0&&document.suggestions.length>0)}
 function statusCopy(document:ArchiveDocument){if(document.archivedAt)return"Archivada";if(isPending(document))return"Pendiente";return"Nueva"}
 function statusClass(document:ArchiveDocument){if(document.archivedAt)return"muted";if(isPending(document))return"warning";return"ok"}
-function DocumentIcon({image}:{image:boolean}){return <span className="archive-lifecycle-icon" aria-hidden="true"><svg className="financial-icon" viewBox="0 0 24 24"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/>{image?<><circle cx="10" cy="12" r="1.4"/><path d="m8.5 17 2.7-2.7 1.9 1.9 1.4-1.4 1.5 1.5"/></>:<><path d="M9 12h6M9 15h6"/></>}</svg></span>}
+function DocumentIcon({image}:{image:boolean}){return <span className="archive-lifecycle-icon" aria-hidden="true"><svg className="financial-icon" viewBox="0 0 24 24" fill="none"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/>{image?<><circle cx="10" cy="12" r="1.4"/><path d="m8.5 17 2.7-2.7 1.9 1.9 1.4-1.4 1.5 1.5"/></>:<><path d="M9 12h6M9 15h6"/></>}</svg></span>}
 
 export function ArchiveLifecycleClient({active,archived,view}:Props){
   const router=useRouter();
