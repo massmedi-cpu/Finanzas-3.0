@@ -19,6 +19,11 @@ export type HomePulse = {
     updatedCount: number;
     reviewCount: number;
   } | null;
+  driveSync: {
+    reconciliationPending: boolean;
+    lastSyncAt: string | null;
+    lastMode: string | null;
+  };
   rules: {
     readOnly: boolean;
     singleTransactionPass: boolean;
@@ -32,6 +37,7 @@ export async function getHomePulse(): Promise<HomePulse> {
   if(error||!data)throw new Error(error?.message||"home_pulse_unavailable");
   const raw=asRecord(data);
   const syncRaw=raw.sync==null?null:asRecord(raw.sync);
+  const driveSyncRaw=asRecord(raw.driveSync);
   const rules=asRecord(raw.rules);
   return {
     version:asString(raw.version,APP_VERSION),
@@ -50,6 +56,11 @@ export async function getHomePulse(): Promise<HomePulse> {
       updatedCount:asNumber(syncRaw.updatedCount),
       reviewCount:asNumber(syncRaw.reviewCount),
     }:null,
+    driveSync:{
+      reconciliationPending:asBoolean(driveSyncRaw.reconciliationPending),
+      lastSyncAt:nullableString(driveSyncRaw.lastSyncAt),
+      lastMode:nullableString(driveSyncRaw.lastMode),
+    },
     rules:{
       readOnly:asBoolean(rules.readOnly),
       singleTransactionPass:asBoolean(rules.singleTransactionPass),
