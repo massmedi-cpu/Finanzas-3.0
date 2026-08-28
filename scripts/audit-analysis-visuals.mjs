@@ -40,7 +40,7 @@ for(const token of [".analysis-workspace{overflow-x:clip}",".analysis-viz-grid,.
 for(const token of ["label:has(input:disabled)","max-height:min(58vh,420px)","width:min(280px,calc(100% - 24px))"]){if(!interactionCss.includes(token))failures.push(`Contrato móvil de interacción ausente: ${token}`);}
 if(wallCss.includes("min-width:620px"))failures.push("Análisis móvil no puede reintroducir gráficos de 620 px que desborden la pantalla");
 if(css.includes("!important"))failures.push("Análisis no puede depender de overrides !important");
-for(const token of [".analysis-bar-pair .income{background:var(--chart-income)}",".analysis-bar-pair .expense{background:var(--chart-expense)}",".analysis-diverging .negative-bar{background:var(--expense)}"]){if(!css.includes(token))failures.push(`Color financiero semántico ausente: ${token}`);}
+for(const token of [".analysis-bar-pair .income{background:var(--chart-income)}",".analysis-bar-pair .expense{background:var(--chart-expense)}",".analysis-diverging .negative-bar{background:var(--negative)}"]){if(!css.includes(token))failures.push(`Color financiero semántico ausente: ${token}`);}
 
 if(failures.length){
   console.error("AXIOMA visual analysis audit FAILED");
