@@ -51,6 +51,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          version_from_headers() {
+            awk 'BEGIN{IGNORECASE=1} /^x-financial-app-version:/ {gsub("\r",""); print $2}' "$1" | tail -n 1
+          }
           check_redirect() {
             path="$1"
             code=$(curl -sS -D /tmp/headers -o /tmp/body -w '%{http_code}' --max-redirs 0 --max-time 15 "$BASE_URL$path" || true)
@@ -60,7 +63,8 @@ jobs:
               exit 1
             fi
             grep -Eqi '^location: .*/login' /tmp/headers || { echo "Missing login redirect for $path"; cat /tmp/headers; exit 1; }
-            grep -Eqi "^x-financial-app-version: ${EXPECTED_VERSION}\r?$" /tmp/headers || { echo "Wrong production version for $path"; cat /tmp/headers; exit 1; }
+            deployed=$(version_from_headers /tmp/headers)
+            [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong production version for $path: ${deployed:-missing}"; cat /tmp/headers; exit 1; }
           }
           for path in / /cash-flow /movimientos /analisis /archivo /configuracion; do
             check_redirect "$path"
@@ -70,6 +74,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          version_from_headers() {
+            awk 'BEGIN{IGNORECASE=1} /^x-financial-app-version:/ {gsub("\r",""); print $2}' "$1" | tail -n 1
+          }
           check_api_unauthorized() {
             path="$1"
             code=$(curl -sS -D /tmp/api-headers -o /tmp/body -w '%{http_code}' --max-time 15 "$BASE_URL$path" || true)
@@ -79,7 +86,8 @@ jobs:
               exit 1
             fi
             grep -q '"error":"unauthorized"' /tmp/body || { echo "Unexpected unauthorized payload for $path"; cat /tmp/body; exit 1; }
-            grep -Eqi "^x-financial-app-version: ${EXPECTED_VERSION}\r?$" /tmp/api-headers || { echo "Wrong API version for $path"; cat /tmp/api-headers; exit 1; }
+            deployed=$(version_from_headers /tmp/api-headers)
+            [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong API version for $path: ${deployed:-missing}"; cat /tmp/api-headers; exit 1; }
           }
           for path in /api/archive /api/settings /api/forecast /api/control/matching-quality /api/intelligence; do
             check_api_unauthorized "$path"
