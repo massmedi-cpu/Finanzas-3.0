@@ -23,7 +23,6 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const method=String(data?.method||"");
   const machineReceipt=method.startsWith("image_ocr_receipt_");
   if(!machineReceipt)return next;
-
   const rawText=String(data?.rawText||next.ocrText||existing.ocrText||"");
   if(incomingData&&!incomingData.rawText&&rawText)incomingData.rawText=rawText;
   const reconstruction=Object.prototype.hasOwnProperty.call(next,"digitalReconstruction")?next.digitalReconstruction:existing.digitalReconstruction;
@@ -73,10 +72,17 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
 export async function POST(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const {id}=await params;const action=request.nextUrl.searchParams.get("action");
-  if(action!=="restore")return apiError("unsupported_action");
-  const {data,error}=await supabase.rpc("financial_app_archive_restore",{p_id:id});
-  if(error||!data)return apiFailure("archive.document.restore",error,"restore_failed");
-  return apiJson({ok:true});
+  if(action==="archive"){
+    const {data,error}=await supabase.rpc("financial_app_archive_archive",{p_id:id});
+    if(error||!data)return apiFailure("archive.document.archive",error,"archive_failed");
+    return apiJson({ok:true,action:"archive"});
+  }
+  if(action==="restore"){
+    const {data,error}=await supabase.rpc("financial_app_archive_restore",{p_id:id});
+    if(error||!data)return apiFailure("archive.document.restore",error,"restore_failed");
+    return apiJson({ok:true,action:"restore"});
+  }
+  return apiError("unsupported_action");
 }
 
 export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
