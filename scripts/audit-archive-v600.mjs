@@ -17,7 +17,14 @@ for(const token of ['getArchiveOverview','archiveOverview(search,false)','getArc
 if(!api.includes('request.nextUrl.searchParams.get("includeArchived") === "1"'))failures.push("La API de Archivo debe excluir archivados por defecto y exigir includeArchived=1 explícito");
 if(api.includes('searchParams.get("archived") !== "0"'))failures.push("La API ha recuperado el flag ambiguo archived de versiones anteriores");
 for(const token of ['action==="archive"','financial_app_archive_archive','action==="restore"','financial_app_archive_restore'])if(!detailApi.includes(token))failures.push(`Endpoint reversible de Archivo incompleto: ${token}`);
-for(const token of ["archived_at is null","archived_at = v_cutoff","document_history","v_cutoff","financial_app_v600_archive_migration"])if(!migration.includes(token))failures.push(`Migración 6.0.0 no protege el contrato idempotente: ${token}`);
+for(const token of [
+  "where d.archived_at is null",
+  "d.created_at <= timestamptz '2026-08-28 05:14:26.813505+00'",
+  "set archived_at = timestamptz '2026-08-28 05:14:26.813505+00'",
+  "insert into financial_app.document_history",
+  "'archive_v6_migration'",
+  "'system:financial-app-6.0.0'"
+])if(!migration.includes(token))failures.push(`Migración 6.0.0 no protege el contrato idempotente: ${token}`);
 if(!layout.includes('import "../archive-lifecycle.css";'))failures.push("Archivo debe cargar su hoja propietaria de ciclo documental");
 
 if(failures.length){console.error("Archive v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
