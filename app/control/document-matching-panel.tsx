@@ -1,5 +1,6 @@
 import { formatEuro, formatInteger } from "@/lib/format/es-es";
-import type { ArchiveDocument, ArchiveMatchConfidence, ArchiveMovementRef } from "@/lib/financial/archive";
+import type { ArchiveMatchConfidence, ArchiveMovementRef } from "@/lib/financial/archive";
+import type { DocumentMatchingObservability, DocumentMatchingPriority } from "@/lib/financial/document-matching-observability";
 
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 const dateLabel=(value:string|null)=>value?dates.format(new Date(`${value}T12:00:00`)):"Sin fecha";
@@ -14,6 +15,7 @@ const confidenceLabel=(value:ArchiveMatchConfidence|undefined,score:number)=>{
   return"Baja";
 };
 const confidenceClass=(value:ArchiveMatchConfidence|undefined,score:number)=>value||((score>=93?"high":score>=75?"medium":"low") as ArchiveMatchConfidence);
+const priorityLabel=(value:DocumentMatchingPriority)=>value==="auto_safe"?"Autoenlace seguro":value==="ambiguous"?"Ambigua":value==="high"?"Candidata fuerte":"Revisar";
 
 function Candidate({candidate}:{candidate:ArchiveMovementRef}){
   const score=Math.max(0,Math.min(100,Number(candidate.score||0)));
@@ -42,33 +44,35 @@ function Candidate({candidate}:{candidate:ArchiveMovementRef}){
   </article>;
 }
 
-export function DocumentMatchingPanel({documents}:{documents:ArchiveDocument[]}){
-  const unlinked=documents.filter(document=>document.links.length===0);
-  const withCandidates=unlinked.filter(document=>document.suggestions.length>0);
-  const safeAuto=withCandidates.filter(document=>Boolean(document.suggestions[0]?.autoEligible)).length;
+export function DocumentMatchingPanel({data}:{data:DocumentMatchingObservability}){
+  const s=data.summary;
   return <section className="document-matching-panel" aria-labelledby="document-matching-title">
     <div className="matching-quality-head">
       <div>
         <p className="eyebrow">MATCHING DOCUMENTAL · EXPLICABLE</p>
         <h2 id="document-matching-title">Por qué un ticket encaja con un movimiento</h2>
-        <p>Una única puntuación combina importe, fecha y comercio. El mismo motor alimenta las sugerencias y el autoenlace conservador; aquí solo se observa y explica, nunca se crea un vínculo.</p>
+        <p>El servidor clasifica todos los documentos activos sin vínculo con una única puntuación basada en importe, fecha y comercio. Este panel observa y prioriza; no crea vínculos.</p>
       </div>
       <a className="secondary-action button-link" href="/archivo">Revisar en Archivo</a>
     </div>
 
-    <div className="document-matching-summary">
-      <div><span>Activos sin vínculo</span><strong>{formatInteger(unlinked.length)}</strong></div>
-      <div><span>Con candidatos</span><strong>{formatInteger(withCandidates.length)}</strong></div>
-      <div><span>Autoenlace seguro</span><strong>{formatInteger(safeAuto)}</strong></div>
+    <div className="document-matching-summary document-matching-summary-advanced">
+      <div><span>Sin vínculo</span><strong>{formatInteger(s.activeUnlinked)}</strong></div>
+      <div><span>Con candidatos</span><strong>{formatInteger(s.withCandidates)}</strong></div>
+      <div><span>Autoenlace seguro</span><strong>{formatInteger(s.safeAuto)}</strong></div>
+      <div><span>Ambiguos</span><strong>{formatInteger(s.ambiguous)}</strong></div>
+      <div><span>Sin candidato</span><strong>{formatInteger(s.noCandidates)}</strong></div>
     </div>
 
-    {withCandidates.length===0?<div className="document-matching-empty"><strong>Sin coincidencias pendientes</strong><span>Si aparece un documento con candidatos, este panel mostrará el score y las razones exactas antes de revisarlo en Archivo.</span></div>:
-      <div className="document-matching-list">{withCandidates.slice(0,8).map(document=><article className="document-match-document" key={document.id}>
+    <p className="document-matching-policy">Autoenlace: score ≥ {formatInteger(data.rules.safeAutoMinimumScore)}, margen ≥ {formatInteger(data.rules.safeAutoMinimumMargin)} puntos y comercio confirmado. Los casos ambiguos nunca se consideran autoenlace seguro.</p>
+
+    {data.documents.length===0?<div className="document-matching-empty"><strong>Sin coincidencias pendientes</strong><span>No hay documentos activos con candidatos que necesiten explicación o revisión.</span></div>:
+      <div className="document-matching-list">{data.documents.map(document=><article className={`document-match-document priority-${document.priority}`} key={document.id}>
         <header>
           <div><strong>{document.merchant||document.fileName}</strong><span>{dateLabel(document.documentDate)} · {moneyLabel(document.amount)}</span></div>
-          <span>{formatInteger(document.suggestions.length)} candidato{document.suggestions.length===1?"":"s"}</span>
+          <span className={`document-match-priority priority-${document.priority}`}>{priorityLabel(document.priority)}</span>
         </header>
-        <div className="document-match-candidates">{document.suggestions.slice(0,3).map(candidate=><Candidate key={candidate.sourceId} candidate={candidate}/>)}</div>
+        <div className="document-match-candidates">{document.suggestions.map(candidate=><Candidate key={candidate.sourceId} candidate={candidate}/>)}</div>
       </article>)}</div>}
   </section>;
 }
