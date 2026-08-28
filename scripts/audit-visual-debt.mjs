@@ -23,8 +23,9 @@ for(const file of cssFiles){
 const redesigned=[
   "app/globals.css","app/typography.css","app/controls.css","app/chrome.css","app/home.css","app/movements.css",
   "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/net-worth.css",
-  "app/control.css","app/goals.css","app/rules.css","app/archive.css","app/settings.css","app/analysis.css",
-  "app/analysis-visual-wall.css","app/analysis-interactions.css","app/explicabilidad/explainability.css"
+  "app/control.css","app/goals.css","app/rules.css","app/archive.css","app/archive-review.css","app/document-linking.css",
+  "app/settings.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
+  "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css"
 ];
 for(const file of redesigned){if(!fs.existsSync(file))failures.push(`Falta hoja de producto: ${file}`);}
 
@@ -56,8 +57,7 @@ const typography=fs.readFileSync("app/typography.css","utf8");
 for(const token of ["--type-metadata:14px","--type-secondary:15px","--type-copy:16px","--type-section:21px","--type-page:clamp(28px,2.6vw,36px)","--type-financial:","font-variant-numeric:tabular-nums"]){if(!typography.includes(token))failures.push(`typography.css ha perdido la escala base: ${token}`);}
 for(const forbidden of [".movement-",".forecast-",".plan-",".home-","[class*=",".mobile-nav",".app-root.private .app-route"]){if(typography.includes(forbidden))failures.push(`typography.css ha vuelto a ser una capa de rescate específica: ${forbidden}`);}
 
-const priorityReadable=["app/globals.css","app/chrome.css","app/home.css","app/movements.css","app/controls.css"];
-for(const file of priorityReadable){
+for(const file of redesigned){
   const css=fs.readFileSync(file,"utf8");
   for(const match of css.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g)){
     const size=Number(match[1]);
@@ -66,4 +66,4 @@ for(const file of priorityReadable){
 }
 
 if(failures.length){console.error("Visual debt audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS sin !important, tokens semánticos protegidos y tipografía sin capa de rescate`);
+console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS sin !important, ${redesigned.length} superficies reformadas protegidas y tipografía sin microtexto`);
