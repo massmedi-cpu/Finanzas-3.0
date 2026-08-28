@@ -1,10 +1,10 @@
-# Financial App 6.2.0
+# Financial App 6.3.0
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 6.2.0
+## Baseline 6.3.0
 
-5.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo, retiró aliases visuales y amplió los gates. 6.1.0 añadió matching documental explicable, observabilidad server-side, histórico agregado y calibración anónima mediante decisiones reales. 6.2.0 convierte esa calibración en una política supervisada versionada: el motor puede proponer endurecimientos basados en evidencia, pero nunca cambia umbrales sin aprobación explícita y permite rollback a una política anterior.
+5.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo, retiró aliases visuales y amplió los gates. 6.1.0 añadió matching documental explicable, observabilidad server-side, histórico agregado y calibración anónima mediante decisiones reales. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplía la revisión documental a un triage universal: detecta también OCR fallido, metadatos incompletos, ausencia de candidatos y documentos listos para archivar, sin ejecutar acciones automáticamente.
 
 - Navegación principal con cinco destinos exactos: Inicio, Cash Flow, Movimientos, Análisis y Archivo.
 - Previsión permanece accesible desde Más y su calendario canónico se integra dentro de Cash Flow.
@@ -12,6 +12,11 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - Escala de lectura de 14–16 px en las superficies reformadas y objetivos táctiles de 44 px en controles críticos.
 - Las superficies activas quedan protegidas por auditoría contra microtexto, `!important` y aliases visuales heredados.
 - Archivo pagina en servidor los estados Nuevas/Pendientes/Archivadas y calcula búsqueda y conteos con el mismo filtro.
+- `Atención documental` sustituye la antigua cola matching-only y clasifica todos los documentos activos por la siguiente acción útil.
+- El orden de atención prioriza OCR fallido, metadatos incompletos, asociación segura, matching manual, ausencia de candidato y archivado.
+- Cada prioridad incluye razones explícitas; los documentos sin candidato siguen visibles y no desaparecen de la revisión.
+- El triage reutiliza el motor de matching y la política supervisada activa; no mantiene un margen paralelo hardcodeado.
+- Desde la bandeja se puede abrir el original, volver al documento en Archivo, asociar candidatos o archivar un documento resuelto mediante acciones explícitas.
 - Archivo y Centro de control comparten el mismo motor server-side de matching documental; no existe una segunda fórmula de scoring en React/Node.
 - El matching expone score, confianza, margen frente al segundo candidato, coincidencia de comercio, razones y autoelegibilidad.
 - Los casos ambiguos nunca se consideran autoenlace seguro.
