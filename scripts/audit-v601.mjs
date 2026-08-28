@@ -11,7 +11,10 @@ const archive=read("database/FINANCIAL_APP_6.0.1_ARCHIVE_PAGINATION.sql");
 const globals=read("app/globals.css");
 const notes=read("docs/releases/6.0.1.md");
 
-must(version.includes('APP_VERSION = "6.0.1"'),"APP_VERSION debe ser 6.0.1");
+const versionMatch=version.match(/APP_VERSION\s*=\s*["'](\d+)\.(\d+)\.(\d+)["']/);
+const versionTuple=versionMatch?versionMatch.slice(1).map(Number):[0,0,0];
+const atLeast601=versionTuple[0]>6||(versionTuple[0]===6&&(versionTuple[1]>0||(versionTuple[1]===0&&versionTuple[2]>=1)));
+must(atLeast601,"APP_VERSION debe conservar baseline >= 6.0.1");
 must(pkg.version==="3.4.8","La versión técnica del paquete sigue siendo 3.4.8 por contrato");
 must(pkg.scripts?.["audit:v601"]==="node scripts/audit-v601.mjs","Falta audit:v601");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v601.mjs"),"audit:current no ejecuta el gate 6.0.1");
@@ -36,4 +39,4 @@ for(const token of ["Financial App 6.0.1","paginación en servidor","14 px","44 
 }
 
 if(failures.length){console.error("Financial App 6.0.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.0.1 audit OK · Archivo paginado, visual semántico sin aliases y release metadata-only protegidos");
+console.log("Financial App 6.0.1 baseline audit OK · Archivo paginado, visual semántico sin aliases y release metadata-only protegidos");
