@@ -22,7 +22,7 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - La asociación segura reutiliza `archive_link_calibrated_core`, conservando el aprendizaje supervisado y el histórico de calibración existente.
 - El archivado seguro registra `document_history` y puede restaurarse; las asociaciones pueden deshacerse mediante unlink.
 - La última tanda segura aplicada puede revertirse desde el propio centro de operaciones.
-- Los cores de operaciones no son ejecutables por `anon` ni directamente por `authenticated`; solo los wrappers autenticados `SECURITY DEFINER` exponen el contrato tras comprobar la allowlist.
+- `anon` no puede ejecutar operaciones 6.4. Los wrappers `public` son `SECURITY INVOKER`; los cores `SECURITY DEFINER` quedan fuera del API público, requieren rol autenticado y vuelven a comprobar la allowlist mediante `authorized_email()`.
 - Archivo y Centro de control comparten el mismo motor server-side de matching documental; no existe una segunda fórmula de scoring en React/Node.
 - El matching expone score, confianza, margen frente al segundo candidato, coincidencia de comercio, razones y autoelegibilidad.
 - Los casos ambiguos nunca se consideran autoenlace seguro ni pueden incorporarse a un lote.
