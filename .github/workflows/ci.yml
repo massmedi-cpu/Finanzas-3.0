@@ -28,101 +28,11 @@ jobs:
         run: npm ls --depth=0
       - name: Dependency security audit
         run: npm audit --omit=dev --audit-level=high
-      - name: Total AXIOMA structural audit
-        run: npm run audit:axioma
-      - name: Canonical current architecture audit
-        run: npm run audit:current
-      - name: Structural Axioma audit
-        run: npm run audit:structure
-      - name: Architecture 1.7 regression audit
-        run: npm run audit:v17
-      - name: Recovery 1.8 audit
-        run: npm run audit:v18
-      - name: Document engine 1.9 guarantee audit
-        run: npm run audit:v19
-      - name: Unified Plan 2.0 audit
-        run: npm run audit:v20
-      - name: Stabilization 2.0.1 audit
-        run: npm run audit:v201
-      - name: Evolution 2.1 audit
-        run: npm run audit:v210
-      - name: Analytics 2.2 audit
-        run: npm run audit:v220
-      - name: Analytics calculation tests
-        run: npm run test:analytics
-      - name: Intelligence 2.3 audit
-        run: npm run audit:v230
-      - name: Intelligence decision tests
-        run: npm run test:intelligence
-      - name: Long horizon 2.4 audit
-        run: npm run audit:v240
-      - name: Long horizon calculation tests
-        run: npm run test:horizon
-      - name: Month close and Spanish format 2.5 audit
-        run: npm run audit:v250
-      - name: Spanish Spain number format tests
-        run: npm run test:format
-      - name: Full codebase 2.6 audit
-        run: npm run audit:v260
-      - name: Europe/Madrid time tests
-        run: npm run test:time
-      - name: Explainability 2.7 audit
-        run: npm run audit:v270
-      - name: Explainability decision tests
-        run: npm run test:explainability
-      - name: System integrity 2.8 audit
-        run: npm run audit:v280
-      - name: System integrity deterministic tests
-        run: npm run test:integrity
-      - name: Cash Flow chart 2.8.1 audit
-        run: npm run audit:v281
-      - name: Visual foundation 3.0 audit
-        run: npm run audit:v300
-      - name: Bulk editing and Drive sync 3.8 audit
-        run: npm run audit:v380
-      - name: Archive partial PATCH 3.8.1 audit
-        run: npm run audit:v381
-      - name: Reconciliation workbench 3.9 audit
-        run: npm run audit:v390
-      - name: Progressive home 3.9.1 audit
-        run: npm run audit:home-streaming
-      - name: Movements automation 4.0 audit
-        run: npm run audit:v400
-      - name: Forecast ledger 4.1 audit
-        run: npm run audit:v410
-      - name: Authenticated release E2E 4.2 audit
-        run: npm run audit:v420
-      - name: Matching observability 4.3 audit
-        run: npm run audit:v430
-      - name: Actionable intelligence 4.4 audit
-        run: npm run audit:v440
-      - name: Performance and UX 4.5 audit
-        run: npm run audit:v450
-      - name: Architecture closure 5.0 audit
-        run: npm run audit:v500
-      - name: OCR and identity 5.0.1 audit
-        run: npm run audit:v501
-      - name: Visual debt audit
-        run: npm run audit:visual-debt
-      - name: Forecast calendar 3.6 audit
-        run: npm run audit:forecast-calendar
-      - name: Forecast blue cash flow 3.7 audit
-        run: npm run audit:forecast-calendar-v370
-      - name: Source sync regression audit
-        run: npm run audit:sync
-      - name: Ticket OCR pipeline audit
-        run: npm run audit:ocr
-      - name: Ticket OCR metadata tests
-        run: npm run test:ocr
-      - name: Backup recovery unit tests
-        run: npm run test:backup
-      - name: Accessibility regression audit
-        run: npm run audit:a11y
-      - name: Static lint
+      - name: Regression tests
+        run: npm run test:regression
+      - name: Static type and unused-code checks
         run: npm run lint
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Production build
+      - name: Production build and release gates
         env:
           NEXT_PUBLIC_SUPABASE_URL: https://ulxsvuksrghjgcjfuegv.supabase.co
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
