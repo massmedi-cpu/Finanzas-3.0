@@ -42,6 +42,34 @@ assert.equal(commercialMetadata.documentDate,"2026-08-28");
 assert.equal(commercialMetadata.amount,821.83);
 assert.equal(commercialMetadata.merchant,"Sinfibanda");
 
+const productionCommercialOcr=`ALBARAN    F\nTELF:955631612-955672144 41500-ALCALA DE GUADAIRA P.I. LAGUNA LARGA C/3 NAVES 16-18 www.SINFIBANDA.net ventas@sinfibanda.net    BUREAU 7828    VEJER DE LA FRONTERA SOC.COOP.AND.DIVINO SALVADOR 11150 CADIZ CTRA-LA MUELA S/N CLIENTE\nVERITAS\nNúmero Albarán L1111 28/08/2026 Fecha    28/08/2026 Fecha Valor  Referéncia Albarán\nB-91349282\nCantidad  Código    Articulo    Precio    IVA    Subtotal\n5,0009745    CHAPA PERF. 2000*1000*4*5 T-8 HIERRO    125,320    21,00  626,600    S.5\n1,0023    PORTES TDN/TXT + PALET 2000*1000    52,600    21,00    52,600\nYEMBALAJE\n08\n0\n6,00\nescuento    Descuento P.Pago % Base Imponible 679,200 Importe IVA 142,630 Importe R.E. Subtotal TOTAL ALBARAN 679,200\nEspecialistas en: -SINFINES - CHAPAS PERFORADAS GRAN STOCK- TODO PARA ELEVACION Y TRANSPORTE    821,830\n-BANDAS ELEVADORAS,CANGILONES PARA BANDA Y TIPO Z -EXPERTOS EN ATEX\nHORARIO DE VERANO :DEL 22 DE JUNIO AL 31 DE AGOSTO 07.00 A 15.00`;
+const productionLayout=parseReceiptLayout(productionCommercialOcr);
+assert.equal(productionLayout.items.length,2,"La evidencia OCR real de producción debe reconstruir exactamente dos líneas comerciales");
+assert.deepEqual(productionLayout.items.map(row=>[row.quantity,row.unitPrice,row.total]),[
+  ["5","125,32","626,60"],
+  ["1","52,60","52,60"],
+]);
+assert.ok(productionLayout.items[0].description.includes("9745"));
+assert.ok(productionLayout.items[1].description.includes("23"));
+assert.deepEqual(productionLayout.summary.map(row=>[row.label,row.value]),[
+  ["Base","679,20"],
+  ["IVA","142,63"],
+  ["Total","821,83"],
+]);
+assert.equal(productionLayout.unparsedBody?.length,0,"El ruido posterior a las líneas del albarán no puede invalidar el cuerpo financiero");
+const productionValidation=validateReceiptFinancials(productionLayout,[productionCommercialOcr]);
+assert.equal(productionValidation.status,"complete");
+assert.equal(productionValidation.itemSum,679.2);
+assert.equal(productionValidation.base,679.2);
+assert.equal(productionValidation.tax,142.63);
+assert.equal(productionValidation.printedTotal,821.83);
+assert.equal(productionValidation.contradictions.length,0);
+const productionMetadata=inferDocumentMetadata(productionCommercialOcr,"receipt");
+assert.equal(productionMetadata.documentType,"invoice");
+assert.equal(productionMetadata.documentDate,"2026-08-28");
+assert.equal(productionMetadata.amount,821.83);
+assert.equal(productionMetadata.merchant,"Sinfibanda");
+
 const item=(text:string,left:number,top:number,width:number,score=.98)=>({
   text,
   score,
@@ -75,7 +103,7 @@ const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push
 
 assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia");
 assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v5");
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v6");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -137,4 +165,4 @@ assert.ok((isolated?.topLeft||0)>=40&&(isolated?.topLeft||0)<=65);
 assert.ok((isolated?.topRight||0)>=225&&(isolated?.topRight||0)<=265);
 assert.ok((isolated?.bottom||0)>=420&&(isolated?.bottom||0)<photoHeight);
 
-console.log("ticket-ocr PP-OCRv6 geometry tests OK · tickets y documentos comerciales");
+console.log("ticket-ocr PP-OCRv6 geometry tests OK · tickets y evidencia comercial real de producción");
