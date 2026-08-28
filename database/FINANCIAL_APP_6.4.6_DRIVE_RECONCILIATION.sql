@@ -115,7 +115,7 @@ begin
 
   select jsonb_build_object(
     'reconciliationPending',change_token is null,
-    'lastSyncAt',last_sync_at,
+    'lastSyncAt',case when change_token is null then null else updated_at end,
     'lastMode',last_mode
   )
   into v_drive_sync
