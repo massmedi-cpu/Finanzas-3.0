@@ -89,11 +89,12 @@ for(const token of ["getDocumentMatchingDashboard","DocumentMatchingPanel","docu
   must(controlPage.includes(token),`Centro de control no integra el dashboard documental único: ${token}`);
 must(!controlPage.includes("getArchiveOverview")&&!controlPage.includes("getDocumentMatchingObservability("),"Centro de control no puede recalcular matching por una segunda vía");
 if(usesTriage){
-  for(const token of ["getDocumentTriage","DocumentTriageClient"])
-    must(reviewPage.includes(token),`La bandeja 6.3 debe conservar la priorización server-side del matching dentro del triage: ${token}`);
-  must(!reviewPage.includes("getDocumentMatchingObservability(")&&!reviewPage.includes("getArchiveReviewQueue"),"La revisión 6.3 no puede recuperar una segunda cola matching-only");
+  const directTriage=reviewPage.includes("getDocumentTriage")&&reviewPage.includes("DocumentTriageClient");
+  const operationsTriage=reviewPage.includes("getDocumentOperations")&&reviewPage.includes("DocumentTriageClient");
+  must(directTriage||operationsTriage,"La bandeja debe conservar la priorización server-side del matching dentro del triage, directa o encapsulada por 6.4");
+  must(!reviewPage.includes("getDocumentMatchingObservability(")&&!reviewPage.includes("getArchiveReviewQueue"),"La revisión no puede recuperar una segunda cola matching-only");
   for(const token of ["ArchiveMovementRef","candidate.reasons","candidate.scoreMargin","document.storageUrl","document.suggestions"])
-    must(reviewClient.includes(token),`Triage 6.3 ha perdido la explicabilidad del matching 6.1: ${token}`);
+    must(reviewClient.includes(token),`Triage ha perdido la explicabilidad del matching 6.1: ${token}`);
 }else{
   for(const token of ["getDocumentMatchingObservability(20)","ArchiveReviewClient","data.summary.withCandidates"])
     must(reviewPage.includes(token),`Cola de revisión no consume la priorización server-side: ${token}`);
@@ -123,4 +124,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Document matching v6.1 audit OK · score único, ${usesTriage?"triage 6.3":"cola 6.1"} server-side, histórico agregado sin datos financieros y una sola evaluación por dashboard`);
+console.log(`Document matching v6.1 audit OK · score único, ${usesTriage?"triage server-side forward-compatible":"cola 6.1"}, histórico agregado sin datos financieros y una sola evaluación por dashboard`);
