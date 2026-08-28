@@ -1,10 +1,10 @@
-# Financial App 6.3.1
+# Financial App 6.3.2
 
 Aplicación financiera personal privada, responsive y basada en datos reales. La fuente externa se trata siempre en modo lectura y Financial App mantiene separados los datos originales de los enriquecimientos privados.
 
-## Baseline 6.3.1
+## Baseline 6.3.2
 
-5.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo, retiró aliases visuales y amplió los gates. 6.1.0 añadió matching documental explicable, observabilidad server-side, histórico agregado y calibración anónima mediante decisiones reales. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal. 6.3.1 corrige la reconstrucción de albaranes y facturas con tablas comerciales y valida correctamente documentos cuyos precios de línea están expresados antes de IVA.
+5.0 cerró la evolución arquitectónica iniciada en 4.x y dejó una única implementación runtime por responsabilidad. 5.0.1 reforzó el OCR documental. 6.0.0 reconstruyó integralmente la experiencia visual y de navegación. 6.0.1 endureció Archivo, retiró aliases visuales y amplió los gates. 6.1.0 añadió matching documental explicable, observabilidad server-side, histórico agregado y calibración anónima mediante decisiones reales. 6.2.0 convirtió esa calibración en una política supervisada versionada y reversible. 6.3.0 amplió la revisión documental a un triage universal. 6.3.1 añadió reconstrucción de tablas comerciales. 6.3.2 cierra el caso real de producción: separa cantidad y código unidos mediante coherencia aritmética, reconoce albaranes como documentos comerciales, recupera base/IVA/total aunque el total quede desplazado a otra línea y obtiene el comercio desde dominios embebidos sin alterar la evidencia OCR literal.
 
 - Navegación principal con cinco destinos exactos: Inicio, Cash Flow, Movimientos, Análisis y Archivo.
 - Previsión permanece accesible desde Más y su calendario canónico se integra dentro de Cash Flow.
@@ -26,8 +26,9 @@ Aplicación financiera personal privada, responsive y basada en datos reales. La
 - Las propuestas pueden endurecer la política, nunca relajarla automáticamente. Aplicar, rechazar y rollback son acciones explícitas.
 - El motor consulta la política activa para determinar autoelegibilidad; los umbrales ya no están hardcodeados en la lógica de matching.
 - Inicio usa `financial_app_home_pulse` como ruta crítica ligera y carga cuentas/secciones secundarias en paralelo.
-- El OCR conserva texto, confianza y polígonos por separado; los tickets usan su parser específico y los albaranes/facturas pueden reconstruir tablas Cantidad/Código/Artículo/Precio/IVA/Subtotal sin inventar importes.
-- La revisión canónica del motor OCR es `paddle_layout_v5`, con PaddleOCR.js 0.4.2 y PP-OCRv6 en español, una sola inferencia y fallback seguro al original si no hay contorno fiable.
+- El OCR conserva texto, confianza y polígonos por separado; los tickets usan su parser específico y los albaranes/facturas reconstruyen tablas Cantidad/Código/Artículo/Precio/IVA/Subtotal mediante evidencia textual y aritmética verificable.
+- La revisión canónica del motor OCR es `paddle_layout_v6`, con PaddleOCR.js 0.4.2 y PP-OCRv6 en español, una sola inferencia y fallback seguro al original si no hay contorno fiable.
+- La regresión OCR incluye la evidencia literal del albarán real que permanecía pendiente tras 6.3.1.
 - Archivo conserva un histórico reversible y los documentos del corte 6.0.0 permanecen archivados sin alterar sus valores ni asociaciones.
 - Los gates históricos siguen activos de forma forward-compatible.
 - `docs/ARCHITECTURE.md` y `docs/CANONICAL_ARCHITECTURE.md` siguen describiendo la arquitectura canónica iniciada en 5.0; 6.x mejora el producto sin crear una arquitectura runtime paralela.
