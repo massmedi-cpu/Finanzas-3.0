@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.4.1. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 6.4.2. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -71,6 +71,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - `anon` no ejecuta operaciones privilegiadas.
 - Los wrappers públicos necesarios deben ser `SECURITY INVOKER` cuando el contrato lo permita.
 - Los cores `SECURITY DEFINER` que sean imprescindibles viven fuera del API público, usan `search_path` cerrado, permisos mínimos y vuelven a validar la autorización de servidor mediante `authorized_email()` cuando corresponda.
+- `financial_app_document_matching_dashboard` sigue este patrón desde 6.4.2: el wrapper público es invoker y el core privilegiado permanece en `financial_app` con autorización explícita.
 - La condición `authenticated` no equivale a autorización: una frontera privilegiada debe verificar además la identidad permitida.
 - Los advisors de Supabase forman parte de la verificación tras cambios de esquema; sus avisos se corrigen con alcance medido, no mediante cambios masivos sin evidencia.
 
