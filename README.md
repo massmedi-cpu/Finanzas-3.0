@@ -83,21 +83,21 @@ Los axiomas completos están en `docs/PROJECT_AXIOMS.md`.
 
 - El navegador nunca recibe `SUPABASE_SERVICE_ROLE_KEY` ni secretos Google.
 - RLS y privilegios mantienen las superficies privadas cerradas por defecto.
-- Preview autenticada mediante token one-time y deshabilitada en producción.
+- Las ramas de trabajo no se despliegan en Vercel y las previews no forman parte del flujo de release.
 - Las funciones privilegiadas se revisan mediante gates y advisors antes de release.
 
 ## Release
 
-Una versión solo llega a `main` después de superar:
+Una versión llega a producción mediante publicación directa desde `main`, sin preview intermedia, después de superar:
 
 1. AXIOMA y arquitectura canónica.
 2. Gates históricos de regresión.
 3. Gate de la versión actual.
 4. Auditoría de dependencias.
 5. Lint, TypeScript y build reproducible.
-6. Preview del mismo SHA validado.
-7. Migración Supabase verificada.
-8. Smoke de producción tras el merge.
+6. Preflight Supabase de candidato, compatible tanto con la baseline declarada por la migración como con la versión ya alineada.
+7. Merge directo a `main`; ninguna otra rama puede generar deployments Git en Vercel.
+8. Alineación de la migración de release, `preflight:supabase:release` exacto y smoke de producción.
 
 ## Versionado
 
@@ -111,7 +111,8 @@ Ambos versionados son deliberadamente independientes.
 - Dominio: `financialapp-home.vercel.app`.
 - Vercel región `cdg1`.
 - Node 22.
-- Las ramas de desarrollo no deben consumir previews innecesarios; la publicación se concentra en el HEAD final validado.
+- `vercel.json` bloquea cualquier deployment Git de ramas y permite únicamente `main`.
+- El desarrollo, auditorías y regresiones se ejecutan en GitHub CI sin consumir builds de preview de Vercel.
 
 ## Documentación vigente
 

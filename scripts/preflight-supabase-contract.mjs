@@ -3,6 +3,7 @@ import path from "node:path";
 
 const root=process.cwd();
 const enforced=process.env.VERCEL==="1"||process.env.CI==="true";
+const exactMode=process.argv.includes("--exact");
 const configSource=fs.readFileSync(path.join(root,"lib/supabase/config.ts"),"utf8");
 const fallbackUrl=configSource.match(/FALLBACK_SUPABASE_URL\s*=\s*["']([^"']+)["']/)?.[1]||"";
 const fallbackKey=configSource.match(/FALLBACK_SUPABASE_PUBLISHABLE_KEY\s*=\s*["']([^"']+)["']/)?.[1]||"";
@@ -24,6 +25,15 @@ if(!version){
   console.error("Supabase release preflight FAILED · APP_VERSION no reconocible");
   process.exit(1);
 }
+
+const releaseMigrationPath=path.join(root,"database",`FINANCIAL_APP_${version.replaceAll(".","_")}_RELEASE.sql`);
+let baselineVersion=version;
+if(fs.existsSync(releaseMigrationPath)){
+  const releaseMigration=fs.readFileSync(releaseMigrationPath,"utf8");
+  const baselineMatch=releaseMigration.match(/requires_(\d+)_(\d+)_(\d+)_baseline/i);
+  if(baselineMatch)baselineVersion=`${baselineMatch[1]}.${baselineMatch[2]}.${baselineMatch[3]}`;
+}
+const acceptedVersions=exactMode?[version]:[...new Set([version,baselineVersion])];
 
 const sourceRoots=["app","lib","components","supabase/functions"];
 const extensions=new Set([".ts",".tsx",".js",".mjs"]);
@@ -53,36 +63,50 @@ if(functions.length>200){
   process.exit(1);
 }
 
-let response;
-try{
-  response=await fetch(`${url}/rest/v1/rpc/financial_app_release_preflight`,{
-    method:"POST",
-    headers:{apikey:key,authorization:`Bearer ${key}`,"content-type":"application/json","cache-control":"no-store"},
-    body:JSON.stringify({p_expected_version:version,p_required_functions:functions}),
-    signal:AbortSignal.timeout(12000),
-  });
-}catch(error){
-  console.error(`Supabase release preflight FAILED · conexión: ${error instanceof Error?error.message:String(error)}`);
-  process.exit(1);
+async function requestPreflight(expectedVersion){
+  let response;
+  try{
+    response=await fetch(`${url}/rest/v1/rpc/financial_app_release_preflight`,{
+      method:"POST",
+      headers:{apikey:key,authorization:`Bearer ${key}`,"content-type":"application/json","cache-control":"no-store"},
+      body:JSON.stringify({p_expected_version:expectedVersion,p_required_functions:functions}),
+      signal:AbortSignal.timeout(12000),
+    });
+  }catch(error){
+    throw new Error(`conexión: ${error instanceof Error?error.message:String(error)}`);
+  }
+
+  const raw=await response.text();
+  let payload;
+  try{payload=raw?JSON.parse(raw):null;}catch{payload=null;}
+  if(!response.ok||!payload||typeof payload!=="object"){
+    throw new Error(`HTTP ${response.status} · ${raw.slice(0,300)}`);
+  }
+  return {expectedVersion,payload};
 }
 
-const raw=await response.text();
-let payload;
-try{payload=raw?JSON.parse(raw):null;}catch{payload=null;}
-if(!response.ok||!payload||typeof payload!=="object"){
-  console.error(`Supabase release preflight FAILED · HTTP ${response.status} · ${raw.slice(0,300)}`);
-  process.exit(1);
+const attempts=[];
+for(const expectedVersion of acceptedVersions){
+  let result;
+  try{result=await requestPreflight(expectedVersion);}catch(error){
+    console.error(`Supabase release preflight FAILED · ${error instanceof Error?error.message:String(error)}`);
+    process.exit(1);
+  }
+  attempts.push(result);
+  if(result.payload.ok===true){
+    const mode=exactMode?"release exacto":(expectedVersion===version?"candidato ya alineado":"candidato sobre baseline");
+    console.log(`Supabase release preflight OK · ${mode} · código ${version} · DB ${expectedVersion} · ${functions.length} RPCs presentes en producción`);
+    process.exit(0);
+  }
 }
 
-const missing=Array.isArray(payload.missing)?payload.missing:[];
-if(payload.ok!==true){
-  console.error("Supabase release preflight FAILED");
-  console.error(`- código: ${version}`);
-  console.error(`- DB app: ${payload.appVersion??"desconocida"}`);
-  console.error(`- DB target: ${payload.targetVersion??"desconocida"}`);
+console.error("Supabase release preflight FAILED");
+console.error(`- código: ${version}`);
+console.error(`- versiones DB aceptadas en este modo: ${acceptedVersions.join(" o ")}`);
+for(const {expectedVersion,payload} of attempts){
+  const missing=Array.isArray(payload.missing)?payload.missing:[];
+  console.error(`- intento ${expectedVersion}: DB app ${payload.appVersion??"desconocida"} · DB target ${payload.targetVersion??"desconocida"}`);
   if(missing.length)console.error(`- RPCs ausentes: ${missing.join(", ")}`);
   if(payload.error)console.error(`- error: ${payload.error}`);
-  process.exit(1);
 }
-
-console.log(`Supabase release preflight OK · Financial App ${version} · ${functions.length} RPCs presentes en producción`);
+process.exit(1);

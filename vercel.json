@@ -5,13 +5,17 @@
   "regions": ["cdg1"],
   "git": {
     "deploymentEnabled": {
+      "**": false,
+      "main": true,
       "audit/**": false,
       "chore/**": false,
       "develop/**": false,
       "feat/**": false,
+      "feature/**": false,
       "fix/**": false,
       "hotfix/**": false,
-      "release/**": false
+      "release/**": false,
+      "checkpoint/**": false
     }
   }
 }

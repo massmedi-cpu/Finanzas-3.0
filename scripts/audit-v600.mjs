@@ -12,11 +12,15 @@ const cashFlow=read("app/cash-flow/page.tsx");
 const releaseMigration=read("database/FINANCIAL_APP_6.0.0_RELEASE.sql");
 const archiveMigration=read("database/FINANCIAL_APP_6.0.0_ARCHIVE_EXISTING_DOCUMENTS.sql");
 const releaseNotes=read("docs/releases/6.0.0.md");
+const vercel=JSON.parse(read("vercel.json"));
 
 must(/APP_VERSION\s*=\s*["']6\.0\.0["']/.test(version),"APP_VERSION debe ser exactamente 6.0.0");
 must(pkg.version==="3.4.8","La versión técnica del paquete debe conservar el baseline 3.4.8");
 must(pkg.scripts?.["audit:v600"]==="node scripts/audit-v600.mjs","Falta script audit:v600");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v600.mjs"),"audit:current no protege el gate 6.0.0");
+must(pkg.scripts?.["preflight:supabase:release"]==="node scripts/preflight-supabase-contract.mjs --exact","Falta preflight Supabase exacto para el cierre de publicación");
+const deploymentEnabled=vercel?.git?.deploymentEnabled;
+must(deploymentEnabled?.["**"]===false&&deploymentEnabled?.main===true,"Vercel debe bloquear todas las ramas y permitir despliegues Git únicamente desde main");
 
 for(const token of [
   "financial_app_6_0_0_requires_5_0_1_baseline",
@@ -60,4 +64,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 6.0.0 audit OK · versión, navegación, identidad, previsión integrada y migraciones seguras protegidas");
+console.log("Financial App 6.0.0 audit OK · versión, navegación, identidad, previsión integrada, publicación solo desde main y migraciones seguras protegidas");
