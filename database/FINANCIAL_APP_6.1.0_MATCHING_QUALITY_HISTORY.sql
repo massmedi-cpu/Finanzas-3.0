@@ -64,7 +64,8 @@ begin
 end
 $function$;
 
-create or replace function financial_app.document_matching_quality_capture_core(
+create or replace function financial_app.document_matching_dashboard_core(
+  p_limit integer default 8,
   p_days integer default 90
 )
 returns jsonb
@@ -93,7 +94,7 @@ begin
   if v_email is null then raise exception 'forbidden' using errcode='42501'; end if;
 
   v_day:=(now() at time zone 'Europe/Madrid')::date;
-  v_payload:=financial_app.document_matching_observability_core(1);
+  v_payload:=financial_app.document_matching_observability_core(greatest(1,least(coalesce(p_limit,8),20)));
   v_summary:=coalesce(v_payload->'summary','{}'::jsonb);
   v_active:=greatest(0,coalesce((v_summary->>'activeUnlinked')::integer,0));
   v_with:=greatest(0,coalesce((v_summary->>'withCandidates')::integer,0));
@@ -151,40 +152,27 @@ begin
     'version',financial_app.current_app_version(),
     'snapshotDate',v_day,
     'storedNoFinancialValues',true,
+    'observability',v_payload,
     'history',financial_app.document_matching_quality_history_core(p_days)
   );
 end
 $function$;
 
-create or replace function public.financial_app_document_matching_quality_history(
-  p_days integer default 90,
-  p_capture boolean default true
+create or replace function public.financial_app_document_matching_dashboard(
+  p_limit integer default 8,
+  p_days integer default 90
 )
 returns jsonb
-language plpgsql
+language sql
 security definer
 set search_path to 'pg_catalog','financial_app','auth'
 as $function$
-declare
-  v_email text;
-begin
-  v_email:=financial_app.authorized_email();
-  if v_email is null then raise exception 'forbidden' using errcode='42501'; end if;
-  if coalesce(p_capture,true) then
-    return financial_app.document_matching_quality_capture_core(p_days);
-  end if;
-  return jsonb_build_object(
-    'version',financial_app.current_app_version(),
-    'snapshotDate',(now() at time zone 'Europe/Madrid')::date,
-    'storedNoFinancialValues',true,
-    'history',financial_app.document_matching_quality_history_core(p_days)
-  );
-end
+  select financial_app.document_matching_dashboard_core(p_limit,p_days)
 $function$;
 
 revoke all on function financial_app.document_matching_quality_history_core(integer) from public,anon,authenticated;
-revoke all on function financial_app.document_matching_quality_capture_core(integer) from public,anon,authenticated;
-revoke all on function public.financial_app_document_matching_quality_history(integer,boolean) from public,anon;
-grant execute on function public.financial_app_document_matching_quality_history(integer,boolean) to authenticated;
+revoke all on function financial_app.document_matching_dashboard_core(integer,integer) from public,anon,authenticated;
+revoke all on function public.financial_app_document_matching_dashboard(integer,integer) from public,anon;
+grant execute on function public.financial_app_document_matching_dashboard(integer,integer) to authenticated;
 
 commit;
