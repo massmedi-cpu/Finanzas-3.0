@@ -59,9 +59,10 @@ must(!architecture.includes("finance_v3_")&&!architecture.includes("finanzas-v3-
 must(nextAudit.includes("5.0.0")&&nextAudit.toLowerCase().includes("baseline"),"README_AUDIT_NEXT no cierra el roadmap anterior en la baseline 5.0");
 
 must(pkg.scripts?.["audit:v500"]==="node scripts/audit-v500.mjs","Falta script audit:v500");
-must(String(pkg.scripts?.prebuild||"").includes("audit-v500.mjs"),"prebuild no ejecuta 5.0");
-must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v500.mjs"),"audit:current no ejecuta 5.0");
-must(ci.includes("Architecture closure 5.0 audit")&&ci.includes("npm run audit:v500"),"CI no ejecuta el gate 5.0");
+must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v500.mjs"),"audit:current no protege la baseline 5.0");
+must(String(pkg.scripts?.["audit:release"]||"").includes("audit:current"),"audit:release debe delegar en la auditoría canónica actual");
+must(String(pkg.scripts?.prebuild||"").includes("audit:release"),"prebuild debe ejecutar el gate consolidado de release");
+must(ci.includes("npm run build"),"CI debe ejecutar el build, que aplica el prebuild consolidado");
 
 if(failures.length){console.error("Financial App 5.0 architecture closure audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
 console.log(`Financial App 5.0 audit OK · ${runtimeFiles.length} archivos runtime sin loaders/RPC sustituidos · arquitectura y release probe canónicos`);
