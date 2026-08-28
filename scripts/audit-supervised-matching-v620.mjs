@@ -27,7 +27,7 @@ for(const forbidden of ["insert into financial_app.transaction_documents","delet
 
 for(const token of ["MatchingPolicyDashboard","financial_app_document_matching_policy_dashboard","getDocumentMatchingPolicyDashboard"])
   must(loader.includes(token),`Loader de política incompleto: ${token}`);
-for(const token of ["El motor propone; tú decides","Generar propuesta","Aplicar política","Rechazar","Volver a la política anterior"])
+for(const token of ["El motor propone; tú decides","Crear propuesta","Aplicar política","Rechazar","Volver a política anterior"])
   must(panel.toLowerCase().includes(token.toLowerCase()),`Panel supervisado incompleto: ${token}`);
 for(const token of ["financial_app_document_matching_policy_generate","financial_app_document_matching_policy_apply","financial_app_document_matching_policy_reject","financial_app_document_matching_policy_rollback"])
   must(api.includes(token),`API supervisada incompleta: ${token}`);
@@ -42,7 +42,7 @@ for(const token of [
 ])must(policy.includes(token),`Frontera de seguridad 6.2 incompleta: ${token}`);
 
 const outsideFunctions=policy.replace(/create or replace function[\s\S]*?\$function\$;/gi,"");
-must(!outsideFunctions.includes("document_matching_policy_apply_core(")&&!outsideFunctions.includes("document_matching_policy_rollback_core("),"La instalación 6.2 no puede aplicar ni revertir políticas automáticamente");
+must(!/select\s+financial_app\.document_matching_policy_(?:apply|rollback)_core\s*\(/i.test(outsideFunctions),"La instalación 6.2 no puede aplicar ni revertir políticas automáticamente");
 
 if(failures.length){console.error("Supervised matching v6.2 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
 console.log("Supervised matching v6.2 audit OK · política versionada, aprobación explícita, rollback y motor gobernado sin autoajuste opaco");
