@@ -1,3 +1,4 @@
+import "./tablet.css";
 import "../archive.css";
 import "../archive-lifecycle.css";
 import "../archive-review.css";
