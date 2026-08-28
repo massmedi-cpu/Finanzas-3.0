@@ -40,6 +40,7 @@ const commercialMetadata=inferDocumentMetadata(commercialDocument,"receipt");
 assert.equal(commercialMetadata.documentType,"invoice");
 assert.equal(commercialMetadata.documentDate,"2026-08-28");
 assert.equal(commercialMetadata.amount,821.83);
+assert.equal(commercialMetadata.merchant,"Sinfibanda");
 
 const item=(text:string,left:number,top:number,width:number,score=.98)=>({
   text,
