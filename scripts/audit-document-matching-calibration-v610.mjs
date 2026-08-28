@@ -39,8 +39,14 @@ must(Boolean(tableDefinition),"No se puede auditar la tabla de calibración");
 for(const forbidden of ["document_id","transaction_id","source_id","amount","merchant","concept","counterparty","file_name","storage_url"])
   must(!tableDefinition.includes(forbidden),`La calibración anónima no puede almacenar ${forbidden}`);
 
-for(const token of ["document_match_candidates_rows_core(p_document_id,20)","v_chosen_rank=1","v_existing_origin is distinct from 'manual'","decision,'accepted'","decision,association_origin"])
-  must(migration.includes(token),`Feedback atómico incompleto: ${token}`);
+for(const token of [
+  "document_match_candidates_rows_core(p_document_id,20)",
+  "v_chosen_rank=1",
+  "v_existing_origin is distinct from 'manual'",
+  "engine_version,decision,association_origin",
+  "financial_app.current_app_version(),'accepted','manual'",
+  "financial_app.current_app_version(),'reverted',v_origin",
+]) must(migration.includes(token),`Feedback atómico incompleto: ${token}`);
 must(migration.includes("v_linked:=financial_app.archive_link_core(p_document_id,p_source_id)"),"El wrapper calibrado debe reutilizar el link canónico existente");
 must(migration.includes("v_unlinked:=financial_app.archive_unlink_core(p_document_id,p_source_id)"),"El wrapper calibrado debe reutilizar el unlink canónico existente");
 
