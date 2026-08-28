@@ -1,3 +1,4 @@
+import "./chart-tokens.css";
 import "../analysis.css";
 import "../analysis-visual-wall.css";
 import "../analysis-interactions.css";
