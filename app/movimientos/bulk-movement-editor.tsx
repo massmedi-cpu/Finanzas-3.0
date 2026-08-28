@@ -57,17 +57,12 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
     if(applied)reset();
   }
 
-  async function automateSafe(){await onApply({$operation:"automate-safe"});}
   async function markReviewed(){await onApply({needsReview:false});}
 
   return <form className="bulk-movement-editor" onSubmit={submit}>
     <div className="bulk-editor-head">
-      <div><strong>{selectedCount} movimiento{selectedCount===1?"":"s"} seleccionado{selectedCount===1?"":"s"}</strong><span>Los cambios se aplican juntos y quedan registrados en el historial de cada movimiento.</span></div>
+      <div><strong>{selectedCount} movimiento{selectedCount===1?"":"s"} seleccionado{selectedCount===1?"":"s"}</strong><span>Solo se ofrecen operaciones reversibles: los cambios se aplican juntos y quedan registrados en el historial de cada movimiento.</span></div>
       <button className="ghost" type="button" onClick={onClear} disabled={busy}>Quitar selección</button>
-    </div>
-
-    <div className="inline-alert info" role="status">
-      <strong>Automatización 4.0.</strong> Reaplica reglas activas, vincula solo facturas inequívocas y concilia únicamente parejas exactas de traspasos internos. Las coincidencias dudosas se dejan intactas para revisión.
     </div>
 
     <div className="bulk-editor-grid">
@@ -83,9 +78,8 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
       <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={tagsEnabled} onChange={e=>setTagsEnabled(e.target.checked)}/> Sustituir etiquetas</span><input value={tags} onChange={e=>setTags(e.target.value)} disabled={!tagsEnabled} placeholder="Separadas por comas; vacío = quitar todas"/></label>
     </div>
     <div className="bulk-editor-actions">
-      <span>Máximo 200 movimientos por operación. La automatización nunca fuerza coincidencias ambiguas.</span>
+      <span>Máximo 200 movimientos por operación. Puedes deshacer el último lote mientras ninguno de sus movimientos haya cambiado después.</span>
       <button className="ghost" type="button" onClick={markReviewed} disabled={busy}>{busy?"Procesando…":"Marcar revisados"}</button>
-      <button className="ghost" type="button" onClick={automateSafe} disabled={busy}>{busy?"Procesando…":"Automatizar seguro"}</button>
       <button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length}>{busy?"Aplicando…":`Aplicar cambios a ${selectedCount}`}</button>
     </div>
   </form>;
