@@ -51,6 +51,17 @@ function cleanLine(value: string) {
   return value.replace(/[|¦]/g, "I").replace(/\s{2,}/g, " ").trim();
 }
 
+function merchantDisplayLine(value: string) {
+  const line = cleanLine(value);
+  const domain = line.match(/^(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.[a-z]{2,}(?:\/.*)?$/i);
+  if (!domain) return line;
+  return domain[1]
+    .split(/[-_]+/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    .join(" ") || line;
+}
+
 function usefulLine(value: string) {
   const line = cleanLine(value);
   if (line.length < 2) return false;
@@ -157,7 +168,7 @@ function likelyMerchant(lines: string[]) {
     if (/\b(SL|S\.L\.|SA|S\.A\.)\b/i.test(line)) score += 4;
     if (!best || score > best.score) best = { line, score };
   }
-  return best?.line || null;
+  return best ? merchantDisplayLine(best.line) : null;
 }
 
 export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = null): DocumentMetadata {

@@ -45,7 +45,8 @@ must(receiptLayout.includes("unparsedBody")&&receiptLayout.includes("top")&&rece
 
 for(const token of ["needs_review","failed","invalid_item_arithmetic","unparsed_body_rows","items_total_mismatch","base_tax_total_mismatch"])
   must(validator.includes(token),`Validador financiero incompleto: ${token}`);
-must(revision.includes('paddle_layout_v4')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR PP-OCRv6 no está identificada de forma estable");
+const ocrRevisionNumber=Number.parseInt(revision.match(/paddle_layout_v(\d+)/)?.[1]||"0",10);
+must(ocrRevisionNumber>=4&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR PP-OCRv6 no está identificada de forma estable o retrocede por debajo de paddle_layout_v4");
 
 for(const token of ["rawText","normalizedText","layoutText","tsv","validation","metrics"])
   must(baseOcr.includes(token),`El contrato OCR ha perdido ${token}`);
