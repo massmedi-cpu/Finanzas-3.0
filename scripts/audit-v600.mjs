@@ -72,8 +72,9 @@ for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-hov
 must(!globals.includes("--accent:#0b4f8a")&&!globals.includes("--accent:#4c9bff"),"La identidad azul no puede volver a dominar el producto");
 must(cashFlow.includes("ForecastClient")&&cashFlow.includes("getForecastCalendar")&&cashFlow.includes("Promise.all"),"Cash Flow debe integrar la previsión canónica sin duplicarla");
 
-for(const token of ["financialapp-home.vercel.app","EXPECTED_VERSION","X-Financial-App-Version","/cash-flow","/movimientos","/analisis","/archivo","/configuracion"])
+for(const token of ["financialapp-home.vercel.app","EXPECTED_VERSION","/cash-flow","/movimientos","/analisis","/archivo","/configuracion"])
   must(productionSmoke.includes(token),`Smoke de producción 6.0.0 incompleto: ${token}`);
+must(productionSmoke.toLowerCase().includes("x-financial-app-version"),"Smoke de producción 6.0.0 no valida la cabecera de versión");
 must(!productionSmoke.includes("finanzas-3-0.vercel.app")&&!productionSmoke.includes("/ajustes")&&!productionSmoke.includes("/auth/preview"),"Smoke de producción conserva alias/rutas o autenticación Preview obsoletos");
 must(!/un único preview|preview del HEAD|promoción posterior a `main`/i.test(testMatrix),"La matriz de pruebas no puede exigir previews ni promoción posterior a main");
 
