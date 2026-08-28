@@ -1,17 +1,24 @@
-# Supabase backend — Financial App 1.7.0
+# Supabase backend — Financial App 6.0.0
 
-Este árbol contiene únicamente las Edge Functions pertenecientes al runtime actual de Financial App.
+Este árbol contiene únicamente las Edge Functions pertenecientes al runtime activo o a cierres explícitos de compatibilidad de Financial App.
 
 | Function | Estado | `verify_jwt` | Uso |
 |---|---|---:|---|
-| `financial-app-sync` | activa | true | sincronización incremental desde la fuente de solo lectura |
-| `financial-app-preview-session` | temporal | false | canje de ticket de Preview; valida token de un solo uso dentro de la función |
-| `financial-app-initial-import` | deshabilitada | true | responde `410 Gone`; se conserva versionada para que el backend desplegado sea reproducible |
+| `financial-app-sync` | activa | true | sincronización incremental desde la fuente externa de solo lectura |
+| `financial-app-initial-import` | deshabilitada | true | responde `410 Gone`; tombstone controlado de una función retirada |
 
-Las funciones heredadas `finanzas-v3-*` se han retirado de esta rama porque no forman parte de Financial App 1.7.0. Permanecen en el historial Git y algunas pueden seguir desplegadas en el proyecto Supabase compartido; no deben eliminarse del entorno remoto sin confirmar antes que ninguna aplicación antigua las consume.
+## Autenticación
+
+Google OAuth + allowlist de servidor es el único flujo interactivo de acceso a Financial App.
+
+La autenticación temporal de Preview fue retirada en 6.0.0. El RPC `financial_app_claim_preview_login` y la tabla `financial_app.preview_login_tokens` se eliminan idempotentemente en el cierre 6.0.0. La antigua Edge Function `financial-app-preview-session` no forma parte del código activo; si permanece desplegada como tombstone remoto, exige JWT y responde `410 Gone`.
+
+Las migraciones antiguas se conservan en Git únicamente como historial y no representan superficies runtime vigentes.
 
 ## Reglas
-- No guardar secretos, service-role keys ni credenciales de Google Drive.
-- Las tablas `financial_app.*` mantienen RLS activo y no se exponen directamente al cliente.
-- Los wrappers públicos verifican autorización mediante `financial_app.authorized_email()` en sus núcleos `SECURITY DEFINER`.
-- La fuente bancaria continúa en modo solo lectura; las ediciones viven en la capa privada.
+
+- No guardar secretos, service-role keys ni credenciales de Google Drive en el repositorio o el navegador.
+- Las tablas `financial_app.*` mantienen las restricciones de acceso definidas por la arquitectura canónica.
+- Las funciones privilegiadas deben tener un uso justificado, permisos mínimos y gates explícitos.
+- La fuente bancaria/documental externa continúa en modo solo lectura; las ediciones viven en la capa privada.
+- Las ramas de desarrollo no modifican metadatos de versión de producción; la alineación exacta se realiza únicamente durante el release a `main`.

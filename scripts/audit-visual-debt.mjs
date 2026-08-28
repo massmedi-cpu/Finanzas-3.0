@@ -3,15 +3,21 @@ import path from "node:path";
 
 const failures=[];
 const cssFiles=[];
+const runtimeVisualFiles=[];
 function walk(dir){
   if(!fs.existsSync(dir))return;
   for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
     const full=path.join(dir,entry.name);
     if(entry.isDirectory())walk(full);
-    else if(entry.name.endsWith(".css"))cssFiles.push(full.replaceAll("\\","/"));
+    else{
+      const normalized=full.replaceAll("\\","/");
+      if(entry.name.endsWith(".css"))cssFiles.push(normalized);
+      if(/\.(css|tsx|ts)$/.test(entry.name))runtimeVisualFiles.push(normalized);
+    }
   }
 }
 walk("app");
+walk("components");
 
 for(const file of cssFiles){
   const css=fs.readFileSync(file,"utf8");
@@ -21,13 +27,23 @@ for(const file of cssFiles){
 }
 
 const redesigned=[
-  "app/globals.css","app/typography.css","app/controls.css","app/chrome.css","app/home.css","app/movements.css",
-  "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/net-worth.css",
-  "app/control.css","app/goals.css","app/rules.css","app/archive.css","app/archive-review.css","app/document-linking.css",
-  "app/settings.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
-  "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css"
+  "app/globals.css","app/typography.css","app/controls.css","app/chrome.css","app/home.css","app/home-streaming.css","app/movements.css",
+  "app/movimientos/conciliacion/reconciliation-workbench.css","app/movimientos/movement-documents.css","app/movimientos/split-editor.css",
+  "app/accounts.css","app/plan.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/forecast-ledger.css","app/net-worth.css",
+  "app/control.css","app/control/integrity.css","app/control/matching-quality.css","app/goals.css","app/rules.css",
+  "app/archive.css","app/archive-lifecycle.css","app/archive-review.css","app/document-linking.css",
+  "app/settings.css","app/auth.css","app/analysis.css","app/analysis-visual-wall.css","app/analysis-interactions.css",
+  "app/intelligence.css","app/reconciliation.css","app/explicabilidad/explainability.css",
+  "app/system-state.css","app/visual.css","app/tablet.css"
 ];
 for(const file of redesigned){if(!fs.existsSync(file))failures.push(`Falta hoja de producto: ${file}`);}
+
+const legacyAliases=["var(--bg)","var(--surface)","var(--surface-2)","var(--surface-3)","var(--border)","var(--muted)","var(--text)","var(--accent)","var(--accent-soft)","var(--accent-contrast)","var(--success)","var(--success-soft)","var(--expense)","var(--expense-soft)","var(--info-soft)","var(--warning-soft)","var(--shadow-float)","var(--radius-control)","var(--radius-overlay)","var(--radius-panel)"];
+for(const file of runtimeVisualFiles){
+  if(file==="app/globals.css")continue;
+  const source=fs.readFileSync(file,"utf8");
+  for(const legacy of legacyAliases){if(source.includes(legacy))failures.push(`${file}: consume alias visual legado ${legacy}`);}
+}
 
 const globals=fs.readFileSync("app/globals.css","utf8");
 for(const legacy of ["--shadow:","--surface-soft:","--surface-strong:","#0b4f8a","#4c9bff"]){if(globals.includes(legacy))failures.push(`globals.css recupera identidad/token retirado: ${legacy}`);}
@@ -74,4 +90,4 @@ for(const file of redesigned){
 }
 
 if(failures.length){console.error("Visual debt audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS sin !important, ${redesigned.length} superficies reformadas protegidas y tipografía UI sin microtexto`);
+console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS, ${redesigned.length} superficies reformadas, sin aliases de compatibilidad ni microtexto`);

@@ -8,7 +8,6 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 const version=read("lib/app-version.ts");
 const migration=read("database/FINANCIAL_APP_5.0.0_ARCHITECTURE_CLOSURE.sql");
 const probe=read("lib/financial/release-probe.ts");
-const e2e=read("scripts/authenticated-preview-e2e.mjs");
 const canonical=read("docs/CANONICAL_ARCHITECTURE.md");
 const architecture=read("docs/ARCHITECTURE.md");
 const readme=read("README.md");
@@ -48,8 +47,19 @@ must(!/insert\s+into\s+financial_app\.transactions/i.test(migration)&&!/update\s
 for(const token of ["getAccountsOverview","getHomePulse","accountsReadable","homePulseReadable","getMovements","getForecastCalendar","getArchiveOverview","getMatchingObservability","getActionableIntelligence"])
   must(probe.includes(token),`Probe 5.0 ha perdido superficie canónica: ${token}`);
 must(!probe.includes("getFinancialDashboard")&&!probe.includes("dashboardReadable"),"Probe 5.0 sigue acoplado al dashboard sustituido");
-must(e2e.includes("expectedVersion")&&e2e.includes('"accountsReadable"')&&e2e.includes('"homePulseReadable"'),"E2E 5.0 no valida versión dinámica y superficies canónicas");
-must(!e2e.includes('"dashboardReadable"'),"E2E 5.0 conserva el dashboard sustituido");
+
+const previewE2ePath="scripts/authenticated-preview-e2e.mjs";
+if(atLeast(currentVersion,"6.0.0")){
+  must(!fs.existsSync(previewE2ePath),"6.0+ no puede recuperar el E2E de autenticación de previews retirado");
+  must(!fs.existsSync("app/auth/preview/route.ts"),"6.0+ no puede recuperar la ruta de autenticación de previews retirada");
+}else{
+  must(fs.existsSync(previewE2ePath),"La baseline 5.x debe conservar su E2E de preview histórico");
+  if(fs.existsSync(previewE2ePath)){
+    const e2e=read(previewE2ePath);
+    must(e2e.includes("expectedVersion")&&e2e.includes('"accountsReadable"')&&e2e.includes('"homePulseReadable"'),"E2E 5.0 no valida versión dinámica y superficies canónicas");
+    must(!e2e.includes('"dashboardReadable"'),"E2E 5.0 conserva el dashboard sustituido");
+  }
+}
 
 must(canonical.includes("5.0.0"),"CANONICAL_ARCHITECTURE no declara la arquitectura base 5.0.0");
 must(architecture.includes("5.0.0"),"ARCHITECTURE no declara la arquitectura base 5.0.0");

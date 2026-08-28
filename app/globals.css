@@ -12,11 +12,6 @@
   --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;--space-10:40px;--space-12:48px;
   --font-xs:14px;--font-sm:15px;--font-md:16px;--font-lg:21px;--font-xl:24px;--font-2xl:30px;--font-3xl:36px;
   --motion-micro:150ms;--motion-panel:220ms;--ease-standard:cubic-bezier(.2,.8,.2,1);--content-max:1540px;
-  --bg:var(--background-primary);--surface:var(--surface-primary);--surface-2:var(--surface-secondary);--surface-3:var(--background-tertiary);
-  --text:var(--text-primary);--muted:var(--text-tertiary);--border:var(--border-subtle);
-  --accent:var(--gold-primary);--accent-contrast:var(--text-inverse);--accent-soft:var(--gold-muted);
-  --success:var(--positive);--success-soft:var(--positive-muted);--expense:var(--negative);--expense-soft:var(--negative-muted);--info-soft:var(--info-muted);--warning-soft:var(--warning-muted);--shadow-float:var(--shadow-overlay);
-  --radius-control:var(--radius-small);--radius-overlay:var(--radius-large);--radius-panel:var(--radius-large);
 }
 @media(prefers-color-scheme:dark){:root{
   --background-primary:#0b0c0e;--background-secondary:#101216;--background-tertiary:#15181c;

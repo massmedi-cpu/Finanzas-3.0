@@ -1,7 +1,7 @@
 button{font:inherit}
 .primary-action,.secondary-action,.ghost,.danger-action,.icon-button{font:inherit;touch-action:manipulation}
 .primary-action,.secondary-action,.ghost,.danger-action{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:9px 14px;border-radius:var(--radius-medium);font-size:15px;font-weight:720;line-height:1.2;cursor:pointer;text-decoration:none;transition:background var(--motion-micro) var(--ease-standard),border-color var(--motion-micro) var(--ease-standard),color var(--motion-micro) var(--ease-standard),transform var(--motion-micro) var(--ease-standard),box-shadow var(--motion-micro) var(--ease-standard)}
-.primary-action{border:1px solid var(--accent);background:var(--accent);color:var(--text-inverse);box-shadow:0 1px 0 color-mix(in srgb,var(--gold-light) 46%,transparent) inset}
+.primary-action{border:1px solid var(--gold-primary);background:var(--gold-primary);color:var(--text-inverse);box-shadow:0 1px 0 color-mix(in srgb,var(--gold-light) 46%,transparent) inset}
 .primary-action:hover:not(:disabled){background:var(--gold-hover);border-color:var(--gold-hover)}
 .primary-action:active:not(:disabled){background:var(--gold-active);border-color:var(--gold-active)}
 .secondary-action,.ghost{border:1px solid var(--border-default);background:var(--surface-secondary);color:var(--text-primary)}

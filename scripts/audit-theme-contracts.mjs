@@ -24,7 +24,7 @@ if(!chrome.includes('if(publicRoute)return <><ThemeController/>{children}</>;'))
 for(const token of ["matchMedia(\"(prefers-color-scheme: dark)\")","addEventListener(\"change\"","addEventListener(\"storage\"","MutationObserver","fetch(\"/api/settings\"","persistThemePreference(serverTheme)","hasStoredThemePreference","hasStoredPreference","if(hasStoredPreference)return;"]){if(!controller.includes(token))failures.push(`ThemeController incompleto: ${token}`);}
 if(controller.indexOf("if(hasStoredPreference)return;")>controller.indexOf("persistThemePreference(serverTheme)"))failures.push("La preferencia del servidor puede volver a pisar una preferencia local explícita");
 for(const token of ["THEME_STORAGE_KEY","THEME_CHROME","root.dataset.theme=effective","root.dataset.themePreference=preference","root.style.colorScheme=effective","meta.content=THEME_CHROME[effective]",'light:"#f4f1e9"','dark:"#0b0c0e"']){if(!theme.includes(token))failures.push(`Runtime canónico de tema incompleto: ${token}`);}
-for(const token of ["background:var(--accent)","color:var(--negative)","color:var(--positive)"]){if(!controls.includes(token))failures.push(`Los controles semánticos deben consumir tokens centrales: ${token}`);}
+for(const token of ["background:var(--gold-primary)","color:var(--negative)","color:var(--positive)"]){if(!controls.includes(token))failures.push(`Los controles semánticos deben consumir tokens centrales: ${token}`);}
 if(!settings.includes('localStorage.setItem("financial-app-theme", theme)'))failures.push("Configuración debe persistir la preferencia de tema");
 
 if(failures.length){console.error("Theme contract audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}

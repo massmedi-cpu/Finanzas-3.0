@@ -23,8 +23,9 @@ const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let 
 must(atLeast(version,"3.7.2"),"La versión visible debe conservar como mínimo los contratos funcionales de 3.7.2");
 
 // v6 replaces the old blue product identity. Blue remains semantic info only.
-for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-muted:","--gold-hover:","--gold-active:","--accent:var(--gold-primary)","--focus:"])
+for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-muted:","--gold-hover:","--gold-active:","--focus:"])
   must(globals.includes(token),`Falta identidad premium canónica: ${token}`);
+must(!globals.includes("--accent:"),"La identidad premium 6.x no debe depender del alias --accent");
 for(const legacyBlue of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b4f8a","--accent:#4c9bff","--focus:#4c9bff"])
   must(!globals.includes(legacyBlue),`La identidad azul 3.7 no puede volver a dominar: ${legacyBlue}`);
 for(const legacy of ["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"])
@@ -88,4 +89,4 @@ for(const root of roots){
 }
 
 if(failures.length){console.error("Forecast/Cash Flow v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast/Cash Flow v6 audit OK · identidad dorada, cinco destinos primarios, previsión accesible e integrada, descartes y proyección protegidos");
+console.log("Forecast/Cash Flow v6 audit OK · identidad dorada semántica, cinco destinos primarios, previsión accesible e integrada, descartes y proyección protegidos");
