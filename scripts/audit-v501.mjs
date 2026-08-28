@@ -92,9 +92,10 @@ for(const [file,width,height] of [
 }
 
 must(pkg.scripts?.["audit:v501"]==="node scripts/audit-v501.mjs","Falta script audit:v501");
-must(String(pkg.scripts?.prebuild||"").includes("audit-v501.mjs"),"prebuild no ejecuta el gate 5.0.1");
-must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v501.mjs"),"audit:current no ejecuta el gate 5.0.1");
-must(ci.includes("OCR and identity 5.0.1 audit")&&ci.includes("npm run audit:v501"),"CI no ejecuta el gate 5.0.1");
+must(String(pkg.scripts?.["audit:current"]||"").includes("audit-v501.mjs"),"audit:current no protege el gate 5.0.1");
+must(String(pkg.scripts?.["audit:release"]||"").includes("audit:current"),"audit:release debe delegar en la auditoría canónica actual");
+must(String(pkg.scripts?.prebuild||"").includes("audit:release"),"prebuild debe ejecutar el gate consolidado de release");
+must(ci.includes("npm run build"),"CI debe ejecutar el build, que aplica el prebuild consolidado");
 
 if(failures.length){
   console.error("Financial App 5.0.1 audit FAILED");

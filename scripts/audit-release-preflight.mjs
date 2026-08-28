@@ -19,8 +19,11 @@ for(const token of [
 ]) must(script.includes(token),`Preflight ha perdido la garantía: ${token}`);
 
 must(!/service[_-]?role/i.test(script),"El preflight de build no puede depender de service_role");
-must(String(pkg.scripts?.prebuild||"").includes("node scripts/audit-release-preflight.mjs"),"La auditoría del preflight debe ejecutarse en cada build");
-must(String(pkg.scripts?.prebuild||"").includes("node scripts/preflight-supabase-contract.mjs"),"El preflight vivo debe ejecutarse en cada build");
+const prebuild=String(pkg.scripts?.prebuild||"");
+const release=String(pkg.scripts?.["audit:release"]||"");
+const livePreflight=String(pkg.scripts?.["preflight:supabase"]||"");
+must(prebuild.includes("audit:release")&&release.includes("audit-release-preflight.mjs"),"La auditoría del preflight debe ejecutarse en cada build mediante audit:release");
+must(prebuild.includes("audit:release")&&release.includes("preflight:supabase")&&livePreflight.includes("preflight-supabase-contract.mjs"),"El preflight vivo debe ejecutarse en cada build mediante audit:release");
 
 for(const token of [
   "create table if not exists public.financial_app_release_manifest",

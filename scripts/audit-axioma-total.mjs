@@ -67,7 +67,9 @@ for(const file of codeFiles.filter(file=>file.startsWith("app/api/"))){
 
 const ci=read(".github/workflows/ci.yml");
 must(!/develop\/v\d|hotfix\/v\d|financial-app-rebuild/.test(ci),"CI acoplado a ramas históricas concretas");
-must(ci.includes("audit:axioma"),"CI no ejecuta el gate AXIOMA total");
+const releaseScript=String(packageJson.scripts?.["audit:release"]||"");
+const prebuildScript=String(packageJson.scripts?.prebuild||"");
+must(releaseScript.includes("audit:axioma")&&prebuildScript.includes("audit:release")&&ci.includes("npm run build"),"CI/build no encadenan el gate AXIOMA total mediante audit:release");
 
 const packageText=read("package.json");
 const allRepoCode=[...walk("scripts"),...runtimeFiles].filter(file=>/\.(?:ts|tsx|js|mjs)$/.test(file));
