@@ -31,8 +31,11 @@ const operationsPage=page.includes("Centro de operaciones documentales")&&page.i
 must(triagePage||operationsPage,"La página debe conservar triage 6.3 directamente o a través del centro operativo forward-compatible");
 must(page.includes("DocumentTriageClient"),"La página debe conservar el cliente canónico de revisión documental");
 must(!page.includes("getDocumentMatchingObservability"),"La revisión no puede volver a depender de la cola matching-only de 6.1");
-for(const token of ["Revisar OCR","Completar datos","Asociación segura","Investigar sin coincidencia","Archivar documento","Abrir en Archivo"])
+for(const token of ["Revisar OCR","Completar datos","Asociación segura","Investigar sin coincidencia","Abrir en Archivo"])
   must(client.includes(token),`Cliente de triage incompleto: ${token}`);
+const legacyArchiveLabel=client.includes("Archivar documento");
+const operationsArchiveLabel=client.includes('archive_candidate:"Listo para archivar"')&&client.includes("data.operationSummary.archive");
+must(legacyArchiveLabel||operationsArchiveLabel,"Cliente de triage incompleto: acción de archivado visible");
 must(client.includes("El triage solo prioriza y explica")||client.includes("servidor vuelve a validar"),"La seguridad explícita del triage debe seguir visible");
 must(client.includes("/api/archive/${documentId}/links"),"La asociación contextual calibrada debe conservarse");
 must(client.includes('action:"archive"')||client.includes('/api/archive/operations'),"El archivado explícito debe conservar una ruta canónica");
