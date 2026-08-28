@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import {versionAtLeast} from "./lib/version-baseline.mjs";
 
 const read=file=>fs.readFileSync(file,"utf8");
 const failures=[];
@@ -10,9 +11,8 @@ const release=read("database/FINANCIAL_APP_6.4.3_RELEASE.sql");
 const notes=read("docs/releases/6.4.3.md");
 const workflow=read(".github/workflows/production-smoke.yml");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
-const [major,minor,patch]=currentVersion.split(".").map(Number);
 
-must(major===6&&minor===4&&patch>=3,"APP_VERSION debe preservar la baseline 6.4.3 dentro de la familia 6.4.x");
+must(versionAtLeast(currentVersion,"6.4.3"),"APP_VERSION debe preservar como mínimo la baseline 6.4.3");
 must(pkg.version==="3.4.8","La versión técnica del paquete permanece 3.4.8 por contrato");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-reliability-v643.mjs"),"audit:current no ejecuta fiabilidad 6.4.3");
 must(String(pkg.scripts?.["audit:current"]||"").includes("audit-release-v643.mjs"),"audit:current no ejecuta el cierre 6.4.3");
@@ -24,4 +24,4 @@ for(const token of ["Wait for globally consistent production version","stable_pa
   must(workflow.includes(token),`Production smoke 6.4.3 incompleto: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.3 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.3 release audit OK · baseline preservada por 6.4.x, propagación global estable y gates forward-compatible");
+console.log(`Financial App 6.4.3 release audit OK · baseline preservada por ${currentVersion}, propagación global estable y gates forward-compatible`);

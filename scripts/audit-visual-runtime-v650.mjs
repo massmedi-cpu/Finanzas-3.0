@@ -1,0 +1,79 @@
+import fs from "node:fs";
+import {versionAtLeast} from "./lib/version-baseline.mjs";
+
+const read=file=>fs.readFileSync(file,"utf8");
+const failures=[];
+const must=(ok,message)=>{if(!ok)failures.push(message)};
+
+const rootLayout=read("app/layout.tsx");
+const loading=read("app/route-loading.css");
+const chartTokens=read("app/analisis/chart-tokens.css");
+const analysisLayout=read("app/analisis/layout.tsx");
+const analysisWall=read("app/analysis-visual-wall.css");
+const dashboard=read("components/analysis-visual-dashboard.tsx");
+const cashFlow=read("app/cash-flow.css");
+const home=read("app/page.tsx");
+const homeSections=read("app/home-sections.tsx");
+const accounts=read("app/accounts.css");
+const netWorth=read("app/net-worth.css");
+
+must(!fs.existsSync("app/visual.css"),"app/visual.css debe permanecer retirado del runtime");
+must(rootLayout.includes('import "./route-loading.css";'),"El layout raíz debe cargar route-loading.css");
+must(!rootLayout.includes("visual.css"),"El layout raíz no puede volver a cargar visual.css");
+must(rootLayout.indexOf('import "./route-loading.css";')<rootLayout.indexOf('import "./tablet.css";'),"Debe preservarse la cascada route-loading -> tablet");
+
+for(const token of [".route-loading-v300","v300-shimmer","prefers-reduced-motion:reduce","@media(max-width:760px)"])
+  must(loading.includes(token),`route-loading.css perdió contrato compartido: ${token}`);
+for(const token of [".cf-",".balance-chart",".nw-",".analysis-","--chart-income","--chart-expense","--chart-accent","--chart-prior","--chart-grid","--chart-fill"])
+  must(!loading.includes(token),`route-loading.css no debe mezclar visualización específica: ${token}`);
+must(!loading.includes("!important"),"route-loading.css no debe usar !important");
+
+for(const token of ["--chart-income","--chart-expense","--chart-accent","--chart-prior","--chart-grid","--chart-fill","html[data-theme=\"dark\"] .analysis-workspace"])
+  must(chartTokens.includes(token),`Tokens de Análisis incompletos: ${token}`);
+must(chartTokens.trimStart().startsWith(".analysis-workspace{"),"Los tokens de gráficas deben estar acotados a .analysis-workspace");
+must(!chartTokens.includes(":root"),"Los tokens de Análisis no pueden volver al :root");
+must(!chartTokens.includes("!important"),"chart-tokens.css no debe usar !important");
+must(analysisLayout.includes('import "./chart-tokens.css";'),"Análisis debe cargar chart-tokens.css");
+must(analysisLayout.indexOf('import "./chart-tokens.css";')<analysisLayout.indexOf('import "../analysis.css";'),"Análisis debe preservar cascada tokens -> analysis.css");
+
+for(const token of [".cf-income",".cf-expense",".cf-acc-line",".cf-acc-dot",".cf-grid line",".cf-series-controls"])
+  must(cashFlow.includes(token),`Cash Flow perdió contrato visual canónico: ${token}`);
+must(home.includes('import "./cash-flow.css";'),"Inicio debe seguir cargando cash-flow.css al reutilizar CashFlowChart");
+must(homeSections.includes("CashFlowChart"),"Inicio debe seguir reutilizando CashFlowChart");
+for(const token of [".balance-chart svg",".balance-chart-line",".balance-chart-area",".balance-chart-dot"])
+  must(accounts.includes(token),`Cuentas perdió contrato BalanceChart: ${token}`);
+for(const token of [".nw-grid-line",".nw-line",".nw-area",".nw-dot"])
+  must(netWorth.includes(token),`Patrimonio perdió contrato de gráfica: ${token}`);
+
+must(analysisWall.includes("content-visibility:auto"),"La rejilla visual debe diferir pintura fuera de pantalla");
+must(analysisWall.includes("contain-intrinsic-size:auto 338px"),"La pintura diferida debe reservar tamaño intrínseco");
+must(dashboard.includes("24 gráficos e informes rápidos"),"El panel debe conservar el contrato visible de 24 gráficos");
+const defaultOrder=dashboard.match(/const DEFAULT_ORDER:ChartId\[\]=\[([\s\S]*?)\];/)?.[1]||"";
+const chartIds=[...defaultOrder.matchAll(/"([a-z0-9-]+)"/g)].map(match=>match[1]);
+must(chartIds.length===24,`DEFAULT_ORDER debe conservar 24 gráficos; detectados ${chartIds.length}`);
+must(new Set(chartIds).size===24,"DEFAULT_ORDER no debe contener gráficos duplicados");
+
+must(versionAtLeast("6.5.0","6.4.11"),"Comparador semver falla en 6.5.0 >= 6.4.11");
+must(versionAtLeast("7.0.0","6.4.11"),"Comparador semver falla entre familias mayores");
+must(!versionAtLeast("6.4.10","6.4.11"),"Comparador semver acepta una versión inferior");
+must(!versionAtLeast("bad","6.4.11"),"Comparador semver acepta una versión inválida");
+
+const historical=["v640","v641","v642","v643","v644","v645","v646","v647","v648","v649","v6410","v6411"];
+for(const suffix of historical){
+  const source=read(`scripts/audit-release-${suffix}.mjs`);
+  must(source.includes('from "./lib/version-baseline.mjs"'),`Gate ${suffix} no usa comparador semver compartido`);
+  must(source.includes("versionAtLeast(currentVersion"),`Gate ${suffix} no valida su baseline con versionAtLeast`);
+  must(!source.includes("^6\\.4\\."),`Gate ${suffix} conserva bloqueo regex a 6.4.x`);
+  must(!source.includes("major===6&&minor===4"),`Gate ${suffix} conserva bloqueo imperativo a 6.4.x`);
+}
+
+const loadingBytes=fs.statSync("app/route-loading.css").size;
+const tokenBytes=fs.statSync("app/analisis/chart-tokens.css").size;
+must(loadingBytes<3292,`route-loading.css debe ser menor que el antiguo visual.css de 3292 bytes; detectados ${loadingBytes}`);
+
+if(failures.length){
+  console.error("Financial App 6.5.0 visual runtime audit FAILED");
+  for(const failure of failures)console.error(`- ${failure}`);
+  process.exit(1);
+}
+console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global 3292 bytes retirado · skeleton ${loadingBytes} bytes · tokens locales ${tokenBytes} bytes · 24 gráficos preservados`);

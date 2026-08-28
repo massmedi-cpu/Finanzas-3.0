@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import {versionAtLeast} from "./lib/version-baseline.mjs";
 
 const read=file=>fs.readFileSync(file,"utf8");
 const failures=[];
@@ -9,9 +10,8 @@ const pkg=JSON.parse(read("package.json"));
 const release=read("database/FINANCIAL_APP_6.4.11_RELEASE.sql");
 const notes=read("docs/releases/6.4.11.md");
 const currentVersion=version.match(/APP_VERSION\s*=\s*["']([^"']+)/)?.[1]||"0.0.0";
-const family=currentVersion.match(/^6\.4\.(\d+)$/);
 
-must(Boolean(family)&&Number(family?.[1]||0)>=11,"APP_VERSION debe pertenecer a 6.4.x desde patch 11");
+must(versionAtLeast(currentVersion,"6.4.11"),"APP_VERSION debe preservar como mínimo la baseline 6.4.11");
 must(pkg.version==="3.4.8","La versión técnica npm debe permanecer en 3.4.8");
 const current=String(pkg.scripts?.["audit:current"]||"");
 must(current.includes("audit-tablet-scope-v6411.mjs"),"audit:current no ejecuta el gate funcional 6.4.11");

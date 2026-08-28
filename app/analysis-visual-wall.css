@@ -34,6 +34,7 @@
 .analysis-waterfall .wf-bridge{stroke:var(--chart-prior);stroke-width:1.5;stroke-dasharray:5 4}
 
 .analysis-viz-card[data-chart-id="annual-waterfall"],.analysis-viz-card[data-chart-id="category-treemap"],.analysis-viz-card[data-chart-id="monthly-flow"],.analysis-viz-card[data-chart-id="net-trend"]{grid-column:auto}
+.analysis-viz-grid>div{content-visibility:auto;contain-intrinsic-size:auto 338px}
 
 @media(min-width:1280px){
   .analysis-viz-grid{grid-template-columns:repeat(3,minmax(0,1fr))}

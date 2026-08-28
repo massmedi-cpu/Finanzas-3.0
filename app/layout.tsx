@@ -6,7 +6,7 @@ import "./typography.css";
 import "./controls.css";
 import "./chrome.css";
 import "./system-state.css";
-import "./visual.css";
+import "./route-loading.css";
 import "./tablet.css";
 
 export const metadata:Metadata={

@@ -28,9 +28,14 @@ must(!workflow.includes("Wait for exact production version"),"El smoke no puede 
 must(workflow.includes("Verify protected application routes"),"Debe conservarse la verificación final de rutas privadas");
 must(workflow.includes("Verify private API boundary"),"Debe conservarse la verificación final de APIs privadas");
 
-must(v640.includes('/^6\\.4\\.\\d+$/.test(currentVersion)'),"El gate 6.4.0 debe aceptar la familia 6.4.x sin enumeración manual");
-must(v641.includes('currentVersion.match(/^6\\.4\\.(\\d+)$/)')&&v641.includes("patch>=1"),"El gate 6.4.1 debe aceptar futuros patch 6.4.x desde patch 1");
-must(v642.includes('currentVersion.match(/^6\\.4\\.(\\d+)$/)')&&v642.includes("patch>=2"),"El gate 6.4.2 debe aceptar futuros patch 6.4.x desde patch 2");
+for(const [source,baseline,label] of [
+  [v640,"6.4.0","6.4.0"],
+  [v641,"6.4.1","6.4.1"],
+  [v642,"6.4.2","6.4.2"]
+]){
+  must(source.includes('from "./lib/version-baseline.mjs"'),`El gate ${label} debe usar el comparador semver compartido`);
+  must(source.includes(`versionAtLeast(currentVersion,"${baseline}")`),`El gate ${label} debe aceptar cualquier versión igual o posterior a ${baseline}`);
+}
 
 if(failures.length){console.error("Financial App 6.4.3 release reliability audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.3 release reliability audit OK · propagación global estable y gates históricos 6.4.x forward-compatible");
+console.log("Financial App 6.4.3 release reliability audit OK · propagación global estable y gates históricos forward-compatible entre familias");
