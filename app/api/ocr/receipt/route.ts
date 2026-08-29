@@ -12,10 +12,19 @@ const OCR_TIMEOUT_MS = 50_000;
 
 type TesseractWorker = Awaited<ReturnType<typeof createWorker>>;
 type PaddleItem = { text: string; score: number; poly: number[][] };
+type UnknownRecord = Record<string, unknown>;
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 let workerOrigin = "";
 let queue: Promise<void> = Promise.resolve();
+
+function asRecord(value: unknown): UnknownRecord | null {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
+}
+
+function asArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -42,15 +51,17 @@ async function getWorker(origin: string) {
   return workerPromise;
 }
 
-function itemFromWord(word: any): PaddleItem | null {
-  const text = String(word?.text || "").trim();
-  const box = word?.bbox;
+function itemFromWord(value: unknown): PaddleItem | null {
+  const word = asRecord(value);
+  if (!word) return null;
+  const text = String(word.text || "").trim();
+  const box = asRecord(word.bbox);
   const x0 = Number(box?.x0);
   const y0 = Number(box?.y0);
   const x1 = Number(box?.x1);
   const y1 = Number(box?.y1);
   if (!text || ![x0, y0, x1, y1].every(Number.isFinite) || x1 <= x0 || y1 <= y0) return null;
-  const confidence = Number(word?.confidence);
+  const confidence = Number(word.confidence);
   return {
     text,
     score: Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 50,
@@ -59,12 +70,21 @@ function itemFromWord(word: any): PaddleItem | null {
 }
 
 function wordsFromBlocks(blocks: unknown): PaddleItem[] {
-  if (!Array.isArray(blocks)) return [];
-  return blocks.flatMap((block: any) =>
-    (block?.paragraphs || []).flatMap((paragraph: any) =>
-      (paragraph?.lines || []).flatMap((line: any) => (line?.words || []).map(itemFromWord).filter(Boolean)),
-    ),
-  );
+  const items: PaddleItem[] = [];
+  for (const blockValue of asArray(blocks)) {
+    const block = asRecord(blockValue);
+    for (const paragraphValue of asArray(block?.paragraphs)) {
+      const paragraph = asRecord(paragraphValue);
+      for (const lineValue of asArray(paragraph?.lines)) {
+        const line = asRecord(lineValue);
+        for (const wordValue of asArray(line?.words)) {
+          const item = itemFromWord(wordValue);
+          if (item) items.push(item);
+        }
+      }
+    }
+  }
+  return items;
 }
 
 function wordsFromTsv(tsv: unknown): PaddleItem[] {
@@ -123,13 +143,15 @@ export async function POST(request: NextRequest) {
 
   try {
     const recognition = await recognizeExclusive(Buffer.from(arrayBuffer), request.nextUrl.origin);
-    const data: any = recognition?.data || {};
+    const data = asRecord(recognition?.data) || {};
     let items = wordsFromBlocks(data.blocks);
     if (!items.length) items = wordsFromTsv(data.tsv);
-    if (!items.length && String(data.text || "").trim()) {
+    const rawText = typeof data.text === "string" ? data.text.trim() : "";
+    if (!items.length && rawText) {
+      const confidence = Number(data.confidence);
       items = [{
-        text: String(data.text).trim(),
-        score: Number.isFinite(Number(data.confidence)) ? Number(data.confidence) : 50,
+        text: rawText,
+        score: Number.isFinite(confidence) ? Math.max(0, Math.min(100, confidence)) : 50,
         poly: [[0, 0], [width, 0], [width, height], [0, height]],
       }];
     }
