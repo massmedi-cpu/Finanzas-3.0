@@ -14,6 +14,8 @@ const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
 const archive=read("app/archivo/archive-client.tsx");
 const visual=read("app/archivo/receipt-geometry-preview.tsx");
 const loader=read("public/vendor/paddleocr-loader.mjs");
+const serverOcr=read("app/api/ocr/receipt/route.ts");
+const nextConfig=read("next.config.ts");
 const validator=read("lib/document/receipt-financial-validator.ts");
 const revision=read("lib/document/receipt-ocr-revision.ts");
 const pkg=JSON.parse(read("package.json"));
@@ -51,11 +53,13 @@ for(const token of [
   "passes",
 ]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
 
-must(archive.includes("PaddleOCR.create")&&archive.includes("sharedWorkerPromise")&&archive.includes("workerReuse:true"),"Archivo no utiliza el motor PaddleOCR canónico reutilizable");
-must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"Archivo debe usar una combinación de idioma/modelo soportada por PaddleOCR.js para español");
-must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en PaddleOCR.js 0.4.2 y no puede volver al runtime");
-must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"Tesseract no puede sobrevivir en el runtime OCR");
-must(loader.includes("@paddleocr/paddleocr-js@0.4.2"),"Falta PaddleOCR.js 0.4.2 en el loader canónico");
+must(archive.includes("PaddleOCR.create")&&archive.includes("sharedWorkerPromise")&&archive.includes("workerReuse:true"),"Archivo no conserva el adaptador OCR geométrico reutilizable");
+must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"Archivo ha perdido el contrato de idioma/modelo que alimenta el motor geométrico");
+must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en el contrato OCR histórico y no puede volver al runtime");
+must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"El cliente y el motor geométrico no deben acoplarse directamente a Tesseract");
+must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.includes("serverPredict"),"El adaptador OCR móvil no apunta al reconocimiento autenticado del servidor");
+must(serverOcr.includes('createWorker("spa"')&&serverOcr.includes('runtime: "server-tesseract-7"'),"El reconocimiento OCR real del servidor no está fijado a Tesseract español");
+must(nextConfig.includes("./node_modules/regenerator-runtime/**/*")&&nextConfig.includes("./node_modules/tesseract.js/**/*")&&nextConfig.includes("'/api/ocr/receipt': ocrRuntimeAssets"),"El bundle OCR del servidor no protege las dependencias críticas de Tesseract");
 must(visual.includes("ReceiptGeometryPreview")&&visual.includes("viewBox")&&visual.includes("textLength")&&visual.includes('lengthAdjust="spacingAndGlyphs"'),"La reconstrucción ya no conserva la maquetación espacial");
 
 for(const token of [
@@ -71,7 +75,7 @@ const ocrRevisionNumber=Number.parseInt(revision.match(/paddle_layout_v(\d+)/)?.
 must(ocrRevisionNumber>=4,"La revisión OCR debe conservar como mínimo el baseline paddle_layout_v4");
 must(ocrEngine.includes("prepareReceiptImage")&&ocrEngine.includes("if (prepared.paperDetected)")&&ocrEngine.includes("input = prepared.grayscale"),"El OCR debe aislar el papel únicamente cuando la detección sea segura");
 must(ocrEngine.includes("input = file")&&!ocrEngine.includes("input = prepared.adaptive"),"El aislamiento de papel debe tener fallback al original y no usar binarización destructiva");
-must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia PP-OCRv6");
+must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia de reconocimiento");
 must(preprocessor.includes("detectPaper")&&preprocessor.includes("rectifyPaper")&&preprocessor.includes("perspectiveCorrected"),"El aislamiento de papel no conserva sus garantías geométricas");
 must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar una segunda pasada de rescate");
 must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
@@ -106,4 +110,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 baseline audit OK · PP-OCRv6 español · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");
+console.log("Financial App 5.0.1 baseline audit OK · reconocimiento Tesseract español en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");
