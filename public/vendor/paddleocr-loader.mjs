@@ -4,15 +4,29 @@ const LOCAL_TESSERACT_WORKER = "/vendor/document-engine/tesseract/worker.min.js"
 const LOCAL_TESSERACT_LANG = "/vendor/document-engine/tessdata";
 const LOCAL_TESSERACT_CORE = "/vendor/document-engine/tesseract-core";
 
+const PADDLE_IMPORT_TIMEOUT_MS = 10000;
+const PADDLE_CREATE_TIMEOUT_MS = 15000;
+const PADDLE_PREDICT_TIMEOUT_MS = 30000;
+const LOCAL_BOOT_TIMEOUT_MS = 30000;
+const LOCAL_RECOGNIZE_TIMEOUT_MS = 60000;
+
 let paddleModulePromise;
 let tesseractWorkerPromise;
+
+function withTimeout(promise, timeoutMs, label) {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = window.setTimeout(() => reject(new Error(`${label} superó ${Math.round(timeoutMs / 1000)} s`)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => window.clearTimeout(timer));
+}
 
 function loadClassicScript(src, id) {
   return new Promise((resolve, reject) => {
     const existing = document.getElementById(id);
     if (existing) {
       if (window.Tesseract) return resolve();
-      existing.addEventListener("load", () => resolve(), { once: true });
+      existing.addEventListener("load", () => window.Tesseract ? resolve() : reject(new Error(`Se cargó ${src}, pero no expuso Tesseract`)), { once: true });
       existing.addEventListener("error", () => reject(new Error(`No se pudo cargar ${src}`)), { once: true });
       return;
     }
@@ -20,28 +34,38 @@ function loadClassicScript(src, id) {
     script.id = id;
     script.src = src;
     script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error(`No se pudo cargar ${src}`));
+    script.onload = () => window.Tesseract ? resolve() : reject(new Error(`Se cargó ${src}, pero no expuso Tesseract`));
+    script.onerror = () => {
+      script.remove();
+      reject(new Error(`No se pudo cargar ${src}`));
+    };
     document.head.appendChild(script);
   });
 }
 
 async function getPaddleModule() {
-  if (!paddleModulePromise) paddleModulePromise = import(PADDLE_MODULE_URL);
+  if (!paddleModulePromise) {
+    paddleModulePromise = import(PADDLE_MODULE_URL).catch((error) => {
+      paddleModulePromise = undefined;
+      throw error;
+    });
+  }
   return paddleModulePromise;
 }
 
 async function getTesseractWorker() {
   if (!tesseractWorkerPromise) {
     tesseractWorkerPromise = (async () => {
-      if (!window.Tesseract) await loadClassicScript(LOCAL_TESSERACT_SCRIPT, "financial-tesseract-loader");
+      if (!window.Tesseract) {
+        await withTimeout(loadClassicScript(LOCAL_TESSERACT_SCRIPT, "financial-tesseract-loader"), LOCAL_BOOT_TIMEOUT_MS, "Carga del OCR local");
+      }
       if (!window.Tesseract?.createWorker) throw new Error("Tesseract local no disponible");
-      return window.Tesseract.createWorker("spa", 1, {
+      return withTimeout(window.Tesseract.createWorker("spa", 1, {
         workerPath: LOCAL_TESSERACT_WORKER,
         langPath: LOCAL_TESSERACT_LANG,
         corePath: LOCAL_TESSERACT_CORE,
         cacheMethod: "none",
-      });
+      }), LOCAL_BOOT_TIMEOUT_MS, "Arranque del OCR local");
     })().catch((error) => {
       tesseractWorkerPromise = undefined;
       throw error;
@@ -92,7 +116,11 @@ function itemFromWord(word) {
 async function tesseractPredict(input) {
   const started = performance.now();
   const worker = await getTesseractWorker();
-  const result = await worker.recognize(input, { rotateAuto: true }, { text: true, blocks: true });
+  const result = await withTimeout(
+    worker.recognize(input, { rotateAuto: true }, { text: true, blocks: true }),
+    LOCAL_RECOGNIZE_TIMEOUT_MS,
+    "Lectura del OCR local",
+  );
   const size = await imageSize(input);
   const items = wordsFromBlocks(result?.data?.blocks).map(itemFromWord).filter(Boolean);
   const totalMs = Math.round(performance.now() - started);
@@ -115,8 +143,8 @@ const PaddleOCR = {
     let primary = null;
     let primaryError = null;
     try {
-      const module = await getPaddleModule();
-      primary = await module.PaddleOCR.create(options);
+      const module = await withTimeout(getPaddleModule(), PADDLE_IMPORT_TIMEOUT_MS, "Descarga de PP-OCRv6");
+      primary = await withTimeout(module.PaddleOCR.create(options), PADDLE_CREATE_TIMEOUT_MS, "Arranque de PP-OCRv6");
     } catch (error) {
       primaryError = error;
     }
@@ -126,7 +154,7 @@ const PaddleOCR = {
       async predict(input, params) {
         if (!fallbackActive && primary) {
           try {
-            return await primary.predict(input, params);
+            return await withTimeout(primary.predict(input, params), PADDLE_PREDICT_TIMEOUT_MS, "Lectura de PP-OCRv6");
           } catch (error) {
             primaryError = error;
             fallbackActive = true;
