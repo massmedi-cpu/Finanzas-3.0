@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 6.5.0. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 7.0.0. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -45,19 +45,28 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Desde 6.4.4 la automatización masiva 4.0 no forma parte del runtime activo. Su migración histórica se conserva únicamente como trazabilidad.
 - Movimientos no ejecuta matching documental propio ni una orquestación paralela de reglas/documentos/conciliación.
 
-## Previsión e inteligencia
+## Previsión, Agenda Financiera e inteligencia
 
-- Previsión usa el ledger/calendario canónico con matching real 1↔1, descartes reversibles y proyección mensual calculada en servidor.
+- El ledger/calendario canónico sigue siendo la única fuente de eventos previstos: matching real 1↔1, descartes reversibles y proyección mensual se resuelven en servidor.
 - El suplemento histórico anual no constituye un segundo motor: alimenta `forecast_calendar_visible_core` sobre el resultado de `forecast_calendar_core` y conserva el mismo matching, descarte y cálculo mensual.
-- Desde 6.4.8 una categoría fiscal genérica sin señal textual explícita solo puede generar una previsión anual si la misma identidad normalizada aparece en al menos dos años distintos. Esto evita convertir cargos puntuales mal o genéricamente categorizados en recurrencias anuales.
+- Desde 6.4.8 una categoría fiscal genérica sin señal textual explícita solo puede generar una previsión anual si la misma identidad normalizada aparece en al menos dos años distintos.
 - Seguros y señales fiscales textuales explícitas —domiciliación de impuesto, IRPF, IBI, IVTM, tributo o tasa municipal— siguen pudiendo proyectarse desde una observación cuando el contrato anual las identifica.
+- Desde 7.0.0 `financial_app.forecast_liquidity_core(date,integer)` es la única capa canónica de liquidez futura. No genera eventos propios: llama a `forecast_calendar_visible_core` y proyecta únicamente los eventos no confirmados.
+- La apertura de la proyección usa el último `source_balance` conocido de cuentas activas con `account_role='operating'` y `cash_flow_enabled=true`. Las cuentas de ahorro y las cuentas fuera del contrato de Cash Flow quedan excluidas.
+- Los eventos `received` no vuelven a afectar al saldo proyectado porque su impacto ya está incorporado en el saldo real de apertura. Esto evita doble conteo.
+- Un evento vencido sin confirmar se aplica conservadoramente en la fecha de inicio del horizonte; no se oculta una obligación solo porque su fecha estimada ya haya pasado.
+- El horizonte estándar de producto es de 90 días y el contrato permite entre 7 y 180 días.
+- La salida expone serie diaria de saldo, saldo mínimo y fecha, saldo final, días bajo cero, hitos 30/60/90, pendientes de ingreso/gasto, compromisos y bandas de confianza.
+- La capa de liquidez es estrictamente de solo lectura sobre movimientos, cuentas, documentos y previsiones; nunca escribe en datos de origen ni en enriquecimientos privados.
+- `lib/financial/forecast-liquidity.ts` es el loader tipado canónico y `ForecastLiquidityDashboard` es la superficie compartida por Previsión y Cash Flow. No existe un segundo cálculo de saldo en cliente.
+- Los cambios explícitos de previsión continúan escribiendo mediante las rutas canónicas existentes; el cliente hace `router.refresh()` para invalidar también la proyección server-side después de añadir, descartar o restaurar eventos.
 - Matching observability mide calidad sin persistir valores financieros derivados.
 - Inteligencia financiera reutiliza señales canónicas para anomalías, recurrencias, subidas y oportunidades, sin inventar cifras ni mutar movimientos.
 
 ## Documentos, OCR y Google Drive
 
 - La sincronización de Drive es incremental y preserva el original externo.
-- La frontera canónica de normalización de metadatos de Drive es `financial_app.drive_document_rows(jsonb)`. Desde 6.4.5 admite como fallback la convención real `YYYYMMDD Comercio importe` además del formato con guiones, de modo que fecha, importe y comercio se normalizan antes del matching.
+- La frontera canónica de normalización de metadatos de Drive es `financial_app.drive_document_rows(jsonb)`. Admite como fallback la convención real `YYYYMMDD Comercio importe` además del formato con guiones, de modo que fecha, importe y comercio se normalizan antes del matching.
 - La normalización de nombres no crea asociaciones ni un motor de scoring: entrega metadatos al matching documental 6.x ya existente.
 - Desde 6.4.6, si una migración de ciclo de vida deja documentos de Drive archivados después de inicializar el cursor incremental, la reconciliación invalida una sola vez ese cursor y el siguiente sync autenticado hace un full scan. Solo se reactivan IDs que Google Drive confirma presentes; nunca hay desarchivado masivo por suposición.
 - Mientras esa reconciliación está pendiente, Inicio expone el estado sin presentar la invalidación del cursor como una sincronización real.
@@ -65,7 +74,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - PP-OCRv6 preserva geometría y reconstrucción de tickets/documentos comerciales sin convertir la imagen en una segunda fuente financiera.
 - `document_triage_core` es la cola canónica de prioridad documental.
 - El matching usa una política supervisada versionada. Los umbrales no se autoajustan ni se relajan automáticamente.
-- El Centro de operaciones documentales 6.4 orquesta sobre triage y matching existentes: no crea un segundo motor.
+- El Centro de operaciones documentales orquesta sobre triage y matching existentes: no crea un segundo motor.
 - Solo las operaciones que el servidor marca como seguras pueden entrar en lote y cada una se revalida de nuevo justo antes de escribir.
 - Las asociaciones reutilizan el core calibrado y el archivado conserva historial reversible.
 - Los casos ambiguos, OCR fallido, metadatos incompletos o decisiones manuales permanecen fuera de la automatización segura.
@@ -76,11 +85,11 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Cada módulo carga sus estilos desde su propio layout o superficie.
 - Desde 6.4.9 los estilos exclusivos de Inicio (`home.css`) y Revisión de Archivo (`archive-review.css`) no forman parte del layout raíz; se importan únicamente en sus rutas.
 - Desde 6.4.10 `document-linking.css` tampoco pertenece al layout raíz: la misma hoja compartida se importa únicamente desde Archivo y Movimientos, sus dos consumidores reales, sin duplicación de reglas.
-- Desde 6.4.11 `app/tablet.css` conserva solo contratos responsive compartidos; Archivo y Movimientos cargan sus reglas tablet exclusivas desde hojas locales de ruta, manteniendo el orden de cascada anterior. La regla muerta `.topbar .home-top-actions` queda retirada.
-- Desde 6.5.0 `app/visual.css` deja de formar parte del runtime y se elimina. Sus 3.292 bytes mezclaban skeleton global con tokens/selectores de gráficas que ya tenían consumidores concretos.
-- El skeleton compartido vive en `app/route-loading.css` y conserva su posición anterior en la cascada antes de `tablet.css`.
+- Desde 6.4.11 `app/tablet.css` conserva solo contratos responsive compartidos; Archivo y Movimientos cargan sus reglas tablet exclusivas desde hojas locales de ruta, manteniendo el orden de cascada anterior.
+- Desde 6.5.0 `app/visual.css` deja de formar parte del runtime y se elimina. El skeleton compartido vive en `app/route-loading.css`.
 - Los tokens `--chart-*` de Análisis viven en `app/analisis/chart-tokens.css`, acotados a `.analysis-workspace`; Cash Flow, Cuentas y Patrimonio mantienen sus contratos visuales en sus hojas canónicas de ruta.
-- Los 24 gráficos del panel visual de Análisis conservan contenido e interacciones. Las tarjetas usan `content-visibility:auto` con tamaño intrínseco de reserva para diferir trabajo de layout/pintura fuera del viewport sin cambiar la semántica ni crear lazy loaders de datos paralelos.
+- Los 24 gráficos del panel visual de Análisis usan `content-visibility:auto` con tamaño intrínseco de reserva para diferir layout/pintura fuera del viewport sin cambiar semántica ni datos.
+- Desde 7.0.0 `app/forecast-liquidity.css` se carga únicamente en Previsión y Cash Flow, las dos superficies que consumen la Agenda Financiera. No se incorpora al layout raíz.
 - No deben existir hojas runtime `*-vNNN.css` ni `*-advanced.css`.
 
 ## Seguridad
@@ -90,8 +99,9 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - RLS y privilegios mantienen las tablas privadas cerradas por defecto.
 - `anon` no ejecuta operaciones privilegiadas.
 - Los wrappers públicos necesarios deben ser `SECURITY INVOKER` cuando el contrato lo permita.
-- Los cores `SECURITY DEFINER` que sean imprescindibles viven fuera del API público, usan `search_path` cerrado, permisos mínimos y vuelven a validar la autorización de servidor mediante `authorized_email()` cuando corresponda.
-- `financial_app_document_matching_dashboard` sigue este patrón desde 6.4.2: el wrapper público es invoker y el core privilegiado permanece en `financial_app` con autorización explícita.
+- Los cores `SECURITY DEFINER` imprescindibles viven fuera del API público, usan `search_path` cerrado, permisos mínimos y vuelven a validar la autorización mediante `authorized_email()` cuando corresponda.
+- `financial_app_document_matching_dashboard` sigue este patrón desde 6.4.2.
+- Desde 7.0.0 `public.financial_app_forecast_liquidity(date,integer)` es `SECURITY INVOKER`; delega en `financial_app.forecast_liquidity_core`, que vuelve a comprobar `authorized_email()`. `anon` no tiene `EXECUTE`; `authenticated` y `service_role` sí.
 - La condición `authenticated` no equivale a autorización: una frontera privilegiada debe verificar además la identidad permitida.
 - Los advisors de Supabase forman parte de la verificación tras cambios de esquema; sus avisos se corrigen con alcance medido, no mediante cambios masivos sin evidencia.
 - Código sin uso que conserve permisos privilegiados o una lógica paralela se retira del runtime cuando la evidencia demuestra que ya no es necesario.
@@ -101,14 +111,14 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 Toda release debe superar, como mínimo:
 
 1. AXIOMA estructural y arquitectura canónica.
-2. Gates históricos forward-compatible. Desde 6.5.0 las baselines 6.4.0–6.4.11 se comparan mediante un helper semántico común (`versionAtLeast`), de forma que una familia posterior mantiene todas las pruebas históricas sin quedar bloqueada por una regex de versión.
+2. Gates históricos forward-compatible. Desde 6.5.0 las baselines 6.4.0–6.4.11 se comparan mediante `versionAtLeast`; 7.0.0 añade sus gates específicos sin desactivar los anteriores.
 3. Gate de la versión actual.
 4. Auditoría de dependencias, lint, TypeScript y build reproducible.
 5. Migración Supabase compatible y verificada sin mutar datos de origen cuando exista cambio de base de datos.
 6. CI verde sobre la rama de trabajo.
 7. Merge a `main` y un único despliegue de producción desde el SHA validado.
-8. Deployment Vercel `READY` y cabecera de versión exacta.
+8. Deployment Vercel `READY` y versión exacta.
 9. Alineación final de metadata de Supabase cuando proceda.
-10. Production smoke sobre dominio canónico, rutas privadas y frontera API. Desde 6.4.3 la versión se considera propagada únicamente cuando login, las rutas protegidas y las APIs privadas alcanzan la versión esperada en dos pasadas consecutivas antes de la verificación final.
+10. Production smoke sobre dominio canónico, rutas privadas y frontera API. Desde 6.4.3 la versión se considera propagada únicamente cuando login, rutas protegidas y APIs privadas alcanzan la versión esperada en dos pasadas consecutivas.
 
 `npm run audit:current` protege las reglas canónicas y los gates históricos impiden reintroducir implementaciones sustituidas.
