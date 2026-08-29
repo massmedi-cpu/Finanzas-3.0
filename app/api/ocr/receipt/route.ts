@@ -1,3 +1,4 @@
+import path from "node:path";
 import { NextRequest } from "next/server";
 import { createWorker } from "tesseract.js";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
@@ -15,7 +16,7 @@ type PaddleItem = { text: string; score: number; poly: number[][] };
 type UnknownRecord = Record<string, unknown>;
 
 let workerPromise: Promise<TesseractWorker> | null = null;
-let workerOrigin = "";
+let workerRoot = "";
 let queue: Promise<void> = Promise.resolve();
 
 function asRecord(value: unknown): UnknownRecord | null {
@@ -36,15 +37,18 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
   });
 }
 
-async function getWorker(origin: string) {
-  if (!workerPromise || workerOrigin !== origin) {
-    workerOrigin = origin;
+async function getWorker() {
+  const root = process.cwd();
+  if (!workerPromise || workerRoot !== root) {
+    workerRoot = root;
     workerPromise = createWorker("spa", 1, {
-      langPath: `${origin}/vendor/document-engine/tessdata`,
+      workerPath: path.join(root, "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
+      corePath: path.join(root, "node_modules", "tesseract.js-core"),
+      langPath: path.join(root, "public", "vendor", "document-engine", "tessdata"),
       cacheMethod: "none",
     }).catch((failure) => {
       workerPromise = null;
-      workerOrigin = "";
+      workerRoot = "";
       throw failure;
     });
   }
@@ -110,13 +114,13 @@ function wordsFromTsv(tsv: unknown): PaddleItem[] {
   return items;
 }
 
-async function recognizeExclusive(bytes: Buffer, origin: string) {
+async function recognizeExclusive(bytes: Buffer) {
   const previous = queue;
   let release!: () => void;
   queue = new Promise<void>((resolve) => { release = resolve; });
   await previous;
   try {
-    const worker = await withTimeout(getWorker(origin), OCR_TIMEOUT_MS, "ocr_worker");
+    const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "ocr_worker");
     return await withTimeout(
       worker.recognize(bytes, {}, { text: true, blocks: true, tsv: true }),
       OCR_TIMEOUT_MS,
@@ -142,7 +146,7 @@ export async function POST(request: NextRequest) {
   const started = Date.now();
 
   try {
-    const recognition = await recognizeExclusive(Buffer.from(arrayBuffer), request.nextUrl.origin);
+    const recognition = await recognizeExclusive(Buffer.from(arrayBuffer));
     const data = asRecord(recognition?.data) || {};
     let items = wordsFromBlocks(data.blocks);
     if (!items.length) items = wordsFromTsv(data.tsv);
@@ -178,7 +182,7 @@ export async function POST(request: NextRequest) {
       type: failure instanceof Error ? failure.name : "unknown_failure",
     });
     workerPromise = null;
-    workerOrigin = "";
+    workerRoot = "";
     return apiError("ocr_server_failed", 503);
   }
 }
