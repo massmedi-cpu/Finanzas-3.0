@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { asArray, asBoolean, asNumber, asRecord, asString, nullableString } from "@/lib/validation/json";
 
 export type ForecastCalendarStatus="expected"|"received"|"late";
-export type ForecastCalendarSource="automatic"|"manual";
+export type ForecastCalendarSource="automatic"|"manual"|"document";
 export type ForecastCalendarFrequency="once"|"weekly"|"monthly"|"bimonthly"|"quarterly"|"yearly";
 export type ForecastCalendarActual={transactionId:string;date:string;amount:number;title:string;category:string|null};
 export type ForecastCalendarMatch={method:string;dateDifferenceDays:number;amountDifference:number;identityRank:number};
@@ -26,11 +26,13 @@ export type ForecastCalendarOverview={
   rules:{calendarOnly:boolean;estimatedDates:boolean;actualMovementConfirms:boolean;annualInsuranceAndTaxPatterns:boolean;dismissibleOccurrences:boolean;
     reversibleDismissal:boolean;dismissedEventsExcludedFromMetrics:boolean;normalizedCategoryFallbackMatching:boolean;actualExpensesIncludedInProjection:boolean;
     confirmedEventsNotDoubleCounted:boolean;oneToOneActualMatching:boolean;annualTextSignalDetection:boolean;serverSideMonthlyProjection:boolean;
+    pendingInvoiceCommitments:boolean;pendingInvoiceLookbackDays:number;pendingInvoiceFallbackDays:number;pendingInvoiceRequiresNoMovementCandidate:boolean;
+    pendingInvoiceDeduplicatesCanonicalForecast:boolean;pendingInvoiceDismissible:boolean;sourceDataReadOnly:boolean;
     historyWindowDays:number;maximumMonths:number};
 };
 
 const status=(value:unknown):ForecastCalendarStatus=>value==="received"?"received":value==="late"?"late":"expected";
-const source=(value:unknown):ForecastCalendarSource=>value==="manual"?"manual":"automatic";
+const source=(value:unknown):ForecastCalendarSource=>value==="manual"?"manual":value==="document"?"document":"automatic";
 const frequency=(value:unknown):ForecastCalendarFrequency=>{
   const v=asString(value);
   return v==="once"||v==="weekly"||v==="bimonthly"||v==="quarterly"||v==="yearly"?v:"monthly";
@@ -80,6 +82,9 @@ export async function getForecastCalendar(months=12):Promise<ForecastCalendarOve
       normalizedCategoryFallbackMatching:bool(rules.normalizedCategoryFallbackMatching,true),actualExpensesIncludedInProjection:bool(rules.actualExpensesIncludedInProjection,true),
       confirmedEventsNotDoubleCounted:bool(rules.confirmedEventsNotDoubleCounted,true),oneToOneActualMatching:bool(rules.oneToOneActualMatching,true),
       annualTextSignalDetection:bool(rules.annualTextSignalDetection,true),serverSideMonthlyProjection:bool(rules.serverSideMonthlyProjection,true),
+      pendingInvoiceCommitments:bool(rules.pendingInvoiceCommitments,false),pendingInvoiceLookbackDays:asNumber(rules.pendingInvoiceLookbackDays,45),pendingInvoiceFallbackDays:asNumber(rules.pendingInvoiceFallbackDays,7),
+      pendingInvoiceRequiresNoMovementCandidate:bool(rules.pendingInvoiceRequiresNoMovementCandidate,true),pendingInvoiceDeduplicatesCanonicalForecast:bool(rules.pendingInvoiceDeduplicatesCanonicalForecast,true),
+      pendingInvoiceDismissible:bool(rules.pendingInvoiceDismissible,true),sourceDataReadOnly:bool(rules.sourceDataReadOnly,true),
       historyWindowDays:asNumber(rules.historyWindowDays,1460),maximumMonths:asNumber(rules.maximumMonths,18),
     },
   };
