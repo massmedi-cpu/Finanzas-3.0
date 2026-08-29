@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { NextRequest } from "next/server";
 import { createWorker } from "tesseract.js";
@@ -10,6 +11,18 @@ export const maxDuration = 60;
 
 const MAX_OCR_BYTES = 5 * 1024 * 1024;
 const OCR_TIMEOUT_MS = 50_000;
+const OCR_RUNTIME_FILES = [
+  path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
+  path.join(process.cwd(), "node_modules", "tesseract.js-core", "package.json"),
+  path.join(process.cwd(), "node_modules", "regenerator-runtime", "runtime.js"),
+  path.join(process.cwd(), "public", "vendor", "document-engine", "tessdata", "spa.traineddata.gz"),
+] as const;
+
+for (const runtimeFile of OCR_RUNTIME_FILES) {
+  if (!fs.existsSync(runtimeFile)) {
+    throw new Error(`ocr_runtime_asset_missing:${path.relative(process.cwd(), runtimeFile)}`);
+  }
+}
 
 type TesseractWorker = Awaited<ReturnType<typeof createWorker>>;
 type PaddleItem = { text: string; score: number; poly: number[][] };

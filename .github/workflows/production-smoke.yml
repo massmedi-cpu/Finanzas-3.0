@@ -54,6 +54,13 @@ jobs:
               && grep -q '"error":"unauthorized"' /tmp/api-body \
               && [ "$deployed" = "$EXPECTED_VERSION" ]
           }
+          ocr_api_ready() {
+            code=$(curl -sS -X POST -H 'Cache-Control: no-cache' -H 'Content-Type: image/jpeg' -D /tmp/ocr-headers -o /tmp/ocr-body -w '%{http_code}' --data-binary '' --max-time 15 "$BASE_URL/api/ocr/receipt" || true)
+            deployed=$(version_from_headers /tmp/ocr-headers)
+            [ "$code" = "401" ] \
+              && grep -q '"error":"unauthorized"' /tmp/ocr-body \
+              && [ "$deployed" = "$EXPECTED_VERSION" ]
+          }
 
           stable_passes=0
           for attempt in $(seq 1 60); do
@@ -66,6 +73,7 @@ jobs:
             for path in /api/archive /api/settings /api/forecast /api/control/matching-quality /api/intelligence; do
               api_ready "$path" || coherent=0
             done
+            ocr_api_ready || coherent=0
 
             if [ "$coherent" = "1" ]; then
               stable_passes=$((stable_passes + 1))
@@ -128,9 +136,21 @@ jobs:
             deployed=$(version_from_headers /tmp/api-headers)
             [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong API version for $path: ${deployed:-missing}"; cat /tmp/api-headers; exit 1; }
           }
+          check_ocr_api_unauthorized() {
+            code=$(curl -sS -X POST -H 'Cache-Control: no-cache' -H 'Content-Type: image/jpeg' -D /tmp/ocr-headers -o /tmp/ocr-body -w '%{http_code}' --data-binary '' --max-time 15 "$BASE_URL/api/ocr/receipt" || true)
+            if [ "$code" != "401" ]; then
+              echo "Expected 401 for /api/ocr/receipt, got $code"
+              cat /tmp/ocr-body
+              exit 1
+            fi
+            grep -q '"error":"unauthorized"' /tmp/ocr-body || { echo "Unexpected unauthorized OCR payload"; cat /tmp/ocr-body; exit 1; }
+            deployed=$(version_from_headers /tmp/ocr-headers)
+            [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong API version for /api/ocr/receipt: ${deployed:-missing}"; cat /tmp/ocr-headers; exit 1; }
+          }
           for path in /api/archive /api/settings /api/forecast /api/control/matching-quality /api/intelligence; do
             check_api_unauthorized "$path"
           done
+          check_ocr_api_unauthorized
 
       - name: Smoke gate passed
-        run: echo "Production smoke OK · Financial App $EXPECTED_VERSION · propagación global estable, dominio canónico, rutas privadas y APIs verificadas."
+        run: echo "Production smoke OK · Financial App $EXPECTED_VERSION · propagación global estable, dominio canónico, rutas privadas, APIs y bundle OCR verificados."
