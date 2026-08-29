@@ -14,7 +14,7 @@ export default async function ForecastPage(){
     <header className="topbar"><div>
       <p className="eyebrow">PREVISIÓN · {APP_VERSION}</p>
       <h1>Agenda Financiera Inteligente</h1>
-      <p>No solo muestra qué cargos e ingresos se esperan: parte del saldo operativo actual y calcula cómo evoluciona tu liquidez durante los próximos 90 días. Las fechas siguen siendo estimadas y un movimiento solo queda confirmado cuando aparece en el banco.</p>
+      <p>Combina patrones del historial, movimientos esperados y facturas recientes todavía sin cargo bancario para calcular cómo evoluciona tu liquidez. Las facturas pendientes son estimaciones prudentes: nunca crean una asociación bancaria y desaparecen cuando el movimiento real queda asociado.</p>
     </div></header>
     <ForecastLiquidityDashboard data={liquidity}/>
     <ForecastClient initialData={initialData}/>
