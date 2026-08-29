@@ -72,29 +72,29 @@ begin
       count(*) filter(where confidence<.65)::int uncertain_count
     from event_rows
     group by effective_date
-  ),days as(
-    select gs::date day
+  ),projection_days as(
+    select gs::date projection_date
     from generate_series(v_start,v_end,interval '1 day') gs
   ),series as(
-    select d.day,
+    select d.projection_date,
       round(coalesce(e.income,0),2) income,
       round(coalesce(e.expenses,0),2) expenses,
       round(coalesce(e.net,0),2) net,
       coalesce(e.event_count,0)::int event_count,
       coalesce(e.uncertain_count,0)::int uncertain_count,
-      round(v_opening+sum(coalesce(e.net,0)) over(order by d.day rows between unbounded preceding and current row),2) projected_balance
-    from days d left join daily_events e on e.effective_date=d.day
+      round(v_opening+sum(coalesce(e.net,0)) over(order by d.projection_date rows between unbounded preceding and current row),2) projected_balance
+    from projection_days d left join daily_events e on e.effective_date=d.projection_date
   )
   select
     coalesce(jsonb_agg(jsonb_build_object(
-      'date',day,'income',income,'expenses',expenses,'net',net,
+      'date',projection_date,'income',income,'expenses',expenses,'net',net,
       'eventCount',event_count,'uncertainEvents',uncertain_count,'projectedBalance',projected_balance
-    ) order by day),'[]'::jsonb),
+    ) order by projection_date),'[]'::jsonb),
     jsonb_build_object(
       'openingBalance',round(v_opening,2),
-      'projectedEndBalance',coalesce((select projected_balance from series order by day desc limit 1),round(v_opening,2)),
-      'minimumProjectedBalance',coalesce((select projected_balance from series order by projected_balance,day limit 1),round(v_opening,2)),
-      'minimumBalanceDate',(select day from series order by projected_balance,day limit 1),
+      'projectedEndBalance',coalesce((select projected_balance from series order by projection_date desc limit 1),round(v_opening,2)),
+      'minimumProjectedBalance',coalesce((select projected_balance from series order by projected_balance,projection_date limit 1),round(v_opening,2)),
+      'minimumBalanceDate',(select projection_date from series order by projected_balance,projection_date limit 1),
       'daysBelowZero',(select count(*)::int from series where projected_balance<0),
       'pendingIncome',round(coalesce((select sum(amount) from event_rows where amount>0),0),2),
       'pendingExpenses',round(coalesce(abs((select sum(amount) from event_rows where amount<0)),0),2),
@@ -103,9 +103,9 @@ begin
       'overdueEvents',(select count(*)::int from event_rows where estimated_date<v_start)
     ),
     jsonb_build_object(
-      '30',case when v_days>=30 then (select projected_balance from series where day<=v_start+29 order by day desc limit 1) else null end,
-      '60',case when v_days>=60 then (select projected_balance from series where day<=v_start+59 order by day desc limit 1) else null end,
-      '90',case when v_days>=90 then (select projected_balance from series where day<=v_start+89 order by day desc limit 1) else null end
+      '30',case when v_days>=30 then (select projected_balance from series where projection_date<=v_start+29 order by projection_date desc limit 1) else null end,
+      '60',case when v_days>=60 then (select projected_balance from series where projection_date<=v_start+59 order by projection_date desc limit 1) else null end,
+      '90',case when v_days>=90 then (select projected_balance from series where projection_date<=v_start+89 order by projection_date desc limit 1) else null end
     ),
     jsonb_build_object(
       'high',(select count(*)::int from event_rows where confidence>=.80),
@@ -127,7 +127,7 @@ begin
     where coalesce(e.item->>'status','expected')<>'received'
       and (e.item->>'estimatedDate')::date<=v_end
   ),daily_balance as(
-    select (d.item->>'date')::date day,(d.item->>'projectedBalance')::numeric projected_balance
+    select (d.item->>'date')::date projection_date,(d.item->>'projectedBalance')::numeric projected_balance
     from jsonb_array_elements(v_daily) d(item)
   ),ranked as(
     select e.*,row_number() over(order by e.effective_date,abs(e.amount) desc,e.ord) rn
@@ -153,7 +153,7 @@ begin
     ) order by r.rn
   ) filter(where r.rn<=12),'[]'::jsonb)
   into v_commitments
-  from ranked r left join daily_balance b on b.day=r.effective_date;
+  from ranked r left join daily_balance b on b.projection_date=r.effective_date;
 
   return jsonb_build_object(
     'version',financial_app.current_app_version(),
