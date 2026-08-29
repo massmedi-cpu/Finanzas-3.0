@@ -170,6 +170,7 @@ function removeGeometricNoise(tokens: NativeToken[], medianHeight: number) {
     const visible = token.text.replace(/\s/g, "");
     if (!visible || token.score < 15) return false;
     if (visible.length !== 1) return true;
+    if (/^\p{L}$/u.test(visible) && token.score < 40) return false;
     const tiny = token.boxWidth <= medianHeight * 0.78 && token.boxHeight <= medianHeight * 0.94;
     if (!tiny) return true;
     if (token.score >= 88) return true;
