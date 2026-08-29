@@ -31,7 +31,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): 
     const timer = setTimeout(() => reject(new Error(`${label}_timeout`)), timeoutMs);
     promise.then(
       (value) => { clearTimeout(timer); resolve(value); },
-      (error) => { clearTimeout(timer); reject(error); },
+      (failure) => { clearTimeout(timer); reject(failure); },
     );
   });
 }
@@ -42,10 +42,10 @@ async function getWorker(origin: string) {
     workerPromise = createWorker("spa", 1, {
       langPath: `${origin}/vendor/document-engine/tessdata`,
       cacheMethod: "none",
-    }).catch((error) => {
+    }).catch((failure) => {
       workerPromise = null;
       workerOrigin = "";
-      throw error;
+      throw failure;
     });
   }
   return workerPromise;
@@ -173,10 +173,9 @@ export async function POST(request: NextRequest) {
         runtime: "server-tesseract-7",
       },
     });
-  } catch (error) {
+  } catch (failure) {
     console.error("financial_app_server_receipt_ocr_failed", {
-      name: error instanceof Error ? error.name : undefined,
-      message: error instanceof Error ? error.message : String(error),
+      type: failure instanceof Error ? failure.name : "unknown_failure",
     });
     workerPromise = null;
     workerOrigin = "";
