@@ -19,6 +19,7 @@ must(current.includes("audit-scenario-lab-v800.mjs"),"audit:current no ejecuta e
 must(current.includes("audit-release-v800.mjs"),"audit:current no ejecuta el cierre 8.0.0");
 for(const token of [
   "forecast_scenario_core",
+  "p_events jsonb",
   "forecast_liquidity_core(v_start,v_days)",
   "financial_app_forecast_scenario",
   "'ephemeral',true",
@@ -27,6 +28,7 @@ for(const token of [
 ]) must(migration.includes(token),`Migración 8.0.0 incompleta: ${token}`);
 for(const token of [
   "financial_app_8_0_0_requires_7_0_0_baseline",
+  "p_start date, p_days integer, p_events jsonb",
   "financial_app_8_0_0_scenario_security_contract_missing",
   "financial_app_8_0_0_scenario_grants_invalid",
   "financial_app_8_0_0_canonical_liquidity_dependency_missing",
