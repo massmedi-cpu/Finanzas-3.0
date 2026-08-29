@@ -77,11 +77,6 @@ function normalizedKey(value: string) {
   return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
-function numericLike(text: string) {
-  const compact = text.trim().replace(/\s+/g, "");
-  return /^[€$£]?[+-]?(?:\d+[\d.,']*|[.,]\d+)%?$/.test(compact);
-}
-
 function integerLike(text: string) {
   return /^\d{1,3}$/.test(text.trim());
 }
