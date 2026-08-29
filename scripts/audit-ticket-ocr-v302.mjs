@@ -26,8 +26,9 @@ must(client.includes("PaddleOCR.create")&&client.includes('lang:"es"')&&client.i
 must(!client.includes('ocrVersion:"PP-OCRv5"'),"La combinación PP-OCRv5 + lang es no está soportada por el contrato OCR actual");
 must(client.includes("sharedWorkerPromise")&&client.includes("workerReuse:true"),"El adaptador OCR debe reutilizarse entre documentos");
 must(!client.includes("Tesseract")&&!engine.includes("Tesseract"),"El motor geométrico de cliente no debe acoplarse directamente a Tesseract");
-for(const token of ["rawText:recognized.rawText","normalizedText:recognized.normalizedText","validation:recognized.validation","metrics:recognized.metrics","visualLayout","localProcessing:true","automaticOnImport:true"])
-  must(client.includes(token),`Archivo no persiste la evidencia OCR: ${token}`);
+for(const token of ["rawText:recognized.rawText","normalizedText:recognized.normalizedText","validation:recognized.validation","metrics:recognized.metrics","visualLayout","localProcessing:false","automaticOnImport:true",'assetOrigin:"server-bundled"'])
+  must(client.includes(token),`Archivo no persiste la evidencia OCR real: ${token}`);
+must(client.includes("failedBody")&&client.includes("applyDetail(failedBody.document")&&client.includes('detail.ocrStatus==="failed"')&&client.includes("El ticket está guardado, pero el OCR no ha podido leerlo"),"Un fallo OCR debe conservar el original, abrir el documento y mostrar un aviso visible");
 
 for(const token of ["engine.predict(input","PP-OCRv6","ppocrv6_es_geometry","groupRows","makeVisualLayout","strictReceiptLayout","validateReceiptFinancials","RECEIPT_OCR_METHOD_PREFIX","rawText","normalizedText","visualLayout","metrics","prepareReceiptImage","paperDetected","discardedBoxCount","trustedText","literalText"])
   must(engine.includes(token),`Motor geométrico canónico incompleto: ${token}`);
@@ -80,4 +81,4 @@ if(failures.length){
   failures.forEach(failure=>console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en servidor · bundle runtime trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en servidor · fallo visible y original recuperable · bundle runtime trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
