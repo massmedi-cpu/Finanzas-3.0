@@ -41,7 +41,7 @@ must(!/localStorage|sessionStorage|document\.cookie/.test(api+client),"El simula
 must(api.includes("method:\"POST\"")===false,"La ruta API no debe contener llamadas fetch cliente");
 
 for(const token of ["requireAuthorizedUser()","getForecastLiquidity(90)","ScenarioLab","Simulador de Decisiones"])must(page.includes(token),`Página de escenarios incompleta: ${token}`);
-for(const token of ["/api/scenarios","Gasto puntual","Ingreso puntual","Compra a plazos","Gasto recurrente","Simular impacto","Previsión actual vs. escenario","No se ha guardado nada","no constituye asesoramiento financiero"])must(client.includes(token),`Experiencia del simulador incompleta: ${token}`);
+for(const token of ["/api/scenarios","Gasto puntual","Ingreso puntual","Compra a plazos","Gasto recurrente","Simular impacto","Previsión actual vs. escenario","No se ha guardado nada","ni constituye asesoramiento financiero"])must(client.includes(token),`Experiencia del simulador incompleta: ${token}`);
 must(!client.includes("setResult(json as ForecastScenarioOverview);localStorage"),"No se puede persistir el resultado del escenario");
 
 must(layout.includes('import "./scenarios.css";'),"Los estilos del simulador deben cargarse solo desde su layout");
