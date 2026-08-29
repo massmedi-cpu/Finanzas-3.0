@@ -6,7 +6,7 @@ import { asArray,asBoolean,asNumber,asRecord,asString,nullableString } from "@/l
 export type ForecastLiquidityDay={date:string;income:number;expenses:number;net:number;eventCount:number;uncertainEvents:number;projectedBalance:number};
 export type ForecastLiquidityCommitment={
   id:string;title:string;estimatedDate:string;effectiveDate:string;estimatedAmount:number;category:string|null;counterparty:string|null;
-  source:"automatic"|"manual";frequency:string;status:string;confidence:number;confidenceLevel:"high"|"medium"|"low";toleranceDays:number;
+  source:"automatic"|"manual"|"document";frequency:string;status:string;confidence:number;confidenceLevel:"high"|"medium"|"low";toleranceDays:number;
   explanation:Record<string,unknown>;projectedDayBalance:number;
 };
 export type ForecastLiquidityOverview={
@@ -15,12 +15,12 @@ export type ForecastLiquidityOverview={
   horizons:{days30:number|null;days60:number|null;days90:number|null};
   confidence:{high:number;medium:number;low:number};
   daily:ForecastLiquidityDay[];commitments:ForecastLiquidityCommitment[];
-  rules:{usesCanonicalForecast:boolean;operatingAccountsOnly:boolean;cashFlowEnabledAccountsOnly:boolean;receivedEventsNotDoubleCounted:boolean;overdueAppliedAtStart:boolean;sourceBalancesReadOnly:boolean;maximumDays:number};
+  rules:{usesCanonicalForecast:boolean;operatingAccountsOnly:boolean;cashFlowEnabledAccountsOnly:boolean;receivedEventsNotDoubleCounted:boolean;overdueAppliedAtStart:boolean;sourceBalancesReadOnly:boolean;pendingInvoiceCommitments:boolean;maximumDays:number};
 };
 
 const nullableNumeric=(value:unknown)=>value==null?null:asNumber(value);
 const confidenceLevel=(value:unknown):ForecastLiquidityCommitment["confidenceLevel"]=>value==="high"?"high":value==="medium"?"medium":"low";
-const source=(value:unknown):ForecastLiquidityCommitment["source"]=>value==="manual"?"manual":"automatic";
+const source=(value:unknown):ForecastLiquidityCommitment["source"]=>value==="manual"?"manual":value==="document"?"document":"automatic";
 const day=(value:unknown):ForecastLiquidityDay=>{const x=asRecord(value);return{date:asString(x.date),income:asNumber(x.income),expenses:asNumber(x.expenses),net:asNumber(x.net),eventCount:asNumber(x.eventCount),uncertainEvents:asNumber(x.uncertainEvents),projectedBalance:asNumber(x.projectedBalance)}};
 const commitment=(value:unknown):ForecastLiquidityCommitment=>{const x=asRecord(value);return{
   id:asString(x.id),title:asString(x.title),estimatedDate:asString(x.estimatedDate),effectiveDate:asString(x.effectiveDate),estimatedAmount:asNumber(x.estimatedAmount),
@@ -45,7 +45,8 @@ export async function getForecastLiquidity(days=90):Promise<ForecastLiquidityOve
     daily:asArray(r.daily).map(day),commitments:asArray(r.commitments).map(commitment),
     rules:{
       usesCanonicalForecast:asBoolean(rules.usesCanonicalForecast),operatingAccountsOnly:asBoolean(rules.operatingAccountsOnly),cashFlowEnabledAccountsOnly:asBoolean(rules.cashFlowEnabledAccountsOnly),
-      receivedEventsNotDoubleCounted:asBoolean(rules.receivedEventsNotDoubleCounted),overdueAppliedAtStart:asBoolean(rules.overdueAppliedAtStart),sourceBalancesReadOnly:asBoolean(rules.sourceBalancesReadOnly),maximumDays:asNumber(rules.maximumDays,180),
+      receivedEventsNotDoubleCounted:asBoolean(rules.receivedEventsNotDoubleCounted),overdueAppliedAtStart:asBoolean(rules.overdueAppliedAtStart),sourceBalancesReadOnly:asBoolean(rules.sourceBalancesReadOnly),
+      pendingInvoiceCommitments:asBoolean(rules.pendingInvoiceCommitments),maximumDays:asNumber(rules.maximumDays,180),
     },
   };
 }
