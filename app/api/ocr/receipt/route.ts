@@ -19,7 +19,7 @@ const OCR_RUNTIME_FILES = [
 ] as const;
 
 for (const runtimeFile of OCR_RUNTIME_FILES) {
-  if (!fs.existsSync(runtimeFile)) {
+  if (!fs.existsSync(/* turbopackIgnore: true */ runtimeFile)) {
     throw new Error(`ocr_runtime_asset_missing:${path.relative(process.cwd(), runtimeFile)}`);
   }
 }
