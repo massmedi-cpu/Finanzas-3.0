@@ -17,7 +17,7 @@ La Edge Function `financial-app-sync` comprueba el estado de la fuente y procesa
 - preserva IDs y procedencia;
 - no elimina originales de Google Drive;
 - registra ejecuciones y resultados para Control/Inicio;
-- no se dispara automáticamente al montar Inicio en 4.5+.
+- no se dispara automáticamente al montar Inicio.
 
 La actualización manual refresca la UI únicamente cuando la sincronización informa de cambios reales.
 
@@ -54,10 +54,11 @@ Estas implementaciones permanecen únicamente en migraciones históricas anterio
 
 ## 5. Motores financieros
 
-- Movimientos: consulta paginada, edición individual/masiva, splits, reglas y automatización trazable.
+- Movimientos: consulta paginada, edición individual/masiva, splits y reglas con historial y reversibilidad.
 - Cash Flow: agregación canónica excluyendo duplicados, traspasos internos y movimientos fuera del contrato financiero.
 - Presupuesto y Plan: motores de servidor reutilizados por UI; no se recalculan cifras con fórmulas paralelas en cliente.
 - Previsión: calendario/ledger, matching 1↔1 con movimientos reales, descartes reversibles y proyección mensual de servidor.
+- Agenda Financiera 7.0: `financial_app_forecast_liquidity` reutiliza el calendario visible canónico, parte de saldos operativos reales y proyecta solo compromisos todavía no confirmados. Produce saldo diario futuro, mínimo, hitos 30/60/90, días bajo cero y confianza sin mutar datos.
 - Conciliación: matching controlado y workbench de revisión.
 - Inteligencia: anomalías, recurrencias, subidas y oportunidades derivadas de señales canónicas.
 - Control: integridad, calidad de matching, sincronización, cierre y auditorías.
@@ -77,11 +78,13 @@ Estas implementaciones permanecen únicamente en migraciones históricas anterio
 - `app/page.tsx` obtiene `getHomePulse()` en la ruta crítica y transmite cuentas/secciones independientes.
 - `IntentLink` calienta rutas privadas por intención/touch sin reintroducir prefetch indiscriminado.
 - La sincronización manual no bloquea la primera pintura.
+- Previsión y Cash Flow cargan la proyección de liquidez como dato server-side y comparten `ForecastLiquidityDashboard`; las mutaciones explícitas del calendario invalidan la vista mediante `router.refresh()`.
 
 ## 8. Estilos y responsive
 
 - Sistema visual común en hojas semánticas no versionadas.
 - Cada módulo es propietario de sus estilos específicos.
+- `forecast-liquidity.css` se carga únicamente en Previsión y Cash Flow.
 - Mobile-first y tablet/desktop responsive.
 - Modo claro/oscuro y controles compartidos protegidos por gates de regresión.
 
@@ -89,7 +92,7 @@ Estas implementaciones permanecen únicamente en migraciones históricas anterio
 
 CI ejecuta AXIOMA, arquitectura actual, regresiones históricas, gate de la versión, seguridad de dependencias, lint, typecheck y build.
 
-Una release se publica solo desde el mismo SHA que ha superado CI y Preview. Tras el merge se comprueba despliegue de producción y smoke HTTP.
+Una release se publica solo desde el mismo SHA que ha superado CI. Las previews automáticas permanecen bloqueadas. Tras el merge se comprueba el deployment de producción, se alinea la metadata Supabase y se ejecuta smoke HTTP del dominio canónico.
 
 Las migraciones históricas se conservan para reconstrucción/auditoría. El rollback de código no implica reescribir la fuente financiera externa.
 

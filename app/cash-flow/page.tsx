@@ -5,8 +5,10 @@ import Link from "next/link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getCashFlowRange, type CashFlowRange } from "@/lib/financial/cash-flow";
 import { getForecastCalendar } from "@/lib/financial/forecast-calendar";
+import { getForecastLiquidity } from "@/lib/financial/forecast-liquidity";
 import { movementState, movementUrl } from "@/lib/financial/movement-query";
 import { CashFlowChart } from "@/components/cash-flow-chart";
+import { ForecastLiquidityDashboard } from "@/components/forecast-liquidity-dashboard";
 import { ForecastClient } from "@/app/prevision/forecast-client";
 
 const dateFmt=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"short",year:"numeric"});
@@ -27,9 +29,10 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
   const defaultFrom=`${today.slice(0,7)}-01`;
   const customFrom=/^\d{4}-\d{2}-\d{2}$/.test(params.from||"")?params.from!:defaultFrom;
   const customTo=/^\d{4}-\d{2}-\d{2}$/.test(params.to||"")?params.to!:today;
-  const [data,forecast]=await Promise.all([
+  const [data,forecast,liquidity]=await Promise.all([
     getCashFlowRange({range,anchor,dateFrom:range==="custom"?customFrom:null,dateTo:range==="custom"?customTo:null,accountId:params.account||null,category:params.category||null,subcategory:params.subcategory||null,merchant:params.merchant||null,type:params.type||null}),
     getForecastCalendar(12),
+    getForecastLiquidity(90),
   ]);
   const filterCount=[params.account,params.category,params.subcategory,params.merchant,params.type].filter(Boolean).length;
   const movementBase=movementState({from:data.dateFrom,to:data.dateTo,cashFlowOnly:true,account:params.account||"",category:params.category||"",subcategory:params.subcategory||"",merchant:params.merchant||"",type:params.type||""});
@@ -59,7 +62,7 @@ export default async function CashFlowPage({searchParams}:{searchParams:Promise<
 
     <article className="panel cf-main-panel"><div className="panel-head"><div><p className="eyebrow">REAL · {data.bucket.toUpperCase()}</p><h2>Ingresos, gastos y acumulado</h2><p>{displayDate(data.dateFrom)} — {displayDate(data.dateTo)}</p></div><span className="pill">{data.series.length} puntos</span></div><CashFlowChart points={data.series} drilldown={{bucket:data.bucket,dateFrom:data.dateFrom,dateTo:data.dateTo,account:params.account||"",type:params.type||"",category:params.category||"",subcategory:params.subcategory||"",merchant:params.merchant||""}}/></article>
 
-    <section id="prevision" className="cf-forecast-zone" aria-labelledby="cf-forecast-title"><div className="cf-section-heading"><div><p className="eyebrow">PREVISTO</p><h2 id="cf-forecast-title">Calendario de próximos movimientos</h2><p>Fechas estimadas, confirmaciones reales y descartes. Un evento solo pasa a realizado cuando aparece en el banco.</p></div><Link className="ghost button-link" href="/prevision">Vista de previsión</Link></div><ForecastClient initialData={forecast}/></section>
+    <section id="prevision" className="cf-forecast-zone" aria-labelledby="cf-forecast-title"><div className="cf-section-heading"><div><p className="eyebrow">PREVISTO</p><h2 id="cf-forecast-title">Agenda financiera de próximos movimientos</h2><p>Saldo futuro, fechas estimadas, confirmaciones reales y descartes. Un evento solo pasa a realizado cuando aparece en el banco.</p></div><Link className="ghost button-link" href="/prevision">Abrir agenda completa</Link></div><ForecastLiquidityDashboard data={liquidity} compact/><ForecastClient initialData={forecast}/></section>
 
     <div className="cf-lower-grid">
       <article className="panel cf-category-panel"><div className="panel-head"><div><p className="eyebrow">GASTO</p><h2>Principales categorías</h2></div></div><ol className="cf-categories">{data.topExpenseCategories.map((c,i)=><li key={c.category}><Link className="cf-drill-row" href={movementUrl({...movementBase,category:c.category,max:"-0.01"})}><span><b>{i+1}</b>{c.category}</span><strong>{formatEuro(c.amount)}</strong></Link></li>)}</ol>{!data.topExpenseCategories.length&&<p className="muted-copy">No hay gastos para estos filtros.</p>}</article>
