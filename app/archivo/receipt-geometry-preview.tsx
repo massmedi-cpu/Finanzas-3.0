@@ -56,11 +56,11 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         opacity="0.72"
       />)}
       {visual.tokens.map((token) => <text
-        key={`${token.top}-${token.left}-${token.index}`}
+        key={`${token.top}-${token.left}-${token.index}-${token.text}`}
         x={token.renderX}
         y={token.baselineY}
         fill="#171717"
-        fontFamily={'"Roboto Mono", "DejaVu Sans Mono", "Liberation Mono", "Courier New", ui-monospace, monospace'}
+        fontFamily={'"Roboto", "Arial Narrow", Arial, Helvetica, sans-serif'}
         fontSize={token.fontSize}
         fontWeight={token.fontWeight}
         textAnchor={token.textAnchor}
