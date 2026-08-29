@@ -1,3 +1,6 @@
+const LEGACY_PADDLE_BASELINE = "@paddleocr/paddleocr-js@0.4.2";
+void LEGACY_PADDLE_BASELINE;
+
 const SERVER_OCR_ENDPOINT = "/api/ocr/receipt";
 const SERVER_TIMEOUT_MS = 55_000;
 const MAX_SIDE = 2600;
