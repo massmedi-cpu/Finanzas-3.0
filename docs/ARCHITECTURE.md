@@ -59,6 +59,7 @@ Estas implementaciones permanecen únicamente en migraciones históricas anterio
 - Presupuesto y Plan: motores de servidor reutilizados por UI; no se recalculan cifras con fórmulas paralelas en cliente.
 - Previsión: calendario/ledger, matching 1↔1 con movimientos reales, descartes reversibles y proyección mensual de servidor.
 - Agenda Financiera 7.0: `financial_app_forecast_liquidity` reutiliza el calendario visible canónico, parte de saldos operativos reales y proyecta solo compromisos todavía no confirmados. Produce saldo diario futuro, mínimo, hitos 30/60/90, días bajo cero y confianza sin mutar datos.
+- Simulador de Decisiones 8.0: `financial_app_forecast_scenario` reutiliza directamente la liquidez 7.0 y superpone hipótesis efímeras. Admite gasto/ingreso puntual, recurrencias y cuotas, compara trayectoria base y simulada y no persiste ningún escenario.
 - Conciliación: matching controlado y workbench de revisión.
 - Inteligencia: anomalías, recurrencias, subidas y oportunidades derivadas de señales canónicas.
 - Control: integridad, calidad de matching, sincronización, cierre y auditorías.
@@ -79,12 +80,14 @@ Estas implementaciones permanecen únicamente en migraciones históricas anterio
 - `IntentLink` calienta rutas privadas por intención/touch sin reintroducir prefetch indiscriminado.
 - La sincronización manual no bloquea la primera pintura.
 - Previsión y Cash Flow cargan la proyección de liquidez como dato server-side y comparten `ForecastLiquidityDashboard`; las mutaciones explícitas del calendario invalidan la vista mediante `router.refresh()`.
+- `/escenarios` carga como baseline la liquidez de 90 días en servidor. El cliente mantiene únicamente el borrador interactivo en memoria y POSTea a `/api/scenarios`; el cálculo real se resuelve en PostgreSQL mediante `forecast_scenario_core`.
 
 ## 8. Estilos y responsive
 
 - Sistema visual común en hojas semánticas no versionadas.
 - Cada módulo es propietario de sus estilos específicos.
 - `forecast-liquidity.css` se carga únicamente en Previsión y Cash Flow.
+- `app/escenarios/scenarios.css` se carga únicamente en la ruta del Simulador.
 - Mobile-first y tablet/desktop responsive.
 - Modo claro/oscuro y controles compartidos protegidos por gates de regresión.
 
