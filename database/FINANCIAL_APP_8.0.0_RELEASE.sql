@@ -21,12 +21,12 @@ begin
   select p.prosecdef into v_private_definer
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname='financial_app' and p.proname='forecast_scenario_core'
-    and pg_get_function_identity_arguments(p.oid)='p_start date, p_days integer, p_scenario jsonb';
+    and pg_get_function_identity_arguments(p.oid)='p_start date, p_days integer, p_events jsonb';
 
   select p.prosecdef into v_public_definer
   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
   where n.nspname='public' and p.proname='financial_app_forecast_scenario'
-    and pg_get_function_identity_arguments(p.oid)='p_start date, p_days integer, p_scenario jsonb';
+    and pg_get_function_identity_arguments(p.oid)='p_start date, p_days integer, p_events jsonb';
 
   if v_private_definer is distinct from true or v_public_definer is distinct from false then
     raise exception 'financial_app_8_0_0_scenario_security_contract_missing';
