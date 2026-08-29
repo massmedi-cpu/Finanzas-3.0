@@ -46,11 +46,10 @@ export function SyncButton({ reconciliationPending = false }: SyncButtonProps) {
         setState("unchanged");
       }
 
-      // Una sincronización sin cambios no vuelve a renderizar toda la aplicación.
-      // La reconciliación pendiente sí refresca Inicio aunque solo haya cambiado el estado documental.
-      if(data?.changed===true||reconciliationCompleted){
-        startRefresh(()=>router.refresh());
-      }
+      // El backend puede estar ya actualizado aunque esta pantalla conserve datos de una
+      // renderización anterior. Tras cualquier sync correcto refrescamos Inicio para que
+      // "Actualizar datos" signifique también volver a leer el estado actual de la app.
+      startRefresh(()=>router.refresh());
     } catch {
       setErrorMessage("sync_unavailable");
       setState("error");
