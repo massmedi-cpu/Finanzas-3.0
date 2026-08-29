@@ -1,6 +1,6 @@
 # Financial App — Arquitectura canónica vigente
 
-Actualizada para Financial App 7.0.0. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
+Actualizada para Financial App 8.0.0. La baseline arquitectónica se cerró en Financial App 5.0.0; las versiones posteriores evolucionan esa misma arquitectura sin crear un runtime paralelo. Este documento define el criterio técnico del código activo. El historial de migraciones y auditorías conserva decisiones anteriores, pero no constituye una segunda arquitectura runtime.
 
 ## Principios
 
@@ -45,7 +45,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Desde 6.4.4 la automatización masiva 4.0 no forma parte del runtime activo. Su migración histórica se conserva únicamente como trazabilidad.
 - Movimientos no ejecuta matching documental propio ni una orquestación paralela de reglas/documentos/conciliación.
 
-## Previsión, Agenda Financiera e inteligencia
+## Previsión, Agenda Financiera, escenarios e inteligencia
 
 - El ledger/calendario canónico sigue siendo la única fuente de eventos previstos: matching real 1↔1, descartes reversibles y proyección mensual se resuelven en servidor.
 - El suplemento histórico anual no constituye un segundo motor: alimenta `forecast_calendar_visible_core` sobre el resultado de `forecast_calendar_core` y conserva el mismo matching, descarte y cálculo mensual.
@@ -59,6 +59,11 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - La salida expone serie diaria de saldo, saldo mínimo y fecha, saldo final, días bajo cero, hitos 30/60/90, pendientes de ingreso/gasto, compromisos y bandas de confianza.
 - La capa de liquidez es estrictamente de solo lectura sobre movimientos, cuentas, documentos y previsiones; nunca escribe en datos de origen ni en enriquecimientos privados.
 - `lib/financial/forecast-liquidity.ts` es el loader tipado canónico y `ForecastLiquidityDashboard` es la superficie compartida por Previsión y Cash Flow. No existe un segundo cálculo de saldo en cliente.
+- Desde 8.0.0 `financial_app.forecast_scenario_core(date,integer,jsonb)` es una capa efímera de escenarios que siempre parte de `forecast_liquidity_core`; no genera una segunda previsión, no altera el calendario y no persiste hipótesis.
+- El simulador admite gasto puntual, ingreso puntual, recurrencia mensual o periódica y compras a plazos, con límites de 24 definiciones y 120 ocurrencias para un horizonte máximo de 180 días.
+- La salida de escenarios conserva la serie base y añade únicamente el impacto hipotético acumulado para producir saldo simulado, mínimo, fecha del mínimo, días bajo cero, primera fecha de riesgo e hitos 30/60/90.
+- `/api/scenarios` es la única frontera HTTP del simulador. Valida sesión, allowlist, fechas, importes, límites y modalidad antes de llamar al RPC; el cliente no contiene fórmulas financieras paralelas.
+- La UI `/escenarios` mantiene el estado solo en memoria durante la sesión de la página. No usa tablas, `localStorage`, `sessionStorage` ni cookies para conservar escenarios o resultados.
 - Los cambios explícitos de previsión continúan escribiendo mediante las rutas canónicas existentes; el cliente hace `router.refresh()` para invalidar también la proyección server-side después de añadir, descartar o restaurar eventos.
 - Matching observability mide calidad sin persistir valores financieros derivados.
 - Inteligencia financiera reutiliza señales canónicas para anomalías, recurrencias, subidas y oportunidades, sin inventar cifras ni mutar movimientos.
@@ -90,6 +95,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Los tokens `--chart-*` de Análisis viven en `app/analisis/chart-tokens.css`, acotados a `.analysis-workspace`; Cash Flow, Cuentas y Patrimonio mantienen sus contratos visuales en sus hojas canónicas de ruta.
 - Los 24 gráficos del panel visual de Análisis usan `content-visibility:auto` con tamaño intrínseco de reserva para diferir layout/pintura fuera del viewport sin cambiar semántica ni datos.
 - Desde 7.0.0 `app/forecast-liquidity.css` se carga únicamente en Previsión y Cash Flow, las dos superficies que consumen la Agenda Financiera. No se incorpora al layout raíz.
+- Desde 8.0.0 `app/escenarios/scenarios.css` se carga únicamente desde el layout del Simulador y mantiene una escala mínima de 14 px en texto auxiliar.
 - No deben existir hojas runtime `*-vNNN.css` ni `*-advanced.css`.
 
 ## Seguridad
@@ -102,6 +108,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - Los cores `SECURITY DEFINER` imprescindibles viven fuera del API público, usan `search_path` cerrado, permisos mínimos y vuelven a validar la autorización mediante `authorized_email()` cuando corresponda.
 - `financial_app_document_matching_dashboard` sigue este patrón desde 6.4.2.
 - Desde 7.0.0 `public.financial_app_forecast_liquidity(date,integer)` es `SECURITY INVOKER`; delega en `financial_app.forecast_liquidity_core`, que vuelve a comprobar `authorized_email()`. `anon` no tiene `EXECUTE`; `authenticated` y `service_role` sí.
+- Desde 8.0.0 `public.financial_app_forecast_scenario(date,integer,jsonb)` aplica el mismo contrato: wrapper `SECURITY INVOKER`, core privado autorizado, `anon` revocado y grants explícitos para `authenticated`/`service_role`.
 - La condición `authenticated` no equivale a autorización: una frontera privilegiada debe verificar además la identidad permitida.
 - Los advisors de Supabase forman parte de la verificación tras cambios de esquema; sus avisos se corrigen con alcance medido, no mediante cambios masivos sin evidencia.
 - Código sin uso que conserve permisos privilegiados o una lógica paralela se retira del runtime cuando la evidencia demuestra que ya no es necesario.
@@ -111,7 +118,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 Toda release debe superar, como mínimo:
 
 1. AXIOMA estructural y arquitectura canónica.
-2. Gates históricos forward-compatible. Desde 6.5.0 las baselines 6.4.0–6.4.11 se comparan mediante `versionAtLeast`; 7.0.0 añade sus gates específicos sin desactivar los anteriores.
+2. Gates históricos forward-compatible. Desde 6.5.0 las baselines 6.4.0–6.4.11 se comparan mediante `versionAtLeast`; 7.0.0 añade sus gates específicos de liquidez y 8.0.0 añade los del Simulador de Decisiones sin desactivar los anteriores.
 3. Gate de la versión actual.
 4. Auditoría de dependencias, lint, TypeScript y build reproducible.
 5. Migración Supabase compatible y verificada sin mutar datos de origen cuando exista cambio de base de datos.

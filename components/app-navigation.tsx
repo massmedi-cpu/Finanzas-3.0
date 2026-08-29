@@ -19,6 +19,7 @@ const secondary = [
   ["Categorías","/configuracion#categorias","categories"],
   ["Plan","/plan","plan"],
   ["Previsión","/prevision","forecast"],
+  ["Simulador","/escenarios","plan"],
   ["Presupuesto","/presupuesto","budget"],
   ["Objetivos","/objetivos","goals"],
   ["Patrimonio","/patrimonio","net-worth"],
