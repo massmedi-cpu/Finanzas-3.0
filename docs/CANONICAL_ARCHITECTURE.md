@@ -74,7 +74,7 @@ La ruta crítica de Inicio usa exclusivamente `financial_app_home_pulse` mediant
 - PP-OCRv6 preserva geometría y reconstrucción de tickets/documentos comerciales sin convertir la imagen en una segunda fuente financiera.
 - `document_triage_core` es la cola canónica de prioridad documental.
 - El matching usa una política supervisada versionada. Los umbrales no se autoajustan ni se relajan automáticamente.
-- El Centro de operaciones documentales orquesta sobre triage y matching existentes: no crea un segundo motor.
+- El Centro de operaciones documentales 6.4 orquesta sobre triage y matching existentes: no crea un segundo motor.
 - Solo las operaciones que el servidor marca como seguras pueden entrar en lote y cada una se revalida de nuevo justo antes de escribir.
 - Las asociaciones reutilizan el core calibrado y el archivado conserva historial reversible.
 - Los casos ambiguos, OCR fallido, metadatos incompletos o decisiones manuales permanecen fuera de la automatización segura.
