@@ -42,7 +42,7 @@ export default async function ControlPage({searchParams}:{searchParams:Promise<R
 
   const controlPromise=getControlCenter(month);
   const matchingPromise=getMatchingObservability(90);
-  const documentMatchingPromise=getDocumentMatchingDashboard(8,90);
+  const documentMatchingDashboard=getDocumentMatchingDashboard(8,90);
   const calibrationPromise=getDocumentMatchingCalibration(90);
   const policyPromise=getDocumentMatchingPolicyDashboard(90);
   const integrityPromise=getSystemIntegrityOverview();
@@ -52,7 +52,7 @@ export default async function ControlPage({searchParams}:{searchParams:Promise<R
     <header className="topbar"><div><p className="eyebrow">CENTRO DE CONTROL · {data.version}</p><h1>Control financiero</h1><p>Problemas reales, prioridades, cierre mensual, calidad de decisiones e integridad técnica sobre una única base de datos financiera.</p></div></header>
     <ControlClient initialData={data}/>
     <Suspense fallback={<ControlStreamFallback title="Calidad de asociaciones"/>}><MatchingQualityStream data={matchingPromise}/></Suspense>
-    <Suspense fallback={<ControlStreamFallback title="Asociación de documentos"/>}><DocumentMatchingStream data={documentMatchingPromise}/></Suspense>
+    <Suspense fallback={<ControlStreamFallback title="Asociación de documentos"/>}><DocumentMatchingStream data={documentMatchingDashboard}/></Suspense>
     <Suspense fallback={<ControlStreamFallback title="Calibración documental"/>}><CalibrationStream data={calibrationPromise}/></Suspense>
     <Suspense fallback={<ControlStreamFallback title="Política de asociación"/>}><PolicyStream data={policyPromise}/></Suspense>
     <Suspense fallback={<ControlStreamFallback title="Integridad del sistema"/>}><IntegrityStream data={integrityPromise}/></Suspense>
