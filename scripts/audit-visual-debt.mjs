@@ -107,4 +107,4 @@ for(const file of redesigned){
 }
 
 if(failures.length){console.error("Visual debt audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS, ${redesigned.length} superficies reformadas, sin aliases de compatibilidad ni microtexto`);
+console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS, ${redesigned.length} superficies reformadas, acentos semánticos protegidos, sin aliases de compatibilidad ni microtexto`);
