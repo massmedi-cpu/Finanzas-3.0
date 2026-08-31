@@ -2,7 +2,8 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
 import { madridToday } from "@/lib/time/madrid";
-import type { ForecastRecurrence } from "@/lib/financial/forecast";
+
+type ForecastRecurrence={frequency:"weekly"|"monthly"|"yearly";interval:number;until?:string|null};
 
 const validDate=(value:unknown)=>typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:null;
 const safeMonths=(value:unknown)=>Math.max(1,Math.min(18,Number(value)||12));
