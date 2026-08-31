@@ -12,7 +12,6 @@ const ocrRuntimeAssets = [
   './node_modules/is-url/**/*',
   './node_modules/node-fetch/**/*',
   './node_modules/idb-keyval/**/*',
-  './public/vendor/document-engine/tessdata/**/*',
 ];
 
 const nextConfig: NextConfig = {
