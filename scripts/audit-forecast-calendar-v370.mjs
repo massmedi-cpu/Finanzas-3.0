@@ -47,6 +47,18 @@ for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos e
 must(client.includes("Ya no cuenta en los cálculos del mes")||client.includes("Ya no cuenta en el cash flow estimado"),"Previsión debe informar que un descarte deja de contar en los cálculos");
 must(client.includes('event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount'),"Los confirmados deben usar importe real y los demás estimado");
 
+for(const token of [
+  "removeSeries(event)",
+  'event.source!=="manual"',
+  'event.frequency==="once"',
+  "!event.forecastId",
+  "new URLSearchParams({id:event.forecastId})",
+  "Eliminar serie",
+  "Quitar este",
+  "Serie eliminada"
+]) must(client.includes(token),`Previsión ha perdido eliminación segura de series manuales: ${token}`);
+must(client.includes('event.source==="manual"&&event.frequency!=="once"&&Boolean(event.forecastId)'),"La acción Eliminar serie solo debe mostrarse en forecasts manuales recurrentes con forecastId");
+
 const legacyClientProjection=[
   "data.actualMonths.find","event.status!==\"received\"","actualMonth.cashFlow+pendingFlow.cashFlow","actualMonth.income+pendingFlow.income","actualMonth.expenses+pendingFlow.expenses"
 ].every(token=>client.includes(token));
@@ -65,7 +77,8 @@ must(legacyClientProjection||serverProjection,"La proyección mensual debe sumar
 must(client.includes("real +")&&client.includes("todavía previsto"),"La UI debe explicar la composición real + pendiente del Cash Flow estimado");
 
 must(api.includes("financial_app_dismiss_forecast_event")&&api.includes("eventId")&&api.includes("p_estimated_date"),"DELETE de Previsión debe descartar una ocurrencia persistente");
-for(const token of ["actualMonths","ForecastActualMonth","normalizedCategoryFallbackMatching","actualExpensesIncludedInProjection","confirmedEventsNotDoubleCounted"])
+must(api.includes("financial_app_cancel_forecast")&&api.includes('searchParams.get("id")'),"DELETE de Previsión debe conservar la cancelación completa de series manuales");
+for(const token of ["actualMonths","ForecastActualMonth","normalizedCategoryFallbackMatching","actualExpensesIncludedInProjection","confirmedEventsNotDoubleCounted","forecastId"])
   must(lib.includes(token),`Contrato tipado de previsión incompleto: ${token}`);
 for(const token of ["forecast_event_overrides","dismiss_forecast_event","financial_app_dismiss_forecast_event","dismissibleOccurrences","dismissedEventsExcludedFromMetrics","o.event_id=x.item->>'id'"])
   must(migration.includes(token),`Migración 3.7 incompleta: ${token}`);
@@ -92,4 +105,4 @@ for(const root of roots){
 }
 
 if(failures.length){console.error("Forecast/Cash Flow v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast/Cash Flow v6 audit OK · identidad dorada semántica, seis destinos primarios, previsión priorizada e integrada, descartes y proyección protegidos");
+console.log("Forecast/Cash Flow v6 audit OK · previsión canónica, descartes reversibles, series manuales gestionables y proyección protegida");
