@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
+import { validCalendarDate } from "@/lib/time/calendar-date";
 import { madridToday } from "@/lib/time/madrid";
 
 type ForecastRecurrence={frequency:"weekly"|"monthly"|"yearly";interval:number;until?:string|null};
 
-const validDate=(value:unknown)=>typeof value==="string"&&/^\d{4}-\d{2}-\d{2}$/.test(value)?value:null;
 const safeMonths=(value:unknown)=>Math.max(1,Math.min(18,Number(value)||12));
 const asRecord=(value:unknown):Record<string,unknown>|null=>value!==null&&typeof value==="object"&&!Array.isArray(value)?value as Record<string,unknown>:null;
 export const dynamic="force-dynamic";
@@ -21,14 +21,14 @@ export async function POST(request:NextRequest){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   let parsed:unknown;try{parsed=await request.json();}catch{return apiError("invalid_json");}
   const body=asRecord(parsed);if(!body)return apiError("invalid_forecast");
-  const date=validDate(body.date);const amount=Number(body.amount);const title=typeof body.title==="string"?body.title.trim():"";
+  const date=validCalendarDate(body.date);const amount=Number(body.amount);const title=typeof body.title==="string"?body.title.trim():"";
   if(!date||!title||!Number.isFinite(amount)||amount===0)return apiError("invalid_forecast");
   let recurrence:ForecastRecurrence|null=null;
   const recurrenceBody=asRecord(body.recurrence);
   if(recurrenceBody){
     const frequency=String(recurrenceBody.frequency||"");const interval=Math.max(1,Math.min(24,Number(recurrenceBody.interval)||1));
     if(!["weekly","monthly","yearly"].includes(frequency))return apiError("invalid_recurrence");
-    recurrence={frequency:frequency as ForecastRecurrence["frequency"],interval};const until=validDate(recurrenceBody.until);if(until)recurrence.until=until;
+    recurrence={frequency:frequency as ForecastRecurrence["frequency"],interval};const until=validCalendarDate(recurrenceBody.until);if(until)recurrence.until=until;
   }
   const explanation=asRecord(body.explanation);
   const{data,error}=await supabase.rpc("financial_app_upsert_forecast",{p_id:typeof body.id==="string"&&body.id?body.id:null,p_title:title,p_date:date,p_amount:amount,p_category:typeof body.category==="string"&&body.category?body.category:null,p_subcategory:typeof body.subcategory==="string"&&body.subcategory?body.subcategory:null,p_counterparty:typeof body.counterparty==="string"&&body.counterparty?body.counterparty:null,p_recurrence:recurrence,p_notes:typeof body.notes==="string"&&body.notes?body.notes:null,p_confidence:Number.isFinite(Number(body.confidence))?Number(body.confidence):1,p_explanation:explanation});
@@ -51,7 +51,7 @@ export async function DELETE(request:NextRequest){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const eventId=request.nextUrl.searchParams.get("eventId")?.trim()||"";
   if(eventId){
-    const estimatedDate=validDate(request.nextUrl.searchParams.get("date"));if(!estimatedDate)return apiError("invalid_event_date");
+    const estimatedDate=validCalendarDate(request.nextUrl.searchParams.get("date"));if(!estimatedDate)return apiError("invalid_event_date");
     const patternId=request.nextUrl.searchParams.get("patternId")?.trim()||null;const title=request.nextUrl.searchParams.get("title")?.trim()||null;
     const{data,error}=await supabase.rpc("financial_app_dismiss_forecast_event",{p_event_id:eventId,p_pattern_id:patternId,p_estimated_date:estimatedDate,p_title:title});
     if(error||!data)return apiFailure("forecast.dismiss",error,"forecast_dismiss_failed");
