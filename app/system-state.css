@@ -8,13 +8,13 @@
 .system-state-card p{margin:10px 0 0;color:var(--text-tertiary);font-size:16px;line-height:1.6}
 .system-state-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
 .system-state-actions a,.system-state-actions button{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 14px;border-radius:var(--radius-small);font:inherit;font-weight:800;text-decoration:none;cursor:pointer}
-.system-state-actions .primary{border:1px solid var(--gold-primary);background:var(--gold-primary);color:var(--text-inverse)}
+.system-state-actions .primary{border:1px solid var(--accent-primary);background:var(--accent-primary);color:var(--text-inverse)}
 .system-state-actions .secondary{border:1px solid var(--border-subtle);background:transparent;color:var(--text-primary)}
 .system-loading-row{display:flex;align-items:center;gap:14px}
-.system-spinner{width:24px;height:24px;flex:0 0 auto;border:3px solid var(--border-subtle);border-top-color:var(--gold-primary);border-radius:50%;animation:financial-app-spin .75s linear infinite}
+.system-spinner{width:24px;height:24px;flex:0 0 auto;border:3px solid var(--border-subtle);border-top-color:var(--accent-primary);border-radius:50%;animation:financial-app-spin .75s linear infinite}
 .system-loading-copy strong,.system-loading-copy span{display:block}
 .system-loading-copy span{margin-top:4px;color:var(--text-tertiary);font-size:14px}
 .system-error-code{display:inline-block;margin-top:16px;padding:6px 9px;border-radius:var(--radius-small);background:var(--surface-secondary);color:var(--text-tertiary);font:600 14px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace}
 @keyframes financial-app-spin{to{transform:rotate(360deg)}}
-@media(prefers-reduced-motion:reduce){.system-spinner{animation:none;border-top-color:var(--border-subtle);box-shadow:inset 0 0 0 3px var(--gold-primary)}}
+@media(prefers-reduced-motion:reduce){.system-spinner{animation:none;border-top-color:var(--border-subtle);box-shadow:inset 0 0 0 3px var(--accent-primary)}}
 @media(max-width:520px){.system-state-card{padding:22px 0}.system-state-actions{display:grid}.system-state-actions>*{width:100%}}
