@@ -8,7 +8,7 @@ import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getHomePulse } from "@/lib/financial/home-pulse";
 import { getAccountsOverview } from "@/lib/financial/accounts";
 import { getBudgetMonth } from "@/lib/financial/budget";
-import { getForecastOverview } from "@/lib/financial/forecast";
+import { getForecastLiquidity } from "@/lib/financial/forecast-liquidity";
 import { getAnalysisOverview } from "@/lib/financial/analysis";
 import { getHomeControlSummary,getHomeReconciliationSummary } from "@/lib/financial/home-streaming";
 import { madridToday } from "@/lib/time/madrid";
@@ -37,7 +37,7 @@ export default async function Home(){
   const pulsePromise=getHomePulse();
   const accountsPromise=getAccountsOverview();
   const budgetPromise=getBudgetMonth(month);
-  const forecastPromise=getForecastOverview(30);
+  const forecastPromise=getForecastLiquidity(30);
   const analysisPromise=getAnalysisOverview(year);
   const reconciliationPromise=getHomeReconciliationSummary();
   const controlPromise=Promise.all([pulsePromise,budgetPromise]).then(([pulse,budget])=>getHomeControlSummary(pulse,budget));
