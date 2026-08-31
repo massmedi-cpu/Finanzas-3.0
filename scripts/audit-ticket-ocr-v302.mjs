@@ -45,10 +45,11 @@ must(!fs.existsSync("lib/document/ticket-ocr-geometry.ts"),"El motor geométrico
 must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.includes("serverPredict")&&loader.includes("financial-paddleocr-ready"),"El adaptador del navegador no apunta de forma estable al OCR autenticado del servidor");
 must(loader.includes("SERVER_TIMEOUT_MS = 55_000")&&loader.includes("MAX_SIDE = 2600")&&loader.includes("DIRECT_BLOB_LIMIT"),"El proxy OCR móvil ha perdido límites de tiempo, tamaño o escalado");
 must(!loader.includes("LEGACY_PADDLE_BASELINE")&&!loader.includes("cdn.jsdelivr.net/npm/@paddleocr"),"El loader conserva una firma Paddle obsoleta que ya no corresponde al runtime real");
-for(const token of ['createWorker("spa"','workerPath: path.join(root, "node_modules", "tesseract.js"','corePath: path.join(root, "node_modules", "tesseract.js-core")','langPath: path.join(root, "public", "vendor", "document-engine", "tessdata")','runtime: "server-tesseract-7"','apiError("ocr_server_failed", 503)'])
+for(const token of ['createWorker("spa"','workerPath: path.join(root, "node_modules", "tesseract.js"','corePath: path.join(root, "node_modules", "tesseract.js-core")','OCR_LANGUAGE_ROOT = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "spa", "4.0.0")','langPath: OCR_LANGUAGE_ROOT','runtime: "server-tesseract-7"','apiError("ocr_server_failed", 503)'])
   must(serverOcr.includes(token),`OCR de servidor incompleto o sin ruta Tesseract fijada: ${token}`);
-for(const token of ["./node_modules/tesseract.js/**/*","./node_modules/tesseract.js-core/**/*","./node_modules/@tesseract.js-data/spa/**/*","./node_modules/regenerator-runtime/**/*","./node_modules/wasm-feature-detect/**/*","./node_modules/zlibjs/**/*","./node_modules/bmp-js/**/*","./node_modules/is-url/**/*","./node_modules/node-fetch/**/*","./node_modules/idb-keyval/**/*","./public/vendor/document-engine/tessdata/**/*"])
+for(const token of ["./node_modules/tesseract.js/**/*","./node_modules/tesseract.js-core/**/*","./node_modules/@tesseract.js-data/spa/**/*","./node_modules/regenerator-runtime/**/*","./node_modules/wasm-feature-detect/**/*","./node_modules/zlibjs/**/*","./node_modules/bmp-js/**/*","./node_modules/is-url/**/*","./node_modules/node-fetch/**/*","./node_modules/idb-keyval/**/*"])
   must(nextConfig.includes(token),`El bundle de /api/ocr/receipt no traza una dependencia runtime necesaria: ${token}`);
+must(!nextConfig.includes("./public/vendor/document-engine/tessdata/**/*"),"El idioma OCR no debe duplicarse en public y node_modules");
 must(nextConfig.includes("'/api/ocr/receipt': ocrRuntimeAssets"),"Next no aplica el trazado OCR a /api/ocr/receipt");
 
 must(visual.includes("isReceiptVisualLayout")&&visual.includes("ReceiptGeometryPreview")&&visual.includes("viewBox")&&visual.includes("textLength")&&visual.includes('lengthAdjust="spacingAndGlyphs"'),"La vista del ticket no reconstruye su maquetación desde coordenadas");
@@ -81,4 +82,4 @@ if(failures.length){
   failures.forEach(failure=>console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en servidor · fallo visible y original recuperable · bundle runtime trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en servidor · fallo visible y original recuperable · bundle runtime server-only trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
