@@ -4,13 +4,17 @@ import { NextRequest } from "next/server";
 import { createWorker } from "tesseract.js";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiJson, apiUnauthorized } from "@/lib/api/response";
+import { readServerImageMetadata } from "@/lib/document/server-image-metadata";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 const MAX_OCR_BYTES = 5 * 1024 * 1024;
+const MAX_OCR_SIDE = 12_000;
+const MAX_OCR_PIXELS = 80_000_000;
 const OCR_TIMEOUT_MS = 50_000;
+const OCR_QUEUE_TIMEOUT_MS = 10_000;
 const OCR_RUNTIME_FILES = [
   path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
   path.join(process.cwd(), "node_modules", "tesseract.js-core", "package.json"),
@@ -27,6 +31,14 @@ for (const runtimeFile of OCR_RUNTIME_FILES) {
 type TesseractWorker = Awaited<ReturnType<typeof createWorker>>;
 type PaddleItem = { text: string; score: number; poly: number[][] };
 type UnknownRecord = Record<string, unknown>;
+type OcrTimeoutKind = "ocr_queue" | "ocr_worker" | "ocr_recognize";
+
+class OcrTimeoutError extends Error {
+  constructor(readonly kind: OcrTimeoutKind) {
+    super("ocr_timeout");
+    this.name = "OcrTimeoutError";
+  }
+}
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 let workerRoot = "";
@@ -40,14 +52,27 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, kind: OcrTimeoutKind): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label}_timeout`)), timeoutMs);
+    const timer = setTimeout(() => reject(new OcrTimeoutError(kind)), timeoutMs);
     promise.then(
       (value) => { clearTimeout(timer); resolve(value); },
       (failure) => { clearTimeout(timer); reject(failure); },
     );
   });
+}
+
+async function resetWorker() {
+  const current = workerPromise;
+  workerPromise = null;
+  workerRoot = "";
+  if (!current) return;
+  try {
+    const worker = await current;
+    await worker.terminate();
+  } catch {
+    // A failed worker is already unusable; keep reset best-effort.
+  }
 }
 
 async function getWorker() {
@@ -131,8 +156,8 @@ async function recognizeExclusive(bytes: Buffer) {
   const previous = queue;
   let release!: () => void;
   queue = new Promise<void>((resolve) => { release = resolve; });
-  await previous;
   try {
+    await withTimeout(previous, OCR_QUEUE_TIMEOUT_MS, "ocr_queue");
     const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "ocr_worker");
     return await withTimeout(
       worker.recognize(bytes, {}, { text: true, blocks: true, tsv: true }),
@@ -148,18 +173,25 @@ export async function POST(request: NextRequest) {
   const supabase = await getAuthorizedClient();
   if (!supabase) return apiUnauthorized();
 
-  const contentType = request.headers.get("content-type") || "";
-  if (!contentType.startsWith("image/")) return apiError("ocr_image_required", 415);
+  const declaredContentType = (request.headers.get("content-type") || "").split(";", 1)[0].trim().toLowerCase();
+  if (declaredContentType && !declaredContentType.startsWith("image/")) return apiError("ocr_image_required", 415);
 
   const arrayBuffer = await request.arrayBuffer();
   if (!arrayBuffer.byteLength || arrayBuffer.byteLength > MAX_OCR_BYTES) return apiError("ocr_image_too_large", 413);
 
-  const width = Math.max(1, Number(request.headers.get("x-ocr-width")) || 1);
-  const height = Math.max(1, Number(request.headers.get("x-ocr-height")) || 1);
+  const bytes = Buffer.from(arrayBuffer);
+  const image = readServerImageMetadata(bytes);
+  if (!image) return apiError("ocr_image_format_unsupported", 415);
+  if (image.width > MAX_OCR_SIDE || image.height > MAX_OCR_SIDE || image.width * image.height > MAX_OCR_PIXELS) {
+    return apiError("ocr_image_dimensions_too_large", 413);
+  }
+
+  const width = image.width;
+  const height = image.height;
   const started = Date.now();
 
   try {
-    const recognition = await recognizeExclusive(Buffer.from(arrayBuffer));
+    const recognition = await recognizeExclusive(bytes);
     const data = asRecord(recognition?.data) || {};
     let items = wordsFromBlocks(data.blocks);
     if (!items.length) items = wordsFromTsv(data.tsv);
@@ -193,9 +225,10 @@ export async function POST(request: NextRequest) {
   } catch (failure) {
     console.error("financial_app_server_receipt_ocr_failed", {
       type: failure instanceof Error ? failure.name : "unknown_failure",
+      timeout: failure instanceof OcrTimeoutError ? failure.kind : undefined,
     });
-    workerPromise = null;
-    workerRoot = "";
+    if (failure instanceof OcrTimeoutError && failure.kind === "ocr_queue") return apiError("ocr_server_busy", 503);
+    await resetWorker();
     return apiError("ocr_server_failed", 503);
   }
 }
