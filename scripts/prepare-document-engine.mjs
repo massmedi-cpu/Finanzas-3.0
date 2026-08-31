@@ -35,22 +35,16 @@ async function copyTracked(source, relativeTarget) {
   assets.push({path: relativeTarget.replaceAll(path.sep, "/"),bytes: info.size,sha256: await sha256(destination)});
 }
 
-// PDF.js remains browser-side because scanned and text PDFs are inspected in Archivo.
+// Only browser-consumed assets belong in public/. Receipt OCR is server-only
+// and resolves Tesseract, core and Spanish traineddata directly from node_modules.
 await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.min.mjs"),path.join("pdfjs", "pdf.min.mjs"));
 await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.worker.min.mjs"),path.join("pdfjs", "pdf.worker.min.mjs"));
-
-// Receipt recognition runs exclusively in /api/ocr/receipt. Only the Spanish
-// traineddata is materialized here because the server worker resolves langPath
-// against this stable bundled location. Tesseract JS/core stay in node_modules
-// and are traced into the server function by next.config.ts.
-await copyTracked(path.join(nodeModules, "@tesseract.js-data", "spa", "4.0.0", "spa.traineddata.gz"),path.join("tessdata", "spa.traineddata.gz"));
 
 const manifest = {
   formatVersion: 1,
   appVersion,
   generatedFromLockfile: true,
   packages: {
-    "@tesseract.js-data/spa": lockedVersion("@tesseract.js-data/spa"),
     "pdfjs-dist": lockedVersion("pdfjs-dist"),
   },
   assets: assets.sort((a, b) => a.path.localeCompare(b.path)),
