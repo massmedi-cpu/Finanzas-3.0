@@ -11,6 +11,7 @@ const primary = [
   ["Cash Flow","/cash-flow","cash-flow"],
   ["Movimientos","/movimientos","movements"],
   ["Análisis","/analisis","analysis"],
+  ["Previsión","/prevision","forecast"],
   ["Archivo","/archivo","archive"],
 ] as const satisfies readonly (readonly [string,string,FinancialIconName])[];
 
@@ -18,7 +19,6 @@ const secondary = [
   ["Cuentas","/cuentas","accounts"],
   ["Categorías","/configuracion#categorias","categories"],
   ["Plan","/plan","plan"],
-  ["Previsión","/prevision","forecast"],
   ["Simulador","/escenarios","plan"],
   ["Presupuesto","/presupuesto","budget"],
   ["Objetivos","/objetivos","goals"],

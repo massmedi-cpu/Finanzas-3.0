@@ -67,7 +67,7 @@ jobs:
             coherent=1
 
             login_ready || coherent=0
-            for path in / /cash-flow /movimientos /analisis /archivo /configuracion; do
+            for path in / /cash-flow /movimientos /analisis /prevision /archivo /configuracion; do
               route_ready "$path" || coherent=0
             done
             for path in /api/archive /api/settings /api/forecast /api/control/matching-quality /api/intelligence; do
@@ -113,7 +113,7 @@ jobs:
             deployed=$(version_from_headers /tmp/headers)
             [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong production version for $path: ${deployed:-missing}"; cat /tmp/headers; exit 1; }
           }
-          for path in / /cash-flow /movimientos /analisis /archivo /configuracion; do
+          for path in / /cash-flow /movimientos /analisis /prevision /archivo /configuracion; do
             check_redirect "$path"
           done
 

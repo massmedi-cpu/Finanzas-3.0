@@ -19,7 +19,7 @@ for(const token of [
   "login_ready",
   "route_ready",
   "api_ready",
-  "/ /cash-flow /movimientos /analisis /archivo /configuracion",
+  "/ /cash-flow /movimientos /analisis /prevision /archivo /configuracion",
   "/api/archive /api/settings /api/forecast /api/control/matching-quality /api/intelligence",
   "Production did not become globally consistent"
 ])must(workflow.includes(token),`Smoke 6.4.3 incompleto: ${token}`);

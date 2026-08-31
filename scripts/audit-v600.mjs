@@ -68,11 +68,10 @@ must(!/(?:insert\s+into|update|delete\s+from)\s+financial_app\.document_transact
 
 const primaryBlock=navigation.split("const secondary")[0];
 const secondaryBlock=navigation.split("const secondary")[1]?.split("function routeOf")[0]||"";
-const expectedPrimary=[["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Archivo","/archivo"]];
-for(const [label,href] of expectedPrimary)must(primaryBlock.includes(`["${label}","${href}"`),`Falta destino principal del baseline 6.0: ${label}`);
-must((primaryBlock.match(/\["[^\"]+","\/[^"]*","[^"]+"\]/g)||[]).length===5,"La navegación principal debe conservar exactamente cinco destinos");
-must(!primaryBlock.includes('["Previsión","/prevision"'),"Previsión no puede volver a ser destino principal");
-must(secondaryBlock.includes('["Previsión","/prevision"'),"Previsión debe permanecer accesible desde Más");
+const expectedPrimary=[["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Previsión","/prevision"],["Archivo","/archivo"]];
+for(const [label,href] of expectedPrimary)must(primaryBlock.includes(`["${label}","${href}"`),`Falta destino principal protegido: ${label}`);
+must((primaryBlock.match(/\["[^\"]+","\/[^"]*","[^"]+"\]/g)||[]).length===6,"La navegación principal debe conservar exactamente seis destinos");
+must(!secondaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe duplicarse dentro de Más si ya es destino principal");
 
 for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-hover:","--gold-active:"])
   must(globals.includes(token),`Identidad premium 6.x incompleta: ${token}`);
@@ -80,7 +79,7 @@ must(!globals.includes("--accent:"),"La familia 6.x no debe recuperar el alias v
 must(!globals.includes("--accent:#0b4f8a")&&!globals.includes("--accent:#4c9bff"),"La identidad azul no puede volver a dominar el producto");
 must(cashFlow.includes("ForecastClient")&&cashFlow.includes("getForecastCalendar")&&cashFlow.includes("Promise.all"),"Cash Flow debe integrar la previsión canónica sin duplicarla");
 
-for(const token of ["financialapp-home.vercel.app","EXPECTED_VERSION","/cash-flow","/movimientos","/analisis","/archivo","/configuracion"])
+for(const token of ["financialapp-home.vercel.app","EXPECTED_VERSION","/cash-flow","/movimientos","/analisis","/prevision","/archivo","/configuracion"])
   must(productionSmoke.includes(token),`Smoke de producción del baseline 6.0 incompleto: ${token}`);
 must(productionSmoke.toLowerCase().includes("x-financial-app-version"),"Smoke de producción no valida la cabecera de versión");
 must(!productionSmoke.includes("finanzas-3-0.vercel.app")&&!productionSmoke.includes("/ajustes")&&!productionSmoke.includes("/auth/preview"),"Smoke de producción conserva alias/rutas o autenticación Preview obsoletos");
@@ -94,4 +93,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 6.0 baseline audit OK · navegación, identidad semántica, Preview retirada, smoke exacto, publicación solo desde main y migraciones seguras protegidas");
+console.log("Financial App 6.0 baseline audit OK · navegación priorizada, identidad semántica, Preview retirada, smoke exacto, publicación solo desde main y migraciones seguras protegidas");
