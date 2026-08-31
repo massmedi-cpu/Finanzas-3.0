@@ -52,29 +52,32 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
       <Link className={view==="archived"?"active":""} href={archiveHref("archived",query)}><span>Archivadas</span><b>{counts.archived}</b></Link>
     </nav>
 
-    <div className="archive-lifecycle-head">
-      <div><p className="eyebrow">{view==="archived"?"HISTÓRICO":view==="pending"?"REQUIERE ATENCIÓN":"ENTRADA DOCUMENTAL"}</p><h2>{view==="archived"?"Documentos archivados":view==="pending"?"Pendientes de revisión":"Documentos nuevos"}</h2><p>{view==="archived"?"Conservados sin alterar importes, fechas ni vínculos. Puedes desarchivarlos en cualquier momento.":view==="pending"?"OCR, asociación o metadatos requieren revisión antes de cerrar el documento.":"Los documentos futuros permanecen aquí hasta que decidas archivarlos."}</p></div>
-      <form className="archive-lifecycle-search" action="/archivo" method="get">
-        <input type="hidden" name="view" value={view}/>
-        <label><span>Buscar en esta vista</span><input name="q" type="search" defaultValue={query} placeholder="Proveedor, archivo o texto OCR…" maxLength={160}/></label>
-        <button className="secondary-action" type="submit">Buscar</button>
-        {query&&<Link className="ghost-action" href={archiveHref(view,"")}>Limpiar</Link>}
-      </form>
-    </div>
+    {view!=="new"&&<>
+      <div className="archive-lifecycle-head">
+        <div><p className="eyebrow">{view==="archived"?"HISTÓRICO":"REQUIERE ATENCIÓN"}</p><h2>{view==="archived"?"Documentos archivados":"Pendientes de revisión"}</h2><p>{view==="archived"?"Conservados sin alterar importes, fechas ni vínculos. Puedes desarchivarlos en cualquier momento.":"OCR, asociación o metadatos requieren revisión antes de cerrar el documento."}</p></div>
+        <form className="archive-lifecycle-search" action="/archivo" method="get">
+          <input type="hidden" name="view" value={view}/>
+          <label><span>Buscar en esta vista</span><input name="q" type="search" defaultValue={query} placeholder="Proveedor, archivo o texto OCR…" maxLength={160}/></label>
+          <button className="secondary-action" type="submit">Buscar</button>
+          {query&&<Link className="ghost-action" href={archiveHref(view,"")}>Limpiar</Link>}
+        </form>
+      </div>
 
-    {feedback&&<div className="inline-alert info" role="status">{feedback}</div>}
-    {view==="pending"&&total>0&&<div className="archive-review-callout"><div><strong>{total} documento{total===1?"":"s"} requieren revisión</strong><span>Resuelve OCR y asociaciones sugeridas antes de archivarlos.</span></div><Link className="primary-action" href="/archivo/revision">Abrir revisión</Link></div>}
+      {feedback&&<div className="inline-alert info" role="status">{feedback}</div>}
+      {view==="pending"&&total>0&&<div className="archive-review-callout"><div><strong>{total} documento{total===1?"":"s"} requieren revisión</strong><span>Resuelve OCR y asociaciones sugeridas antes de archivarlos.</span></div><Link className="primary-action" href="/archivo/revision">Abrir revisión</Link></div>}
 
-    <div className="archive-lifecycle-list">
-      {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
-        <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
-        <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{document.amount==null?"Importe pendiente":formatEuro(document.amount)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small></div>
-        <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>mutate(document,"restore")}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:view==="new"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>mutate(document,"archive")}>{busy===document.id?"Archivando…":"Archivar"}</button>:null}</div>
-      </article>)}
-    </div>
+      <div className="archive-lifecycle-list">
+        {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
+          <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
+          <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{document.amount==null?"Importe pendiente":formatEuro(document.amount)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small></div>
+          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>mutate(document,"restore")}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
+          {/* Archivar se gestiona desde el detalle activo para no duplicar la lista de Nuevas. */}
+        </article>)}
+      </div>
 
-    {!documents.length&&<div className="empty-state"><strong>{query?"Sin coincidencias":view==="archived"?"No hay documentos archivados":view==="pending"?"No hay documentos pendientes":"No hay documentos nuevos"}</strong><span>{query?"Prueba con otro proveedor, nombre de archivo o texto del documento.":view==="new"?"Las próximas facturas y tickets aparecerán aquí.":view==="pending"?"No hay revisiones documentales abiertas.":"Cuando archives un documento aparecerá en este histórico."}</span></div>}
+      {!documents.length&&<div className="empty-state"><strong>{query?"Sin coincidencias":view==="archived"?"No hay documentos archivados":"No hay documentos pendientes"}</strong><span>{query?"Prueba con otro proveedor, nombre de archivo o texto del documento.":view==="pending"?"No hay revisiones documentales abiertas.":"Cuando archives un documento aparecerá en este histórico."}</span></div>}
 
-    {totalPages>1&&<nav className="archive-lifecycle-pagination" aria-label="Paginación de documentos"><span>{firstVisible}–{lastVisible} de {total}</span><div>{page>1?<Link className="secondary-action" href={archiveHref(view,query,page-1)}>Anterior</Link>:<span/>}<strong>Página {page} de {totalPages}</strong>{page<totalPages?<Link className="secondary-action" href={archiveHref(view,query,page+1)}>Siguiente</Link>:<span/>}</div></nav>}
+      {totalPages>1&&<nav className="archive-lifecycle-pagination" aria-label="Paginación de documentos"><span>{firstVisible}–{lastVisible} de {total}</span><div>{page>1?<Link className="secondary-action" href={archiveHref(view,query,page-1)}>Anterior</Link>:<span/>}<strong>Página {page} de {totalPages}</strong>{page<totalPages?<Link className="secondary-action" href={archiveHref(view,query,page+1)}>Siguiente</Link>:<span/>}</div></nav>}
+    </>}
   </section>
 }

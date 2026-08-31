@@ -43,7 +43,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
       page={page}
       pageSize={PAGE_SIZE}
     />
-    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Procesar documentos activos</h2><p>Escanea, revisa el OCR, corrige metadatos, vincula movimientos y conserva el original antes de archivar.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
+    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
     {view==="pending"&&<div className="archive-view-note"><strong>La cola pendiente se resuelve en Revisión.</strong><span>Así se evita duplicar el editor documental y se mantiene una sola fuente de verdad para OCR y asociaciones.</span><Link className="primary-action" href="/archivo/revision">Ir a Revisión</Link></div>}
   </section></main>
 }
