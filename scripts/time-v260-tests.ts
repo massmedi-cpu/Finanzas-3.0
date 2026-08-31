@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
 import { validCalendarDate } from "../lib/time/calendar-date";
 import { MADRID_TIME_ZONE,madridMonth,madridToday,madridYear } from "../lib/time/madrid";
 
@@ -27,5 +28,8 @@ for(const value of ["2026-08-31","2024-02-29","2000-02-29","0001-01-01"]){
 for(const value of [null,"","2026-8-31","2026-13-01","2026-04-31","2026-02-29","2100-02-29","0000-01-01"]){
   assert.equal(validCalendarDate(value),null);
 }
+const forecastApi=fs.readFileSync("app/api/forecast/route.ts","utf8");
+assert.match(forecastApi,/from "@\/lib\/time\/calendar-date"/);
+assert.ok((forecastApi.match(/validCalendarDate\(/g)||[]).length>=3,"Previsión debe validar fecha principal, fin de recurrencia y fecha de descarte");
 
 console.log("Financial App time tests OK · límites Madrid y fechas reales de calendario protegidos");
