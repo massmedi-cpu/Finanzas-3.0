@@ -41,12 +41,30 @@ for(const token of [
   "@media(max-width:980px)",".mobile-bottom-nav{","inset:auto 0 0 0","env(safe-area-inset-bottom,0px)","overflow-x:clip"
 ]){if(!chrome.includes(token))failures.push(`Shell adaptable incompleto: falta ${token}`);}
 for(const token of ["mobile-bottom-nav","product-more-menu","Más",'aria-expanded={moreOpen}','aria-controls="product-more-menu"','FinancialIcon']){if(!navigation.includes(token))failures.push(`Navegación adaptable incompleta: falta ${token}`);}
-const requiredPrimary=['["Inicio","/","home"]','["Cash Flow","/cash-flow","cash-flow"]','["Movimientos","/movimientos","movements"]','["Análisis","/analisis","analysis"]','["Archivo","/archivo","archive"]'];
+const requiredPrimary=['["Inicio","/","home"]','["Cash Flow","/cash-flow","cash-flow"]','["Movimientos","/movimientos","movements"]','["Análisis","/analisis","analysis"]','["Previsión","/prevision","forecast"]','["Archivo","/archivo","archive"]'];
 let lastIndex=-1;
 for(const token of requiredPrimary){const index=navigation.indexOf(token);if(index<0)failures.push(`Falta destino primario requerido: ${token}`);else if(index<=lastIndex)failures.push(`Orden primario incorrecto en ${token}`);lastIndex=index;}
-if((navigation.match(/primary\.map/g)||[]).length<2)failures.push("Las cinco secciones primarias deben alimentar sidebar y bottom navigation desde una única fuente de verdad");
+if((navigation.match(/primary\.map/g)||[]).length<2)failures.push("Las seis secciones primarias deben alimentar sidebar y bottom navigation desde una única fuente de verdad");
 if(!navigation.includes('role="dialog"')||!navigation.includes('event.key==="Escape"'))failures.push("Más debe comportarse como superficie modal accesible y cerrarse con Escape");
 if(chrome.includes(".sidebar{")||navigation.includes("AppSidebar"))failures.push("El shell ha recuperado la sidebar SaaS retirada");
 
+const controlPage=read("app/control/page.tsx");
+for(const token of [
+  'import { Suspense } from "react"',
+  "controlPromise=getControlCenter(month)",
+  "matchingPromise=getMatchingObservability(90)",
+  "documentMatchingPromise=getDocumentMatchingDashboard(8,90)",
+  "calibrationPromise=getDocumentMatchingCalibration(90)",
+  "policyPromise=getDocumentMatchingPolicyDashboard(90)",
+  "integrityPromise=getSystemIntegrityOverview()",
+  "ControlStreamFallback",
+  "MatchingQualityStream",
+  "DocumentMatchingStream",
+  "CalibrationStream",
+  "PolicyStream",
+  "IntegrityStream",
+]){if(!controlPage.includes(token))failures.push(`Centro de control ha perdido carga progresiva: ${token}`);}
+if(controlPage.includes("await Promise.all(["))failures.push("Centro de control no debe volver a bloquear avisos y cierre mensual esperando todos los diagnósticos técnicos");
+
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles premium, cinco destinos primarios y shell responsive protegidos");
+console.log("Control usage audit OK · controles premium, seis destinos primarios, shell responsive y carga progresiva del centro de control protegidos");
