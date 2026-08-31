@@ -53,7 +53,7 @@ for(const token of [
   'import { Suspense } from "react"',
   "controlPromise=getControlCenter(month)",
   "matchingPromise=getMatchingObservability(90)",
-  "documentMatchingPromise=getDocumentMatchingDashboard(8,90)",
+  "documentMatchingDashboard=getDocumentMatchingDashboard(8,90)",
   "calibrationPromise=getDocumentMatchingCalibration(90)",
   "policyPromise=getDocumentMatchingPolicyDashboard(90)",
   "integrityPromise=getSystemIntegrityOverview()",
