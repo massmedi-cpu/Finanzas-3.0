@@ -23,8 +23,10 @@ import {
 } from "./home-sections";
 
 const date=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
+const dateTime=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit",timeZone:"Europe/Madrid"});
 export const dynamic="force-dynamic";
 function fmtDate(value:string|null|undefined){return value?date.format(new Date(`${value.slice(0,10)}T12:00:00`)):"—"}
+function fmtDateTime(value:string|null|undefined){if(!value)return "pendiente";const parsed=new Date(value);return Number.isNaN(parsed.getTime())?"pendiente":dateTime.format(parsed)}
 
 export default async function Home(){
   await requireAuthorizedUser();
@@ -45,7 +47,7 @@ export default async function Home(){
   const pulse=await pulsePromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace home-workspace">
-    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/></div></header>
+    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><div className="home-sync-action"><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/><small>Datos de Drive · {fmtDateTime(pulse.sync?.sourceModifiedAt)}</small></div></div></header>
 
     <Suspense fallback={<HomeAccountsFallback/>}><HomeAccountsSection data={accountsPromise}/></Suspense>
 
@@ -61,6 +63,6 @@ export default async function Home(){
     <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>
     <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid pulse={pulse} analysis={analysisPromise} budget={budgetPromise}/></Suspense>
 
-    <footer className="home-freshness"><span>Fuente oficial: Google Drive XLSX · solo lectura.</span><span>Última sincronización {pulse.sync?.finishedAt?new Date(pulse.sync.finishedAt).toLocaleString("es-ES"):"pendiente"}.</span></footer>
+    <footer className="home-freshness"><span>Fuente oficial: Google Drive XLSX · solo lectura.</span><span>Última comprobación {pulse.sync?.finishedAt?fmtDateTime(pulse.sync.finishedAt):"pendiente"}.</span></footer>
   </section></main>;
 }
