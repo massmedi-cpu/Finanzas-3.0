@@ -18,6 +18,9 @@ for(const file of routes){
   const source=fs.readFileSync(file,"utf8");
   const relative=path.relative(process.cwd(),file);
   if(!source.includes("@/lib/api/response"))failures.push(`${relative}: no usa la frontera API común`);
+  if(!source.includes("@/lib/auth/authorized-client"))failures.push(`${relative}: no usa el cliente autorizado común`);
+  if(!source.includes("getAuthorizedClient("))failures.push(`${relative}: no exige autorización antes de acceder a datos privados`);
+  if(!source.includes("apiUnauthorized"))failures.push(`${relative}: no conserva la respuesta 401 canónica`);
   if(/\b(?:error|readError|current\.error|detail\.error|deleted\.error)\s*\??\.message\b/.test(source)||/instanceof\s+Error\s*\?[^:\n]*\.message/.test(source))failures.push(`${relative}: expone o manipula mensajes crudos de error`);
   if(source.includes("NextResponse.json("))failures.push(`${relative}: conserva respuestas JSON fuera de la frontera común`);
 }
@@ -26,6 +29,10 @@ const helper=fs.readFileSync("lib/api/response.ts","utf8");
 for(const token of ["API_NO_STORE_HEADERS","apiUnauthorized","apiFailure","publicApiErrorCode","financial_app_api_failure"]){
   if(!helper.includes(token))failures.push(`lib/api/response.ts: falta ${token}`);
 }
+const authHelper=fs.readFileSync("lib/auth/authorized-client.ts","utf8");
+for(const token of ["supabase.auth.getUser()","hasFinancialAppAccess","return null"]){
+  if(!authHelper.includes(token))failures.push(`lib/auth/authorized-client.ts: falta ${token}`);
+}
 if(!helper.includes('"Cache-Control": "private, no-store"'))failures.push("lib/api/response.ts: falta no-store canónico");
 
 if(failures.length){
@@ -33,4 +40,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App API boundary audit OK · ${routes.length} rutas sanitizadas y no-store centralizado`);
+console.log(`Financial App API boundary audit OK · ${routes.length} rutas autorizadas, sanitizadas y no-store centralizado`);
