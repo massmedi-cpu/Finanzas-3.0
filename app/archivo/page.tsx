@@ -24,17 +24,16 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const page=Number.isFinite(requestedPage)&&requestedPage>0?requestedPage:1;
   const offset=(page-1)*PAGE_SIZE;
 
-  const [active,lifecycle]=await Promise.all([
-    getArchiveOverview(),
-    getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset),
-  ]);
+  const lifecyclePromise=getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset);
+  const activePromise=view==="new"?getArchiveOverview():Promise.resolve(null);
+  const [lifecycle,active]=await Promise.all([lifecyclePromise,activePromise]);
 
   const totalPages=Math.max(1,Math.ceil(lifecycle.total/PAGE_SIZE));
   if(page>totalPages)redirect(archiveUrl(view,query,totalPages));
 
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
-    <header className="topbar"><div><p className="eyebrow">ARCHIVO · {active.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/revision">Revisar asociaciones{pending?` · ${pending}`:""}</Link></div></header>
+    <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/revision">Revisar asociaciones{pending?` · ${pending}`:""}</Link></div></header>
     <ArchiveLifecycleClient
       documents={lifecycle.documents}
       counts={lifecycle.counts}
@@ -44,7 +43,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
       page={page}
       pageSize={PAGE_SIZE}
     />
-    {view==="new"&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Procesar documentos activos</h2><p>Escanea, revisa el OCR, corrige metadatos, vincula movimientos y conserva el original antes de archivar.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
+    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Procesar documentos activos</h2><p>Escanea, revisa el OCR, corrige metadatos, vincula movimientos y conserva el original antes de archivar.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
     {view==="pending"&&<div className="archive-view-note"><strong>La cola pendiente se resuelve en Revisión.</strong><span>Así se evita duplicar el editor documental y se mantiene una sola fuente de verdad para OCR y asociaciones.</span><Link className="primary-action" href="/archivo/revision">Ir a Revisión</Link></div>}
   </section></main>
 }
