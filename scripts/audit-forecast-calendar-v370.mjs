@@ -8,6 +8,8 @@ const appVersion=read("lib/app-version.ts");
 const globals=read("app/globals.css");
 const navigation=read("components/app-navigation.tsx");
 const client=read("app/prevision/forecast-client.tsx");
+const forecastPage=read("app/prevision/page.tsx");
+const liquidityDashboard=read("components/forecast-liquidity-dashboard.tsx");
 const css=read("app/forecast.css");
 const cashFlowPage=read("app/cash-flow/page.tsx");
 const api=read("app/api/forecast/route.ts");
@@ -33,11 +35,12 @@ for(const legacy of ["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"])
 
 const primaryBlock=navigation.split("const secondary")[0];
 const secondaryBlock=navigation.split("const secondary")[1]?.split("function routeOf")[0]||"";
-for(const [label,href] of [["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Archivo","/archivo"]])
-  must(primaryBlock.includes(`["${label}","${href}"`),`Navegación primaria 6.0 incompleta: ${label}`);
-must(!primaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe volver a ser un sexto destino primario");
-must(secondaryBlock.includes('["Previsión","/prevision"'),"Previsión debe permanecer accesible desde Más");
+for(const [label,href] of [["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Previsión","/prevision"],["Archivo","/archivo"]])
+  must(primaryBlock.includes(`["${label}","${href}"`),`Navegación primaria incompleta: ${label}`);
+must(!secondaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe duplicarse dentro de Más si ya está en navegación principal");
 must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecastCalendar")&&cashFlowPage.includes("Promise.all"),"Cash Flow debe integrar el calendario/previsión canónico sin duplicar su lógica");
+must(forecastPage.includes("showCommitments={false}"),"La página de Previsión debe evitar repetir la lista de compromisos antes del calendario");
+must(liquidityDashboard.includes("showCommitments=true")&&liquidityDashboard.includes("showCommitments&&<article className=\"liquidity-commitments\""),"El panel de liquidez debe permitir ocultar compromisos redundantes sin perderlos en otros contextos");
 
 for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)"])
   must(client.includes(token),`Previsión ha perdido contrato funcional: ${token}`);
@@ -89,4 +92,4 @@ for(const root of roots){
 }
 
 if(failures.length){console.error("Forecast/Cash Flow v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast/Cash Flow v6 audit OK · identidad dorada semántica, cinco destinos primarios, previsión accesible e integrada, descartes y proyección protegidos");
+console.log("Forecast/Cash Flow v6 audit OK · identidad dorada semántica, seis destinos primarios, previsión priorizada e integrada, descartes y proyección protegidos");
