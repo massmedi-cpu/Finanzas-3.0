@@ -16,7 +16,7 @@ export default async function ForecastPage(){
       <h1>Agenda Financiera Inteligente</h1>
       <p>Combina patrones del historial, movimientos esperados y facturas recientes todavía sin cargo bancario para calcular cómo evoluciona tu liquidez. Las facturas pendientes son estimaciones prudentes: nunca crean una asociación bancaria y desaparecen cuando el movimiento real queda asociado.</p>
     </div></header>
-    <ForecastLiquidityDashboard data={liquidity}/>
+    <ForecastLiquidityDashboard data={liquidity} showCommitments={false}/>
     <ForecastClient initialData={initialData}/>
   </section></main>;
 }
