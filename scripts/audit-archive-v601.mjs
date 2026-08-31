@@ -65,7 +65,7 @@ if(lifecycle.includes("useMemo"))failures.push("El ciclo documental no debe volv
 
 for(const token of [
   'needsDocumentReview(document:ArchiveDetail)',
-  'action:"archive"',
+  'setAction({kind:"archive",target:id})',
   '?action=archive',
   'router.refresh()',
   'Gestión documental activa'
