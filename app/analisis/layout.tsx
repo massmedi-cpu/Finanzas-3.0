@@ -15,7 +15,7 @@ const seedScript=`(()=>{try{
   const savedHidden=Array.isArray(saved?.hidden)?saved.hidden:[];
   const legacyDefault=savedOrder.length===order.length&&savedHidden.length===0&&order.every((id,index)=>savedOrder[index]===id);
   if(legacyDefault)localStorage.setItem(key,JSON.stringify({order,hidden}));
-}catch{}})();`;
+}catch(error){void error}})();`;
 
 export default function Layout({children}:{children:React.ReactNode}){
   return <><script dangerouslySetInnerHTML={{__html:seedScript}}/>{children}</>;
