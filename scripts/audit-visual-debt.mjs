@@ -4,6 +4,7 @@ import path from "node:path";
 const failures=[];
 const cssFiles=[];
 const runtimeVisualFiles=[];
+const migrationFiles=[];
 function walk(dir){
   if(!fs.existsSync(dir))return;
   for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
@@ -16,8 +17,17 @@ function walk(dir){
     }
   }
 }
+function walkMigration(dir){
+  if(!fs.existsSync(dir))return;
+  for(const entry of fs.readdirSync(dir,{withFileTypes:true})){
+    const full=path.join(dir,entry.name);
+    if(entry.isDirectory())walkMigration(full);
+    else if(/\.(css|tsx|ts|mjs)$/.test(entry.name))migrationFiles.push(full.replaceAll("\\","/"));
+  }
+}
 walk("app");
 walk("components");
+for(const dir of ["app","components","lib","scripts"])walkMigration(dir);
 
 for(const file of cssFiles){
   const css=fs.readFileSync(file,"utf8");
@@ -45,7 +55,8 @@ for(const file of runtimeVisualFiles){
   for(const legacy of legacyAliases){if(source.includes(legacy))failures.push(`${file}: consume alias visual legado ${legacy}`);}
 }
 
-for(const file of runtimeVisualFiles){
+for(const file of migrationFiles){
+  if(file==="scripts/audit-visual-debt.mjs")continue;
   const source=fs.readFileSync(file,"utf8");
   const legacyAccentTokens=[...new Set([...source.matchAll(/--gold-[a-z-]+/g)].map(match=>match[0]))];
   if(legacyAccentTokens.length)failures.push(`${file}: usa nombres de acento heredados ${legacyAccentTokens.join(", ")}`);
