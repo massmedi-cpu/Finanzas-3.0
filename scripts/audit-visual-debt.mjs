@@ -45,6 +45,12 @@ for(const file of runtimeVisualFiles){
   for(const legacy of legacyAliases){if(source.includes(legacy))failures.push(`${file}: consume alias visual legado ${legacy}`);}
 }
 
+for(const file of runtimeVisualFiles){
+  const source=fs.readFileSync(file,"utf8");
+  const legacyAccentTokens=[...new Set([...source.matchAll(/--gold-[a-z-]+/g)].map(match=>match[0]))];
+  if(legacyAccentTokens.length)failures.push(`${file}: usa nombres de acento heredados ${legacyAccentTokens.join(", ")}`);
+}
+
 const globals=fs.readFileSync("app/globals.css","utf8");
 for(const legacy of ["--shadow:","--surface-soft:","--surface-strong:","#0b4f8a","#4c9bff"]){if(globals.includes(legacy))failures.push(`globals.css recupera identidad/token retirado: ${legacy}`);}
 for(const token of [
