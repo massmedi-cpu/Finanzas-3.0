@@ -6,6 +6,8 @@ const script=fs.readFileSync("scripts/preflight-supabase-contract.mjs","utf8");
 const pkg=JSON.parse(fs.readFileSync("package.json","utf8"));
 const migration=fs.readFileSync("database/FINANCIAL_APP_3.8.1_RELEASE_PREFLIGHT_INVOKER.sql","utf8");
 const lower=migration.toLowerCase();
+const hardening=fs.readFileSync("database/FINANCIAL_APP_9.0.0_SEARCH_PREFLIGHT_HARDENING.sql","utf8");
+const hardeningLower=hardening.toLowerCase();
 
 for(const token of [
   "FALLBACK_SUPABASE_URL",
@@ -49,9 +51,35 @@ const publicFn=migration.slice(migration.toLowerCase().lastIndexOf("create or re
 must(!/security\s+definer/i.test(publicFn),"financial_app_release_preflight no puede volver a SECURITY DEFINER");
 must(!publicFn.includes("financial_app.app_meta"),"El RPC público no puede leer app_meta privado directamente");
 
+for(const token of [
+  "add column if not exists search_vector tsvector",
+  "create or replace function financial_app.refresh_transaction_search_vector()",
+  "security invoker",
+  "create trigger transactions_refresh_search_vector",
+  "using gin(search_vector)",
+  "t.search_vector @@ websearch_to_tsquery('simple',v_search)",
+  "financial_app_search_hardening_unknown_movements_contract",
+  "search_vector_ready boolean not null default false",
+  "forecast_document_candidate_ready boolean not null default false",
+  "create or replace function public.financial_app_release_preflight",
+  "set search_path to 'pg_catalog','public'",
+  "and v_search_ready",
+  "and v_forecast_document_ready",
+  "grant execute on function public.financial_app_release_preflight(text,text[]) to anon,authenticated,service_role"
+]) must(hardeningLower.includes(token.toLowerCase()),`Hardening 9.0.0 incompleto: ${token}`);
+
+must(!/security\s+definer/i.test(hardening),"El hardening 9.0.0 no puede introducir SECURITY DEFINER");
+const hardeningPublicStart=hardeningLower.lastIndexOf("create or replace function public.financial_app_release_preflight");
+const hardeningPublicEnd=hardeningLower.indexOf("revoke all on function public.financial_app_release_preflight",hardeningPublicStart);
+const hardeningPublicFn=hardening.slice(hardeningPublicStart,hardeningPublicEnd);
+must(hardeningPublicStart>=0&&hardeningPublicEnd>hardeningPublicStart,"No se puede aislar el preflight público endurecido");
+must(!hardeningPublicFn.includes("financial_app.transactions"),"El preflight público endurecido no puede inspeccionar transactions privado");
+must(!hardeningPublicFn.includes("financial_app.app_meta"),"El preflight público endurecido no puede inspeccionar app_meta privado");
+must(hardeningPublicFn.includes("public.financial_app_release_manifest"),"El preflight endurecido debe leer únicamente readiness público saneado");
+
 if(failures.length){
   console.error("Financial App release preflight audit FAILED");
   for(const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App release preflight audit OK · candidato compatible con baseline, cierre exacto separado, invoker público mínimo y sin service_role en build");
+console.log("Financial App release preflight audit OK · candidato compatible con baseline, búsqueda reproducible, readiness público, invoker mínimo y sin service_role en build");
