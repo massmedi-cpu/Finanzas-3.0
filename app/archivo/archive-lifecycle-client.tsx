@@ -32,16 +32,16 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
   const firstVisible=total===0?0:(page-1)*pageSize+1;
   const lastVisible=Math.min(total,page*pageSize);
 
-  async function mutate(document:ArchiveDocument,action:"archive"|"restore"){
+  async function restoreDocument(document:ArchiveDocument){
     if(busy)return;
     setBusy(document.id);setFeedback(null);
     try{
-      const response=await fetch(`/api/archive/${document.id}?action=${action}`,{method:"POST"});
+      const response=await fetch(`/api/archive/${document.id}?action=restore`,{method:"POST"});
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||"document_state_failed");
-      setFeedback(action==="archive"?"Documento archivado.":"Documento desarchivado y devuelto a Nuevas.");
+      setFeedback("Documento desarchivado y devuelto a Nuevas.");
       router.refresh();
-    }catch{setFeedback(action==="archive"?"No se ha podido archivar el documento.":"No se ha podido desarchivar el documento.")}
+    }catch{setFeedback("No se ha podido desarchivar el documento.")}
     finally{setBusy(null)}
   }
 
@@ -70,8 +70,7 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
         {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
           <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
           <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{document.amount==null?"Importe pendiente":formatEuro(document.amount)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small></div>
-          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>mutate(document,"restore")}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
-          {/* Archivar se gestiona desde el detalle activo para no duplicar la lista de Nuevas. */}
+          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
         </article>)}
       </div>
 
