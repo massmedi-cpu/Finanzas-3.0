@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
 import { normalizeNetWorth } from "@/lib/financial/net-worth";
+import { validCalendarDate } from "@/lib/time/calendar-date";
 import { asBoolean, asNumber, asRecord, asString, nullableString } from "@/lib/validation/json";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   const supabase = await getAuthorizedClient();if (!supabase) return apiUnauthorized();
   let body: unknown;try { body = await request.json(); } catch { return apiError("invalid_json"); }
   const input=asRecord(body);const value=asNumber(input.value,Number.NaN);const type=asString(input.itemType);const itemType=type==="liability"?"liability":type==="asset"?"asset":null;
-  const valuationDate = typeof input.valuationDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.valuationDate) ? input.valuationDate : null;
+  const valuationDate=validCalendarDate(input.valuationDate);
   const name=asString(input.name).trim();
   if (!name || !itemType || !Number.isFinite(value) || value < 0 || !valuationDate) return apiError("invalid_item");
   const { error } = await supabase.rpc("financial_app_upsert_net_worth_item", {p_id:nullableString(input.id),p_name:name,p_item_type:itemType,p_category:nullableString(input.category),p_value:value,p_valuation_date:valuationDate,p_include:input.includeInTotal==null?true:asBoolean(input.includeInTotal),p_notes:nullableString(input.notes)});
