@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
@@ -35,24 +35,21 @@ async function copyTracked(source, relativeTarget) {
   assets.push({path: relativeTarget.replaceAll(path.sep, "/"),bytes: info.size,sha256: await sha256(destination)});
 }
 
-await copyTracked(path.join(nodeModules, "tesseract.js", "dist", "tesseract.min.js"),path.join("tesseract", "tesseract.min.js"));
-await copyTracked(path.join(nodeModules, "tesseract.js", "dist", "worker.min.js"),path.join("tesseract", "worker.min.js"));
+// PDF.js remains browser-side because scanned and text PDFs are inspected in Archivo.
 await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.min.mjs"),path.join("pdfjs", "pdf.min.mjs"));
 await copyTracked(path.join(nodeModules, "pdfjs-dist", "build", "pdf.worker.min.mjs"),path.join("pdfjs", "pdf.worker.min.mjs"));
-await copyTracked(path.join(nodeModules, "@tesseract.js-data", "spa", "4.0.0", "spa.traineddata.gz"),path.join("tessdata", "spa.traineddata.gz"));
 
-const coreSource = path.join(nodeModules, "tesseract.js-core");
-const coreFiles = (await readdir(coreSource)).filter((name) => name.startsWith("tesseract-core") && name.endsWith(".wasm.js")).sort();
-if (coreFiles.length < 4) throw new Error(`Tesseract core incompleto: ${coreFiles.length} variantes .wasm.js encontradas`);
-for (const file of coreFiles) await copyTracked(path.join(coreSource, file), path.join("tesseract-core", file));
+// Receipt recognition runs exclusively in /api/ocr/receipt. Only the Spanish
+// traineddata is materialized here because the server worker resolves langPath
+// against this stable bundled location. Tesseract JS/core stay in node_modules
+// and are traced into the server function by next.config.ts.
+await copyTracked(path.join(nodeModules, "@tesseract.js-data", "spa", "4.0.0", "spa.traineddata.gz"),path.join("tessdata", "spa.traineddata.gz"));
 
 const manifest = {
   formatVersion: 1,
   appVersion,
   generatedFromLockfile: true,
   packages: {
-    "tesseract.js": lockedVersion("tesseract.js"),
-    "tesseract.js-core": lockedVersion("tesseract.js-core"),
     "@tesseract.js-data/spa": lockedVersion("@tesseract.js-data/spa"),
     "pdfjs-dist": lockedVersion("pdfjs-dist"),
   },
