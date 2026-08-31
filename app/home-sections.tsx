@@ -4,7 +4,7 @@ import { CashFlowChart } from "@/components/cash-flow-chart";
 import { movementState,movementUrl } from "@/lib/financial/movement-query";
 import type { AccountsOverview } from "@/lib/financial/accounts";
 import type { BudgetMonth } from "@/lib/financial/budget";
-import type { ForecastOverview } from "@/lib/financial/forecast";
+import type { ForecastLiquidityOverview } from "@/lib/financial/forecast-liquidity";
 import type { AnalysisOverview } from "@/lib/financial/analysis";
 import type { ReconciliationSummary } from "@/lib/financial/reconciliation";
 import type { HomeControlSummary } from "@/lib/financial/home-streaming";
@@ -56,11 +56,10 @@ export function HomeForecastFallback(){
   return <section className="home-forecast-section home-stream-loading" aria-busy="true" aria-label="Cargando previsión"><div className="home-section-heading"><div><p className="eyebrow">PRÓXIMOS 30 DÍAS</p><h2>Lo que viene</h2><p>Calculando movimientos esperados y saldo previsto.</p></div></div><div className="home-stream-lines short" aria-hidden="true"><i/><i/></div></section>;
 }
 
-export async function HomeForecastSection({data}:{data:Promise<ForecastOverview>}){
+export async function HomeForecastSection({data}:{data:Promise<ForecastLiquidityOverview>}){
   const forecast=await data;
-  const upcoming=forecast.events.slice(0,4);
-  const suggestions=forecast.suggestions.slice(0,4);
-  return <section className="home-forecast-section" aria-labelledby="home-forecast-title"><div className="home-section-heading"><div><p className="eyebrow">PRÓXIMOS 30 DÍAS</p><h2 id="home-forecast-title">Lo que viene</h2><p>Previsión basada en movimientos confirmados y patrones fiables.</p></div><IntentLink href="/prevision">Ver calendario →</IntentLink></div><div className="home-forecast-line"><div><span>Saldo previsto</span><strong>{formatEuro(forecast.projectedBalance)}</strong></div><div><span>Saldo mínimo</span><strong className={forecast.lowestBalance<0?"negative":""}>{formatEuro(forecast.lowestBalance)}</strong></div></div>{upcoming.length?<div className="home-upcoming">{upcoming.map(event=><div key={event.id}><span>{fmtDate(event.date)}</span><strong>{event.title}</strong><b className={event.amount<0?"negative":"positive"}>{formatEuro(event.amount)}</b></div>)}</div>:suggestions.length?<><p className="home-section-note">Patrones detectados que aún no afectan al saldo:</p><div className="home-upcoming suggestions">{suggestions.map(item=><div key={item.id}><span>{fmtDate(item.nextDate)}</span><strong>{item.title} · {Math.round(item.confidence*100)}%</strong><b className={item.amount<0?"negative":"positive"}>{formatEuro(item.amount)}</b></div>)}</div></>:<div className="home-empty compact">Sin próximos movimientos confirmados ni patrones fiables.</div>}</section>;
+  const upcoming=forecast.commitments.slice(0,4);
+  return <section className="home-forecast-section" aria-labelledby="home-forecast-title"><div className="home-section-heading"><div><p className="eyebrow">PRÓXIMOS 30 DÍAS</p><h2 id="home-forecast-title">Lo que viene</h2><p>Previsión basada en movimientos confirmados y patrones fiables.</p></div><IntentLink href="/prevision">Ver calendario →</IntentLink></div><div className="home-forecast-line"><div><span>Saldo previsto</span><strong>{formatEuro(forecast.summary.projectedEndBalance)}</strong></div><div><span>Saldo mínimo</span><strong className={forecast.summary.minimumProjectedBalance<0?"negative":""}>{formatEuro(forecast.summary.minimumProjectedBalance)}</strong></div></div>{upcoming.length?<div className="home-upcoming">{upcoming.map(event=><div key={event.id}><span>{fmtDate(event.effectiveDate)}</span><strong>{event.title}</strong><b className={event.estimatedAmount<0?"negative":"positive"}>{formatEuro(event.estimatedAmount)}</b></div>)}</div>:<div className="home-empty compact">Sin próximos movimientos esperados.</div>}</section>;
 }
 
 export function HomeDecisionFallback(){
