@@ -3,7 +3,7 @@ export type EffectiveTheme="light"|"dark";
 
 export const THEME_STORAGE_KEY="financial-app-theme";
 export const THEME_CHANGE_EVENT="financial-app-theme-change";
-export const THEME_CHROME={light:"#f4f1e9",dark:"#0b0c0e"} as const;
+export const THEME_CHROME={light:"#f4f7fb",dark:"#070d18"} as const;
 
 export function normalizeThemePreference(value:unknown):ThemePreference{
   return value==="light"||value==="dark"||value==="system"?value:"system";
