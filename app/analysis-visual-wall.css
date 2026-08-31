@@ -7,18 +7,18 @@
 .analysis-diverging-track i,.analysis-average-deviation i{position:absolute;top:2px;height:8px;border-radius:var(--radius-full)}
 .analysis-diverging .positive-bar{background:var(--positive)}
 .analysis-diverging .negative-bar{background:var(--negative)}
-.analysis-average-deviation .above{background:var(--gold-primary)}
+.analysis-average-deviation .above{background:var(--accent-primary)}
 .analysis-average-deviation .below{background:color-mix(in srgb,var(--chart-prior) 70%,transparent)}
 .analysis-average-deviation small{color:var(--text-tertiary);font-size:14px;text-align:right}
 
 .analysis-pareto,.analysis-waterfall{width:100%;overflow:hidden}
 .analysis-pareto svg,.analysis-waterfall svg{display:block;width:100%;height:auto}
-.analysis-pareto rect{fill:var(--gold-primary)}
+.analysis-pareto rect{fill:var(--accent-primary)}
 .analysis-pareto polyline{fill:none;stroke:var(--positive);stroke-width:3;vector-effect:non-scaling-stroke}
 .analysis-pareto text,.analysis-waterfall text{fill:var(--text-tertiary);font-size:14px}
 
 .analysis-treemap{display:flex;flex-wrap:wrap;align-content:stretch;gap:5px;min-height:245px}
-.analysis-treemap>div{display:grid;align-content:end;min-width:96px;min-height:74px;padding:10px;border:1px solid var(--border-subtle);border-radius:var(--radius-small);background:color-mix(in srgb,var(--gold-primary) 11%,var(--surface-primary));overflow:hidden;transition:border-color var(--motion-micro) var(--ease-standard),transform var(--motion-micro) var(--ease-standard)}
+.analysis-treemap>div{display:grid;align-content:end;min-width:96px;min-height:74px;padding:10px;border:1px solid var(--border-subtle);border-radius:var(--radius-small);background:color-mix(in srgb,var(--accent-primary) 11%,var(--surface-primary));overflow:hidden;transition:border-color var(--motion-micro) var(--ease-standard),transform var(--motion-micro) var(--ease-standard)}
 .analysis-treemap>div:nth-child(2n){background:color-mix(in srgb,var(--positive) 10%,var(--surface-primary))}
 .analysis-treemap>div:nth-child(3n){background:color-mix(in srgb,var(--viz-cat-3) 11%,var(--surface-primary))}
 .analysis-treemap>div:nth-child(4n){background:color-mix(in srgb,var(--viz-cat-4) 11%,var(--surface-primary))}
@@ -29,7 +29,7 @@
 .analysis-waterfall svg>line:first-child{stroke:var(--chart-grid);stroke-width:1}
 .analysis-waterfall .wf-income{fill:var(--positive)}
 .analysis-waterfall .wf-expense{fill:var(--negative)}
-.analysis-waterfall .wf-net-positive{fill:var(--gold-primary)}
+.analysis-waterfall .wf-net-positive{fill:var(--accent-primary)}
 .analysis-waterfall .wf-net-negative{fill:var(--negative)}
 .analysis-waterfall .wf-bridge{stroke:var(--chart-prior);stroke-width:1.5;stroke-dasharray:5 4}
 

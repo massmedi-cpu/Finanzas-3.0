@@ -25,7 +25,7 @@ const atLeast=(value,minimum)=>{const a=semver(value),b=semver(minimum);for(let 
 must(atLeast(version,"3.7.2"),"La versión visible debe conservar como mínimo los contratos funcionales de 3.7.2");
 
 // v6 replaces the old blue product identity. Blue remains semantic info only.
-for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-muted:","--gold-hover:","--gold-active:","--focus:"])
+for(const token of ["--accent-primary:","--accent-light:","--accent-dark:","--accent-muted:","--accent-hover:","--accent-active:","--focus:"])
   must(globals.includes(token),`Falta identidad premium canónica: ${token}`);
 must(!globals.includes("--accent:"),"La identidad premium 6.x no debe depender del alias --accent");
 for(const legacyBlue of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b4f8a","--accent:#4c9bff","--focus:#4c9bff"])

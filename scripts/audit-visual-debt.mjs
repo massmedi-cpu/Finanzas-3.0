@@ -69,7 +69,7 @@ for(const token of [
   "--surface-primary:","--surface-secondary:","--surface-elevated:","--surface-hover:","--surface-selected:",
   "--border-subtle:","--border-default:","--border-strong:","--border-selected:",
   "--text-primary:","--text-secondary:","--text-tertiary:","--text-disabled:","--text-inverse:",
-  "--gold-primary:","--gold-light:","--gold-dark:","--gold-muted:","--gold-hover:","--gold-active:",
+  "--accent-primary:","--accent-light:","--accent-dark:","--accent-muted:","--accent-hover:","--accent-active:",
   "--positive:","--positive-muted:","--negative:","--negative-muted:","--warning:","--info:","--pending:","--neutral:",
   "--focus:","--selection:","--interaction-hover:","--interaction-pressed:","--interaction-disabled:",
   "--radius-small:","--radius-medium:","--radius-large:","--radius-full:",

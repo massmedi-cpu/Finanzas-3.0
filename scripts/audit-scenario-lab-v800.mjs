@@ -48,7 +48,7 @@ must(layout.includes('import "./scenarios.css";'),"Los estilos del simulador deb
 must(navigation.includes('["Simulador","/escenarios"'),"El Simulador debe ser accesible desde Más");
 must(!css.includes("!important"),"El CSS del simulador no puede usar !important");
 for(const match of css.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g))must(Number(match[1])>=14,`El simulador contiene microtexto inferior a 14px (${match[1]}px)`);
-for(const token of ["--background-primary","--surface-primary","--gold-primary","--negative","--positive"]){
+for(const token of ["--background-primary","--surface-primary","--accent-primary","--negative","--positive"]){
   if(css.includes(token.replace("--","var(--")))continue;
 }
 

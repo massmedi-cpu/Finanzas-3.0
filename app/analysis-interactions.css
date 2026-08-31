@@ -18,12 +18,12 @@
 .analysis-chart-legend{display:flex;align-items:center;flex-wrap:wrap;gap:8px 14px;min-height:40px;padding:8px 14px;border-bottom:1px solid var(--border-subtle);color:var(--text-tertiary);font-size:14px;font-weight:680}
 .analysis-chart-legend span{display:inline-flex;align-items:center;gap:7px}
 .analysis-chart-legend i{display:inline-block;width:14px;height:7px;border:1px solid color-mix(in srgb,var(--border-default) 72%,transparent);border-radius:var(--radius-full)}
-.analysis-chart-legend .legend-accent{background:var(--gold-primary)}
+.analysis-chart-legend .legend-accent{background:var(--accent-primary)}
 .analysis-chart-legend .legend-success{background:var(--positive)}
 .analysis-chart-legend .legend-muted{background:color-mix(in srgb,var(--chart-prior) 55%,transparent)}
 .analysis-chart-legend .legend-negative{background:var(--negative)}
 .analysis-chart-legend .legend-warning{background:var(--warning)}
-.analysis-chart-legend .legend-multi{background:linear-gradient(90deg,var(--gold-primary),var(--positive),var(--viz-cat-3),var(--viz-cat-4),var(--viz-cat-5),var(--viz-cat-6))}
+.analysis-chart-legend .legend-multi{background:linear-gradient(90deg,var(--accent-primary),var(--positive),var(--viz-cat-3),var(--viz-cat-4),var(--viz-cat-5),var(--viz-cat-6))}
 
 [data-chart-detail]{cursor:pointer;touch-action:manipulation}
 [data-chart-detail]:focus-visible{outline:3px solid var(--focus);outline-offset:3px}
@@ -50,7 +50,7 @@
 .analysis-chart-popover dd{margin:0;text-align:right;font-size:14px;font-weight:760;font-variant-numeric:tabular-nums}
 .viz-point-secondary{stroke:var(--chart-prior)}
 .analysis-pareto .pareto-point{fill:var(--surface-primary);stroke:var(--positive);stroke-width:2;vector-effect:non-scaling-stroke}
-.analysis-treemap>div[data-chart-detail]:hover,.analysis-treemap>div[data-chart-detail]:focus-visible{border-color:color-mix(in srgb,var(--gold-primary) 55%,var(--border-default));filter:brightness(1.02)}
+.analysis-treemap>div[data-chart-detail]:hover,.analysis-treemap>div[data-chart-detail]:focus-visible{border-color:color-mix(in srgb,var(--accent-primary) 55%,var(--border-default));filter:brightness(1.02)}
 .analysis-heatmap>div[data-chart-detail]:hover,.analysis-ranking-track i[data-chart-detail]:hover,.analysis-bar-pair i[data-chart-detail]:hover{filter:brightness(1.08)}
 
 @media(max-width:1100px){

@@ -73,7 +73,7 @@ for(const [label,href] of expectedPrimary)must(primaryBlock.includes(`["${label}
 must((primaryBlock.match(/\["[^\"]+","\/[^"]*","[^"]+"\]/g)||[]).length===6,"La navegación principal debe conservar exactamente seis destinos");
 must(!secondaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe duplicarse dentro de Más si ya es destino principal");
 
-for(const token of ["--gold-primary:","--gold-light:","--gold-dark:","--gold-hover:","--gold-active:"])
+for(const token of ["--accent-primary:","--accent-light:","--accent-dark:","--accent-hover:","--accent-active:"])
   must(globals.includes(token),`Identidad premium 6.x incompleta: ${token}`);
 must(!globals.includes("--accent:"),"La familia 6.x no debe recuperar el alias visual --accent");
 must(!globals.includes("--accent:#0b4f8a")&&!globals.includes("--accent:#4c9bff"),"La identidad azul no puede volver a dominar el producto");

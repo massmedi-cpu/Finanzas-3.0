@@ -23,7 +23,7 @@ for(const token of ["text-button","danger-button"]){const allowed=new Set(localC
 
 const controls=read("app/controls.css");
 for(const selector of [".primary-action{",".secondary-action,.ghost{",".ghost{",".danger-action{",".icon-button{",".button-link{display:inline-flex"]){if(!controls.includes(selector))failures.push(`Control canónico incompleto: falta ${selector}`);}
-for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--gold-primary)","var(--negative)"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
+for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--accent-primary)","var(--negative)"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
 const iconRules=[...controls.matchAll(/\.icon-button\{([^}]*)\}/g)].map(match=>match[1]).join(";");
 for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRules.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
 

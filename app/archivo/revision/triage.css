@@ -37,8 +37,8 @@
 .triage-complete_metadata .triage-action{background:var(--warning-muted);color:var(--warning)}
 .triage-ready_to_link{border-left:3px solid var(--positive)}
 .triage-ready_to_link .triage-action{background:var(--positive-muted);color:var(--positive)}
-.triage-review_match{border-left:3px solid var(--gold-primary)}
-.triage-review_match .triage-action{background:var(--gold-muted);color:var(--gold-primary)}
+.triage-review_match{border-left:3px solid var(--accent-primary)}
+.triage-review_match .triage-action{background:var(--accent-muted);color:var(--accent-primary)}
 .triage-investigate_no_match{border-left:3px solid var(--neutral)}
 .triage-archive_candidate{border-left:3px solid var(--info)}
 .triage-header-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
@@ -46,7 +46,7 @@
 .triage-hint{margin:0;color:var(--text-secondary);font-size:15px;line-height:1.55}
 .triage-reasons{display:grid;gap:6px;margin:0;padding:0;list-style:none}
 .triage-reasons li{position:relative;padding-left:18px;color:var(--text-tertiary);font-size:14px;line-height:1.5}
-.triage-reasons li::before{content:"";position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--gold-primary)}
+.triage-reasons li::before{content:"";position:absolute;left:2px;top:.62em;width:6px;height:6px;border-radius:50%;background:var(--accent-primary)}
 .triage-footer-action{display:flex;align-items:center;justify-content:space-between;gap:14px;padding-top:2px}
 .triage-footer-action button{min-height:44px}
 .triage-footer-action span,.triage-safety{color:var(--text-tertiary);font-size:14px;line-height:1.5}
