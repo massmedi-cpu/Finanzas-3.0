@@ -31,5 +31,7 @@ for(const value of [null,"","2026-8-31","2026-13-01","2026-04-31","2026-02-29","
 const forecastApi=fs.readFileSync("app/api/forecast/route.ts","utf8");
 assert.match(forecastApi,/from "@\/lib\/time\/calendar-date"/);
 assert.ok((forecastApi.match(/validCalendarDate\(/g)||[]).length>=3,"Previsión debe validar fecha principal, fin de recurrencia y fecha de descarte");
+assert.match(forecastApi,/invalid_recurrence_until/);
+assert.match(forecastApi,/!until\|\|until<date/);
 
 console.log("Financial App time tests OK · límites Madrid y fechas reales de calendario protegidos");

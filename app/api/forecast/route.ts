@@ -28,7 +28,12 @@ export async function POST(request:NextRequest){
   if(recurrenceBody){
     const frequency=String(recurrenceBody.frequency||"");const interval=Math.max(1,Math.min(24,Number(recurrenceBody.interval)||1));
     if(!["weekly","monthly","yearly"].includes(frequency))return apiError("invalid_recurrence");
-    recurrence={frequency:frequency as ForecastRecurrence["frequency"],interval};const until=validCalendarDate(recurrenceBody.until);if(until)recurrence.until=until;
+    recurrence={frequency:frequency as ForecastRecurrence["frequency"],interval};
+    const untilValue=recurrenceBody.until;
+    if(untilValue!==undefined&&untilValue!==null&&untilValue!==""){
+      const until=validCalendarDate(untilValue);if(!until||until<date)return apiError("invalid_recurrence_until");
+      recurrence.until=until;
+    }
   }
   const explanation=asRecord(body.explanation);
   const{data,error}=await supabase.rpc("financial_app_upsert_forecast",{p_id:typeof body.id==="string"&&body.id?body.id:null,p_title:title,p_date:date,p_amount:amount,p_category:typeof body.category==="string"&&body.category?body.category:null,p_subcategory:typeof body.subcategory==="string"&&body.subcategory?body.subcategory:null,p_counterparty:typeof body.counterparty==="string"&&body.counterparty?body.counterparty:null,p_recurrence:recurrence,p_notes:typeof body.notes==="string"&&body.notes?body.notes:null,p_confidence:Number.isFinite(Number(body.confidence))?Number(body.confidence):1,p_explanation:explanation});
