@@ -41,11 +41,14 @@ for(const token of [
 for(const token of [
   "PAGE_SIZE=40",
   "getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset)",
+  'activePromise=view==="new"?getArchiveOverview():Promise.resolve(null)',
   "lifecycle.counts.pending",
+  "ARCHIVO · {lifecycle.version}",
   "Procesar documentos activos",
   "totalPages"
-])if(!page.includes(token))failures.push(`Página de Archivo no usa paginación por estado: ${token}`);
+])if(!page.includes(token))failures.push(`Página de Archivo no usa paginación/carga selectiva por estado: ${token}`);
 if(page.includes("getArchivedDocuments"))failures.push("La página de Archivo no debe cargar el histórico completo para pintar una pestaña");
+if(page.includes("const [active,lifecycle]=await Promise.all"))failures.push("Pendientes y Archivadas no deben volver a cargar la biblioteca activa de hasta 200 documentos");
 
 for(const token of [
   'action="/archivo" method="get"',
@@ -61,4 +64,4 @@ if(lifecycle.includes("useMemo"))failures.push("El ciclo documental no debe volv
 for(const token of [".archive-lifecycle-pagination","min-height:44px","font-size:14px"])if(!css.includes(token))failures.push(`CSS de Archivo no protege legibilidad/táctil: ${token}`);
 
 if(failures.length){console.error("Archive v6.0.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Archive v6.0.1 audit OK · conteos filtrados, estados server-side, búsqueda y paginación real protegidos");
+console.log("Archive v6.0.1 audit OK · conteos filtrados, estados server-side, búsqueda/paginación real y carga activa sólo en Nuevas protegidos");
