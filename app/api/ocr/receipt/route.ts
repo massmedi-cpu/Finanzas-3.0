@@ -15,11 +15,12 @@ const MAX_OCR_SIDE = 12_000;
 const MAX_OCR_PIXELS = 80_000_000;
 const OCR_TIMEOUT_MS = 50_000;
 const OCR_QUEUE_TIMEOUT_MS = 10_000;
+const OCR_LANGUAGE_ROOT = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "spa", "4.0.0");
 const OCR_RUNTIME_FILES = [
   path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
   path.join(process.cwd(), "node_modules", "tesseract.js-core", "package.json"),
   path.join(process.cwd(), "node_modules", "regenerator-runtime", "runtime.js"),
-  path.join(process.cwd(), "public", "vendor", "document-engine", "tessdata", "spa.traineddata.gz"),
+  path.join(OCR_LANGUAGE_ROOT, "spa.traineddata.gz"),
 ] as const;
 
 for (const runtimeFile of OCR_RUNTIME_FILES) {
@@ -82,7 +83,7 @@ async function getWorker() {
     workerPromise = createWorker("spa", 1, {
       workerPath: path.join(root, "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
       corePath: path.join(root, "node_modules", "tesseract.js-core"),
-      langPath: path.join(root, "public", "vendor", "document-engine", "tessdata"),
+      langPath: OCR_LANGUAGE_ROOT,
       cacheMethod: "none",
     }).catch((failure) => {
       workerPromise = null;
