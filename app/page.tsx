@@ -59,7 +59,7 @@ export default async function Home(){
 
     <Suspense fallback={<HomeFlowFallback/>}><HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/></Suspense>
     <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>
-    <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid pulse={pulse} analysis={analysisPromise} budget={budgetPromise} reconciliation={reconciliationPromise} control={controlPromise}/></Suspense>
+    <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid pulse={pulse} analysis={analysisPromise} budget={budgetPromise}/></Suspense>
 
     <footer className="home-freshness"><span>Fuente oficial: Google Drive XLSX · solo lectura.</span><span>Última sincronización {pulse.sync?.finishedAt?new Date(pulse.sync.finishedAt).toLocaleString("es-ES"):"pendiente"}.</span></footer>
   </section></main>;
