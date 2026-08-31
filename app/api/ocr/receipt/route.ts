@@ -31,6 +31,14 @@ for (const runtimeFile of OCR_RUNTIME_FILES) {
 type TesseractWorker = Awaited<ReturnType<typeof createWorker>>;
 type PaddleItem = { text: string; score: number; poly: number[][] };
 type UnknownRecord = Record<string, unknown>;
+type OcrTimeoutKind = "ocr_queue" | "ocr_worker" | "ocr_recognize";
+
+class OcrTimeoutError extends Error {
+  constructor(readonly kind: OcrTimeoutKind) {
+    super("ocr_timeout");
+    this.name = "OcrTimeoutError";
+  }
+}
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 let workerRoot = "";
@@ -44,9 +52,9 @@ function asArray(value: unknown): unknown[] {
   return Array.isArray(value) ? value : [];
 }
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, kind: OcrTimeoutKind): Promise<T> {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`${label}_timeout`)), timeoutMs);
+    const timer = setTimeout(() => reject(new OcrTimeoutError(kind)), timeoutMs);
     promise.then(
       (value) => { clearTimeout(timer); resolve(value); },
       (failure) => { clearTimeout(timer); reject(failure); },
@@ -215,12 +223,11 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (failure) {
-    const message = failure instanceof Error ? failure.message : "";
     console.error("financial_app_server_receipt_ocr_failed", {
       type: failure instanceof Error ? failure.name : "unknown_failure",
-      reason: message || "unknown_failure",
+      timeout: failure instanceof OcrTimeoutError ? failure.kind : undefined,
     });
-    if (message === "ocr_queue_timeout") return apiError("ocr_server_busy", 503);
+    if (failure instanceof OcrTimeoutError && failure.kind === "ocr_queue") return apiError("ocr_server_busy", 503);
     await resetWorker();
     return apiError("ocr_server_failed", 503);
   }
