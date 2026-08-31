@@ -33,5 +33,8 @@ assert.match(forecastApi,/from "@\/lib\/time\/calendar-date"/);
 assert.ok((forecastApi.match(/validCalendarDate\(/g)||[]).length>=3,"Previsión debe validar fecha principal, fin de recurrencia y fecha de descarte");
 assert.match(forecastApi,/invalid_recurrence_until/);
 assert.match(forecastApi,/!until\|\|until<date/);
+const netWorthApi=fs.readFileSync("app/api/net-worth/route.ts","utf8");
+assert.match(netWorthApi,/from "@\/lib\/time\/calendar-date"/);
+assert.match(netWorthApi,/valuationDate=validCalendarDate\(input\.valuationDate\)/);
 
 console.log("Financial App time tests OK · límites Madrid y fechas reales de calendario protegidos");
