@@ -63,6 +63,7 @@ function sourceBoolean(value:unknown):boolean|null {
 export function MovementsClient({ initialData, initialFilters }:{ initialData:MovementsResponse; initialFilters:MovementFilterState }) {
   const [pageData,setPageData] = useState(initialData);
   const [filters,setFilters] = useState<Filters>(initialFilters);
+  const [appliedFilters,setAppliedFilters] = useState<Filters>(initialFilters);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState<string|null>(null);
   const [message,setMessage] = useState<string|null>(null);
@@ -72,6 +73,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   const [detailLoading,setDetailLoading] = useState(false);
   const [saving,setSaving] = useState(false);
   const [bulkSaving,setBulkSaving] = useState(false);
+  const [selectingFiltered,setSelectingFiltered] = useState(false);
   const [bulkEditorOpen,setBulkEditorOpen] = useState(false);
   const openRequestRef=useRef(0);
   const pages = Math.max(1, Math.ceil(pageData.total / pageData.pageSize));
@@ -83,6 +85,8 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   },[pageData]);
   const visibleIds=useMemo(()=>pageData.items.map(item=>item.id),[pageData.items]);
   const allVisibleSelected=visibleIds.length>0&&visibleIds.every(id=>selectedIds.has(id));
+  const visibleSelectedCount=visibleIds.filter(id=>selectedIds.has(id)).length;
+  const hiddenSelectedCount=Math.max(0,selectedIds.size-visibleSelectedCount);
   const visibleReviewCount=useMemo(()=>pageData.items.filter(item=>item.needsReview).length,[pageData.items]);
   const visibleDocumentCount=useMemo(()=>pageData.items.filter(item=>item.hasDocuments).length,[pageData.items]);
 
@@ -100,6 +104,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       const body=await response.json() as Omit<MovementsResponse,"facets"> & {facets?:MovementsResponse["facets"];error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
       setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);
+      setAppliedFilters({...next});
       window.history.replaceState(null,"",movementUrl(next));
       return true;
     } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); return false; }
@@ -114,7 +119,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   }
 
   function toggleSelection(id:string,checked:boolean){
-    if(bulkSaving)return;
+    if(bulkSaving||selectingFiltered)return;
     setSelectedIds(current=>{
       const next=new Set(current);
       if(!checked){next.delete(id);return next;}
@@ -124,7 +129,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     });
   }
   function toggleVisible(){
-    if(bulkSaving)return;
+    if(bulkSaving||selectingFiltered)return;
     setSelectedIds(current=>{
       const next=new Set(current);
       if(allVisibleSelected){visibleIds.forEach(id=>next.delete(id));return next;}
@@ -132,6 +137,21 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       if(next.size+missing.length>MAX_BULK_MOVEMENTS){setError(`La selección superaría el máximo de ${MAX_BULK_MOVEMENTS} movimientos.`);return current;}
       missing.forEach(id=>next.add(id));setError(null);return next;
     });
+  }
+  async function selectFiltered(){
+    if(bulkSaving||selectingFiltered||!pageData.total)return;
+    setSelectingFiltered(true);setError(null);setMessage(null);
+    const q=movementSearchParams(appliedFilters);
+    q.set("page","1");q.set("pageSize",String(MAX_BULK_MOVEMENTS));q.set("sort",appliedFilters.sort);q.set("facets","0");
+    try{
+      const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
+      const body=await response.json() as Omit<MovementsResponse,"facets"> & {error?:string};
+      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo seleccionar el conjunto filtrado");
+      const ids=body.items.slice(0,MAX_BULK_MOVEMENTS).map(item=>item.id);
+      setSelectedIds(new Set(ids));
+      setMessage(body.total>MAX_BULK_MOVEMENTS?`Seleccionados los primeros ${MAX_BULK_MOVEMENTS} de ${formatInteger(body.total)} movimientos filtrados. El límite seguro por lote sigue siendo ${MAX_BULK_MOVEMENTS}.`:`Seleccionados los ${formatInteger(ids.length)} movimientos que cumplen los filtros aplicados, aunque estén repartidos en varias páginas.`);
+    }catch(cause){setError(cause instanceof Error?cause.message:"Error al seleccionar movimientos filtrados");}
+    finally{setSelectingFiltered(false);}
   }
   function clearBulkSelection(){setSelectedIds(new Set());setBulkEditorOpen(false);}
 
@@ -144,7 +164,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo aplicar la edición masiva");
       const updated=Number(body.updated||selectedIds.size);
       setSelectedIds(new Set());setBulkEditorOpen(false);
-      const refreshed=await loadWith(filters,pageData.page);
+      const refreshed=await loadWith(appliedFilters,pageData.page);
       if(!refreshed){setError("Los cambios se guardaron, pero no se pudo actualizar la lista. Recarga la vista para confirmar el estado.");return true;}
       setMessage(`${updated} movimiento${updated===1?"":"s"} actualizado${updated===1?"":"s"} en una sola operación.`);
       return true;
@@ -196,7 +216,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       const body=await response.json() as TransactionDetailResponse & {error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudo guardar el movimiento");
       setSelected(body.transaction); setEdit(editState(body.transaction));
-      const refreshed=await loadWith(filters,pageData.page);
+      const refreshed=await loadWith(appliedFilters,pageData.page);
       if(!refreshed){setError("El cambio se guardó, pero no se pudo actualizar la lista. Cierra y vuelve a abrir la vista si necesitas confirmar el estado.");return;}
       setMessage(successMessage);
     } catch(cause) { setError(cause instanceof Error?cause.message:"Error al guardar movimiento"); }
@@ -228,7 +248,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       <div><strong>{formatInteger(visibleDocumentCount)}</strong><span>con documentos en esta página</span></div>
     </section>
 
-    {filters.cashFlowOnly&&<div className="inline-alert info" role="status">Vista enlazada con Cash Flow: se excluyen ahorro, traspasos internos, duplicados, origen ausente y exclusiones manuales.</div>}
+    {appliedFilters.cashFlowOnly&&<div className="inline-alert info" role="status">Vista enlazada con Cash Flow: se excluyen ahorro, traspasos internos, duplicados, origen ausente y exclusiones manuales.</div>}
 
     <form className="movement-filters" onSubmit={submitFilters}>
       <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID, importe, etiquetas u OCR" /></label>
@@ -257,31 +277,31 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       </details>
       <label className="check-filter"><input type="checkbox" checked={filters.review} onChange={e=>setFilters({...filters,review:e.target.checked})}/><span>Solo pendientes de revisar</span></label>
       <label className="check-filter"><input type="checkbox" checked={filters.cashFlowOnly} onChange={e=>setFilters({...filters,cashFlowOnly:e.target.checked})}/><span>Solo movimientos computables en Cash Flow</span></label>
-      <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading||bulkSaving} aria-busy={loading||undefined}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading||bulkSaving}>Limpiar</button></div>
+      <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading||bulkSaving||selectingFiltered} aria-busy={loading||undefined}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading||bulkSaving||selectingFiltered}>Limpiar</button></div>
     </form>
 
     {error&&<div className="inline-alert error" role="alert">{error}</div>}
     {message&&<div className="inline-alert success" role="status">{message}</div>}
 
-    <div className="movement-selection-toolbar" aria-busy={bulkSaving||undefined}>
-      <button className="ghost" type="button" onClick={toggleVisible} disabled={loading||bulkSaving||!visibleIds.length}>{allVisibleSelected?"Quitar visibles":"Seleccionar visibles"}</button>
-      <span>{selectedIds.size?`${selectedIds.size} seleccionado${selectedIds.size===1?"":"s"} · máximo ${MAX_BULK_MOVEMENTS}`:"Selecciona movimientos para resolverlos o editarlos juntos"}</span>
-      {selectedIds.size>0&&<div className="movement-selection-actions"><button className="text-button" type="button" onClick={()=>void applyBulk({needsReview:false})} disabled={bulkSaving}>Marcar revisados</button><button className="text-button" type="button" onClick={()=>void applyBulk({isReconciled:true})} disabled={bulkSaving}>Marcar conciliados</button><button className="secondary-action" type="button" onClick={()=>setBulkEditorOpen(open=>!open)} disabled={bulkSaving} aria-expanded={bulkEditorOpen} aria-controls="bulk-movement-editor">{bulkEditorOpen?"Ocultar editor":"Editar lote"}</button><button className="ghost" type="button" onClick={clearBulkSelection} disabled={bulkSaving}>Limpiar selección</button></div>}
+    <div className="movement-selection-toolbar" aria-busy={bulkSaving||selectingFiltered||undefined}>
+      <div className="movement-selection-scope"><button className="ghost" type="button" onClick={toggleVisible} disabled={loading||bulkSaving||selectingFiltered||!visibleIds.length}>{allVisibleSelected?"Quitar visibles":"Seleccionar visibles"}</button><button className="ghost" type="button" onClick={()=>void selectFiltered()} disabled={loading||bulkSaving||selectingFiltered||!pageData.total}>{selectingFiltered?"Seleccionando…":pageData.total>MAX_BULK_MOVEMENTS?`Seleccionar primeros ${MAX_BULK_MOVEMENTS} filtrados":"Seleccionar todos los filtrados"}</button></div>
+      <span>{selectedIds.size?`${selectedIds.size} seleccionado${selectedIds.size===1?"":"s"}${hiddenSelectedCount?` · ${hiddenSelectedCount} fuera de esta página`:""} · máximo ${MAX_BULK_MOVEMENTS}`:"Selecciona esta página o todo el conjunto filtrado para resolverlo o editarlo junto"}</span>
+      {selectedIds.size>0&&<div className="movement-selection-actions"><button className="text-button" type="button" onClick={()=>void applyBulk({needsReview:false})} disabled={bulkSaving||selectingFiltered}>Marcar revisados</button><button className="text-button" type="button" onClick={()=>void applyBulk({isReconciled:true})} disabled={bulkSaving||selectingFiltered}>Marcar conciliados</button><button className="secondary-action" type="button" onClick={()=>setBulkEditorOpen(open=>!open)} disabled={bulkSaving||selectingFiltered} aria-expanded={bulkEditorOpen} aria-controls="bulk-movement-editor">{bulkEditorOpen?"Ocultar editor":"Editar lote"}</button><button className="ghost" type="button" onClick={clearBulkSelection} disabled={bulkSaving||selectingFiltered}>Limpiar selección</button></div>}
     </div>
 
-    {selectedIds.size>0&&bulkEditorOpen&&<BulkMovementEditor selectedCount={selectedIds.size} categories={pageData.facets.categories} types={pageData.facets.types} busy={bulkSaving} onApply={applyBulk} onClear={clearBulkSelection} onClose={()=>setBulkEditorOpen(false)}/>} 
+    {selectedIds.size>0&&bulkEditorOpen&&<BulkMovementEditor selectedCount={selectedIds.size} categories={pageData.facets.categories} types={pageData.facets.types} busy={bulkSaving||selectingFiltered} onApply={applyBulk} onClear={clearBulkSelection} onClose={()=>setBulkEditorOpen(false)}/>} 
 
     <div className={`movement-table-wrap ${loading?"is-loading":""}`} aria-busy={loading}>
       <table className="movement-table">
         <thead><tr><th className="selection-cell"><span className="sr-only">Seleccionar</span></th><th>Fecha</th><th>Movimiento</th><th>Categoría</th><th>Cuenta</th><th className="numeric">Importe</th><th>Estado</th></tr></thead>
-        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement} selected={selectedIds.has(item.id)} onToggle={toggleSelection} selectionDisabled={bulkSaving}/>)}</tbody>
+        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement} selected={selectedIds.has(item.id)} onToggle={toggleSelection} selectionDisabled={bulkSaving||selectingFiltered}/>)}</tbody>
       </table>
       {!pageData.items.length&&<div className="empty-state"><strong>No hay movimientos con estos filtros.</strong><span>Prueba a limpiar algún criterio de búsqueda.</span></div>}
     </div>
 
-    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} disabled={bulkSaving} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
+    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} disabled={bulkSaving||selectingFiltered} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
 
-    <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||bulkSaving||pageData.page<=1} onClick={()=>loadWith(filters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||bulkSaving||pageData.page>=pages} onClick={()=>loadWith(filters,pageData.page+1)}>Siguiente</button></div></footer>
+    <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||bulkSaving||selectingFiltered||pageData.page<=1} onClick={()=>loadWith(appliedFilters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||bulkSaving||selectingFiltered||pageData.page>=pages} onClick={()=>loadWith(appliedFilters,pageData.page+1)}>Siguiente</button></div></footer>
 
     {detailLoading&&<div className="detail-loading" role="status">Abriendo movimiento…</div>}
     {selected&&edit&&<div className="drawer-backdrop" role="presentation" onMouseDown={()=>!saving&&setSelected(null)}><aside className="movement-drawer" role="dialog" aria-modal="true" aria-labelledby="movement-editor-title" aria-busy={saving||undefined} onMouseDown={event=>event.stopPropagation()}>
@@ -307,7 +327,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       </form>
 
       <SplitEditor transactionId={selected.id} sourceAmount={Number(selected.source["Importe (€)"]??0)} categories={pageData.facets.categories}/>
-      <MovementDocuments key={selected.id} transaction={selected} onChanged={()=>loadWith(filters,pageData.page)}/>
+      <MovementDocuments key={selected.id} transaction={selected} onChanged={()=>loadWith(appliedFilters,pageData.page)}/>
 
       <details className="trace-panel"><summary>Dato original</summary><dl>{Object.entries(selected.source).map(([key,value])=><div key={key}><dt>{key}</dt><dd>{display(value)}</dd></div>)}</dl></details>
       <details className="trace-panel" open={selected.history.length>0}><summary>Historial de cambios · {selected.history.length}</summary>{selected.history.length?<ol className="history-list">{selected.history.map(entry=><li key={entry.id}><div><strong>{entry.field.replace(/^app\./,"App · ").replace(/^source\./,"Origen · ")}</strong><time>{new Date(entry.changedAt).toLocaleString("es-ES")}</time></div><p><span>{display(entry.before)}</span><b>→</b><span>{display(entry.after)}</span></p><small>{entry.changeOrigin==="source_sync"?"Cambio detectado en la fuente":`Edición · ${entry.changedBy||"usuario"}`}</small></li>)}</ol>:<p className="muted-copy">Este movimiento aún no tiene cambios registrados.</p>}</details>
