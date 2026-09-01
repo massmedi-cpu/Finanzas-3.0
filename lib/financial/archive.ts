@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 
 export type ArchiveMatchConfidence="exact"|"high"|"medium"|"low";
 export type ArchiveMatchMode="standard"|"installment";
+export type ArchiveLifecycleState="new"|"pending"|"archived";
+export type ArchivePendingReason="ocr_pending"|"ocr_processing"|"ocr_needs_review"|"ocr_failed"|"ocr_error"|"movement_match_pending";
 export type ArchiveMovementRef = {
   sourceId:string;
   date:string|null;
@@ -24,7 +26,7 @@ export type ArchiveMovementRef = {
 };
 export type ArchiveDocument = {
   id:string; fileName:string; mimeType:string|null; storageProvider?:string|null; storageUrl?:string|null; storagePath:string|null; fileSize:number|null; contentHash:string|null;
-  documentType:string; documentDate:string|null; amount:number|null; merchant:string|null; ocrStatus:string; hasOcrText:boolean;
+  documentType:string; documentDate:string|null; amount:number|null; merchant:string|null; ocrStatus:string; lifecycleState:ArchiveLifecycleState; pendingReasons:ArchivePendingReason[]; hasOcrText:boolean;
   hasReconstruction:boolean; notes:string|null; archivedAt:string|null; createdAt:string; updatedAt:string;
   links:ArchiveMovementRef[]; suggestions:ArchiveMovementRef[];
 };
@@ -36,7 +38,6 @@ export type ArchiveDetail = ArchiveDocument & {
   ocrText:string|null; ocrData:Record<string,unknown>|null; digitalReconstruction:Record<string,unknown>|null;
   history:Array<{action:string;before:unknown;after:unknown;changedBy:string|null;changedAt:string}>;
 };
-export type ArchiveLifecycleState="new"|"pending"|"archived";
 export type ArchiveLifecycleCounts={new:number;pending:number;archived:number};
 export type ArchiveLifecycleOverview=ArchiveOverview&{state:ArchiveLifecycleState;counts:ArchiveLifecycleCounts};
 
