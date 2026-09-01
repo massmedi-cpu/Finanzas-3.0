@@ -70,6 +70,20 @@ assert.equal(productionMetadata.documentDate,"2026-08-28");
 assert.equal(productionMetadata.amount,821.83);
 assert.equal(productionMetadata.merchant,"Sinfibanda");
 
+const productionPriceOnlyOcr=`JUAN\nC. de Mallorca, 312, L'Eixample, 08037\nBarcelona, Spain\n30/08/2026, 19:21\nQTY Description Price\n1 Café Americano 300\n1 Ensalada de la huerta 82)\n1 Bocadillo de Jamén 160\n1Zumo de Naranja 2,80\nTax 1.4 % 4\nAX) 4 % 4.86\n1460`;
+const productionPriceOnlyLayout=parseReceiptLayout(productionPriceOnlyOcr);
+assert.deepEqual(productionPriceOnlyLayout.items.map(row=>[row.description,row.quantity,row.unitPrice,row.total]),[
+  ["Café Americano","1","3,00","3,00"],
+  ["Bocadillo de Jamén","1","1,60","1,60"],
+  ["Zumo de Naranja","1","2,80","2,80"],
+],"Los tickets con QTY + descripción + un único precio deben recuperar solo importes inequívocos");
+assert.ok(productionPriceOnlyLayout.unparsedBody?.some(row=>row.text.includes("Ensalada")),"Una cifra dañada no puede inventarse a partir del total esperado");
+assert.ok(productionPriceOnlyLayout.unparsedBody?.some(row=>row.text==="1460"),"Un número final sin etiqueta no puede asumirse como total");
+const productionPriceOnlyValidation=validateReceiptFinancials(productionPriceOnlyLayout,[productionPriceOnlyOcr]);
+assert.equal(productionPriceOnlyValidation.status,"needs_review","La extracción parcial fiable debe ir a revisión, no marcarse como fallo total");
+assert.equal(productionPriceOnlyValidation.itemSum,7.4);
+assert.equal(productionPriceOnlyValidation.printedTotal,null);
+
 const item=(text:string,left:number,top:number,width:number,score=.98)=>({
   text,
   score,
