@@ -12,9 +12,10 @@ type Props = {
   busy:boolean;
   onApply:(patch:Record<string,unknown>)=>Promise<boolean>;
   onClear:()=>void;
+  onClose:()=>void;
 };
 
-export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,onClear}:Props){
+export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,onClear,onClose}:Props){
   const [type,setType]=useState("__unchanged__");
   const [categoryEnabled,setCategoryEnabled]=useState(false);
   const [category,setCategory]=useState("");
@@ -71,12 +72,10 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
     if(applied)reset();
   }
 
-  async function markReviewed(){await onApply({needsReview:false});}
-
-  return <form className="bulk-movement-editor" onSubmit={submit}>
+  return <form id="bulk-movement-editor" className="bulk-movement-editor" onSubmit={submit} aria-busy={busy||undefined}>
     <div className="bulk-editor-head">
-      <div><strong>{selectedCount} movimiento{selectedCount===1?"":"s"} seleccionado{selectedCount===1?"":"s"}</strong><span>El contador es el total del lote y conserva selecciones hechas en otras páginas o antes de cambiar filtros. Solo se ofrecen operaciones reversibles.</span><span>Los campos de texto solo cambian si activas su casilla. La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
-      <button className="ghost" type="button" onClick={onClear} disabled={busy}>Quitar selección</button>
+      <div><strong>Editar {selectedCount} movimiento{selectedCount===1?"":"s"}</strong><span>Activa únicamente los campos que quieras cambiar. La selección puede abarcar varias páginas.</span><span>La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
+      <div className="bulk-editor-head-actions"><button className="text-button muted" type="button" onClick={onClose} disabled={busy}>Cerrar editor</button><button className="ghost" type="button" onClick={onClear} disabled={busy}>Quitar selección</button></div>
     </div>
 
     <div className="bulk-editor-grid">
@@ -96,9 +95,8 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
       <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={tagsEnabled} onChange={e=>setTagsEnabled(e.target.checked)}/> Sustituir etiquetas</span><input value={tags} onChange={e=>setTags(e.target.value)} disabled={!tagsEnabled} placeholder="Separadas por comas; vacío = quitar todas"/></label>
     </div>
     <div className="bulk-editor-actions">
-      <span>Máximo 200 movimientos por operación. Los cambios quedan registrados y puedes deshacer el último lote mientras ninguno de sus movimientos haya cambiado después.</span>
-      <button className="ghost" type="button" onClick={markReviewed} disabled={busy}>{busy?"Procesando…":"Marcar revisados"}</button>
-      <button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length}>{busy?"Aplicando…":`Aplicar cambios a ${selectedCount}`}</button>
+      <span>Máximo 200 movimientos por operación. Los cambios quedan registrados y el último lote puede deshacerse mientras sus movimientos no cambien después.</span>
+      <button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length} aria-busy={busy||undefined}>{busy?"Aplicando…":`Aplicar cambios a ${selectedCount}`}</button>
     </div>
   </form>;
 }
