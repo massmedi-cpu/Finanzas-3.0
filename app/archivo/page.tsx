@@ -33,7 +33,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
 
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
-    <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/revision">Revisar asociaciones{pending?` · ${pending}`:""}</Link></div></header>
+    <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div>{view!=="pending"&&<div className="topbar-actions"><Link className="ghost button-link" href="/archivo/revision">Revisar pendientes{pending?` · ${pending}`:""}</Link></div>}</header>
     <ArchiveLifecycleClient
       documents={lifecycle.documents}
       counts={lifecycle.counts}
@@ -44,6 +44,5 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
       pageSize={PAGE_SIZE}
     />
     {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
-    {view==="pending"&&<div className="archive-view-note"><strong>La cola pendiente se resuelve en Revisión.</strong><span>Así se evita duplicar el editor documental y se mantiene una sola fuente de verdad para OCR y asociaciones.</span><Link className="primary-action" href="/archivo/revision">Ir a Revisión</Link></div>}
   </section></main>
 }
