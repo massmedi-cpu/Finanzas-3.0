@@ -3,6 +3,20 @@ import { join } from "node:path";
 
 const errors=[];
 const read=(path)=>readFileSync(path,"utf8");
+function pngSize(path){
+  const file=readFileSync(path);
+  const signature="89504e470d0a1a0a";
+  if(file.length<24||file.subarray(0,8).toString("hex")!==signature) return null;
+  return {width:file.readUInt32BE(16),height:file.readUInt32BE(20)};
+}
+function expectPng(path,width,height){
+  if(!existsSync(path)){
+    errors.push(`Falta recurso PWA: ${path}`);
+    return;
+  }
+  const size=pngSize(path);
+  if(!size||size.width!==width||size.height!==height) errors.push(`${path} debe ser un PNG ${width}x${height}`);
+}
 function walk(dir){
   if(!existsSync(dir)) return [];
   return readdirSync(dir).flatMap(name=>{const path=join(dir,name);return statSync(path).isDirectory()?walk(path):[path]});
@@ -17,6 +31,7 @@ const navigation=read("components/app-navigation.tsx");
 const chrome=read("components/app-chrome.tsx");
 const chart=read("components/cash-flow-chart.tsx");
 const layout=read("app/layout.tsx");
+const manifest=read("app/manifest.ts");
 const loading=read("app/loading.tsx");
 const errorState=read("app/error.tsx");
 const dialogBoundary=read("components/accessible-dialog-boundary.tsx");
@@ -41,6 +56,24 @@ if(!globals.includes("prefers-reduced-motion:reduce")) errors.push("Falta soport
 if(!globals.includes("forced-colors:active")) errors.push("Falta soporte básico para colores forzados");
 if(!layout.includes('lang="es-ES"')) errors.push("El idioma raíz debe identificar español de España");
 if(!layout.includes('viewportFit:"cover"')) errors.push("La PWA debe declarar viewport-fit=cover para gestionar safe areas en dispositivos con notch");
+for(const [path,width,height] of [
+  ["app/icon.png",512,512],
+  ["app/apple-icon.png",180,180],
+  ["public/icons/icon-192.png",192,192],
+  ["public/icons/icon-512.png",512,512],
+]) expectPng(path,width,height);
+if(existsSync("public/icon.svg")) errors.push("El icono SVG de la identidad anterior debe permanecer retirado");
+if(!layout.includes('url:"/icon.png"')||!layout.includes('sizes:"512x512"')) errors.push("Metadata debe servir el icono principal 512x512");
+if(!layout.includes('url:"/apple-icon.png"')||!layout.includes('sizes:"180x180"')) errors.push("Metadata debe servir el icono Apple 180x180");
+for(const token of [
+  '{src:"/icons/icon-192.png",sizes:"192x192",type:"image/png",purpose:"maskable"}',
+  '{src:"/icons/icon-512.png",sizes:"512x512",type:"image/png",purpose:"maskable"}',
+  '{src:"/icons/icon-192.png",sizes:"192x192",type:"image/png",purpose:"any"}',
+  '{src:"/icons/icon-512.png",sizes:"512x512",type:"image/png",purpose:"any"}',
+]){
+  if(!manifest.includes(token)) errors.push(`El manifest ha perdido el contrato de icono: ${token}`);
+}
+if(!readFileSync("app/icon.png").equals(readFileSync("public/icons/icon-512.png"))) errors.push("El icono 512 de metadata y el del manifest deben ser idénticos");
 for(const token of [
   "safe-area-inset-top",
   "safe-area-inset-bottom",
@@ -109,4 +142,4 @@ if(errors.length){
   for(const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, safe areas PWA, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
+console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, safe areas e iconos PWA, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
