@@ -25,12 +25,14 @@ const budgetLayout=read("app/presupuesto/layout.tsx");
 const forecastLayout=read("app/prevision/layout.tsx");
 const goalsLayout=read("app/objetivos/layout.tsx");
 const rulesLayout=read("app/reglas/layout.tsx");
+const netWorthLayout=read("app/patrimonio/layout.tsx");
 const movementsClient=read("app/movimientos/movements-client.tsx");
 const archiveClient=read("app/archivo/archive-client.tsx");
 const budgetClient=read("app/presupuesto/budget-client.tsx");
 const forecastClient=read("app/prevision/forecast-client.tsx");
 const goalsClient=read("app/objetivos/goals-client.tsx");
 const rulesClient=read("app/reglas/rules-client.tsx");
+const netWorthClient=read("app/patrimonio/net-worth-client.tsx");
 
 if(!globals.includes(".skip-link")) errors.push("Falta estilo global del enlace para saltar al contenido");
 if(!globals.includes(":focus-visible")) errors.push("Falta foco visible global");
@@ -71,6 +73,7 @@ const modalRoutes=[
   ["Previsión",forecastLayout,forecastClient,false],
   ["Objetivos",goalsLayout,goalsClient,false],
   ["Reglas",rulesLayout,rulesClient,false],
+  ["Patrimonio",netWorthLayout,netWorthClient,true],
 ];
 for(const [name,routeLayout,client,needsDrawerCss] of modalRoutes){
   if(!routeLayout.includes("AccessibleDialogBoundary")) errors.push(`${name}: falta la frontera modal accesible compartida`);
@@ -78,6 +81,7 @@ for(const [name,routeLayout,client,needsDrawerCss] of modalRoutes){
   if(needsDrawerCss&&!routeLayout.includes('import "../detail-dialog.css";')) errors.push(`${name}: falta el estilo de cajón compartido route-scoped`);
   if(!client.includes('role="dialog"')||!client.includes('aria-modal="true"')||!client.includes('aria-label="Cerrar"')) errors.push(`${name}: el modal no conserva semántica/cierre accesible`);
 }
+if(!netWorthClient.includes('aria-busy={busy ? "true" : undefined}')) errors.push("Patrimonio debe impedir cierre por Escape mientras guarda el editor");
 
 const pages=walk("app").filter(path=>path.endsWith("page.tsx"));
 const protectedPages=pages.filter(page=>read(page).includes('id="main-content"'));
@@ -93,4 +97,4 @@ if(errors.length){
   for(const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 6 superficies modales con foco/Escape/scroll compartidos · shell único, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
+console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);

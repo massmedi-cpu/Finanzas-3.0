@@ -23,6 +23,7 @@ const detailDialogCss=read("app/detail-dialog.css");
 const editorDialogCss=read("app/editor-dialog.css");
 const movementLayout=read("app/movimientos/layout.tsx");
 const archiveLayout=read("app/archivo/layout.tsx");
+const netWorthLayout=read("app/patrimonio/layout.tsx");
 const budgetLayout=read("app/presupuesto/layout.tsx");
 const forecastLayout=read("app/prevision/layout.tsx");
 const goalsLayout=read("app/objetivos/layout.tsx");
@@ -37,7 +38,7 @@ const netWorth=read("app/net-worth.css");
 must(!fs.existsSync("app/visual.css"),"app/visual.css debe permanecer retirado del runtime");
 must(rootLayout.includes('import "./route-loading.css";'),"El layout raíz debe cargar route-loading.css");
 must(!rootLayout.includes("visual.css"),"El layout raíz no puede volver a cargar visual.css");
-must(!rootLayout.includes("detail-dialog.css"),"El layout raíz no debe cargar estilos de cajón específicos de Movimientos/Archivo");
+must(!rootLayout.includes("detail-dialog.css"),"El layout raíz no debe cargar estilos de cajón específicos de Movimientos/Archivo/Patrimonio");
 must(!rootLayout.includes("editor-dialog.css"),"El layout raíz no debe cargar estilos de editor que solo necesitan rutas con modal");
 must(rootLayout.indexOf('import "./route-loading.css";')<rootLayout.indexOf('import "./tablet.css";'),"Debe preservarse la cascada route-loading -> tablet");
 
@@ -109,19 +110,25 @@ for(const token of [
 
 for(const token of [
   ".drawer-backdrop{position:fixed;z-index:100;inset:0;display:flex;justify-content:flex-end;overscroll-behavior:contain}",
-  ".movement-drawer,.archive-drawer{max-width:100%;min-width:0;height:100dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable",
+  ".movement-drawer,.archive-drawer,.net-worth-drawer{max-width:100%;min-width:0;height:100dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable",
   ".drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;border-bottom:1px solid var(--border-subtle)}",
   ".trace-panel{margin-top:18px;border:1px solid var(--border-subtle);border-radius:var(--radius-medium);background:var(--surface-secondary);overflow:hidden}",
 ]) must(detailDialogCss.includes(token),`El cajón compartido perdió una primitiva visual: ${token}`);
-for(const [name,routeLayout,localCss] of [["Movimientos",movementLayout,movementsCss],["Archivo",archiveLayout,archiveCss]]){
+const drawerRoutes=[
+  ["Movimientos",movementLayout,movementsCss,'import "../movements.css";'],
+  ["Archivo",archiveLayout,archiveCss,'import "../archive.css";'],
+  ["Patrimonio",netWorthLayout,netWorth,'import "../net-worth.css";'],
+];
+for(const [name,routeLayout,localCss,localToken] of drawerRoutes){
   must(routeLayout.includes('import "../detail-dialog.css";'),`${name} debe cargar detail-dialog.css`);
   const sharedIndex=routeLayout.indexOf('import "../detail-dialog.css";');
-  const localToken=name==="Movimientos"?'import "../movements.css";':'import "../archive.css";';
   must(sharedIndex>=0&&sharedIndex<routeLayout.indexOf(localToken),`${name} debe cargar la base del cajón antes de sus overrides locales`);
   must(!localCss.includes("position:fixed;z-index:100;inset:0;display:flex;justify-content:flex-end"),`${name} no debe volver a duplicar la geometría base del backdrop`);
   must(!localCss.includes("background:var(--surface-elevated);border-left:1px solid var(--border-default);padding:24px;box-shadow:var(--shadow-overlay)"),`${name} no debe volver a duplicar la superficie base del cajón`);
   must(!localCss.includes("margin-top:18px;border:1px solid var(--border-subtle);border-radius:var(--radius-medium);background:var(--surface-secondary);overflow:hidden"),`${name} no debe volver a duplicar el panel técnico base`);
 }
+for(const token of [".nw-editor-backdrop{align-items:flex-end}","height:min(92dvh,880px)","border-radius:var(--radius-large) var(--radius-large) 0 0"])
+  must(netWorth.includes(token),`Patrimonio perdió su editor bottom-sheet responsive: ${token}`);
 
 for(const token of [
   ".budget-modal-backdrop,.forecast-editor-backdrop,.goals-modal-backdrop,.rules-modal-backdrop{position:fixed;z-index:120;inset:0;display:grid;place-items:center;padding:24px;overflow:auto;overscroll-behavior:contain",
@@ -181,4 +188,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · editores compartidos ${editorDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} con Patrimonio responsive · editores compartidos ${editorDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
