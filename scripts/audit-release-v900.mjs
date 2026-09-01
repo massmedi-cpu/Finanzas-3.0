@@ -9,6 +9,7 @@ const version=read("lib/app-version.ts");
 const pkg=JSON.parse(read("package.json"));
 const migration=read("database/FINANCIAL_APP_9.0.0_PENDING_INVOICE_COMMITMENTS.sql");
 const annualMemory=read("database/FINANCIAL_APP_9.0.0_FORECAST_ANNUAL_OBLIGATION_MEMORY.sql");
+const driveHydration=read("database/FINANCIAL_APP_9.0.0_DRIVE_DOCUMENT_CONTENT_HYDRATION.sql");
 const release=read("database/FINANCIAL_APP_9.0.0_RELEASE.sql");
 const lifecycle=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_CLOSURE.sql");
 const storage=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_STORAGE_DURABILITY.sql");
@@ -17,6 +18,12 @@ const lifecycleGate=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_RELEAS
 const archiveClient=read("app/archivo/archive-client.tsx");
 const archiveApi=read("app/api/archive/route.ts");
 const archiveDetailApi=read("app/api/archive/[id]/route.ts");
+const syncApi=read("app/api/sync/route.ts");
+const ocrApi=read("app/api/ocr/receipt/route.ts");
+const hydrationWorker=read("lib/document/drive-content-hydration.ts");
+const serverOcr=read("lib/document/server-receipt-ocr.ts");
+const serverPdf=read("lib/document/server-pdf-text.ts");
+const driveSource=read("supabase/functions/financial-app-drive-document-source/index.ts");
 const cleanupWorker=read("lib/document/storage-cleanup.ts");
 const healthApi=read("app/api/archive/health/route.ts");
 const cleanupApi=read("app/api/archive/storage-cleanup/route.ts");
@@ -60,6 +67,42 @@ for(const token of [
 must(!/\b(update|delete|insert)\s+financial_app\.transactions\b/i.test(annualMemory),"La memoria anual no puede mutar movimientos bancarios");
 must(annualMemory.includes("forecast_calendar_visible_core(date,integer)"),"La memoria anual debe extender el calendario canónico, no crear un circuito paralelo");
 must(annualMemory.includes("forecast_annual_memory_target_patch_not_applied")&&annualMemory.includes("forecast_annual_memory_unexpected_amount_contract"),"La migración debe fallar cerrada si cambia el contrato que está extendiendo");
+
+for(const token of [
+  "document_content_hydration_queue",
+  "financial_app_prepare_drive_document_hydration",
+  "financial_app_drive_document_hydration_pending",
+  "financial_app_drive_document_hydration_source",
+  "financial_app_drive_document_hydration_fail",
+  "financial_app_complete_drive_document_hydration",
+  "financial_app_finalize_document_links_after_hydration",
+  "source_too_large",
+  "processing_timeout_limit",
+  "q.attempts<3",
+  "interval '10 minutes'",
+  "sourceDataReadOnly",
+  "d.ocr_status in('complete','manual','not_required')",
+  "revoke all on table financial_app.document_content_hydration_queue from public,anon,authenticated",
+  "grant execute on function public.financial_app_drive_document_hydration_source(uuid) to service_role"
+])must(driveHydration.includes(token),`Hidratación Drive 9.0.0 incompleta: ${token}`);
+must(!/\b(update|delete|insert)\s+financial_app\.transactions\b/i.test(driveHydration),"La hidratación documental no puede mutar movimientos bancarios");
+must(!driveHydration.includes("grant execute on function public.financial_app_drive_document_hydration_source(uuid) to authenticated"),"El puente interno de origen Drive no puede exponerse directamente a usuarios autenticados");
+for(const status of ["'pending'","'processing'","'needs_review'"])
+  must(!driveHydration.includes(`d.ocr_status in('complete','manual','not_required',${status})`),`Auto-link no puede admitir OCR no validado: ${status}`);
+
+for(const token of ["processDriveDocumentHydration","maxDuration=60","contentHydration","drive_content_hydration_unavailable"])
+  must(syncApi.includes(token),`Sync no integra hidratación documental de forma tolerante: ${token}`);
+for(const token of ["MAX_BATCH=2","BUDGET_MS=32_000","financial_app_prepare_drive_document_hydration","financial_app_drive_document_hydration_pending","financial_app_complete_drive_document_hydration","financial_app_finalize_document_links_after_hydration","drive_auto_pdf_text_v1","drive_auto_image_tesseract_v1","agreement.compared>=2","confidence??0)>=85"])
+  must(hydrationWorker.includes(token),`Worker de hidratación Drive incompleto: ${token}`);
+must(!hydrationWorker.includes("financial_app.transactions"),"El worker de hidratación no puede tocar directamente movimientos");
+for(const token of ["recognizeServerReceiptImage","ServerReceiptOcrError","server-tesseract-7","OCR_LANGUAGE_ROOT","queueTimeoutMs"])
+  must(serverOcr.includes(token),`OCR de servidor compartido incompleto: ${token}`);
+must(ocrApi.includes("recognizeServerReceiptImage")&&!ocrApi.includes("createWorker"),"El endpoint OCR debe reutilizar el motor de servidor en vez de duplicarlo");
+for(const token of ["pdfjs-dist/legacy/build/pdf.mjs","MAX_PDF_PAGES=16","MIN_USEFUL_TEXT=40","getTextContent"])
+  must(serverPdf.includes(token),`Lector PDF de hidratación incompleto: ${token}`);
+for(const token of ["drive.readonly","financial_app_drive_document_hydration_source","MAX_SOURCE_BYTES=12*1024*1024","alt=media","supportsAllDrives=true","requireAllowedUser","cache-control\":\"private, no-store"])
+  must(driveSource.includes(token),`Puente Drive de solo lectura incompleto: ${token}`);
+must(!/method:\s*["'](?:PUT|PATCH|DELETE)["']/i.test(driveSource),"El puente Drive no puede escribir ni borrar en Google Drive");
 
 for(const token of [
   "financial_app_9_0_0_requires_8_0_0_baseline",
@@ -146,4 +189,4 @@ for(const token of [
 ])must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 9.0.0 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 9.0.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + ciclo documental canónico protegidos`);
+console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + hidratación Drive + ciclo documental canónico protegidos`);
