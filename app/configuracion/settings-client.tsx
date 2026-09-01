@@ -288,7 +288,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
                   <strong>{backupName || "Copia seleccionada"}</strong>
                   <span>Formato {preview.formatVersion ?? "—"} · Financial App {preview.backupAppVersion || "—"}</span>
                 </div>
-                <span className={preview.safe ? "backup-status safe" : "backup-status blocked"}>
+                <span className={`status-badge ${preview.safe ? "ok" : "error"}`}>
                   {preview.safe ? "Lista para restaurar" : "Restauración bloqueada"}
                 </span>
               </div>
@@ -302,8 +302,8 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
 
               {(preview.errors.length > 0 || preview.warnings.length > 0) && (
                 <div className="backup-messages">
-                  {preview.errors.map((item) => <p className="settings-error" key={`e-${item}`}>{backupIssueLabel(item)}</p>)}
-                  {preview.warnings.map((item) => <p className="settings-warning" key={`w-${item}`}>{backupIssueLabel(item)}</p>)}
+                  {preview.errors.map((item) => <p className="inline-alert error" role="alert" key={`e-${item}`}>{backupIssueLabel(item)}</p>)}
+                  {preview.warnings.map((item) => <p className="inline-alert warning" key={`w-${item}`}>{backupIssueLabel(item)}</p>)}
                 </div>
               )}
 
@@ -350,8 +350,8 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
         </section>
       </section>
 
-      {message && <p className="settings-ok" role="status">{message}</p>}
-      {error && <p className="settings-error" role="alert">{error}</p>}
+      {message && <p className="inline-alert success settings-feedback" role="status" aria-live="polite">{message}</p>}
+      {error && <p className="inline-alert error settings-feedback" role="alert">{error}</p>}
 
       <section className="settings-card technical-card">
         <h2>Sistema</h2>
