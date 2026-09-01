@@ -27,12 +27,14 @@ for(const forbidden of [
 for(const token of ["DocumentTriageAction","DocumentTriage","parseDocumentTriage","financial_app_document_triage","getDocumentTriage"])
   must(loader.includes(token),`Loader de triage incompleto: ${token}`);
 const triagePage=page.includes("Atención documental")&&page.includes("getDocumentTriage");
-const operationsPage=page.includes("Centro de operaciones documentales")&&page.includes("getDocumentOperations");
+const operationsTitle=page.includes("Centro de operaciones documentales")||page.includes("Bandeja de conciliación documental");
+const operationsPage=operationsTitle&&page.includes("getDocumentOperations");
 must(triagePage||operationsPage,"La página debe conservar triage 6.3 directamente o a través del centro operativo forward-compatible");
 must(page.includes("DocumentTriageClient"),"La página debe conservar el cliente canónico de revisión documental");
 must(!page.includes("getDocumentMatchingObservability"),"La revisión no puede volver a depender de la cola matching-only de 6.1");
-for(const token of ["Revisar OCR","Completar datos","Asociación segura","Investigar sin coincidencia","Abrir en Archivo"])
+for(const token of ["Revisar OCR","Completar datos","Asociación segura","Investigar sin coincidencia"])
   must(client.includes(token),`Cliente de triage incompleto: ${token}`);
+must(client.includes("Abrir en Archivo")||client.includes("Abrir ficha completa"),"Cliente de triage incompleto: acceso a la ficha documental completa");
 const legacyArchiveLabel=client.includes("Archivar documento");
 const operationsArchiveLabel=client.includes('archive_candidate:"Listo para archivar"')&&client.includes("data.operationSummary.archive");
 must(legacyArchiveLabel||operationsArchiveLabel,"Cliente de triage incompleto: acción de archivado visible");
