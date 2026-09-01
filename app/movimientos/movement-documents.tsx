@@ -20,7 +20,7 @@ function confidenceLabel(document:MovementDocument){
   return isDriveDocument(document)?"Google Drive · vinculado":"Vinculado";
 }
 
-export function MovementDocuments({transaction,onChanged}:{transaction:TransactionDetail;onChanged?:()=>void|Promise<void>}){
+export function MovementDocuments({transaction,onChanged}:{transaction:TransactionDetail;onChanged?:()=>unknown}){
   const [matches,setMatches]=useState<MovementDocumentMatches>(transaction.documentMatches??emptyMatches);
   const [busy,setBusy]=useState<string|null>(null);
   const [error,setError]=useState<string|null>(null);
