@@ -97,8 +97,8 @@ for(const token of [
   ".document-card{contain-intrinsic-size:auto 84px}",
 ]) must(archiveCss.includes(token),`Archivo perdió rendimiento/scroll adaptable: ${token}`);
 
+must(!detailDialogCss.includes("detail-dialog-boundary"),"detail-dialog.css no debe conservar la frontera modal específica retirada");
 for(const token of [
-  ".detail-dialog-boundary{display:contents}",
   ".drawer-backdrop{position:fixed;z-index:100;inset:0;display:flex;justify-content:flex-end;overscroll-behavior:contain}",
   ".movement-drawer,.archive-drawer{max-width:100%;min-width:0;height:100dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable",
   ".drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;border-bottom:1px solid var(--border-subtle)}",
@@ -145,4 +145,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · frontera modal genérica · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);

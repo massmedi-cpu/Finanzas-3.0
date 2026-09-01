@@ -3,14 +3,23 @@
 import { type ReactNode, useEffect, useRef } from "react";
 
 const FOCUSABLE='a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])';
+const ACTIVE_DIALOG='[role="dialog"][aria-modal="true"]';
+const CLOSE_CONTROL='button[aria-label="Cerrar"]:not(:disabled),[data-dialog-close]:not([aria-disabled="true"])';
 
 function focusableElements(dialog:HTMLElement){
   return Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(element=>
-    !element.hasAttribute("hidden")&&element.getAttribute("aria-hidden")!=="true"&&element.getClientRects().length>0
+    !element.hasAttribute("hidden")&&
+    element.getAttribute("aria-hidden")!=="true"&&
+    !element.closest("[inert]")&&
+    element.getClientRects().length>0
   );
 }
 
-export function DetailDialogBoundary({children}:{children:ReactNode}){
+function dialogBusy(dialog:HTMLElement){
+  return Boolean(dialog.closest('[aria-busy="true"],.is-loading'));
+}
+
+export function AccessibleDialogBoundary({children}:{children:ReactNode}){
   const boundaryRef=useRef<HTMLDivElement>(null);
 
   useEffect(()=>{
@@ -19,11 +28,11 @@ export function DetailDialogBoundary({children}:{children:ReactNode}){
 
     let activeDialog:HTMLElement|null=null;
     let previousFocus:HTMLElement|null=null;
+    let previousRootOverflow="";
+    let previousBodyOverflow="";
     let frame=0;
     const root=document.documentElement;
     const body=document.body;
-    const previousRootOverflow=root.style.overflow;
-    const previousBodyOverflow=body.style.overflow;
 
     const focusDialog=(dialog:HTMLElement,preferLast=false)=>{
       const focusables=focusableElements(dialog);
@@ -54,6 +63,8 @@ export function DetailDialogBoundary({children}:{children:ReactNode}){
       if(activeDialog===dialog)return;
       if(activeDialog)deactivate();
       previousFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;
+      previousRootOverflow=root.style.overflow;
+      previousBodyOverflow=body.style.overflow;
       activeDialog=dialog;
       root.style.overflow="hidden";
       body.style.overflow="hidden";
@@ -62,7 +73,7 @@ export function DetailDialogBoundary({children}:{children:ReactNode}){
     };
 
     const refresh=()=>{
-      const dialogs=Array.from(boundary.querySelectorAll<HTMLElement>('[role="dialog"][aria-modal="true"]'));
+      const dialogs=Array.from(boundary.querySelectorAll<HTMLElement>(ACTIVE_DIALOG));
       const next=dialogs.at(-1)||null;
       if(next)activate(next);else if(activeDialog)deactivate();
     };
@@ -71,7 +82,8 @@ export function DetailDialogBoundary({children}:{children:ReactNode}){
       const dialog=activeDialog;
       if(!dialog)return;
       if(event.key==="Escape"){
-        const close=dialog.querySelector<HTMLButtonElement>('button[aria-label="Cerrar"]:not(:disabled)');
+        if(dialogBusy(dialog))return;
+        const close=dialog.querySelector<HTMLElement>(CLOSE_CONTROL);
         if(close){event.preventDefault();close.click();}
         return;
       }
@@ -103,10 +115,12 @@ export function DetailDialogBoundary({children}:{children:ReactNode}){
       document.removeEventListener("keydown",onKeyDown);
       document.removeEventListener("focusin",onFocusIn);
       cancelAnimationFrame(frame);
-      root.style.overflow=previousRootOverflow;
-      body.style.overflow=previousBodyOverflow;
+      if(activeDialog){
+        root.style.overflow=previousRootOverflow;
+        body.style.overflow=previousBodyOverflow;
+      }
     };
   },[]);
 
-  return <div ref={boundaryRef} className="detail-dialog-boundary">{children}</div>;
+  return <div ref={boundaryRef} style={{display:"contents"}} data-dialog-boundary="accessible">{children}</div>;
 }
