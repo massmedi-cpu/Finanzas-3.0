@@ -32,8 +32,8 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
   const [activeId,setActiveId]=useState<string|null>(data.documents[0]?.id??null);
   const [sessionDone,setSessionDone]=useState(0);
 
-  const safeDocuments=useMemo(()=>data.documents.filter(item=>item.safeOperation),[data.documents]);
-  const selectedDocuments=useMemo(()=>safeDocuments.filter(item=>selected.includes(item.id)),[safeDocuments,selected]);
+  const safeDocuments=useMemo(()=>data.documents.filter(document=>document.safeOperation),[data.documents]);
+  const selectedDocuments=useMemo(()=>safeDocuments.filter(document=>selected.includes(document.id)),[safeDocuments,selected]);
   const manualCount=data.documents.length-safeDocuments.length;
   const visibleDocuments=useMemo(()=>{
     const needle=normalize(query.trim());
