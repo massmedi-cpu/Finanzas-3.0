@@ -30,6 +30,8 @@ jobs:
         run: npm audit --omit=dev --audit-level=high
       - name: Regression tests
         run: npm run test:regression
+      - name: Analysis runtime performance contract
+        run: node scripts/audit-analysis-deferred-runtime.mjs
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
