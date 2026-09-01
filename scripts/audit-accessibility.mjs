@@ -30,6 +30,8 @@ const chromeCss=read("app/chrome.css");
 const navigation=read("components/app-navigation.tsx");
 const chrome=read("components/app-chrome.tsx");
 const networkStatus=read("components/network-status.tsx");
+const globalSearch=read("components/global-search.tsx");
+const appDestinations=read("lib/ui/app-destinations.ts");
 const chart=read("components/cash-flow-chart.tsx");
 const layout=read("app/layout.tsx");
 const manifest=read("app/manifest.ts");
@@ -105,6 +107,16 @@ for(const token of [
 }
 if(!navigation.includes("statusTone?:NetworkState")||!navigation.includes("product-data-status ${statusTone}")) errors.push("La navegación no refleja visualmente el estado real de conexión");
 if(!read("package.json").includes('"test:network"')||!existsSync("scripts/network-status-tests.ts")) errors.push("La resiliencia de conexión no está cubierta por la suite de regresión");
+for(const token of [
+  'role="dialog"','aria-modal="true"','role="combobox"','role="listbox"','role="option"','aria-activedescendant={items[activeIndex]?.id}',
+  'event.key==="Escape"','event.key==="ArrowDown"','event.key==="ArrowUp"','event.key==="Enter"','event.key!=="Tab"',
+  '(event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="k"','root.style.overflow="hidden"','restoreFocusRef.current?.focus()','router.push(item.href)',
+]) if(!globalSearch.includes(token)) errors.push(`La búsqueda global ha perdido comportamiento accesible: ${token}`);
+for(const token of ['onOpenSearch:()=>void','aria-label="Buscar en Financial App"','aria-controls="global-search-dialog"']) if(!navigation.includes(token)) errors.push(`La navegación ha perdido acceso a la búsqueda global: ${token}`);
+if(!chrome.includes("<GlobalSearch")||!chrome.includes("searchOpen")) errors.push("El shell no conserva la búsqueda global persistente");
+if(!appDestinations.includes("movementSearchHref")||!appDestinations.includes("encodeURIComponent(normalized)")) errors.push("La búsqueda global no protege o no construye la búsqueda de movimientos");
+if(!read("package.json").includes('"test:search"')||!existsSync("scripts/global-search-tests.ts")) errors.push("La búsqueda global no está cubierta por la suite de regresión");
+for(const token of [".global-search-dialog{",".global-search-result{",".mobile-search-trigger{","overscroll-behavior:contain","prefers-reduced-motion:reduce"]) if(!chromeCss.includes(token)) errors.push(`La búsqueda global ha perdido su contrato visual: ${token}`);
 if(!navigation.includes('href="#main-content"')) errors.push("La navegación no ofrece salto al contenido principal");
 if(!/aria-current\s*=\s*\{\s*current\s*\?\s*["']page["']\s*:\s*undefined\s*\}/.test(navigation)) errors.push("La navegación no marca aria-current=page");
 if(!navigation.includes('aria-expanded={moreOpen}')||!navigation.includes('aria-controls="product-more-menu"')) errors.push("El menú secundario no comunica su estado expandido");

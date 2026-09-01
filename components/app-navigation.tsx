@@ -6,43 +6,7 @@ import { useEffect,useRef,useState } from "react";
 import { IntentLink } from "@/components/intent-link";
 import { FinancialIcon,type FinancialIconName } from "@/components/financial-icons";
 import type { NetworkState } from "@/components/network-status";
-
-const primary = [
-  ["Inicio","/","home"],
-  ["Cash Flow","/cash-flow","cash-flow"],
-  ["Movimientos","/movimientos","movements"],
-  ["Análisis","/analisis","analysis"],
-  ["Previsión","/prevision","forecast"],
-  ["Archivo","/archivo","archive"],
-] as const satisfies readonly (readonly [string,string,FinancialIconName])[];
-
-const secondaryOrganize = [
-  ["Cuentas","/cuentas","accounts"],
-  ["Categorías","/configuracion#categorias","categories"],
-  ["Presupuesto","/presupuesto","budget"],
-  ["Reglas","/reglas","rules"],
-  ["Importación","/configuracion#importacion","import"],
-] as const satisfies readonly (readonly [string,string,FinancialIconName])[];
-const secondaryPlan = [
-  ["Plan","/plan","plan"],
-  ["Simulador","/escenarios","plan"],
-  ["Objetivos","/objetivos","goals"],
-  ["Patrimonio","/patrimonio","net-worth"],
-  ["Inteligencia","/inteligencia","intelligence"],
-] as const satisfies readonly (readonly [string,string,FinancialIconName])[];
-const secondarySystem = [
-  ["OCR","/archivo/revision","scan"],
-  ["Integraciones","/configuracion#integraciones","integrations"],
-  ["Centro de control","/control","control"],
-  ["Explicabilidad","/explicabilidad","explain"],
-  ["Configuración","/configuracion","settings"],
-] as const satisfies readonly (readonly [string,string,FinancialIconName])[];
-const secondaryGroups = [
-  {key:"organize",label:"Organizar",items:secondaryOrganize},
-  {key:"plan",label:"Planificar",items:secondaryPlan},
-  {key:"system",label:"Sistema",items:secondarySystem},
-] as const;
-const secondary = [...secondaryOrganize,...secondaryPlan,...secondarySystem] as const;
+import { primaryDestinations,secondaryDestinations,secondaryGroups } from "@/lib/ui/app-destinations";
 
 function routeOf(href:string){return href.split("#")[0];}
 function matches(pathname:string,href:string){
@@ -51,12 +15,12 @@ function matches(pathname:string,href:string){
 }
 function secondaryMatches(pathname:string,href:string){
   const route=routeOf(href);
-  const primaryOwner=primary.some(([,primaryHref])=>routeOf(primaryHref)===route);
+  const primaryOwner=primaryDestinations.some(item=>routeOf(item.href)===route);
   if(primaryOwner)return pathname!==route&&matches(pathname,href);
   return matches(pathname,href);
 }
 
-export function AppNavigation({status="Datos reales · fuente solo lectura",statusTone="online"}:{status?:string;statusTone?:NetworkState}){
+export function AppNavigation({status="Datos reales · fuente solo lectura",statusTone="online",onOpenSearch}:{status?:string;statusTone?:NetworkState;onOpenSearch:()=>void}){
   const pathname=usePathname();
   const [moreOpen,setMoreOpen]=useState(false);
   const dialogRef=useRef<HTMLElement>(null);
@@ -107,7 +71,7 @@ export function AppNavigation({status="Datos reales · fuente solo lectura",stat
       <FinancialIcon name={icon} active={current}/><span>{label}</span>
     </IntentLink>;
   };
-  const moreActive=secondary.some(([,href])=>secondaryMatches(pathname,href));
+  const moreActive=secondaryDestinations.some(item=>secondaryMatches(pathname,item.href));
 
   return <>
     <a className="skip-link" href="#main-content">Saltar al contenido principal</a>
@@ -117,8 +81,9 @@ export function AppNavigation({status="Datos reales · fuente solo lectura",stat
         <span className="product-brand-mark"><Image src="/brand/isotipo.png" width={42} height={42} alt="" priority/></span>
         <span className="product-brand-copy"><strong>Financial App</strong><small>Finanzas personales</small></span>
       </IntentLink>
+      <button type="button" className="product-search-trigger" onClick={onOpenSearch} aria-haspopup="dialog" aria-controls="global-search-dialog"><FinancialIcon name="search"/><span>Buscar en la app</span><kbd>Ctrl K</kbd></button>
       <nav className="product-primary-nav" aria-label="Navegación principal">
-        {primary.map(([label,href,icon])=>primaryLink(label,href,icon))}
+        {primaryDestinations.map(item=>primaryLink(item.label,item.href,item.icon))}
       </nav>
       <div className="product-sidebar-footer">
         <button type="button" className={`product-more-button${moreActive?" active":""}`} aria-haspopup="dialog" aria-expanded={moreOpen} aria-controls="product-more-menu" onClick={event=>toggleMore(event.currentTarget)}>
@@ -130,11 +95,11 @@ export function AppNavigation({status="Datos reales · fuente solo lectura",stat
 
     <header className="mobile-product-header">
       <IntentLink className="mobile-brand" href="/" aria-label="Financial App · Inicio" onClick={()=>closeMore()}><Image src="/brand/isotipo.png" width={36} height={36} alt="" priority/><strong>Financial App</strong></IntentLink>
-      <button type="button" className={`mobile-more-trigger${moreActive?" active":""}`} aria-label="Más secciones" aria-haspopup="dialog" aria-expanded={moreOpen} aria-controls="product-more-menu" onClick={event=>toggleMore(event.currentTarget)}><FinancialIcon name="more" active={moreActive}/></button>
+      <div className="mobile-header-actions"><button type="button" className="mobile-search-trigger" aria-label="Buscar en Financial App" aria-haspopup="dialog" aria-controls="global-search-dialog" onClick={onOpenSearch}><FinancialIcon name="search"/></button><button type="button" className={`mobile-more-trigger${moreActive?" active":""}`} aria-label="Más secciones" aria-haspopup="dialog" aria-expanded={moreOpen} aria-controls="product-more-menu" onClick={event=>toggleMore(event.currentTarget)}><FinancialIcon name="more" active={moreActive}/></button></div>
     </header>
 
     <nav className="mobile-bottom-nav" aria-label="Navegación principal móvil">
-      {primary.map(([label,href,icon])=>primaryLink(label,href,icon,true))}
+      {primaryDestinations.map(item=>primaryLink(item.label,item.href,item.icon,true))}
     </nav>
 
     {moreOpen&&<>
@@ -145,9 +110,9 @@ export function AppNavigation({status="Datos reales · fuente solo lectura",stat
           {secondaryGroups.map(group=><section key={group.key} className="product-more-group" aria-labelledby={`product-more-${group.key}`}>
             <h3 id={`product-more-${group.key}`}>{group.label}</h3>
             <div className="product-more-grid">
-              {group.items.map(([label,href,icon])=>{
-                const current=secondaryMatches(pathname,href);
-                return <IntentLink key={`${href}-${label}`} className={`product-more-item${current?" active":""}`} href={href} aria-current={current?"page":undefined} onClick={()=>closeMore()}><span className="product-more-icon"><FinancialIcon name={icon} active={current}/></span><span>{label}</span><FinancialIcon className="product-more-chevron" name="chevron-right"/></IntentLink>;
+              {group.items.map(item=>{
+                const current=secondaryMatches(pathname,item.href);
+                return <IntentLink key={`${item.href}-${item.label}`} className={`product-more-item${current?" active":""}`} href={item.href} aria-current={current?"page":undefined} onClick={()=>closeMore()}><span className="product-more-icon"><FinancialIcon name={item.icon} active={current}/></span><span>{item.label}</span><FinancialIcon className="product-more-chevron" name="chevron-right"/></IntentLink>;
               })}
             </div>
           </section>)}

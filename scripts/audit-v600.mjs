@@ -7,6 +7,7 @@ const must=(condition,message)=>{if(!condition)failures.push(message)};
 const version=read("lib/app-version.ts");
 const pkg=JSON.parse(read("package.json"));
 const navigation=read("components/app-navigation.tsx");
+const destinations=read("lib/ui/app-destinations.ts");
 const globals=read("app/globals.css");
 const cashFlow=read("app/cash-flow/page.tsx");
 const login=read("app/login/page.tsx");
@@ -66,12 +67,13 @@ for(const token of [
 must(!/(?:insert\s+into|update|delete\s+from)\s+financial_app\.transactions/i.test(archiveMigration),"La migración documental no puede mutar movimientos");
 must(!/(?:insert\s+into|update|delete\s+from)\s+financial_app\.document_transaction_links/i.test(archiveMigration),"La migración documental no puede mutar asociaciones documento–movimiento");
 
-const primaryBlock=navigation.split("const secondary")[0];
-const secondaryBlock=navigation.split("const secondary")[1]?.split("function routeOf")[0]||"";
+const primaryBlock=destinations.split("export const primaryDestinations = [")[1]?.split("] as const satisfies readonly AppDestination[]")[0]||"";
+const secondaryBlock=destinations.split("export const organizeDestinations = [")[1]||"";
 const expectedPrimary=[["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Previsión","/prevision"],["Archivo","/archivo"]];
-for(const [label,href] of expectedPrimary)must(primaryBlock.includes(`["${label}","${href}"`),`Falta destino principal protegido: ${label}`);
-must((primaryBlock.match(/\["[^\"]+","\/[^"]*","[^"]+"\]/g)||[]).length===6,"La navegación principal debe conservar exactamente seis destinos");
-must(!secondaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe duplicarse dentro de Más si ya es destino principal");
+for(const [label,href] of expectedPrimary)must(primaryBlock.includes(`label:"${label}",href:"${href}"`),`Falta destino principal protegido: ${label}`);
+must((primaryBlock.match(/\{label:"/g)||[]).length===6,"La navegación principal debe conservar exactamente seis destinos");
+must(!secondaryBlock.includes('label:"Previsión",href:"/prevision"'),"Previsión no debe duplicarse dentro de Más si ya es destino principal");
+must(navigation.includes("primaryDestinations")&&navigation.includes("secondaryGroups"),"La navegación debe consumir el catálogo canónico compartido");
 
 for(const token of ["--accent-primary:","--accent-light:","--accent-dark:","--accent-hover:","--accent-active:"])
   must(globals.includes(token),`Identidad premium 6.x incompleta: ${token}`);

@@ -7,6 +7,7 @@ const must=(condition,message)=>{if(!condition)failures.push(message)};
 const appVersion=read("lib/app-version.ts");
 const globals=read("app/globals.css");
 const navigation=read("components/app-navigation.tsx");
+const destinations=read("lib/ui/app-destinations.ts");
 const client=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
 const liquidityDashboard=read("components/forecast-liquidity-dashboard.tsx");
@@ -34,11 +35,12 @@ for(const legacyBlue of ["--accent:#0b4f8a","--accent-soft:#e7f1fb","--focus:#0b
 for(const legacy of ["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"])
   must(!globals.toLowerCase().includes(legacy),`globals.css conserva marrón retirado: ${legacy}`);
 
-const primaryBlock=navigation.split("const secondary")[0];
-const secondaryBlock=navigation.split("const secondary")[1]?.split("function routeOf")[0]||"";
+const primaryBlock=destinations.split("export const primaryDestinations = [")[1]?.split("] as const satisfies readonly AppDestination[]")[0]||"";
+const secondaryBlock=destinations.split("export const organizeDestinations = [")[1]||"";
 for(const [label,href] of [["Inicio","/"],["Cash Flow","/cash-flow"],["Movimientos","/movimientos"],["Análisis","/analisis"],["Previsión","/prevision"],["Archivo","/archivo"]])
-  must(primaryBlock.includes(`["${label}","${href}"`),`Navegación primaria incompleta: ${label}`);
-must(!secondaryBlock.includes('["Previsión","/prevision"'),"Previsión no debe duplicarse dentro de Más si ya está en navegación principal");
+  must(primaryBlock.includes(`label:"${label}",href:"${href}"`),`Navegación primaria incompleta: ${label}`);
+must(!secondaryBlock.includes('label:"Previsión",href:"/prevision"'),"Previsión no debe duplicarse dentro de Más si ya está en navegación principal");
+must(navigation.includes("primaryDestinations")&&navigation.includes("secondaryGroups"),"La navegación debe consumir el catálogo canónico compartido");
 must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecastCalendar")&&cashFlowPage.includes("Promise.all"),"Cash Flow debe integrar el calendario/previsión canónico sin duplicar su lógica");
 must(forecastPage.includes("showCommitments={false}"),"La página de Previsión debe evitar repetir la lista de compromisos antes del calendario");
 must(liquidityDashboard.includes("showCommitments=true")&&liquidityDashboard.includes("showCommitments&&<article className=\"liquidity-commitments\""),"El panel de liquidez debe permitir ocultar compromisos redundantes sin perderlos en otros contextos");
