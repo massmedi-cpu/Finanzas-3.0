@@ -25,6 +25,7 @@ type BackupPreview = {
   };
   sections: Record<string, { backup: number; current: number; delta: number }>;
 };
+type SettingsMessage = { tone: "success" | "warning"; text: string };
 
 const sectionLabels: Record<string, string> = {
   transactionOverrides: "Ediciones de movimientos",
@@ -63,7 +64,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
   const [theme, setTheme] = useState(initialData.preferences.theme);
   const [timezone, setTimezone] = useState(initialData.preferences.timezone || "Europe/Madrid");
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<SettingsMessage | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [backup, setBackup] = useState<Record<string, unknown> | null>(null);
   const [backupName, setBackupName] = useState<string | null>(null);
@@ -97,7 +98,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
       if (!r.ok) throw new Error(body.error || "No se pudo guardar");
       localStorage.setItem("financial-app-theme", theme);
       await refreshSettings();
-      setMessage("Preferencias guardadas.");
+      setMessage({ tone: "success", text: "Preferencias guardadas." });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Error al guardar");
     } finally {
@@ -126,7 +127,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-      setMessage("Copia privada 1.8 exportada correctamente.");
+      setMessage({ tone: "success", text: "Copia privada 1.8 exportada correctamente." });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Error al exportar");
     } finally {
@@ -158,8 +159,8 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
       setBackup(candidate);
       setBackupName(file.name);
       setPreview(body);
-      if (body.safe) setMessage("Copia compatible. Revisa las diferencias antes de decidir si quieres restaurarla.");
-      else setMessage("La copia se ha analizado, pero la restauración permanece bloqueada.");
+      if (body.safe) setMessage({ tone: "success", text: "Copia compatible. Revisa las diferencias antes de decidir si quieres restaurarla." });
+      else setMessage({ tone: "warning", text: "La copia se ha analizado, pero la restauración permanece bloqueada." });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Copia no válida");
       if (fileRef.current) fileRef.current.value = "";
@@ -187,7 +188,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
       const body = await r.json();
       if (!r.ok || !body.ok) throw new Error(body.error || "No se pudo restaurar la copia");
       await refreshSettings();
-      setMessage(`Restauración completada de forma atómica. Checkpoint previo: ${String(body.checkpointId || "creado")}.`);
+      setMessage({ tone: "success", text: `Restauración completada de forma atómica. Checkpoint previo: ${String(body.checkpointId || "creado")}.` });
       setBackup(null);
       setBackupName(null);
       setPreview(null);
@@ -288,7 +289,7 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
                   <strong>{backupName || "Copia seleccionada"}</strong>
                   <span>Formato {preview.formatVersion ?? "—"} · Financial App {preview.backupAppVersion || "—"}</span>
                 </div>
-                <span className={preview.safe ? "backup-status safe" : "backup-status blocked"}>
+                <span className={`status-badge ${preview.safe ? "ok" : "error"}`}>
                   {preview.safe ? "Lista para restaurar" : "Restauración bloqueada"}
                 </span>
               </div>
@@ -302,8 +303,8 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
 
               {(preview.errors.length > 0 || preview.warnings.length > 0) && (
                 <div className="backup-messages">
-                  {preview.errors.map((item) => <p className="settings-error" key={`e-${item}`}>{backupIssueLabel(item)}</p>)}
-                  {preview.warnings.map((item) => <p className="settings-warning" key={`w-${item}`}>{backupIssueLabel(item)}</p>)}
+                  {preview.errors.map((item) => <p className="inline-alert error" role="alert" key={`e-${item}`}>{backupIssueLabel(item)}</p>)}
+                  {preview.warnings.map((item) => <p className="inline-alert warning" key={`w-${item}`}>{backupIssueLabel(item)}</p>)}
                 </div>
               )}
 
@@ -350,8 +351,8 @@ export function SettingsClient({ initialData }: { initialData: SettingsOverview 
         </section>
       </section>
 
-      {message && <p className="settings-ok" role="status">{message}</p>}
-      {error && <p className="settings-error" role="alert">{error}</p>}
+      {message && <p className={`inline-alert ${message.tone} settings-feedback`} role="status" aria-live="polite">{message.text}</p>}
+      {error && <p className="inline-alert error settings-feedback" role="alert">{error}</p>}
 
       <section className="settings-card technical-card">
         <h2>Sistema</h2>

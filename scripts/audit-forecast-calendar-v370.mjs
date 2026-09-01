@@ -11,6 +11,7 @@ const client=read("app/prevision/forecast-client.tsx");
 const forecastPage=read("app/prevision/page.tsx");
 const liquidityDashboard=read("components/forecast-liquidity-dashboard.tsx");
 const css=read("app/forecast.css");
+const controls=read("app/controls.css");
 const cashFlowPage=read("app/cash-flow/page.tsx");
 const api=read("app/api/forecast/route.ts");
 const lib=read("lib/financial/forecast-calendar.ts");
@@ -42,8 +43,19 @@ must(cashFlowPage.includes("ForecastClient")&&cashFlowPage.includes("getForecast
 must(forecastPage.includes("showCommitments={false}"),"La página de Previsión debe evitar repetir la lista de compromisos antes del calendario");
 must(liquidityDashboard.includes("showCommitments=true")&&liquidityDashboard.includes("showCommitments&&<article className=\"liquidity-commitments\""),"El panel de liquidez debe permitir ocultar compromisos redundantes sin perderlos en otros contextos");
 
-for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","forecast-delete-button","removeEvent(event)"])
+for(const token of ["forecast-cashflow-summary","Cash Flow estimado","Ingresos estimados","Gastos estimados","effectiveAmount(event)","danger-button","removeEvent(event)"])
   must(client.includes(token),`Previsión ha perdido contrato funcional: ${token}`);
+for(const token of [
+  'className={`inline-alert ${feedback.tone}`}',
+  'className={`status-badge forecast-status ${statusTone(event)}`}',
+  'recurringManual?"text-button":"danger-button"',
+  'className="danger-button" onClick={()=>removeSeries(event)}',
+  'className="ghost" onClick={()=>restoreEvent(event)',
+  'className="icon-button" aria-label="Mes anterior"',
+  'className="icon-button" aria-label="Mes siguiente"',
+]) must(client.includes(token),`Previsión ha perdido integración con controles/estados canónicos: ${token}`);
+for(const legacyControl of ["forecast-delete-button","ghost-action","icon-action","link-button"])
+  must(!client.includes(legacyControl),`Previsión no debe recuperar el control legacy ${legacyControl}`);
 must(client.includes("Ya no cuenta en los cálculos del mes")||client.includes("Ya no cuenta en el cash flow estimado"),"Previsión debe informar que un descarte deja de contar en los cálculos");
 must(client.includes('event.status==="received"&&event.actual?event.actual.amount:event.estimatedAmount'),"Los confirmados deben usar importe real y los demás estimado");
 
@@ -95,7 +107,10 @@ if(ledger410){
   must(ledger410.includes("event_rank=1 and transaction_rank=1"),"4.1 debe reforzar la conciliación previsión↔real 1↔1");
   must(ledger410.includes("actualExpensesIncludedInProjection")&&ledger410.includes("serverSideMonthlyProjection"),"4.1 debe mantener gastos reales dentro de la proyección canónica");
 }
-must(css.includes(".forecast-cashflow-summary{")&&css.includes(".forecast-delete-button{"),"Faltan estilos del resumen o del botón Eliminar");
+must(css.includes(".forecast-cashflow-summary{"),"Faltan estilos del resumen de Previsión");
+for(const token of [".danger-action,.danger-button{",".text-button{",".ghost{",".icon-button{",".status-badge{",".inline-alert{"])
+  must(controls.includes(token),`El sistema canónico no contiene el control requerido por Previsión: ${token}`);
+must(!css.includes(".forecast-delete-button{")&&!css.includes(".link-button{")&&!css.includes(".forecast-feedback{"),"Previsión no debe recuperar estilos locales de controles/feedback compartidos");
 
 const roots=["app","components"];
 const banned=["#6f4e37","#d2a174","#8d6441","#ede2d7","#34281f"];
@@ -105,4 +120,4 @@ for(const root of roots){
 }
 
 if(failures.length){console.error("Forecast/Cash Flow v6 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Forecast/Cash Flow v6 audit OK · previsión canónica, descartes reversibles, series manuales gestionables y proyección protegida");
+console.log("Forecast/Cash Flow v6 audit OK · previsión canónica, controles compartidos, descartes reversibles, series manuales gestionables y proyección protegida");

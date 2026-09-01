@@ -12,7 +12,7 @@ const read=file=>fs.readFileSync(file,"utf8");
 
 const controls=read("app/controls.css");
 for(const selector of [".primary-action{",".secondary-action,.ghost{",".ghost{",".danger-action,.danger-button{",".text-button{",".text-button:hover:not(:disabled){",".text-button.muted{",".icon-button{",".button-link{display:inline-flex"]){if(!controls.includes(selector))failures.push(`Control canónico incompleto: falta ${selector}`);}
-for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--accent-primary)","var(--negative)",".danger-button:hover:not(:disabled)",".inline-alert.warning{"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
+for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--accent-primary)","var(--negative)",".danger-button:hover:not(:disabled)",".inline-alert.warning{",".status-badge.error{",".status-badge.info{"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
 for(const client of ["app/presupuesto/budget-client.tsx","app/objetivos/goals-client.tsx"]){if(!read(client).includes('className="danger-button"'))failures.push(`${client} ha perdido el control destructivo canónico danger-button`);}
 for(const css of ["app/budget.css","app/goals.css"]){const source=read(css);if(/(?:^|})\.danger-button\{/.test(source))failures.push(`${css} no debe volver a ser propietario visual de danger-button`);if(/(?:^|})\.text-button\{/.test(source))failures.push(`${css} no debe volver a ser propietario visual de text-button`);}
 const controlCss=read("app/control.css");
@@ -24,6 +24,44 @@ const netWorthClient=read("app/patrimonio/net-worth-client.tsx");
 const netWorthCss=read("app/net-worth.css");
 for(const token of ['className="text-button"','className="primary-action"','className="icon-button"','className="inline-alert error nw-error"'])if(!netWorthClient.includes(token))failures.push(`Patrimonio no consume el control canónico: ${token}`);
 for(const forbidden of [".nw-primary{",".nw-actions button{",".nw-range select{min-height:44px",".nw-form input,.nw-form select,.nw-form textarea{width:100%;min-height:44px"]){if(netWorthCss.includes(forbidden))failures.push(`Patrimonio ha recuperado control legacy: ${forbidden}`);}
+
+const forecastClient=read("app/prevision/forecast-client.tsx");
+const forecastCss=read("app/forecast.css");
+const forecastLedgerCss=read("app/forecast-ledger.css");
+for(const token of [
+  'className="icon-button" aria-label="Mes anterior"',
+  'className="icon-button" aria-label="Mes siguiente"',
+  'className={`inline-alert ${feedback.tone}`}',
+  'className={`status-badge forecast-status ${statusTone(event)}`}',
+  'recurringManual?"text-button":"danger-button"',
+  'className="danger-button" onClick={()=>removeSeries(event)}',
+  'className="ghost" onClick={()=>restoreEvent(event)',
+  'className="icon-button" onClick={()=>setEditor(null)',
+  'className="ghost" onClick={()=>setEditor(null)} disabled={loading}',
+  'aria-busy={loading?"true":undefined}',
+  'event.currentTarget===event.target&&!loading',
+  'aria-pressed={filter==="all"}',
+])if(!forecastClient.includes(token))failures.push(`Previsión ha perdido control/estado canónico: ${token}`);
+for(const forbidden of ["ghost-action","icon-action","forecast-delete-button","link-button"]){if(forecastClient.includes(forbidden))failures.push(`Previsión ha recuperado control legacy en cliente: ${forbidden}`);}
+for(const forbidden of [".forecast-feedback{",".forecast-delete-button{",".link-button{",".forecast-status{display:inline-flex"]){if(forecastCss.includes(forbidden))failures.push(`forecast.css ha recuperado propiedad visual legacy: ${forbidden}`);}
+if(forecastLedgerCss.includes("ghost-action"))failures.push("forecast-ledger.css no debe depender del antiguo ghost-action");
+
+const settingsClient=read("app/configuracion/settings-client.tsx");
+const settingsCss=read("app/settings.css");
+for(const token of [
+  'type SettingsMessage = { tone: "success" | "warning"; text: string }',
+  'tone: "warning", text: "La copia se ha analizado, pero la restauración permanece bloqueada."',
+  'className={`status-badge ${preview.safe ? "ok" : "error"}`}',
+  'className="inline-alert error" role="alert"',
+  'className="inline-alert warning"',
+  'className={`inline-alert ${message.tone} settings-feedback`}',
+  'className="inline-alert error settings-feedback" role="alert"',
+  'className="danger-action"',
+])if(!settingsClient.includes(token))failures.push(`Configuración ha perdido feedback/control canónico: ${token}`);
+for(const forbidden of ["settings-ok","settings-error","settings-warning","backup-status safe","backup-status blocked"]){if(settingsClient.includes(forbidden))failures.push(`Configuración ha recuperado estado legacy en cliente: ${forbidden}`);}
+for(const forbidden of [".settings-ok",".settings-error",".settings-warning",".backup-status{",".restore-box .danger-action{"]){if(settingsCss.includes(forbidden))failures.push(`settings.css ha recuperado propiedad global indebida: ${forbidden}`);}
+if(!settingsCss.includes(".settings-feedback,.backup-messages .inline-alert{margin:0}"))failures.push("Configuración debe conservar únicamente el ajuste local de margen para alertas compartidas");
+
 const iconRules=[...controls.matchAll(/\.icon-button\{([^}]*)\}/g)].map(match=>match[1]).join(";");
 for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRules.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
 
@@ -107,4 +145,4 @@ else{
 }
 
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles premium compartidos, Patrimonio sin isla legacy, shell responsive, CSS delimitado, diagnósticos aislados y wrappers RPC protegidos");
+console.log("Control usage audit OK · controles, feedback y badges premium compartidos · Previsión y Configuración sin islas legacy · Patrimonio canónico · shell responsive · diagnósticos aislados y wrappers RPC protegidos");
