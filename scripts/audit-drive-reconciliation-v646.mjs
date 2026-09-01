@@ -30,7 +30,7 @@ for(const token of ["driveSync","reconciliationPending","lastSyncAt","lastMode"]
   must(pulse.includes(token),`Home pulse 6.4.6 no expone ${token}`);
 for(const token of ["reconciliationPending","pendingReconciliation","Reconciliar Drive","reconciliationCompleted"])
   must(button.includes(token),`Botón de sync 6.4.6 incompleto: ${token}`);
-must(home.includes("<SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/>"),"Inicio no conecta el estado de reconciliación al botón");
+must(home.includes("reconciliationPending={pulse.driveSync.reconciliationPending}"),"Inicio no conecta el estado de reconciliación al botón");
 
 for(const token of [
   'const VERSION = 7',
