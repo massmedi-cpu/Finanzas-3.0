@@ -60,13 +60,29 @@ for(const token of [".balance-chart svg",".balance-chart-line",".balance-chart-a
 for(const token of [".nw-grid-line",".nw-line",".nw-area",".nw-dot"])
   must(netWorth.includes(token),`Patrimonio perdió contrato de gráfica: ${token}`);
 
+for(const token of ["Drive XLSX · datos","· solo lectura","<HomeDecisionGrid analysis={analysisPromise}/>"])
+  must(home.includes(token),`Inicio perdió jerarquía/frescura de fuente compacta: ${token}`);
+for(const forbidden of ["home-freshness","Última comprobación","<HomeDecisionGrid pulse="])
+  must(!home.includes(forbidden),`Inicio ha recuperado información redundante: ${forbidden}`);
+for(const token of [
+  "HomeDecisionGrid({analysis}:{analysis:Promise<AnalysisOverview>})",
+  "Las seis categorías con mayor peso del periodo.",
+  'aria-labelledby="home-spend-title"',
+]) must(homeSections.includes(token),`Inicio perdió el bloque de concentración simplificado: ${token}`);
+for(const forbidden of ["home-attention-section","home-attention-list","Qué necesita atención","Detectados en última sincronización","import type { HomePulse }"])
+  must(!homeSections.includes(forbidden),`Inicio ha recuperado un panel/contrato redundante: ${forbidden}`);
+must(!homeCss.includes(".home-attention-"),"home.css no debe conservar estilos del panel de atención retirado");
+must(!homeCss.includes(".home-freshness"),"home.css no debe conservar el pie redundante de frescura");
+must(homeCss.includes(".home-category-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:28px"),"La concentración de gasto debe aprovechar dos columnas en escritorio");
+must(homeCss.includes("@media(max-width:820px){.home-account-ledger{grid-template-columns:1fr}.home-category-list{grid-template-columns:1fr}"),"La concentración de gasto debe volver a una columna en tablet/móvil");
+
 must(analysisWall.includes("content-visibility:auto"),"La rejilla visual debe diferir pintura fuera de pantalla");
 must(analysisWall.includes("contain-intrinsic-size:auto 338px"),"La pintura diferida debe reservar tamaño intrínseco");
 for(const token of [
   ".home-forecast-section{content-visibility:auto;contain-intrinsic-size:auto 320px}",
-  ".home-decision-grid{content-visibility:auto;contain-intrinsic-size:auto 520px}",
+  ".home-decision-grid{content-visibility:auto;contain-intrinsic-size:auto 390px}",
   ".home-forecast-section{contain-intrinsic-size:auto 360px}",
-  ".home-decision-grid{contain-intrinsic-size:auto 720px}",
+  ".home-decision-grid{contain-intrinsic-size:auto 560px}",
 ]) must(homeCss.includes(token),`Inicio perdió pintura diferida responsive: ${token}`);
 for(const token of [
   "content-visibility:auto;contain-intrinsic-size:auto 82px",
@@ -129,4 +145,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
