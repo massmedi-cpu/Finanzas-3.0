@@ -13,6 +13,7 @@ const receiptLayout=read("lib/document/receipt-layout.ts");
 const visual=read("app/archivo/receipt-geometry-preview.tsx");
 const loader=read("public/vendor/paddleocr-loader.mjs");
 const serverOcr=read("app/api/ocr/receipt/route.ts");
+const serverOcrCore=read("lib/document/server-receipt-ocr.ts");
 const nextConfig=read("next.config.ts");
 const baseOcr=read("lib/document/ticket-ocr.ts");
 const archiveApi=read("app/api/archive/[id]/route.ts");
@@ -46,8 +47,12 @@ must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.include
 must(loader.includes("SERVER_TIMEOUT_MS = 55_000")&&loader.includes("MAX_SIDE = 2600")&&loader.includes("DIRECT_BLOB_LIMIT"),"El proxy OCR móvil ha perdido límites de tiempo, tamaño o escalado");
 must(loader.includes("MAX_SERVER_BYTES = 4.5 * 1024 * 1024")&&loader.includes("constrainedCanvasBlob")&&loader.includes("DIRECT_IMAGE_TYPES")&&loader.includes("HEIC/HEIF"),"El proxy OCR debe convertir formatos decodificables y garantizar una copia por debajo del límite del servidor");
 must(!loader.includes("LEGACY_PADDLE_BASELINE")&&!loader.includes("cdn.jsdelivr.net/npm/@paddleocr"),"El loader conserva una firma Paddle obsoleta que ya no corresponde al runtime real");
-for(const token of ['createWorker("spa"','workerPath: path.join(root, "node_modules", "tesseract.js"','corePath: path.join(root, "node_modules", "tesseract.js-core")','OCR_LANGUAGE_ROOT = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "spa", "4.0.0")','langPath: OCR_LANGUAGE_ROOT','runtime: "server-tesseract-7"','apiError("ocr_server_failed", 503)'])
-  must(serverOcr.includes(token),`OCR de servidor incompleto o sin ruta Tesseract fijada: ${token}`);
+
+must(serverOcr.includes('from "@/lib/document/server-receipt-ocr"')&&serverOcr.includes("recognizeServerReceiptImage"),"La ruta OCR debe delegar en el núcleo Tesseract canónico compartido");
+must(!serverOcr.includes("createWorker("),"La ruta OCR no debe mantener un segundo worker Tesseract paralelo");
+for(const token of ['createWorker("spa"','workerPath:path.join(root,"node_modules","tesseract.js"','corePath:path.join(root,"node_modules","tesseract.js-core")','OCR_LANGUAGE_ROOT=path.join(process.cwd(),"node_modules","@tesseract.js-data","spa","4.0.0")','langPath:OCR_LANGUAGE_ROOT','runtime:"server-tesseract-7"','new ServerReceiptOcrError("ocr_server_failed",503,true'])
+  must(serverOcrCore.includes(token),`Núcleo OCR de servidor incompleto o sin ruta Tesseract fijada: ${token}`);
+must(serverOcr.includes("ServerReceiptOcrError")&&serverOcr.includes("return apiError(error.code,error.status)"),"La ruta OCR debe propagar de forma controlada códigos y estados del núcleo compartido");
 for(const token of ["./node_modules/tesseract.js/**/*","./node_modules/tesseract.js-core/**/*","./node_modules/@tesseract.js-data/spa/**/*","./node_modules/regenerator-runtime/**/*","./node_modules/wasm-feature-detect/**/*","./node_modules/zlibjs/**/*","./node_modules/bmp-js/**/*","./node_modules/is-url/**/*","./node_modules/node-fetch/**/*","./node_modules/idb-keyval/**/*"])
   must(nextConfig.includes(token),`El bundle de /api/ocr/receipt no traza una dependencia runtime necesaria: ${token}`);
 must(!nextConfig.includes("./public/vendor/document-engine/tessdata/**/*"),"El idioma OCR no debe duplicarse en public y node_modules");
@@ -83,4 +88,4 @@ if(failures.length){
   failures.forEach(failure=>console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en servidor · fallo visible y original recuperable · bundle runtime server-only trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en núcleo compartido de servidor · fallo visible y original recuperable · bundle runtime server-only trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
