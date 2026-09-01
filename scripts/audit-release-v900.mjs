@@ -8,6 +8,7 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 const version=read("lib/app-version.ts");
 const pkg=JSON.parse(read("package.json"));
 const migration=read("database/FINANCIAL_APP_9.0.0_PENDING_INVOICE_COMMITMENTS.sql");
+const annualMemory=read("database/FINANCIAL_APP_9.0.0_FORECAST_ANNUAL_OBLIGATION_MEMORY.sql");
 const release=read("database/FINANCIAL_APP_9.0.0_RELEASE.sql");
 const lifecycle=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_CLOSURE.sql");
 const storage=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_STORAGE_DURABILITY.sql");
@@ -36,6 +37,30 @@ for(const token of [
   "'pendingInvoiceCommitments',true",
   "'sourceDataReadOnly',true"
 ])must(migration.includes(token),`Migración 9.0.0 incompleta: ${token}`);
+
+for(const token of [
+  "forecast_annual_memory_candidate",
+  "p_start-2190",
+  "<=35",
+  "*.12",
+  "v_years_observed<2 and not v_strong_signal",
+  "v_age_days<=550",
+  "v_age_days<=950",
+  "v_age_days<=1300",
+  "missed_years*.08",
+  "cross join lateral financial_app.forecast_annual_memory_candidate",
+  "h.estimated_amount",
+  "'annual_tax_insurance_history'",
+  "'memoryRecovered',h.missed_years>0",
+  "'annualObligationMemory',true",
+  "'annualMemoryEvidenceDays',2190",
+  "'annualMemoryMaxAnchorAgeDays',1300",
+  "revoke all on function financial_app.forecast_annual_memory_candidate(uuid,date,date) from public,anon,authenticated,service_role"
+])must(annualMemory.includes(token),`Memoria anual 9.0.0 incompleta: ${token}`);
+must(!/\b(update|delete|insert)\s+financial_app\.transactions\b/i.test(annualMemory),"La memoria anual no puede mutar movimientos bancarios");
+must(annualMemory.includes("forecast_calendar_visible_core(date,integer)"),"La memoria anual debe extender el calendario canónico, no crear un circuito paralelo");
+must(annualMemory.includes("forecast_annual_memory_target_patch_not_applied")&&annualMemory.includes("forecast_annual_memory_unexpected_amount_contract"),"La migración debe fallar cerrada si cambia el contrato que está extendiendo");
+
 for(const token of [
   "financial_app_9_0_0_requires_8_0_0_baseline",
   "financial_app_9_0_0_security_contract_missing",
@@ -121,4 +146,4 @@ for(const token of [
 ])must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 9.0.0 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 9.0.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + ciclo documental canónico protegidos`);
+console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + ciclo documental canónico protegidos`);
