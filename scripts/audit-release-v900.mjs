@@ -11,6 +11,7 @@ const migration=read("database/FINANCIAL_APP_9.0.0_PENDING_INVOICE_COMMITMENTS.s
 const release=read("database/FINANCIAL_APP_9.0.0_RELEASE.sql");
 const lifecycle=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_CLOSURE.sql");
 const storage=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_STORAGE_DURABILITY.sql");
+const safety=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_Z_SAFETY_HARDENING.sql");
 const lifecycleGate=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_RELEASE_GATE.sql");
 const archiveClient=read("app/archivo/archive-client.tsx");
 const archiveApi=read("app/api/archive/route.ts");
@@ -71,6 +72,17 @@ for(const token of [
 ])must(storage.includes(token),`Durabilidad documental 9.0.0 incompleta: ${token}`);
 
 for(const token of [
+  "not state.linked and financial_app.document_has_match_candidate_core",
+  "o.owner_id=v_uid::text",
+  "o.created_at<=now()-interval '15 minutes'",
+  "q.attempts<5",
+  "q.last_attempt_at<=now()-interval '10 minutes'",
+  "'orphanGraceMinutes',15",
+  "'cleanupRetryLimit',5",
+  "'cleanupRetryBackoffMinutes',10"
+])must(safety.includes(token),`Endurecimiento documental 9.0.0 incompleto: ${token}`);
+
+for(const token of [
   "documentLifecycleReady",
   "documentStorageCleanupReady",
   "archiveDetailParityReady",
@@ -92,6 +104,7 @@ for(const token of [
   "financial_app_document_storage_cleanup_count"
 ])must(cleanupWorker.includes(token),`Worker de limpieza documental incompleto: ${token}`);
 must(healthApi.includes("financial_app_document_lifecycle_health"),"No existe autodiagnóstico autenticado del ciclo documental");
+must(!healthApi.includes("processDocumentStorageCleanup"),"El health check vuelve a mutar Storage en una petición GET");
 must(cleanupApi.includes("processDocumentStorageCleanup"),"No existe endpoint autenticado de mantenimiento documental");
 
 for(const token of [
