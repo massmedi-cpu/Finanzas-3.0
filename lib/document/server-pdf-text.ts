@@ -18,15 +18,25 @@ export async function extractServerPdfText(bytes:Buffer):Promise<ServerPdfTextRe
   if(!bytes.byteLength||bytes.byteLength>MAX_PDF_BYTES)throw new ServerPdfTextError("drive_pdf_too_large",false);
   try{
     const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
-    const task=pdfjs.getDocument({data:new Uint8Array(bytes),isEvalSupported:false,useSystemFonts:true});
+    const task=pdfjs.getDocument({data:new Uint8Array(bytes),useSystemFonts:true});
     const pdf=await task.promise;
-    const pagesRead=Math.min(pdf.numPages,MAX_PDF_PAGES);const chunks:string[]=[];
+    const totalPages=pdf.numPages;
+    const pagesRead=Math.min(totalPages,MAX_PDF_PAGES);
+    const chunks:string[]=[];
     try{
       for(let index=1;index<=pagesRead;index++){
-        const page=await pdf.getPage(index);const content=await page.getTextContent();const text=content.items.map(item=>"str" in item?String(item.str||""):"").join(" ").replace(/\s+/g," ").trim();if(text)chunks.push(text);
+        const page=await pdf.getPage(index);
+        const content=await page.getTextContent();
+        const text=content.items.map(item=>"str" in item?String(item.str||""):"").join(" ").replace(/\s+/g," ").trim();
+        if(text)chunks.push(text);
       }
-    }finally{await pdf.destroy().catch(()=>undefined);}
+    }finally{
+      await task.destroy().catch(()=>undefined);
+    }
     const text=chunks.join("\n").trim();
-    return{text,pagesRead,totalPages:pdf.numPages,truncated:pdf.numPages>pagesRead,useful:text.replace(/\s/g,"").length>=MIN_USEFUL_TEXT};
-  }catch(failure){if(failure instanceof ServerPdfTextError)throw failure;throw new ServerPdfTextError("drive_pdf_text_failed",true,failure);}
+    return{text,pagesRead,totalPages,truncated:totalPages>pagesRead,useful:text.replace(/\s/g,"").length>=MIN_USEFUL_TEXT};
+  }catch(failure){
+    if(failure instanceof ServerPdfTextError)throw failure;
+    throw new ServerPdfTextError("drive_pdf_text_failed",true,failure);
+  }
 }
