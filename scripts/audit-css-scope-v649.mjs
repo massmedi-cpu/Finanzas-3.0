@@ -22,7 +22,7 @@ must(archiveLayout.includes('import "../archive-review.css";'),"Archivo debe car
 must(linkingGlobal||linkingScoped,"document-linking.css debe seguir disponible para Archivo y Movimientos");
 for(const token of [".home-workspace{",".home-month-pulse{",".home-flow-section",".home-decision-grid{"])
   must(homeSource.includes(token),`home.css ha perdido estructura local relevante: ${token}`);
-for(const token of [".archive-review-workspace",".triage-"])
+for(const token of [".review-queue{",".review-candidate{"])
   must(archiveReviewSource.includes(token),`archive-review.css ha perdido estructura local relevante: ${token}`);
 must(homeCss>0&&archiveReviewCss>0,"Las hojas route-scoped no pueden quedar vacías");
 
