@@ -90,6 +90,30 @@ const typography=fs.readFileSync("app/typography.css","utf8");
 for(const token of ["--type-metadata:14px","--type-secondary:15px","--type-copy:16px","--type-section:21px","--type-page:clamp(28px,2.6vw,36px)","--type-financial:","font-variant-numeric:tabular-nums"]){if(!typography.includes(token))failures.push(`typography.css ha perdido la escala base: ${token}`);}
 for(const forbidden of [".movement-",".forecast-",".plan-",".home-","[class*=",".mobile-nav",".app-root.private .app-route"]){if(typography.includes(forbidden))failures.push(`typography.css ha vuelto a ser una capa de rescate específica: ${forbidden}`);}
 
+const controls=fs.readFileSync("app/controls.css","utf8");
+for(const token of [
+  "input,select,textarea{min-height:44px",
+  "font-family:inherit;font-size:15px",
+  ':where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),select,textarea){padding:9px 11px}',
+  "textarea{line-height:1.5}",
+]){if(!controls.includes(token))failures.push(`controls.css ha perdido el contrato de campo compartido: ${token}`);}
+
+const sharedControlRoutes=["app/settings.css","app/cash-flow.css","app/budget.css","app/forecast.css","app/goals.css","app/rules.css","app/movements.css","app/archive.css"];
+for(const file of sharedControlRoutes){
+  const css=fs.readFileSync(file,"utf8");
+  for(const match of css.matchAll(/([^{}]+)\{([^{}]*)\}/g)){
+    const selector=match[1];
+    const body=match[2];
+    if(!/(?:input|select|textarea)/.test(selector))continue;
+    const sharedPieces=[
+      /min-height\s*:\s*44px/.test(body),
+      /font-size\s*:\s*15px/.test(body),
+      /padding\s*:\s*(?:8px 10px|8px 11px|9px 11px|9px 12px|10px 11px)/.test(body),
+    ].filter(Boolean).length;
+    if(sharedPieces>=2)failures.push(`${file}: vuelve a duplicar geometría tipográfica del campo compartido en ${selector.trim()}`);
+  }
+}
+
 function readableCss(file,css){
   if(file!=="app/analysis.css")return css;
   const valueRule=/\.donut-center-value,.donut-center-label\{[^}]*\}/g;
@@ -107,4 +131,4 @@ for(const file of redesigned){
 }
 
 if(failures.length){console.error("Visual debt audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS, ${redesigned.length} superficies reformadas, acentos semánticos protegidos, sin aliases de compatibilidad ni microtexto`);
+console.log(`Visual debt audit OK · ${cssFiles.length} hojas CSS, ${redesigned.length} superficies reformadas, campos compartidos canónicos, acentos semánticos protegidos, sin aliases de compatibilidad ni microtexto`);
