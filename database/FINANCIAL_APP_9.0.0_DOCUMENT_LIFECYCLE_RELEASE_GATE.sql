@@ -115,8 +115,15 @@ begin
     and coalesce(v_triage_definition,'') like '%processing%'
     and coalesce(v_triage_definition,'') like '%usescanonicallifecyclestate%';
 
-  v_document_storage_ready:=to_regclass('financial_app.document_deletion_tombstones') is not null
-    and to_regclass('financial_app.document_storage_cleanup_queue') is not null
+  v_document_storage_ready:=
+    exists(
+      select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='financial_app' and c.relname='document_deletion_tombstones'
+    )
+    and exists(
+      select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+      where n.nspname='financial_app' and c.relname='document_storage_cleanup_queue'
+    )
     and coalesce(v_delete_definition,'') like '%document_deletion_tombstones%'
     and coalesce(v_delete_definition,'') like '%document_storage_cleanup_queue%'
     and coalesce(v_duplicate_definition,'') like '%document_storage_cleanup_queue%'
