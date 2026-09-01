@@ -1,6 +1,6 @@
 type CleanupRow={
   cleanup_id:number|string;
-  document_id:string;
+  document_id:string|null;
   bucket:string;
   storage_path:string;
   attempts:number;
@@ -12,6 +12,7 @@ type CleanupClient={
 };
 
 export type DocumentStorageCleanupResult={
+  reconciled:number;
   attempted:number;
   completed:number;
   failed:number;
@@ -25,18 +26,22 @@ function cleanupRows(value:unknown):CleanupRow[]{
     if(!item||typeof item!=="object")return[];
     const row=item as Record<string,unknown>;
     const cleanupId=row.cleanup_id;
-    const documentId=String(row.document_id||"");
+    const documentId=row.document_id==null?null:String(row.document_id);
     const bucket=String(row.bucket||"");
     const storagePath=String(row.storage_path||"");
-    if((typeof cleanupId!=="number"&&typeof cleanupId!=="string")||!documentId||!bucket||!storagePath)return[];
+    if((typeof cleanupId!=="number"&&typeof cleanupId!=="string")||!bucket||!storagePath)return[];
     return[{cleanup_id:cleanupId,document_id:documentId,bucket,storage_path:storagePath,attempts:Number(row.attempts||0)}];
   });
 }
 
 export async function processDocumentStorageCleanup(client:CleanupClient,limit=20):Promise<DocumentStorageCleanupResult>{
   const safeLimit=Math.max(1,Math.min(100,Math.trunc(limit)||20));
+  const reconciledResult=await client.rpc("financial_app_document_storage_cleanup_reconcile");
+  if(reconciledResult.error)return{reconciled:0,attempted:0,completed:0,failed:0,remaining:null,unavailable:true};
+  const reconciled=Math.max(0,Number(reconciledResult.data||0));
+
   const pending=await client.rpc("financial_app_document_storage_cleanup_pending",{p_limit:safeLimit});
-  if(pending.error)return{attempted:0,completed:0,failed:0,remaining:null,unavailable:true};
+  if(pending.error)return{reconciled,attempted:0,completed:0,failed:0,remaining:null,unavailable:true};
 
   const rows=cleanupRows(pending.data);
   let completed=0;
@@ -55,5 +60,5 @@ export async function processDocumentStorageCleanup(client:CleanupClient,limit=2
 
   const remainingResult=await client.rpc("financial_app_document_storage_cleanup_count");
   const remaining=remainingResult.error?null:Number(remainingResult.data||0);
-  return{attempted:rows.length,completed,failed,remaining:Number.isFinite(remaining)?remaining:null,unavailable:false};
+  return{reconciled,attempted:rows.length,completed,failed,remaining:Number.isFinite(remaining)?remaining:null,unavailable:false};
 }
