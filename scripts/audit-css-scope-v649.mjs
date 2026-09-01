@@ -8,8 +8,10 @@ const rootLayout=read("app/layout.tsx");
 const homePage=read("app/page.tsx");
 const archiveLayout=read("app/archivo/layout.tsx");
 const movementsLayout=read("app/movimientos/layout.tsx");
-const homeCss=fs.statSync("app/home.css").size;
-const archiveReviewCss=fs.statSync("app/archive-review.css").size;
+const homeSource=read("app/home.css");
+const archiveReviewSource=read("app/archive-review.css");
+const homeCss=Buffer.byteLength(homeSource);
+const archiveReviewCss=Buffer.byteLength(archiveReviewSource);
 const linkingGlobal=rootLayout.includes('import "./document-linking.css";');
 const linkingScoped=archiveLayout.includes('import "../document-linking.css";')&&movementsLayout.includes('import "../document-linking.css";');
 
@@ -18,11 +20,15 @@ must(!rootLayout.includes('"./archive-review.css"'),"archive-review.css no debe 
 must(homePage.includes('import "./home.css";'),"Inicio debe cargar home.css de forma local");
 must(archiveLayout.includes('import "../archive-review.css";'),"Archivo debe cargar archive-review.css desde su layout");
 must(linkingGlobal||linkingScoped,"document-linking.css debe seguir disponible para Archivo y Movimientos");
-must(homeCss+archiveReviewCss>=11000,`El aislamiento esperado debe sacar al menos 11 KB del ámbito raíz; detectados ${homeCss+archiveReviewCss} bytes`);
+for(const token of [".home-workspace{",".home-month-pulse{",".home-flow-section",".home-decision-grid{"])
+  must(homeSource.includes(token),`home.css ha perdido estructura local relevante: ${token}`);
+for(const token of [".archive-review-workspace",".triage-"])
+  must(archiveReviewSource.includes(token),`archive-review.css ha perdido estructura local relevante: ${token}`);
+must(homeCss>0&&archiveReviewCss>0,"Las hojas route-scoped no pueden quedar vacías");
 
 if(failures.length){
   console.error("Financial App 6.4.9 CSS scope audit FAILED");
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.4.9 CSS scope audit OK · ${homeCss+archiveReviewCss} bytes de CSS específico fuera del layout raíz`);
+console.log(`Financial App 6.4.9 CSS scope audit OK · ${homeCss+archiveReviewCss} bytes de CSS específico permanecen fuera del layout raíz sin umbral que penalice limpieza`);
