@@ -1,0 +1,5 @@
+.detail-dialog-boundary{display:contents}
+.drawer-backdrop{position:fixed;z-index:100;inset:0;display:flex;justify-content:flex-end;overscroll-behavior:contain}
+.movement-drawer,.archive-drawer{max-width:100%;min-width:0;height:100dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;background:var(--surface-elevated);border-left:1px solid var(--border-default);padding:24px;box-shadow:var(--shadow-overlay)}
+.drawer-head{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;border-bottom:1px solid var(--border-subtle)}
+.trace-panel{margin-top:18px;border:1px solid var(--border-subtle);border-radius:var(--radius-medium);background:var(--surface-secondary);overflow:hidden}
