@@ -19,7 +19,9 @@ button[aria-busy="true"],a[aria-busy="true"]{cursor:progress}
 .primary-action[aria-busy="true"]::before,.secondary-action[aria-busy="true"]::before,.ghost[aria-busy="true"]::before,.danger-action[aria-busy="true"]::before{content:"";width:15px;height:15px;flex:0 0 15px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:control-spin .7s linear infinite}
 @keyframes control-spin{to{transform:rotate(360deg)}}
 
-input,select,textarea{min-height:44px;border:1px solid var(--border-default);border-radius:var(--radius-medium);background:var(--surface-secondary);color:var(--text-primary);font-size:15px;transition:border-color var(--motion-micro) var(--ease-standard),background var(--motion-micro) var(--ease-standard),box-shadow var(--motion-micro) var(--ease-standard)}
+input,select,textarea{min-height:44px;border:1px solid var(--border-default);border-radius:var(--radius-medium);background:var(--surface-secondary);color:var(--text-primary);font-family:inherit;font-size:15px;transition:border-color var(--motion-micro) var(--ease-standard),background var(--motion-micro) var(--ease-standard),box-shadow var(--motion-micro) var(--ease-standard)}
+:where(input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]):not([type="button"]):not([type="submit"]):not([type="reset"]):not([type="image"]),select,textarea){padding:9px 11px}
+textarea{line-height:1.5}
 input:hover,select:hover,textarea:hover{border-color:var(--border-strong)}
 input:focus,select:focus,textarea:focus{border-color:var(--focus);background:var(--surface-primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 18%,transparent);outline:none}
 input::placeholder,textarea::placeholder{color:var(--text-disabled)}
