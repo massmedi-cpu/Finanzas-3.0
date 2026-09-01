@@ -52,19 +52,45 @@ const controlPage=read("app/control/page.tsx");
 for(const token of [
   'import { Suspense } from "react"',
   "controlPromise=getControlCenter(month)",
-  "matchingPromise=getMatchingObservability(90)",
-  "documentMatchingDashboard=getDocumentMatchingDashboard(8,90)",
-  "calibrationPromise=getDocumentMatchingCalibration(90)",
-  "policyPromise=getDocumentMatchingPolicyDashboard(90)",
-  "integrityPromise=getSystemIntegrityOverview()",
+  "settleDiagnostic(getMatchingObservability(90))",
+  "settleDiagnostic(getDocumentMatchingDashboard(8,90))",
+  "settleDiagnostic(getDocumentMatchingCalibration(90))",
+  "settleDiagnostic(getDocumentMatchingPolicyDashboard(90))",
+  "settleDiagnostic(getSystemIntegrityOverview())",
+  "DiagnosticResult",
+  "settleDiagnostic",
+  "DiagnosticUnavailable",
   "ControlStreamFallback",
   "MatchingQualityStream",
   "DocumentMatchingStream",
   "CalibrationStream",
   "PolicyStream",
   "IntegrityStream",
-]){if(!controlPage.includes(token))failures.push(`Centro de control ha perdido carga progresiva: ${token}`);}
+]){if(!controlPage.includes(token))failures.push(`Centro de control ha perdido carga progresiva/aislamiento: ${token}`);}
 if(controlPage.includes("await Promise.all(["))failures.push("Centro de control no debe volver a bloquear avisos y cierre mensual esperando todos los diagnósticos técnicos");
 
+const controlSecurityMigration="database/FINANCIAL_APP_9.0.1_CONTROL_RPC_WRAPPERS.sql";
+if(!fs.existsSync(controlSecurityMigration))failures.push(`Falta contrato de seguridad ${controlSecurityMigration}`);
+else{
+  const migration=read(controlSecurityMigration).toLowerCase();
+  const wrappers=[
+    "financial_app_archive_link_calibrated(uuid,text)",
+    "financial_app_archive_unlink_calibrated(uuid,text)",
+    "financial_app_document_matching_calibration(integer)",
+    "financial_app_document_matching_observability(integer)",
+    "financial_app_document_matching_policy_apply(bigint)",
+    "financial_app_document_matching_policy_dashboard(integer)",
+    "financial_app_document_matching_policy_generate(integer)",
+    "financial_app_document_matching_policy_reject(bigint)",
+    "financial_app_document_matching_policy_rollback()",
+  ];
+  for(const wrapper of wrappers){
+    if(!migration.includes(`alter function public.${wrapper} security definer`))failures.push(`Wrapper público sin SECURITY DEFINER protegido: ${wrapper}`);
+    if(!migration.includes(`revoke all on function public.${wrapper} from public, anon`))failures.push(`Wrapper público sin cierre explícito de anon/PUBLIC: ${wrapper}`);
+    if(!migration.includes(`grant execute on function public.${wrapper} to authenticated, service_role`))failures.push(`Wrapper público sin roles autorizados explícitos: ${wrapper}`);
+  }
+  if(/grant\s+execute\s+on\s+function\s+financial_app\.[a-z0-9_]+_core/i.test(migration))failures.push("La reparación de Control no puede reabrir funciones privadas *_core");
+}
+
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles premium, seis destinos primarios, shell responsive y carga progresiva del centro de control protegidos");
+console.log("Control usage audit OK · controles premium, shell responsive, diagnósticos aislados y wrappers RPC privados/públicos protegidos");
