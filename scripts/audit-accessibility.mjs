@@ -18,6 +18,11 @@ const chart=read("components/cash-flow-chart.tsx");
 const layout=read("app/layout.tsx");
 const loading=read("app/loading.tsx");
 const errorState=read("app/error.tsx");
+const detailDialog=read("components/detail-dialog-boundary.tsx");
+const movementLayout=read("app/movimientos/layout.tsx");
+const archiveLayout=read("app/archivo/layout.tsx");
+const movementsClient=read("app/movimientos/movements-client.tsx");
+const archiveClient=read("app/archivo/archive-client.tsx");
 
 if(!globals.includes(".skip-link")) errors.push("Falta estilo global del enlace para saltar al contenido");
 if(!globals.includes(":focus-visible")) errors.push("Falta foco visible global");
@@ -35,6 +40,17 @@ if(!chart.includes('role="group"')) errors.push("Los controles de series del gr�
 if(!loading.includes('role="status"')||!loading.includes('aria-live="polite"')||!loading.includes('aria-busy="true"')) errors.push("El estado de carga no comunica actividad de forma accesible");
 if(!errorState.includes('role="alert"')||!errorState.includes("reset")) errors.push("El estado de error no es anunciable o recuperable");
 
+for(const token of ["MutationObserver","event.key===\"Escape\"","event.key!==\"Tab\"","root.style.overflow=\"hidden\"","body.style.overflow=\"hidden\"","restore.focus()","focusDialog(dialog)"]){
+  if(!detailDialog.includes(token)) errors.push(`El controlador de diálogos ha perdido comportamiento modal: ${token}`);
+}
+for(const [name,routeLayout] of [["Movimientos",movementLayout],["Archivo",archiveLayout]]){
+  if(!routeLayout.includes("DetailDialogBoundary")) errors.push(`${name}: falta el límite modal compartido`);
+  if(!routeLayout.includes('import "../detail-dialog.css";')) errors.push(`${name}: falta el estilo modal compartido route-scoped`);
+}
+for(const [name,client] of [["Movimientos",movementsClient],["Archivo",archiveClient]]){
+  if(!client.includes('role="dialog"')||!client.includes('aria-modal="true"')||!client.includes('aria-label="Cerrar"')) errors.push(`${name}: el cajón de detalle no conserva semántica/cierre accesible`);
+}
+
 const pages=walk("app").filter(path=>path.endsWith("page.tsx"));
 const protectedPages=pages.filter(page=>read(page).includes('id="main-content"'));
 for(const page of protectedPages){
@@ -49,4 +65,4 @@ if(errors.length){
   for(const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · shell único, navegación, foco, carga, errores, movimiento reducido y gráficos cubiertos`);
+console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · shell único, navegación, foco, diálogos, carga, errores, movimiento reducido y gráficos cubiertos`);
