@@ -7,6 +7,7 @@ import type { ArchiveMovementRef } from "@/lib/financial/archive";
 import type { DocumentTriageAction } from "@/lib/financial/document-triage";
 import type { DocumentOperations } from "@/lib/financial/document-operations";
 import { formatEuro } from "@/lib/format/es-es";
+import { TriageQuickResolution } from "./triage-quick-resolution";
 
 const dateFormat=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 const date=(value:string|null)=>value?dateFormat.format(new Date(`${value}T12:00:00`)):"—";
@@ -75,6 +76,10 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
     focusDocument(visibleDocuments[next].id);
   }
 
+  function notifyChanged(nextMessage:string){setError(null);setMessage(nextMessage);setLastApplied([]);router.refresh();}
+  function notifyResolved(documentId:string,nextMessage:string){setError(null);setMessage(nextMessage);setLastApplied([]);setSessionDone(current=>current+1);moveAfter([documentId]);router.refresh();}
+  function notifyError(nextError:string){setError(nextError||null);if(nextError)setMessage(null);}
+
   function toggle(documentId:string){setSelected(current=>current.includes(documentId)?current.filter(id=>id!==documentId):[...current,documentId]);}
   function selectSafe(){
     const limit=Math.max(1,Math.min(50,data.rules.maxBatchSize||50));
@@ -141,7 +146,7 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
     {message&&<div className="inline-alert success" role="status">{message}</div>}
 
     <section className="queue-command" aria-label="Cola de revisión documental">
-      <div className="queue-command-head"><div><span className="queue-kicker">Cola de trabajo</span><strong>{data.documents.length} pendiente{data.documents.length===1?"":"s"}</strong><p>Trabaja un documento cada vez o procesa en lote únicamente los casos que siguen siendo seguros al confirmar.</p></div><div className="queue-session"><span>Procesados esta sesión</span><strong>{sessionDone}</strong></div></div>
+      <div className="queue-command-head"><div><span className="queue-kicker">Bandeja de conciliación</span><strong>{data.documents.length} pendiente{data.documents.length===1?"":"s"}</strong><p>Resuelve cada documento desde esta vista y avanza al siguiente. Las acciones seguras siguen requiriendo confirmación y revalidación en servidor.</p></div><div className="queue-session"><span>Procesados esta sesión</span><strong>{sessionDone}</strong></div></div>
       <div className="queue-controls">
         <div className="queue-filters" role="group" aria-label="Filtrar cola"><button type="button" className={filter==="all"?"active":""} aria-pressed={filter==="all"} onClick={()=>setFilter("all")}>Todos <span>{data.documents.length}</span></button><button type="button" className={filter==="safe"?"active":""} aria-pressed={filter==="safe"} onClick={()=>setFilter("safe")}>Seguros <span>{safeDocuments.length}</span></button><button type="button" className={filter==="manual"?"active":""} aria-pressed={filter==="manual"} onClick={()=>setFilter("manual")}>Manuales <span>{manualCount}</span></button></div>
         <label className="queue-search"><span className="sr-only">Buscar en la cola</span><input type="search" value={query} onChange={event=>setQuery(event.target.value)} placeholder="Buscar archivo, emisor, fecha o importe"/></label>
@@ -171,17 +176,18 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
         const selectedSafe=selected.includes(document.id);
         const isActive=document.id===activeId;
         return <section id={`triage-${document.id}`} className={`triage-item triage-${document.action}${document.safeOperation?" triage-safe":""}${isActive?" triage-active":""}`} key={document.id} aria-current={isActive?"step":undefined}>
-          <header><div className="triage-document-heading">{document.safeOperation&&<label className="operation-check"><input type="checkbox" checked={selectedSafe} onChange={()=>toggle(document.id)} disabled={busy!==null}/><span className="sr-only">Seleccionar operación segura para {document.fileName}</span></label>}<div><div className="triage-item-title"><span className="triage-priority">Prioridad {document.priorityScore}</span><span className="triage-action">{actionLabel(document.action)}</span>{document.safeOperation&&<span className="operation-safe-badge">Seguro y reversible</span>}</div><h2>{document.fileName}</h2><p>{document.merchant||"Emisor sin identificar"} · {date(document.documentDate)} · {money(document.amount)}</p></div></div><div className="triage-header-actions">{!isActive&&<button className="primary-action" type="button" onClick={()=>focusDocument(document.id)}>Revisar</button>}{document.storageUrl&&<a className="ghost button-link" href={document.storageUrl} target="_blank" rel="noreferrer">Original</a>}<Link className="ghost button-link" href={archiveQuery}>Abrir en Archivo</Link></div></header>
+          <header><div className="triage-document-heading">{document.safeOperation&&<label className="operation-check"><input type="checkbox" checked={selectedSafe} onChange={()=>toggle(document.id)} disabled={busy!==null}/><span className="sr-only">Seleccionar operación segura para {document.fileName}</span></label>}<div><div className="triage-item-title"><span className="triage-priority">Prioridad {document.priorityScore}</span><span className="triage-action">{actionLabel(document.action)}</span>{document.safeOperation&&<span className="operation-safe-badge">Seguro y reversible</span>}</div><h2>{document.fileName}</h2><p>{document.merchant||"Emisor sin identificar"} · {date(document.documentDate)} · {money(document.amount)}</p></div></div><div className="triage-header-actions">{!isActive&&<button className="primary-action" type="button" onClick={()=>focusDocument(document.id)}>Revisar</button>}{document.storageUrl&&<a className="ghost button-link" href={document.storageUrl} target="_blank" rel="noreferrer">Original</a>}<Link className="ghost button-link" href={archiveQuery}>Abrir ficha completa</Link></div></header>
           {isActive&&<div className="triage-detail">
             <p className="triage-hint">{actionHint(document.action)}</p>
             {document.safeOperation&&<div className="operation-safe-note"><strong>{document.safeOperation.label}</strong><span>Solo se ejecutará si al confirmar sigue cumpliendo exactamente las condiciones de seguridad.</span></div>}
+            <TriageQuickResolution document={document} disabled={busy!==null} onChanged={notifyChanged} onResolved={notifyResolved} onError={notifyError}/>
             {!!document.reasons.length&&<ul className="triage-reasons">{document.reasons.map(reason=><li key={reason}>{reason}</li>)}</ul>}
             {canMatch&&suggestions.length>0&&<div className="review-candidates">{suggestions.map((candidate,index)=><article key={`${document.id}-${candidate.sourceId}`} className={`review-candidate${index===0?" best":""}`}><div><div className="candidate-heading"><strong>{index===0?"Mejor coincidencia":"Alternativa"}</strong><span className={`confidence confidence-${candidate.confidenceTier||"unknown"}`}>Confianza {confidenceLabel(candidate.confidenceTier).toLowerCase()}</span></div><span>{candidate.counterparty||candidate.concept||candidate.sourceId}</span><small>{date(candidate.date)} · {money(candidate.amount)}{candidate.score!=null?` · score ${Math.round(Number(candidate.score))}%`:""}{candidate.scoreMargin!=null&&candidate.candidateRank===1?` · margen ${Math.round(Number(candidate.scoreMargin))} pt`:""}{candidate.daysDiff!=null?` · ${Math.abs(candidate.daysDiff)} día${Math.abs(candidate.daysDiff)===1?"":"s"} de diferencia`:""}{candidate.amountDiff!=null?` · diferencia ${money(Math.abs(candidate.amountDiff))}`:""}</small>{candidate.reasons?.length?<small>{candidate.reasons.join(" · ")}</small>:null}</div><button className={index===0?"primary-action":"ghost"} type="button" disabled={busy!==null} onClick={()=>link(document.id,candidate)}>{busy===document.id?"Asociando…":"Asociar manualmente"}</button></article>)}</div>}
-            {canMatch&&!suggestions.length&&<div className="candidate-empty"><strong>Sin candidatos disponibles</strong><span>Este caso necesita completar datos o localizar el movimiento desde Archivo antes de poder asociarlo.</span></div>}
+            {canMatch&&!suggestions.length&&<div className="candidate-empty"><strong>Sin candidatos disponibles</strong><span>Completa los datos y usa “Buscar movimiento compatible” para localizar el cargo sin abandonar el flujo de conciliación.</span></div>}
           </div>}
         </section>;
       })}
     </div>
-    <p className="triage-safety">Nada se asocia ni se archiva de forma automática. Las operaciones seguras requieren selección y confirmación explícitas; el servidor vuelve a validar cada documento al ejecutar y los casos ambiguos permanecen siempre en revisión manual.</p>
+    <p className="triage-safety">Nada se asocia ni se archiva de forma automática. Guardar o validar datos solo recalcula la bandeja; las operaciones seguras requieren confirmación explícita, el servidor vuelve a validar cada documento y los casos ambiguos permanecen siempre en revisión manual.</p>
   </div>;
 }
