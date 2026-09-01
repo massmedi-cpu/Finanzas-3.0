@@ -17,7 +17,7 @@ export const metadata:Metadata={
   icons:{icon:[{url:"/icon.png",type:"image/png",sizes:"512x512"}],apple:[{url:"/apple-icon.png",type:"image/png",sizes:"180x180"}]},
   appleWebApp:{capable:true,title:"Financial App",statusBarStyle:"default"}
 };
-export const viewport:Viewport={themeColor:THEME_CHROME.light,colorScheme:"light dark"};
+export const viewport:Viewport={themeColor:THEME_CHROME.light,colorScheme:"light dark",viewportFit:"cover"};
 
 const themeBootstrap=`try{const raw=localStorage.getItem('financial-app-theme');const p=raw==='light'||raw==='dark'||raw==='system'?raw:'system';const e=p==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):p;const r=document.documentElement;r.dataset.theme=e;r.dataset.themePreference=p;r.style.colorScheme=e;let m=document.querySelector('meta[name="theme-color"]');if(!m){m=document.createElement('meta');m.name='theme-color';document.head.appendChild(m)}m.content=e==='dark'?'${THEME_CHROME.dark}':'${THEME_CHROME.light}'}catch(error){void error}`;
 
