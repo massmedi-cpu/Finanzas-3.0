@@ -47,7 +47,7 @@ export default async function Home(){
   const pulse=await pulsePromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace home-workspace">
-    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><div className="home-sync-action"><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/><small>Datos de Drive · {fmtDateTime(pulse.sync?.sourceModifiedAt)}</small></div></div></header>
+    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><div className="home-sync-action"><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/><small>Drive XLSX · datos {fmtDateTime(pulse.sync?.sourceModifiedAt)} · solo lectura</small></div></div></header>
 
     <Suspense fallback={<HomeAccountsFallback/>}><HomeAccountsSection data={accountsPromise}/></Suspense>
 
@@ -61,8 +61,6 @@ export default async function Home(){
 
     <Suspense fallback={<HomeFlowFallback/>}><HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/></Suspense>
     <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>
-    <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid pulse={pulse} analysis={analysisPromise} budget={budgetPromise}/></Suspense>
-
-    <footer className="home-freshness"><span>Fuente oficial: Google Drive XLSX · solo lectura.</span><span>Última comprobación {pulse.sync?.finishedAt?fmtDateTime(pulse.sync.finishedAt):"pendiente"}.</span></footer>
+    <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid analysis={analysisPromise}/></Suspense>
   </section></main>;
 }
