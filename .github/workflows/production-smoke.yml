@@ -117,6 +117,63 @@ jobs:
             check_redirect "$path"
           done
 
+      - name: Verify installable PWA assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          version_from_headers() {
+            awk 'BEGIN{IGNORECASE=1} /^x-financial-app-version:/ {gsub("\r",""); print $2}' "$1" | tail -n 1
+          }
+          fetch_asset() {
+            path="$1"
+            output="$2"
+            expected_type="$3"
+            code=$(curl -sS -H 'Cache-Control: no-cache' -D /tmp/pwa-headers -o "$output" -w '%{http_code}' --max-time 20 "$BASE_URL$path" || true)
+            [ "$code" = "200" ] || { echo "Expected 200 for $path, got $code"; exit 1; }
+            grep -Eqi "^content-type: ${expected_type}" /tmp/pwa-headers || { echo "Wrong content type for $path"; cat /tmp/pwa-headers; exit 1; }
+            deployed=$(version_from_headers /tmp/pwa-headers)
+            [ "$deployed" = "$EXPECTED_VERSION" ] || { echo "Wrong PWA asset version for $path: ${deployed:-missing}"; exit 1; }
+          }
+
+          fetch_asset /manifest.webmanifest /tmp/manifest.webmanifest 'application/manifest\+json'
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const manifest=JSON.parse(readFileSync('/tmp/manifest.webmanifest','utf8'));
+          const expected=[
+            ['/icons/icon-192.png','192x192','maskable'],
+            ['/icons/icon-512.png','512x512','maskable'],
+            ['/icons/icon-192.png','192x192','any'],
+            ['/icons/icon-512.png','512x512','any'],
+          ];
+          if(manifest.name!=='Financial App'||manifest.display!=='standalone'||manifest.start_url!=='/') throw new Error('Manifest PWA incompleto');
+          for(const [src,sizes,purpose] of expected){
+            if(!manifest.icons?.some(icon=>icon.src===src&&icon.sizes===sizes&&icon.type==='image/png'&&icon.purpose===purpose)) throw new Error(`Falta icono PWA ${src} ${sizes} ${purpose}`);
+          }
+          NODE
+
+          fetch_asset /icon.png /tmp/icon-512-meta.png 'image/png'
+          fetch_asset /apple-icon.png /tmp/icon-180.png 'image/png'
+          fetch_asset /icons/icon-192.png /tmp/icon-192.png 'image/png'
+          fetch_asset /icons/icon-512.png /tmp/icon-512-manifest.png 'image/png'
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const expected=[
+            ['/tmp/icon-512-meta.png',512,512],
+            ['/tmp/icon-180.png',180,180],
+            ['/tmp/icon-192.png',192,192],
+            ['/tmp/icon-512-manifest.png',512,512],
+          ];
+          for(const [path,width,height] of expected){
+            const file=readFileSync(path);
+            if(file.subarray(0,8).toString('hex')!=='89504e470d0a1a0a'||file.readUInt32BE(16)!==width||file.readUInt32BE(20)!==height) throw new Error(`${path} no es PNG ${width}x${height}`);
+          }
+          if(!readFileSync('/tmp/icon-512-meta.png').equals(readFileSync('/tmp/icon-512-manifest.png'))) throw new Error('Los iconos 512 de metadata y manifest no coinciden');
+          NODE
+
+          code=$(curl -sS -D /tmp/favicon-headers -o /dev/null -w '%{http_code}' --max-redirs 0 --max-time 20 "$BASE_URL/favicon.ico" || true)
+          ([ "$code" = "307" ] || [ "$code" = "308" ]) || { echo "Expected favicon redirect, got $code"; exit 1; }
+          grep -Eqi '^location: .*/icon.png' /tmp/favicon-headers || { echo 'Favicon no redirige al icono canónico'; cat /tmp/favicon-headers; exit 1; }
+
       - name: Verify private API boundary
         shell: bash
         run: |
@@ -153,4 +210,4 @@ jobs:
           check_ocr_api_unauthorized
 
       - name: Smoke gate passed
-        run: echo "Production smoke OK · Financial App $EXPECTED_VERSION · propagación global estable, dominio canónico, rutas privadas, APIs y bundle OCR verificados."
+        run: echo "Production smoke OK · Financial App $EXPECTED_VERSION · propagación global estable, PWA instalable, dominio canónico, rutas privadas, APIs y bundle OCR verificados."
