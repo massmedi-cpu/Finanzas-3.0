@@ -34,13 +34,28 @@ for(const [file,token] of routeStyleContracts){must(fs.existsSync(file),`Falta l
 
 must(!fs.existsSync("lib/document/ticket-ocr-v305.ts"),"Permanece el motor OCR v305 sustituido");
 const tsconfig=read("tsconfig.json");must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"El OCR público no apunta al motor canónico");
-const serverOcr=read("app/api/ocr/receipt/route.ts");
-for(const token of ["queueTail: Promise<void> = Promise.resolve()","withExclusiveOcr","queueTail = previous.then(() => slot)","assertRuntimeAssets()","runtimeRootChecked","invalidateWorker()","OCR_QUEUE_TIMEOUT_MS = 8_000","OCR_TIMEOUT_MS = 45_000"])
-  must(serverOcr.includes(token),`OCR de servidor ha perdido resiliencia de cola/runtime: ${token}`);
+const serverOcrRoute=read("app/api/ocr/receipt/route.ts");
+const sharedServerOcrFile="lib/document/server-receipt-ocr.ts";
+const serverOcr=fs.existsSync(sharedServerOcrFile)?read(sharedServerOcrFile):serverOcrRoute;
+if(fs.existsSync(sharedServerOcrFile)){
+  must(serverOcrRoute.includes('from "@/lib/document/server-receipt-ocr"'),"El endpoint OCR debe consumir el núcleo de servidor compartido");
+  must(serverOcrRoute.includes("recognizeServerReceiptImage"),"El endpoint OCR ha perdido el reconocedor compartido");
+  must(!serverOcrRoute.includes("createWorker"),"El endpoint OCR no debe duplicar el worker del núcleo compartido");
+}
+for(const [pattern,label] of [
+  [/queueTail\s*:\s*Promise<void>\s*=\s*Promise\.resolve\(\)/,"queueTail Promise.resolve"],
+  [/withExclusiveOcr/,"withExclusiveOcr"],
+  [/queueTail\s*=\s*previous\.then\(\(\)\s*=>\s*slot\)/,"queueTail encadenada"],
+  [/assertRuntimeAssets\(\)/,"assertRuntimeAssets"],
+  [/runtimeRootChecked/,"runtimeRootChecked"],
+  [/invalidateWorker\(\)/,"invalidateWorker"],
+  [/(?:OCR_QUEUE_TIMEOUT_MS|DEFAULT_QUEUE_TIMEOUT_MS)\s*=\s*8_000/,"timeout de cola 8s"],
+  [/(?:OCR_TIMEOUT_MS|DEFAULT_TIMEOUT_MS)\s*=\s*45_000/,"timeout OCR 45s"],
+])must(pattern.test(serverOcr),`OCR de servidor ha perdido resiliencia de cola/runtime: ${label}`);
 must(!serverOcr.includes("let queue: Promise<void> = Promise.resolve()"),"OCR no puede recuperar la cola desacoplada que permitía solapar reconocimientos tras timeout");
-const topLevelAssetGuard=serverOcr.indexOf("for (const runtimeFile of OCR_RUNTIME_FILES)");
+const topLevelAssetGuard=serverOcr.indexOf("for(const runtimeFile of OCR_RUNTIME_FILES)")>=0?serverOcr.indexOf("for(const runtimeFile of OCR_RUNTIME_FILES)"):serverOcr.indexOf("for (const runtimeFile of OCR_RUNTIME_FILES)");
 const assetGuardFunction=serverOcr.indexOf("function assertRuntimeAssets()");
-must(topLevelAssetGuard>assetGuardFunction,"Los assets OCR deben validarse de forma perezosa dentro de assertRuntimeAssets, no al importar la ruta");
+must(assetGuardFunction>=0&&topLevelAssetGuard>assetGuardFunction,"Los assets OCR deben validarse de forma perezosa dentro de assertRuntimeAssets, no al importar el módulo");
 const appVersion=read("lib/app-version.ts");
 const versionMatch=appVersion.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);must(Boolean(versionMatch),"APP_VERSION debe ser semántica y explícita");
 const runtimeVersion=versionMatch?versionMatch.slice(1).join("."):null;
