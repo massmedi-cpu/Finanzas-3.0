@@ -11,7 +11,9 @@ const chartTokens=read("app/analisis/chart-tokens.css");
 const analysisLayout=read("app/analisis/layout.tsx");
 const analysisWall=read("app/analysis-visual-wall.css");
 const dashboard=read("components/analysis-visual-dashboard.tsx");
-const cashFlow=read("app/cash-flow.css");
+const cashFlowPage=read("app/cash-flow.css");
+const cashFlowChart=read("app/cash-flow-chart.css");
+const cashFlowLayout=read("app/cash-flow/layout.tsx");
 const home=read("app/page.tsx");
 const homeSections=read("app/home-sections.tsx");
 const accounts=read("app/accounts.css");
@@ -37,8 +39,14 @@ must(analysisLayout.includes('import "./chart-tokens.css";'),"Análisis debe car
 must(analysisLayout.indexOf('import "./chart-tokens.css";')<analysisLayout.indexOf('import "../analysis.css";'),"Análisis debe preservar cascada tokens -> analysis.css");
 
 for(const token of [".cf-income",".cf-expense",".cf-acc-line",".cf-acc-dot",".cf-grid line",".cf-series-controls"])
-  must(cashFlow.includes(token),`Cash Flow perdió contrato visual canónico: ${token}`);
-must(home.includes('import "./cash-flow.css";'),"Inicio debe seguir cargando cash-flow.css al reutilizar CashFlowChart");
+  must(cashFlowChart.includes(token),`Gráfica Cash Flow compartida perdió contrato visual canónico: ${token}`);
+for(const token of [".cf-summary",".cf-filter-panel",".cf-forecast-zone",".cf-rules"])
+  must(cashFlowPage.includes(token),`Página Cash Flow perdió contrato visual propio: ${token}`);
+for(const token of [".cf-income",".cf-expense",".cf-acc-line",".cf-acc-dot",".cf-series-controls"])
+  must(!cashFlowPage.includes(token),`cash-flow.css no debe volver a duplicar la gráfica compartida: ${token}`);
+must(home.includes('import "./cash-flow-chart.css";'),"Inicio debe cargar únicamente cash-flow-chart.css al reutilizar CashFlowChart");
+must(!home.includes('import "./cash-flow.css";'),"Inicio no debe volver a cargar todos los estilos de la página Cash Flow");
+must(cashFlowLayout.includes('import "../cash-flow.css";')&&cashFlowLayout.includes('import "../cash-flow-chart.css";'),"La ruta Cash Flow debe combinar estilos propios y gráfica compartida");
 must(homeSections.includes("CashFlowChart"),"Inicio debe seguir reutilizando CashFlowChart");
 for(const token of [".balance-chart svg",".balance-chart-line",".balance-chart-area",".balance-chart-dot"])
   must(accounts.includes(token),`Cuentas perdió contrato BalanceChart: ${token}`);
@@ -69,6 +77,7 @@ for(const suffix of historical){
 
 const loadingBytes=fs.statSync("app/route-loading.css").size;
 const tokenBytes=fs.statSync("app/analisis/chart-tokens.css").size;
+const chartBytes=fs.statSync("app/cash-flow-chart.css").size;
 must(loadingBytes<3292,`route-loading.css debe ser menor que el antiguo visual.css de 3292 bytes; detectados ${loadingBytes}`);
 
 if(failures.length){
@@ -76,4 +85,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global 3292 bytes retirado · skeleton ${loadingBytes} bytes · tokens locales ${tokenBytes} bytes · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global 3292 bytes retirado · skeleton ${loadingBytes} bytes · tokens locales ${tokenBytes} bytes · gráfica Cash Flow compartida ${chartBytes} bytes · 24 gráficos preservados`);

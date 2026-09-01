@@ -1,5 +1,5 @@
 import "./home.css";
-import "./cash-flow.css";
+import "./cash-flow-chart.css";
 import "./home-streaming.css";
 import { Suspense } from "react";
 import { formatEuro, formatInteger } from "@/lib/format/es-es";

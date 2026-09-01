@@ -38,15 +38,29 @@ const chrome=read("app/chrome.css");
 const navigation=read("components/app-navigation.tsx");
 for(const token of [
   ".product-sidebar{","position:fixed",".product-primary-nav{",".product-more-menu{",
+  ".product-more-groups{",".product-more-group h3{","overscroll-behavior:contain",
   "@media(max-width:980px)",".mobile-bottom-nav{","inset:auto 0 0 0","env(safe-area-inset-bottom,0px)","overflow-x:clip"
 ]){if(!chrome.includes(token))failures.push(`Shell adaptable incompleto: falta ${token}`);}
-for(const token of ["mobile-bottom-nav","product-more-menu","Más",'aria-expanded={moreOpen}','aria-controls="product-more-menu"','FinancialIcon']){if(!navigation.includes(token))failures.push(`Navegación adaptable incompleta: falta ${token}`);}
+for(const token of [
+  "mobile-bottom-nav","product-more-menu","Más",'aria-expanded={moreOpen}','aria-controls="product-more-menu"','aria-haspopup="dialog"','FinancialIcon',
+  "secondaryGroups","Organizar","Planificar","Sistema","dialogRef","triggerRef","root.style.overflow=\"hidden\"",'event.key!=="Tab"','event.key==="Escape"'
+]){if(!navigation.includes(token))failures.push(`Navegación adaptable/premium incompleta: falta ${token}`);}
 const requiredPrimary=['["Inicio","/","home"]','["Cash Flow","/cash-flow","cash-flow"]','["Movimientos","/movimientos","movements"]','["Análisis","/analisis","analysis"]','["Previsión","/prevision","forecast"]','["Archivo","/archivo","archive"]'];
 let lastIndex=-1;
 for(const token of requiredPrimary){const index=navigation.indexOf(token);if(index<0)failures.push(`Falta destino primario requerido: ${token}`);else if(index<=lastIndex)failures.push(`Orden primario incorrecto en ${token}`);lastIndex=index;}
 if((navigation.match(/primary\.map/g)||[]).length<2)failures.push("Las seis secciones primarias deben alimentar sidebar y bottom navigation desde una única fuente de verdad");
-if(!navigation.includes('role="dialog"')||!navigation.includes('event.key==="Escape"'))failures.push("Más debe comportarse como superficie modal accesible y cerrarse con Escape");
+if(!navigation.includes('role="dialog"')||!navigation.includes('aria-modal="true"')||!navigation.includes('aria-labelledby="product-more-title"'))failures.push("Más debe comportarse como superficie modal accesible, etiquetada y con foco contenido");
 if(chrome.includes(".sidebar{")||navigation.includes("AppSidebar"))failures.push("El shell ha recuperado la sidebar SaaS retirada");
+
+const homePage=read("app/page.tsx");
+const cashFlowLayout=read("app/cash-flow/layout.tsx");
+const cashFlowCss=read("app/cash-flow.css");
+const sharedChartCss=read("app/cash-flow-chart.css");
+if(homePage.includes('import "./cash-flow.css"'))failures.push("Inicio no debe cargar todos los estilos de la sección Cash Flow");
+for(const token of ['import "./cash-flow-chart.css"','import "./home.css"'])if(!homePage.includes(token))failures.push(`Inicio ha perdido su límite CSS: ${token}`);
+for(const token of ['import "../cash-flow.css"','import "../cash-flow-chart.css"'])if(!cashFlowLayout.includes(token))failures.push(`Cash Flow ha perdido sus estilos route-scoped/compartidos: ${token}`);
+for(const token of [".cf-chart-wrap{",".cf-series-controls{",".cf-tooltip{",".cf-chart-data{"])if(!sharedChartCss.includes(token))failures.push(`La gráfica compartida ha perdido estilo canónico: ${token}`);
+for(const token of [".cf-series-controls{",".cf-tooltip{",".cf-chart-data{"])if(cashFlowCss.includes(token))failures.push(`cash-flow.css vuelve a duplicar estilos compartidos: ${token}`);
 
 const controlPage=read("app/control/page.tsx");
 for(const token of [
@@ -93,4 +107,4 @@ else{
 }
 
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles premium, shell responsive, diagnósticos aislados y wrappers RPC privados/públicos protegidos");
+console.log("Control usage audit OK · controles premium, shell responsive, menú modal agrupado, CSS compartido delimitado, diagnósticos aislados y wrappers RPC protegidos");
