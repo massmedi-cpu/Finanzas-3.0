@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
+import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
 import { asNumber, asRecord, asString } from "@/lib/validation/json";
 
 export const dynamic = "force-dynamic";
@@ -17,6 +18,8 @@ export async function GET(request: NextRequest) {
   const search = request.nextUrl.searchParams.get("search");
   const limit = boundedInteger(request.nextUrl.searchParams.get("limit"), 200, 1, 200);
   const offset = boundedInteger(request.nextUrl.searchParams.get("offset"), 0, 0, 1_000_000);
+  if(offset===0)await processDocumentStorageCleanup(supabase,25);
+
   // v6: active documents are the safe/default API scope. Historical records must
   // be requested explicitly; the old ambiguous `archived` flag is intentionally ignored.
   const includeArchived = request.nextUrl.searchParams.get("includeArchived") === "1";
@@ -78,17 +81,13 @@ export async function POST(request: NextRequest) {
         return apiFailure("archive.duplicate.reuse", reused.error, "archive_create_failed");
       }
 
-      const previousStoragePath =
-        current.data.storageProvider === "supabase_storage" && current.data.storagePath
-          ? String(current.data.storagePath)
-          : null;
-      let storageCleanupPending = false;
-      if (previousStoragePath && previousStoragePath !== storagePath) {
-        const removed = await supabase.storage.from("financial-app-documents").remove([previousStoragePath]);
-        storageCleanupPending = Boolean(removed.error);
-      }
-
-      return apiJson({ ok: true, id, duplicate: true, storageCleanupPending });
+      const cleanup=await processDocumentStorageCleanup(supabase,25);
+      return apiJson({
+        ok: true,
+        id,
+        duplicate: true,
+        storageCleanupPending: cleanup.remaining==null||cleanup.remaining>0||cleanup.failed>0,
+      });
     }
   }
 
