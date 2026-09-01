@@ -15,6 +15,7 @@ type Props={
   page:number;
   pageSize:number;
 };
+type Feedback={tone:"success"|"error";message:string};
 
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 function formatDate(value:string|null,createdAt:string){const raw=value?`${value}T12:00:00`:createdAt;return dates.format(new Date(raw))}
@@ -27,7 +28,7 @@ function archiveHref(view:ArchiveLifecycleState,query:string,page=1){const param
 export function ArchiveLifecycleClient({documents,counts,total,view,query,page,pageSize}:Props){
   const router=useRouter();
   const [busy,setBusy]=useState<string|null>(null);
-  const [feedback,setFeedback]=useState<string|null>(null);
+  const [feedback,setFeedback]=useState<Feedback|null>(null);
   const totalPages=Math.max(1,Math.ceil(total/pageSize));
   const firstVisible=total===0?0:(page-1)*pageSize+1;
   const lastVisible=Math.min(total,page*pageSize);
@@ -39,13 +40,13 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
       const response=await fetch(`/api/archive/${document.id}?action=restore`,{method:"POST"});
       const body=await response.json();
       if(!response.ok)throw new Error(body.error||"document_state_failed");
-      setFeedback("Documento desarchivado y devuelto a Nuevas.");
+      setFeedback({tone:"success",message:"Documento desarchivado y devuelto a Nuevas."});
       router.refresh();
-    }catch{setFeedback("No se ha podido desarchivar el documento.")}
+    }catch{setFeedback({tone:"error",message:"No se ha podido desarchivar el documento."})}
     finally{setBusy(null)}
   }
 
-  return <section className="archive-lifecycle" aria-label="Estados de Archivo">
+  return <section className="archive-lifecycle" aria-label="Estados de Archivo" aria-busy={Boolean(busy)||undefined}>
     <nav className="archive-state-nav" aria-label="Estados documentales">
       <Link className={view==="new"?"active":""} href={archiveHref("new",query)}><span>Nuevas</span><b>{counts.new}</b></Link>
       <Link className={view==="pending"?"active":""} href={archiveHref("pending",query)}><span>Pendientes</span><b>{counts.pending}</b></Link>
@@ -59,18 +60,18 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
           <input type="hidden" name="view" value={view}/>
           <label><span>Buscar en esta vista</span><input name="q" type="search" defaultValue={query} placeholder="Proveedor, archivo o texto OCR…" maxLength={160}/></label>
           <button className="secondary-action" type="submit">Buscar</button>
-          {query&&<Link className="ghost-action" href={archiveHref(view,"")}>Limpiar</Link>}
+          {query&&<Link className="ghost button-link" href={archiveHref(view,"")}>Limpiar</Link>}
         </form>
       </div>
 
-      {feedback&&<div className="inline-alert info" role="status">{feedback}</div>}
+      {feedback&&<div className={`inline-alert ${feedback.tone}`} role={feedback.tone==="error"?"alert":"status"} aria-live="polite">{feedback.message}</div>}
       {view==="pending"&&total>0&&<div className="archive-review-callout"><div><strong>{total} documento{total===1?"":"s"} requieren revisión</strong><span>Resuelve OCR y asociaciones sugeridas antes de archivarlos.</span></div><Link className="primary-action" href="/archivo/revision">Abrir revisión</Link></div>}
 
       <div className="archive-lifecycle-list">
         {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
           <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
           <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{document.amount==null?"Importe pendiente":formatEuro(document.amount)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small></div>
-          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={busy===document.id} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
+          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={Boolean(busy)} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
         </article>)}
       </div>
 
