@@ -6,6 +6,7 @@ out/
 .env.*
 !.env.example
 *.log
+*.tsbuildinfo
 *.zip
 .DS_Store
 Thumbs.db
