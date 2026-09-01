@@ -43,7 +43,7 @@ for(const token of [
 ]){if(!chrome.includes(token))failures.push(`Shell adaptable incompleto: falta ${token}`);}
 for(const token of [
   "mobile-bottom-nav","product-more-menu","Más",'aria-expanded={moreOpen}','aria-controls="product-more-menu"','aria-haspopup="dialog"','FinancialIcon',
-  "secondaryGroups","Organizar","Planificar","Sistema","dialogRef","triggerRef","root.style.overflow=\"hidden\"",'event.key==="Tab"','event.key==="Escape"'
+  "secondaryGroups","Organizar","Planificar","Sistema","dialogRef","triggerRef","root.style.overflow=\"hidden\"",'event.key!=="Tab"','event.key==="Escape"'
 ]){if(!navigation.includes(token))failures.push(`Navegación adaptable/premium incompleta: falta ${token}`);}
 const requiredPrimary=['["Inicio","/","home"]','["Cash Flow","/cash-flow","cash-flow"]','["Movimientos","/movimientos","movements"]','["Análisis","/analisis","analysis"]','["Previsión","/prevision","forecast"]','["Archivo","/archivo","archive"]'];
 let lastIndex=-1;
