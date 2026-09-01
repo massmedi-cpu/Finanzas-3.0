@@ -2,7 +2,7 @@
 
 import { formatEuro, formatInteger } from "@/lib/format/es-es";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
 import { SplitEditor } from "./split-editor";
@@ -72,6 +72,8 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   const [detailLoading,setDetailLoading] = useState(false);
   const [saving,setSaving] = useState(false);
   const [bulkSaving,setBulkSaving] = useState(false);
+  const [bulkEditorOpen,setBulkEditorOpen] = useState(false);
+  const openRequestRef=useRef(0);
   const pages = Math.max(1, Math.ceil(pageData.total / pageData.pageSize));
   const range = useMemo(() => {
     if (!pageData.total) return "0 movimientos";
@@ -81,6 +83,10 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   },[pageData]);
   const visibleIds=useMemo(()=>pageData.items.map(item=>item.id),[pageData.items]);
   const allVisibleSelected=visibleIds.length>0&&visibleIds.every(id=>selectedIds.has(id));
+  const visibleReviewCount=useMemo(()=>pageData.items.filter(item=>item.needsReview).length,[pageData.items]);
+  const visibleDocumentCount=useMemo(()=>pageData.items.filter(item=>item.hasDocuments).length,[pageData.items]);
+
+  useEffect(()=>{if(!selectedIds.size)setBulkEditorOpen(false)},[selectedIds.size]);
 
   async function loadWith(next:Filters,page=1) {
     setLoading(true); setError(null);
@@ -95,7 +101,8 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
       setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);
       window.history.replaceState(null,"",movementUrl(next));
-    } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); }
+      return true;
+    } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); return false; }
     finally { setLoading(false); }
   }
 
@@ -107,6 +114,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   }
 
   function toggleSelection(id:string,checked:boolean){
+    if(bulkSaving)return;
     setSelectedIds(current=>{
       const next=new Set(current);
       if(!checked){next.delete(id);return next;}
@@ -116,6 +124,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     });
   }
   function toggleVisible(){
+    if(bulkSaving)return;
     setSelectedIds(current=>{
       const next=new Set(current);
       if(allVisibleSelected){visibleIds.forEach(id=>next.delete(id));return next;}
@@ -124,7 +133,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       missing.forEach(id=>next.add(id));setError(null);return next;
     });
   }
-  function clearBulkSelection(){setSelectedIds(new Set());}
+  function clearBulkSelection(){setSelectedIds(new Set());setBulkEditorOpen(false);}
 
   async function applyBulk(patch:Record<string,unknown>){
     if(!selectedIds.size||!Object.keys(patch).length)return false;
@@ -134,23 +143,26 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       const body=await response.json() as {ok?:boolean;updated?:number;error?:string};
       if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo aplicar la edición masiva");
       const updated=Number(body.updated||selectedIds.size);
-      setSelectedIds(new Set());
+      setSelectedIds(new Set());setBulkEditorOpen(false);
+      const refreshed=await loadWith(filters,pageData.page);
+      if(!refreshed){setError("Los cambios se guardaron, pero no se pudo actualizar la lista. Recarga la vista para confirmar el estado.");return true;}
       setMessage(`${updated} movimiento${updated===1?"":"s"} actualizado${updated===1?"":"s"} en una sola operación.`);
-      await loadWith(filters,pageData.page);
       return true;
     }catch(cause){setError(cause instanceof Error?cause.message:"Error en la edición masiva");return false;}
     finally{setBulkSaving(false);}
   }
 
   async function openMovement(id:string) {
+    const requestId=++openRequestRef.current;
     setDetailLoading(true); setError(null); setMessage(null);
     try {
       const response=await fetch(`/api/movements/${id}`,{cache:"no-store"});
       const body=await response.json() as TransactionDetailResponse & {error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudo abrir el movimiento");
+      if(requestId!==openRequestRef.current)return;
       setSelected(body.transaction); setEdit(editState(body.transaction));
-    } catch(cause) { setError(cause instanceof Error?cause.message:"Error al abrir movimiento"); }
-    finally { setDetailLoading(false); }
+    } catch(cause) { if(requestId===openRequestRef.current)setError(cause instanceof Error?cause.message:"Error al abrir movimiento"); }
+    finally { if(requestId===openRequestRef.current)setDetailLoading(false); }
   }
 
   function buildPatch():Record<string,unknown> {
@@ -183,8 +195,10 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       const response=await fetch(`/api/movements/${selected.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(patch)});
       const body=await response.json() as TransactionDetailResponse & {error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudo guardar el movimiento");
-      setSelected(body.transaction); setEdit(editState(body.transaction)); setMessage(successMessage);
-      await loadWith(filters,pageData.page);
+      setSelected(body.transaction); setEdit(editState(body.transaction));
+      const refreshed=await loadWith(filters,pageData.page);
+      if(!refreshed){setError("El cambio se guardó, pero no se pudo actualizar la lista. Cierra y vuelve a abrir la vista si necesitas confirmar el estado.");return;}
+      setMessage(successMessage);
     } catch(cause) { setError(cause instanceof Error?cause.message:"Error al guardar movimiento"); }
     finally { setSaving(false); }
   }
@@ -192,7 +206,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   async function save(event:FormEvent) {
     event.preventDefault();
     const patch=buildPatch();
-    if(!Object.keys(patch).length){setMessage("No hay cambios que guardar.");return;}
+    if(!Object.keys(patch).length){setError(null);setMessage("No hay cambios que guardar.");return;}
     await patchSelected(patch,"Cambios guardados y registrados en el historial.");
   }
 
@@ -208,11 +222,10 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   }
 
   return <div className="movements-module">
-    <section className="movement-summary" aria-label="Resumen de movimientos">
-      <div><strong>{formatInteger(pageData.total)}</strong><span>movimientos</span></div>
-      <div><strong>{pageData.items.filter(item=>item.needsReview).length}</strong><span>visibles por revisar</span></div>
-      <div><strong>{pageData.items.filter(item=>item.hasOverrides).length}</strong><span>visibles editados</span></div>
-      <div><strong>{pageData.items.filter(item=>item.hasDocuments).length}</strong><span>visibles con documentos</span></div>
+    <section className="movement-summary" aria-label="Resumen de la vista">
+      <div><strong>{formatInteger(pageData.total)}</strong><span>movimientos con estos filtros</span></div>
+      <div><strong>{formatInteger(visibleReviewCount)}</strong><span>por revisar en esta página</span></div>
+      <div><strong>{formatInteger(visibleDocumentCount)}</strong><span>con documentos en esta página</span></div>
     </section>
 
     {filters.cashFlowOnly&&<div className="inline-alert info" role="status">Vista enlazada con Cash Flow: se excluyen ahorro, traspasos internos, duplicados, origen ausente y exclusiones manuales.</div>}
@@ -244,35 +257,35 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       </details>
       <label className="check-filter"><input type="checkbox" checked={filters.review} onChange={e=>setFilters({...filters,review:e.target.checked})}/><span>Solo pendientes de revisar</span></label>
       <label className="check-filter"><input type="checkbox" checked={filters.cashFlowOnly} onChange={e=>setFilters({...filters,cashFlowOnly:e.target.checked})}/><span>Solo movimientos computables en Cash Flow</span></label>
-      <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading}>Limpiar</button></div>
+      <div className="filter-actions"><button className="primary-action" type="submit" disabled={loading||bulkSaving} aria-busy={loading||undefined}>{loading?"Cargando…":"Aplicar filtros"}</button><button className="ghost" type="button" onClick={clearFilters} disabled={loading||bulkSaving}>Limpiar</button></div>
     </form>
 
     {error&&<div className="inline-alert error" role="alert">{error}</div>}
     {message&&<div className="inline-alert success" role="status">{message}</div>}
 
-    <div className="movement-selection-toolbar">
-      <button className="ghost" type="button" onClick={toggleVisible} disabled={loading||!visibleIds.length}>{allVisibleSelected?"Quitar visibles":"Seleccionar visibles"}</button>
-      <span>{selectedIds.size?`${selectedIds.size} seleccionado${selectedIds.size===1?"":"s"}`:"Selecciona movimientos para editarlos juntos"}</span>
-      {selectedIds.size>0&&<button className="ghost" type="button" onClick={clearBulkSelection} disabled={bulkSaving}>Limpiar selección</button>}
+    <div className="movement-selection-toolbar" aria-busy={bulkSaving||undefined}>
+      <button className="ghost" type="button" onClick={toggleVisible} disabled={loading||bulkSaving||!visibleIds.length}>{allVisibleSelected?"Quitar visibles":"Seleccionar visibles"}</button>
+      <span>{selectedIds.size?`${selectedIds.size} seleccionado${selectedIds.size===1?"":"s"} · máximo ${MAX_BULK_MOVEMENTS}`:"Selecciona movimientos para resolverlos o editarlos juntos"}</span>
+      {selectedIds.size>0&&<div className="movement-selection-actions"><button className="text-button" type="button" onClick={()=>void applyBulk({needsReview:false})} disabled={bulkSaving}>Marcar revisados</button><button className="text-button" type="button" onClick={()=>void applyBulk({isReconciled:true})} disabled={bulkSaving}>Marcar conciliados</button><button className="secondary-action" type="button" onClick={()=>setBulkEditorOpen(open=>!open)} disabled={bulkSaving} aria-expanded={bulkEditorOpen} aria-controls="bulk-movement-editor">{bulkEditorOpen?"Ocultar editor":"Editar lote"}</button><button className="ghost" type="button" onClick={clearBulkSelection} disabled={bulkSaving}>Limpiar selección</button></div>}
     </div>
 
-    {selectedIds.size>0&&<BulkMovementEditor selectedCount={selectedIds.size} categories={pageData.facets.categories} types={pageData.facets.types} busy={bulkSaving} onApply={applyBulk} onClear={clearBulkSelection}/>} 
+    {selectedIds.size>0&&bulkEditorOpen&&<BulkMovementEditor selectedCount={selectedIds.size} categories={pageData.facets.categories} types={pageData.facets.types} busy={bulkSaving} onApply={applyBulk} onClear={clearBulkSelection} onClose={()=>setBulkEditorOpen(false)}/>} 
 
     <div className={`movement-table-wrap ${loading?"is-loading":""}`} aria-busy={loading}>
       <table className="movement-table">
         <thead><tr><th className="selection-cell"><span className="sr-only">Seleccionar</span></th><th>Fecha</th><th>Movimiento</th><th>Categoría</th><th>Cuenta</th><th className="numeric">Importe</th><th>Estado</th></tr></thead>
-        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement} selected={selectedIds.has(item.id)} onToggle={toggleSelection}/>)}</tbody>
+        <tbody>{pageData.items.map(item=><MovementRow key={item.id} item={item} onOpen={openMovement} selected={selectedIds.has(item.id)} onToggle={toggleSelection} selectionDisabled={bulkSaving}/>)}</tbody>
       </table>
       {!pageData.items.length&&<div className="empty-state"><strong>No hay movimientos con estos filtros.</strong><span>Prueba a limpiar algún criterio de búsqueda.</span></div>}
     </div>
 
-    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
+    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} disabled={bulkSaving} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
 
-    <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||pageData.page<=1} onClick={()=>loadWith(filters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||pageData.page>=pages} onClick={()=>loadWith(filters,pageData.page+1)}>Siguiente</button></div></footer>
+    <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||bulkSaving||pageData.page<=1} onClick={()=>loadWith(filters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||bulkSaving||pageData.page>=pages} onClick={()=>loadWith(filters,pageData.page+1)}>Siguiente</button></div></footer>
 
     {detailLoading&&<div className="detail-loading" role="status">Abriendo movimiento…</div>}
-    {selected&&edit&&<div className="drawer-backdrop" role="presentation" onMouseDown={()=>!saving&&setSelected(null)}><aside className="movement-drawer" role="dialog" aria-modal="true" aria-labelledby="movement-editor-title" onMouseDown={event=>event.stopPropagation()}>
-      <header className="drawer-head"><div><p className="eyebrow">{selected.sourceId}</p><h2 id="movement-editor-title">Editar movimiento</h2><p>{display(selected.source["Concepto original"])}</p></div><button className="icon-button" type="button" aria-label="Cerrar" onClick={()=>setSelected(null)}>×</button></header>
+    {selected&&edit&&<div className="drawer-backdrop" role="presentation" onMouseDown={()=>!saving&&setSelected(null)}><aside className="movement-drawer" role="dialog" aria-modal="true" aria-labelledby="movement-editor-title" aria-busy={saving||undefined} onMouseDown={event=>event.stopPropagation()}>
+      <header className="drawer-head"><div><p className="eyebrow">{selected.sourceId}</p><h2 id="movement-editor-title">Editar movimiento</h2><p>{display(selected.source["Concepto original"])}</p></div><button className="icon-button" type="button" aria-label="Cerrar" disabled={saving} onClick={()=>setSelected(null)}>×</button></header>
       <div className="source-lock"><strong>Origen protegido</strong><span>Los campos bancarios originales son de solo lectura. Tus cambios se guardan aparte y quedan trazados.</span></div>
       <form className="movement-editor" onSubmit={save}>
         <div className="editor-grid">
@@ -290,7 +303,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
           <label className="wide"><span>Notas de Financial App</span><textarea rows={3} value={edit.notes} onChange={e=>setEdit({...edit,notes:e.target.value})}/></label>
         </div>
         <div className="flag-grid"><label><input type="checkbox" checked={edit.isInternalTransfer} onChange={e=>setEdit({...edit,isInternalTransfer:e.target.checked})}/> Traspaso interno</label><label><input type="checkbox" checked={edit.isDuplicate} onChange={e=>setEdit({...edit,isDuplicate:e.target.checked})}/> Duplicado</label><label><input type="checkbox" checked={edit.needsReview} onChange={e=>setEdit({...edit,needsReview:e.target.checked})}/> Pendiente de revisar</label></div>
-        <div className="editor-actions"><button className="primary-action" type="submit" disabled={saving}>{saving?"Guardando…":"Guardar cambios"}</button><button className="ghost" type="button" onClick={restoreSource} disabled={saving}>Restaurar origen</button></div>
+        <div className="editor-actions"><button className="primary-action" type="submit" disabled={saving} aria-busy={saving||undefined}>{saving?"Guardando…":"Guardar cambios"}</button><button className="ghost" type="button" onClick={restoreSource} disabled={saving}>Restaurar origen</button></div>
       </form>
 
       <SplitEditor transactionId={selected.id} sourceAmount={Number(selected.source["Importe (€)"]??0)} categories={pageData.facets.categories}/>
@@ -304,16 +317,16 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
 
 function Status({item}:{item:MovementItem}) {
   if(item.sourceMissing) return <span className="status-badge warning">Origen ausente</span>;
-  if(item.status==="new") return <span className="status-badge new">Nuevo</span>;
+  if(item.status==="new") return <span className="status-badge info">Nuevo</span>;
   if(item.needsReview) return <span className="status-badge warning">Revisar</span>;
   if(item.hasOverrides) return <span className="status-badge edited">Editado</span>;
   if(item.isInternalTransfer) return <span className="status-badge muted">Traspaso</span>;
   return <span className="status-badge ok">Correcto</span>;
 }
 
-function MovementRow({item,onOpen,selected,onToggle}:{item:MovementItem;onOpen:(id:string)=>void;selected:boolean;onToggle:(id:string,checked:boolean)=>void}) {
+function MovementRow({item,onOpen,selected,onToggle,selectionDisabled}:{item:MovementItem;onOpen:(id:string)=>void;selected:boolean;onToggle:(id:string,checked:boolean)=>void;selectionDisabled:boolean}) {
   return <tr className={selected?"is-selected":""}>
-    <td className="selection-cell"><input type="checkbox" checked={selected} onChange={e=>onToggle(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></td>
+    <td className="selection-cell"><input type="checkbox" checked={selected} disabled={selectionDisabled} onChange={e=>onToggle(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></td>
     <td><span className="date-main">{formatDate(item.date)}</span><small>{item.time?item.time.slice(0,5):""}</small></td>
     <td><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}</button></td>
     <td><span>{item.category||"Sin categoría"}</span>{item.subcategory&&<small>{item.subcategory}</small>}</td>

@@ -20,7 +20,7 @@ function confidenceLabel(document:MovementDocument){
   return isDriveDocument(document)?"Google Drive · vinculado":"Vinculado";
 }
 
-export function MovementDocuments({transaction,onChanged}:{transaction:TransactionDetail;onChanged?:()=>void|Promise<void>}){
+export function MovementDocuments({transaction,onChanged}:{transaction:TransactionDetail;onChanged?:()=>unknown}){
   const [matches,setMatches]=useState<MovementDocumentMatches>(transaction.documentMatches??emptyMatches);
   const [busy,setBusy]=useState<string|null>(null);
   const [error,setError]=useState<string|null>(null);
@@ -78,7 +78,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
   async function loadCandidates(query=pickerSearch){
     setPickerLoading(true);setError(null);
     try{
-      const params=new URLSearchParams({archived:"1"});
+      const params=new URLSearchParams({includeArchived:"1"});
       if(query.trim())params.set("search",query.trim());
       const response=await fetch(`/api/archive?${params.toString()}`,{cache:"no-store"});
       const body=await response.json() as ArchiveOverviewPayload;
@@ -112,7 +112,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
 
       {pickerOpen&&<section className="manual-link-picker" aria-label="Elegir factura o ticket de Archivo">
         <form className="link-picker-toolbar" onSubmit={submitPickerSearch}><input value={pickerSearch} onChange={event=>setPickerSearch(event.target.value)} placeholder="Buscar por archivo, comercio, importe u OCR"/><button className="ghost" type="submit" disabled={pickerLoading}>{pickerLoading?"Buscando…":"Buscar"}</button></form>
-        <p className="muted-copy">Elige cualquier documento ya subido a Archivo. La vinculación es manual y reversible.</p>
+        <p className="muted-copy">Elige cualquier documento de Archivo, también del histórico. La vinculación es manual y reversible.</p>
         <div className="link-picker-list">{candidates.map(document=><div key={document.id}><span><strong>{document.fileName}</strong><small>{document.merchant||document.documentType||"Documento"} · {formatDate(document.documentDate)} · {formatMoney(document.amount)}</small></span><button className="primary-action" type="button" onClick={()=>linkById(document.id)} disabled={busy!==null}>{busy===`link-${document.id}`?"Vinculando…":"Vincular"}</button></div>)}{!pickerLoading&&!candidates.length&&<p className="muted-copy">No hay documentos disponibles con esa búsqueda.</p>}</div>
       </section>}
 
