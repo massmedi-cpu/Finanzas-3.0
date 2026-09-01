@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { unzipSync } from "npm:fflate@0.8.2";
 
-const VERSION = 6;
+const VERSION = 7;
 const FILE_ID = "1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8";
 const FILE_NAME = "Movimientos bancarios - fuente";
 const DRIVE_DOCUMENTS_ROOT_ID = "1HR64X9Tu2FuRD2cdyA6BGOIqfxZqtaIW";
@@ -24,6 +24,7 @@ type DriveScanStats = {
   supportedDocuments: number;
   maxDepth: number;
   removedDocuments: number;
+  ambiguousRemovals: number;
   fallbackFullScan: boolean;
 };
 type DriveDelta = {
@@ -40,6 +41,7 @@ type SyncMetrics = {
   sourceChanged: boolean;
   documentChanged: boolean;
   autoLinked: number;
+  autoLinkSkipped: boolean;
 };
 
 class HttpError extends Error {
@@ -393,6 +395,7 @@ async function driveChanges(token: string, savedToken: string, stats: DriveScanS
   let pageToken = savedToken;
   let nextToken = "";
   let relevantFolderChanged = false;
+  let ambiguousRemoval = false;
 
   do {
     const params = new URLSearchParams({
@@ -413,8 +416,16 @@ async function driveChanges(token: string, savedToken: string, stats: DriveScanS
       const file = change?.file;
       if (!fileId) continue;
 
-      if (change?.removed || !file || file?.trashed) {
+      if (change?.removed || !file) {
         removedIds.add(fileId);
+        ambiguousRemoval = true;
+        stats.ambiguousRemovals += 1;
+        continue;
+      }
+
+      if (file?.trashed) {
+        removedIds.add(fileId);
+        if (String(file.mimeType || "") === DRIVE_FOLDER_MIME) relevantFolderChanged = true;
         continue;
       }
 
@@ -451,13 +462,13 @@ async function driveChanges(token: string, savedToken: string, stats: DriveScanS
 
   if (!nextToken) throw new Error("drive_new_start_page_token_missing");
   stats.removedDocuments = removedIds.size;
-  return { files, removedIds: [...removedIds], nextToken, relevantFolderChanged };
+  return { files, removedIds: [...removedIds], nextToken, relevantFolderChanged, ambiguousRemoval };
 }
 async function driveDocumentDelta(token: string, savedToken: string, stats: DriveScanStats): Promise<DriveDelta> {
   if (savedToken) {
     try {
       const incremental = await driveChanges(token, savedToken, stats);
-      if (!incremental.relevantFolderChanged) {
+      if (!incremental.relevantFolderChanged && !incremental.ambiguousRemoval) {
         return {
           mode: "incremental",
           files: incremental.files,
@@ -701,11 +712,13 @@ Deno.serve(async (req: Request) => {
     supportedDocuments: 0,
     maxDepth: 0,
     removedDocuments: 0,
+    ambiguousRemovals: 0,
     fallbackFullScan: false,
   };
   let sourceChanged = false;
   let documentChanged = false;
   let autoLinked = 0;
+  let autoLinkSkipped = false;
 
   try {
     if (req.method !== "GET" && req.method !== "POST") throw new HttpError(405, "method_not_allowed");
@@ -729,6 +742,7 @@ Deno.serve(async (req: Request) => {
       && Date.parse(state.source_modified_at) === Date.parse(meta.modifiedTime || ""),
     );
     sourceChanged = !sourceUnchanged;
+    const reconciliationPending = !String(documentState?.changeToken || "");
 
     const documentScanPromise = (async () => {
       const start = performance.now();
@@ -771,15 +785,20 @@ Deno.serve(async (req: Request) => {
       timings.snapshotApply = ms(phase);
     }
 
-    let autoLink: any = { linked: 0 };
-    try {
-      phase = performance.now();
-      autoLink = await finalizeDocumentLinks();
-      timings.autoLink = ms(phase);
-      autoLinked = Number(autoLink?.linked || 0);
-    } catch (linkError) {
-      autoLink = { linked: 0, error: "auto_link_failed" };
-      console.error("financial_app_document_links_error", JSON.stringify({ runId, error: errorCode(linkError) }));
+    let autoLink: any = { linked: 0, skipped: true };
+    const shouldFinalizeLinks = sourceChanged || documentChanged || reconciliationPending;
+    if (shouldFinalizeLinks) {
+      try {
+        phase = performance.now();
+        autoLink = await finalizeDocumentLinks();
+        timings.autoLink = ms(phase);
+        autoLinked = Number(autoLink?.linked || 0);
+      } catch (linkError) {
+        autoLink = { linked: 0, error: "auto_link_failed" };
+        console.error("financial_app_document_links_error", JSON.stringify({ runId, error: errorCode(linkError) }));
+      }
+    } else {
+      autoLinkSkipped = true;
     }
     documents = { ...documents, autoLink };
 
@@ -791,6 +810,7 @@ Deno.serve(async (req: Request) => {
       sourceChanged,
       documentChanged,
       autoLinked,
+      autoLinkSkipped,
     };
     syncLog(metrics, true);
 
@@ -832,6 +852,7 @@ Deno.serve(async (req: Request) => {
       sourceChanged,
       documentChanged,
       autoLinked,
+      autoLinkSkipped,
     };
     syncLog(metrics, false, errorCode(error));
     console.error("financial_app_sync_error", JSON.stringify({ runId, error: errorCode(error) }));

@@ -33,6 +33,13 @@ for(const [file,token] of routeStyleContracts){must(fs.existsSync(file),`Falta l
 
 must(!fs.existsSync("lib/document/ticket-ocr-v305.ts"),"Permanece el motor OCR v305 sustituido");
 const tsconfig=read("tsconfig.json");must(tsconfig.includes('"@/lib/document/ticket-ocr": ["./lib/document/ticket-ocr-engine"]'),"El OCR público no apunta al motor canónico");
+const serverOcr=read("app/api/ocr/receipt/route.ts");
+for(const token of ["queueTail: Promise<void> = Promise.resolve()","withExclusiveOcr","queueTail = previous.then(() => slot)","assertRuntimeAssets()","runtimeRootChecked","invalidateWorker()","OCR_QUEUE_TIMEOUT_MS = 8_000","OCR_TIMEOUT_MS = 45_000"])
+  must(serverOcr.includes(token),`OCR de servidor ha perdido resiliencia de cola/runtime: ${token}`);
+must(!serverOcr.includes("let queue: Promise<void> = Promise.resolve()"),"OCR no puede recuperar la cola desacoplada que permitía solapar reconocimientos tras timeout");
+const topLevelAssetGuard=serverOcr.indexOf("for (const runtimeFile of OCR_RUNTIME_FILES)");
+const assetGuardFunction=serverOcr.indexOf("function assertRuntimeAssets()");
+must(topLevelAssetGuard>assetGuardFunction,"Los assets OCR deben validarse de forma perezosa dentro de assertRuntimeAssets, no al importar la ruta");
 const appVersion=read("lib/app-version.ts");
 const versionMatch=appVersion.match(/APP_VERSION\s*=\s*"(\d+)\.(\d+)\.(\d+)"/);must(Boolean(versionMatch),"APP_VERSION debe ser semántica y explícita");
 const runtimeVersion=versionMatch?versionMatch.slice(1).join("."):null;
@@ -66,4 +73,4 @@ if(process.env.VERCEL!=="1"){
 const sensitivePatterns=[/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/,/SUPABASE_SERVICE_ROLE_KEY\s*=\s*[^$\s]/,/GOOGLE_CLIENT_SECRET\s*=\s*[^$\s]/];for(const file of files){const source=read(file);for(const pattern of sensitivePatterns)must(!pattern.test(source),`Posible secreto incrustado en ${file}`);}
 
 if(failures.length){console.error("Canonical architecture audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · app ${runtimeVersion} · paquete ${packageJson.version} · navegación, Drive/movimientos y arquitectura canónica protegidos`);
+console.log(`Canonical architecture audit OK · ${files.length} archivos runtime inspeccionados · app ${runtimeVersion} · paquete ${packageJson.version} · navegación, Drive/movimientos, OCR resiliente y arquitectura canónica protegidos`);
