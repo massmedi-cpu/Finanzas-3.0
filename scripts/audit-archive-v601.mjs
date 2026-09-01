@@ -49,16 +49,23 @@ for(const token of [
 for(const token of [
   "requireAuthorizedUser()",
   "PAGE_SIZE=40",
-  "getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset)",
-  'activePromise=view==="new"?getArchiveOverview():Promise.resolve(null)',
+  "NEW_VIEW_COUNT_LIMIT=1",
+  'view==="new"?null:query||null',
+  'view==="new"?NEW_VIEW_COUNT_LIMIT:PAGE_SIZE',
+  'activePromise=view==="new"?getArchiveOverview(null,PAGE_SIZE,0):Promise.resolve(null)',
+  'documents={view==="new"?[]:lifecycle.documents}',
+  'total={view==="new"?lifecycle.counts.new:lifecycle.total}',
+  'view!=="new"&&page>totalPages',
   "lifecycle.counts.pending",
   "ARCHIVO · {lifecycle.version}",
   "Gestionar documentos activos",
   "totalPages",
   'view!=="pending"',
   "Revisar pendientes"
-])if(!page.includes(token))failures.push(`Página de Archivo no usa autorización/paginación/carga selectiva o handoff único: ${token}`);
+])if(!page.includes(token))failures.push(`Página de Archivo no usa autorización/paginación/carga selectiva o payload inicial acotado: ${token}`);
 if(page.includes("getArchivedDocuments"))failures.push("La página de Archivo no debe cargar el histórico completo para pintar una pestaña");
+if(page.includes("getArchiveOverview()"))failures.push("Nuevas no debe recuperar hasta 200 documentos activos en la carga inicial");
+if(page.includes('getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset)'))failures.push("Nuevas no debe recuperar 40 filas de ciclo documental que no se renderizan");
 if(page.includes("const [active,lifecycle]=await Promise.all"))failures.push("Pendientes y Archivadas no deben volver a cargar la biblioteca activa de hasta 200 documentos");
 if(page.includes("archive-view-note"))failures.push("La vista Pendientes no debe duplicar el acceso a Revisión que ya ofrece el ciclo documental");
 
@@ -94,4 +101,4 @@ if(css.includes("ghost-action"))failures.push("El CSS de Archivo no debe recuper
 if(css.includes("archive-view-note"))failures.push("El CSS de Archivo no debe conservar la tarjeta redundante archive-view-note");
 
 if(failures.length){console.error("Archive v6.0.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada, revisión única, feedback canónico, Nuevas selectivas y archivado reversible protegidos");
+console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada, revisión única, feedback canónico, Nuevas con payload inicial acotado y archivado reversible protegidos");
