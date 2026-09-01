@@ -12,6 +12,7 @@ for(const required of ["app/loading.tsx","app/error.tsx","app/not-found.tsx","ap
   if(!existsSync(required)) errors.push(`Falta estado global accesible: ${required}`);
 }
 const globals=read("app/globals.css");
+const chromeCss=read("app/chrome.css");
 const navigation=read("components/app-navigation.tsx");
 const chrome=read("components/app-chrome.tsx");
 const chart=read("components/cash-flow-chart.tsx");
@@ -39,6 +40,17 @@ if(!globals.includes(":focus-visible")) errors.push("Falta foco visible global")
 if(!globals.includes("prefers-reduced-motion:reduce")) errors.push("Falta soporte prefers-reduced-motion");
 if(!globals.includes("forced-colors:active")) errors.push("Falta soporte básico para colores forzados");
 if(!layout.includes('lang="es-ES"')) errors.push("El idioma raíz debe identificar español de España");
+if(!layout.includes('viewportFit:"cover"')) errors.push("La PWA debe declarar viewport-fit=cover para gestionar safe areas en dispositivos con notch");
+for(const token of [
+  "safe-area-inset-top",
+  "safe-area-inset-bottom",
+  "safe-area-inset-left",
+  "safe-area-inset-right",
+]){
+  if(!chromeCss.includes(token)) errors.push(`El shell móvil no protege ${token}`);
+}
+if(!chromeCss.includes("padding-top:calc(62px + env(safe-area-inset-top,0px))")) errors.push("El contenido móvil no reserva la altura de la cabecera más el safe area superior");
+if(!chromeCss.includes("height:calc(62px + env(safe-area-inset-top,0px))")) errors.push("La cabecera móvil no integra el safe area superior");
 if(!chrome.includes("<AppNavigation")) errors.push("El shell persistente no monta la navegación principal");
 if(!navigation.includes('href="#main-content"')) errors.push("La navegación no ofrece salto al contenido principal");
 if(!/aria-current\s*=\s*\{\s*current\s*\?\s*["']page["']\s*:\s*undefined\s*\}/.test(navigation)) errors.push("La navegación no marca aria-current=page");
@@ -97,4 +109,4 @@ if(errors.length){
   for(const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
+console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, safe areas PWA, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
