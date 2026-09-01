@@ -41,7 +41,8 @@ export function SyncButton({reconciliationPending=false,sourceModifiedAt=null,la
     autoStarted.current=true;
     const lastAuto=Number(localStorage.getItem(AUTO_SYNC_KEY)||"0");
     const cooldownElapsed=!Number.isFinite(lastAuto)||Date.now()-lastAuto>=AUTO_SYNC_COOLDOWN_MS;
-    const stale=pendingReconciliation||ageMs(lastSyncAt)>=AUTO_SYNC_STALE_MS||ageMs(sourceModifiedAt)>=AUTO_SYNC_STALE_MS;
+    const freshnessAnchor=lastSyncAt||sourceModifiedAt;
+    const stale=pendingReconciliation||ageMs(freshnessAnchor)>=AUTO_SYNC_STALE_MS;
     if(cooldownElapsed&&stale)void sync("auto");
   // Solo al montar: router.refresh() no puede crear un bucle de sincronización.
   // eslint-disable-next-line react-hooks/exhaustive-deps
