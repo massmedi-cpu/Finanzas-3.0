@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
-import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
+import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
 import type { ReceiptLayout } from "@/lib/document/receipt-layout";
@@ -33,12 +33,16 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   return next;
 }
 
-export async function GET(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
+export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
   const {id}=await params;const {data,error}=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(error||!data)return apiFailure("archive.document.read",error,"document_unavailable",404);
   let signedUrl:string|null=data.storageProvider==="google_drive"?(data.storageUrl||null):null;
   if(data.storageProvider==="supabase_storage"&&data.storagePath){const signed=await supabase.storage.from("financial-app-documents").createSignedUrl(data.storagePath,300);signedUrl=signed.data?.signedUrl||null;}
+  if(request.nextUrl.searchParams.get("original")==="1"){
+    if(!signedUrl)return apiError("original_unavailable",404);
+    return apiRedirect(signedUrl);
+  }
   return apiJson({ok:true,document:data,signedUrl});
 }
 
