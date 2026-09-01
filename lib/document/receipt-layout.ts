@@ -26,8 +26,10 @@ export type TsvLine = { top: number; bottom: number; words: TsvWord[]; plain: st
 const moneyPattern = "[+-]?\\d{1,7}(?:[.,]\\d{2})";
 const qtyPattern = "\\d+(?:[.,]\\d+)?";
 const itemRegex = new RegExp(`^(.+?)\\s+(${qtyPattern})\\s+(${moneyPattern})\\s+(${moneyPattern})(?:\\s*(?:EUR|€))?$`, "i");
+const priceOnlyItemRegex = /^(\d{1,3}(?:[.,]\d+)?)\s*(\p{L}[\p{L}\d\s.,'’()\-/]*?)\s+([+-]?\d{1,7}(?:[.,]\d{2})?)(?:\s*(?:EUR|€))?$/iu;
 const summaryRegex = /^(base(?:\s+imponible)?|subtotal|total\s+iva|iva(?:\s*\([^)]*\)|\s+\d+(?:[.,]\d+)?%)?|total(?:\s+a\s+pagar)?|importe\s+total|efectivo|tarjeta)\s*:?[\s-]*(.+)$/i;
 const columnHeader = /^(descripci[oó]n\s+)?u(?:d|ds|ds\.)\s+precio\s+(?:total|importe)$/i;
+const priceOnlyColumnHeader = /^(?:QTY|CANT(?:IDAD)?|U(?:D|DS|NDS?)\.?)\s+(?:DESCRIPCI[OÓ]N|DESCRIPTION|DESCR(?:IPTION)?|ART[IÍ]CULO|PRODUCTO)\s+(?:PRICE|PRECIO|IMPORTE)$/i;
 const commercialColumnHeader = /\bCANTIDAD\b.*\bC[ÓO]DIGO\b.*\bART[IÍ]CULO\b.*\bPRECIO\b.*\bIVA\b.*\bSUBTOTAL\b/i;
 const commercialSummaryMarker = /\bBASE\s+IMPONIBLE\b|\bIMPORTE\s+IVA\b|\bTOTAL\s+(?:ALBAR[AÁ]N|FACTURA|A\s+PAGAR)\b|^\s*TOTAL\b|\b\d{1,3}[.,]\d{2,3}\s*%\s*IVA\s+sobre\b/i;
 
@@ -48,6 +50,15 @@ function parseDecimal(value: string) {
   const normalized = cleanLine(value).replace(/\s+/g, "").replace(/O/gi, "0").replace(/,/g, ".");
   const match = normalized.match(/\d{1,7}\.\d{2}/);
   return match?.[0] || null;
+}
+function parsePriceOnlyMoney(value: string) {
+  const decimal = parseDecimal(value);
+  if (decimal) return receiptDisplayNumber(decimal);
+  const compact = cleanLine(value).replace(/\s+/g, "").replace(/O/gi, "0");
+  if (!/^\d{3,7}$/.test(compact)) return null;
+  const cents = Number(compact);
+  if (!Number.isFinite(cents) || cents < 0 || cents > 100_000_000) return null;
+  return (cents / 100).toFixed(2).replace(".", ",");
 }
 function parseQuantity(value: string) {
   const normalized = cleanLine(value).replace(/O/gi, "0");
@@ -317,10 +328,11 @@ export function parseReceiptLayout(text: string): ReceiptLayout {
   if (commercial) return commercial;
 
   const header: string[] = []; const items: ReceiptLineItem[] = []; const summary: ReceiptSummaryLine[] = []; const footer: string[] = []; const unparsedBody: ReceiptUnparsedRow[] = [];
-  let seenTable = false; let tableEnded = false; let rowIndex = 0;
+  let seenTable = false; let priceOnlyTable = false; let tableEnded = false; let rowIndex = 0;
   for (const raw of String(text || "").split(/\r?\n/)) {
     const line = cleanLine(raw); if (!line) continue;
-    if (columnHeader.test(line) || (/DESCRIP/i.test(line) && /PRECI/i.test(line))) { seenTable = true; continue; }
+    if (columnHeader.test(line) || (/DESCRIP/i.test(line) && /PRECI/i.test(line) && /(?:TOTAL|IMPORTE)/i.test(line))) { seenTable = true; priceOnlyTable = false; continue; }
+    if (priceOnlyColumnHeader.test(line)) { seenTable = true; priceOnlyTable = true; continue; }
     const summaryLine = line.match(summaryRegex);
     if (summaryLine && /\d/.test(summaryLine[2])) {
       summary.push({ label: summaryLine[1].replace(/\s+/g, " ").trim(), value: summaryLine[2].trim(), top: rowIndex++ });
@@ -331,6 +343,26 @@ export function parseReceiptLayout(text: string): ReceiptLayout {
       tableEnded = true; footer.push(line); rowIndex += 1; continue;
     }
     if (tableEnded) { footer.push(line); rowIndex += 1; continue; }
+    if (seenTable && priceOnlyTable) {
+      const priceOnlyItem = line.match(priceOnlyItemRegex);
+      if (priceOnlyItem && recognizableDescription(priceOnlyItem[2])) {
+        const quantity = parseNumber(priceOnlyItem[1]);
+        const price = parsePriceOnlyMoney(priceOnlyItem[3]);
+        if (quantity === 1 && price) {
+          items.push({
+            description: cleanLine(priceOnlyItem[2]),
+            quantity: "1",
+            unitPrice: price,
+            total: price,
+            top: rowIndex,
+            bottom: rowIndex,
+            sourceLine: line,
+          });
+          rowIndex += 1;
+          continue;
+        }
+      }
+    }
     const item = line.match(itemRegex);
     if (seenTable && item && recognizableDescription(item[1]) && plausibleItem(item[2], item[3], item[4])) {
       items.push({ description: item[1].trim(), quantity: receiptDisplayNumber(item[2]), unitPrice: receiptDisplayNumber(item[3]), total: receiptDisplayNumber(item[4]), top: rowIndex, bottom: rowIndex, sourceLine: line });
