@@ -14,7 +14,8 @@ const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
 const archive=read("app/archivo/archive-client.tsx");
 const visual=read("app/archivo/receipt-geometry-preview.tsx");
 const loader=read("public/vendor/paddleocr-loader.mjs");
-const serverOcr=read("app/api/ocr/receipt/route.ts");
+const serverOcrRoute=read("app/api/ocr/receipt/route.ts");
+const serverOcrCore=fs.existsSync("lib/document/server-receipt-ocr.ts")?read("lib/document/server-receipt-ocr.ts"):serverOcrRoute;
 const nextConfig=read("next.config.ts");
 const validator=read("lib/document/receipt-financial-validator.ts");
 const revision=read("lib/document/receipt-ocr-revision.ts");
@@ -58,7 +59,11 @@ must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"A
 must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en el contrato OCR histórico y no puede volver al runtime");
 must(!archive.includes("Tesseract")&&!ocrEngine.includes("Tesseract"),"El cliente y el motor geométrico no deben acoplarse directamente a Tesseract");
 must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.includes("serverPredict"),"El adaptador OCR móvil no apunta al reconocimiento autenticado del servidor");
-must(serverOcr.includes('createWorker("spa"')&&serverOcr.includes('runtime: "server-tesseract-7"'),"El reconocimiento OCR real del servidor no está fijado a Tesseract español");
+must(/createWorker\(\s*["']spa["']/.test(serverOcrCore)&&serverOcrCore.includes('runtime:"server-tesseract-7"')||/createWorker\(\s*["']spa["']/.test(serverOcrCore)&&serverOcrCore.includes('runtime: "server-tesseract-7"'),"El reconocimiento OCR real del servidor no está fijado a Tesseract español");
+if(fs.existsSync("lib/document/server-receipt-ocr.ts")){
+  must(serverOcrRoute.includes('from "@/lib/document/server-receipt-ocr"')&&serverOcrRoute.includes("recognizeServerReceiptImage"),"La ruta OCR debe consumir el núcleo español de servidor compartido");
+  must(!serverOcrRoute.includes("createWorker"),"La ruta OCR no debe duplicar el worker Tesseract español");
+}
 must(nextConfig.includes("./node_modules/regenerator-runtime/**/*")&&nextConfig.includes("./node_modules/tesseract.js/**/*")&&nextConfig.includes("'/api/ocr/receipt': ocrRuntimeAssets"),"El bundle OCR del servidor no protege las dependencias críticas de Tesseract");
 must(visual.includes("ReceiptGeometryPreview")&&visual.includes("viewBox")&&visual.includes("textLength")&&visual.includes('lengthAdjust="spacingAndGlyphs"'),"La reconstrucción ya no conserva la maquetación espacial");
 
