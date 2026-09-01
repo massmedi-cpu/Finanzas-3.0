@@ -49,10 +49,12 @@ if(forecastLedgerCss.includes("ghost-action"))failures.push("forecast-ledger.css
 const settingsClient=read("app/configuracion/settings-client.tsx");
 const settingsCss=read("app/settings.css");
 for(const token of [
+  'type SettingsMessage = { tone: "success" | "warning"; text: string }',
+  'tone: "warning", text: "La copia se ha analizado, pero la restauración permanece bloqueada."',
   'className={`status-badge ${preview.safe ? "ok" : "error"}`}',
   'className="inline-alert error" role="alert"',
   'className="inline-alert warning"',
-  'className="inline-alert success settings-feedback" role="status"',
+  'className={`inline-alert ${message.tone} settings-feedback`}',
   'className="inline-alert error settings-feedback" role="alert"',
   'className="danger-action"',
 ])if(!settingsClient.includes(token))failures.push(`Configuración ha perdido feedback/control canónico: ${token}`);
