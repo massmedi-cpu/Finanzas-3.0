@@ -44,6 +44,7 @@ must(!fs.existsSync("lib/document/ticket-ocr-geometry.ts"),"El motor geométrico
 
 must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.includes("serverPredict")&&loader.includes("financial-paddleocr-ready"),"El adaptador del navegador no apunta de forma estable al OCR autenticado del servidor");
 must(loader.includes("SERVER_TIMEOUT_MS = 55_000")&&loader.includes("MAX_SIDE = 2600")&&loader.includes("DIRECT_BLOB_LIMIT"),"El proxy OCR móvil ha perdido límites de tiempo, tamaño o escalado");
+must(loader.includes("MAX_SERVER_BYTES = 4.5 * 1024 * 1024")&&loader.includes("constrainedCanvasBlob")&&loader.includes("DIRECT_IMAGE_TYPES")&&loader.includes("HEIC/HEIF"),"El proxy OCR debe convertir formatos decodificables y garantizar una copia por debajo del límite del servidor");
 must(!loader.includes("LEGACY_PADDLE_BASELINE")&&!loader.includes("cdn.jsdelivr.net/npm/@paddleocr"),"El loader conserva una firma Paddle obsoleta que ya no corresponde al runtime real");
 for(const token of ['createWorker("spa"','workerPath: path.join(root, "node_modules", "tesseract.js"','corePath: path.join(root, "node_modules", "tesseract.js-core")','OCR_LANGUAGE_ROOT = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "spa", "4.0.0")','langPath: OCR_LANGUAGE_ROOT','runtime: "server-tesseract-7"','apiError("ocr_server_failed", 503)'])
   must(serverOcr.includes(token),`OCR de servidor incompleto o sin ruta Tesseract fijada: ${token}`);
