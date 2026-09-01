@@ -8,6 +8,7 @@ const migration=read("database/FINANCIAL_APP_6.4.6_DRIVE_RECONCILIATION.sql");
 const pulse=read("lib/financial/home-pulse.ts");
 const button=read("components/sync-button.tsx");
 const home=read("app/page.tsx");
+const sync=read("supabase/functions/financial-app-sync/index.ts");
 
 for(const token of [
   "archive_v6_migration",
@@ -31,5 +32,22 @@ for(const token of ["reconciliationPending","pendingReconciliation","Reconciliar
   must(button.includes(token),`Botón de sync 6.4.6 incompleto: ${token}`);
 must(home.includes("<SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/>"),"Inicio no conecta el estado de reconciliación al botón");
 
-if(failures.length){console.error("Financial App 6.4.6 Drive reconciliation audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.6 Drive reconciliation audit OK · cursor invalidado una vez y timestamp de sync coherente");
+for(const token of [
+  'const VERSION = 7',
+  'ambiguousRemovals: number',
+  'let ambiguousRemoval = false',
+  'if (change?.removed || !file)',
+  'ambiguousRemoval = true',
+  'stats.ambiguousRemovals += 1',
+  '!incremental.relevantFolderChanged && !incremental.ambiguousRemoval',
+  'stats.fallbackFullScan = true',
+  'const reconciliationPending = !String(documentState?.changeToken || "")',
+  'const shouldFinalizeLinks = sourceChanged || documentChanged || reconciliationPending',
+  'autoLinkSkipped = true',
+]) must(sync.includes(token),`Sync Drive ha perdido la garantía conservadora: ${token}`);
+must(sync.includes('const FILE_ID = "1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8"'),"La fuente financiera oficial de Drive no puede cambiar de ID accidentalmente");
+must(sync.includes('const FILE_NAME = "Movimientos bancarios - fuente"'),"La sincronización debe validar también el nombre de la fuente financiera");
+must(!sync.includes('1lcMy9FC3KgiKrOvCw6Ohbq0dx9VuDRpu'),"Financial App no puede apuntar al ZIP de Salud Conectada");
+
+if(failures.length){console.error("Financial App Drive reconciliation audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
+console.log("Financial App Drive reconciliation audit OK · cursor, borrados ambiguos, full scan conservador y autoenlace condicionado protegidos");
