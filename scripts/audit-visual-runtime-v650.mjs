@@ -20,8 +20,17 @@ const homeCss=read("app/home.css");
 const movementsCss=read("app/movements.css");
 const archiveCss=read("app/archive.css");
 const detailDialogCss=read("app/detail-dialog.css");
+const editorDialogCss=read("app/editor-dialog.css");
 const movementLayout=read("app/movimientos/layout.tsx");
 const archiveLayout=read("app/archivo/layout.tsx");
+const budgetLayout=read("app/presupuesto/layout.tsx");
+const forecastLayout=read("app/prevision/layout.tsx");
+const goalsLayout=read("app/objetivos/layout.tsx");
+const rulesLayout=read("app/reglas/layout.tsx");
+const budgetCss=read("app/budget.css");
+const forecastCss=read("app/forecast.css");
+const goalsCss=read("app/goals.css");
+const rulesCss=read("app/rules.css");
 const accounts=read("app/accounts.css");
 const netWorth=read("app/net-worth.css");
 
@@ -29,6 +38,7 @@ must(!fs.existsSync("app/visual.css"),"app/visual.css debe permanecer retirado d
 must(rootLayout.includes('import "./route-loading.css";'),"El layout raíz debe cargar route-loading.css");
 must(!rootLayout.includes("visual.css"),"El layout raíz no puede volver a cargar visual.css");
 must(!rootLayout.includes("detail-dialog.css"),"El layout raíz no debe cargar estilos de cajón específicos de Movimientos/Archivo");
+must(!rootLayout.includes("editor-dialog.css"),"El layout raíz no debe cargar estilos de editor que solo necesitan rutas con modal");
 must(rootLayout.indexOf('import "./route-loading.css";')<rootLayout.indexOf('import "./tablet.css";'),"Debe preservarse la cascada route-loading -> tablet");
 
 for(const token of [".route-loading-v300","v300-shimmer","prefers-reduced-motion:reduce","@media(max-width:760px)"])
@@ -97,7 +107,6 @@ for(const token of [
   ".document-card{contain-intrinsic-size:auto 84px}",
 ]) must(archiveCss.includes(token),`Archivo perdió rendimiento/scroll adaptable: ${token}`);
 
-must(!detailDialogCss.includes("detail-dialog-boundary"),"detail-dialog.css no debe conservar la frontera modal específica retirada");
 for(const token of [
   ".drawer-backdrop{position:fixed;z-index:100;inset:0;display:flex;justify-content:flex-end;overscroll-behavior:contain}",
   ".movement-drawer,.archive-drawer{max-width:100%;min-width:0;height:100dvh;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable",
@@ -113,6 +122,32 @@ for(const [name,routeLayout,localCss] of [["Movimientos",movementLayout,movement
   must(!localCss.includes("background:var(--surface-elevated);border-left:1px solid var(--border-default);padding:24px;box-shadow:var(--shadow-overlay)"),`${name} no debe volver a duplicar la superficie base del cajón`);
   must(!localCss.includes("margin-top:18px;border:1px solid var(--border-subtle);border-radius:var(--radius-medium);background:var(--surface-secondary);overflow:hidden"),`${name} no debe volver a duplicar el panel técnico base`);
 }
+
+for(const token of [
+  ".budget-modal-backdrop,.forecast-editor-backdrop,.goals-modal-backdrop,.rules-modal-backdrop{position:fixed;z-index:120;inset:0;display:grid;place-items:center;padding:24px;overflow:auto;overscroll-behavior:contain",
+  ".budget-modal,.forecast-editor,.goals-modal,.rules-modal{max-width:100%;overflow:auto;overscroll-behavior:contain;scrollbar-gutter:stable;border:1px solid var(--border-default);border-radius:var(--radius-large);background:var(--surface-elevated);box-shadow:var(--shadow-overlay)}",
+  ".budget-modal-head,.forecast-editor-head,.goals-modal-head,.rules-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}",
+  "@media(max-width:680px){.budget-modal-backdrop,.forecast-editor-backdrop,.goals-modal-backdrop{align-items:end;padding:0}",
+  ".budget-modal,.forecast-editor,.goals-modal{width:100%;max-height:94dvh;border-inline:0;border-bottom:0;border-radius:var(--radius-large) var(--radius-large) 0 0}",
+]) must(editorDialogCss.includes(token),`La superficie compartida de editores perdió una primitiva: ${token}`);
+const editorRoutes=[
+  ["Presupuesto",budgetLayout,budgetCss,'import "../budget.css";',"budget-modal-backdrop"],
+  ["Previsión",forecastLayout,forecastCss,'import "../forecast.css";',"forecast-editor-backdrop"],
+  ["Objetivos",goalsLayout,goalsCss,'import "../goals.css";',"goals-modal-backdrop"],
+  ["Reglas",rulesLayout,rulesCss,'import "../rules.css";',"rules-modal-backdrop"],
+];
+for(const [name,routeLayout,localCss,localImport,backdropClass] of editorRoutes){
+  const sharedImport='import "../editor-dialog.css";';
+  must(routeLayout.includes(sharedImport),`${name}: falta editor-dialog.css route-scoped`);
+  must(routeLayout.indexOf(sharedImport)>=0&&routeLayout.indexOf(sharedImport)<routeLayout.indexOf(localImport),`${name}: editor-dialog.css debe cargarse antes del CSS local`);
+  must(!new RegExp(`\\.${backdropClass}\\{[^}]*position:fixed`).test(localCss),`${name}: no debe volver a duplicar la geometría fija del backdrop`);
+  must(!localCss.includes("box-shadow:var(--shadow-overlay)"),`${name}: la sombra/superficie del editor pertenece a editor-dialog.css`);
+}
+must(budgetCss.includes(".budget-modal{width:min(100%,620px);max-height:min(90dvh,820px);padding:22px}"),"Presupuesto debe conservar dimensiones propias sobre la base compartida");
+must(forecastCss.includes(".forecast-editor{width:min(760px,100%);max-height:min(88dvh,820px);padding:22px}"),"Previsión debe conservar dimensiones propias sobre la base compartida");
+must(goalsCss.includes(".goals-modal{width:min(720px,100%);max-height:min(90dvh,840px);padding:22px}"),"Objetivos debe conservar dimensiones propias sobre la base compartida");
+must(rulesCss.includes(".rules-modal{width:min(960px,100%);max-height:min(90dvh,860px)}"),"Reglas debe conservar dimensiones propias sobre la base compartida");
+must(rulesCss.includes(".rules-modal-head{position:sticky;top:0;z-index:2")&&rulesCss.includes(".rules-modal-actions{position:sticky;bottom:0;z-index:2"),"Reglas debe conservar cabecera y acciones sticky del editor largo");
 
 must(dashboard.includes("24 gráficos e informes rápidos"),"El panel debe conservar el contrato visible de 24 gráficos");
 const defaultOrder=dashboard.match(/const DEFAULT_ORDER:ChartId\[\]=\[([\s\S]*?)\];/)?.[1]||"";
@@ -138,6 +173,7 @@ const loadingBytes=fs.statSync("app/route-loading.css").size;
 const tokenBytes=fs.statSync("app/analisis/chart-tokens.css").size;
 const chartBytes=fs.statSync("app/cash-flow-chart.css").size;
 const detailDialogBytes=fs.statSync("app/detail-dialog.css").size;
+const editorDialogBytes=fs.statSync("app/editor-dialog.css").size;
 must(loadingBytes<3292,`route-loading.css debe ser menor que el antiguo visual.css de 3292 bytes; detectados ${loadingBytes}`);
 
 if(failures.length){
@@ -145,4 +181,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · frontera modal genérica · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} · editores compartidos ${editorDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);

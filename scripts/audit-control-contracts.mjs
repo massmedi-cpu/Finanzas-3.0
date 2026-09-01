@@ -13,17 +13,17 @@ const read=file=>fs.readFileSync(file,"utf8");
 const localContracts=[
   {token:"text-button",clients:["app/reglas/rules-client.tsx"],css:"app/rules.css",selector:".rule-actions .text-button{",label:"Reglas"},
   {token:"text-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".text-button{",label:"Presupuesto"},
-  {token:"danger-button",clients:["app/presupuesto/budget-client.tsx"],css:"app/budget.css",selector:".danger-button{",label:"Presupuesto"},
   {token:"text-button",clients:["app/control/control-client.tsx"],css:"app/control.css",selector:".text-link,.text-button{",label:"Control"},
   {token:"text-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".text-button{",label:"Objetivos"},
-  {token:"danger-button",clients:["app/objetivos/goals-client.tsx"],css:"app/goals.css",selector:".danger-button{",label:"Objetivos"},
 ];
 for(const contract of localContracts){const css=read(contract.css);if(!css.includes(contract.selector))failures.push(`${contract.label} usa ${contract.token} sin estilo local propietario en ${contract.css}`);}
-for(const token of ["text-button","danger-button"]){const allowed=new Set(localContracts.filter(contract=>contract.token===token).flatMap(contract=>[...contract.clients,contract.css]));for(const file of files){if(read(file).includes(token)&&!allowed.has(file))failures.push(`${file} usa ${token} sin contrato de propiedad declarado`);}}
+for(const token of ["text-button"]){const allowed=new Set(localContracts.filter(contract=>contract.token===token).flatMap(contract=>[...contract.clients,contract.css]));for(const file of files){if(read(file).includes(token)&&!allowed.has(file))failures.push(`${file} usa ${token} sin contrato de propiedad declarado`);}}
 
 const controls=read("app/controls.css");
-for(const selector of [".primary-action{",".secondary-action,.ghost{",".ghost{",".danger-action{",".icon-button{",".button-link{display:inline-flex"]){if(!controls.includes(selector))failures.push(`Control canónico incompleto: falta ${selector}`);}
-for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--accent-primary)","var(--negative)"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
+for(const selector of [".primary-action{",".secondary-action,.ghost{",".ghost{",".danger-action,.danger-button{",".icon-button{",".button-link{display:inline-flex"]){if(!controls.includes(selector))failures.push(`Control canónico incompleto: falta ${selector}`);}
+for(const token of ["min-height:44px","button:disabled","button[aria-busy=\"true\"]","var(--accent-primary)","var(--negative)",".danger-button:hover:not(:disabled)"]){if(!controls.includes(token))failures.push(`Sistema de controles sin garantía premium: falta ${token}`);}
+for(const client of ["app/presupuesto/budget-client.tsx","app/objetivos/goals-client.tsx"]){if(!read(client).includes('className="danger-button"'))failures.push(`${client} ha perdido el control destructivo canónico danger-button`);}
+for(const css of ["app/budget.css","app/goals.css"]){if(/(?:^|})\.danger-button\{/.test(read(css)))failures.push(`${css} no debe volver a ser propietario visual de danger-button`);}
 const iconRules=[...controls.matchAll(/\.icon-button\{([^}]*)\}/g)].map(match=>match[1]).join(";");
 for(const token of ["border:","background:","color:","border-radius:","padding:"]){if(!iconRules.includes(token))failures.push(`icon-button canónico incompleto: falta ${token}`);}
 
@@ -107,4 +107,4 @@ else{
 }
 
 if(failures.length){console.error("Control usage audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Control usage audit OK · controles premium, shell responsive, menú modal agrupado, CSS compartido delimitado, diagnósticos aislados y wrappers RPC protegidos");
+console.log("Control usage audit OK · controles premium compartidos, shell responsive, menú modal agrupado, CSS delimitado, diagnósticos aislados y wrappers RPC protegidos");
