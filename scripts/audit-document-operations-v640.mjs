@@ -10,7 +10,10 @@ const loader=read("lib/financial/document-operations.ts");
 const api=read("app/api/archive/operations/route.ts");
 const page=read("app/archivo/revision/page.tsx");
 const client=read("app/archivo/revision/triage-client.tsx");
+const quick=read("app/archivo/revision/triage-quick-resolution.tsx");
 const css=read("app/archivo/revision/triage.css");
+const workspaceCss=read("app/archivo/revision/triage-workspace.css");
+const layout=read("app/archivo/revision/layout.tsx");
 const lower=migration.toLowerCase();
 
 for(const token of [
@@ -37,14 +40,21 @@ for(const token of ["DocumentSafeOperation","DocumentOperationDocument","Documen
   must(loader.includes(token),`Loader 6.4 incompleto: ${token}`);
 for(const token of ["financial_app_document_operations_batch","invalid_document_operations","operations.length>50"])
   must(api.includes(token),`API 6.4 incompleta: ${token}`);
-for(const token of ["Centro de operaciones documentales","getDocumentOperations","DocumentTriageClient"])
-  must(page.includes(token),`Página 6.4 incompleta: ${token}`);
-for(const token of ["Seleccionar seguras","Aplicar ${selected.length","window.confirm","/api/archive/operations","servidor vuelve a validar","Deshacer ${lastApplied.length","?action=restore","method:\"DELETE\""])
+for(const token of ["Bandeja de conciliación documental","getDocumentOperations","DocumentTriageClient","Conciliación de movimientos"])
+  must(page.includes(token),`Página de conciliación incompleta: ${token}`);
+for(const token of ["Seleccionar seguras","Aplicar ${selected.length","window.confirm","/api/archive/operations","servidor vuelve a validar","Deshacer ${lastApplied.length","?action=restore","method:\"DELETE\"","TriageQuickResolution","Bandeja de conciliación"])
   must(client.includes(token),`Cliente operativo 6.4 incompleto: ${token}`);
 must(!client.includes('body:JSON.stringify({action:"archive"})'),"No puede reaparecer el archivado roto que enviaba action en el body");
 must(client.includes("filter(document=>document.safeOperation)"),"La selección múltiple debe limitarse a operaciones marcadas seguras por servidor");
+for(const token of ["method:\"PATCH\"","payload.ocrStatus=\"manual\"","/api/archive/operations","reconciled","Buscar movimiento compatible","window.confirm","onResolved(document.id","Guardar y validar OCR"])
+  must(quick.includes(token),`Resolución end-to-end incompleta: ${token}`);
+must(!quick.includes("/api/movements/")&&!quick.includes("method:\"DELETE\""),"La resolución rápida no puede modificar movimientos ni borrar documentos");
+must(quick.includes("documentType")&&quick.includes("documentDate")&&quick.includes("amount")&&quick.includes("merchant"),"La resolución rápida debe cubrir los metadatos que alimentan matching");
 for(const token of [".operations-summary",".operations-toolbar",".operation-check",".operation-safe-badge",".operation-safe-note","min-height:44px"])
   must(css.includes(token),`Estilos operativos 6.4 incompletos: ${token}`);
+for(const token of [".triage-resolution",".triage-resolution-grid",".triage-resolution-actions","min-height:44px","@media(max-width:720px)"])
+  must(workspaceCss.includes(token),`Workspace de conciliación incompleto: ${token}`);
+must(layout.includes('import "./triage-workspace.css"'),"La bandeja debe cargar sus estilos responsive dedicados");
 
 if(failures.length){console.error("Document operations v6.4 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, wrapper invoker, allowlist y reversibilidad protegidas");
+console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, reversibilidad y bandeja de conciliación end-to-end protegidas");
