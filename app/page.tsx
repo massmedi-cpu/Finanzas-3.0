@@ -30,9 +30,6 @@ function fmtDateTime(value:string|null|undefined){if(!value)return "pendiente";c
 
 export default async function Home(){
   await requireAuthorizedUser();
-
-  // El pulso crítico excluye saldos/cuentas; esas lecturas arrancan en paralelo y se transmiten por Suspense.
-  // Mostrar Inicio nunca dispara una sincronización de Drive ni un segundo refresh automático.
   const today=madridToday();
   const year=Number(today.slice(0,4));
   const month=today.slice(0,7);
@@ -43,14 +40,11 @@ export default async function Home(){
   const analysisPromise=getAnalysisOverview(year);
   const reconciliationPromise=getHomeReconciliationSummary();
   const controlPromise=Promise.all([pulsePromise,budgetPromise]).then(([pulse,budget])=>getHomeControlSummary(pulse,budget));
-
   const pulse=await pulsePromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace home-workspace">
-    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><div className="home-sync-action"><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending}/><small>Drive XLSX · datos {fmtDateTime(pulse.sync?.sourceModifiedAt)} · solo lectura</small></div></div></header>
-
+    <header className="home-masthead"><div><p className="eyebrow">INICIO · {APP_VERSION}</p><h1>Panorama financiero</h1><p>Ritmo mensual, previsión y próximos movimientos conectados en una sola lectura.</p></div><div className="home-top-actions"><span>Último movimiento {fmtDate(pulse.lastMovementDate)}</span><div className="home-sync-action"><SyncButton reconciliationPending={pulse.driveSync.reconciliationPending} sourceModifiedAt={pulse.sync?.sourceModifiedAt} lastSyncAt={pulse.driveSync.lastSyncAt} autoSync/><small>Drive XLSX · datos {fmtDateTime(pulse.sync?.sourceModifiedAt)} · solo lectura · actualización inteligente</small></div></div></header>
     <Suspense fallback={<HomeAccountsFallback/>}><HomeAccountsSection data={accountsPromise}/></Suspense>
-
     <section className="home-month-pulse" aria-label="Resumen del mes">
       <IntentLink href="/analisis"><span>Ingresos</span><strong className="positive">{formatEuro(pulse.income)}</strong><small>reales computables</small></IntentLink>
       <IntentLink href="/presupuesto"><span>Gastos</span><strong className="negative">{formatEuro(pulse.expenses)}</strong><small>gasto personal real</small></IntentLink>
@@ -58,7 +52,6 @@ export default async function Home(){
       <IntentLink href="/movimientos?review=1"><span>Por revisar</span><strong>{formatInteger(pulse.needsReview)}</strong><small>{pulse.reviewSource}</small></IntentLink>
       <Suspense fallback={<HomePulseSecondaryFallback/>}><HomePulseSecondary reconciliation={reconciliationPromise} control={controlPromise}/></Suspense>
     </section>
-
     <Suspense fallback={<HomeFlowFallback/>}><HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/></Suspense>
     <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>
     <Suspense fallback={<HomeDecisionFallback/>}><HomeDecisionGrid analysis={analysisPromise}/></Suspense>
