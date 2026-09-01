@@ -74,6 +74,8 @@ for(const token of ['className="ghost"','className="primary-action"','Comprobar 
 
 const chrome=read("app/chrome.css");
 const navigation=read("components/app-navigation.tsx");
+const destinations=read("lib/ui/app-destinations.ts");
+const navigationSurface=`${navigation}\n${destinations}`;
 for(const token of [
   ".product-sidebar{","position:fixed",".product-primary-nav{",".product-more-menu{",
   ".product-more-groups{",".product-more-group h3{","overscroll-behavior:contain",
@@ -82,11 +84,12 @@ for(const token of [
 for(const token of [
   "mobile-bottom-nav","product-more-menu","Más",'aria-expanded={moreOpen}','aria-controls="product-more-menu"','aria-haspopup="dialog"','FinancialIcon',
   "secondaryGroups","Organizar","Planificar","Sistema","dialogRef","triggerRef","root.style.overflow=\"hidden\"",'event.key!=="Tab"','event.key==="Escape"'
-]){if(!navigation.includes(token))failures.push(`Navegación adaptable/premium incompleta: falta ${token}`);}
-const requiredPrimary=['["Inicio","/","home"]','["Cash Flow","/cash-flow","cash-flow"]','["Movimientos","/movimientos","movements"]','["Análisis","/analisis","analysis"]','["Previsión","/prevision","forecast"]','["Archivo","/archivo","archive"]'];
+]){if(!navigationSurface.includes(token))failures.push(`Navegación adaptable/premium incompleta: falta ${token}`);}
+const requiredPrimary=['label:"Inicio",href:"/",icon:"home"','label:"Cash Flow",href:"/cash-flow",icon:"cash-flow"','label:"Movimientos",href:"/movimientos",icon:"movements"','label:"Análisis",href:"/analisis",icon:"analysis"','label:"Previsión",href:"/prevision",icon:"forecast"','label:"Archivo",href:"/archivo",icon:"archive"'];
 let lastIndex=-1;
-for(const token of requiredPrimary){const index=navigation.indexOf(token);if(index<0)failures.push(`Falta destino primario requerido: ${token}`);else if(index<=lastIndex)failures.push(`Orden primario incorrecto en ${token}`);lastIndex=index;}
-if((navigation.match(/primary\.map/g)||[]).length<2)failures.push("Las seis secciones primarias deben alimentar sidebar y bottom navigation desde una única fuente de verdad");
+for(const token of requiredPrimary){const index=destinations.indexOf(token);if(index<0)failures.push(`Falta destino primario requerido: ${token}`);else if(index<=lastIndex)failures.push(`Orden primario incorrecto en ${token}`);lastIndex=index;}
+if((navigation.match(/primaryDestinations\.map/g)||[]).length<2)failures.push("Las seis secciones primarias deben alimentar sidebar y bottom navigation desde una única fuente de verdad");
+if(!navigation.includes('from "@/lib/ui/app-destinations"')||!destinations.includes("appDestinations"))failures.push("Navegación y búsqueda deben compartir el catálogo canónico de destinos");
 if(!navigation.includes('role="dialog"')||!navigation.includes('aria-modal="true"')||!navigation.includes('aria-labelledby="product-more-title"'))failures.push("Más debe comportarse como superficie modal accesible, etiquetada y con foco contenido");
 if(chrome.includes(".sidebar{")||navigation.includes("AppSidebar"))failures.push("El shell ha recuperado la sidebar SaaS retirada");
 
