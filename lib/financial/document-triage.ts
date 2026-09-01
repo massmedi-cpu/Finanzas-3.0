@@ -35,8 +35,8 @@ export function parseDocumentTriage(value:unknown):DocumentTriage{
   return{
     version:asString(r.version,APP_VERSION),generatedAt:asString(r.generatedAt),
     summary:{active:asNumber(summary.active),reviewOcr:asNumber(summary.reviewOcr),completeMetadata:asNumber(summary.completeMetadata),readyToLink:asNumber(summary.readyToLink),reviewMatch:asNumber(summary.reviewMatch),investigateNoMatch:asNumber(summary.investigateNoMatch),archiveCandidate:asNumber(summary.archiveCandidate)},
-    documents:asArray(r.documents).map(item=>{const x=asRecord(item);return{
-      id:asString(x.id),fileName:asString(x.fileName),documentType:asString(x.documentType,"documento"),storageProvider:nullableString(x.storageProvider),storageUrl:nullableString(x.storageUrl),
+    documents:asArray(r.documents).map(item=>{const x=asRecord(item),id=asString(x.id),storageProvider=nullableString(x.storageProvider),storageUrl=nullableString(x.storageUrl);return{
+      id,fileName:asString(x.fileName),documentType:asString(x.documentType,"documento"),storageProvider,storageUrl:storageUrl||(storageProvider==="supabase_storage"&&id?`/api/archive/${id}?original=1`:null),
       documentDate:nullableString(x.documentDate),amount:nullableNumber(x.amount),merchant:nullableString(x.merchant),ocrStatus:nullableString(x.ocrStatus),linkCount:asNumber(x.linkCount),
       action:action(x.action),priorityScore:asNumber(x.priorityScore),reasons:asArray(x.reasons).map(reason=>asString(reason)).filter(Boolean),suggestions:asArray(x.suggestions).map(movement),
     }}),
