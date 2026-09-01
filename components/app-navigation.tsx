@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { useEffect,useRef,useState } from "react";
 import { IntentLink } from "@/components/intent-link";
 import { FinancialIcon,type FinancialIconName } from "@/components/financial-icons";
+import type { NetworkState } from "@/components/network-status";
 
 const primary = [
   ["Inicio","/","home"],
@@ -55,7 +56,7 @@ function secondaryMatches(pathname:string,href:string){
   return matches(pathname,href);
 }
 
-export function AppNavigation({status="Datos reales · fuente solo lectura"}:{status?:string}){
+export function AppNavigation({status="Datos reales · fuente solo lectura",statusTone="online"}:{status?:string;statusTone?:NetworkState}){
   const pathname=usePathname();
   const [moreOpen,setMoreOpen]=useState(false);
   const dialogRef=useRef<HTMLElement>(null);
@@ -123,7 +124,7 @@ export function AppNavigation({status="Datos reales · fuente solo lectura"}:{st
         <button type="button" className={`product-more-button${moreActive?" active":""}`} aria-haspopup="dialog" aria-expanded={moreOpen} aria-controls="product-more-menu" onClick={event=>toggleMore(event.currentTarget)}>
           <FinancialIcon name="more" active={moreActive}/><span>Más</span>
         </button>
-        <span className="product-data-status" role="status">{status}</span>
+        <span className={`product-data-status ${statusTone}`} role="status" aria-live="polite">{status}</span>
       </div>
     </aside>
 

@@ -29,6 +29,7 @@ const globals=read("app/globals.css");
 const chromeCss=read("app/chrome.css");
 const navigation=read("components/app-navigation.tsx");
 const chrome=read("components/app-chrome.tsx");
+const networkStatus=read("components/network-status.tsx");
 const chart=read("components/cash-flow-chart.tsx");
 const layout=read("app/layout.tsx");
 const manifest=read("app/manifest.ts");
@@ -85,6 +86,25 @@ for(const token of [
 if(!chromeCss.includes("padding-top:calc(62px + env(safe-area-inset-top,0px))")) errors.push("El contenido móvil no reserva la altura de la cabecera más el safe area superior");
 if(!chromeCss.includes("height:calc(62px + env(safe-area-inset-top,0px))")) errors.push("La cabecera móvil no integra el safe area superior");
 if(!chrome.includes("<AppNavigation")) errors.push("El shell persistente no monta la navegación principal");
+for(const token of ["useNetworkStatus","<NetworkStatusBanner",'statusTone={network.state}']){
+  if(!chrome.includes(token)) errors.push(`El shell ha perdido el estado global de conexión: ${token}`);
+}
+for(const token of [
+  'fetch("/manifest.webmanifest"',
+  'method:"HEAD"',
+  'cache:"no-store"',
+  'window.addEventListener("online"',
+  'window.addEventListener("offline"',
+  'new AbortController()',
+  'role={offline?"alert":"status"}',
+  'aria-live={offline?"assertive":"polite"}',
+  'disabled={checking}',
+  "resolveNetworkState(previous,online)",
+]){
+  if(!networkStatus.includes(token)) errors.push(`La resiliencia de conexión ha perdido comportamiento: ${token}`);
+}
+if(!navigation.includes("statusTone?:NetworkState")||!navigation.includes("product-data-status ${statusTone}")) errors.push("La navegación no refleja visualmente el estado real de conexión");
+if(!read("package.json").includes('"test:network"')||!existsSync("scripts/network-status-tests.ts")) errors.push("La resiliencia de conexión no está cubierta por la suite de regresión");
 if(!navigation.includes('href="#main-content"')) errors.push("La navegación no ofrece salto al contenido principal");
 if(!/aria-current\s*=\s*\{\s*current\s*\?\s*["']page["']\s*:\s*undefined\s*\}/.test(navigation)) errors.push("La navegación no marca aria-current=page");
 if(!navigation.includes('aria-expanded={moreOpen}')||!navigation.includes('aria-controls="product-more-menu"')) errors.push("El menú secundario no comunica su estado expandido");
@@ -142,4 +162,4 @@ if(errors.length){
   for(const error of errors) console.error(`- ${error}`);
   process.exit(1);
 }
-console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, safe areas e iconos PWA, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);
+console.log(`Financial App accessibility audit OK · ${protectedPages.length} pantallas autenticadas · 7 superficies modales con foco/Escape/scroll compartidos · shell único, conectividad real, safe areas e iconos PWA, navegación, carga, errores, movimiento reducido y gráficos cubiertos`);

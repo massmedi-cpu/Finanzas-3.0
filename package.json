@@ -81,7 +81,8 @@
     "test:explainability": "tsx scripts/explainability-v270-tests.ts",
     "test:integrity": "tsx scripts/integrity-v280-tests.ts",
     "test:ocr": "tsx scripts/ticket-ocr-v302-tests.ts && tsx scripts/receipt-reconstruction-v4-tests.ts && tsx scripts/server-image-metadata-tests.ts",
-    "test:regression": "npm run test:backup && npm run test:analytics && npm run test:intelligence && npm run test:horizon && npm run test:format && npm run test:time && npm run test:explainability && npm run test:integrity && npm run test:ocr"
+    "test:network": "tsx scripts/network-status-tests.ts",
+    "test:regression": "npm run test:backup && npm run test:analytics && npm run test:intelligence && npm run test:horizon && npm run test:format && npm run test:time && npm run test:explainability && npm run test:integrity && npm run test:ocr && npm run test:network"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
