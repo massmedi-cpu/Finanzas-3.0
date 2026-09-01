@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
+import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
 import type { ReceiptLayout } from "@/lib/document/receipt-layout";
@@ -91,11 +92,15 @@ export async function POST(request:NextRequest,{params}:{params:Promise<{id:stri
 
 export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:string}>}){
   const supabase=await getAuthorizedClient();if(!supabase)return apiUnauthorized();
-  const {id}=await params;const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
+  const {id}=await params;
+  const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(detail.error||!detail.data)return apiFailure("archive.document.delete.read",detail.error,"document_unavailable",404);
   const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});
   if(deleted.error||!deleted.data)return apiFailure("archive.document.delete",deleted.error,"delete_failed");
-  let storageCleanupPending=false;
-  if(detail.data.storageProvider==="supabase_storage"&&detail.data.storagePath){const removed=await supabase.storage.from("financial-app-documents").remove([detail.data.storagePath]);storageCleanupPending=Boolean(removed.error);}
-  return apiJson({ok:true,storageCleanupPending,externalOriginalPreserved:detail.data.storageProvider==="google_drive"});
+  const cleanup=await processDocumentStorageCleanup(supabase,25);
+  return apiJson({
+    ok:true,
+    storageCleanupPending:cleanup.remaining==null||cleanup.remaining>0||cleanup.failed>0,
+    externalOriginalPreserved:detail.data.storageProvider==="google_drive",
+  });
 }
