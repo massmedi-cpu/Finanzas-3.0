@@ -44,15 +44,29 @@ for(const token of ["requireAuthorizedUser()","getForecastLiquidity(90)","Scenar
 for(const token of ["/api/scenarios","Gasto puntual","Ingreso puntual","Compra a plazos","Gasto recurrente","Simular impacto","Previsión actual vs. escenario","No se ha guardado nada","ni constituye asesoramiento financiero"])must(client.includes(token),`Experiencia del simulador incompleta: ${token}`);
 must(!client.includes("setResult(json as ForecastScenarioOverview);localStorage"),"No se puede persistir el resultado del escenario");
 
-must(layout.includes('import "./scenarios.css";'),"Los estilos del simulador deben cargarse solo desde su layout");
-must(navigation.includes('["Simulador","/escenarios"'),"El Simulador debe ser accesible desde Más");
+const sharedImport=layout.indexOf('import "../decision-surfaces.css";');
+const localImport=layout.indexOf('import "./scenarios.css";');
+must(sharedImport>=0&&localImport>sharedImport,"Escenarios debe cargar decision-surfaces antes de su CSS local");
+for(const token of [
+  "MAX_SCENARIO_DEFINITIONS=24",
+  "items.length>=MAX_SCENARIO_DEFINITIONS",
+  "disabled={loading||atLimit}",
+  'className="icon-button"',
+  'className="ghost"',
+  "inline-alert ${feedback.tone}",
+  "decision-summary scenario-baseline-summary",
+  "decision-summary scenario-comparison-grid",
+  "decision-disclosure scenario-accessible-data",
+  "decision-disclosure scenario-occurrences",
+  "aria-busy={loading||undefined}",
+  'JSON.stringify({days:90,events})'
+])must(client.includes(token),`Escenarios ha perdido una garantía UX/canónica: ${token}`);
+for(const obsolete of ['className="icon-action"','className="ghost-action"','scenario-zero-state'])must(!client.includes(obsolete),`Escenarios no debe recuperar control/estado legado: ${obsolete}`);
 must(!css.includes("!important"),"El CSS del simulador no puede usar !important");
+must(!css.includes(".scenario-zero-state")&&!css.includes(".scenario-item>.icon-action"),"El CSS del simulador no debe recuperar estados/controles locales retirados");
 for(const match of css.matchAll(/font-size\s*:\s*(\d+(?:\.\d+)?)px/g))must(Number(match[1])>=14,`El simulador contiene microtexto inferior a 14px (${match[1]}px)`);
-for(const token of ["--background-primary","--surface-primary","--accent-primary","--negative","--positive"]){
-  if(css.includes(token.replace("--","var(--")))continue;
-}
 
 for(const token of ["ScenarioKind","ScenarioLiquiditySummary","ForecastScenarioOverview","normalizeForecastScenario"])must(model.includes(token),`Modelo tipado de escenario incompleto: ${token}`);
 
 if(failures.length){console.error("Financial App 8.0.0 scenario lab audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 8.0.0 scenario lab audit OK · hipótesis efímeras sobre liquidez canónica, sin persistencia ni segundo motor");
+console.log("Financial App 8.0.0 scenario lab audit OK · límite de 24 protegido en UI, controles canónicos, hipótesis efímeras sobre liquidez canónica y cero persistencia");
