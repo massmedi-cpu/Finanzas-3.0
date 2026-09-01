@@ -74,7 +74,7 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
 
   return <form id="bulk-movement-editor" className="bulk-movement-editor" onSubmit={submit} aria-busy={busy||undefined}>
     <div className="bulk-editor-head">
-      <div><strong>Editar {selectedCount} movimiento{selectedCount===1?"":"s"}</strong><span>Activa únicamente los campos que quieras cambiar. La selección puede abarcar varias páginas.</span><span>La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
+      <div><strong>Editar {selectedCount} movimiento{selectedCount===1?"":"s"}</strong><span>Activa únicamente los campos que quieras cambiar. Solo se ofrecen operaciones reversibles.</span><span>La selección se conserva al navegar a otras páginas o antes de cambiar filtros.</span><span>La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
       <div className="bulk-editor-head-actions"><button className="text-button muted" type="button" onClick={onClose} disabled={busy}>Cerrar editor</button><button className="ghost" type="button" onClick={onClear} disabled={busy}>Quitar selección</button></div>
     </div>
 
@@ -95,7 +95,7 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
       <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={tagsEnabled} onChange={e=>setTagsEnabled(e.target.checked)}/> Sustituir etiquetas</span><input value={tags} onChange={e=>setTags(e.target.value)} disabled={!tagsEnabled} placeholder="Separadas por comas; vacío = quitar todas"/></label>
     </div>
     <div className="bulk-editor-actions">
-      <span>Máximo 200 movimientos por operación. Los cambios quedan registrados y el último lote puede deshacerse mientras sus movimientos no cambien después.</span>
+      <span>Máximo 200 movimientos por operación. Puedes deshacer el último lote mientras sus movimientos no hayan cambiado después.</span>
       <button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length} aria-busy={busy||undefined}>{busy?"Aplicando…":`Aplicar cambios a ${selectedCount}`}</button>
     </div>
   </form>;
