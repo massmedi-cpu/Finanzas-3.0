@@ -8,7 +8,6 @@ import type { ForecastLiquidityOverview } from "@/lib/financial/forecast-liquidi
 import type { AnalysisOverview } from "@/lib/financial/analysis";
 import type { ReconciliationSummary } from "@/lib/financial/reconciliation";
 import type { HomeControlSummary } from "@/lib/financial/home-streaming";
-import type { HomePulse } from "@/lib/financial/home-pulse";
 import type { CashFlowPoint } from "@/lib/financial/cash-flow";
 
 const date=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
@@ -63,11 +62,11 @@ export async function HomeForecastSection({data}:{data:Promise<ForecastLiquidity
 }
 
 export function HomeDecisionFallback(){
-  return <section className="home-decision-grid home-stream-loading" aria-busy="true" aria-label="Cargando decisiones"><div className="home-stream-chart" aria-hidden="true"/><div className="home-stream-lines" aria-hidden="true"><i/><i/><i/></div></section>;
+  return <section className="home-decision-grid home-stream-loading" aria-busy="true" aria-label="Cargando concentración del gasto"><div className="home-stream-lines" aria-hidden="true"><i/><i/><i/><i/></div></section>;
 }
 
-export async function HomeDecisionGrid({pulse,analysis,budget}:{pulse:HomePulse;analysis:Promise<AnalysisOverview>;budget:Promise<BudgetMonth>}){
-  const [a,b]=await Promise.all([analysis,budget]);
+export async function HomeDecisionGrid({analysis}:{analysis:Promise<AnalysisOverview>}){
+  const a=await analysis;
   const year=a.year||new Date().getFullYear();
-  return <section className="home-decision-grid"><div className="home-spend-section"><div className="home-section-heading compact"><div><p className="eyebrow">GASTO {year}</p><h2>En qué se concentra</h2></div><IntentLink href="/analisis">Analizar →</IntentLink></div>{a.categories.length?<div className="home-category-list">{a.categories.slice(0,6).map(item=><IntentLink key={item.category} href={movementUrl(movementState({category:item.category,from:a.periodStart,to:a.periodEnd,cashFlowOnly:true}))}><div><strong>{item.category}</strong><small>{formatPercent(item.share,1)} · {formatInteger(item.movements)} mov.</small></div><b>{formatEuro(item.amount)}</b><i><span style={{width:`${Math.min(100,item.share)}%`}}/></i></IntentLink>)}</div>:<div className="home-empty">No hay categorías disponibles.</div>}</div><div className="home-attention-section"><div className="home-section-heading compact"><div><p className="eyebrow">CONTROL</p><h2>Qué necesita atención</h2></div><IntentLink href="/control">Abrir control →</IntentLink></div><div className="home-attention-list"><IntentLink href="/analisis"><span>Sin categoría</span><strong>{a.uncategorizedCount}</strong></IntentLink><IntentLink href="/presupuesto"><span>Presupuestos excedidos</span><strong>{b.overBudgetCount}</strong></IntentLink><IntentLink href="/movimientos"><span>Detectados en última sincronización</span><strong>{pulse.sync?.newCount??0}</strong></IntentLink></div></div></section>;
+  return <section className="home-decision-grid" aria-labelledby="home-spend-title"><div className="home-section-heading compact"><div><p className="eyebrow">GASTO {year}</p><h2 id="home-spend-title">En qué se concentra</h2><p>Las seis categorías con mayor peso del periodo.</p></div><IntentLink href="/analisis">Analizar →</IntentLink></div>{a.categories.length?<div className="home-category-list">{a.categories.slice(0,6).map(item=><IntentLink key={item.category} href={movementUrl(movementState({category:item.category,from:a.periodStart,to:a.periodEnd,cashFlowOnly:true}))}><div><strong>{item.category}</strong><small>{formatPercent(item.share,1)} · {formatInteger(item.movements)} mov.</small></div><b>{formatEuro(item.amount)}</b><i><span style={{width:`${Math.min(100,item.share)}%`}}/></i></IntentLink>)}</div>:<div className="home-empty">No hay categorías disponibles.</div>}</section>;
 }
