@@ -1,3 +1,4 @@
+import "../module-surfaces.css";
 import "../control.css";
 import "./integrity.css";
 import "./matching-quality.css";
