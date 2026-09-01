@@ -9,6 +9,10 @@ export function apiJson<T>(body: T, status = 200) {
   return NextResponse.json(body, { status, headers: API_NO_STORE_HEADERS });
 }
 
+export function apiRedirect(url: string, status: 307 | 308 = 307) {
+  return NextResponse.redirect(url, { status, headers: API_NO_STORE_HEADERS });
+}
+
 export function apiError(error: string, status = 400, extra: Record<string, unknown> = {}) {
   return apiJson({ ok: false, error, ...extra }, status);
 }
