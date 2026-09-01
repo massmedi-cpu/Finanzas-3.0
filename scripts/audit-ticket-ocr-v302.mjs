@@ -6,6 +6,7 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 
 const client=read("app/archivo/archive-client.tsx");
 const engine=read("lib/document/ticket-ocr-engine.ts");
+const metadataBoundary=read("lib/document/ticket-ocr-metadata.ts");
 const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
 const validator=read("lib/document/receipt-financial-validator.ts");
 const revision=read("lib/document/receipt-ocr-revision.ts");
@@ -27,6 +28,12 @@ must(client.includes("PaddleOCR.create")&&client.includes('lang:"es"')&&client.i
 must(!client.includes('ocrVersion:"PP-OCRv5"'),"La combinación PP-OCRv5 + lang es no está soportada por el contrato OCR actual");
 must(client.includes("sharedWorkerPromise")&&client.includes("workerReuse:true"),"El adaptador OCR debe reutilizarse entre documentos");
 must(!client.includes("Tesseract")&&!engine.includes("Tesseract"),"El motor geométrico de cliente no debe acoplarse directamente a Tesseract");
+must(client.includes('from "@/lib/document/ticket-ocr-metadata"')&&metadataBoundary.includes('from "./ticket-ocr"'),"Archivo debe cargar solo el parser ligero de metadatos en el bundle inicial");
+must(client.includes('import("@/lib/document/ticket-ocr")')&&client.includes("await Promise.all"),"El motor geométrico OCR debe entrar por import dinámico cuando se procesa una imagen");
+must(!client.includes("useEffect")&&!/setTimeout[\s\S]{0,120}makeWorker/.test(client),"Archivo no debe precargar el worker OCR al montar la pantalla");
+must((client.match(/makeWorker\(/g)||[]).length===3,"makeWorker solo debe existir en su declaración y en las dos rutas reales de OCR");
+must((client.match(/loadPaddleOcr\(/g)||[]).length===2,"PaddleOCR solo debe cargarse desde makeWorker bajo demanda");
+must(client.includes("useMemo(()=>detail?reconstructionReceiptLayout(detail)||parseReceiptLayout(reconstructionLayout):null")&&client.includes("detail.digitalReconstruction&&receiptLayout&&"),"La reconstrucción del ticket debe calcularse solo con un documento abierto y quedar memoizada");
 for(const token of ["rawText:recognized.rawText","normalizedText:recognized.normalizedText","validation:recognized.validation","metrics:recognized.metrics","visualLayout","localProcessing:false","automaticOnImport:true",'assetOrigin:"server-bundled"'])
   must(client.includes(token),`Archivo no persiste la evidencia OCR real: ${token}`);
 must(client.includes("failedBody")&&client.includes("applyDetail(failedBody.document")&&client.includes('detail.ocrStatus==="failed"')&&client.includes("El ticket está guardado, pero el OCR no ha podido leerlo"),"Un fallo OCR debe conservar el original, abrir el documento y mostrar un aviso visible");
@@ -88,4 +95,4 @@ if(failures.length){
   failures.forEach(failure=>console.error(`- ${failure}`));
   process.exit(1);
 }
-console.log(`Ticket OCR integrity audit OK · reconocimiento Tesseract autenticado en núcleo compartido de servidor · fallo visible y original recuperable · bundle runtime server-only trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
+console.log(`Ticket OCR integrity audit OK · OCR cliente bajo demanda y reconstrucción memoizada · reconocimiento Tesseract autenticado en núcleo compartido de servidor · fallo visible y original recuperable · bundle runtime server-only trazado · geometría y validación preservadas · una sola inferencia · ${versionMatch?.[0]||"APP_VERSION"}`);
