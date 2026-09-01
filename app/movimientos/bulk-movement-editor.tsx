@@ -1,9 +1,10 @@
 "use client";
 
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
 type Choice = "unchanged" | "inherit" | "yes" | "no";
 type CashChoice = "unchanged" | "inherit" | "include" | "exclude";
+type TagMode = "replace" | "add" | "remove";
 
 type Props = {
   selectedCount:number;
@@ -13,6 +14,12 @@ type Props = {
   onApply:(patch:Record<string,unknown>)=>Promise<boolean>;
   onClear:()=>void;
   onClose:()=>void;
+};
+
+const fieldLabels:Record<string,string>={
+  type:"Tipo",category:"Categoría",subcategory:"Subcategoría",normalizedConcept:"Concepto normalizado",counterparty:"Comercio o contraparte",
+  description:"Descripción",notes:"Notas",cashFlowOverride:"Cash Flow",isReconciled:"Conciliación",isRecurring:"Recurrente",needsReview:"Pendiente de revisar",
+  isInternalTransfer:"Traspaso interno",isDuplicate:"Duplicado",tags:"Etiquetas",
 };
 
 export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,onClear,onClose}:Props){
@@ -36,8 +43,11 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
   const [internalTransfer,setInternalTransfer]=useState<Exclude<Choice,"inherit">>("unchanged");
   const [duplicate,setDuplicate]=useState<Exclude<Choice,"inherit">>("unchanged");
   const [tagsEnabled,setTagsEnabled]=useState(false);
+  const [tagMode,setTagMode]=useState<TagMode>("add");
   const [tags,setTags]=useState("");
+  const [previewOpen,setPreviewOpen]=useState(false);
 
+  const parsedTags=useMemo(()=>[...new Set(tags.split(",").map(value=>value.trim()).filter(Boolean))],[tags]);
   const patch=useMemo(()=>{
     const next:Record<string,unknown>={};
     if(type!=="__unchanged__") next.type=type==="__clear__"?null:type;
@@ -53,28 +63,36 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
     if(review!=="unchanged") next.needsReview=review==="yes";
     if(internalTransfer!=="unchanged") next.isInternalTransfer=internalTransfer==="yes";
     if(duplicate!=="unchanged") next.isDuplicate=duplicate==="yes";
-    if(tagsEnabled) next.tags=tags.split(",").map(value=>value.trim()).filter(Boolean);
+    if(tagsEnabled){
+      if(tagMode==="replace")next.tags=parsedTags;
+      else if(parsedTags.length)next.$tags={mode:tagMode,values:parsedTags};
+    }
     return next;
-  },[type,categoryEnabled,category,subcategoryEnabled,subcategory,normalizedConceptEnabled,normalizedConcept,counterpartyEnabled,counterparty,descriptionEnabled,description,notesEnabled,notes,cashFlow,reconciled,recurring,review,internalTransfer,duplicate,tagsEnabled,tags]);
+  },[type,categoryEnabled,category,subcategoryEnabled,subcategory,normalizedConceptEnabled,normalizedConcept,counterpartyEnabled,counterparty,descriptionEnabled,description,notesEnabled,notes,cashFlow,reconciled,recurring,review,internalTransfer,duplicate,tagsEnabled,tagMode,parsedTags]);
+  const patchSignature=JSON.stringify(patch);
+  const changeLabels=useMemo(()=>Object.keys(patch).map(key=>key==="$tags"?`${tagMode==="add"?"Añadir":"Quitar"} etiquetas`:fieldLabels[key]||key),[patch,tagMode]);
+
+  useEffect(()=>setPreviewOpen(false),[patchSignature,selectedCount]);
 
   function reset(){
     setType("__unchanged__");setCategoryEnabled(false);setCategory("");setSubcategoryEnabled(false);setSubcategory("");
     setNormalizedConceptEnabled(false);setNormalizedConcept("");setCounterpartyEnabled(false);setCounterparty("");
     setDescriptionEnabled(false);setDescription("");setNotesEnabled(false);setNotes("");
     setCashFlow("unchanged");setReconciled("unchanged");setRecurring("unchanged");setReview("unchanged");
-    setInternalTransfer("unchanged");setDuplicate("unchanged");setTagsEnabled(false);setTags("");
+    setInternalTransfer("unchanged");setDuplicate("unchanged");setTagsEnabled(false);setTagMode("add");setTags("");setPreviewOpen(false);
   }
 
   async function submit(event:FormEvent){
     event.preventDefault();
     if(!Object.keys(patch).length)return;
+    if(!previewOpen){setPreviewOpen(true);return;}
     const applied=await onApply(patch);
     if(applied)reset();
   }
 
   return <form id="bulk-movement-editor" className="bulk-movement-editor" onSubmit={submit} aria-busy={busy||undefined}>
     <div className="bulk-editor-head">
-      <div><strong>Editar {selectedCount} movimiento{selectedCount===1?"":"s"}</strong><span>Activa únicamente los campos que quieras cambiar. Solo se ofrecen operaciones reversibles.</span><span>La selección se conserva al navegar a otras páginas o antes de cambiar filtros.</span><span>La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
+      <div><strong>Editar {selectedCount} movimiento{selectedCount===1?"":"s"}</strong><span>Activa únicamente los campos que quieras cambiar. Solo se ofrecen operaciones reversibles.</span><span>La selección puede incluir movimientos de varias páginas y se conserva hasta que la limpies.</span><span>La fecha se mantiene como edición individual para evitar asignarla por error a movimientos distintos.</span></div>
       <div className="bulk-editor-head-actions"><button className="text-button muted" type="button" onClick={onClose} disabled={busy}>Cerrar editor</button><button className="ghost" type="button" onClick={onClear} disabled={busy}>Quitar selección</button></div>
     </div>
 
@@ -92,11 +110,14 @@ export function BulkMovementEditor({selectedCount,categories,types,busy,onApply,
       <label><span>Duplicado</span><select value={duplicate} onChange={e=>setDuplicate(e.target.value as Exclude<Choice,"inherit">)}><option value="unchanged">No cambiar</option><option value="yes">Sí</option><option value="no">No</option></select></label>
       <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={descriptionEnabled} onChange={e=>setDescriptionEnabled(e.target.checked)}/> Cambiar descripción</span><input value={description} onChange={e=>setDescription(e.target.value)} disabled={!descriptionEnabled} placeholder="Vacío = restaurar origen"/></label>
       <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={notesEnabled} onChange={e=>setNotesEnabled(e.target.checked)}/> Cambiar notas</span><input value={notes} onChange={e=>setNotes(e.target.value)} disabled={!notesEnabled} placeholder="Vacío = quitar notas personales"/></label>
-      <label className="bulk-enabled-field wide"><span><input type="checkbox" checked={tagsEnabled} onChange={e=>setTagsEnabled(e.target.checked)}/> Sustituir etiquetas</span><input value={tags} onChange={e=>setTags(e.target.value)} disabled={!tagsEnabled} placeholder="Separadas por comas; vacío = quitar todas"/></label>
+      <div className="bulk-enabled-field wide bulk-tags-field"><label><span><input type="checkbox" checked={tagsEnabled} onChange={e=>setTagsEnabled(e.target.checked)}/> Cambiar etiquetas</span></label><div><select value={tagMode} onChange={e=>setTagMode(e.target.value as TagMode)} disabled={!tagsEnabled} aria-label="Operación de etiquetas"><option value="add">Añadir sin borrar las existentes</option><option value="remove">Quitar solo estas etiquetas</option><option value="replace">Sustituir todas las etiquetas</option></select><input value={tags} onChange={e=>setTags(e.target.value)} disabled={!tagsEnabled} placeholder={tagMode==="replace"?"Separadas por comas; vacío = quitar todas":"Separadas por comas"}/></div><small>{tagMode==="add"?"Las etiquetas actuales de cada movimiento se conservan.":tagMode==="remove"?"Solo se eliminan las etiquetas indicadas; el resto permanece.":"Esta opción reemplaza el conjunto completo de etiquetas."}</small></div>
     </div>
+
+    {previewOpen&&<section className="bulk-impact-preview" aria-label="Vista previa de la edición masiva"><div><span className="eyebrow">VISTA PREVIA</span><strong>{selectedCount} movimiento{selectedCount===1?"":"s"} recibirán {changeLabels.length} cambio{changeLabels.length===1?"":"s"}</strong><p>Se aplicarán únicamente los campos listados. Cada movimiento se volverá a validar y el lote completo seguirá siendo reversible.</p></div><ul>{changeLabels.map(label=><li key={label}>{label}</li>)}</ul></section>}
+
     <div className="bulk-editor-actions">
       <span>Máximo 200 movimientos por operación. Puedes deshacer el último lote mientras sus movimientos no hayan cambiado después.</span>
-      <button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length} aria-busy={busy||undefined}>{busy?"Aplicando…":`Aplicar cambios a ${selectedCount}`}</button>
+      <div>{previewOpen&&<button className="ghost" type="button" onClick={()=>setPreviewOpen(false)} disabled={busy}>Volver a editar</button>}<button className="primary-action" type="submit" disabled={busy||!Object.keys(patch).length} aria-busy={busy||undefined}>{busy?"Aplicando…":previewOpen?`Confirmar y aplicar a ${selectedCount}`:"Revisar cambios"}</button></div>
     </div>
   </form>;
 }

@@ -18,8 +18,10 @@ must(route.includes("financial_app_undo_bulk_transaction_batch"),"El undo masivo
 
 for(const forbidden of ["Automatización 4.0","Automatizar seguro","automate-safe"])
   must(!editor.includes(forbidden),`El editor conserva UI de automatización retirada: ${forbidden}`);
-for(const required of ["Solo se ofrecen operaciones reversibles","otras páginas o antes de cambiar filtros","deshacer el último lote"])
-  must(editor.includes(required),`El editor masivo ha perdido claridad de seguridad: ${required}`);
+must(editor.includes("Solo se ofrecen operaciones reversibles"),"El editor masivo ha perdido claridad de seguridad: operaciones reversibles");
+const selectionSafetyCopy=editor.includes("otras páginas o antes de cambiar filtros")||editor.includes("varias páginas y se conserva hasta que la limpies");
+must(selectionSafetyCopy,"El editor masivo ha perdido claridad de seguridad sobre selección multipágina persistente");
+must(editor.includes("deshacer el último lote"),"El editor masivo ha perdido claridad de seguridad: deshacer el último lote");
 
 for(const token of [
   "financial_app_6_4_4_legacy_automation_has_history",

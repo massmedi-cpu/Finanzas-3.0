@@ -5,6 +5,21 @@ import { asRecord } from "@/lib/validation/json";
 
 export const dynamic = "force-dynamic";
 const MAX_BULK_MOVEMENTS = 200;
+const MAX_BULK_TAGS = 20;
+const MAX_TAG_LENGTH = 48;
+
+function validateTagOperation(patch:Record<string,unknown>){
+  const specialKeys=Object.keys(patch).filter(key=>key.startsWith("$"));
+  if(specialKeys.some(key=>key!=="$tags"))return "unsupported_bulk_operation";
+  if(!("$tags" in patch))return null;
+  if("tags" in patch)return "conflicting_tag_operations";
+  const operation=asRecord(patch.$tags);
+  const mode=String(operation.mode??"").trim().toLowerCase();
+  const values=Array.isArray(operation.values)?[...new Set(operation.values.map(value=>String(value??"").trim()).filter(Boolean))]:[];
+  if(mode!=="add"&&mode!=="remove")return "invalid_tag_operation";
+  if(!values.length||values.length>MAX_BULK_TAGS||values.some(value=>value.length>MAX_TAG_LENGTH))return "invalid_tag_operation";
+  return null;
+}
 
 export async function POST(request: NextRequest) {
   const supabase = await getAuthorizedClient();
@@ -30,7 +45,8 @@ export async function POST(request: NextRequest) {
   if (!ids.length) return apiError("no_transactions_selected");
   if (ids.length > MAX_BULK_MOVEMENTS) return apiError("bulk_limit_exceeded",400,{limit:MAX_BULK_MOVEMENTS});
   if (!Object.keys(patch).length) return apiError("invalid_patch");
-  if (Object.keys(patch).some(key=>key.startsWith("$"))) return apiError("unsupported_bulk_operation");
+  const tagOperationError=validateTagOperation(patch);
+  if(tagOperationError)return apiError(tagOperationError);
 
   const { data, error } = await supabase.rpc("financial_app_bulk_update_transactions", {p_transaction_ids: ids,p_patch: patch});
   if (error || !data) return apiFailure("movements.bulk.apply",error,"bulk_update_failed");
