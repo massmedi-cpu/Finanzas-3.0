@@ -13,8 +13,8 @@ export const maxDuration = 60;
 const MAX_OCR_BYTES = 5 * 1024 * 1024;
 const MAX_OCR_SIDE = 12_000;
 const MAX_OCR_PIXELS = 80_000_000;
-const OCR_TIMEOUT_MS = 50_000;
-const OCR_QUEUE_TIMEOUT_MS = 10_000;
+const OCR_TIMEOUT_MS = 45_000;
+const OCR_QUEUE_TIMEOUT_MS = 8_000;
 const OCR_LANGUAGE_ROOT = path.join(process.cwd(), "node_modules", "@tesseract.js-data", "spa", "4.0.0");
 const OCR_RUNTIME_FILES = [
   path.join(process.cwd(), "node_modules", "tesseract.js", "src", "worker-script", "node", "index.js"),
@@ -22,12 +22,6 @@ const OCR_RUNTIME_FILES = [
   path.join(process.cwd(), "node_modules", "regenerator-runtime", "runtime.js"),
   path.join(OCR_LANGUAGE_ROOT, "spa.traineddata.gz"),
 ] as const;
-
-for (const runtimeFile of OCR_RUNTIME_FILES) {
-  if (!fs.existsSync(/* turbopackIgnore: true */ runtimeFile)) {
-    throw new Error(`ocr_runtime_asset_missing:${path.relative(process.cwd(), runtimeFile)}`);
-  }
-}
 
 type TesseractWorker = Awaited<ReturnType<typeof createWorker>>;
 type PaddleItem = { text: string; score: number; poly: number[][] };
@@ -43,7 +37,8 @@ class OcrTimeoutError extends Error {
 
 let workerPromise: Promise<TesseractWorker> | null = null;
 let workerRoot = "";
-let queue: Promise<void> = Promise.resolve();
+let queueTail: Promise<void> = Promise.resolve();
+let runtimeRootChecked = "";
 
 function asRecord(value: unknown): UnknownRecord | null {
   return value && typeof value === "object" && !Array.isArray(value) ? value as UnknownRecord : null;
@@ -63,21 +58,28 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, kind: OcrTimeout
   });
 }
 
-async function resetWorker() {
+function assertRuntimeAssets() {
+  const root = process.cwd();
+  if (runtimeRootChecked === root) return;
+  for (const runtimeFile of OCR_RUNTIME_FILES) {
+    if (!fs.existsSync(/* turbopackIgnore: true */ runtimeFile)) {
+      throw new Error(`ocr_runtime_asset_missing:${path.relative(root, runtimeFile)}`);
+    }
+  }
+  runtimeRootChecked = root;
+}
+
+function invalidateWorker() {
   const current = workerPromise;
   workerPromise = null;
   workerRoot = "";
   if (!current) return;
-  try {
-    const worker = await current;
-    await worker.terminate();
-  } catch {
-    // A failed worker is already unusable; keep reset best-effort.
-  }
+  void current.then((worker) => worker.terminate()).catch(() => undefined);
 }
 
 async function getWorker() {
   const root = process.cwd();
+  assertRuntimeAssets();
   if (!workerPromise || workerRoot !== root) {
     workerRoot = root;
     workerPromise = createWorker("spa", 1, {
@@ -92,6 +94,26 @@ async function getWorker() {
     });
   }
   return workerPromise;
+}
+
+async function withExclusiveOcr<T>(task: () => Promise<T>) {
+  const previous = queueTail.catch(() => undefined);
+  let release!: () => void;
+  const slot = new Promise<void>((resolve) => { release = resolve; });
+  queueTail = previous.then(() => slot);
+
+  try {
+    await withTimeout(previous, OCR_QUEUE_TIMEOUT_MS, "ocr_queue");
+  } catch (failure) {
+    release();
+    throw failure;
+  }
+
+  try {
+    return await task();
+  } finally {
+    release();
+  }
 }
 
 function itemFromWord(value: unknown): PaddleItem | null {
@@ -154,20 +176,19 @@ function wordsFromTsv(tsv: unknown): PaddleItem[] {
 }
 
 async function recognizeExclusive(bytes: Buffer) {
-  const previous = queue;
-  let release!: () => void;
-  queue = new Promise<void>((resolve) => { release = resolve; });
-  try {
-    await withTimeout(previous, OCR_QUEUE_TIMEOUT_MS, "ocr_queue");
-    const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "ocr_worker");
-    return await withTimeout(
-      worker.recognize(bytes, {}, { text: true, blocks: true, tsv: true }),
-      OCR_TIMEOUT_MS,
-      "ocr_recognize",
-    );
-  } finally {
-    release();
-  }
+  return withExclusiveOcr(async () => {
+    try {
+      const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "ocr_worker");
+      return await withTimeout(
+        worker.recognize(bytes, {}, { text: true, blocks: true, tsv: true }),
+        OCR_TIMEOUT_MS,
+        "ocr_recognize",
+      );
+    } catch (failure) {
+      if (failure instanceof OcrTimeoutError || failure instanceof Error) invalidateWorker();
+      throw failure;
+    }
+  });
 }
 
 export async function POST(request: NextRequest) {
@@ -229,7 +250,6 @@ export async function POST(request: NextRequest) {
       timeout: failure instanceof OcrTimeoutError ? failure.kind : undefined,
     });
     if (failure instanceof OcrTimeoutError && failure.kind === "ocr_queue") return apiError("ocr_server_busy", 503);
-    await resetWorker();
     return apiError("ocr_server_failed", 503);
   }
 }
