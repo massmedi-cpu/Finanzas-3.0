@@ -2,6 +2,10 @@ const SERVER_OCR_ENDPOINT = "/api/ocr/receipt";
 const SERVER_TIMEOUT_MS = 55_000;
 const MAX_SIDE = 2600;
 const DIRECT_BLOB_LIMIT = 3.5 * 1024 * 1024;
+const MAX_SERVER_BYTES = 4.5 * 1024 * 1024;
+const MIN_COMPRESSED_SIDE = 1200;
+const JPEG_QUALITIES = [0.94, 0.88, 0.82, 0.76];
+const DIRECT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 function withAbortTimeout(timeoutMs) {
   const controller = new AbortController();
@@ -9,70 +13,103 @@ function withAbortTimeout(timeoutMs) {
   return { controller, clear: () => window.clearTimeout(timer) };
 }
 
-async function canvasToBlob(canvas) {
+async function canvasToBlob(canvas, quality = 0.94) {
   return new Promise((resolve, reject) => {
-    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No se pudo preparar la imagen OCR")), "image/jpeg", 0.94);
+    canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error("No se pudo preparar la imagen OCR")), "image/jpeg", quality);
   });
 }
 
-function scaledSize(width, height) {
+function scaledSize(width, height, maxSide = MAX_SIDE) {
   const largest = Math.max(width, height);
-  if (!largest || largest <= MAX_SIDE) return { width, height };
-  const scale = MAX_SIDE / largest;
+  if (!largest || largest <= maxSide) return { width, height };
+  const scale = maxSide / largest;
   return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
 }
 
-async function blobSize(blob) {
-  if (typeof createImageBitmap !== "function") return { width: 1, height: 1, bitmap: null };
-  const bitmap = await createImageBitmap(blob);
-  return { width: bitmap.width, height: bitmap.height, bitmap };
+function drawToCanvas(source, width, height) {
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d", { alpha: false });
+  if (!context) throw new Error("Canvas OCR no disponible");
+  context.fillStyle = "#fff";
+  context.fillRect(0, 0, width, height);
+  context.drawImage(source, 0, 0, width, height);
+  return canvas;
+}
+
+async function constrainedCanvasBlob(sourceCanvas) {
+  let canvas = sourceCanvas;
+  let best = null;
+  while (true) {
+    for (const quality of JPEG_QUALITIES) {
+      const blob = await canvasToBlob(canvas, quality);
+      best = blob;
+      if (blob.size <= MAX_SERVER_BYTES) return blob;
+    }
+    const largest = Math.max(canvas.width, canvas.height);
+    if (largest <= MIN_COMPRESSED_SIDE) break;
+    const nextMax = Math.max(MIN_COMPRESSED_SIDE, Math.round(largest * 0.82));
+    const target = scaledSize(canvas.width, canvas.height, nextMax);
+    canvas = drawToCanvas(canvas, target.width, target.height);
+  }
+  if (best && best.size <= MAX_SERVER_BYTES) return best;
+  throw new Error("La imagen sigue siendo demasiado grande para el OCR después de optimizarla");
+}
+
+async function decodeBlob(blob) {
+  if (typeof createImageBitmap !== "function") {
+    throw new Error("Este navegador no puede convertir este formato de imagen para OCR");
+  }
+  try {
+    return await createImageBitmap(blob);
+  } catch {
+    const type = String(blob.type || "").toLowerCase();
+    if (type === "image/heic" || type === "image/heif") {
+      throw new Error("Este dispositivo no puede decodificar HEIC/HEIF. El original se conservará para revisión manual");
+    }
+    throw new Error("No se ha podido decodificar la imagen para OCR");
+  }
 }
 
 async function prepareServerInput(input) {
   if (typeof HTMLCanvasElement !== "undefined" && input instanceof HTMLCanvasElement) {
     const target = scaledSize(input.width, input.height);
-    if (target.width === input.width && target.height === input.height) {
-      return { blob: await canvasToBlob(input), width: input.width, height: input.height };
-    }
-    const canvas = document.createElement("canvas");
-    canvas.width = target.width;
-    canvas.height = target.height;
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Canvas OCR no disponible");
-    context.drawImage(input, 0, 0, target.width, target.height);
-    return { blob: await canvasToBlob(canvas), width: target.width, height: target.height };
+    const canvas = target.width === input.width && target.height === input.height
+      ? input
+      : drawToCanvas(input, target.width, target.height);
+    return { blob: await constrainedCanvasBlob(canvas), width: canvas.width, height: canvas.height };
   }
 
   if (!(input instanceof Blob)) throw new Error("Formato OCR no compatible");
-  const size = await blobSize(input);
+  const type = String(input.type || "").toLowerCase();
+  if (DIRECT_IMAGE_TYPES.has(type) && input.size <= DIRECT_BLOB_LIMIT) {
+    return { blob: input, width: 0, height: 0 };
+  }
+
+  const bitmap = await decodeBlob(input);
   try {
-    if (input.size <= DIRECT_BLOB_LIMIT && Math.max(size.width, size.height) <= MAX_SIDE) {
-      return { blob: input, width: size.width, height: size.height };
-    }
-    if (!size.bitmap) return { blob: input, width: size.width, height: size.height };
-    const target = scaledSize(size.width, size.height);
-    const canvas = document.createElement("canvas");
-    canvas.width = target.width;
-    canvas.height = target.height;
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("Canvas OCR no disponible");
-    context.drawImage(size.bitmap, 0, 0, target.width, target.height);
-    return { blob: await canvasToBlob(canvas), width: target.width, height: target.height };
+    const target = scaledSize(bitmap.width, bitmap.height);
+    const canvas = drawToCanvas(bitmap, target.width, target.height);
+    return { blob: await constrainedCanvasBlob(canvas), width: canvas.width, height: canvas.height };
   } finally {
-    size.bitmap?.close?.();
+    bitmap.close?.();
   }
 }
 
 async function serverPredict(input) {
   const prepared = await prepareServerInput(input);
+  if (prepared.blob.size > MAX_SERVER_BYTES) {
+    throw new Error("La copia preparada para OCR supera el límite seguro del servidor");
+  }
   const timeout = withAbortTimeout(SERVER_TIMEOUT_MS);
   try {
     const response = await fetch(SERVER_OCR_ENDPOINT, {
       method: "POST",
       headers: {
         "content-type": prepared.blob.type || "image/jpeg",
-        "x-ocr-width": String(prepared.width),
-        "x-ocr-height": String(prepared.height),
+        ...(prepared.width > 0 ? { "x-ocr-width": String(prepared.width) } : {}),
+        ...(prepared.height > 0 ? { "x-ocr-height": String(prepared.height) } : {}),
       },
       body: prepared.blob,
       cache: "no-store",
