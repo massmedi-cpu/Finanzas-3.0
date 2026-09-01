@@ -16,6 +16,9 @@ const cashFlowChart=read("app/cash-flow-chart.css");
 const cashFlowLayout=read("app/cash-flow/layout.tsx");
 const home=read("app/page.tsx");
 const homeSections=read("app/home-sections.tsx");
+const homeCss=read("app/home.css");
+const movementsCss=read("app/movements.css");
+const archiveCss=read("app/archive.css");
 const accounts=read("app/accounts.css");
 const netWorth=read("app/net-worth.css");
 
@@ -55,6 +58,27 @@ for(const token of [".nw-grid-line",".nw-line",".nw-area",".nw-dot"])
 
 must(analysisWall.includes("content-visibility:auto"),"La rejilla visual debe diferir pintura fuera de pantalla");
 must(analysisWall.includes("contain-intrinsic-size:auto 338px"),"La pintura diferida debe reservar tamaño intrínseco");
+for(const token of [
+  ".home-forecast-section{content-visibility:auto;contain-intrinsic-size:auto 320px}",
+  ".home-decision-grid{content-visibility:auto;contain-intrinsic-size:auto 520px}",
+  ".home-forecast-section{contain-intrinsic-size:auto 360px}",
+  ".home-decision-grid{contain-intrinsic-size:auto 720px}",
+]) must(homeCss.includes(token),`Inicio perdió pintura diferida responsive: ${token}`);
+for(const token of [
+  ".movement-card-row{content-visibility:auto;contain-intrinsic-size:auto 82px}",
+  ".movement-table-wrap{overscroll-behavior:contain;scrollbar-gutter:stable}",
+  ".movement-drawer{overscroll-behavior:contain;scrollbar-gutter:stable}",
+  ".movement-card>div:first-child{flex:1 1 auto}",
+  ".card-side{flex:0 0 auto}",
+]) must(movementsCss.includes(token),`Movimientos perdió rendimiento/scroll adaptable: ${token}`);
+must(movementsCss.includes("@media(max-width:560px){.movement-card strong{max-width:none}}"),"Movimientos no debe volver a estrangular conceptos móviles con un ancho vw fijo");
+for(const token of [
+  ".document-card{content-visibility:auto;contain-intrinsic-size:auto 76px}",
+  ".archive-drawer{scrollbar-gutter:stable}",
+  ".reconstruction,.receipt-table-wrap{overscroll-behavior:contain;scrollbar-gutter:stable}",
+  ".document-card{contain-intrinsic-size:auto 84px}",
+]) must(archiveCss.includes(token),`Archivo perdió rendimiento/scroll adaptable: ${token}`);
+
 must(dashboard.includes("24 gráficos e informes rápidos"),"El panel debe conservar el contrato visible de 24 gráficos");
 const defaultOrder=dashboard.match(/const DEFAULT_ORDER:ChartId\[\]=\[([\s\S]*?)\];/)?.[1]||"";
 const chartIds=[...defaultOrder.matchAll(/"([a-z0-9-]+)"/g)].map(match=>match[1]);
@@ -85,4 +109,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global 3292 bytes retirado · skeleton ${loadingBytes} bytes · tokens locales ${tokenBytes} bytes · gráfica Cash Flow compartida ${chartBytes} bytes · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · visual.css global 3292 bytes retirado · skeleton ${loadingBytes} bytes · tokens locales ${tokenBytes} bytes · gráfica Cash Flow compartida ${chartBytes} bytes · pintura diferida Home/Movimientos/Archivo protegida · 24 gráficos preservados`);
