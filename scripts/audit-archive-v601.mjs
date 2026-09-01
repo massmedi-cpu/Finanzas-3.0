@@ -54,10 +54,13 @@ for(const token of [
   "lifecycle.counts.pending",
   "ARCHIVO · {lifecycle.version}",
   "Gestionar documentos activos",
-  "totalPages"
-])if(!page.includes(token))failures.push(`Página de Archivo no usa autorización/paginación/carga selectiva por estado: ${token}`);
+  "totalPages",
+  'view!=="pending"',
+  "Revisar pendientes"
+])if(!page.includes(token))failures.push(`Página de Archivo no usa autorización/paginación/carga selectiva o handoff único: ${token}`);
 if(page.includes("getArchivedDocuments"))failures.push("La página de Archivo no debe cargar el histórico completo para pintar una pestaña");
 if(page.includes("const [active,lifecycle]=await Promise.all"))failures.push("Pendientes y Archivadas no deben volver a cargar la biblioteca activa de hasta 200 documentos");
+if(page.includes("archive-view-note"))failures.push("La vista Pendientes no debe duplicar el acceso a Revisión que ya ofrece el ciclo documental");
 
 for(const token of [
   'action="/archivo" method="get"',
@@ -67,9 +70,14 @@ for(const token of [
   "counts.archived",
   'view!=="new"',
   "archive-lifecycle-pagination",
-  "Página {page} de {totalPages}"
-])if(!lifecycle.includes(token))failures.push(`Cliente de ciclo documental sin estados/paginación o vuelve a duplicar Nuevas: ${token}`);
+  "Página {page} de {totalPages}",
+  'type Feedback={tone:"success"|"error";message:string}',
+  'inline-alert ${feedback.tone}',
+  'className="ghost button-link"',
+  'disabled={Boolean(busy)}'
+])if(!lifecycle.includes(token))failures.push(`Cliente de ciclo documental sin estados/paginación/feedback canónico: ${token}`);
 if(lifecycle.includes("useMemo"))failures.push("El ciclo documental no debe volver a filtrar páginas parciales en memoria");
+if(lifecycle.includes("ghost-action"))failures.push("Archivo no debe recuperar el control local ghost-action");
 
 for(const token of [
   'needsDocumentReview(document:ArchiveDetail)',
@@ -82,6 +90,8 @@ if(activeClient.includes('archived:"1"'))failures.push("El cliente activo no deb
 if(activeClient.includes("Biblioteca única"))failures.push("Archivo no debe recuperar la leyenda heredada que contradice Nuevas/Pendientes/Archivadas");
 
 for(const token of [".archive-lifecycle-pagination","min-height:44px","font-size:14px"])if(!css.includes(token))failures.push(`CSS de Archivo no protege legibilidad/táctil: ${token}`);
+if(css.includes("ghost-action"))failures.push("El CSS de Archivo no debe recuperar geometría del control ghost-action");
+if(css.includes("archive-view-note"))failures.push("El CSS de Archivo no debe conservar la tarjeta redundante archive-view-note");
 
 if(failures.length){console.error("Archive v6.0.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada a anon, carga selectiva, Nuevas sin lista duplicada y archivado seguro desde detalle protegidos");
+console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada, revisión única, feedback canónico, Nuevas selectivas y archivado reversible protegidos");
