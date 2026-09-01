@@ -21,6 +21,14 @@ type MatchingDashboardData=Awaited<ReturnType<typeof getDocumentMatchingDashboar
 type CalibrationData=Awaited<ReturnType<typeof getDocumentMatchingCalibration>>;
 type PolicyData=Awaited<ReturnType<typeof getDocumentMatchingPolicyDashboard>>;
 type IntegrityData=Awaited<ReturnType<typeof getSystemIntegrityOverview>>;
+type DiagnosticResult<T>={ok:true;data:T}|{ok:false;error:string};
+
+function settleDiagnostic<T>(promise:Promise<T>):Promise<DiagnosticResult<T>>{
+  return promise.then(
+    data=>({ok:true,data}),
+    error=>({ok:false,error:error instanceof Error?error.message:String(error||"diagnostic_unavailable")}),
+  );
+}
 
 function ControlStreamFallback({title}:{title:string}){
   return <section className="control-panel" aria-busy="true" aria-label={`Cargando ${title}`}>
@@ -29,11 +37,19 @@ function ControlStreamFallback({title}:{title:string}){
   </section>;
 }
 
-async function MatchingQualityStream({data}:{data:Promise<MatchingQualityData>}){return <MatchingQualityPanel data={await data}/>;}
-async function DocumentMatchingStream({data}:{data:Promise<MatchingDashboardData>}){return <DocumentMatchingPanel dashboard={await data}/>;}
-async function CalibrationStream({data}:{data:Promise<CalibrationData>}){return <DocumentMatchingCalibrationPanel data={await data}/>;}
-async function PolicyStream({data}:{data:Promise<PolicyData>}){return <DocumentMatchingPolicyPanel data={await data}/>;}
-async function IntegrityStream({data}:{data:Promise<IntegrityData>}){return <IntegrityPanel initialData={await data}/>;}
+function DiagnosticUnavailable({title,error}:{title:string;error:string}){
+  console.error(`[control] ${title} unavailable`,error);
+  return <section className="control-panel" role="status" aria-label={`${title} no disponible`}>
+    <div className="control-panel-head"><div><p className="eyebrow">DIAGNÓSTICO AISLADO</p><h2>{title}</h2></div></div>
+    <p className="muted-copy">Este diagnóstico no está disponible temporalmente. El resto del Centro de control continúa operativo y puedes volver a cargar la página para reintentarlo.</p>
+  </section>;
+}
+
+async function MatchingQualityStream({data}:{data:Promise<DiagnosticResult<MatchingQualityData>>}){const result=await data;return result.ok?<MatchingQualityPanel data={result.data}/>:<DiagnosticUnavailable title="Calidad de asociaciones" error={result.error}/>;}
+async function DocumentMatchingStream({data}:{data:Promise<DiagnosticResult<MatchingDashboardData>>}){const result=await data;return result.ok?<DocumentMatchingPanel dashboard={result.data}/>:<DiagnosticUnavailable title="Asociación de documentos" error={result.error}/>;}
+async function CalibrationStream({data}:{data:Promise<DiagnosticResult<CalibrationData>>}){const result=await data;return result.ok?<DocumentMatchingCalibrationPanel data={result.data}/>:<DiagnosticUnavailable title="Calibración documental" error={result.error}/>;}
+async function PolicyStream({data}:{data:Promise<DiagnosticResult<PolicyData>>}){const result=await data;return result.ok?<DocumentMatchingPolicyPanel data={result.data}/>:<DiagnosticUnavailable title="Política de asociación" error={result.error}/>;}
+async function IntegrityStream({data}:{data:Promise<DiagnosticResult<IntegrityData>>}){const result=await data;return result.ok?<IntegrityPanel initialData={result.data}/>:<DiagnosticUnavailable title="Integridad del sistema" error={result.error}/>;}
 
 export default async function ControlPage({searchParams}:{searchParams:Promise<Record<string,string|undefined>>}){
   await requireAuthorizedUser();
@@ -41,11 +57,11 @@ export default async function ControlPage({searchParams}:{searchParams:Promise<R
   const month=MONTH_RE.test(params.month||"")?params.month!:null;
 
   const controlPromise=getControlCenter(month);
-  const matchingPromise=getMatchingObservability(90);
-  const documentMatchingDashboard=getDocumentMatchingDashboard(8,90);
-  const calibrationPromise=getDocumentMatchingCalibration(90);
-  const policyPromise=getDocumentMatchingPolicyDashboard(90);
-  const integrityPromise=getSystemIntegrityOverview();
+  const matchingPromise=settleDiagnostic(getMatchingObservability(90));
+  const documentMatchingDashboard=settleDiagnostic(getDocumentMatchingDashboard(8,90));
+  const calibrationPromise=settleDiagnostic(getDocumentMatchingCalibration(90));
+  const policyPromise=settleDiagnostic(getDocumentMatchingPolicyDashboard(90));
+  const integrityPromise=settleDiagnostic(getSystemIntegrityOverview());
   const data=await controlPromise;
 
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace control-workspace">
