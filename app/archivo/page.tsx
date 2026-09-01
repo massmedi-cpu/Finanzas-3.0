@@ -7,6 +7,7 @@ import {ArchiveLifecycleClient} from "./archive-lifecycle-client";
 
 export const dynamic="force-dynamic";
 const PAGE_SIZE=40;
+const NEW_VIEW_COUNT_LIMIT=1;
 
 function archiveUrl(view:ArchiveLifecycleState,query:string,page:number){
   const params=new URLSearchParams({view});
@@ -24,23 +25,32 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const page=Number.isFinite(requestedPage)&&requestedPage>0?requestedPage:1;
   const offset=(page-1)*PAGE_SIZE;
 
-  const lifecyclePromise=getArchiveLifecycleOverview(view,query||null,PAGE_SIZE,offset);
-  const activePromise=view==="new"?getArchiveOverview():Promise.resolve(null);
+  // Nuevas solo necesita los contadores/versión del ciclo documental. Pedir la
+  // página completa de 40 filas aquí duplicaba datos que nunca se renderizan.
+  const lifecyclePromise=getArchiveLifecycleOverview(
+    view,
+    view==="new"?null:query||null,
+    view==="new"?NEW_VIEW_COUNT_LIMIT:PAGE_SIZE,
+    view==="new"?0:offset,
+  );
+  // La biblioteca activa sí se muestra en Nuevas, pero su primer payload queda
+  // acotado a la misma página visible en lugar del antiguo máximo de 200.
+  const activePromise=view==="new"?getArchiveOverview(null,PAGE_SIZE,0):Promise.resolve(null);
   const [lifecycle,active]=await Promise.all([lifecyclePromise,activePromise]);
 
-  const totalPages=Math.max(1,Math.ceil(lifecycle.total/PAGE_SIZE));
-  if(page>totalPages)redirect(archiveUrl(view,query,totalPages));
+  const totalPages=view==="new"?1:Math.max(1,Math.ceil(lifecycle.total/PAGE_SIZE));
+  if(view!=="new"&&page>totalPages)redirect(archiveUrl(view,query,totalPages));
 
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
     <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div>{view!=="pending"&&<div className="topbar-actions"><Link className="ghost button-link" href="/archivo/revision">Revisar pendientes{pending?` · ${pending}`:""}</Link></div>}</header>
     <ArchiveLifecycleClient
-      documents={lifecycle.documents}
+      documents={view==="new"?[]:lifecycle.documents}
       counts={lifecycle.counts}
-      total={lifecycle.total}
+      total={view==="new"?lifecycle.counts.new:lifecycle.total}
       view={view}
       query={query}
-      page={page}
+      page={view==="new"?1:page}
       pageSize={PAGE_SIZE}
     />
     {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
