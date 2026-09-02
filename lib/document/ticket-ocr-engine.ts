@@ -142,14 +142,15 @@ function replacementWithOriginalCase(original: string, replacement: string) {
 }
 
 /**
- * Corrige únicamente firmas inequívocas de software de caja. La evidencia
- * literal del motor se conserva antes de aplicar estas correcciones, de modo
- * que nunca se oculta lo que PP-OCRv6 leyó realmente.
+ * Corrige únicamente lecturas inequívocas. La evidencia literal del motor se
+ * conserva antes de aplicar estas correcciones, de modo que nunca se oculta lo
+ * que PP-OCRv6 leyó realmente.
  */
 function correctTrustedReceiptText(value: string) {
   return value
     .replace(/\bPovered(?=\s+by\b)/giu, (match) => replacementWithOriginalCase(match, "Powered"))
-    .replace(/\bgamarero\.com\b/giu, (match) => replacementWithOriginalCase(match, "qamarero.com"));
+    .replace(/\bgamarero\.com\b/giu, (match) => replacementWithOriginalCase(match, "qamarero.com"))
+    .replace(/\bTOTALA\b/giu, (match) => replacementWithOriginalCase(match, "TOTAL A"));
 }
 
 function metadataTextFromRows(rows: VisualRow[], sourceWidth: number) {
@@ -231,6 +232,13 @@ function isReceiptTableHeader(row: VisualRow) {
   return key.includes("DESCRIP") && key.includes("PRECI") && (key.includes("IMPORTE") || key.includes("TOTAL") || key.includes("UDS"));
 }
 
+function isFinancialSummaryRow(row: VisualRow) {
+  const key = cleanSpaces(normalizedKey(row.text));
+  return /\b(BASE(?:\s+IMPONIBLE)?|SUBTOTAL|TOTAL\s+IVA|IVA|IMPORTE\s+(?:IVA|TOTAL)|EFECTIVO|TARJETA)\b/i.test(key)
+    || /\bTOTAL\s*A?\s*PAGAR\b/i.test(key)
+    || /^\s*TOTAL\b/i.test(key);
+}
+
 function obviousRecognitionNoise(box: Box) {
   const visible = box.text.replace(/\s/g, "");
   if (!visible) return true;
@@ -251,6 +259,9 @@ function obviousRecognitionNoise(box: Box) {
 function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: number) {
   const rows = groupRows(boxes);
   const tableIndex = rows.findIndex(isReceiptTableHeader);
+  const protectedFinancialBoxes = new Set(
+    rows.filter(isFinancialSummaryRow).flatMap((row) => row.boxes),
+  );
   let corridor: { left: number; right: number } | null = null;
   let bottomLimit = sourceHeight;
 
@@ -263,7 +274,7 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
       right: clamp(table.right + margin, 0, sourceWidth),
     };
 
-    const footerRows = rows.slice(tableIndex + 1).filter((row) => /\b(TOTAL|PENDIENTE|PAGADO|GRACIAS|EFECTIVO|TARJETA)\b/i.test(normalizedKey(row.text)));
+    const footerRows = rows.slice(tableIndex + 1).filter((row) => isFinancialSummaryRow(row) || /\b(PENDIENTE|PAGADO|GRACIAS)\b/i.test(normalizedKey(row.text)));
     const lastFooter = footerRows.at(-1);
     if (lastFooter) bottomLimit = Math.min(sourceHeight, lastFooter.bottom + Math.max(lastFooter.height * 4, sourceHeight * 0.045));
   }
@@ -271,11 +282,12 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
   const accepted: Box[] = [];
   const discarded: Box[] = [];
   for (const box of boxes) {
-    let reject = obviousRecognitionNoise(box);
+    const protectedFinancial = protectedFinancialBoxes.has(box) && box.score >= 35;
+    let reject = protectedFinancial ? false : obviousRecognitionNoise(box);
     if (!reject && corridor) {
       const overlap = Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left));
       const overlapRatio = overlap / Math.max(1, box.width);
-      const semantic = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+      const semantic = protectedFinancial || /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
       if (overlapRatio < 0.28 && !semantic) reject = true;
       if (box.top > bottomLimit && !semantic) reject = true;
     }

@@ -36,6 +36,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-operational-status-tests.ts
       - name: OCR dimension-aware transport
         run: node scripts/ocr-loader-dimension-tests.mjs
+      - name: OCR financial summary rows
+        run: ./node_modules/.bin/tsx scripts/ocr-financial-summary-row-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
