@@ -8,8 +8,8 @@ const openStart=source.indexOf("async function openDocument",upgradeStart);
 assert.ok(upgradeStart>=0&&openStart>upgradeStart,"Debe existir el flujo dedicado de actualización OCR antes de openDocument");
 const upgrade=source.slice(upgradeStart,openStart);
 
-assert.match(source,/function needsOcrUpgrade\(document:ArchiveDetail\)\{return Boolean\(document\.mimeType\?\.startsWith\("image\/"\)&&document\.ocrStatus!=="manual"&&!ocrMethod\(document\)\.startsWith\(RECEIPT_OCR_METHOD_PREFIX\)\);\}/,
-  "Solo imágenes automáticas con método OCR legado pueden entrar en auto-upgrade; manual debe quedar excluido");
+assert.match(source,/function needsOcrUpgrade\(document:ArchiveDetail\)\{return Boolean\(document\.mimeType\?\.startsWith\("image\/"\)&&document\.ocrStatus!=="manual"&&!isCompatibleReceiptOcrMethod\(ocrMethod\(document\)\)\);\}/,
+  "Solo imágenes automáticas con método OCR no compatible pueden entrar en auto-upgrade; manual y legacy equivalente deben quedar excluidos");
 assert.match(upgrade,/if\(!force&&!needsOcrUpgrade\(document\)\)return;/,
   "La actualización automática debe respetar needsOcrUpgrade salvo reintento manual explícito");
 
@@ -27,6 +27,6 @@ assert.match(upgrade,/catch\{setError\("El OCR no ha podido reconstruir el ticke
 
 const open=source.slice(openStart,source.indexOf("async function upload",openStart));
 assert.match(open,/if\(body\.signedUrl&&needsOcrUpgrade\(body\.document\)\)await upgradeExistingOcr\(body\.document,body\.signedUrl\)/,
-  "Abrir un documento legado solo debe auto-reprocesar si existe acceso al original privado");
+  "Abrir un documento no compatible solo debe auto-reprocesar si existe acceso al original privado");
 
-console.log("OCR safe auto-reprocessing tests OK · manual excluido, original requerido, OCR termina antes del PATCH y fallos conservan revisión previa");
+console.log("OCR safe auto-reprocessing tests OK · manual/legacy compatible excluidos, original requerido, OCR termina antes del PATCH y fallos conservan revisión previa");
