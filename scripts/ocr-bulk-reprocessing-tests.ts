@@ -38,10 +38,14 @@ const canonicalClient=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 assert.ok(wrapper.includes("ArchiveClientCore")&&wrapper.includes("ArchiveBulkOcrRecovery"),"El shell nuevo debe envolver el núcleo validado sin reescribirlo");
 assert.ok(wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell mientras el núcleo conserva su ruta canónica histórica");
 assert.ok(wrapper.includes("archiveRefreshKey")&&wrapper.includes("document.updatedAt"),"router.refresh debe poder remontar el núcleo con datos OCR actualizados");
+assert.ok(wrapper.includes("pendingCount>0||recoveryCount>0")&&wrapper.includes("shouldCheck={shouldCheckRecovery}"),"El shell debe consultar el plan cuando exista cualquier Pending global, aunque el OCR quede fuera de la primera página activa");
+assert.ok(page.includes("pendingCount={pending}"),"La página debe transmitir al shell el contador Pending canónico global");
 assert.ok(canonicalClient.includes("recognizeTicketImage(file,worker,onProgress,hint)"),"El núcleo OCR canónico debe seguir intacto en archive-client.tsx");
 
 const client=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 for(const token of [
+  "shouldCheck",
+  "if(!shouldCheck){setLoading(false);return;}",
   "async function runBulkRecovery",
   "for(let index=0;index<selected.length;index++)",
   "Actualizar OCR pendientes",
@@ -68,4 +72,4 @@ assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación no
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una confirmación/vínculo concurrente debe cancelar la escritura");
 
-console.log("OCR bulk reprocessing tests OK · shell limpio, núcleo canónico intacto, Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · shell limpio, núcleo canónico intacto, trigger Pending global, Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
