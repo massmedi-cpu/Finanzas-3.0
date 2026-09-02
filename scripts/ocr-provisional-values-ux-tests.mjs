@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const client=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
 
 assert.ok(client.includes('function ocrValuesTrusted(status:string){return status==="complete"||status==="manual"||status==="not_required"}'),"Debe existir una única frontera visual de valores OCR confiables");
 assert.ok(client.includes('`${formatted} · provisional`'),"Las tarjetas deben marcar importes OCR no confiables como provisionales");
