@@ -16,7 +16,7 @@ assert.ok(route.includes('from "@/lib/document/ocr-review-transition"')&&route.i
 assert.ok(transition.includes('from "./ocr-operational-status"')&&transition.includes("operationalOcrStatus(input.validationStatus,input.rawText)"),"La transición de revisión debe seguir usando el traductor operativo canónico para evidencia de máquina");
 assert.ok(!route.includes("next.ocrStatus=validation.status")&&!transition.includes("return input.validationStatus"),"Ninguna capa puede volver a copiar directamente validation.status a ocrStatus");
 
-const client=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
+const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 assert.ok(client.includes('ocrStatus:\"failed\"')&&client.includes("ocrError instanceof Error"),"Un fallo real del motor debe seguir persistiendo como failed");
 assert.ok(client.includes("if(!text.trim())throw new Error"),"La ausencia real de texto debe seguir siendo un error OCR");
 

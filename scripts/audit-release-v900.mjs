@@ -15,8 +15,7 @@ const lifecycle=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_CLOSURE.sq
 const storage=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_STORAGE_DURABILITY.sql");
 const safety=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_Z_SAFETY_HARDENING.sql");
 const lifecycleGate=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_LIFECYCLE_RELEASE_GATE.sql");
-const archiveWrapper=read("app/archivo/archive-client.tsx");
-const archiveClient=read("app/archivo/archive-client-core.tsx");
+const archiveClient=read("app/archivo/archive-client.tsx");
 const archiveApi=read("app/api/archive/route.ts");
 const archiveDetailApi=read("app/api/archive/[id]/route.ts");
 const syncApi=read("app/api/sync/route.ts");
@@ -160,7 +159,6 @@ for(const token of [
   "financial_app_document_storage_cleanup_reconcile"
 ])must(lifecycleGate.includes(token),`Release gate documental 9.0.0 incompleto: ${token}`);
 
-must(archiveWrapper.includes('from "./archive-client-core"')&&archiveWrapper.includes("ArchiveClientCore"),"El wrapper de Archivo debe delegar en el núcleo que consume lifecycleState canónico");
 must(archiveClient.includes('return document.lifecycleState==="pending"'),"Archivo vuelve a decidir el estado pendiente con una heurística local");
 must(!archiveClient.includes('document.links.length===0&&document.suggestions.length>0'),"Archivo conserva la heurística local antigua de revisión");
 must(archiveApi.includes("processDocumentStorageCleanup(supabase,25)"),"El listado de Archivo no ejecuta reconciliación/limpieza durable");
@@ -191,4 +189,4 @@ for(const token of [
 ])must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 9.0.0 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 9.0.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + hidratación Drive + ciclo documental canónico + wrapper/core protegidos`);
+console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + hidratación Drive + ciclo documental canónico protegidos`);

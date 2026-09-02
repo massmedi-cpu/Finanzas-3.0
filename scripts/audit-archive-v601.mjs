@@ -7,8 +7,7 @@ const authBoundary=read("database/FINANCIAL_APP_9.0.0_ARCHIVE_LIFECYCLE_AUTH.sql
 const data=read("lib/financial/archive.ts");
 const page=read("app/archivo/page.tsx");
 const lifecycle=read("app/archivo/archive-lifecycle-client.tsx");
-const activeClient=read("app/archivo/archive-client-core.tsx");
-const wrapper=read("app/archivo/archive-client.tsx");
+const activeClient=read("app/archivo/archive-client.tsx");
 const css=read("app/archive-lifecycle.css");
 
 for(const token of [
@@ -94,7 +93,6 @@ for(const token of [
   'router.refresh()',
   'Gestión documental activa'
 ])if(!activeClient.includes(token))failures.push(`Gestión activa de Archivo incompleta: ${token}`);
-for(const token of ["ArchiveClientCore","ArchiveBulkOcrRecovery","initialRecoveryCount"])if(!wrapper.includes(token))failures.push(`Wrapper activo de Archivo incompleto: ${token}`);
 if(activeClient.includes('archived:"1"'))failures.push("El cliente activo no debe enviar el parámetro legado archived=1 que la API ignora desde v6");
 if(activeClient.includes("Biblioteca única"))failures.push("Archivo no debe recuperar la leyenda heredada que contradice Nuevas/Pendientes/Archivadas");
 
@@ -103,4 +101,4 @@ if(css.includes("ghost-action"))failures.push("El CSS de Archivo no debe recuper
 if(css.includes("archive-view-note"))failures.push("El CSS de Archivo no debe conservar la tarjeta redundante archive-view-note");
 
 if(failures.length){console.error("Archive v6.0.1 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada, revisión única, feedback canónico, payload acotado y wrapper/core OCR protegidos");
+console.log("Archive v6.0.1 audit OK · estados server-side, autorización cerrada, revisión única, feedback canónico, Nuevas con payload inicial acotado y archivado reversible protegidos");

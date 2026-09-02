@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 
-const source=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
+const source=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 
 const upgradeStart=source.indexOf("async function upgradeExistingOcr");
 const openStart=source.indexOf("async function openDocument",upgradeStart);
