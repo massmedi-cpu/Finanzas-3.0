@@ -22,6 +22,7 @@ const syncApi=read("app/api/sync/route.ts");
 const ocrApi=read("app/api/ocr/receipt/route.ts");
 const hydrationWorker=read("lib/document/drive-content-hydration.ts");
 const serverOcr=read("lib/document/server-receipt-ocr.ts");
+const provenance=read("lib/document/receipt-ocr-provenance.ts");
 const serverPdf=read("lib/document/server-pdf-text.ts");
 const driveSource=read("supabase/functions/financial-app-drive-document-source/index.ts");
 const cleanupWorker=read("lib/document/storage-cleanup.ts");
@@ -95,8 +96,9 @@ for(const token of ["processDriveDocumentHydration","maxDuration=60","contentHyd
 for(const token of ["MAX_BATCH=2","BUDGET_MS=32_000","financial_app_prepare_drive_document_hydration","financial_app_drive_document_hydration_pending","financial_app_complete_drive_document_hydration","financial_app_finalize_document_links_after_hydration","drive_auto_pdf_text_v1","drive_auto_image_tesseract_v1","agreement.compared>=2","confidence??0)>=85"])
   must(hydrationWorker.includes(token),`Worker de hidratación Drive incompleto: ${token}`);
 must(!hydrationWorker.includes("financial_app.transactions"),"El worker de hidratación no puede tocar directamente movimientos");
-for(const token of ["recognizeServerReceiptImage","ServerReceiptOcrError","server-tesseract-7","OCR_LANGUAGE_ROOT","queueTimeoutMs"])
+for(const token of ["recognizeServerReceiptImage","ServerReceiptOcrError","SERVER_RECEIPT_OCR_RUNTIME","OCR_LANGUAGE_ROOT","queueTimeoutMs"])
   must(serverOcr.includes(token),`OCR de servidor compartido incompleto: ${token}`);
+must(provenance.includes('SERVER_RECEIPT_OCR_RUNTIME = "server-tesseract-7"')&&provenance.includes('SERVER_RECEIPT_OCR_MODEL = "spa.traineddata"'),"La procedencia canónica debe fijar runtime Tesseract 7 y modelo español");
 must(ocrApi.includes("recognizeServerReceiptImage")&&!ocrApi.includes("createWorker"),"El endpoint OCR debe reutilizar el motor de servidor en vez de duplicarlo");
 for(const token of ["pdfjs-dist/legacy/build/pdf.mjs","MAX_PDF_PAGES=16","MIN_USEFUL_TEXT=40","getTextContent"])
   must(serverPdf.includes(token),`Lector PDF de hidratación incompleto: ${token}`);
