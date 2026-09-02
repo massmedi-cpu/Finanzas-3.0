@@ -16,10 +16,10 @@ type ReprocessResponse={
   error?:string;
 };
 
-export function ArchiveBulkOcrRecovery({initialCount}:{initialCount:number}){
+export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:number;shouldCheck:boolean}){
   const router=useRouter();
   const [plan,setPlan]=useState<PlanResponse|null>(null);
-  const [loading,setLoading]=useState(initialCount>0);
+  const [loading,setLoading]=useState(shouldCheck);
   const [running,setRunning]=useState(false);
   const [done,setDone]=useState(0);
   const [current,setCurrent]=useState("");
@@ -35,12 +35,12 @@ export function ArchiveBulkOcrRecovery({initialCount}:{initialCount:number}){
   },[]);
 
   useEffect(()=>{
-    if(initialCount<=0){setLoading(false);return;}
+    if(!shouldCheck){setLoading(false);return;}
     let active=true;
     setLoading(true);
     void loadPlan().catch(cause=>{if(active)setError(cause instanceof Error?cause.message:"No se pudo comprobar el OCR pendiente")}).finally(()=>{if(active)setLoading(false)});
     return()=>{active=false};
-  },[initialCount,loadPlan]);
+  },[shouldCheck,loadPlan]);
 
   async function runBulkRecovery(){
     if(running)return;
@@ -87,7 +87,7 @@ export function ArchiveBulkOcrRecovery({initialCount}:{initialCount:number}){
     }
   }
 
-  if(initialCount<=0&&!message&&!error)return null;
+  if(!shouldCheck&&!message&&!error)return null;
   if(!loading&&plan&&plan.total===0&&!message&&!error)return null;
   const batchSize=plan?.candidates.length||0;
   const visibleCount=plan?.total??initialCount;
