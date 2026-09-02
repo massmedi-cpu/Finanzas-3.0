@@ -86,6 +86,7 @@
     "test:regression": "npm run test:backup && npm run test:analytics && npm run test:intelligence && npm run test:horizon && npm run test:format && npm run test:time && npm run test:explainability && npm run test:integrity && npm run test:ocr && npm run test:network && npm run test:search"
   },
   "dependencies": {
+    "@napi-rs/canvas": "1.0.8",
     "@supabase/ssr": "0.12.4",
     "@supabase/supabase-js": "2.112.3",
     "@tesseract.js-data/spa": "1.0.0",
