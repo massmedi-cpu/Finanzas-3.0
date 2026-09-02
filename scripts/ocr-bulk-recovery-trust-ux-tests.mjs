@@ -3,6 +3,7 @@ import fs from "node:fs";
 
 const source=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 const route=fs.readFileSync("app/api/archive/reprocess-ocr/route.ts","utf8");
+const page=fs.readFileSync("app/archivo/page.tsx","utf8");
 
 for(const token of [
   "Los datos detectados todavía no están confirmados",
@@ -38,9 +39,13 @@ for(const token of [
 assert.ok(route.indexOf("const persistence=buildStoredReceiptPersistence")<route.indexOf("const missingFields=manualReviewMissingFields"),"Los campos pendientes deben calcularse sobre el resultado persistible nuevo, no sobre la lectura anterior");
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("const missingFields=manualReviewMissingFields"),"La comprobación de carrera sigue precediendo al resumen de revisión");
 
+assert.ok(page.includes('import {ArchiveBulkOcrRecovery} from "./archive-bulk-ocr-recovery"'),"La vista Pending debe poder montar el recuperador OCR seguro");
+assert.ok(page.includes('view==="pending"&&pending>0&&<ArchiveBulkOcrRecovery initialCount={0} shouldCheck={true}/>'),"Pendientes debe comprobar primero si hay OCR recuperables antes de forzar revisión manual");
+assert.ok(page.indexOf('ArchiveBulkOcrRecovery initialCount={0}')<page.indexOf('<ArchiveLifecycleClient'),"La recuperación automática debe aparecer antes de la cola de revisión pendiente");
+
 const loop=source.slice(source.indexOf("for(let index=0;index<selected.length;index++)"),source.indexOf("setOutcomes(nextOutcomes)"));
 assert.ok(loop.includes("await fetch(\"/api/archive/reprocess-ocr\""),"El lote debe seguir esperando cada reprocesado antes de avanzar");
 assert.ok(!loop.includes("Promise.all"),"La mejora de UX no puede convertir el reprocesado seguro en paralelo");
 assert.ok(loop.includes("failed+=1")&&loop.includes("continue"),"Un fallo individual debe seguir aislado del resto del lote");
 
-console.log("OCR bulk recovery trust UX tests OK · resultado por documento indica campos pendientes sin alterar seguridad secuencial ni confianza OCR");
+console.log("OCR bulk recovery trust UX tests OK · recuperación segura visible también en Pendientes, antes de la revisión manual, sin alterar seguridad secuencial ni confianza OCR");
