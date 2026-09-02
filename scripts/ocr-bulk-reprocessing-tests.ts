@@ -78,10 +78,12 @@ for(const token of [
   "const latest=await documentDetail",
   "isBulkOcrReprocessCandidate(latest)",
   "buildStoredReceiptPersistence(latest,result)",
-  "financial_app_archive_update",
+  'supabase.rpc("financial_app_archive_update"',
 ])assert.ok(route.includes(token),`La API de recuperación debe proteger lifecycle completo, original, carreras y escritura: ${token}`);
 assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación debe usar el ciclo documental paginado, no cargar la biblioteca completa");
-assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
+const latestCheckIndex=route.indexOf("const latest=await documentDetail");
+const updateCallIndex=route.indexOf('supabase.rpc("financial_app_archive_update"');
+assert.ok(latestCheckIndex>=0&&updateCallIndex>=0&&latestCheckIndex<updateCallIndex,"La comprobación de carrera debe ocurrir antes de la llamada RPC que escribe");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una revisión manual concurrente debe cancelar la escritura");
 assert.ok(route.includes("Los vínculos no se")&&route.includes("legacy pueden conservarlos"),"La ruta debe documentar explícitamente que el reprocesado legacy no modifica asociaciones");
 
