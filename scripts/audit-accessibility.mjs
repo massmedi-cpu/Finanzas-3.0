@@ -46,6 +46,7 @@ const goalsLayout=read("app/objetivos/layout.tsx");
 const rulesLayout=read("app/reglas/layout.tsx");
 const netWorthLayout=read("app/patrimonio/layout.tsx");
 const movementsClient=read("app/movimientos/movements-client.tsx");
+const movementDetailDrawer=read("app/movimientos/movement-detail-drawer.tsx");
 const archiveClient=read("app/archivo/archive-client.tsx");
 const budgetClient=read("app/presupuesto/budget-client.tsx");
 const forecastClient=read("app/prevision/forecast-client.tsx");
@@ -144,7 +145,7 @@ for(const token of [
 }
 
 const modalRoutes=[
-  ["Movimientos",movementLayout,movementsClient,true],
+  ["Movimientos",movementLayout,movementsClient+movementDetailDrawer,true],
   ["Archivo",archiveLayout,archiveClient,true],
   ["Presupuesto",budgetLayout,budgetClient,false],
   ["Previsión",forecastLayout,forecastClient,false],
@@ -158,6 +159,7 @@ for(const [name,routeLayout,client,needsDrawerCss] of modalRoutes){
   if(needsDrawerCss&&!routeLayout.includes('import "../detail-dialog.css";')) errors.push(`${name}: falta el estilo de cajón compartido route-scoped`);
   if(!client.includes('role="dialog"')||!client.includes('aria-modal="true"')||!client.includes('aria-label="Cerrar"')) errors.push(`${name}: el modal no conserva semántica/cierre accesible`);
 }
+if(!movementsClient.includes("MovementDetailDrawer")) errors.push("Movimientos: el listado debe conservar la frontera diferida que monta el drawer accesible");
 if(!netWorthClient.includes('aria-busy={busy ? "true" : undefined}')) errors.push("Patrimonio debe impedir cierre por Escape mientras guarda el editor");
 
 const pages=walk("app").filter(path=>path.endsWith("page.tsx"));

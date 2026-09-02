@@ -30,6 +30,7 @@ const listRoute=fs.readFileSync("app/api/movements/route.ts","utf8");
 const selectionRoute=fs.readFileSync("app/api/movements/selection/route.ts","utf8");
 const client=fs.readFileSync("app/movimientos/movements-client.tsx","utf8");
 const lazyTools=fs.readFileSync("app/movimientos/movement-lazy-tools.tsx","utf8");
+const detailDrawer=fs.readFileSync("app/movimientos/movement-detail-drawer.tsx","utf8");
 const sql=fs.readFileSync("database/FINANCIAL_APP_9.0.0_MOVEMENT_SELECTION_FAST_PATH.sql","utf8");
 
 assert.ok(listRoute.includes("movementRpcFilterParams(q)"),"Listado y selección deben compartir el mismo parser de filtros");
@@ -40,8 +41,13 @@ assert.ok(!selectionRoute.includes("financial_app_movements_advanced"),"Seleccio
 assert.ok(client.includes("new AbortController()")&&client.includes("signal:controller.signal")&&client.includes("listAbortRef.current?.abort()"),"Las recargas deben cancelar la petición anterior para impedir carreras de UI");
 assert.ok(client.includes("movementSelectionScopeKey")&&client.includes("selectionScopeChanged")&&client.includes("Selección reiniciada porque cambió el conjunto de filtros"),"La selección oculta debe limpiarse cuando cambia su ámbito semántico");
 assert.ok(client.includes("/api/movements/selection?")&&!client.includes('q.set("pageSize",String(MAX_BULK_MOVEMENTS))'),"Seleccionar filtrados debe dejar de descargar 200 movimientos completos");
-assert.ok(client.includes('from "./movement-lazy-tools"'),"El cliente inicial debe cargar las herramientas pesadas bajo demanda");
-assert.ok(lazyTools.includes("dynamic(")&&lazyTools.includes("ssr:false")&&lazyTools.includes('import("./bulk-movement-editor")')&&lazyTools.includes('import("./movement-documents")')&&lazyTools.includes('import("./split-editor")'),"Editor masivo, documentos y splits deben quedar en chunks diferidos");
+assert.ok(client.includes('from "./movement-lazy-tools"')&&client.includes("MovementDetailDrawer"),"El cliente inicial debe entrar al editor individual por el boundary lazy");
+assert.ok(!client.includes('className="movement-editor"')&&!client.includes("restoreSource")&&!client.includes("buildPatch"),"Formulario, restauración y patch detallado no deben volver al bundle inicial de Movimientos");
+assert.ok(client.length<28000,`El cliente inicial de Movimientos ha vuelto a crecer demasiado (${client.length} bytes)`);
+assert.ok(lazyTools.includes("dynamic(")&&lazyTools.includes("ssr:false")&&lazyTools.includes('import("./bulk-movement-editor")')&&lazyTools.includes('import("./movement-detail-drawer")'),"Editor masivo y drawer individual deben quedar en chunks diferidos");
+assert.ok(detailDrawer.includes('from "./movement-documents"')&&detailDrawer.includes('from "./split-editor"'),"Documentos y splits deben viajar con el runtime diferido del detalle, no con la tabla inicial");
+for(const token of ["Origen protegido","Restaurar origen","Historial de cambios","Cambios guardados y registrados en el historial","Ediciones restauradas al estado derivado del origen"])
+  assert.ok(detailDrawer.includes(token),`El drawer diferido ha perdido un contrato de edición segura: ${token}`);
 
 for(const token of [
   "movements_selection_core",
@@ -59,4 +65,4 @@ assert.ok(!sql.includes("movements_advanced_enriched_core"),"El RPC ligero no pu
 assert.ok(!sql.includes("'facets'"),"La selección de IDs no debe calcular facetas");
 assert.ok(!sql.includes("'documentCount'"),"La selección de IDs no debe construir metadatos de tarjeta");
 
-console.log("Movement selection performance tests OK · filtros canónicos, IDs-only, límite 200, selección segura, fetch race-safe y herramientas lazy protegidos");
+console.log("Movement selection performance tests OK · filtros canónicos, IDs-only, límite 200, selección segura, fetch race-safe y detalle/edición fuera del bundle inicial");
