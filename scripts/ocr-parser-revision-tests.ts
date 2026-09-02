@@ -6,11 +6,12 @@ import {
   isCurrentReceiptOcrMethod,
 } from "../lib/document/receipt-ocr-revision";
 
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v6","La revisión del motor PP-OCRv6 no debe fingir un cambio de modelo");
-assert.equal(RECEIPT_PARSER_REVISION,"parser_v3","Las reglas de transporte/filtrado/reconstrucción nuevas deben tener revisión propia");
-assert.equal(RECEIPT_OCR_METHOD_PREFIX,"image_ocr_receipt_v501:paddle_layout_v6:parser_v3:");
-assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v3:ppocrv6_es_geometry"),true);
-assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry"),false,"Los documentos parser_v2 deben considerarse obsoletos para poder regenerarse al abrirlos");
-assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v5:parser_v3:ppocrv6_es_geometry"),false);
+assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v6","El modelo OCR sigue siendo PP-OCRv6; la revisión cambia en la canalización, no en el modelo");
+assert.equal(RECEIPT_PARSER_REVISION,"parser_v4","La calidad de transporte para documentos densos debe invalidar las reconstrucciones v2/v3 anteriores");
+assert.equal(RECEIPT_OCR_METHOD_PREFIX,"image_ocr_receipt_v501:paddle_layout_v6:parser_v4:");
+assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v4:ppocrv6_es_geometry"),true);
+assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v3:ppocrv6_es_geometry"),false,"Los documentos parser_v3 procesados con 2600px deben poder regenerarse con la entrada de mayor calidad");
+assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry"),false,"Los documentos parser_v2 continúan siendo elegibles para reprocessing");
+assert.equal(isCurrentReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v5:parser_v4:ppocrv6_es_geometry"),false);
 
-console.log("OCR parser revision tests OK · parser_v3 current, parser_v2 legacy and eligible for reprocessing");
+console.log("OCR parser revision tests OK · parser_v4 current; v2/v3 legacy and eligible for one safe higher-detail reprocessing");
