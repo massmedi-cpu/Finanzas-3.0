@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createWorker } from "tesseract.js";
+import { SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
 import { readServerImageMetadata } from "./server-image-metadata";
 
 const DEFAULT_MAX_BYTES=5*1024*1024;
@@ -25,7 +26,7 @@ export type ServerReceiptOcrResult={
   rawText:string;
   confidence:number|null;
   metrics:{detMs:number;recMs:number;totalMs:number;detectedBoxes:number;recognizedCount:number};
-  runtime:"server-tesseract-7";
+  runtime:typeof SERVER_RECEIPT_OCR_RUNTIME;
 };
 export type ServerReceiptOcrOptions={
   maxBytes?:number;
@@ -110,7 +111,7 @@ export async function recognizeServerReceiptImage(bytes:Buffer,options:ServerRec
     if(!items.length&&rawText){const confidence=Number(data.confidence);items=[{text:rawText,score:Number.isFinite(confidence)?Math.max(0,Math.min(100,confidence)):50,poly:[[0,0],[image.width,0],[image.width,image.height],[0,image.height]]}]}
     if(!items.length)throw new ServerReceiptOcrError("ocr_no_text",422,false);
     const totalMs=Date.now()-started;const scores=items.map(item=>item.score).filter(Number.isFinite);const confidence=scores.length?scores.reduce((sum,value)=>sum+value,0)/scores.length:null;
-    return{image:{width:image.width,height:image.height},items,rawText:rawText||items.map(item=>item.text).join("\n"),confidence,metrics:{detMs:0,recMs:totalMs,totalMs,detectedBoxes:items.length,recognizedCount:items.length},runtime:"server-tesseract-7"};
+    return{image:{width:image.width,height:image.height},items,rawText:rawText||items.map(item=>item.text).join("\n"),confidence,metrics:{detMs:0,recMs:totalMs,totalMs,detectedBoxes:items.length,recognizedCount:items.length},runtime:SERVER_RECEIPT_OCR_RUNTIME};
   }catch(failure){
     if(failure instanceof ServerReceiptOcrError)throw failure;
     if(failure instanceof TimeoutError&&failure.kind==="ocr_queue")throw new ServerReceiptOcrError("ocr_server_busy",503,true,failure);
