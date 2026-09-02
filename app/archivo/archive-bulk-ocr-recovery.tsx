@@ -16,10 +16,10 @@ type ReprocessResponse={
   error?:string;
 };
 
-export function ArchiveBulkOcrRecovery({refreshKey}:{refreshKey:string}){
+export function ArchiveBulkOcrRecovery({initialCount}:{initialCount:number}){
   const router=useRouter();
   const [plan,setPlan]=useState<PlanResponse|null>(null);
-  const [loading,setLoading]=useState(true);
+  const [loading,setLoading]=useState(initialCount>0);
   const [running,setRunning]=useState(false);
   const [done,setDone]=useState(0);
   const [current,setCurrent]=useState("");
@@ -35,11 +35,12 @@ export function ArchiveBulkOcrRecovery({refreshKey}:{refreshKey:string}){
   },[]);
 
   useEffect(()=>{
+    if(initialCount<=0){setLoading(false);return;}
     let active=true;
     setLoading(true);
     void loadPlan().catch(cause=>{if(active)setError(cause instanceof Error?cause.message:"No se pudo comprobar el OCR pendiente")}).finally(()=>{if(active)setLoading(false)});
     return()=>{active=false};
-  },[loadPlan,refreshKey]);
+  },[initialCount,loadPlan]);
 
   async function runBulkRecovery(){
     if(running)return;
@@ -86,12 +87,14 @@ export function ArchiveBulkOcrRecovery({refreshKey}:{refreshKey:string}){
     }
   }
 
-  if(!loading&&!plan?.total&&!message&&!error)return null;
+  if(initialCount<=0&&!message&&!error)return null;
+  if(!loading&&plan&&plan.total===0&&!message&&!error)return null;
   const batchSize=plan?.candidates.length||0;
+  const visibleCount=plan?.total??initialCount;
   return <div className="archive-bulk-recovery">
     <div className="archive-library-note">
-      <span><strong>Recuperación OCR</strong><br/>{loading&&!plan?"Comprobando documentos pendientes…":running?`Procesando ${Math.min(done+1,batchSize)}/${batchSize}${current?` · ${current}`:""}`:plan?.total?`${plan.total} documento${plan.total===1?"":"s"} puede${plan.total===1?"":"n"} releerse desde el original privado.`:"No hay documentos pendientes de recuperación automática."}</span>
-      {Boolean(plan?.total)&&<button className="secondary-action" type="button" onClick={runBulkRecovery} disabled={running||loading} aria-busy={running||undefined}>{running?"Actualizando OCR…":`Actualizar OCR pendientes · ${plan?.total||0}`}</button>}
+      <span><strong>Recuperación OCR</strong><br/>{loading&&!plan?"Comprobando documentos pendientes…":running?`Procesando ${Math.min(done+1,batchSize)}/${batchSize}${current?` · ${current}`:""}`:visibleCount?`${visibleCount} documento${visibleCount===1?"":"s"} puede${visibleCount===1?"":"n"} releerse desde el original privado.`:"No hay documentos pendientes de recuperación automática."}</span>
+      {Boolean(visibleCount)&&<button className="secondary-action" type="button" onClick={runBulkRecovery} disabled={running||loading} aria-busy={running||undefined}>{running?"Actualizando OCR…":`Actualizar OCR pendientes · ${visibleCount}`}</button>}
     </div>
     {running&&<div className="ocr-progress" role="status"><div><span>{current||"Preparando lote OCR"}</span><b>{batchSize?Math.round(done/batchSize*100):0}%</b></div><progress max={Math.max(1,batchSize)} value={done}/><small>Originales procesados uno a uno. Una relectura fallida no sustituye la evidencia anterior ni una revisión manual.</small></div>}
     {!running&&plan&&plan.remaining>0&&<div className="archive-library-note"><span>Este lote está limitado a {plan.limit} originales para proteger rendimiento. Quedan {plan.remaining} para una siguiente pasada.</span></div>}
