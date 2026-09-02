@@ -13,7 +13,10 @@ function forbid(pattern,message,text=sql){
 
 requireMatch(/create or replace function financial_app\.forecast_obligation_fingerprint\(\s*p_original_concept text,\s*p_fallback text\s*\)/i,
   'Missing canonical obligation fingerprint helper');
-requireMatch(/REF\\\.?\\s\+MANDATO[\\s\\S]{0,260}bank_mandate:[\\s\\S]{0,180}md5/i,
+if(!coreSql.includes("REF\\.?\\s+MANDATO\\s+([A-Z0-9]+)")) {
+  throw new Error('Bank mandate parser is missing from the obligation fingerprint');
+}
+requireMatch(/bank_mandate:[\s\S]{0,120}md5\('financial-app-v900-obligation:'/i,
   'Bank mandate must be reduced to a non-raw internal fingerprint');
 requireMatch(/forecast_obligation_fingerprint\([\s\S]{0,900}=v_obligation_fingerprint/i,
   'Annual memory must match the canonical obligation fingerprint');
