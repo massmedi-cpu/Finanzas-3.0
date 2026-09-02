@@ -42,6 +42,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-commercial-header-recovery-tests.ts
       - name: OCR parser revision
         run: ./node_modules/.bin/tsx scripts/ocr-parser-revision-tests.ts
+      - name: OCR safe automatic reprocessing
+        run: node scripts/ocr-safe-auto-reprocessing-tests.mjs
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
