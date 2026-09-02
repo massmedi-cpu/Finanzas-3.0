@@ -11,7 +11,7 @@ assert.equal(resolveOcrReviewStatus({existingStatus:"manual",incomingStatus:unde
 assert.equal(resolveOcrReviewStatus({existingStatus:"complete",incomingStatus:"complete",manualReviewConfirmed:false,newMachineEvidence:true,reviewSensitiveChanged:false,validationStatus:"failed",rawText:useful}),"needs_review","Nueva evidencia de máquina siempre vuelve a derivar el estado desde la validación real");
 assert.equal(resolveOcrReviewStatus({existingStatus:"failed",incomingStatus:"failed",manualReviewConfirmed:false,newMachineEvidence:true,reviewSensitiveChanged:false,validationStatus:"failed",rawText:""}),"failed","Nueva evidencia sin texto útil sigue siendo un fallo OCR real");
 
-const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const client=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
 const route=fs.readFileSync("app/api/archive/[id]/route.ts","utf8");
 assert.ok(client.includes('manualReviewConfirmed:true')&&client.includes('ocrStatus:"manual"'),"Archivo debe enviar una confirmación explícita al marcar manual");
 assert.ok(client.includes("Confirmar revisión")&&client.includes("Guardar cambios"),"La UI debe separar guardar de confirmar revisión");
