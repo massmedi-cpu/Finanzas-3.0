@@ -51,7 +51,7 @@ const unresolvedResult:ImageOcrResult={
   normalizedText:"ALBARAN\nSUBTOTAL 679,20\n821,830",
   layoutText:"ALBARAN\nSUBTOTAL 679,20\n821,830",
   metadata:{documentType:"invoice",documentDate:"2026-08-28",amount:null,merchant:null,lines:["ALBARAN","SUBTOTAL 679,20","821,830"]},
-  validation:{status:"needs_review",confidence:.45,printedTotal:null,itemSum:null,base:679.2,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:1,contradictions:["missing_total"]},
+  validation:{status:"needs_review",confidence:.45,printedTotal:null,itemSum:null,base:679.2,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:1,contradictions:[{code:"missing_total",severity:"critical",message:"No hay un total final corroborado."}]},
 };
 const clearedMachineFields=buildStoredReceiptPersistence(baseExisting,unresolvedResult,"2026-09-02T05:01:00.000Z");
 assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando parser_v5 ya no lo considera total");
