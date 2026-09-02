@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
 import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
-import { operationalOcrStatus } from "@/lib/document/ocr-operational-status";
+import { resolveOcrReviewStatus } from "@/lib/document/ocr-review-transition";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
 import type { ReceiptLayout } from "@/lib/document/receipt-layout";
@@ -17,8 +17,12 @@ function receiptLayoutFromReconstruction(value:unknown){
   return candidate as ReceiptLayout;
 }
 
+function comparableReviewValue(value:unknown){return value==null||value===""?"":String(value).trim();}
+
 function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unknown>){
   const next={...input};
+  const manualReviewConfirmed=next.manualReviewConfirmed===true;
+  delete next.manualReviewConfirmed;
   const incomingData=next.ocrData&&typeof next.ocrData==="object"?{...(next.ocrData as Record<string,unknown>)}:null;
   const existingData=existing.ocrData&&typeof existing.ocrData==="object"?existing.ocrData as Record<string,unknown>:null;
   const data=incomingData||existingData;
@@ -31,7 +35,19 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const layout=receiptLayoutFromReconstruction(reconstruction);
   const validation=validateReceiptFinancials(layout,rawText?[rawText]:[]);
   if(incomingData){incomingData.validation=validation;next.ocrData=incomingData;}
-  if(next.ocrStatus!=="manual")next.ocrStatus=operationalOcrStatus(validation.status,rawText);
+  const reviewSensitiveChanged=["documentType","documentDate","amount","merchant","ocrText"].some(key=>
+    Object.prototype.hasOwnProperty.call(next,key)&&comparableReviewValue(next[key])!==comparableReviewValue(existing[key])
+  );
+  const resolvedStatus=resolveOcrReviewStatus({
+    existingStatus:existing.ocrStatus,
+    incomingStatus:next.ocrStatus,
+    manualReviewConfirmed,
+    newMachineEvidence:Boolean(incomingData),
+    reviewSensitiveChanged,
+    validationStatus:validation.status,
+    rawText,
+  });
+  if(resolvedStatus)next.ocrStatus=resolvedStatus;else delete next.ocrStatus;
   return next;
 }
 
