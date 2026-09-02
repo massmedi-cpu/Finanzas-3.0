@@ -207,6 +207,17 @@ function labeledAmount(lines: string[], pattern: RegExp) {
   return null;
 }
 
+function invoiceVatBreakdown(lines: string[]) {
+  for (const line of lines) {
+    const match = line.match(/\bIVA\s+sobre\s+(\d{1,7}[.,]\d{2,3})\s+(\d{1,7}[.,]\d{2,3})\b/i);
+    if (!match) continue;
+    const base = parseEuroValue(match[1]);
+    const tax = parseEuroValue(match[2]);
+    if (base !== null && tax !== null) return { base, tax };
+  }
+  return null;
+}
+
 export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = null): DocumentMetadata {
   const text = normalizeOcrText(rawText);
   const lines = text.split(/\r?\n/).filter(Boolean);
@@ -240,8 +251,14 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
   }
 
   if (documentType === "invoice") {
-    const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
-    const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
+    // En una factura/albarán, un importe encontrado por proximidad o por una
+    // etiqueta OCR degradada no es suficiente: puede ser base/subtotal. La
+    // inferencia genérica se descarta y solo se recupera un bruto cuando base
+    // + IVA están explícitos y ese bruto aparece también en la evidencia.
+    amount = null;
+    const vatBreakdown = invoiceVatBreakdown(lines);
+    const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.base ?? null;
+    const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
     if (base !== null && tax !== null) {
       const gross = Math.round((base + tax) * 100) / 100;
       const candidates = lines.flatMap(extractAmounts);
