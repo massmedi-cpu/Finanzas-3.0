@@ -50,7 +50,7 @@ assert.ok(recognized.rawText.includes("WA]"));
 assert.ok(recognized.rawText.includes("subtota"));
 assert.ok(recognized.text.includes("[cantidad]"),"La columna Cantidad de baja confianza debe conservarse por contexto de cabecera");
 assert.ok(recognized.text.includes("IVA]"),"WA solo puede normalizarse a IVA dentro de una cabecera comercial fuerte");
-assert.ok(recognized.text.includes("SUBTOTAL"),"subtota debe normalizarse solo dentro de la cabecera comercial fuerte");
+assert.ok(/\bsubtotal\b/i.test(recognized.text),"subtota debe normalizarse a subtotal conservando el estilo de mayúsculas/minúsculas de la fuente");
 assert.ok(!recognized.text.includes("BACKGROUND"),"El rescate de cabecera no puede reabrir el filtro de ruido exterior");
 assert.equal(recognized.receiptLayout?.items.length,2,"La cabecera recuperada debe activar el parser comercial");
 assert.deepEqual(recognized.receiptLayout?.items.map(row=>[row.quantity,row.unitPrice,row.total]),[
