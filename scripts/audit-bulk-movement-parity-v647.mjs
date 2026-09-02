@@ -6,6 +6,7 @@ const must=(ok,message)=>{if(!ok)failures.push(message)};
 
 const editor=read("app/movimientos/bulk-movement-editor.tsx");
 const client=read("app/movimientos/movements-client.tsx");
+const detailDrawer=read("app/movimientos/movement-detail-drawer.tsx");
 const documents=read("app/movimientos/movement-documents.tsx");
 const route=read("app/api/movements/bulk/route.ts");
 const selectionRoute=read("app/api/movements/selection/route.ts");
@@ -42,12 +43,18 @@ for(const token of [
   "Marcar conciliados",
   "const refreshed=await loadWith(appliedFilters,pageData.page)",
   "Los cambios se guardaron, pero no se pudo actualizar la lista",
+  'status-badge info\">Nuevo'
+])must(client.includes(token),`Flujo diario de Movimientos sin garantía en listado: ${token}`);
+for(const token of [
   "El cambio se guardó, pero no se pudo actualizar la lista",
   'aria-busy={saving||undefined}',
-  'status-badge info\">Nuevo'
-])must(client.includes(token),`Flujo diario de Movimientos sin garantía: ${token}`);
+  "Origen protegido",
+  "Restaurar origen",
+  "Historial de cambios"
+])must(detailDrawer.includes(token),`Flujo diario de Movimientos sin garantía en detalle diferido: ${token}`);
 must(!client.includes('status-badge new'),"Movimientos no puede usar el tono de estado local obsoleto 'new'");
 must(client.includes("openRequestRef")&&client.includes("requestId!==openRequestRef.current"),"La apertura de detalle debe ignorar respuestas antiguas que lleguen fuera de orden");
+must(client.includes("MovementDetailDrawer")&&!client.includes('className="movement-editor"'),"El editor individual debe permanecer fuera del bundle inicial de Movimientos");
 must(documents.includes('includeArchived:"1"'),"El selector documental debe poder buscar explícitamente en Archivo histórico");
 must(!documents.includes('archived:"1"'),"El selector documental no puede recuperar el parámetro legado archived=1");
 
@@ -74,4 +81,4 @@ for(const token of [".movement-selection-scope",".bulk-tags-field",".bulk-impact
   must(operationCss.includes(token),`Estilos de operaciones masivas incompletos: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.7 bulk movement parity audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.7 bulk movement parity audit OK · selección global filtrada IDs-only, preview explícito, etiquetas aditivas, límite 200, refresco fiable y undo canónico protegidos");
+console.log("Financial App 6.4.7 bulk movement parity audit OK · selección global filtrada IDs-only, detalle diferido seguro, preview explícito, etiquetas aditivas, límite 200, refresco fiable y undo canónico protegidos");
