@@ -16,6 +16,7 @@ const must=(ok:unknown,message:string)=>{if(!ok)failures.push(message)};
 
 const engine=read("lib/document/ticket-ocr-engine.ts");
 const server=read("lib/document/server-receipt-ocr.ts");
+const canonical=read("lib/document/server-canonical-receipt.ts");
 const archive=read("app/archivo/archive-client.tsx");
 const loader=read("public/vendor/receipt-ocr-loader.mjs");
 const legacyLoader=read("public/vendor/paddleocr-loader.mjs");
@@ -61,16 +62,22 @@ must(legacyLoader.includes("Legacy browser shim")&&legacyLoader.includes("/vendo
 must(!legacyLoader.includes("PP-OCRv6")&&!legacyLoader.includes("onnxruntime"),"El shim legacy conserva lógica/modelo Paddle");
 
 must(server.includes("runtime:SERVER_RECEIPT_OCR_RUNTIME"),"El endpoint Tesseract no devuelve la constante canónica de runtime");
+for(const token of ["recognizeServerReceiptImage","recognizeTicketImage","receiptOcrRuntime","server_ocr_runtime_mismatch"])
+  must(canonical.includes(token),`La entrada server-side canónica está incompleta: ${token}`);
 for(const source of [reprocess,drive]){
   must(source.includes("SERVER_RECEIPT_OCR_ENGINE"),"Una ruta de persistencia no guarda el motor canónico");
   must(source.includes("SERVER_RECEIPT_OCR_MODEL"),"Una ruta de persistencia no guarda el modelo canónico");
   must(source.includes("SERVER_RECEIPT_OCR_RUNTIME"),"Una ruta de persistencia no guarda el runtime canónico");
+  must(source.includes("recognizeCanonicalReceiptBytes"),"Una ruta server-side evita el OCR canónico compartido");
+  must(!source.includes("recognizeServerReceiptImage("),"Una ruta server-side conserva una llamada Tesseract paralela");
 }
-must(drive.includes('method:"drive_auto_image_tesseract_v1"'),"Drive debe conservar su método Tesseract explícito");
+must(drive.includes("method:parsed.method"),"Drive debe persistir la revisión OCR canónica real");
+must(drive.includes('sourceMethod:"drive_auto_image_canonical_v2"'),"Drive debe conservar su procedencia de ingestión separada del método OCR");
+must(drive.includes('financiallyValid=parsed.validation?.status==="complete"'),"Drive no exige validación financiera canónica antes de completar");
 
 if(failures.length){
   console.error("OCR runtime provenance tests FAILED");
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("OCR runtime provenance tests OK · runtime Tesseract veraz, compatibilidad legacy precisa y rutas unificadas");
+console.log("OCR runtime provenance tests OK · Tesseract veraz y pipeline único para Archivo, Drive y reprocesado");
