@@ -290,7 +290,8 @@ function classifyTableRow(row: Row, rowIndex: number, width: number, columns:Tab
     amount=[...parseable].sort((a,b)=>distanceTo(a.right,columns.amountRight,width*.86)-distanceTo(b.right,columns.amountRight,width*.86))[0];
   }
   if(amount&&columns.priceRight){
-    const candidates=rightZone.filter(token=>token.index!==amount?.index&&token.x<amount.x);
+    const amountToken=amount;
+    const candidates=rightZone.filter(token=>token.index!==amountToken.index&&token.x<amountToken.x);
     const closest=[...candidates].sort((a,b)=>distanceTo(a.right,columns.priceRight,width*.68)-distanceTo(b.right,columns.priceRight,width*.68))[0];
     if(closest&&distanceTo(closest.right,columns.priceRight,width*.68)<=width*.14)price=closest;
   }
@@ -299,7 +300,8 @@ function classifyTableRow(row: Row, rowIndex: number, width: number, columns:Tab
     if(remaining.length)price=remaining.at(-1)!;
   }
   if(!amount&&price&&parseMoneyCell(price.text)!=null&&columns.amountRight){
-    const candidates=rightZone.filter(token=>token.index!==price?.index&&token.x>price.x);
+    const priceToken=price;
+    const candidates=rightZone.filter(token=>token.index!==priceToken.index&&token.x>priceToken.x);
     const closest=[...candidates].sort((a,b)=>distanceTo(a.right,columns.amountRight,width*.86)-distanceTo(b.right,columns.amountRight,width*.86))[0];
     if(closest&&distanceTo(closest.right,columns.amountRight,width*.86)<=width*.14)amount=closest;
   }
