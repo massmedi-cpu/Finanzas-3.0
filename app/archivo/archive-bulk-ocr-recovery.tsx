@@ -15,6 +15,7 @@ type ReprocessResponse={
   ocrStatus?:string;
   humanFieldsPreserved?:string[];
   fieldChanges?:FieldChange[];
+  missingFields?:string[];
   error?:string;
 };
 type RecoveryOutcome={
@@ -41,6 +42,19 @@ function fieldChangeDetail(changes:FieldChange[]|undefined){
   return ` Cambios automáticos: ${changes.map(fieldChangeLabel).join(", ")}.`;
 }
 
+function missingFieldLabel(fields:string[]|undefined){
+  const labels:Record<string,string>={documentDate:"fecha",amount:"importe",merchant:"comercio",documentType:"tipo"};
+  const values=(fields||[]).map(field=>labels[field]||field);
+  if(!values.length)return "";
+  if(values.length===1)return values[0];
+  return `${values.slice(0,-1).join(", ")} y ${values.at(-1)}`;
+}
+
+function missingFieldDetail(fields:string[]|undefined){
+  const label=missingFieldLabel(fields);
+  return label?` Falta completar ${label} antes de confirmar la revisión.`:"";
+}
+
 function outcomeFor(candidate:Candidate,response:ReprocessResponse):RecoveryOutcome{
   const preserved=response.humanFieldsPreserved||[];
   const changes=fieldChangeDetail(response.fieldChanges);
@@ -51,7 +65,8 @@ function outcomeFor(candidate:Candidate,response:ReprocessResponse):RecoveryOutc
     return{id:candidate.id,fileName:candidate.fileName,tone:"success",title:"OCR validado",detail:`La nueva lectura desde el original ha superado la validación automática.${changes}`};
   }
   const correction=preserved.length?` Se han conservado tus correcciones en ${preservedLabel(preserved)}.`:"";
-  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura se ha guardado como evidencia provisional.${changes}${correction}`};
+  const missing=missingFieldDetail(response.missingFields);
+  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura se ha guardado como evidencia provisional.${changes}${missing}${correction}`};
 }
 
 export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:number;shouldCheck:boolean}){
