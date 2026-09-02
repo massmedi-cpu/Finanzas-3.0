@@ -32,6 +32,8 @@ jobs:
         run: npm run test:regression
       - name: Document matching index-path contract
         run: node scripts/audit-document-matching-index-path-v900.mjs
+      - name: Document matching OCR readiness
+        run: node scripts/audit-document-matching-ocr-readiness-v900.mjs
       - name: OCR operational status semantics
         run: ./node_modules/.bin/tsx scripts/ocr-operational-status-tests.ts
       - name: OCR dimension-aware transport
