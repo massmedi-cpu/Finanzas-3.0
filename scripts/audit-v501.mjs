@@ -11,7 +11,8 @@ const login=read("app/login/page.tsx");
 const authCss=read("app/auth.css");
 const ocrEngine=read("lib/document/ticket-ocr-engine.ts");
 const preprocessor=read("lib/document/receipt-image-preprocessor.ts");
-const archive=read("app/archivo/archive-client.tsx");
+const archiveWrapper=read("app/archivo/archive-client.tsx");
+const archive=fs.existsSync("app/archivo/archive-client-core.tsx")?read("app/archivo/archive-client-core.tsx"):archiveWrapper;
 const visual=read("app/archivo/receipt-geometry-preview.tsx");
 const loader=read("public/vendor/paddleocr-loader.mjs");
 const serverOcrRoute=read("app/api/ocr/receipt/route.ts");
@@ -55,6 +56,7 @@ for(const token of [
   "passes",
 ]) must(ocrEngine.includes(token),`OCR canónico 5.0.1 incompleto: ${token}`);
 
+must(archiveWrapper.includes("ArchiveClientCore")||!fs.existsSync("app/archivo/archive-client-core.tsx"),"El wrapper de Archivo debe delegar el flujo OCR validado en el núcleo preservado");
 must(archive.includes("PaddleOCR.create")&&archive.includes("sharedWorkerPromise")&&archive.includes("workerReuse:true"),"Archivo no conserva el adaptador OCR geométrico reutilizable");
 must(archive.includes('lang:"es"')&&archive.includes('ocrVersion:"PP-OCRv6"'),"Archivo ha perdido el contrato de idioma/modelo que alimenta el motor geométrico");
 must(!archive.includes('ocrVersion:"PP-OCRv5"'),"PP-OCRv5 no admite lang es en el contrato OCR histórico y no puede volver al runtime");
@@ -87,9 +89,6 @@ must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar un
 must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
 must(!/\b(?:ENERGY|CUBATA|GALICIA|CAÑA|AGUA CON GAS|AVILA BAR)\b/i.test(ocrEngine),"El OCR no puede contener vocabulario específico de un ticket");
 
-// La hidratación automática de Drive conserva las mismas firmas RPC, pero sus
-// privilegios elevados deben vivir en el esquema privado. Public solo expone
-// wrappers SECURITY INVOKER para evitar endpoints SECURITY DEFINER autenticados.
 const hydrationLower=hydrationBoundary.toLowerCase();
 for(const core of [
   "prepare_drive_document_hydration_core",
@@ -152,4 +151,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 baseline audit OK · reconocimiento Tesseract español en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta · hidratación Drive con frontera SECURITY INVOKER");
+console.log("Financial App 5.0.1 baseline audit OK · reconocimiento Tesseract español en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta · hidratación Drive con frontera SECURITY INVOKER · wrapper/core de Archivo protegido");
