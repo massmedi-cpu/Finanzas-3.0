@@ -56,6 +56,10 @@ jobs:
         run: node scripts/ocr-provisional-values-ux-tests.mjs
       - name: OCR manual review completeness
         run: ./node_modules/.bin/tsx scripts/ocr-manual-review-completeness-tests.ts
+      - name: OCR bulk recovery policy
+        run: ./node_modules/.bin/tsx scripts/ocr-bulk-reprocessing-tests.ts
+      - name: OCR server recovery safety
+        run: ./node_modules/.bin/tsx scripts/ocr-server-reprocess-safety-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
