@@ -12,8 +12,10 @@ requireMatch(/identityRank[\s\S]{0,220}::integer\s*<=\s*1/i,
   'Automatic received state must require exact/contained identity');
 requireMatch(/\{actual\}'\s*,\s*'null'::jsonb[\s\S]{0,180}\{match\}'\s*,\s*'null'::jsonb/i,
   'Weak matches must clear actual evidence and match metadata');
-requireMatch(/projectionMonths[\s\S]{0,4000}jsonb_array_elements\(v_events\)/i,
-  'Projection must be rebuilt from the filtered trusted event set');
+requireMatch(/from jsonb_array_elements\(v_events\) e\(item\)/i,
+  'Projection aggregates must read the filtered trusted event set');
+requireMatch(/'projectionMonths'\s*,\s*v_projection_months/i,
+  'Recomputed projection must replace the inherited projection payload');
 requireMatch(/jsonb_array_elements\(coalesce\(v_payload->'actualMonths'/i,
   'Projection must preserve actual cash-flow months');
 requireMatch(/'receivedRequiresStrongIdentity'\s*,\s*true/i,
