@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { bulkOcrReprocessPlan, isBulkOcrReprocessCandidate, BULK_OCR_REPROCESS_LIMIT } from "../lib/document/ocr-bulk-reprocess-policy";
 
-const current="image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry";
+const current="image_ocr_receipt_v501:paddle_layout_v6:parser_v7:ppocrv6_es_geometry";
+const previous="image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry";
 const legacy="image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry";
 const doc=(id:string,ocrStatus:string,method:string,options:{mimeType?:string;storageProvider?:string;links?:unknown[];bulkReprocessed?:boolean}={})=>({
   id,
@@ -14,6 +15,7 @@ const doc=(id:string,ocrStatus:string,method:string,options:{mimeType?:string;st
 });
 
 assert.equal(isBulkOcrReprocessCandidate(doc("legacy-complete","complete",legacy)),true,"Un OCR legado completo debe poder actualizar motor/parser");
+assert.equal(isBulkOcrReprocessCandidate(doc("previous-complete","complete",previous)),true,"parser_v6 debe poder actualizarse una vez para aplicar la clasificación documental v7");
 assert.equal(isBulkOcrReprocessCandidate(doc("current-review","needs_review",current)),true,"Un OCR actual pendiente puede reintentarse una vez por lote");
 assert.equal(isBulkOcrReprocessCandidate(doc("failed","failed",current)),true,"Un fallo operativo puede reintentarse desde el original");
 assert.equal(isBulkOcrReprocessCandidate(doc("error","error",current)),true,"Un error operativo puede reintentarse desde el original");
@@ -72,4 +74,4 @@ assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación no
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una confirmación/vínculo concurrente debe cancelar la escritura");
 
-console.log("OCR bulk reprocessing tests OK · shell limpio, núcleo canónico intacto, trigger Pending global, Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · parser_v6 legacy, parser_v7 actual, shell limpio, trigger Pending global, lote secuencial, sin bucles y carreras aisladas");
