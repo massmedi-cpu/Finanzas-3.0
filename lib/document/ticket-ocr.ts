@@ -236,16 +236,32 @@ function invoiceVatBreakdown(lines: string[]) {
   return null;
 }
 
+function strongTaxEvidence(lower: string) {
+  return /\b(?:irpf|impuestos?|tribut(?:o|os|aria|ario|arias|arios)|aeat|autoliquidaci[oó]n)\b/.test(lower)
+    || /\bagencia\s+tributaria\b/.test(lower)
+    || /\bmodelo\s+(?:100|111|115|130|131|180|190|200|202|303|347|349|390)\b/.test(lower);
+}
+
+function receiptStructureEvidence(lower: string) {
+  const hospitality = /\b(?:mesa|terraza|pedido\s+por|staff|camarero|barra)\b/.test(lower);
+  const commercial = /\b(?:total|importe|precio|pago|tarjeta|efectivo|uds|unidades)\b/.test(lower);
+  return hospitality && commercial;
+}
+
 export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = null): DocumentMetadata {
   const text = normalizeOcrText(rawText);
   const lines = text.split(/\r?\n/).filter(Boolean);
   const lower = text.toLowerCase();
-  let documentType = hint || "other";
+  const explicitReceipt = /\b(ticket|recibo|justificante|tique)\b/.test(lower);
+  const taxEvidence = strongTaxEvidence(lower);
+  const receiptEvidence = receiptStructureEvidence(lower);
+  let documentType = "other";
   if (/\b(factura|albar[aá]n)\b/.test(lower)) documentType = "invoice";
-  else if (/\b(ticket|recibo|justificante|tique)\b/.test(lower) || hint === "receipt") documentType = "receipt";
+  else if (explicitReceipt) documentType = "receipt";
   else if (/\bcontrato\b/.test(lower)) documentType = "contract";
   else if (/\bextracto\b/.test(lower)) documentType = "statement";
-  else if (/\b(irpf|iva|impuesto|tribut)\b/.test(lower)) documentType = "tax";
+  else if (taxEvidence) documentType = "tax";
+  else if (hint === "receipt" || receiptEvidence) documentType = "receipt";
 
   const documentDate = parseDate(text, documentType === "receipt");
   const totalMatchers = [
