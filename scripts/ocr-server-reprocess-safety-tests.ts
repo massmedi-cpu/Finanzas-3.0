@@ -24,7 +24,7 @@ const result:ImageOcrResult={
   passes:[{variant:"ppocrv6_es_geometry",confidence:92,score:92,visualLayout:{version:1}} as never],
   receiptLayout:{header:["JUAN"],items:[],summary:[{label:"TOTAL",value:"821,83"}],footer:[],unparsedBody:[],source:"geometry_tsv"},
   metadata:{documentType:"invoice",documentDate:"2026-08-29",amount:821.83,merchant:"JUAN",lines:["JUAN","TOTAL 821,83"]},
-  validation:{status:"complete",contradictions:[],printedTotal:821.83,itemSum:null,taxBase:null,taxAmount:null,taxRate:null},
+  validation:{status:"complete",confidence:1,printedTotal:821.83,itemSum:null,base:null,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:0,contradictions:[]},
   metrics:{preprocessMs:0,primaryMs:1000,secondaryMs:0,reconstructionMs:20,totalMs:1020},
 };
 
