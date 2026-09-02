@@ -97,7 +97,7 @@ export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:s
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(detail.error||!detail.data)return apiFailure("archive.document.delete.read",detail.error,"document_unavailable",404);
   const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});
-  if(deleted.error||!deleted.data)return apiFailure("archive.document.delete","delete_failed");
+  if(deleted.error||!deleted.data)return apiFailure("archive.document.delete",deleted.error,"delete_failed");
   const cleanup=await processDocumentStorageCleanup(supabase,25);
   return apiJson({
     ok:true,
