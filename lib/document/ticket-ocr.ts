@@ -186,7 +186,10 @@ function likelyMerchant(lines: string[]) {
     const previous = index > 0 ? cleanLine(lines[index - 1]) : "";
     if (/\bcliente\b/i.test(recentContext)) score -= 28;
     if (addressLike.test(line)) score -= 30;
-    if (addressLike.test(previous)) score -= 12;
+    // Locality/province lines typically sit immediately below address/phone lines.
+    // Penalize that context strongly enough that a short clean header above the
+    // address remains the merchant instead of the geographic line below it.
+    if (addressLike.test(previous)) score -= 24;
 
     if (!best || score > best.score) best = { line, score };
   }

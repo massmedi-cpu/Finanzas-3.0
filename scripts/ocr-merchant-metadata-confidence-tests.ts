@@ -30,6 +30,18 @@ Fecha 29/08/2026
 TOTAL 12,50`;
 assert.equal(inferDocumentMetadata(shortHeader,"receipt").merchant,"NORA","Una cabecera comercial corta debe ganar a la dirección y localidad posteriores");
 
+const realTicketShape=`Y
+- a;
+JUAN
+PISUERGA-SN TEL. 686108450
+CORIA DEL RIO SEVILLA
+C.LF.
+TICKET N* VENDEDOR 1
+36572/1/001 HORA14:55:33
+FECHA29/08/2026
+TOTAL A PAGAR 14,60`;
+assert.equal(inferDocumentMetadata(realTicketShape,"receipt").merchant,"JUAN","Una localidad/provincia inmediatamente posterior a dirección y teléfono no puede superar la cabecera comercial real");
+
 const legalName=`ACME SL
 C/ INDUSTRIA 4
 41000 SEVILLA
