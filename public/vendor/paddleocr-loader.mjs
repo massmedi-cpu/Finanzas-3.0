@@ -1,6 +1,9 @@
 const SERVER_OCR_ENDPOINT = "/api/ocr/receipt";
 const SERVER_TIMEOUT_MS = 55_000;
-const MAX_SIDE = 2600;
+// Dense invoices/albaranes need more character density than thermal receipts.
+// 3400px still cuts a 4080x3072 phone photo from 12.5MP to ~8.7MP while
+// preserving substantially more small text than the previous 2600px ceiling.
+const MAX_SIDE = 3400;
 const DIRECT_BLOB_LIMIT = 3.5 * 1024 * 1024;
 const MAX_SERVER_BYTES = 4.5 * 1024 * 1024;
 const MIN_COMPRESSED_SIDE = 1200;

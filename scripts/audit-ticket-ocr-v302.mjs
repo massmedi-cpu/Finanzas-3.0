@@ -51,7 +51,7 @@ must(!fs.existsSync("lib/document/ticket-ocr-v307.ts"),"No debe existir un segun
 must(!fs.existsSync("lib/document/ticket-ocr-geometry.ts"),"El motor geométrico legado debe estar eliminado, no dormido en runtime");
 
 must(loader.includes('SERVER_OCR_ENDPOINT = "/api/ocr/receipt"')&&loader.includes("serverPredict")&&loader.includes("financial-paddleocr-ready"),"El adaptador del navegador no apunta de forma estable al OCR autenticado del servidor");
-must(loader.includes("SERVER_TIMEOUT_MS = 55_000")&&loader.includes("MAX_SIDE = 2600")&&loader.includes("DIRECT_BLOB_LIMIT"),"El proxy OCR móvil ha perdido límites de tiempo, tamaño o escalado");
+must(loader.includes("SERVER_TIMEOUT_MS = 55_000")&&loader.includes("MAX_SIDE = 3400")&&loader.includes("DIRECT_BLOB_LIMIT"),"El proxy OCR móvil ha perdido límites de tiempo, tamaño o escalado");
 must(loader.includes("MAX_SERVER_BYTES = 4.5 * 1024 * 1024")&&loader.includes("constrainedCanvasBlob")&&loader.includes("DIRECT_IMAGE_TYPES")&&loader.includes("HEIC/HEIF"),"El proxy OCR debe convertir formatos decodificables y garantizar una copia por debajo del límite del servidor");
 must(!loader.includes("LEGACY_PADDLE_BASELINE")&&!loader.includes("cdn.jsdelivr.net/npm/@paddleocr"),"El loader conserva una firma Paddle obsoleta que ya no corresponde al runtime real");
 
