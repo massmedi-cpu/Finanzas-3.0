@@ -60,6 +60,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-bulk-reprocessing-tests.ts
       - name: OCR server recovery safety
         run: ./node_modules/.bin/tsx scripts/ocr-server-reprocess-safety-tests.ts
+      - name: OCR bulk recovery trust UX
+        run: node scripts/ocr-bulk-recovery-trust-ux-tests.mjs
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
