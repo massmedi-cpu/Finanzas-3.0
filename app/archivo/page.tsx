@@ -2,7 +2,7 @@ import Link from "next/link";
 import {redirect} from "next/navigation";
 import {requireAuthorizedUser} from "@/lib/auth/require-user";
 import {getArchiveOverview,getArchiveLifecycleOverview,type ArchiveLifecycleState} from "@/lib/financial/archive";
-import {ArchiveClient} from "./archive-client";
+import {ArchiveClient} from "./archive-client-shell";
 import {ArchiveLifecycleClient} from "./archive-lifecycle-client";
 
 export const dynamic="force-dynamic";
@@ -53,6 +53,6 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
       page={view==="new"?1:page}
       pageSize={PAGE_SIZE}
     />
-    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
-  </section></main>
+    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active} pendingCount={pending}/></section>}
+  </section></main>;
 }
