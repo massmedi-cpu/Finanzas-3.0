@@ -4,7 +4,7 @@ import {requireAuthorizedUser} from "@/lib/auth/require-user";
 import {getArchiveOverview,getArchiveLifecycleOverview,type ArchiveLifecycleState} from "@/lib/financial/archive";
 import {ArchiveClient} from "./archive-client-shell";
 import {ArchiveLifecycleClient} from "./archive-lifecycle-client";
-import {ArchiveBulkOcrRecovery} from "./archive-bulk-ocr-recovery";
+import {ArchiveBulkOcrRecoveryDeferred} from "./archive-bulk-ocr-recovery-deferred";
 
 export const dynamic="force-dynamic";
 const PAGE_SIZE=40;
@@ -41,7 +41,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
     <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/duplicados">Revisar duplicados</Link>{view!=="pending"&&<Link className="ghost button-link" href="/archivo/revision">Revisar pendientes{pending?` · ${pending}`:""}</Link>}</div></header>
-    <ArchiveBulkOcrRecovery initialCount={pending} shouldCheck={true}/>
+    <ArchiveBulkOcrRecoveryDeferred initialCount={pending} shouldCheck={true}/>
     <ArchiveLifecycleClient
       documents={view==="new"?[]:lifecycle.documents}
       counts={lifecycle.counts}

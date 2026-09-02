@@ -32,6 +32,8 @@ jobs:
         run: npm run test:regression
       - name: Analysis runtime performance contract
         run: node scripts/audit-analysis-deferred-runtime.mjs
+      - name: Archive runtime performance contract
+        run: node scripts/audit-archive-deferred-runtime.mjs
       - name: Document matching index-path contract
         run: node scripts/audit-document-matching-index-path-v900.mjs
       - name: Document matching OCR readiness

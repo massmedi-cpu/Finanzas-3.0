@@ -46,13 +46,16 @@ assert.equal(plan.limit,BULK_OCR_REPROCESS_LIMIT);
 assert.deepEqual(plan.selected.map(item=>item.id),many.slice(0,BULK_OCR_REPROCESS_LIMIT).map(item=>item.id),"El plan debe ser determinista y conservar orden");
 
 const wrapper=fs.readFileSync("app/archivo/archive-client-shell.tsx","utf8");
+const recoveryBoundary=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery-deferred.tsx","utf8");
 const page=fs.readFileSync("app/archivo/page.tsx","utf8");
 const canonicalClient=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
-assert.ok(wrapper.includes("ArchiveClientCore")&&!wrapper.includes("ArchiveBulkOcrRecovery"),"El núcleo activo no debe montar un segundo recuperador OCR duplicado");
-assert.ok(wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell mientras el núcleo conserva su ruta canónica histórica");
+assert.ok(wrapper.includes('import("./archive-client")')&&!wrapper.includes("ArchiveBulkOcrRecovery"),"El núcleo activo debe cargarse diferido y no montar un segundo recuperador OCR duplicado");
+assert.ok(!wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell sin recuperar un import estático del núcleo pesado");
 assert.ok(wrapper.includes("archiveRefreshKey")&&wrapper.includes("document.updatedAt"),"router.refresh debe poder remontar el núcleo con datos OCR actualizados");
-assert.ok(page.includes("<ArchiveBulkOcrRecovery initialCount={pending} shouldCheck={true}/>") ,"Archivo debe comprobar legacy y pendientes en cualquier vista del ciclo documental");
-assert.equal((page.match(/<ArchiveBulkOcrRecovery/g)||[]).length,1,"Archivo debe mantener una sola superficie de recuperación OCR");
+assert.ok(page.includes("<ArchiveBulkOcrRecoveryDeferred initialCount={pending} shouldCheck={true}/>") ,"Archivo debe comprobar legacy y pendientes en cualquier vista del ciclo documental");
+assert.equal((page.match(/<ArchiveBulkOcrRecoveryDeferred/g)||[]).length,1,"Archivo debe mantener una sola superficie de recuperación OCR");
+assert.ok(!page.includes('from "./archive-bulk-ocr-recovery"'),"La página no debe cargar el recuperador pesado antes del primer render");
+assert.ok(recoveryBoundary.includes('import("./archive-bulk-ocr-recovery")'),"El único recuperador debe seguir siendo el canónico y cargarse a través del boundary diferido");
 assert.ok(canonicalClient.includes("recognizeTicketImage(file,worker,onProgress,hint)"),"El núcleo OCR canónico debe seguir intacto en archive-client.tsx");
 
 const client=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
@@ -87,4 +90,4 @@ assert.ok(latestCheckIndex>=0&&updateCallIndex>=0&&latestCheckIndex<updateCallIn
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una revisión manual concurrente debe cancelar la escritura");
 assert.ok(route.includes("Los vínculos no se")&&route.includes("legacy pueden conservarlos"),"La ruta debe documentar explícitamente que el reprocesado legacy no modifica asociaciones");
 
-console.log("OCR bulk reprocessing tests OK · legacy complete/archivado actualizable, vínculos preservados, parser_v7 equivalente estable, lote secuencial, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · legacy complete/archivado actualizable, vínculos preservados, parser_v7 equivalente estable, lote secuencial, sin bucles y carreras aisladas · runtime diferido protegido");
