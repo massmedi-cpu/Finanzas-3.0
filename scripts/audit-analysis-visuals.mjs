@@ -13,7 +13,7 @@ const wallCss=read("app/analysis-visual-wall.css");
 const interactionCss=read("app/analysis-interactions.css");
 const css=baseCss+wallCss+interactionCss;
 
-for(const token of ["AnalysisVisualDashboard","AnalysisPeriodForm","resolveAnalysisPeriod","getAnalysisOverviewPeriod","analysis-insight-grid"]){
+for(const token of ["AnalysisVisualDeferred","AnalysisPeriodForm","resolveAnalysisPeriod","getAnalysisOverviewPeriod","analysis-insight-grid"]){
   if(!page.includes(token))failures.push(`Análisis ha perdido la integración de periodo/visual: ${token}`);
 }
 for(const token of [
