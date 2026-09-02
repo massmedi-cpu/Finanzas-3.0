@@ -42,6 +42,8 @@ jobs:
         run: node scripts/ocr-loader-cache-policy-tests.mjs
       - name: OCR runtime provenance truth
         run: ./node_modules/.bin/tsx scripts/ocr-runtime-provenance-tests.ts
+      - name: Canonical document OCR pipeline
+        run: node scripts/audit-canonical-document-ocr-v900.mjs
       - name: OCR financial summary rows
         run: ./node_modules/.bin/tsx scripts/ocr-financial-summary-row-tests.ts
       - name: OCR commercial header recovery
