@@ -78,6 +78,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/document-link-trust-unification-tests.ts
       - name: Sync observability and verification
         run: ./node_modules/.bin/tsx scripts/sync-observability-tests.ts
+      - name: Forecast automatic precision
+        run: node scripts/forecast-automatic-precision-tests.mjs
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
