@@ -10,7 +10,7 @@ export const runtime="nodejs";
 export const dynamic="force-dynamic";
 export const maxDuration=60;
 
-const DISCOVERY_SCAN_LIMIT=80;
+const DISCOVERY_PAGE_SIZE=80;
 const UNRESOLVED_OCR=new Set(["needs_review","failed","error"]);
 
 type AuthorizedClient=NonNullable<Awaited<ReturnType<typeof getAuthorizedClient>>>;
@@ -21,32 +21,44 @@ async function documentDetail(supabase:AuthorizedClient,id:string){
 }
 
 async function discoverCandidates(supabase:AuthorizedClient){
-  const overview=await supabase.rpc("financial_app_archive_overview",{
-    p_search:null,
-    p_limit:DISCOVERY_SCAN_LIMIT,
-    p_offset:0,
-    p_include_archived:false,
-  });
-  if(overview.error||!overview.data)return{error:overview.error,data:null};
-  const payload=overview.data as {total:number;documents:ArchiveDocument[]};
   const candidates:Array<{id:string;fileName:string;ocrStatus:string}>=[];
   let total=0;
-  for(const document of payload.documents){
-    if(!UNRESOLVED_OCR.has(document.ocrStatus))continue;
-    if(!document.mimeType?.startsWith("image/")||document.storageProvider!=="supabase_storage"||document.links.length>0||document.ocrStatus==="manual")continue;
-    // Solo los pocos documentos ya marcados como no resueltos requieren detalle.
-    // Así podemos excluir un OCR actual ya reprocesado sin consultar imágenes complete.
-    const detail=await documentDetail(supabase,document.id);
-    if(!detail||!isBulkOcrReprocessCandidate(detail))continue;
-    total+=1;
-    if(candidates.length<BULK_OCR_REPROCESS_LIMIT)candidates.push({id:document.id,fileName:document.fileName,ocrStatus:document.ocrStatus});
+  let offset=0;
+  let pendingTotal=Number.POSITIVE_INFINITY;
+
+  // Recorremos únicamente el ciclo Pending, por páginas, sin cargar la biblioteca
+  // activa completa en memoria ni consultar imágenes ya resueltas/archivadas.
+  while(offset<pendingTotal){
+    const overview=await supabase.rpc("financial_app_archive_lifecycle_overview",{
+      p_state:"pending",
+      p_search:null,
+      p_limit:DISCOVERY_PAGE_SIZE,
+      p_offset:offset,
+    });
+    if(overview.error||!overview.data)return{error:overview.error,data:null};
+    const payload=overview.data as {total:number;documents:ArchiveDocument[]};
+    pendingTotal=payload.total;
+    if(!payload.documents.length)break;
+
+    for(const document of payload.documents){
+      if(!UNRESOLVED_OCR.has(document.ocrStatus))continue;
+      if(!document.mimeType?.startsWith("image/")||document.storageProvider!=="supabase_storage"||document.links.length>0)continue;
+      // Solo los documentos ya marcados como no resueltos requieren detalle.
+      // Así excluimos un OCR actual ya reprocesado sin N+1 sobre imágenes complete.
+      const detail=await documentDetail(supabase,document.id);
+      if(!detail||!isBulkOcrReprocessCandidate(detail))continue;
+      total+=1;
+      if(candidates.length<BULK_OCR_REPROCESS_LIMIT)candidates.push({id:document.id,fileName:document.fileName,ocrStatus:document.ocrStatus});
+    }
+    offset+=payload.documents.length;
   }
+
   return{error:null,data:{
     total,
     candidates,
     limit:BULK_OCR_REPROCESS_LIMIT,
     remaining:Math.max(0,total-candidates.length),
-    truncated:payload.total>payload.documents.length,
+    truncated:false,
   }};
 }
 
