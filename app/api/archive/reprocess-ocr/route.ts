@@ -11,6 +11,7 @@ export const dynamic="force-dynamic";
 export const maxDuration=60;
 
 const DISCOVERY_SCAN_LIMIT=80;
+const UNRESOLVED_OCR=new Set(["needs_review","failed","error"]);
 
 type AuthorizedClient=NonNullable<Awaited<ReturnType<typeof getAuthorizedClient>>>;
 
@@ -31,14 +32,12 @@ async function discoverCandidates(supabase:AuthorizedClient){
   const candidates:Array<{id:string;fileName:string;ocrStatus:string}>=[];
   let total=0;
   for(const document of payload.documents){
+    if(!UNRESOLVED_OCR.has(document.ocrStatus))continue;
     if(!document.mimeType?.startsWith("image/")||document.storageProvider!=="supabase_storage"||document.links.length>0||document.ocrStatus==="manual")continue;
-    const unresolved=["needs_review","failed","error"].includes(document.ocrStatus);
-    let candidate=unresolved;
-    if(!candidate){
-      const detail=await documentDetail(supabase,document.id);
-      candidate=Boolean(detail&&isBulkOcrReprocessCandidate(detail));
-    }
-    if(!candidate)continue;
+    // Solo los pocos documentos ya marcados como no resueltos requieren detalle.
+    // Así podemos excluir un OCR actual ya reprocesado sin consultar imágenes complete.
+    const detail=await documentDetail(supabase,document.id);
+    if(!detail||!isBulkOcrReprocessCandidate(detail))continue;
     total+=1;
     if(candidates.length<BULK_OCR_REPROCESS_LIMIT)candidates.push({id:document.id,fileName:document.fileName,ocrStatus:document.ocrStatus});
   }
