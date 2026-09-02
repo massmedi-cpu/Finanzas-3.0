@@ -36,6 +36,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-operational-status-tests.ts
       - name: OCR dimension-aware transport
         run: node scripts/ocr-loader-dimension-tests.mjs
+      - name: OCR loader cache freshness
+        run: node scripts/ocr-loader-cache-policy-tests.mjs
       - name: OCR financial summary rows
         run: ./node_modules/.bin/tsx scripts/ocr-financial-summary-row-tests.ts
       - name: OCR commercial header recovery
