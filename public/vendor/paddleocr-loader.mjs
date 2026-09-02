@@ -7,6 +7,9 @@ const MIN_COMPRESSED_SIDE = 1200;
 const JPEG_QUALITIES = [0.94, 0.88, 0.82, 0.76];
 const DIRECT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
+const nowMs = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
+const roundedMs = (value) => Math.max(0, Math.round(value * 10) / 10);
+
 function withAbortTimeout(timeoutMs) {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(new Error("OCR server timeout")), timeoutMs);
@@ -74,42 +77,78 @@ async function decodeBlob(blob) {
 
 async function prepareServerInput(input) {
   if (typeof HTMLCanvasElement !== "undefined" && input instanceof HTMLCanvasElement) {
-    const target = scaledSize(input.width, input.height);
-    const canvas = target.width === input.width && target.height === input.height
+    const sourceWidth = input.width;
+    const sourceHeight = input.height;
+    const target = scaledSize(sourceWidth, sourceHeight);
+    const canvas = target.width === sourceWidth && target.height === sourceHeight
       ? input
       : drawToCanvas(input, target.width, target.height);
-    return { blob: await constrainedCanvasBlob(canvas), width: canvas.width, height: canvas.height };
+    return {
+      blob: await constrainedCanvasBlob(canvas),
+      width: canvas.width,
+      height: canvas.height,
+      sourceWidth,
+      sourceHeight,
+      scaled: canvas.width !== sourceWidth || canvas.height !== sourceHeight,
+    };
   }
 
   if (!(input instanceof Blob)) throw new Error("Formato OCR no compatible");
   const type = String(input.type || "").toLowerCase();
-  if (DIRECT_IMAGE_TYPES.has(type) && input.size <= DIRECT_BLOB_LIMIT) {
-    return { blob: input, width: 0, height: 0 };
+  const directCandidate = DIRECT_IMAGE_TYPES.has(type) && input.size <= DIRECT_BLOB_LIMIT;
+
+  // Preserve the old compatibility fallback on browsers that cannot inspect image
+  // dimensions. Modern browsers must decide by dimensions, not only compressed bytes:
+  // a 4080x3072 phone photo can weigh < 1 MB and still be unnecessarily expensive.
+  if (directCandidate && typeof createImageBitmap !== "function") {
+    return { blob: input, width: 0, height: 0, sourceWidth: 0, sourceHeight: 0, scaled: false };
   }
 
   const bitmap = await decodeBlob(input);
   try {
-    const target = scaledSize(bitmap.width, bitmap.height);
+    const sourceWidth = bitmap.width;
+    const sourceHeight = bitmap.height;
+    const target = scaledSize(sourceWidth, sourceHeight);
+    const scaled = target.width !== sourceWidth || target.height !== sourceHeight;
+
+    if (directCandidate && !scaled) {
+      return { blob: input, width: sourceWidth, height: sourceHeight, sourceWidth, sourceHeight, scaled: false };
+    }
+
     const canvas = drawToCanvas(bitmap, target.width, target.height);
-    return { blob: await constrainedCanvasBlob(canvas), width: canvas.width, height: canvas.height };
+    return {
+      blob: await constrainedCanvasBlob(canvas),
+      width: canvas.width,
+      height: canvas.height,
+      sourceWidth,
+      sourceHeight,
+      scaled,
+    };
   } finally {
     bitmap.close?.();
   }
 }
 
 async function serverPredict(input) {
+  const predictStarted = nowMs();
+  const prepareStarted = predictStarted;
   const prepared = await prepareServerInput(input);
+  const prepareMs = roundedMs(nowMs() - prepareStarted);
   if (prepared.blob.size > MAX_SERVER_BYTES) {
     throw new Error("La copia preparada para OCR supera el límite seguro del servidor");
   }
   const timeout = withAbortTimeout(SERVER_TIMEOUT_MS);
   try {
+    const requestStarted = nowMs();
     const response = await fetch(SERVER_OCR_ENDPOINT, {
       method: "POST",
       headers: {
         "content-type": prepared.blob.type || "image/jpeg",
         ...(prepared.width > 0 ? { "x-ocr-width": String(prepared.width) } : {}),
         ...(prepared.height > 0 ? { "x-ocr-height": String(prepared.height) } : {}),
+        ...(prepared.sourceWidth > 0 ? { "x-ocr-source-width": String(prepared.sourceWidth) } : {}),
+        ...(prepared.sourceHeight > 0 ? { "x-ocr-source-height": String(prepared.sourceHeight) } : {}),
+        "x-ocr-scaled": prepared.scaled ? "1" : "0",
       },
       body: prepared.blob,
       cache: "no-store",
@@ -119,7 +158,26 @@ async function serverPredict(input) {
     if (!response.ok || !body?.ok || !body?.result) {
       throw new Error(body?.error || `OCR server ${response.status}`);
     }
-    return [body.result];
+
+    const totalMs = roundedMs(nowMs() - predictStarted);
+    const transportMs = roundedMs(nowMs() - requestStarted);
+    const serverMetrics = body.result.metrics && typeof body.result.metrics === "object" ? body.result.metrics : {};
+    const serverMs = Number(serverMetrics.totalMs);
+    return [{
+      ...body.result,
+      metrics: {
+        ...serverMetrics,
+        serverMs: Number.isFinite(serverMs) ? serverMs : null,
+        prepareMs,
+        transportMs,
+        totalMs,
+        sourceWidth: prepared.sourceWidth || null,
+        sourceHeight: prepared.sourceHeight || null,
+        transportWidth: prepared.width || null,
+        transportHeight: prepared.height || null,
+        transportScaled: prepared.scaled,
+      },
+    }];
   } finally {
     timeout.clear();
   }
