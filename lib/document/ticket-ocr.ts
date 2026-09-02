@@ -240,6 +240,11 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
   }
 
   if (documentType === "invoice") {
+    // En una factura/albarán, un importe encontrado por proximidad o por una
+    // etiqueta OCR degradada no es suficiente: puede ser base/subtotal. La
+    // inferencia genérica se descarta y solo se recupera un bruto cuando base
+    // + IVA están explícitos y ese bruto aparece también en la evidencia.
+    amount = null;
     const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
     const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i);
     if (base !== null && tax !== null) {
