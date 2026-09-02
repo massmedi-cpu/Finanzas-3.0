@@ -28,6 +28,11 @@ export type StoredArchiveOcrPersistence = {
   validationStatus: string | null;
 };
 
+export type StoredArchiveFieldChange = {
+  field: "documentType" | "documentDate" | "amount" | "merchant";
+  kind: "updated" | "cleared";
+};
+
 function asRecord(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
@@ -45,6 +50,13 @@ function sameValue(field: string, left: unknown, right: unknown) {
   return String(left ?? "").trim() === String(right ?? "").trim();
 }
 
+function fieldEqual(field: string, left: unknown, right: unknown) {
+  const leftBlank = blank(left);
+  const rightBlank = blank(right);
+  if (leftBlank || rightBlank) return leftBlank && rightBlank;
+  return sameValue(field, left, right);
+}
+
 function selectMachineValue(
   field: string,
   current: unknown,
@@ -56,6 +68,21 @@ function selectMachineValue(
   if (previousMachineValue !== undefined && sameValue(field, current, previousMachineValue)) return nextMachineValue;
   preserved.push(field);
   return current;
+}
+
+export function storedReceiptFieldChanges(
+  existing: StoredArchiveOcrDocument,
+  persistence: Pick<StoredArchiveOcrPersistence, "documentType" | "documentDate" | "amount" | "merchant">,
+): StoredArchiveFieldChange[] {
+  const fields: StoredArchiveFieldChange["field"][] = ["documentType", "documentDate", "amount", "merchant"];
+  const changes: StoredArchiveFieldChange[] = [];
+  for (const field of fields) {
+    const before = existing[field];
+    const after = persistence[field];
+    if (fieldEqual(field, before, after)) continue;
+    changes.push({ field, kind: blank(after) ? "cleared" : "updated" });
+  }
+  return changes;
 }
 
 export function buildStoredReceiptPersistence(
