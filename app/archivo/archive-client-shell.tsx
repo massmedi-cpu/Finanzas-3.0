@@ -17,11 +17,12 @@ function initialRecoveryCount(data:ArchiveOverview){
   ).length;
 }
 
-export function ArchiveClient({initialData}:{initialData:ArchiveOverview}){
+export function ArchiveClient({initialData,pendingCount}:{initialData:ArchiveOverview;pendingCount:number}){
   const refreshKey=archiveRefreshKey(initialData);
   const recoveryCount=initialRecoveryCount(initialData);
+  const shouldCheckRecovery=pendingCount>0||recoveryCount>0;
   return <>
-    <ArchiveBulkOcrRecovery key={`bulk:${refreshKey}`} initialCount={recoveryCount}/>
+    <ArchiveBulkOcrRecovery key={`bulk:${refreshKey}:${pendingCount}`} initialCount={recoveryCount} shouldCheck={shouldCheckRecovery}/>
     <ArchiveClientCore key={refreshKey} initialData={initialData}/>
   </>;
 }
