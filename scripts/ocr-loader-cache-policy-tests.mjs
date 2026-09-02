@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const config=fs.readFileSync("next.config.ts","utf8");
-const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const client=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
 const loader=fs.readFileSync("public/vendor/paddleocr-loader.mjs","utf8");
 
 assert.ok(client.includes('script.src="/vendor/paddleocr-loader.mjs"'),"Archivo debe cargar el loader OCR canónico del mismo origen");
