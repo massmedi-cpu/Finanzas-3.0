@@ -19,6 +19,7 @@ const serverOcrCore=fs.existsSync("lib/document/server-receipt-ocr.ts")?read("li
 const nextConfig=read("next.config.ts");
 const validator=read("lib/document/receipt-financial-validator.ts");
 const revision=read("lib/document/receipt-ocr-revision.ts");
+const hydrationBoundary=read("database/FINANCIAL_APP_9.0.0_DRIVE_DOCUMENT_HYDRATION_INVOKER_BOUNDARY.sql");
 const pkg=JSON.parse(read("package.json"));
 const ci=read(".github/workflows/ci.yml");
 
@@ -86,6 +87,42 @@ must(!ocrEngine.includes("shouldRunSecondary"),"El nuevo OCR no debe ejecutar un
 must(!ocrEngine.includes("reconstructReceiptEvidence"),"El nuevo OCR no debe fusionar lecturas de distintos pases");
 must(!/\b(?:ENERGY|CUBATA|GALICIA|CAÑA|AGUA CON GAS|AVILA BAR)\b/i.test(ocrEngine),"El OCR no puede contener vocabulario específico de un ticket");
 
+// La hidratación automática de Drive conserva las mismas firmas RPC, pero sus
+// privilegios elevados deben vivir en el esquema privado. Public solo expone
+// wrappers SECURITY INVOKER para evitar endpoints SECURITY DEFINER autenticados.
+const hydrationLower=hydrationBoundary.toLowerCase();
+for(const core of [
+  "prepare_drive_document_hydration_core",
+  "drive_document_hydration_pending_core",
+  "drive_document_hydration_source_core",
+  "drive_document_hydration_fail_core",
+  "complete_drive_document_hydration_core",
+  "finalize_document_links_after_hydration_core",
+]) must(hydrationBoundary.includes(core),`Frontera de hidratación incompleta: falta core privado ${core}`);
+for(const wrapper of [
+  "public.financial_app_prepare_drive_document_hydration",
+  "public.financial_app_drive_document_hydration_pending",
+  "public.financial_app_drive_document_hydration_source",
+  "public.financial_app_drive_document_hydration_fail",
+  "public.financial_app_complete_drive_document_hydration",
+  "public.financial_app_finalize_document_links_after_hydration",
+]) must(hydrationBoundary.includes(wrapper),`Frontera de hidratación incompleta: falta wrapper ${wrapper}`);
+must((hydrationLower.match(/\nsecurity invoker\n/g)||[]).length===6,"Los seis RPC de hidratación públicos deben ser SECURITY INVOKER");
+must((hydrationLower.match(/set schema financial_app/g)||[]).length===6,"Las seis implementaciones privilegiadas deben salir de public");
+must(!hydrationLower.includes("security definer"),"La migración de frontera no debe crear nuevos SECURITY DEFINER públicos");
+must(hydrationBoundary.includes("grant execute on function public.financial_app_drive_document_hydration_source(uuid) to service_role"),"La lectura del origen de Drive debe seguir reservada a service_role");
+must(hydrationBoundary.includes("revoke all on function public.financial_app_drive_document_hydration_source(uuid) from public,anon,authenticated"),"El origen de Drive no puede quedar ejecutable por sesiones de usuario");
+for(const signature of [
+  "public.financial_app_prepare_drive_document_hydration(integer)",
+  "public.financial_app_drive_document_hydration_pending(integer)",
+  "public.financial_app_drive_document_hydration_fail(uuid,text,text,boolean)",
+  "public.financial_app_complete_drive_document_hydration(uuid,text,text,date,numeric,text,text,jsonb,text)",
+  "public.financial_app_finalize_document_links_after_hydration()",
+]){
+  must(hydrationBoundary.includes(`revoke all on function ${signature} from public,anon`),`Wrapper de hidratación sin revoke mínimo: ${signature}`);
+  must(hydrationBoundary.includes(`grant execute on function ${signature} to authenticated,service_role`),`Wrapper de hidratación sin grant autenticado controlado: ${signature}`);
+}
+
 function pngDimensions(file){
   const value=fs.readFileSync(file);
   const signature="89504e470d0a1a0a";
@@ -115,4 +152,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 baseline audit OK · reconocimiento Tesseract español en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta");
+console.log("Financial App 5.0.1 baseline audit OK · reconocimiento Tesseract español en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta · hidratación Drive con frontera SECURITY INVOKER");
