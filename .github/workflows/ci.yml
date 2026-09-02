@@ -80,6 +80,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/sync-observability-tests.ts
       - name: Forecast automatic precision
         run: node scripts/forecast-automatic-precision-tests.mjs
+      - name: Forecast projection trust
+        run: node scripts/forecast-projection-trust-tests.mjs
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
