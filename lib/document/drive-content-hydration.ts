@@ -4,7 +4,8 @@ import { asArray,asNumber,asRecord,asString,nullableString } from "@/lib/validat
 import { inferDocumentMetadata,type DocumentMetadata } from "./ticket-ocr";
 import { extractServerPdfText,ServerPdfTextError } from "./server-pdf-text";
 import { SERVER_RECEIPT_OCR_ENGINE,SERVER_RECEIPT_OCR_MODEL,SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
-import { recognizeServerReceiptImage,ServerReceiptOcrError } from "./server-receipt-ocr";
+import { recognizeCanonicalReceiptBytes } from "./server-canonical-receipt";
+import { ServerReceiptOcrError } from "./server-receipt-ocr";
 
 const MAX_BATCH=2;
 const MAX_SOURCE_BYTES=12*1024*1024;
@@ -64,8 +65,9 @@ async function processClaim(supabase:SupabaseClient,accessToken:string,claim:Cla
     return status==="complete"?"completed" as const:"review" as const;
   }
   if(claim.mimeType.startsWith("image/")){
-    const recognized=await recognizeServerReceiptImage(bytes,{maxBytes:MAX_SOURCE_BYTES,timeoutMs:25_000,queueTimeoutMs:3_000});const inferred=inferDocumentMetadata(recognized.rawText,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const agreement=imageAgreement(claim,inferred);const highConfidence=(recognized.confidence??0)>=85;const status=completeMetadata(meta)&&highConfidence&&agreement.compared>=2&&agreement.agreed===agreement.compared?"complete":"needs_review";
-    await complete(supabase,claim,meta,recognized.rawText,{engine:SERVER_RECEIPT_OCR_ENGINE,model:SERVER_RECEIPT_OCR_MODEL,runtime:recognized.runtime||SERVER_RECEIPT_OCR_RUNTIME,method:"drive_auto_image_tesseract_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,confidence:recognized.confidence,recognizedCount:recognized.metrics.recognizedCount,image:recognized.image,agreement},status);
+    const parsed=await recognizeCanonicalReceiptBytes(bytes,{mimeType:claim.mimeType,hint:claim.documentType==="receipt"?"receipt":null,maxBytes:MAX_SOURCE_BYTES,timeoutMs:25_000,queueTimeoutMs:3_000});
+    const inferred=parsed.metadata||inferDocumentMetadata(parsed.text,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const agreement=imageAgreement(claim,inferred);const highConfidence=(parsed.confidence??0)>=85;const financiallyValid=parsed.validation?.status==="complete";const status=completeMetadata(meta)&&highConfidence&&financiallyValid&&agreement.compared>=2&&agreement.agreed===agreement.compared?"complete":"needs_review";const firstPass=asRecord(parsed.passes[0]);const visualLayout=firstPass.visualLayout||null;
+    await complete(supabase,claim,meta,parsed.text,{engine:SERVER_RECEIPT_OCR_ENGINE,model:SERVER_RECEIPT_OCR_MODEL,runtime:SERVER_RECEIPT_OCR_RUNTIME,method:parsed.method,sourceMethod:"drive_auto_image_canonical_v2",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,confidence:parsed.confidence,passes:parsed.passes,rawText:parsed.rawText,normalizedText:parsed.normalizedText,tsv:parsed.tsv,validation:parsed.validation,metrics:parsed.metrics,receiptLayout:parsed.receiptLayout,visualLayout,deskewAngle:parsed.deskewAngle,perspectiveCorrected:parsed.perspectiveCorrected,imagePreprocessing:Boolean(firstPass.paperDetected),geometryLayout:Boolean(visualLayout||parsed.receiptLayout),agreement,financiallyValid},status);
     return status==="complete"?"completed" as const:"review" as const;
   }
   throw new ServerReceiptOcrError("drive_source_unsupported",415,false);

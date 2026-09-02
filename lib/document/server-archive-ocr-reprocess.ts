@@ -1,8 +1,8 @@
 import { operationalOcrStatus } from "./ocr-operational-status";
 import { SERVER_RECEIPT_OCR_ENGINE, SERVER_RECEIPT_OCR_MODEL, SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
-import { recognizeServerReceiptImage } from "./server-receipt-ocr";
+import { recognizeCanonicalReceiptBytes } from "./server-canonical-receipt";
 import { normalizeOcrText } from "./ticket-ocr";
-import { recognizeTicketImage, type ImageOcrResult } from "./ticket-ocr-engine";
+import type { ImageOcrResult } from "./ticket-ocr-engine";
 
 export type StoredArchiveOcrDocument = {
   documentType: string;
@@ -165,6 +165,7 @@ export function buildStoredReceiptPersistence(
     validation: result.validation,
     metrics: result.metrics,
     visualLayout,
+    receiptLayout: result.receiptLayout,
     deskewAngle: result.deskewAngle,
     perspectiveCorrected: result.perspectiveCorrected,
   };
@@ -206,14 +207,9 @@ export async function reprocessStoredReceiptBytes(
   existing: StoredArchiveOcrDocument,
   mimeType = "image/jpeg",
 ) {
-  const source = new Blob([new Uint8Array(bytes)], { type: mimeType }) as File;
-  const engine = {
-    predict: async (input: Blob | HTMLCanvasElement) => {
-      if (!(input as Blob).arrayBuffer) throw new Error("server_ocr_blob_required");
-      const server = await recognizeServerReceiptImage(Buffer.from(await (input as Blob).arrayBuffer()));
-      return [{ image: server.image, items: server.items, metrics: server.metrics, runtime: server.runtime }];
-    },
-  };
-  const result = await recognizeTicketImage(source, engine, () => undefined, "receipt");
+  const result = await recognizeCanonicalReceiptBytes(bytes, {
+    mimeType,
+    hint: "receipt",
+  });
   return { result, persistence: buildStoredReceiptPersistence(existing, result) };
 }
