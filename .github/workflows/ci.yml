@@ -32,6 +32,8 @@ jobs:
         run: npm run test:regression
       - name: Document matching index-path contract
         run: node scripts/audit-document-matching-index-path-v900.mjs
+      - name: OCR operational status semantics
+        run: ./node_modules/.bin/tsx scripts/ocr-operational-status-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
