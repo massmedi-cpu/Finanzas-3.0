@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Candidate={id:string;fileName:string;ocrStatus:string};
+type FieldChange={field:"documentType"|"documentDate"|"amount"|"merchant";kind:"updated"|"cleared"};
 type PlanResponse={ok:true;total:number;candidates:Candidate[];limit:number;remaining:number;truncated:boolean;error?:string};
 type ReprocessResponse={
   ok:boolean;
@@ -13,6 +14,7 @@ type ReprocessResponse={
   reason?:string;
   ocrStatus?:string;
   humanFieldsPreserved?:string[];
+  fieldChanges?:FieldChange[];
   error?:string;
 };
 type RecoveryOutcome={
@@ -28,16 +30,28 @@ function preservedLabel(fields:string[]|undefined){
   return (fields||[]).map(field=>labels[field]||field).join(", ");
 }
 
+function fieldChangeLabel(change:FieldChange){
+  const labels:Record<FieldChange["field"],string>={documentType:"tipo",documentDate:"fecha",amount:"importe",merchant:"comercio"};
+  const action=change.kind==="cleared"?"retirado":"actualizado";
+  return `${labels[change.field]} ${action}`;
+}
+
+function fieldChangeDetail(changes:FieldChange[]|undefined){
+  if(!changes?.length)return "";
+  return ` Cambios automáticos: ${changes.map(fieldChangeLabel).join(", ")}.`;
+}
+
 function outcomeFor(candidate:Candidate,response:ReprocessResponse):RecoveryOutcome{
   const preserved=response.humanFieldsPreserved||[];
+  const changes=fieldChangeDetail(response.fieldChanges);
   if(response.skipped||!response.updated){
     return{id:candidate.id,fileName:candidate.fileName,tone:"muted",title:"Omitido de forma segura",detail:"El documento cambió durante la lectura o ya no necesitaba recuperación. No se ha sobrescrito nada."};
   }
   if(response.ocrStatus==="complete"){
-    return{id:candidate.id,fileName:candidate.fileName,tone:"success",title:"OCR validado",detail:"La nueva lectura desde el original ha superado la validación automática."};
+    return{id:candidate.id,fileName:candidate.fileName,tone:"success",title:"OCR validado",detail:`La nueva lectura desde el original ha superado la validación automática.${changes}`};
   }
   const correction=preserved.length?` Se han conservado tus correcciones en ${preservedLabel(preserved)}.`:"";
-  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura se ha guardado como evidencia provisional.${correction}`};
+  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura se ha guardado como evidencia provisional.${changes}${correction}`};
 }
 
 export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:number;shouldCheck:boolean}){

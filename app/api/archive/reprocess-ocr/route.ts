@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
 import { BULK_OCR_REPROCESS_LIMIT, isBulkOcrReprocessCandidate } from "@/lib/document/ocr-bulk-reprocess-policy";
-import { buildStoredReceiptPersistence, reprocessStoredReceiptBytes } from "@/lib/document/server-archive-ocr-reprocess";
+import { buildStoredReceiptPersistence, reprocessStoredReceiptBytes, storedReceiptFieldChanges } from "@/lib/document/server-archive-ocr-reprocess";
 import { asRecord } from "@/lib/validation/json";
 import type { ArchiveDetail, ArchiveDocument } from "@/lib/financial/archive";
 
@@ -101,6 +101,7 @@ export async function POST(request:NextRequest){
   if(!latest)return apiError("document_unavailable",404);
   if(!isBulkOcrReprocessCandidate(latest))return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reprocess"});
   const persistence=buildStoredReceiptPersistence(latest,result);
+  const fieldChanges=storedReceiptFieldChanges(latest,persistence);
 
   const updated=await supabase.rpc("financial_app_archive_update",{
     p_id:documentId,
@@ -125,5 +126,6 @@ export async function POST(request:NextRequest){
     method:persistence.method,
     validationStatus:persistence.validationStatus,
     humanFieldsPreserved:persistence.humanFieldsPreserved,
+    fieldChanges,
   });
 }
