@@ -8,7 +8,7 @@ import { resolveAnalysisPeriod } from "@/lib/financial/analysis-period";
 import { movementState, movementUrl } from "@/lib/financial/movement-query";
 import { madridToday, madridYear } from "@/lib/time/madrid";
 import { AnalysisPeriodForm } from "@/components/analysis-period-form";
-import { AnalysisVisualDashboard } from "@/components/analysis-visual-dashboard";
+import { AnalysisVisualDeferred } from "@/components/analysis-visual-deferred";
 
 const pct=(v:number|null)=>formatSignedPercent(v,1);
 const plainPct=(v:number|null)=>formatPercent(v,1);
@@ -56,7 +56,7 @@ export default async function AnalysisPage({searchParams}:{searchParams:Promise<
       <article><span>Referencia anual de gasto</span><strong>{insights.annualizedExpenses==null?"—":formatEuro(insights.annualizedExpenses)}</strong><small>Media mensual × 12. Es una referencia lineal, no una previsión bancaria.</small></article>
     </section>
 
-    <AnalysisVisualDashboard months={data.monthly} categories={data.categories} merchants={data.merchants} deviations={data.deviations} insights={insights} year={data.year} comparisonYear={data.comparisonYear} income={data.income} expenses={data.expenses} net={data.net} priorIncome={data.priorIncome} priorExpenses={data.priorExpenses} priorNet={data.priorNet} periodStart={data.periodStart} periodEnd={data.periodEnd}/>
+    <AnalysisVisualDeferred months={data.monthly} categories={data.categories} merchants={data.merchants} deviations={data.deviations} insights={insights} year={data.year} comparisonYear={data.comparisonYear} income={data.income} expenses={data.expenses} net={data.net} priorIncome={data.priorIncome} priorExpenses={data.priorExpenses} priorNet={data.priorNet} periodStart={data.periodStart} periodEnd={data.periodEnd}/>
 
     <div className="analysis-grid analysis-diagnostic-grid">
       <article className="panel analysis-diagnostics"><div className="panel-head"><div><p className="eyebrow">DIAGNÓSTICO</p><h2>Cómo se está comportando el periodo</h2></div><span className={`pill coverage-${insights.coverage}`}>Cobertura {coverageCopy(insights.coverage)}</span></div><dl>
