@@ -3,6 +3,7 @@ import { SUPABASE_PUBLISHABLE_KEY,SUPABASE_URL } from "@/lib/supabase/config";
 import { asArray,asNumber,asRecord,asString,nullableString } from "@/lib/validation/json";
 import { inferDocumentMetadata,type DocumentMetadata } from "./ticket-ocr";
 import { extractServerPdfText,ServerPdfTextError } from "./server-pdf-text";
+import { SERVER_RECEIPT_OCR_ENGINE,SERVER_RECEIPT_OCR_MODEL,SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
 import { recognizeServerReceiptImage,ServerReceiptOcrError } from "./server-receipt-ocr";
 
 const MAX_BATCH=2;
@@ -64,7 +65,7 @@ async function processClaim(supabase:SupabaseClient,accessToken:string,claim:Cla
   }
   if(claim.mimeType.startsWith("image/")){
     const recognized=await recognizeServerReceiptImage(bytes,{maxBytes:MAX_SOURCE_BYTES,timeoutMs:25_000,queueTimeoutMs:3_000});const inferred=inferDocumentMetadata(recognized.rawText,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const agreement=imageAgreement(claim,inferred);const highConfidence=(recognized.confidence??0)>=85;const status=completeMetadata(meta)&&highConfidence&&agreement.compared>=2&&agreement.agreed===agreement.compared?"complete":"needs_review";
-    await complete(supabase,claim,meta,recognized.rawText,{method:"drive_auto_image_tesseract_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,confidence:recognized.confidence,recognizedCount:recognized.metrics.recognizedCount,image:recognized.image,agreement},status);
+    await complete(supabase,claim,meta,recognized.rawText,{engine:SERVER_RECEIPT_OCR_ENGINE,model:SERVER_RECEIPT_OCR_MODEL,runtime:recognized.runtime||SERVER_RECEIPT_OCR_RUNTIME,method:"drive_auto_image_tesseract_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,confidence:recognized.confidence,recognizedCount:recognized.metrics.recognizedCount,image:recognized.image,agreement},status);
     return status==="complete"?"completed" as const:"review" as const;
   }
   throw new ServerReceiptOcrError("drive_source_unsupported",415,false);
