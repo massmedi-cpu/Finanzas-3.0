@@ -11,9 +11,14 @@ export type BulkOcrReprocessDocument = {
   links?: unknown[] | null;
 };
 
+function storedOcrData(document: BulkOcrReprocessDocument) {
+  return document.ocrData && typeof document.ocrData === "object"
+    ? document.ocrData as Record<string, unknown>
+    : null;
+}
+
 function storedOcrMethod(document: BulkOcrReprocessDocument) {
-  if (!document.ocrData || typeof document.ocrData !== "object") return "";
-  return String((document.ocrData as Record<string, unknown>).method || "");
+  return String(storedOcrData(document)?.method || "");
 }
 
 export function isBulkOcrReprocessCandidate(document: BulkOcrReprocessDocument) {
@@ -22,9 +27,12 @@ export function isBulkOcrReprocessCandidate(document: BulkOcrReprocessDocument) 
   if (Array.isArray(document.links) && document.links.length > 0) return false;
   const status = String(document.ocrStatus || "").toLowerCase();
   if (status === "manual") return false;
-  const unresolved = status === "needs_review" || status === "failed" || status === "error";
+  const data = storedOcrData(document);
   const method = storedOcrMethod(document);
-  const legacy = method.startsWith("image_ocr_receipt_") && !method.startsWith(RECEIPT_OCR_METHOD_PREFIX);
+  const current = method.startsWith(RECEIPT_OCR_METHOD_PREFIX);
+  const alreadyBulkReprocessed = current && data?.bulkReprocessed === true;
+  const unresolved = (status === "needs_review" || status === "failed" || status === "error") && !alreadyBulkReprocessed;
+  const legacy = method.startsWith("image_ocr_receipt_") && !current;
   return unresolved || legacy;
 }
 
