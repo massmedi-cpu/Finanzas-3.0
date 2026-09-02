@@ -1,15 +1,14 @@
 import fs from 'node:fs';
 
-const sql = [
-  fs.readFileSync('database/v9.0.0-forecast-obligation-identity.sql','utf8'),
-  fs.readFileSync('database/v9.0.0-forecast-obligation-identity-dependency-permissions.sql','utf8'),
-].join('\n');
+const coreSql = fs.readFileSync('database/v9.0.0-forecast-obligation-identity.sql','utf8');
+const boundarySql = fs.readFileSync('database/v9.0.0-forecast-obligation-identity-security-boundary.sql','utf8');
+const sql = `${coreSql}\n${boundarySql}`;
 
-function requireMatch(pattern,message){
-  if(!pattern.test(sql)) throw new Error(message);
+function requireMatch(pattern,message,text=sql){
+  if(!pattern.test(text)) throw new Error(message);
 }
-function forbid(pattern,message){
-  if(pattern.test(sql)) throw new Error(message);
+function forbid(pattern,message,text=sql){
+  if(pattern.test(text)) throw new Error(message);
 }
 
 requireMatch(/create or replace function financial_app\.forecast_obligation_fingerprint\(\s*p_original_concept text,\s*p_fallback text\s*\)/i,
@@ -38,22 +37,34 @@ requireMatch(/seasonalSlotsPreserved[\s\S]{0,80}true/i,
   'Forecast rules must preserve semiannual/seasonal slots');
 requireMatch(/projectionRecomputedAfterPrecision[\s\S]{0,120}bankMandateObligationIdentity/i,
   'Obligation identity must remain inside the projection-consistent precision core');
-requireMatch(/grant execute on function financial_app\.forecast_obligation_fingerprint\(text,text\) to authenticated, service_role/i,
-  'SECURITY INVOKER chain needs authenticated fingerprint execution');
-requireMatch(/grant execute on function financial_app\.forecast_is_annual_signal\(text,text,text\) to authenticated, service_role/i,
-  'SECURITY INVOKER chain needs authenticated annual-signal execution');
-requireMatch(/grant execute on function financial_app\.forecast_norm\(text\) to authenticated, service_role/i,
-  'SECURITY INVOKER chain needs authenticated normalization execution');
-requireMatch(/revoke all on function financial_app\.forecast_obligation_fingerprint\(text,text\) from public, anon/i,
-  'Public and anon must not execute the internal fingerprint helper');
-requireMatch(/revoke all on function financial_app\.forecast_is_annual_signal\(text,text,text\) from public, anon/i,
-  'Public and anon must not execute the annual-signal helper');
-requireMatch(/revoke all on function financial_app\.forecast_norm\(text\) from public, anon/i,
-  'Public and anon must not execute the normalization helper');
+
+// The canonical precision core remains invoker. Only the two helpers that must read
+// transaction evidence use a narrow owner boundary and verify the authorized identity.
+forbid(/security\s+definer/i,
+  'The canonical obligation/precision core must remain SECURITY INVOKER',coreSql);
+requireMatch(/forecast_enrich_annual_obligation_evidence[\s\S]{0,220}security\s+definer/i,
+  'Evidence helper must use the narrow read boundary',boundarySql);
+requireMatch(/forecast_rematch_annual_obligation_event[\s\S]{0,220}security\s+definer/i,
+  'Rematch helper must use the narrow read boundary',boundarySql);
+const authGuards = boundarySql.match(/financial_app\.authorized_email\(\) is null/gi) ?? [];
+if(authGuards.length < 2) throw new Error('Both SECURITY DEFINER helpers must verify the authorized user');
+requireMatch(/revoke all on function financial_app\.forecast_enrich_annual_obligation_evidence\(jsonb\) from public, anon/i,
+  'Public and anon must not execute the evidence boundary');
+requireMatch(/revoke all on function financial_app\.forecast_rematch_annual_obligation_event\(jsonb\) from public, anon/i,
+  'Public and anon must not execute the rematch boundary');
+forbid(/grant\s+select\s+on\s+(table\s+)?financial_app\.(transactions|accounts)/i,
+  'Obligation identity must never widen direct table read grants');
+
+// The first migration creates the scalar helper before the boundary exists; the final
+// migration state must revoke direct authenticated access to raw fingerprint construction.
+const fpGrant = sql.lastIndexOf('grant execute on function financial_app.forecast_obligation_fingerprint(text,text) to authenticated, service_role');
+const fpRevoke = sql.lastIndexOf('revoke execute on function financial_app.forecast_obligation_fingerprint(text,text) from authenticated');
+if(fpGrant < 0 || fpRevoke <= fpGrant) throw new Error('Final state must keep fingerprint helper internal');
+const memoryGrant = sql.lastIndexOf('grant execute on function financial_app.forecast_annual_memory_candidate(uuid,date,date) to authenticated, service_role');
+const memoryRevoke = sql.lastIndexOf('revoke execute on function financial_app.forecast_annual_memory_candidate(uuid,date,date) from authenticated');
+if(memoryGrant < 0 || memoryRevoke <= memoryGrant) throw new Error('Final state must keep annual-memory table reader internal');
 
 forbid(/'mandateToken'|'rawMandate'|'mandateReference'/i,
   'Raw mandate fields must never be emitted into forecast JSON');
-forbid(/security\s+definer/i,
-  'New obligation identity layer must remain SECURITY INVOKER');
 
 console.log('Forecast obligation identity contract OK');
