@@ -102,7 +102,6 @@ function parseMoneyCell(text: string) {
     const value = Number(compact.replace(",", "."));
     return Number.isFinite(value) ? value : null;
   }
-  // Tickets térmicos omiten a veces el separador decimal (160 -> 1,60).
   if (/^\d{3,5}$/.test(compact)) {
     const value = Number(compact) / 100;
     return Number.isFinite(value) ? value : null;
@@ -282,14 +281,29 @@ function distanceTo(value:number,target:number|null,fallback:number){return Math
 function classifyTableRow(row: Row, rowIndex: number, width: number, columns:TableColumns): TableRow {
   const ordered=[...row.tokens].sort((a,b)=>a.x-b.x);
   const quantity=ordered.find(token=>integerLike(token.text)&&token.centerX<Math.max(width*.3,(columns.descriptionLeft??width*.2)))??null;
-  const money=ordered.filter(token=>parseMoneyCell(token.text)!=null&&token.centerX>width*.38);
+  const rightZone=ordered.filter(token=>token.index!==quantity?.index&&token.centerX>width*.38);
+  const parseable=rightZone.filter(token=>parseMoneyCell(token.text)!=null);
   let amount:NativeToken|null=null;
   let price:NativeToken|null=null;
-  if(money.length){
-    amount=[...money].sort((a,b)=>distanceTo(a.right,columns.amountRight,width*.86)-distanceTo(b.right,columns.amountRight,width*.86))[0];
-    const remaining=money.filter(token=>token.index!==amount?.index);
-    if(remaining.length)price=[...remaining].sort((a,b)=>distanceTo(a.right,columns.priceRight,width*.68)-distanceTo(b.right,columns.priceRight,width*.68))[0];
+
+  if(parseable.length){
+    amount=[...parseable].sort((a,b)=>distanceTo(a.right,columns.amountRight,width*.86)-distanceTo(b.right,columns.amountRight,width*.86))[0];
   }
+  if(amount&&columns.priceRight){
+    const candidates=rightZone.filter(token=>token.index!==amount?.index&&token.x<amount.x);
+    const closest=[...candidates].sort((a,b)=>distanceTo(a.right,columns.priceRight,width*.68)-distanceTo(b.right,columns.priceRight,width*.68))[0];
+    if(closest&&distanceTo(closest.right,columns.priceRight,width*.68)<=width*.14)price=closest;
+  }
+  if(!price){
+    const remaining=parseable.filter(token=>token.index!==amount?.index&&token.x<(amount?.x??width));
+    if(remaining.length)price=remaining.at(-1)!;
+  }
+  if(!amount&&price&&parseMoneyCell(price.text)!=null&&columns.amountRight){
+    const candidates=rightZone.filter(token=>token.index!==price?.index&&token.x>price.x);
+    const closest=[...candidates].sort((a,b)=>distanceTo(a.right,columns.amountRight,width*.86)-distanceTo(b.right,columns.amountRight,width*.86))[0];
+    if(closest&&distanceTo(closest.right,columns.amountRight,width*.86)<=width*.14)amount=closest;
+  }
+
   const excluded=new Set([quantity?.index,price?.index,amount?.index].filter((value):value is number=>typeof value==="number"));
   const description=ordered.filter(token=>!excluded.has(token.index)&&token.x<(price?.x??amount?.x??columns.descriptionEnd)&&token.centerX>Math.min(width*.18,(columns.quantityRight??width*.12)));
   const quantityValue=quantity?Number(quantity.text.trim()):null;
@@ -297,7 +311,7 @@ function classifyTableRow(row: Row, rowIndex: number, width: number, columns:Tab
   let amountValue=amount?parseMoneyCell(amount.text):null;
   if(amountValue!=null&&priceValue==null&&quantityValue&&quantityValue>0)priceValue=amountValue/quantityValue;
   if(priceValue!=null&&amountValue==null&&quantityValue&&quantityValue>0)amountValue=priceValue*quantityValue;
-  const continuation=!quantity&&!money.length&&description.some(token=>/\p{L}/u.test(token.text));
+  const continuation=!quantity&&!parseable.length&&description.some(token=>/\p{L}/u.test(token.text));
   return {rowIndex,row,quantity,description,price,amount,quantityValue,priceValue,amountValue,continuation};
 }
 
@@ -351,12 +365,10 @@ export function buildReceiptVisualModel(layout: ReceiptVisualLayoutInput): Recei
   const rows=buildRows(tokens.filter(token=>!ruleLike(token.text)),medianHeight);
 
   const tableHeaderIndex=rows.findIndex(isTableHeader);
-  let tableBodyIndices=tableHeaderIndex>=0?tableBodyRange(rows,tableHeaderIndex,medianHeight,width):implicitTableBody(rows,width,medianHeight);
+  const tableBodyIndices=tableHeaderIndex>=0?tableBodyRange(rows,tableHeaderIndex,medianHeight,width):implicitTableBody(rows,width,medianHeight);
   const header=tableHeaderIndex>=0?rows[tableHeaderIndex]:null;
   let columns=initialColumns(header,tableBodyIndices.map(index=>rows[index]),width);
   let tableRows=tableBodyIndices.map(rowIndex=>classifyTableRow(rows[rowIndex],rowIndex,width,columns));
-  // Una segunda inferencia usa los propios datos de las filas para estabilizar
-  // las anclas de columnas en tickets inclinados o con cabecera incompleta.
   columns=initialColumns(header,tableRows.map(item=>item.row),width);
   tableRows=tableBodyIndices.map(rowIndex=>classifyTableRow(rows[rowIndex],rowIndex,width,columns));
 
