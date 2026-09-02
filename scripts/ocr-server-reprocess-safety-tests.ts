@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { buildStoredReceiptPersistence, type StoredArchiveOcrDocument } from "../lib/document/server-archive-ocr-reprocess";
+import { buildStoredReceiptPersistence, storedReceiptFieldChanges, type StoredArchiveOcrDocument } from "../lib/document/server-archive-ocr-reprocess";
 import type { ImageOcrResult } from "../lib/document/ticket-ocr";
 
 const baseExisting:StoredArchiveOcrDocument={
@@ -20,7 +20,7 @@ const result:ImageOcrResult={
   layoutText:"JUAN\nFACTURA 1\nTOTAL 821,83",
   tsv:"",
   confidence:92,
-  method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v4:ppocrv6_es_geometry",
+  method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v5:ppocrv6_es_geometry",
   passes:[{variant:"ppocrv6_es_geometry",confidence:92,score:92,visualLayout:{version:1}} as never],
   receiptLayout:{header:["JUAN"],items:[],summary:[{label:"TOTAL",value:"821,83"}],footer:[],unparsedBody:[],source:"geometry_tsv"},
   metadata:{documentType:"invoice",documentDate:"2026-08-29",amount:821.83,merchant:"JUAN",lines:["JUAN","TOTAL 821,83"]},
@@ -38,6 +38,29 @@ assert.deepEqual(machineOwned.humanFieldsPreserved,[]);
 assert.equal(machineOwned.digitalReconstruction.amount,821.83,"La reconstrucción debe conservar la nueva inferencia de máquina");
 assert.equal(machineOwned.ocrData.bulkReprocessed,true);
 assert.equal(machineOwned.ocrData.sourceOriginal,true);
+assert.deepEqual(storedReceiptFieldChanges(baseExisting,machineOwned),[
+  {field:"documentDate",kind:"updated"},
+  {field:"amount",kind:"updated"},
+  {field:"merchant",kind:"updated"},
+],"El resumen debe describir únicamente cambios reales en metadatos visibles");
+
+const unresolvedResult:ImageOcrResult={
+  ...result,
+  text:"ALBARAN\nSUBTOTAL 679,20\n821,830",
+  rawText:"ALBARAN\nSUBTOTAL 679,20\n821,830",
+  normalizedText:"ALBARAN\nSUBTOTAL 679,20\n821,830",
+  layoutText:"ALBARAN\nSUBTOTAL 679,20\n821,830",
+  metadata:{documentType:"invoice",documentDate:"2026-08-28",amount:null,merchant:null,lines:["ALBARAN","SUBTOTAL 679,20","821,830"]},
+  validation:{status:"needs_review",confidence:.45,printedTotal:null,itemSum:null,base:679.2,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:1,contradictions:["missing_total"]},
+};
+const clearedMachineFields=buildStoredReceiptPersistence(baseExisting,unresolvedResult,"2026-09-02T05:01:00.000Z");
+assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando parser_v5 ya no lo considera total");
+assert.equal(clearedMachineFields.merchant,null,"Un comercio automático débil también puede retirarse si la nueva lectura no lo respalda");
+assert.equal(clearedMachineFields.ocrStatus,"needs_review");
+assert.deepEqual(storedReceiptFieldChanges(baseExisting,clearedMachineFields),[
+  {field:"amount",kind:"cleared"},
+  {field:"merchant",kind:"cleared"},
+],"La recuperación debe hacer visible cuándo retira metadatos automáticos no confirmados");
 
 const edited:StoredArchiveOcrDocument={
   ...baseExisting,
@@ -56,10 +79,13 @@ assert.ok(preserved.humanFieldsPreserved.includes("merchant"));
 assert.ok(preserved.humanFieldsPreserved.includes("ocrText"));
 assert.equal(preserved.digitalReconstruction.amount,821.83,"La huella de máquina debe seguir separada de la edición humana");
 assert.equal(preserved.digitalReconstruction.merchant,"JUAN");
+assert.deepEqual(storedReceiptFieldChanges(edited,preserved),[
+  {field:"documentDate",kind:"updated"},
+],"Los campos humanos preservados no pueden presentarse como cambios automáticos");
 
 const missingPrevious:StoredArchiveOcrDocument={...baseExisting,digitalReconstruction:null,merchant:"NO PISAR"};
 const conservative=buildStoredReceiptPersistence(missingPrevious,result);
 assert.equal(conservative.merchant,"NO PISAR","Sin huella previa, un valor existente se conserva de forma conservadora");
 assert.equal(conservative.ocrStatus,"needs_review");
 
-console.log("OCR server reprocess safety tests OK · huella de máquina separada, correcciones humanas preservadas y auto-validación bloqueada cuando procede");
+console.log("OCR server reprocess safety tests OK · huella de máquina separada, cambios visibles, retiros seguros, correcciones humanas preservadas y auto-validación bloqueada cuando procede");
