@@ -48,6 +48,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-parser-revision-tests.ts
       - name: OCR safe automatic reprocessing
         run: node scripts/ocr-safe-auto-reprocessing-tests.mjs
+      - name: OCR merchant metadata confidence
+        run: ./node_modules/.bin/tsx scripts/ocr-merchant-metadata-confidence-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates

@@ -152,18 +152,25 @@ function extractAmounts(line: string) {
 
 function likelyMerchant(lines: string[]) {
   const technicalDomains = new Set(["qamarero", "gamarero", "veritas"]);
+  const domainPattern = /(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.(?:com|net|es|org|eu)(?:\b|\/)/i;
   for (const raw of lines.slice(0, 18)) {
-    const match = raw.match(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+)\.(?:com|net|es|org|eu)(?:\b|\/)/i);
-    if (!match || technicalDomains.has(match[1].toLowerCase())) continue;
-    const domainName = merchantDisplayLine(match[0]);
-    if (domainName.length >= 3) return domainName;
+    const match = raw.match(domainPattern);
+    if (!match) continue;
+    const label = match[1].toLowerCase();
+    if (technicalDomains.has(label)) continue;
+    const letters = (label.match(/[a-z]/g) || []).length;
+    // A very short/corrupted token such as "rfoan.es" must not become a merchant
+    // merely because OCR happened to leave a valid-looking TLD behind.
+    if (label.length < 6 || letters / Math.max(1, label.length) < 0.8) continue;
+    return merchantDisplayLine(match[0]);
   }
 
-  const blocked = /(factura|albar[aá]n|ticket|recibo|fecha|hora|total|subtotal|iva|base|cif|nif|n\.?i\.?f|nº|num\.?|importe|pago|tarjeta|cambio|efectivo|gracias|cliente|copia|documento|unidades?|precio|raz[oó]n\s+social|direcci[oó]n|tel[eé]fono|pedido\s+por|camarero|staff|mesa)/i;
+  const blocked = /(factura|albar[aá]n|ticket|recibo|fecha|hora|total|subtotal|iva|base|cif|nif|n\.?i\.?f|nº|num\.?|importe|pago|tarjeta|cambio|efectivo|gracias|cliente|copia|documento|unidades?|precio|raz[oó]n\s+social|direcci[oó]n|tel[eé]fono|pedido\s+por|camarero|staff|mesa|horario|registro\s+mercantil)/i;
+  const addressLike = /(?:\b(?:calle|avda|avenida|carretera|ctra|pol[ií]gono|p\.?i\.?|c\.?p\.?|tel|telf|tel[eé]fono)\b|(?:^|\s)c\/|\b\d{5}\b)/i;
   let best: { line: string; score: number } | null = null;
   for (const [index, raw] of lines.slice(0, 18).entries()) {
     const line = cleanLine(raw);
-    if (line.length < 3 || line.length > 72 || blocked.test(line)) continue;
+    if (line.length < 3 || line.length > 72 || blocked.test(line) || domainPattern.test(line)) continue;
     const letters = (line.match(/\p{L}/gu) || []).length;
     const digits = (line.match(/\d/g) || []).length;
     const symbols = line.replace(/[\p{L}\d\s]/gu, "").length;
@@ -174,9 +181,16 @@ function likelyMerchant(lines: string[]) {
     if (line === line.toUpperCase() && letters >= 5) score += 3;
     if (/\b(BAR|CAFE|CAFÉ|RESTAURANTE|SUPERMERCADO|ESTANCO|FARMACIA|TIENDA|HOTEL|MES[ÓO]N|TABERNA)\b/i.test(line)) score += 22;
     if (/\b(SL|S\.L\.|SA|S\.A\.)\b/i.test(line)) score += 4;
+
+    const recentContext = lines.slice(Math.max(0, index - 2), index).map(cleanLine).join(" ");
+    const previous = index > 0 ? cleanLine(lines[index - 1]) : "";
+    if (/\bcliente\b/i.test(recentContext)) score -= 28;
+    if (addressLike.test(line)) score -= 30;
+    if (addressLike.test(previous)) score -= 12;
+
     if (!best || score > best.score) best = { line, score };
   }
-  return best ? merchantDisplayLine(best.line) : null;
+  return best && best.score >= 12 ? merchantDisplayLine(best.line) : null;
 }
 
 function labeledAmount(lines: string[], pattern: RegExp) {
