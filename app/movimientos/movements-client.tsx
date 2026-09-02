@@ -4,10 +4,8 @@ import { formatEuro, formatInteger } from "@/lib/format/es-es";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
-import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
-import { SplitEditor } from "./split-editor";
-import { MovementDocuments } from "./movement-documents";
-import { BulkMovementEditor } from "./bulk-movement-editor";
+import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementSelectionScopeKey, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
+import { BulkMovementEditor, MovementDocuments, SplitEditor } from "./movement-lazy-tools";
 
 type Filters = MovementFilterState;
 type EditState = {
@@ -15,6 +13,8 @@ type EditState = {
   cashFlow:"inherit"|"include"|"exclude"; isInternalTransfer:boolean; isDuplicate:boolean; reconciled:"inherit"|"yes"|"no";
   needsReview:boolean; recurring:"inherit"|"yes"|"no"; tags:string; notes:string;
 };
+
+type MovementSelectionResponse={ok:boolean;ids:string[];total:number;limit:number;truncated:boolean;error?:string};
 
 const MAX_BULK_MOVEMENTS=200;
 const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
@@ -76,6 +76,9 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   const [selectingFiltered,setSelectingFiltered] = useState(false);
   const [bulkEditorOpen,setBulkEditorOpen] = useState(false);
   const openRequestRef=useRef(0);
+  const listRequestRef=useRef(0);
+  const listAbortRef=useRef<AbortController|null>(null);
+  const selectionScopeRef=useRef(movementSelectionScopeKey(initialFilters));
   const pages = Math.max(1, Math.ceil(pageData.total / pageData.pageSize));
   const range = useMemo(() => {
     if (!pageData.total) return "0 movimientos";
@@ -91,24 +94,47 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   const visibleDocumentCount=useMemo(()=>pageData.items.filter(item=>item.hasDocuments).length,[pageData.items]);
 
   useEffect(()=>{if(!selectedIds.size)setBulkEditorOpen(false)},[selectedIds.size]);
+  useEffect(()=>()=>{listAbortRef.current?.abort();openRequestRef.current+=1},[]);
 
   async function loadWith(next:Filters,page=1) {
+    const requestId=++listRequestRef.current;
+    listAbortRef.current?.abort();
+    const controller=new AbortController();
+    listAbortRef.current=controller;
     setLoading(true); setError(null);
     const q=movementSearchParams(next);
     q.set("page",String(page));
     q.set("pageSize",String(pageData.pageSize));
     q.set("sort",next.sort);
     q.set("facets","0");
+    const nextSelectionScope=movementSelectionScopeKey(next);
+    const selectionScopeChanged=nextSelectionScope!==selectionScopeRef.current;
     try {
-      const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
+      const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store",signal:controller.signal});
       const body=await response.json() as Omit<MovementsResponse,"facets"> & {facets?:MovementsResponse["facets"];error?:string};
       if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
+      if(requestId!==listRequestRef.current)return true;
       setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);
       setAppliedFilters({...next});
+      selectionScopeRef.current=nextSelectionScope;
+      if(selectionScopeChanged&&selectedIds.size){
+        setSelectedIds(new Set());
+        setBulkEditorOpen(false);
+        setMessage("Selección reiniciada porque cambió el conjunto de filtros. Así no se editarán movimientos que hayan quedado ocultos.");
+      }
       window.history.replaceState(null,"",movementUrl(next));
       return true;
-    } catch(cause) { setError(cause instanceof Error?cause.message:"Error al cargar movimientos"); return false; }
-    finally { setLoading(false); }
+    } catch(cause) {
+      if(cause instanceof Error&&cause.name==="AbortError")return requestId!==listRequestRef.current;
+      if(requestId===listRequestRef.current)setError(cause instanceof Error?cause.message:"Error al cargar movimientos");
+      return false;
+    }
+    finally {
+      if(requestId===listRequestRef.current){
+        setLoading(false);
+        if(listAbortRef.current===controller)listAbortRef.current=null;
+      }
+    }
   }
 
   async function submitFilters(event:FormEvent) { event.preventDefault(); await loadWith(filters,1); }
@@ -142,14 +168,15 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     if(bulkSaving||selectingFiltered||!pageData.total)return;
     setSelectingFiltered(true);setError(null);setMessage(null);
     const q=movementSearchParams(appliedFilters);
-    q.set("page","1");q.set("pageSize",String(MAX_BULK_MOVEMENTS));q.set("sort",appliedFilters.sort);q.set("facets","0");
+    q.set("limit",String(MAX_BULK_MOVEMENTS));
+    q.set("sort",appliedFilters.sort);
     try{
-      const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store"});
-      const body=await response.json() as Omit<MovementsResponse,"facets"> & {error?:string};
+      const response=await fetch(`/api/movements/selection?${q.toString()}`,{cache:"no-store"});
+      const body=await response.json() as MovementSelectionResponse;
       if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo seleccionar el conjunto filtrado");
-      const ids=body.items.slice(0,MAX_BULK_MOVEMENTS).map(item=>item.id);
+      const ids=body.ids.slice(0,MAX_BULK_MOVEMENTS);
       setSelectedIds(new Set(ids));
-      setMessage(body.total>MAX_BULK_MOVEMENTS?`Seleccionados los primeros ${MAX_BULK_MOVEMENTS} de ${formatInteger(body.total)} movimientos filtrados. El límite seguro por lote sigue siendo ${MAX_BULK_MOVEMENTS}.`:`Seleccionados los ${formatInteger(ids.length)} movimientos que cumplen los filtros aplicados, aunque estén repartidos en varias páginas.`);
+      setMessage(body.truncated?`Seleccionados los primeros ${MAX_BULK_MOVEMENTS} de ${formatInteger(body.total)} movimientos filtrados. El límite seguro por lote sigue siendo ${MAX_BULK_MOVEMENTS}.`:`Seleccionados los ${formatInteger(ids.length)} movimientos que cumplen los filtros aplicados, aunque estén repartidos en varias páginas.`);
     }catch(cause){setError(cause instanceof Error?cause.message:"Error al seleccionar movimientos filtrados");}
     finally{setSelectingFiltered(false);}
   }
