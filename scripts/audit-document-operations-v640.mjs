@@ -46,7 +46,7 @@ for(const token of ["Seleccionar seguras","Aplicar ${selected.length","window.co
   must(client.includes(token),`Cliente operativo 6.4 incompleto: ${token}`);
 must(!client.includes('body:JSON.stringify({action:"archive"})'),"No puede reaparecer el archivado roto que enviaba action en el body");
 must(client.includes("filter(document=>document.safeOperation)"),"La selección múltiple debe limitarse a operaciones marcadas seguras por servidor");
-for(const token of ["method:\"PATCH\"","payload.ocrStatus=\"manual\"","/api/archive/operations","reconciled","Buscar movimiento compatible","window.confirm","onResolved(document.id","Guardar y validar OCR"])
+for(const token of ["method:\"PATCH\"","payload.ocrStatus=\"manual\"","payload.manualReviewConfirmed=true","/api/archive/operations","reconciled","Buscar movimiento compatible","window.confirm","onResolved(document.id","Guardar y confirmar revisión"])
   must(quick.includes(token),`Resolución end-to-end incompleta: ${token}`);
 must(!quick.includes("/api/movements/")&&!quick.includes("method:\"DELETE\""),"La resolución rápida no puede modificar movimientos ni borrar documentos");
 must(quick.includes("documentType")&&quick.includes("documentDate")&&quick.includes("amount")&&quick.includes("merchant"),"La resolución rápida debe cubrir los metadatos que alimentan matching");
@@ -57,4 +57,4 @@ for(const token of [".triage-resolution",".triage-resolution-grid",".triage-reso
 must(layout.includes('import "./triage-workspace.css"'),"La bandeja debe cargar sus estilos responsive dedicados");
 
 if(failures.length){console.error("Document operations v6.4 audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revalidación server-side, reversibilidad y bandeja de conciliación end-to-end protegidas");
+console.log("Document operations v6.4 audit OK · selección explícita, lote seguro, revisión OCR confirmada explícitamente, revalidación server-side, reversibilidad y bandeja de conciliación end-to-end protegidas");
