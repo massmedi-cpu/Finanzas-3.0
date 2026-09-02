@@ -22,15 +22,20 @@ globalThis.createImageBitmap=async()=>({width:dimensions.width,height:dimensions
 const requests=[];
 globalThis.fetch=async(_url,options)=>{
   requests.push(options);
-  return{
+  return {
     ok:true,
     status:200,
-    async json(){return{ok:true,result:{
-      image:{width:Number(options.headers["x-ocr-width"]||dimensions.width),height:Number(options.headers["x-ocr-height"]||dimensions.height)},
-      items:[{text:"TOTAL 12,50",score:95,poly:[[0,0],[10,0],[10,10],[0,10]]}],
-      metrics:{detMs:0,recMs:120,totalMs:120,detectedBoxes:1,recognizedCount:1},
-      runtime:"server-tesseract-7",
-    }}};
+    async json(){
+      return {
+        ok:true,
+        result:{
+          image:{width:Number(options.headers["x-ocr-width"]||dimensions.width),height:Number(options.headers["x-ocr-height"]||dimensions.height)},
+          items:[{text:"TOTAL 12,50",score:95,poly:[[0,0],[10,0],[10,10],[0,10]]}],
+          metrics:{detMs:0,recMs:120,totalMs:120,detectedBoxes:1,recognizedCount:1},
+          runtime:"server-tesseract-7",
+        },
+      };
+    },
   };
 };
 
