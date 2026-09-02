@@ -17,6 +17,13 @@ import {
 } from "./receipt-layout";
 import { validateReceiptFinancials } from "./receipt-financial-validator";
 import { RECEIPT_OCR_METHOD_PREFIX } from "./receipt-ocr-revision";
+import {
+  SERVER_RECEIPT_OCR_ENGINE,
+  SERVER_RECEIPT_OCR_MODEL,
+  SERVER_RECEIPT_OCR_RUNTIME,
+  receiptOcrRuntime,
+  receiptOcrVariant,
+} from "./receipt-ocr-provenance";
 import { prepareReceiptImage } from "./receipt-image-preprocessor";
 
 export {
@@ -29,19 +36,19 @@ export {
 } from "./ticket-ocr";
 
 export { validateReceiptFinancials } from "./receipt-financial-validator";
-export { RECEIPT_OCR_METHOD_PREFIX, RECEIPT_OCR_REVISION, isCurrentReceiptOcrMethod } from "./receipt-ocr-revision";
+export { RECEIPT_OCR_METHOD_PREFIX, RECEIPT_OCR_REVISION, isCompatibleReceiptOcrMethod, isCurrentReceiptOcrMethod } from "./receipt-ocr-revision";
 
 type Point = { x: number; y: number };
-type PaddleItem = { poly?: unknown; text?: unknown; score?: unknown };
-type PaddleResult = {
+type GeometryOcrItem = { poly?: unknown; text?: unknown; score?: unknown };
+type GeometryOcrResult = {
   image?: { width?: unknown; height?: unknown };
-  items?: PaddleItem[];
+  items?: GeometryOcrItem[];
   metrics?: { detMs?: unknown; recMs?: unknown; totalMs?: unknown; detectedBoxes?: unknown; recognizedCount?: unknown };
   runtime?: unknown;
 };
 
-type PaddleOcrEngine = {
-  predict: (input: Blob | HTMLCanvasElement, params?: Record<string, unknown>) => Promise<PaddleResult[]>;
+type GeometryOcrEngine = {
+  predict: (input: Blob | HTMLCanvasElement, params?: Record<string, unknown>) => Promise<GeometryOcrResult[]>;
 };
 
 type Box = {
@@ -70,8 +77,9 @@ type VisualRow = {
 
 type VisualLayout = {
   version: 1;
-  engine: "PaddleOCR.js";
-  model: "PP-OCRv6";
+  engine: typeof SERVER_RECEIPT_OCR_ENGINE;
+  model: typeof SERVER_RECEIPT_OCR_MODEL;
+  runtime: typeof SERVER_RECEIPT_OCR_RUNTIME;
   language: "es";
   sourceWidth: number;
   sourceHeight: number;
@@ -109,7 +117,7 @@ function pointsFromPoly(poly: unknown): Point[] {
   return points;
 }
 
-function boxFromItem(item: PaddleItem): Box | null {
+function boxFromItem(item: GeometryOcrItem): Box | null {
   const text = String(item.text ?? "").replace(/\r?\n/g, " ").normalize("NFKC").trim();
   if (!text) return null;
   const points = pointsFromPoly(item.poly);
@@ -144,7 +152,7 @@ function replacementWithOriginalCase(original: string, replacement: string) {
 /**
  * Corrige únicamente lecturas inequívocas. La evidencia literal del motor se
  * conserva antes de aplicar estas correcciones, de modo que nunca se oculta lo
- * que PP-OCRv6 leyó realmente.
+ * que Tesseract leyó realmente.
  */
 function correctTrustedReceiptText(value: string) {
   return value
@@ -334,8 +342,9 @@ function makeVisualLayout(boxes: Box[], sourceWidth: number, sourceHeight: numbe
   const bounds = visualBounds(boxes, sourceWidth, sourceHeight);
   return {
     version: 1,
-    engine: "PaddleOCR.js",
-    model: "PP-OCRv6",
+    engine: SERVER_RECEIPT_OCR_ENGINE,
+    model: SERVER_RECEIPT_OCR_MODEL,
+    runtime: SERVER_RECEIPT_OCR_RUNTIME,
     language: "es",
     sourceWidth,
     sourceHeight,
@@ -449,16 +458,16 @@ function averageConfidence(boxes: Box[]) {
 }
 
 /**
- * Canonical receipt OCR based on PP-OCRv6 geometry.
+ * OCR canónico de tickets basado en geometría real devuelta por Tesseract 7.
  *
- * A single recognition pass is preserved. When a paper contour can be detected
- * safely, PP-OCRv6 receives the rectified grayscale receipt instead of the full
- * camera frame. Literal recognition evidence is retained separately from the
- * trusted text used by the UI and financial parser.
+ * Se conserva una única pasada literal. Cuando el contorno del papel puede
+ * detectarse con seguridad, el runtime recibe la copia rectificada en escala
+ * de grises. La evidencia literal se mantiene separada del texto de confianza
+ * usado por la interfaz y el parser financiero.
  */
 export async function recognizeTicketImage(
   file: File,
-  engine: PaddleOcrEngine,
+  engine: GeometryOcrEngine,
   onProgress: (value: number, label: string) => void,
   hint: DocumentTypeHint = "receipt",
 ): Promise<ImageOcrResult> {
@@ -485,16 +494,18 @@ export async function recognizeTicketImage(
     preprocessMs = 0;
   }
 
-  onProgress(0.12, paperDetected ? "Leyendo solo el ticket con PP-OCRv6" : "Leyendo el original con PP-OCRv6");
+  onProgress(0.12, paperDetected ? "Leyendo solo el ticket con Tesseract 7" : "Leyendo el original con Tesseract 7");
   const results = await engine.predict(input, {
     textRecScoreThresh: 0.2,
     textDetMaxSideLimit: 4000,
   });
   const result = results?.[0];
-  if (!result) throw new Error("PP-OCRv6 no devolvió resultado");
+  if (!result) throw new Error("El OCR de servidor no devolvió resultado");
+  const runtime = receiptOcrRuntime(result.runtime);
+  if (!runtime) throw new Error("El OCR no declaró el runtime Tesseract 7 esperado");
 
   const literalBoxes = (result.items || []).map(boxFromItem).filter((box): box is Box => Boolean(box));
-  if (!literalBoxes.length) throw new Error("PP-OCRv6 no detectó texto en la imagen");
+  if (!literalBoxes.length) throw new Error("Tesseract 7 no detectó texto en la imagen");
 
   const sourceWidth = Math.max(1, numberValue(result.image?.width) || Math.ceil(Math.max(...literalBoxes.map((box) => box.right))));
   const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...literalBoxes.map((box) => box.bottom))));
@@ -542,8 +553,9 @@ export async function recognizeTicketImage(
     reconstructionMs: Math.max(0, elapsed(started) - preprocessMs - primaryMs),
     totalMs: elapsed(started),
   };
+  const variant = receiptOcrVariant(paperDetected);
   const pass: OcrPassEvidence & Record<string, unknown> = {
-    variant: paperDetected ? "ppocrv6_es_paper_geometry" : "ppocrv6_es_geometry",
+    variant,
     confidence,
     score: confidence,
     rawText: literalText,
@@ -551,7 +563,9 @@ export async function recognizeTicketImage(
     durationMs: metrics.primaryMs,
     visualLayout,
     sdkMetrics,
-    runtime: result.runtime ?? null,
+    engine: SERVER_RECEIPT_OCR_ENGINE,
+    model: SERVER_RECEIPT_OCR_MODEL,
+    runtime,
     paperDetected,
     discardedBoxCount: filtered.discarded.length,
     discardedBoxes: filtered.discarded.slice(0, 30).map((box) => ({ text: box.text, score: Math.round(box.score * 10) / 10 })),
@@ -565,7 +579,7 @@ export async function recognizeTicketImage(
     layoutText,
     tsv: "",
     confidence,
-    method: `${RECEIPT_OCR_METHOD_PREFIX}${paperDetected ? "ppocrv6_es_paper_geometry" : "ppocrv6_es_geometry"}`,
+    method: `${RECEIPT_OCR_METHOD_PREFIX}${variant}`,
     passes: [pass],
     receiptLayout,
     metadata,
