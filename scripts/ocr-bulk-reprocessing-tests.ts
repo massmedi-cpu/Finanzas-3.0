@@ -32,9 +32,13 @@ assert.equal(plan.remaining,3);
 assert.equal(plan.limit,BULK_OCR_REPROCESS_LIMIT);
 assert.deepEqual(plan.selected.map(item=>item.id),many.slice(0,BULK_OCR_REPROCESS_LIMIT).map(item=>item.id),"El plan debe ser determinista y conservar orden");
 
-const wrapper=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
-assert.ok(wrapper.includes("ArchiveClientCore")&&wrapper.includes("ArchiveBulkOcrRecovery"),"El módulo nuevo debe envolver el núcleo validado sin reescribirlo");
+const wrapper=fs.readFileSync("app/archivo/archive-client-shell.tsx","utf8");
+const page=fs.readFileSync("app/archivo/page.tsx","utf8");
+const canonicalClient=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+assert.ok(wrapper.includes("ArchiveClientCore")&&wrapper.includes("ArchiveBulkOcrRecovery"),"El shell nuevo debe envolver el núcleo validado sin reescribirlo");
+assert.ok(wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell mientras el núcleo conserva su ruta canónica histórica");
 assert.ok(wrapper.includes("archiveRefreshKey")&&wrapper.includes("document.updatedAt"),"router.refresh debe poder remontar el núcleo con datos OCR actualizados");
+assert.ok(canonicalClient.includes("recognizeTicketImage(file,worker,onProgress,hint)"),"El núcleo OCR canónico debe seguir intacto en archive-client.tsx");
 
 const client=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 for(const token of [
@@ -64,4 +68,4 @@ assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación no
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una confirmación/vínculo concurrente debe cancelar la escritura");
 
-console.log("OCR bulk reprocessing tests OK · Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · shell limpio, núcleo canónico intacto, Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
