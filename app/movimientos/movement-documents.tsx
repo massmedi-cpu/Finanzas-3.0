@@ -183,7 +183,7 @@ export function MovementDocuments({transaction,onChanged}:{transaction:Transacti
         </ul>
       </div>}
 
-      {!matches.linked.length&&!matches.suggestions.length&&!pickerOpen&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Puedes buscar manualmente en Archivo. Las sugerencias automáticas solo aparecen cuando el OCR está resuelto y el matcher canónico encuentra evidencia suficiente.</p>}
+      {!matches.linked.length&&!matches.suggestions.length&&!pickerOpen&&<p className="muted-copy">No hay factura o ticket relacionado todavía. Puedes buscar manualmente en Archivo. Si haces una foto o subes un ticket, el OCR intentará vincularlo automáticamente usando la fecha real de compra, el importe y el comercio, pero solo cuando esos datos estén resueltos y el matcher canónico encuentre evidencia suficiente; mientras tanto permanecerá pendiente de revisión.</p>}
     </div>
   </details>;
 }
