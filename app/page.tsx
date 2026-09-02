@@ -1,4 +1,5 @@
 import "./home.css";
+import "./home-sync.css";
 import "./cash-flow-chart.css";
 import "./home-streaming.css";
 import { Suspense } from "react";
