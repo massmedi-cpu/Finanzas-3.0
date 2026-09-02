@@ -26,16 +26,12 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const page=Number.isFinite(requestedPage)&&requestedPage>0?requestedPage:1;
   const offset=(page-1)*PAGE_SIZE;
 
-  // Nuevas solo necesita los contadores/versión del ciclo documental. Pedir la
-  // página completa de 40 filas aquí duplicaba datos que nunca se renderizan.
   const lifecyclePromise=getArchiveLifecycleOverview(
     view,
     view==="new"?null:query||null,
     view==="new"?NEW_VIEW_COUNT_LIMIT:PAGE_SIZE,
     view==="new"?0:offset,
   );
-  // La biblioteca activa sí se muestra en Nuevas, pero su primer payload queda
-  // acotado a la misma página visible en lugar del antiguo máximo de 200.
   const activePromise=view==="new"?getArchiveOverview(null,PAGE_SIZE,0):Promise.resolve(null);
   const [lifecycle,active]=await Promise.all([lifecyclePromise,activePromise]);
 
@@ -45,7 +41,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
     <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/duplicados">Revisar duplicados</Link>{view!=="pending"&&<Link className="ghost button-link" href="/archivo/revision">Revisar pendientes{pending?` · ${pending}`:""}</Link>}</div></header>
-    {view==="pending"&&pending>0&&<ArchiveBulkOcrRecovery initialCount={0} shouldCheck={true}/>} 
+    <ArchiveBulkOcrRecovery initialCount={pending} shouldCheck={true}/>
     <ArchiveLifecycleClient
       documents={view==="new"?[]:lifecycle.documents}
       counts={lifecycle.counts}
@@ -55,6 +51,6 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
       page={view==="new"?1:page}
       pageSize={PAGE_SIZE}
     />
-    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active} pendingCount={pending}/></section>}
+    {view==="new"&&active&&<section className="archive-active-library" aria-label="Gestión de documentos activos"><div className="archive-active-library-head"><div><p className="eyebrow">GESTIÓN</p><h2>Gestionar documentos activos</h2><p>Escanea, abre, revisa el OCR, corrige metadatos y vincula movimientos desde una sola biblioteca. Los documentos que requieren revisión siguen identificados en Pendientes.</p></div></div><ArchiveClient key={`archive-active-${active.total}`} initialData={active}/></section>}
   </section></main>;
 }

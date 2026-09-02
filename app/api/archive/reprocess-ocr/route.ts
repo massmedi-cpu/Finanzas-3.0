@@ -1,11 +1,11 @@
 import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
-import { BULK_OCR_REPROCESS_LIMIT, isBulkOcrReprocessCandidate } from "@/lib/document/ocr-bulk-reprocess-policy";
+import { BULK_OCR_REPROCESS_LIMIT, isBulkOcrReprocessCandidate, isLegacyReceiptOcrDocument } from "@/lib/document/ocr-bulk-reprocess-policy";
 import { manualReviewMissingFields } from "@/lib/document/ocr-review-completeness";
 import { buildStoredReceiptPersistence, reprocessStoredReceiptBytes, storedReceiptFieldChanges } from "@/lib/document/server-archive-ocr-reprocess";
 import { asRecord } from "@/lib/validation/json";
-import type { ArchiveDetail, ArchiveDocument } from "@/lib/financial/archive";
+import type { ArchiveDetail, ArchiveDocument, ArchiveLifecycleState } from "@/lib/financial/archive";
 
 export const runtime="nodejs";
 export const dynamic="force-dynamic";
@@ -13,45 +13,63 @@ export const maxDuration=60;
 
 const DISCOVERY_PAGE_SIZE=80;
 const UNRESOLVED_OCR=new Set(["needs_review","failed","error"]);
+const DISCOVERY_STATES:ArchiveLifecycleState[]=["pending","new","archived"];
 
 type AuthorizedClient=NonNullable<Awaited<ReturnType<typeof getAuthorizedClient>>>;
+type Candidate={id:string;fileName:string;ocrStatus:string;scope:"unresolved"|"legacy";lifecycleState:ArchiveLifecycleState};
 
 async function documentDetail(supabase:AuthorizedClient,id:string){
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
   return detail.error||!detail.data?null:detail.data as ArchiveDetail;
 }
 
+function cheapDiscoveryCandidate(document:ArchiveDocument,state:ArchiveLifecycleState){
+  if(!document.mimeType?.startsWith("image/")||document.storageProvider!=="supabase_storage")return false;
+  // Pending puede filtrarse por estado sin abrir cada detalle. En New/Archived
+  // necesitamos leer el método almacenado porque un OCR complete puede seguir
+  // perteneciendo a un motor legacy.
+  if(state==="pending")return UNRESOLVED_OCR.has(document.ocrStatus)||document.ocrStatus==="complete";
+  return true;
+}
+
 async function discoverCandidates(supabase:AuthorizedClient){
-  const candidates:Array<{id:string;fileName:string;ocrStatus:string}>=[];
+  const candidates:Candidate[]=[];
+  const seen=new Set<string>();
   let total=0;
-  let offset=0;
-  let pendingTotal=Number.POSITIVE_INFINITY;
 
-  // Recorremos únicamente el ciclo Pending, por páginas, sin cargar la biblioteca
-  // activa completa en memoria ni consultar imágenes ya resueltas/archivadas.
-  while(offset<pendingTotal){
-    const overview=await supabase.rpc("financial_app_archive_lifecycle_overview",{
-      p_state:"pending",
-      p_search:null,
-      p_limit:DISCOVERY_PAGE_SIZE,
-      p_offset:offset,
-    });
-    if(overview.error||!overview.data)return{error:overview.error,data:null};
-    const payload=overview.data as {total:number;documents:ArchiveDocument[]};
-    pendingTotal=payload.total;
-    if(!payload.documents.length)break;
+  for(const state of DISCOVERY_STATES){
+    let offset=0;
+    let stateTotal=Number.POSITIVE_INFINITY;
+    while(offset<stateTotal){
+      const overview=await supabase.rpc("financial_app_archive_lifecycle_overview",{
+        p_state:state,
+        p_search:null,
+        p_limit:DISCOVERY_PAGE_SIZE,
+        p_offset:offset,
+      });
+      if(overview.error||!overview.data)return{error:overview.error,data:null};
+      const payload=overview.data as {total:number;documents:ArchiveDocument[]};
+      stateTotal=payload.total;
+      if(!payload.documents.length)break;
 
-    for(const document of payload.documents){
-      if(!UNRESOLVED_OCR.has(document.ocrStatus))continue;
-      if(!document.mimeType?.startsWith("image/")||document.storageProvider!=="supabase_storage"||document.links.length>0)continue;
-      // Solo los documentos ya marcados como no resueltos requieren detalle.
-      // Así excluimos un OCR actual ya reprocesado sin N+1 sobre imágenes complete.
-      const detail=await documentDetail(supabase,document.id);
-      if(!detail||!isBulkOcrReprocessCandidate(detail))continue;
-      total+=1;
-      if(candidates.length<BULK_OCR_REPROCESS_LIMIT)candidates.push({id:document.id,fileName:document.fileName,ocrStatus:document.ocrStatus});
+      for(const document of payload.documents){
+        if(seen.has(document.id)||!cheapDiscoveryCandidate(document,state))continue;
+        const detail=await documentDetail(supabase,document.id);
+        if(!detail||!isBulkOcrReprocessCandidate(detail))continue;
+        seen.add(document.id);
+        total+=1;
+        if(candidates.length<BULK_OCR_REPROCESS_LIMIT){
+          candidates.push({
+            id:document.id,
+            fileName:document.fileName,
+            ocrStatus:document.ocrStatus,
+            scope:isLegacyReceiptOcrDocument(detail)?"legacy":"unresolved",
+            lifecycleState:state,
+          });
+        }
+      }
+      offset+=payload.documents.length;
     }
-    offset+=payload.documents.length;
   }
 
   return{error:null,data:{
@@ -96,8 +114,9 @@ export async function POST(request:NextRequest){
     return apiError("ocr_reprocess_failed",503);
   }
 
-  // Releer justo antes de escribir evita pisar una confirmación manual, un vínculo
-  // o una corrección guardada mientras el OCR estaba trabajando.
+  // Releer justo antes de escribir evita pisar una confirmación manual o una
+  // corrección guardada mientras el OCR estaba trabajando. Los vínculos no se
+  // modifican por financial_app_archive_update y los legacy pueden conservarlos.
   const latest=await documentDetail(supabase,documentId);
   if(!latest)return apiError("document_unavailable",404);
   if(!isBulkOcrReprocessCandidate(latest))return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reprocess"});
