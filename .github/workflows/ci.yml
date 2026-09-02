@@ -46,6 +46,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-commercial-header-recovery-tests.ts
       - name: OCR parser revision
         run: ./node_modules/.bin/tsx scripts/ocr-parser-revision-tests.ts
+      - name: OCR production concatenated date
+        run: ./node_modules/.bin/tsx scripts/ocr-production-concatenated-date-tests.ts
       - name: OCR invoice amount confidence
         run: ./node_modules/.bin/tsx scripts/ocr-invoice-amount-confidence-tests.ts
       - name: OCR safe automatic reprocessing
