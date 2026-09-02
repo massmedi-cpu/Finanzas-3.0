@@ -80,6 +80,12 @@ export function movementSearchParams(state: MovementFilterState) {
   const q=new URLSearchParams();
   if(state.search)q.set("search",state.search);if(state.account)q.set("account",state.account);if(state.type)q.set("type",state.type);if(state.category)q.set("category",state.category);if(state.subcategory)q.set("subcategory",state.subcategory);if(state.merchant)q.set("merchant",state.merchant);if(state.channel)q.set("channel",state.channel);if(state.tag)q.set("tag",state.tag);if(state.review)q.set("review","1");if(state.cashFlowOnly)q.set("cashFlow","1");if(state.duplicate)q.set("duplicate",state.duplicate);if(state.recurring)q.set("recurring",state.recurring);if(state.internalTransfer)q.set("internalTransfer",state.internalTransfer);if(state.reconciled)q.set("reconciled",state.reconciled);if(state.documents)q.set("documents",state.documents);if(state.splits)q.set("splits",state.splits);if(state.from)q.set("from",state.from);if(state.to)q.set("to",state.to);if(state.min)q.set("min",state.min);if(state.max)q.set("max",state.max);if(state.sort!=="date_desc")q.set("sort",state.sort);return q;
 }
+
+export function movementSelectionScopeKey(state:MovementFilterState){
+  const{sort:_,...semanticFilters}=state;
+  return JSON.stringify(semanticFilters);
+}
+
 export function movementUrl(state: MovementFilterState) { const query=movementSearchParams(state).toString(); return query?`/movimientos?${query}`:"/movimientos"; }
 export function movementState(overrides: Partial<MovementFilterState> = {}): MovementFilterState { return { ...EMPTY_MOVEMENT_FILTERS, ...overrides }; }
 export type MovementBucket = "day" | "week" | "month";

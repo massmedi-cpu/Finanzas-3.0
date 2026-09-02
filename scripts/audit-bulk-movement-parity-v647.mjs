@@ -8,6 +8,7 @@ const editor=read("app/movimientos/bulk-movement-editor.tsx");
 const client=read("app/movimientos/movements-client.tsx");
 const documents=read("app/movimientos/movement-documents.tsx");
 const route=read("app/api/movements/bulk/route.ts");
+const selectionRoute=read("app/api/movements/selection/route.ts");
 const batch=read("database/FINANCIAL_APP_3.8.0_BATCH_UNDO.sql");
 const tagOps=read("database/FINANCIAL_APP_3.8.1_BULK_TAG_OPERATIONS.sql");
 const layout=read("app/movimientos/layout.tsx");
@@ -50,8 +51,10 @@ must(client.includes("openRequestRef")&&client.includes("requestId!==openRequest
 must(documents.includes('includeArchived:"1"'),"El selector documental debe poder buscar explícitamente en Archivo histórico");
 must(!documents.includes('archived:"1"'),"El selector documental no puede recuperar el parámetro legado archived=1");
 
-for(const token of ["appliedFilters","selectFiltered","pageSize\",String(MAX_BULK_MOVEMENTS)","Seleccionar todos los filtrados","fuera de esta página","loadWith(appliedFilters,pageData.page-1)","loadWith(appliedFilters,pageData.page+1)"])
+for(const token of ["appliedFilters","selectFiltered","/api/movements/selection?","limit\",String(MAX_BULK_MOVEMENTS)","Seleccionar todos los filtrados","fuera de esta página","loadWith(appliedFilters,pageData.page-1)","loadWith(appliedFilters,pageData.page+1)"])
   must(client.includes(token),`Selección global filtrada incompleta: ${token}`);
+must(selectionRoute.includes('financial_app_movements_selection')&&selectionRoute.includes("Math.min(200"),"La selección global filtrada debe conservar el límite 200 mediante el fast path IDs-only");
+must(!selectionRoute.includes("financial_app_movements_advanced"),"El fast path no debe reconstruir movimientos completos solo para seleccionar IDs");
 must(client.includes("setAppliedFilters({...next})"),"La vista debe distinguir filtros escritos de filtros realmente aplicados");
 
 for(const token of ["TagMode","$tags","Añadir sin borrar las existentes","Quitar solo estas etiquetas","Sustituir todas las etiquetas","bulk-impact-preview","Revisar cambios","Confirmar y aplicar a ${selectedCount}"])
@@ -71,4 +74,4 @@ for(const token of [".movement-selection-scope",".bulk-tags-field",".bulk-impact
   must(operationCss.includes(token),`Estilos de operaciones masivas incompletos: ${token}`);
 
 if(failures.length){console.error("Financial App 6.4.7 bulk movement parity audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Financial App 6.4.7 bulk movement parity audit OK · selección global filtrada, preview explícito, etiquetas aditivas, límite 200, refresco fiable y undo canónico protegidos");
+console.log("Financial App 6.4.7 bulk movement parity audit OK · selección global filtrada IDs-only, preview explícito, etiquetas aditivas, límite 200, refresco fiable y undo canónico protegidos");
