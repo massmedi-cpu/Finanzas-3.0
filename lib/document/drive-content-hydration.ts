@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_PUBLISHABLE_KEY,SUPABASE_URL } from "@/lib/supabase/config";
 import { asArray,asNumber,asRecord,asString,nullableString } from "@/lib/validation/json";
 import { inferDocumentMetadata,type DocumentMetadata } from "./ticket-ocr";
-import { extractServerPdfText,ServerPdfTextError } from "./server-pdf-text";
+import { processServerPdfDocument,ServerPdfDocumentError } from "./server-pdf-document";
 import { SERVER_RECEIPT_OCR_ENGINE,SERVER_RECEIPT_OCR_MODEL,SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
 import { recognizeCanonicalReceiptBytes } from "./server-canonical-receipt";
 import { ServerReceiptOcrError } from "./server-receipt-ocr";
@@ -54,14 +54,13 @@ async function sourceBytes(accessToken:string,claim:Claim){
 async function processClaim(supabase:SupabaseClient,accessToken:string,claim:Claim){
   const bytes=await sourceBytes(accessToken,claim);
   if(claim.mimeType==="application/pdf"){
-    const pdf=await extractServerPdfText(bytes);
-    if(!pdf.useful){
-      const meta:DocumentMetadata={documentType:claim.documentType,documentDate:claim.documentDate,amount:claim.amount,merchant:claim.merchant,lines:[]};
-      await complete(supabase,claim,meta,"",{method:"drive_auto_pdf_scan_pending_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,reason:"scanned_pdf_requires_visual_ocr"},"needs_review");
-      return"review" as const;
-    }
-    const inferred=inferDocumentMetadata(pdf.text,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const status=completeMetadata(meta)?"complete":"needs_review";
-    await complete(supabase,claim,meta,pdf.text,{method:"drive_auto_pdf_text_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,textCharacters:pdf.text.length},status);
+    const pdf=await processServerPdfDocument(bytes,claim.documentType==="receipt"?"receipt":null);
+    const meta=mergedMetadata(claim,pdf.metadata);
+    const visualOcr=pdf.ocrPages.length>0;
+    const agreement=imageAgreement(claim,pdf.metadata);
+    const visualTrusted=!visualOcr||((pdf.confidence??0)>=80&&pdf.financiallyValid&&agreement.compared>=2&&agreement.agreed===agreement.compared);
+    const status=completeMetadata(meta)&&visualTrusted&&!pdf.truncated&&pdf.unreadPages.length===0?"complete":"needs_review";
+    await complete(supabase,claim,meta,pdf.text,{engine:visualOcr?SERVER_RECEIPT_OCR_ENGINE:"PDF.js 6.2.108",model:visualOcr?SERVER_RECEIPT_OCR_MODEL:null,runtime:visualOcr?SERVER_RECEIPT_OCR_RUNTIME:null,method:pdf.method,automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,scannedPages:pdf.scannedPages,ocrPages:pdf.ocrPages,unreadPages:pdf.unreadPages,pageEvidence:pdf.pageEvidence,textCharacters:pdf.text.length,confidence:pdf.confidence,financiallyValid:pdf.financiallyValid,agreement},status);
     return status==="complete"?"completed" as const:"review" as const;
   }
   if(claim.mimeType.startsWith("image/")){
@@ -74,7 +73,7 @@ async function processClaim(supabase:SupabaseClient,accessToken:string,claim:Cla
 }
 function errorInfo(error:unknown){
   if(error instanceof ServerReceiptOcrError)return{code:error.code,retryable:error.retryable};
-  if(error instanceof ServerPdfTextError)return{code:error.code,retryable:error.retryable};
+  if(error instanceof ServerPdfDocumentError)return{code:error.code,retryable:error.retryable};
   return{code:error instanceof Error?error.message:"drive_hydration_failed",retryable:true};
 }
 
