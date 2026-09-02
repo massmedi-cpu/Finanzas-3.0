@@ -57,6 +57,21 @@ export async function getArchiveAllOverview(search:string|null=null,limit=200,of
   return archiveOverview(search,true,limit,offset);
 }
 
+export async function getCompleteArchiveOverview(search:string|null=null):Promise<ArchiveOverview>{
+  const first=await getArchiveAllOverview(search,100,0);
+  if(!first.hasMore)return first;
+  const documents=[...first.documents];
+  let offset=documents.length;
+  while(offset<first.total){
+    const page=await getArchiveAllOverview(search,100,offset);
+    if(page.documents.length===0)break;
+    documents.push(...page.documents);
+    offset+=page.documents.length;
+    if(!page.hasMore)break;
+  }
+  return {...first,documents,hasMore:documents.length<first.total};
+}
+
 export async function getArchiveLifecycleOverview(
   state:ArchiveLifecycleState,
   search:string|null=null,
