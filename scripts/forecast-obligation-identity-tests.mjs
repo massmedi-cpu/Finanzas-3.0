@@ -1,6 +1,9 @@
 import fs from 'node:fs';
 
-const sql = fs.readFileSync('database/v9.0.0-forecast-obligation-identity.sql','utf8');
+const sql = [
+  fs.readFileSync('database/v9.0.0-forecast-obligation-identity.sql','utf8'),
+  fs.readFileSync('database/v9.0.0-forecast-obligation-identity-dependency-permissions.sql','utf8'),
+].join('\n');
 
 function requireMatch(pattern,message){
   if(!pattern.test(sql)) throw new Error(message);
@@ -36,9 +39,17 @@ requireMatch(/seasonalSlotsPreserved[\s\S]{0,80}true/i,
 requireMatch(/projectionRecomputedAfterPrecision[\s\S]{0,120}bankMandateObligationIdentity/i,
   'Obligation identity must remain inside the projection-consistent precision core');
 requireMatch(/grant execute on function financial_app\.forecast_obligation_fingerprint\(text,text\) to authenticated, service_role/i,
-  'SECURITY INVOKER chain needs authenticated helper execution');
+  'SECURITY INVOKER chain needs authenticated fingerprint execution');
+requireMatch(/grant execute on function financial_app\.forecast_is_annual_signal\(text,text,text\) to authenticated, service_role/i,
+  'SECURITY INVOKER chain needs authenticated annual-signal execution');
+requireMatch(/grant execute on function financial_app\.forecast_norm\(text\) to authenticated, service_role/i,
+  'SECURITY INVOKER chain needs authenticated normalization execution');
 requireMatch(/revoke all on function financial_app\.forecast_obligation_fingerprint\(text,text\) from public, anon/i,
   'Public and anon must not execute the internal fingerprint helper');
+requireMatch(/revoke all on function financial_app\.forecast_is_annual_signal\(text,text,text\) from public, anon/i,
+  'Public and anon must not execute the annual-signal helper');
+requireMatch(/revoke all on function financial_app\.forecast_norm\(text\) from public, anon/i,
+  'Public and anon must not execute the normalization helper');
 
 forbid(/'mandateToken'|'rawMandate'|'mandateReference'/i,
   'Raw mandate fields must never be emitted into forecast JSON');
