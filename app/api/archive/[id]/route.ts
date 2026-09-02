@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
 import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
+import { operationalOcrStatus } from "@/lib/document/ocr-operational-status";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
 import type { ReceiptLayout } from "@/lib/document/receipt-layout";
@@ -30,7 +31,7 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const layout=receiptLayoutFromReconstruction(reconstruction);
   const validation=validateReceiptFinancials(layout,rawText?[rawText]:[]);
   if(incomingData){incomingData.validation=validation;next.ocrData=incomingData;}
-  if(next.ocrStatus!=="manual")next.ocrStatus=validation.status;
+  if(next.ocrStatus!=="manual")next.ocrStatus=operationalOcrStatus(validation.status,rawText);
   return next;
 }
 
