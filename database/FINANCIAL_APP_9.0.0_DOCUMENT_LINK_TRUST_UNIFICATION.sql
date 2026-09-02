@@ -56,25 +56,26 @@ begin
       and lower(coalesce(d.ocr_status,'')) not in ('pending','processing','needs_review','failed','error')
       and d.document_date is not null
       and coalesce(
-        case when replace(coalesce(d.ocr_data->>'installmentAmount',''),',','.') ~ '^[0-9]+(?:\\.[0-9]+)?$'
+        case when replace(coalesce(d.ocr_data->>'installmentAmount',''),',','.') ~ '^[0-9]+([.][0-9]+)?$'
           then replace(d.ocr_data->>'installmentAmount',',','.')::numeric end,
         d.amount
       ) is not null
       and (
         (
-          not (d.ocr_data?'installmentAmount')
+          not coalesce(d.ocr_data?'installmentAmount',false)
           and v_date between coalesce(
-            case when coalesce(d.ocr_data->>'chargeDate','') ~ '^\\d{4}-\\d{2}-\\d{2}$' then (d.ocr_data->>'chargeDate')::date end,
+            case when coalesce(d.ocr_data->>'chargeDate','') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (d.ocr_data->>'chargeDate')::date end,
             d.document_date
           )-7 and coalesce(
-            case when coalesce(d.ocr_data->>'chargeDate','') ~ '^\\d{4}-\\d{2}-\\d{2}$' then (d.ocr_data->>'chargeDate')::date end,
+            case when coalesce(d.ocr_data->>'chargeDate','') ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' then (d.ocr_data->>'chargeDate')::date end,
             d.document_date
           )+7
+          and d.amount is not null
           and abs(abs(d.amount)-v_amount)<=greatest(3::numeric,abs(d.amount)*0.15)
         )
         or (
-          d.ocr_data?'installmentAmount'
-          and replace(coalesce(d.ocr_data->>'installmentAmount',''),',','.') ~ '^[0-9]+(?:\\.[0-9]+)?$'
+          coalesce(d.ocr_data?'installmentAmount',false)
+          and replace(coalesce(d.ocr_data->>'installmentAmount',''),',','.') ~ '^[0-9]+([.][0-9]+)?$'
           and v_date between d.document_date and d.document_date+
             case when coalesce(d.ocr_data->>'paymentWindowDays','') ~ '^[0-9]+$'
               then greatest(30,least((d.ocr_data->>'paymentWindowDays')::integer,730)) else 100 end
