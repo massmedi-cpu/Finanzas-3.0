@@ -72,6 +72,8 @@ jobs:
         run: node scripts/archive-pending-reasons-trust-tests.mjs
       - name: Archive duplicate review safety
         run: ./node_modules/.bin/tsx scripts/archive-duplicate-review-tests.ts
+      - name: Movement selection performance and safety
+        run: ./node_modules/.bin/tsx scripts/movement-selection-performance-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
