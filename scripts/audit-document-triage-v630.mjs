@@ -5,7 +5,8 @@ const failures=[];
 const must=(ok,message)=>{if(!ok)failures.push(message)};
 
 const migration=read("database/FINANCIAL_APP_6.3.0_DOCUMENT_TRIAGE.sql");
-const performanceMigration=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_TRIAGE_MATCHING_SHORT_CIRCUIT.sql");
+const supersededPerformanceMigration=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_TRIAGE_MATCHING_SHORT_CIRCUIT.sql");
+const canonicalHotfix=read("database/FINANCIAL_APP_9.0.0_DOCUMENT_TRIAGE_CANONICAL_LIFECYCLE_HOTFIX.sql");
 const loader=read("lib/financial/document-triage.ts");
 const page=read("app/archivo/revision/page.tsx");
 const client=read("app/archivo/revision/triage-client.tsx");
@@ -47,33 +48,48 @@ must(layout.includes('import "./triage.css";'),"La ruta de revisión debe cargar
 for(const token of [".triage-summary",".triage-review_ocr",".triage-complete_metadata",".triage-ready_to_link","min-height:44px"])
   must(css.includes(token),`Estilos de triage incompletos: ${token}`);
 
-// 9.0.0: el motor de matching solo puede ejecutarse para documentos que hayan
-// superado OCR, metadatos y vinculación. Esto evita repetir matching caro para
-// estados que la máquina de triage resuelve antes, sin cambiar clasificación.
+// La primera optimización 9.0.0 queda conservada como historia de migración, pero
+// fue supersedida porque partía del core 6.3 y perdió parte del ciclo canónico.
+must(supersededPerformanceMigration.includes("candidate_docs as ("),"Debe conservarse la migración histórica que motivó el hotfix");
+
+// El hotfix efectivo debe combinar el contrato canónico 9.0.0 completo con el
+// short-circuit seguro. Esta es la definición que toda evolución posterior debe
+// preservar.
 for(const token of [
+  "archive_document_state_core",
+  "archive_document_pending_reasons_core",
+  "lifecycle_state",
+  "pending_reasons",
+  "'lifecycleState',p.lifecycle_state",
+  "'pendingReasons',to_jsonb(p.pending_reasons)",
+  "'usesCanonicalLifecycleState',true",
+  "d.ocr_status in ('pending','processing','needs_review','failed','error')",
+  "d.ocr_status not in ('pending','processing','needs_review','failed','error')",
   "candidate_docs as (",
-  "d.ocr_status is distinct from 'failed'",
+  "from candidate_docs d",
   "d.document_date is not null",
   "d.amount is not null",
   "d.merchant is not null",
   "btrim(d.merchant)<>''",
   "d.link_count=0",
-  "from candidate_docs d",
   "when p.action in ('ready_to_link','review_match')",
   "then financial_app.document_match_candidates_json_core(p.id,3)",
   "else '[]'::jsonb",
   "financial_app.authorized_email()",
   "security definer"
-])must(performanceMigration.toLowerCase().includes(token.toLowerCase()),`Optimización de triage 9.0.0 incompleta: ${token}`);
+])must(canonicalHotfix.toLowerCase().includes(token.toLowerCase()),`Hotfix canónico de triage 9.0.0 incompleto: ${token}`);
+for(const status of ["pending","processing","needs_review","failed","error"])
+  must(canonicalHotfix.includes(`'${status}'`),`El hotfix no puede perder el estado OCR canónico ${status}`);
 for(const action of ["review_ocr","complete_metadata","ready_to_link","review_match","investigate_no_match","archive_candidate"])
-  must(performanceMigration.includes(action),`La optimización no puede perder el estado canónico ${action}`);
+  must(canonicalHotfix.includes(action),`El hotfix no puede perder el estado de triage ${action}`);
 for(const forbidden of [
   "insert into financial_app.transaction_documents","delete from financial_app.transaction_documents",
   "update financial_app.transactions","delete from financial_app.transactions","insert into financial_app.transactions",
   "update financial_app.documents","delete from financial_app.documents","insert into financial_app.documents"
-])must(!performanceMigration.toLowerCase().includes(forbidden),`La optimización de triage debe seguir siendo de solo lectura: ${forbidden}`);
-must(!performanceMigration.includes("create or replace function public.financial_app_document_triage"),"La optimización no debe reabrir ni sustituir el wrapper público");
-must(!/grant\s+execute/i.test(performanceMigration),"La optimización no debe ampliar permisos de ejecución");
+])must(!canonicalHotfix.toLowerCase().includes(forbidden),`El hotfix de triage debe seguir siendo de solo lectura: ${forbidden}`);
+must(!canonicalHotfix.includes("create or replace function public.financial_app_document_triage"),"El hotfix no debe reabrir ni sustituir el wrapper público");
+must(!/grant\s+execute/i.test(canonicalHotfix),"El hotfix no debe ampliar permisos de ejecución");
+must(canonicalHotfix.includes("revoke all on function financial_app.document_triage_core(integer) from public,anon,authenticated,service_role"),"El core reparado debe quedar privado como en el cierre canónico 9.0.0");
 
-if(failures.length){console.error("Document triage v6.3/9.0 performance audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log("Document triage audit OK · cola universal, política canónica, seguridad explícita y short-circuit de matching 9.0.0 protegidos");
+if(failures.length){console.error("Document triage v6.3/9.0 canonical lifecycle audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
+console.log("Document triage audit OK · ciclo canónico 9.0.0 completo, estados OCR, lifecycleState/pendingReasons, política supervisada y short-circuit seguro protegidos");
