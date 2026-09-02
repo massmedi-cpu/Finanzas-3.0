@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
 import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
+import { operationalOcrStatus } from "@/lib/document/ocr-operational-status";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
 import type { ReceiptLayout } from "@/lib/document/receipt-layout";
@@ -30,7 +31,7 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const layout=receiptLayoutFromReconstruction(reconstruction);
   const validation=validateReceiptFinancials(layout,rawText?[rawText]:[]);
   if(incomingData){incomingData.validation=validation;next.ocrData=incomingData;}
-  if(next.ocrStatus!=="manual")next.ocrStatus=validation.status;
+  if(next.ocrStatus!=="manual")next.ocrStatus=operationalOcrStatus(validation.status,rawText);
   return next;
 }
 
@@ -96,7 +97,7 @@ export async function DELETE(_request:NextRequest,{params}:{params:Promise<{id:s
   const detail=await supabase.rpc("financial_app_archive_document",{p_id:id});
   if(detail.error||!detail.data)return apiFailure("archive.document.delete.read",detail.error,"document_unavailable",404);
   const deleted=await supabase.rpc("financial_app_archive_delete",{p_id:id});
-  if(deleted.error||!deleted.data)return apiFailure("archive.document.delete",deleted.error,"delete_failed");
+  if(deleted.error||!deleted.data)return apiFailure("archive.document.delete","delete_failed");
   const cleanup=await processDocumentStorageCleanup(supabase,25);
   return apiJson({
     ok:true,
