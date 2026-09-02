@@ -26,7 +26,7 @@ IVA INCLUIDO
 LE ATENDIO JUAN MEJIAS`;
 
 const metadata=inferDocumentMetadata(productionReceipt,"receipt");
-assert.equal(RECEIPT_PARSER_REVISION,"parser_v6");
+assert.equal(RECEIPT_PARSER_REVISION,"parser_v7");
 assert.equal(metadata.documentType,"receipt");
 assert.equal(metadata.documentDate,"2026-08-29","FECHA pegada al valor debe conservar la fecha explícita del ticket");
 assert.equal(metadata.merchant,"JUAN","La cabecera comercial debe ganar a la localidad situada debajo de dirección/teléfono");
@@ -39,4 +39,4 @@ assert.equal(colon.amount,7.5,"La mejora de fecha no puede romper un total expl�
 const invalid=inferDocumentMetadata("CAFETERIA CENTRAL\nFECHA32/13/2026\nTOTAL 7,50","receipt");
 assert.equal(invalid.documentDate,null,"Una etiqueta fuerte no puede saltarse la validación de calendario");
 
-console.log("OCR production concatenated date tests OK · FECHA29/08/2026 recuperada, JUAN preservado y 1460 ambiguo sigue sin convertirse en importe");
+console.log("OCR production concatenated date tests OK · parser_v7 conserva FECHA29/08/2026, JUAN y el bloqueo del 1460 ambiguo");
