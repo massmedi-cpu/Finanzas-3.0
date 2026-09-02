@@ -14,7 +14,7 @@ assert.ok(route.includes('apiError("manual_review_incomplete",422,{missingFields
 assert.ok(route.includes("manualReviewConfirmed&&manualReviewMissing.length===0"),"El estado manual solo puede elevarse si no falta ningún campo obligatorio");
 assert.ok(route.indexOf("manual_review_incomplete")<route.indexOf('financial_app_archive_update'),"El rechazo debe ocurrir antes de cualquier escritura documental");
 
-const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const client=fs.readFileSync("app/archivo/archive-client-core.tsx","utf8");
 assert.ok(client.includes('manualReviewMissingFields(edit.documentType,edit.documentDate,edit.amount)'),"Archivo debe calcular los mismos requisitos que el servidor");
 assert.ok(client.includes('disabled={!canConfirmReview||isAction("review")'),"Confirmar revisión debe estar desactivado si faltan campos");
 assert.ok(client.includes("Falta ${reviewMissingLabel(reviewMissingFields)}"),"El botón debe explicar qué falta");
