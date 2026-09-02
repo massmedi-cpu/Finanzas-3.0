@@ -49,14 +49,19 @@ assert.ok(!/Promise\.all\s*\(\s*selected/.test(client),"El cliente no puede disp
 
 const route=fs.readFileSync("app/api/archive/reprocess-ocr/route.ts","utf8");
 for(const token of [
+  'financial_app_archive_lifecycle_overview',
+  'p_state:"pending"',
+  "while(offset<pendingTotal)",
+  "offset+=payload.documents.length",
   "isBulkOcrReprocessCandidate(initial)",
   "download(initial.storagePath)",
   "const latest=await documentDetail",
   "isBulkOcrReprocessCandidate(latest)",
   "buildStoredReceiptPersistence(latest,result)",
   "financial_app_archive_update",
-])assert.ok(route.includes(token),`La API de recuperación debe proteger original, carreras y escritura: ${token}`);
+])assert.ok(route.includes(token),`La API de recuperación debe proteger descubrimiento paginado, original, carreras y escritura: ${token}`);
+assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación no debe escanear la biblioteca activa completa cuando existe el ciclo Pending dedicado");
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una confirmación/vínculo concurrente debe cancelar la escritura");
 
-console.log("OCR bulk reprocessing tests OK · manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · Pending paginado, manual/vínculos protegidos, lote acotado, secuencial, original-first, sin bucles y carreras aisladas");
