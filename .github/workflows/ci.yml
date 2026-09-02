@@ -38,6 +38,8 @@ jobs:
         run: node scripts/ocr-loader-dimension-tests.mjs
       - name: OCR financial summary rows
         run: ./node_modules/.bin/tsx scripts/ocr-financial-summary-row-tests.ts
+      - name: OCR commercial header recovery
+        run: ./node_modules/.bin/tsx scripts/ocr-commercial-header-recovery-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates
