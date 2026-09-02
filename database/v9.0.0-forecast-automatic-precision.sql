@@ -119,7 +119,9 @@ $function$;
 revoke all on function public.financial_app_forecast_calendar(date,integer) from public, anon;
 grant execute on function public.financial_app_forecast_calendar(date,integer) to authenticated, service_role;
 
-revoke all on function financial_app.forecast_auto_event_is_reliable(jsonb) from public, anon, authenticated;
-revoke all on function financial_app.forecast_calendar_precision_core(date,integer) from public, anon, authenticated;
-grant execute on function financial_app.forecast_auto_event_is_reliable(jsonb) to service_role;
-grant execute on function financial_app.forecast_calendar_precision_core(date,integer) to service_role;
+-- The public wrapper is SECURITY INVOKER, matching the existing forecast chain.
+-- Authenticated callers therefore need EXECUTE on the internal read-only helpers too.
+revoke all on function financial_app.forecast_auto_event_is_reliable(jsonb) from public, anon;
+revoke all on function financial_app.forecast_calendar_precision_core(date,integer) from public, anon;
+grant execute on function financial_app.forecast_auto_event_is_reliable(jsonb) to authenticated, service_role;
+grant execute on function financial_app.forecast_calendar_precision_core(date,integer) to authenticated, service_role;
