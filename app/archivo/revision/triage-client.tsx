@@ -12,6 +12,14 @@ import { TriageQuickResolution } from "./triage-quick-resolution";
 const dateFormat=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 const date=(value:string|null)=>value?dateFormat.format(new Date(`${value}T12:00:00`)):"—";
 const money=(value:number|null|undefined)=>value==null?"—":formatEuro(value);
+const ocrValuesTrusted=(status:string|null)=>status==="complete"||status==="manual"||status==="not_required";
+const documentMetadataLine=(document:DocumentOperations["documents"][number])=>{
+  if(ocrValuesTrusted(document.ocrStatus))return `${document.merchant||"Emisor sin identificar"} · ${date(document.documentDate)} · ${money(document.amount)}`;
+  const merchant=document.merchant?`Emisor detectado: ${document.merchant}`:"Emisor sin identificar";
+  const documentDate=document.documentDate?`Fecha detectada: ${date(document.documentDate)}`:"Fecha pendiente";
+  const amount=document.amount==null?"Importe pendiente":`${money(document.amount)} · provisional`;
+  return `${merchant} · ${documentDate} · ${amount}`;
+};
 const actionLabel=(action:DocumentTriageAction)=>({review_ocr:"Revisar OCR",complete_metadata:"Completar datos",ready_to_link:"Asociación segura",review_match:"Revisar coincidencia",investigate_no_match:"Investigar sin coincidencia",archive_candidate:"Listo para archivar"}[action]);
 const actionHint=(action:DocumentTriageAction)=>({review_ocr:"Primero hay que revisar el reconocimiento del documento para evitar trabajar con datos dudosos.",complete_metadata:"Falta información necesaria para buscar y justificar un movimiento con suficiente seguridad.",ready_to_link:"Hay una coincidencia que cumple la política supervisada. Se volverá a validar justo antes de asociarla.",review_match:"Hay evidencia útil, pero la decisión debe seguir siendo manual.",investigate_no_match:"No se ha encontrado todavía un movimiento compatible con la evidencia disponible.",archive_candidate:"El documento ya está asociado y puede pasar al histórico si su estado sigue resuelto."}[action]);
 const confidenceLabel=(value:ArchiveMovementRef["confidenceTier"])=>(value==="exact"?"Exacta":value==="high"?"Alta":value==="medium"?"Media":value==="low"?"Baja":"Sin clasificar");
@@ -176,7 +184,7 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
         const selectedSafe=selected.includes(document.id);
         const isActive=document.id===activeId;
         return <section id={`triage-${document.id}`} className={`triage-item triage-${document.action}${document.safeOperation?" triage-safe":""}${isActive?" triage-active":""}`} key={document.id} aria-current={isActive?"step":undefined}>
-          <header><div className="triage-document-heading">{document.safeOperation&&<label className="operation-check"><input type="checkbox" checked={selectedSafe} onChange={()=>toggle(document.id)} disabled={busy!==null}/><span className="sr-only">Seleccionar operación segura para {document.fileName}</span></label>}<div><div className="triage-item-title"><span className="triage-priority">Prioridad {document.priorityScore}</span><span className="triage-action">{actionLabel(document.action)}</span>{document.safeOperation&&<span className="operation-safe-badge">Seguro y reversible</span>}</div><h2>{document.fileName}</h2><p>{document.merchant||"Emisor sin identificar"} · {date(document.documentDate)} · {money(document.amount)}</p></div></div><div className="triage-header-actions">{!isActive&&<button className="primary-action" type="button" onClick={()=>focusDocument(document.id)}>Revisar</button>}{document.storageUrl&&<a className="ghost button-link" href={document.storageUrl} target="_blank" rel="noreferrer">Original</a>}<Link className="ghost button-link" href={archiveQuery}>Abrir ficha completa</Link></div></header>
+          <header><div className="triage-document-heading">{document.safeOperation&&<label className="operation-check"><input type="checkbox" checked={selectedSafe} onChange={()=>toggle(document.id)} disabled={busy!==null}/><span className="sr-only">Seleccionar operación segura para {document.fileName}</span></label>}<div><div className="triage-item-title"><span className="triage-priority">Prioridad {document.priorityScore}</span><span className="triage-action">{actionLabel(document.action)}</span>{document.safeOperation&&<span className="operation-safe-badge">Seguro y reversible</span>}</div><h2>{document.fileName}</h2><p>{documentMetadataLine(document)}</p></div></div><div className="triage-header-actions">{!isActive&&<button className="primary-action" type="button" onClick={()=>focusDocument(document.id)}>Revisar</button>}{document.storageUrl&&<a className="ghost button-link" href={document.storageUrl} target="_blank" rel="noreferrer">Original</a>}<Link className="ghost button-link" href={archiveQuery}>Abrir ficha completa</Link></div></header>
           {isActive&&<div className="triage-detail">
             <p className="triage-hint">{actionHint(document.action)}</p>
             {document.safeOperation&&<div className="operation-safe-note"><strong>{document.safeOperation.label}</strong><span>Solo se ejecutará si al confirmar sigue cumpliendo exactamente las condiciones de seguridad.</span></div>}
@@ -188,6 +196,6 @@ export function DocumentTriageClient({data}:{data:DocumentOperations}){
         </section>;
       })}
     </div>
-    <p className="triage-safety">Nada se asocia ni se archiva de forma automática. Guardar o validar datos solo recalcula la bandeja; las operaciones seguras requieren confirmación explícita, el servidor vuelve a validar cada documento y los casos ambiguos permanecen siempre en revisión manual.</p>
+    <p className="triage-safety">Nada se asocia ni se archiva de forma automática. Guardar datos no confirma el OCR; confirmar una revisión requiere campos completos y validación del servidor. Las operaciones seguras requieren confirmación explícita, el servidor vuelve a validar cada documento y los casos ambiguos permanecen siempre en revisión manual.</p>
   </div>;
 }
