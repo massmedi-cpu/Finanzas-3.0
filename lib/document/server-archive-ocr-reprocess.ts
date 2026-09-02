@@ -1,4 +1,5 @@
 import { operationalOcrStatus } from "./ocr-operational-status";
+import { SERVER_RECEIPT_OCR_ENGINE, SERVER_RECEIPT_OCR_MODEL, SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
 import { recognizeServerReceiptImage } from "./server-receipt-ocr";
 import { normalizeOcrText } from "./ticket-ocr";
 import { recognizeTicketImage, type ImageOcrResult } from "./ticket-ocr-engine";
@@ -141,7 +142,9 @@ export function buildStoredReceiptPersistence(
   const ocrStatus = preserved.length ? "needs_review" : operational;
   const validationStatus = result.validation?.status || null;
   const ocrData: Record<string, unknown> = {
-    engine: "OCR de tickets · servidor",
+    engine: SERVER_RECEIPT_OCR_ENGINE,
+    model: SERVER_RECEIPT_OCR_MODEL,
+    runtime: SERVER_RECEIPT_OCR_RUNTIME,
     method: result.method,
     pages: 1,
     confidence: result.confidence,
@@ -170,7 +173,9 @@ export function buildStoredReceiptPersistence(
     label: ocrStatus === "complete"
       ? "Reconstrucción visual validada desde las coordenadas OCR. El original sigue siendo la referencia."
       : "Reconstrucción geométrica pendiente de revisión. El original y las líneas OCR siguen siendo la referencia.",
-    engine: "OCR de tickets · servidor",
+    engine: SERVER_RECEIPT_OCR_ENGINE,
+    model: SERVER_RECEIPT_OCR_MODEL,
+    runtime: SERVER_RECEIPT_OCR_RUNTIME,
     method: result.method,
     documentType: inferred.documentType,
     documentDate: inferred.documentDate,

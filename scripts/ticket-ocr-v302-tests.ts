@@ -4,6 +4,7 @@ import { inferDocumentMetadata, normalizeOcrText } from "../lib/document/ticket-
 import { parseReceiptLayout } from "../lib/document/receipt-layout";
 import { validateReceiptFinancials } from "../lib/document/receipt-financial-validator";
 import { RECEIPT_OCR_METHOD_PREFIX, RECEIPT_OCR_REVISION } from "../lib/document/receipt-ocr-revision";
+import { SERVER_RECEIPT_OCR_RUNTIME } from "../lib/document/receipt-ocr-provenance";
 import { detectPaper } from "../lib/document/receipt-image-preprocessor";
 
 const receipt=`CAFETERIA CENTRAL\n21/08/2026 18:42\nDESCRIPCION UDS PRECIO TOTAL\nCAFE 1 2.50 2.50\nTOSTADA 2 2.50 5.00\nBase 6.82\nIVA 0.68\nTOTAL 7.50`;
@@ -90,7 +91,7 @@ const item=(text:string,left:number,top:number,width:number,score=.98)=>({
   poly:[[left,top],[left+width,top],[left+width,top+20],[left,top+20]],
 });
 
-const fakePaddleResult={
+const fakeServerResult={
   image:{width:1000,height:420},
   items:[
     item("CAFETERIA CENTRAL",160,20,300),
@@ -104,20 +105,20 @@ const fakePaddleResult={
     item("Povered by gamarero.com",350,370,300),
   ],
   metrics:{detMs:120,recMs:170,totalMs:290,detectedBoxes:20,recognizedCount:20},
-  runtime:{backend:"wasm",provider:"wasm"},
+  runtime:SERVER_RECEIPT_OCR_RUNTIME,
 };
 
 let predictCalls=0;
 const engine={
-  async predict(){predictCalls+=1;return [fakePaddleResult];},
+  async predict(){predictCalls+=1;return [fakeServerResult];},
 };
 const file=new File([new Uint8Array([1,2,3])],"receipt.jpg",{type:"image/jpeg"});
 const progress:Array<[number,string]>=[];
 const result=await recognizeTicketImage(file,engine,(value,label)=>progress.push([value,label]),"receipt");
 
 assert.equal(predictCalls,1,"El OCR canónico debe ejecutar una única inferencia");
-assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}ppocrv6_es_geometry`);
-assert.equal(RECEIPT_OCR_REVISION,"paddle_layout_v6");
+assert.equal(result.method,`${RECEIPT_OCR_METHOD_PREFIX}server_tesseract_7_geometry`);
+assert.equal(RECEIPT_OCR_REVISION,"server_tesseract_7_geometry_v1");
 assert.equal(result.metadata?.merchant,"CAFETERIA CENTRAL");
 assert.equal(result.metadata?.documentDate,"2026-08-21");
 assert.equal(result.metadata?.amount,7.5);
@@ -137,22 +138,22 @@ assert.equal(result.metrics?.secondaryMs,0,"No puede existir una segunda pasada 
 assert.equal(result.metrics?.preprocessMs,0,"En Node sin canvas debe conservarse el fallback no destructivo");
 const pass=result.passes[0] as typeof result.passes[0]&{visualLayout?:{lines?:unknown[];bounds?:{width:number;height:number}}};
 assert.ok(pass.visualLayout);
-assert.equal(pass.visualLayout?.lines?.length,fakePaddleResult.items.length);
+assert.equal(pass.visualLayout?.lines?.length,fakeServerResult.items.length);
 assert.ok((pass.visualLayout?.bounds?.width||0)>0);
 assert.ok((pass.visualLayout?.bounds?.height||0)>0);
-assert.ok(progress.some(([,label])=>label.includes("PP-OCRv6")));
+assert.ok(progress.some(([,label])=>label.includes("Tesseract 7")));
 
-const noisyPaddleResult={
-  ...fakePaddleResult,
+const noisyServerResult={
+  ...fakeServerResult,
   image:{width:1200,height:560},
   items:[
-    ...fakePaddleResult.items,
+    ...fakeServerResult.items,
     item("WOOKISHVAR",1080,150,110,.96),
     item("出88481日日886886815888日8618日88840",420,500,360,.92),
     item("BACKGROUND",1085,190,105,.91),
   ],
 };
-const noisyEngine={async predict(){return [noisyPaddleResult];}};
+const noisyEngine={async predict(){return [noisyServerResult];}};
 const noisy=await recognizeTicketImage(file,noisyEngine,()=>undefined,"receipt");
 assert.ok(noisy.rawText.includes("WOOKISHVAR"),"La evidencia literal debe conservar el texto detectado por el motor");
 assert.ok(noisy.rawText.includes("886886"),"La evidencia literal debe conservar también la detección espuria");
@@ -179,4 +180,4 @@ assert.ok((isolated?.topLeft||0)>=40&&(isolated?.topLeft||0)<=65);
 assert.ok((isolated?.topRight||0)>=225&&(isolated?.topRight||0)<=265);
 assert.ok((isolated?.bottom||0)>=420&&(isolated?.bottom||0)<photoHeight);
 
-console.log("ticket-ocr PP-OCRv6 geometry tests OK · tickets y evidencia comercial real de producción");
+console.log("ticket-ocr Tesseract 7 geometry tests OK · tickets y evidencia comercial real de producción");

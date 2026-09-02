@@ -39,8 +39,8 @@ globalThis.fetch=async(_url,options)=>{
   };
 };
 
-await import(new URL(`../public/vendor/paddleocr-loader.mjs?test=${Date.now()}`,import.meta.url));
-const engine=await window.__financialPaddleOCR.PaddleOCR.create();
+await import(new URL(`../public/vendor/receipt-ocr-loader.mjs?test=${Date.now()}`,import.meta.url));
+const engine=await window.__financialReceiptOCR.ReceiptOCR.create();
 
 const highRes=new Blob([new Uint8Array(1_000_000)],{type:"image/jpeg"});
 const highResult=(await engine.predict(highRes))[0];
@@ -58,6 +58,7 @@ assert.equal(highResult.metrics.transportWidth,3400);
 assert.ok(Number.isFinite(highResult.metrics.prepareMs));
 assert.ok(Number.isFinite(highResult.metrics.transportMs));
 assert.ok(Number.isFinite(highResult.metrics.totalMs));
+assert.equal(highResult.runtime,"server-tesseract-7");
 
 const originalPixels=4080*3072;
 const transportPixels=3400*2560;
@@ -84,4 +85,4 @@ assert.equal(fallbackRequest.headers["x-ocr-scaled"],"0");
 assert.equal(fallbackRequest.headers["x-ocr-width"],undefined);
 assert.equal(fallbackRequest.body,fallback);
 
-console.log("OCR loader dimension tests OK · 4080x3072 => 3400x2560, ~30% pixel reduction with denser text preserved, small direct and legacy fallback intact");
+console.log("OCR loader dimension tests OK · Tesseract server adapter preserves 3400px transport, small direct and legacy browser fallback");

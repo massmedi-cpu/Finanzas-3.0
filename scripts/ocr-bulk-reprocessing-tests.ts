@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { bulkOcrReprocessPlan, isBulkOcrReprocessCandidate, BULK_OCR_REPROCESS_LIMIT } from "../lib/document/ocr-bulk-reprocess-policy";
+import { RECEIPT_OCR_METHOD_PREFIX } from "../lib/document/receipt-ocr-revision";
 
-const current="image_ocr_receipt_v501:paddle_layout_v6:parser_v7:ppocrv6_es_geometry";
+const current=`${RECEIPT_OCR_METHOD_PREFIX}server_tesseract_7_geometry`;
+const compatibleLegacy="image_ocr_receipt_v501:paddle_layout_v6:parser_v7:ppocrv6_es_geometry";
 const previous="image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry";
 const legacy="image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry";
 const doc=(id:string,ocrStatus:string,method:string,options:{mimeType?:string;storageProvider?:string;links?:unknown[];bulkReprocessed?:boolean}={})=>({
@@ -14,12 +16,15 @@ const doc=(id:string,ocrStatus:string,method:string,options:{mimeType?:string;st
   links:options.links||[],
 });
 
-assert.equal(isBulkOcrReprocessCandidate(doc("legacy-complete","complete",legacy)),true,"Un OCR legado completo debe poder actualizar motor/parser");
+assert.equal(isBulkOcrReprocessCandidate(doc("legacy-complete","complete",legacy)),true,"Un OCR realmente legado completo debe poder actualizar motor/parser");
 assert.equal(isBulkOcrReprocessCandidate(doc("previous-complete","complete",previous)),true,"parser_v6 debe poder actualizarse una vez para aplicar la clasificación documental v7");
+assert.equal(isBulkOcrReprocessCandidate(doc("compatible-complete","complete",compatibleLegacy)),false,"La revisión parser_v7 legacy equivalente no debe reprocesarse solo por su etiqueta histórica");
+assert.equal(isBulkOcrReprocessCandidate(doc("compatible-review","needs_review",compatibleLegacy)),true,"Un OCR compatible pero pendiente sí puede reintentarse por su estado operativo");
 assert.equal(isBulkOcrReprocessCandidate(doc("current-review","needs_review",current)),true,"Un OCR actual pendiente puede reintentarse una vez por lote");
 assert.equal(isBulkOcrReprocessCandidate(doc("failed","failed",current)),true,"Un fallo operativo puede reintentarse desde el original");
 assert.equal(isBulkOcrReprocessCandidate(doc("error","error",current)),true,"Un error operativo puede reintentarse desde el original");
 assert.equal(isBulkOcrReprocessCandidate(doc("already-tried","needs_review",current,{bulkReprocessed:true})),false,"Un OCR actual ya reprocesado no puede entrar en bucle automático");
+assert.equal(isBulkOcrReprocessCandidate(doc("compatible-already-tried","needs_review",compatibleLegacy,{bulkReprocessed:true})),false,"Un OCR legacy compatible ya reprocesado tampoco puede entrar en bucle");
 assert.equal(isBulkOcrReprocessCandidate(doc("current-complete","complete",current)),false,"Un OCR actual completo no debe gastar recursos otra vez");
 assert.equal(isBulkOcrReprocessCandidate(doc("manual","manual",legacy)),false,"Una revisión manual nunca puede ser sobrescrita por el lote");
 assert.equal(isBulkOcrReprocessCandidate(doc("linked","needs_review",legacy,{links:[{id:"movement"}]})),false,"Un documento ya vinculado no debe cambiar metadatos en un lote automático");
@@ -74,4 +79,4 @@ assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación no
 assert.ok(route.indexOf("const latest=await documentDetail")<route.indexOf("financial_app_archive_update"),"La comprobación de carrera debe ocurrir antes de cualquier escritura");
 assert.ok(route.includes('reason:"changed_during_reprocess"'),"Una confirmación/vínculo concurrente debe cancelar la escritura");
 
-console.log("OCR bulk reprocessing tests OK · parser_v6 legacy, parser_v7 actual, shell limpio, trigger Pending global, lote secuencial, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · legacy real actualizable, parser_v7 equivalente estable, lote secuencial, sin bucles y carreras aisladas");

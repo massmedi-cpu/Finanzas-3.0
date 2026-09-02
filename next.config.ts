@@ -38,8 +38,9 @@ const nextConfig: NextConfig = {
       { source: '/brand/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
       { source: '/icons/:path*', headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }] },
       { source: '/manifest.webmanifest', headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }] },
-      // The OCR loader is operational code, not a versioned immutable asset. Never let
-      // a browser reuse an older transport policy after a parser/revision deployment.
+      // OCR loaders are operational code, not versioned immutable assets. Never let
+      // a browser reuse an older transport/provenance policy after a deployment.
+      { source: '/vendor/receipt-ocr-loader.mjs', headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }] },
       { source: '/vendor/paddleocr-loader.mjs', headers: [{ key: 'Cache-Control', value: 'no-store, max-age=0' }] },
     ];
   },
