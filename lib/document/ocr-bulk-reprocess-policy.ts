@@ -1,4 +1,4 @@
-import { RECEIPT_OCR_METHOD_PREFIX } from "./receipt-ocr-revision";
+import { isCompatibleReceiptOcrMethod } from "./receipt-ocr-revision";
 
 export const BULK_OCR_REPROCESS_LIMIT = 8 as const;
 
@@ -29,10 +29,10 @@ export function isBulkOcrReprocessCandidate(document: BulkOcrReprocessDocument) 
   if (status === "manual") return false;
   const data = storedOcrData(document);
   const method = storedOcrMethod(document);
-  const current = method.startsWith(RECEIPT_OCR_METHOD_PREFIX);
-  const alreadyBulkReprocessed = current && data?.bulkReprocessed === true;
+  const compatible = isCompatibleReceiptOcrMethod(method);
+  const alreadyBulkReprocessed = compatible && data?.bulkReprocessed === true;
   const unresolved = (status === "needs_review" || status === "failed" || status === "error") && !alreadyBulkReprocessed;
-  const legacy = method.startsWith("image_ocr_receipt_") && !current;
+  const legacy = method.startsWith("image_ocr_receipt_") && !compatible;
   return unresolved || legacy;
 }
 
