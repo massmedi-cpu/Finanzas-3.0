@@ -1,5 +1,5 @@
 export const RECEIPT_OCR_REVISION = "paddle_layout_v6" as const;
-export const RECEIPT_PARSER_REVISION = "parser_v3" as const;
+export const RECEIPT_PARSER_REVISION = "parser_v4" as const;
 export const RECEIPT_OCR_METHOD_PREFIX = `image_ocr_receipt_v501:${RECEIPT_OCR_REVISION}:${RECEIPT_PARSER_REVISION}:` as const;
 
 export function isCurrentReceiptOcrMethod(method: unknown) {
