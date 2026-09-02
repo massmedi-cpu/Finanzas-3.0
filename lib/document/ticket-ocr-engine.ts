@@ -153,6 +153,12 @@ function correctTrustedReceiptText(value: string) {
     .replace(/\bTOTALA\b/giu, (match) => replacementWithOriginalCase(match, "TOTAL A"));
 }
 
+function correctCommercialHeaderToken(value: string) {
+  return value
+    .replace(/\bWA\b/giu, (match) => replacementWithOriginalCase(match, "IVA"))
+    .replace(/\bSUBTOTA\b/giu, (match) => replacementWithOriginalCase(match, "SUBTOTAL"));
+}
+
 function metadataTextFromRows(rows: VisualRow[], sourceWidth: number) {
   const lines = rows.map((row) => row.text);
   const first = rows[0];
@@ -227,9 +233,19 @@ function normalizedKey(value: string) {
   return value.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 }
 
+function isNoisyCommercialTableHeader(row: VisualRow) {
+  const key = normalizedKey(row.text).replace(/[^A-Z0-9]/g, "");
+  return key.includes("CANT")
+    && key.includes("CODIGO")
+    && key.includes("ARTIC")
+    && key.includes("PRECI")
+    && key.includes("SUBTOTA");
+}
+
 function isReceiptTableHeader(row: VisualRow) {
   const key = normalizedKey(row.text);
-  return key.includes("DESCRIP") && key.includes("PRECI") && (key.includes("IMPORTE") || key.includes("TOTAL") || key.includes("UDS"));
+  const standard = key.includes("DESCRIP") && key.includes("PRECI") && (key.includes("IMPORTE") || key.includes("TOTAL") || key.includes("UDS"));
+  return standard || isNoisyCommercialTableHeader(row);
 }
 
 function isFinancialSummaryRow(row: VisualRow) {
@@ -259,6 +275,9 @@ function obviousRecognitionNoise(box: Box) {
 function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: number) {
   const rows = groupRows(boxes);
   const tableIndex = rows.findIndex(isReceiptTableHeader);
+  const protectedHeaderBoxes = new Set(
+    rows.filter(isReceiptTableHeader).flatMap((row) => row.boxes),
+  );
   const protectedFinancialBoxes = new Set(
     rows.filter(isFinancialSummaryRow).flatMap((row) => row.boxes),
   );
@@ -282,12 +301,13 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
   const accepted: Box[] = [];
   const discarded: Box[] = [];
   for (const box of boxes) {
+    const protectedHeader = protectedHeaderBoxes.has(box);
     const protectedFinancial = protectedFinancialBoxes.has(box) && box.score >= 35;
-    let reject = protectedFinancial ? false : obviousRecognitionNoise(box);
+    let reject = protectedHeader || protectedFinancial ? false : obviousRecognitionNoise(box);
     if (!reject && corridor) {
       const overlap = Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left));
       const overlapRatio = overlap / Math.max(1, box.width);
-      const semantic = protectedFinancial || /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+      const semantic = protectedHeader || protectedFinancial || /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
       if (overlapRatio < 0.28 && !semantic) reject = true;
       if (box.top > bottomLimit && !semantic) reject = true;
     }
@@ -480,8 +500,16 @@ export async function recognizeTicketImage(
   const sourceHeight = Math.max(1, numberValue(result.image?.height) || Math.ceil(Math.max(...literalBoxes.map((box) => box.bottom))));
   const literalRows = groupRows(literalBoxes);
   const literalText = literalRows.map((row) => row.text).join("\n").trim();
-  const allBoxes = literalBoxes.map((box) => {
+  const initiallyTrustedBoxes = literalBoxes.map((box) => {
     const text = correctTrustedReceiptText(box.text);
+    return text === box.text ? box : { ...box, text };
+  });
+  const noisyCommercialHeaderBoxes = new Set(
+    groupRows(initiallyTrustedBoxes).filter(isNoisyCommercialTableHeader).flatMap((row) => row.boxes),
+  );
+  const allBoxes = initiallyTrustedBoxes.map((box) => {
+    if (!noisyCommercialHeaderBoxes.has(box)) return box;
+    const text = correctCommercialHeaderToken(box.text);
     return text === box.text ? box : { ...box, text };
   });
 
