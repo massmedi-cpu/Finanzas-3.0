@@ -22,6 +22,8 @@ const draftFrom=(document:DocumentOperationDocument):Draft=>({
   merchant:document.merchant||"",
 });
 
+function ocrValuesTrusted(status:string|null){return status==="complete"||status==="manual"||status==="not_required";}
+
 function reviewMissingLabel(fields:string[]){
   const labels=fields.map(field=>field==="documentDate"?"fecha":field==="amount"?"importe":field);
   if(labels.length<=1)return labels[0]||"los campos obligatorios";
@@ -57,6 +59,7 @@ export function TriageQuickResolution({document,disabled,onChanged,onResolved,on
 
   const movementHref=useMemo(()=>movementSearchHref(document,draft),[document,draft]);
   const canValidateOcr=document.action==="review_ocr";
+  const trustedOcr=ocrValuesTrusted(document.ocrStatus);
   const hasSafeResolution=Boolean(document.safeOperation);
 
   async function save(validateOcr=false){
@@ -111,11 +114,13 @@ export function TriageQuickResolution({document,disabled,onChanged,onResolved,on
       <span className="triage-step">Paso {document.action==="review_ocr"?1:document.action==="complete_metadata"?2:document.action==="ready_to_link"?3:document.action==="review_match"?4:document.action==="investigate_no_match"?5:6} de 6</span>
     </div>
 
+    {!trustedOcr&&<div className="ocr-warning" role="note"><strong>Datos OCR provisionales</strong><span>La fecha, el importe y el emisor detectados no se consideran confirmados hasta usar «Guardar y confirmar revisión».</span></div>}
+
     <div className="triage-resolution-grid">
       <label><span>Tipo de documento</span><input value={draft.documentType} onChange={event=>setDraft(current=>({...current,documentType:event.target.value}))} disabled={disabled||busy!==null}/></label>
-      <label><span>Fecha</span><input type="date" value={draft.documentDate} onChange={event=>setDraft(current=>({...current,documentDate:event.target.value}))} disabled={disabled||busy!==null}/></label>
-      <label><span>Importe</span><div className="triage-money-input"><input inputMode="decimal" value={draft.amount} onChange={event=>setDraft(current=>({...current,amount:event.target.value}))} placeholder="0,00" disabled={disabled||busy!==null}/><span>€</span></div></label>
-      <label><span>Emisor / comercio</span><input value={draft.merchant} onChange={event=>setDraft(current=>({...current,merchant:event.target.value}))} placeholder="Nombre del comercio" disabled={disabled||busy!==null}/></label>
+      <label><span>{trustedOcr?"Fecha":"Fecha detectada"}</span><input type="date" value={draft.documentDate} onChange={event=>setDraft(current=>({...current,documentDate:event.target.value}))} disabled={disabled||busy!==null}/></label>
+      <label><span>{trustedOcr?"Importe":"Importe detectado"}{!trustedOcr&&<small> · provisional</small>}</span><div className="triage-money-input"><input inputMode="decimal" value={draft.amount} onChange={event=>setDraft(current=>({...current,amount:event.target.value}))} placeholder="0,00" disabled={disabled||busy!==null}/><span>€</span></div></label>
+      <label><span>{trustedOcr?"Emisor / comercio":"Emisor / comercio detectado"}{!trustedOcr&&<small> · provisional</small>}</span><input value={draft.merchant} onChange={event=>setDraft(current=>({...current,merchant:event.target.value}))} placeholder="Nombre del comercio" disabled={disabled||busy!==null}/></label>
     </div>
 
     <div className="triage-resolution-actions">
