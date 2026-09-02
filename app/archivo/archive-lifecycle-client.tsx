@@ -4,7 +4,7 @@ import Link from "next/link";
 import {useState} from "react";
 import {useRouter} from "next/navigation";
 import {formatEuro} from "@/lib/format/es-es";
-import type {ArchiveDocument,ArchiveLifecycleCounts,ArchiveLifecycleState} from "@/lib/financial/archive";
+import type {ArchiveDocument,ArchiveLifecycleCounts,ArchiveLifecycleState,ArchivePendingReason} from "@/lib/financial/archive";
 
 type Props={
   documents:ArchiveDocument[];
@@ -18,9 +18,27 @@ type Props={
 type Feedback={tone:"success"|"error";message:string};
 
 const dates=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
+const pendingReasonLabels:Record<ArchivePendingReason,string>={
+  ocr_pending:"OCR pendiente",
+  ocr_processing:"OCR en proceso",
+  ocr_needs_review:"Revisar OCR",
+  ocr_failed:"OCR sin lectura",
+  ocr_error:"Error de OCR",
+  movement_match_pending:"Revisar asociación",
+};
 function formatDate(value:string|null,createdAt:string){const raw=value?`${value}T12:00:00`:createdAt;return dates.format(new Date(raw))}
 function isPending(document:ArchiveDocument){return ["pending","processing","needs_review","failed","error"].includes(document.ocrStatus)||(document.links.length===0&&document.suggestions.length>0)}
-function statusCopy(document:ArchiveDocument){if(document.archivedAt)return"Archivada";if(isPending(document))return"Pendiente";return"Nueva"}
+function ocrValuesTrusted(status:string){return status==="complete"||status==="manual"||status==="not_required"}
+function amountCopy(document:ArchiveDocument){if(document.amount==null)return"Importe pendiente";const value=formatEuro(document.amount);return ocrValuesTrusted(document.ocrStatus)?value:`${value} · provisional`}
+function pendingReasonCopy(document:ArchiveDocument){const labels=document.pendingReasons.map(reason=>pendingReasonLabels[reason]).filter(Boolean);return labels.length?labels.join(" · "):"Requiere revisión"}
+function statusCopy(document:ArchiveDocument){
+  if(document.archivedAt)return"Archivada";
+  if(!isPending(document))return"Nueva";
+  if(document.pendingReasons.includes("ocr_failed")||document.pendingReasons.includes("ocr_error"))return"OCR pendiente";
+  if(document.pendingReasons.includes("ocr_needs_review"))return"Revisar OCR";
+  if(document.pendingReasons.includes("movement_match_pending"))return"Revisar asociación";
+  return"Pendiente";
+}
 function statusClass(document:ArchiveDocument){if(document.archivedAt)return"muted";if(isPending(document))return"warning";return"ok"}
 function DocumentIcon({image}:{image:boolean}){return <span className="archive-lifecycle-icon" aria-hidden="true"><svg className="financial-icon" viewBox="0 0 24 24" fill="none"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/>{image?<><circle cx="10" cy="12" r="1.4"/><path d="m8.5 17 2.7-2.7 1.9 1.9 1.4-1.4 1.5 1.5"/></>:<><path d="M9 12h6M9 15h6"/></>}</svg></span>}
 function archiveHref(view:ArchiveLifecycleState,query:string,page=1){const params=new URLSearchParams({view});if(query)params.set("q",query);if(page>1)params.set("page",String(page));return `/archivo?${params.toString()}`}
@@ -70,7 +88,7 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
       <div className="archive-lifecycle-list">
         {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
           <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
-          <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{document.amount==null?"Importe pendiente":formatEuro(document.amount)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small></div>
+          <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{amountCopy(document)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small>{view==="pending"&&<small className="archive-pending-reasons">Requiere: {pendingReasonCopy(document)}</small>}</div>
           <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={Boolean(busy)} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
         </article>)}
       </div>
