@@ -11,9 +11,10 @@ assert.equal(hasUsefulOcrText("12345678"),true);
 assert.equal(hasUsefulOcrText("1234567"),false);
 
 const route=fs.readFileSync("app/api/archive/[id]/route.ts","utf8");
-assert.ok(route.includes('from "@/lib/document/ocr-operational-status"'),"La API de Archivo debe usar el traductor canónico de estado OCR");
-assert.ok(route.includes("operationalOcrStatus(validation.status,rawText)"),"La API debe separar validación financiera de estado operativo OCR");
-assert.ok(!route.includes("next.ocrStatus=validation.status"),"La API no puede volver a copiar directamente validation.status a ocrStatus");
+const transition=fs.readFileSync("lib/document/ocr-review-transition.ts","utf8");
+assert.ok(route.includes('from "@/lib/document/ocr-review-transition"')&&route.includes("resolveOcrReviewStatus"),"La API de Archivo debe pasar por la transición canónica de confianza OCR");
+assert.ok(transition.includes('from "./ocr-operational-status"')&&transition.includes("operationalOcrStatus(input.validationStatus,input.rawText)"),"La transición de revisión debe seguir usando el traductor operativo canónico para evidencia de máquina");
+assert.ok(!route.includes("next.ocrStatus=validation.status")&&!transition.includes("return input.validationStatus"),"Ninguna capa puede volver a copiar directamente validation.status a ocrStatus");
 
 const client=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 assert.ok(client.includes('ocrStatus:\"failed\"')&&client.includes("ocrError instanceof Error"),"Un fallo real del motor debe seguir persistiendo como failed");
@@ -33,4 +34,4 @@ for(const token of [
 for(const forbidden of ["document_date=","amount=","merchant=","ocr_text=","ocr_data="])
   assert.ok(!migration.includes(forbidden),`La reclasificación no puede modificar evidencia o metadatos financieros: ${forbidden}`);
 
-console.log("OCR operational status tests OK · validación estructural fallida con texto útil => needs_review; fallo real/no-text => failed");
+console.log("OCR operational status tests OK · validación estructural y transición de revisión conservan needs_review; fallo real/no-text => failed");
