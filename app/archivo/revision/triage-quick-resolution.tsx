@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect,useMemo,useState } from "react";
+import { manualReviewMissingFields } from "@/lib/document/ocr-review-completeness";
 import type { DocumentOperationDocument } from "@/lib/financial/document-operations";
 
 type Draft={documentType:string;documentDate:string;amount:string;merchant:string};
@@ -20,6 +21,12 @@ const draftFrom=(document:DocumentOperationDocument):Draft=>({
   amount:document.amount==null?"":String(document.amount).replace(".",","),
   merchant:document.merchant||"",
 });
+
+function reviewMissingLabel(fields:string[]){
+  const labels=fields.map(field=>field==="documentDate"?"fecha":field==="amount"?"importe":field);
+  if(labels.length<=1)return labels[0]||"los campos obligatorios";
+  return `${labels.slice(0,-1).join(", ")} e ${labels.at(-1)}`;
+}
 
 function dateShift(value:string|null,days:number){
   if(!value)return"";
@@ -57,6 +64,10 @@ export function TriageQuickResolution({document,disabled,onChanged,onResolved,on
     const normalizedAmount=draft.amount.trim().replace(",",".");
     const amount=normalizedAmount===""?null:Number(normalizedAmount);
     if(amount!=null&&!Number.isFinite(amount)){onError("El importe no es válido.");return;}
+    if(validateOcr){
+      const missing=manualReviewMissingFields(draft.documentType,draft.documentDate||null,amount);
+      if(missing.length){onError(`Completa ${reviewMissingLabel(missing)} antes de confirmar la revisión.`);return;}
+    }
     setBusy(validateOcr?"validate":"save");
     onError("");
     try{
@@ -66,11 +77,14 @@ export function TriageQuickResolution({document,disabled,onChanged,onResolved,on
         amount,
         merchant:draft.merchant.trim()||null,
       };
-      if(validateOcr)payload.ocrStatus="manual";
+      if(validateOcr){payload.ocrStatus="manual";payload.manualReviewConfirmed=true;}
       const response=await fetch(`/api/archive/${document.id}`,{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(payload)});
-      const body=await response.json() as {ok?:boolean;error?:string};
-      if(!response.ok||!body.ok)throw new Error(body.error||"document_update_failed");
-      onChanged(validateOcr?"OCR revisado y datos guardados. La bandeja ha recalculado el siguiente paso.":"Datos guardados. La bandeja ha recalculado las coincidencias.");
+      const body=await response.json() as {ok?:boolean;error?:string;missingFields?:string[]};
+      if(!response.ok||!body.ok){
+        if(body.error==="manual_review_incomplete")throw new Error(`Completa ${reviewMissingLabel(body.missingFields||[])} antes de confirmar la revisión.`);
+        throw new Error(body.error||"document_update_failed");
+      }
+      onChanged(validateOcr?"Revisión manual confirmada. La bandeja ha recalculado el siguiente paso.":"Datos guardados. La bandeja ha recalculado las coincidencias.");
     }catch(cause){onError(cause instanceof Error?cause.message:"No se pudieron guardar los datos del documento.");}
     finally{setBusy(null);}
   }
@@ -106,13 +120,13 @@ export function TriageQuickResolution({document,disabled,onChanged,onResolved,on
 
     <div className="triage-resolution-actions">
       <button className="ghost" type="button" onClick={()=>void save(false)} disabled={disabled||busy!==null}>{busy==="save"?"Guardando…":"Guardar datos"}</button>
-      {canValidateOcr&&<button className="secondary-action" type="button" onClick={()=>void save(true)} disabled={disabled||busy!==null}>{busy==="validate"?"Validando…":"Guardar y validar OCR"}</button>}
+      {canValidateOcr&&<button className="secondary-action" type="button" onClick={()=>void save(true)} disabled={disabled||busy!==null}>{busy==="validate"?"Validando…":"Guardar y confirmar revisión"}</button>}
       <a className="ghost button-link" href={movementHref}>Buscar movimiento compatible</a>
       {hasSafeResolution&&<button className="primary-action" type="button" onClick={()=>void resolveSafe()} disabled={disabled||busy!==null}>{busy==="resolve"?"Revalidando…":document.safeOperation!.label}</button>}
     </div>
 
     <div className="triage-resolution-foot">
-      <span>Guardar datos no asocia ni archiva nada.</span>
+      <span>Guardar datos no asocia, archiva ni confirma el OCR.</span>
       <span>{hasSafeResolution?"La acción destacada se revalida en servidor y sigue siendo reversible.":"Este caso sigue necesitando una decisión manual antes de cerrarse."}</span>
     </div>
   </section>;
