@@ -54,6 +54,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-explicit-review-tests.ts
       - name: OCR provisional values UX
         run: node scripts/ocr-provisional-values-ux-tests.mjs
+      - name: OCR manual review completeness
+        run: ./node_modules/.bin/tsx scripts/ocr-manual-review-completeness-tests.ts
       - name: Static type and unused-code checks
         run: npm run lint
       - name: Production build and release gates

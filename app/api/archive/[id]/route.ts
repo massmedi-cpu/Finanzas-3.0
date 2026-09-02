@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiRedirect, apiUnauthorized } from "@/lib/api/response";
 import { processDocumentStorageCleanup } from "@/lib/document/storage-cleanup";
+import { manualReviewMissingFields } from "@/lib/document/ocr-review-completeness";
 import { resolveOcrReviewStatus } from "@/lib/document/ocr-review-transition";
 import { asRecord } from "@/lib/validation/json";
 import { validateReceiptFinancials } from "@/lib/document/receipt-financial-validator";
@@ -18,6 +19,7 @@ function receiptLayoutFromReconstruction(value:unknown){
 }
 
 function comparableReviewValue(value:unknown){return value==null||value===""?"":String(value).trim();}
+function nextOrExisting(next:Record<string,unknown>,existing:Record<string,unknown>,key:string){return Object.prototype.hasOwnProperty.call(next,key)?next[key]:existing[key];}
 
 function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unknown>){
   const next={...input};
@@ -28,7 +30,7 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const data=incomingData||existingData;
   const method=String(data?.method||"");
   const machineReceipt=method.startsWith("image_ocr_receipt_");
-  if(!machineReceipt)return next;
+  if(!machineReceipt)return{input:next,manualReviewMissing:[] as string[]};
   const rawText=String(data?.rawText||next.ocrText||existing.ocrText||"");
   if(incomingData&&!incomingData.rawText&&rawText)incomingData.rawText=rawText;
   const reconstruction=Object.prototype.hasOwnProperty.call(next,"digitalReconstruction")?next.digitalReconstruction:existing.digitalReconstruction;
@@ -38,17 +40,22 @@ function guardedOcrInput(input:Record<string,unknown>,existing:Record<string,unk
   const reviewSensitiveChanged=["documentType","documentDate","amount","merchant","ocrText"].some(key=>
     Object.prototype.hasOwnProperty.call(next,key)&&comparableReviewValue(next[key])!==comparableReviewValue(existing[key])
   );
+  const manualReviewMissing=manualReviewConfirmed?manualReviewMissingFields(
+    nextOrExisting(next,existing,"documentType"),
+    nextOrExisting(next,existing,"documentDate"),
+    nextOrExisting(next,existing,"amount"),
+  ):[];
   const resolvedStatus=resolveOcrReviewStatus({
     existingStatus:existing.ocrStatus,
     incomingStatus:next.ocrStatus,
-    manualReviewConfirmed,
+    manualReviewConfirmed:manualReviewConfirmed&&manualReviewMissing.length===0,
     newMachineEvidence:Boolean(incomingData),
     reviewSensitiveChanged,
     validationStatus:validation.status,
     rawText,
   });
   if(resolvedStatus)next.ocrStatus=resolvedStatus;else delete next.ocrStatus;
-  return next;
+  return{input:next,manualReviewMissing};
 }
 
 export async function GET(request:NextRequest,{params}:{params:Promise<{id:string}>}){
@@ -71,7 +78,9 @@ export async function PATCH(request:NextRequest,{params}:{params:Promise<{id:str
   if(current.error||!current.data)return apiFailure("archive.document.patch.read",current.error,"document_unavailable",404);
   if(!Object.keys(rawInput).length)return apiJson({ok:true,document:current.data});
   const existing=current.data as Record<string,unknown>;
-  const input=guardedOcrInput(rawInput,existing);
+  const guarded=guardedOcrInput(rawInput,existing);
+  if(guarded.manualReviewMissing.length)return apiError("manual_review_incomplete",422,{missingFields:guarded.manualReviewMissing});
+  const input=guarded.input;
   const has=(key:string)=>Object.prototype.hasOwnProperty.call(input,key);
   const {error}=await supabase.rpc("financial_app_archive_update",{
     p_id:id,
