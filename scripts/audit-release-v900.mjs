@@ -21,6 +21,8 @@ const archiveDetailApi=read("app/api/archive/[id]/route.ts");
 const syncApi=read("app/api/sync/route.ts");
 const ocrApi=read("app/api/ocr/receipt/route.ts");
 const hydrationWorker=read("lib/document/drive-content-hydration.ts");
+const canonicalOcr=read("lib/document/server-canonical-receipt.ts");
+const archiveReprocess=read("lib/document/server-archive-ocr-reprocess.ts");
 const serverOcr=read("lib/document/server-receipt-ocr.ts");
 const provenance=read("lib/document/receipt-ocr-provenance.ts");
 const serverPdf=read("lib/document/server-pdf-text.ts");
@@ -93,9 +95,29 @@ for(const status of ["'pending'","'processing'","'needs_review'"])
 
 for(const token of ["processDriveDocumentHydration","maxDuration=60","contentHydration","drive_content_hydration_unavailable"])
   must(syncApi.includes(token),`Sync no integra hidratación documental de forma tolerante: ${token}`);
-for(const token of ["MAX_BATCH=2","BUDGET_MS=32_000","financial_app_prepare_drive_document_hydration","financial_app_drive_document_hydration_pending","financial_app_complete_drive_document_hydration","financial_app_finalize_document_links_after_hydration","drive_auto_pdf_text_v1","drive_auto_image_tesseract_v1","agreement.compared>=2","confidence??0)>=85"])
-  must(hydrationWorker.includes(token),`Worker de hidratación Drive incompleto: ${token}`);
+for(const token of [
+  "MAX_BATCH=2",
+  "BUDGET_MS=32_000",
+  "financial_app_prepare_drive_document_hydration",
+  "financial_app_drive_document_hydration_pending",
+  "financial_app_complete_drive_document_hydration",
+  "financial_app_finalize_document_links_after_hydration",
+  "drive_auto_pdf_text_v1",
+  "recognizeCanonicalReceiptBytes",
+  'sourceMethod:"drive_auto_image_canonical_v2"',
+  "method:parsed.method",
+  'financiallyValid=parsed.validation?.status==="complete"',
+  "agreement.compared>=2",
+  "parsed.confidence??0)>=85"
+]) must(hydrationWorker.includes(token),`Worker de hidratación Drive incompleto: ${token}`);
+must(!hydrationWorker.includes("drive_auto_image_tesseract_v1"),"Drive conserva el atajo OCR v1 que evitaba parser y validación financiera");
+must(!hydrationWorker.includes("recognizeServerReceiptImage("),"Drive vuelve a llamar Tesseract directamente y evita el pipeline documental canónico");
 must(!hydrationWorker.includes("financial_app.transactions"),"El worker de hidratación no puede tocar directamente movimientos");
+for(const token of ["recognizeServerReceiptImage","recognizeTicketImage","receiptOcrRuntime","server_ocr_runtime_mismatch"])
+  must(canonicalOcr.includes(token),`OCR documental canónico incompleto: ${token}`);
+must((canonicalOcr.match(/recognizeServerReceiptImage\(/g)||[]).length===1,"El OCR documental canónico debe hacer una sola lectura Tesseract por inferencia");
+must((canonicalOcr.match(/recognizeTicketImage\(/g)||[]).length===1,"El OCR documental canónico debe aplicar una sola vez geometría, parser y validación");
+must(archiveReprocess.includes("recognizeCanonicalReceiptBytes")&&!archiveReprocess.includes("recognizeServerReceiptImage("),"El reprocesado de Archivo debe reutilizar el OCR documental canónico sin adaptador Tesseract paralelo");
 for(const token of ["recognizeServerReceiptImage","ServerReceiptOcrError","SERVER_RECEIPT_OCR_RUNTIME","OCR_LANGUAGE_ROOT","queueTimeoutMs"])
   must(serverOcr.includes(token),`OCR de servidor compartido incompleto: ${token}`);
 must(provenance.includes('SERVER_RECEIPT_OCR_RUNTIME = "server-tesseract-7"')&&provenance.includes('SERVER_RECEIPT_OCR_MODEL = "spa.traineddata"'),"La procedencia canónica debe fijar runtime Tesseract 7 y modelo español");
@@ -191,4 +213,4 @@ for(const token of [
 ])must(notes.toLowerCase().includes(token.toLowerCase()),`Notas 9.0.0 incompletas: ${token}`);
 
 if(failures.length){console.error("Financial App 9.0.0 release audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1);}
-console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + hidratación Drive + ciclo documental canónico protegidos`);
+console.log(`Financial App 9.0.0 release audit OK · baseline preservada por ${currentVersion} · facturas pendientes + memoria anual + OCR documental canónico + ciclo documental protegidos`);
