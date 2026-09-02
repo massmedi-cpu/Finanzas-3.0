@@ -47,17 +47,22 @@ const highResult=(await engine.predict(highRes))[0];
 const highRequest=requests.at(-1);
 assert.equal(highRequest.headers["x-ocr-source-width"],"4080");
 assert.equal(highRequest.headers["x-ocr-source-height"],"3072");
-assert.equal(highRequest.headers["x-ocr-width"],"2600");
-assert.equal(highRequest.headers["x-ocr-height"],"1958");
+assert.equal(highRequest.headers["x-ocr-width"],"3400");
+assert.equal(highRequest.headers["x-ocr-height"],"2560");
 assert.equal(highRequest.headers["x-ocr-scaled"],"1");
 assert.notEqual(highRequest.body,highRes,"Una foto 4080x3072 no puede saltarse el escalado solo por pesar poco");
 assert.equal(highResult.metrics.serverMs,120);
 assert.equal(highResult.metrics.transportScaled,true);
 assert.equal(highResult.metrics.sourceWidth,4080);
-assert.equal(highResult.metrics.transportWidth,2600);
+assert.equal(highResult.metrics.transportWidth,3400);
 assert.ok(Number.isFinite(highResult.metrics.prepareMs));
 assert.ok(Number.isFinite(highResult.metrics.transportMs));
 assert.ok(Number.isFinite(highResult.metrics.totalMs));
+
+const originalPixels=4080*3072;
+const transportPixels=3400*2560;
+assert.ok(transportPixels/originalPixels<0.70,"El límite de calidad debe seguir reduciendo al menos ~30% de píxeles frente al original");
+assert.ok(transportPixels>2600*1958,"La entrada densa debe conservar más detalle que el antiguo límite de 2600px");
 
 // Una imagen que ya está dentro del límite dimensional y de bytes conserva el blob original.
 dimensions={width:1600,height:1200};
@@ -79,4 +84,4 @@ assert.equal(fallbackRequest.headers["x-ocr-scaled"],"0");
 assert.equal(fallbackRequest.headers["x-ocr-width"],undefined);
 assert.equal(fallbackRequest.body,fallback);
 
-console.log("OCR loader dimension tests OK · 4080x3072 => 2600x1958, small direct preserved, legacy fallback preserved, end-to-end metrics exposed");
+console.log("OCR loader dimension tests OK · 4080x3072 => 3400x2560, ~30% pixel reduction with denser text preserved, small direct and legacy fallback intact");
