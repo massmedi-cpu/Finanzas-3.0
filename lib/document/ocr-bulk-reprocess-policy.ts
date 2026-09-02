@@ -5,8 +5,10 @@ export const BULK_OCR_REPROCESS_LIMIT = 8 as const;
 export type BulkOcrReprocessDocument = {
   id: string;
   mimeType?: string | null;
+  storageProvider?: string | null;
   ocrStatus?: string | null;
   ocrData?: unknown;
+  links?: unknown[] | null;
 };
 
 function storedOcrMethod(document: BulkOcrReprocessDocument) {
@@ -16,10 +18,13 @@ function storedOcrMethod(document: BulkOcrReprocessDocument) {
 
 export function isBulkOcrReprocessCandidate(document: BulkOcrReprocessDocument) {
   if (!document.mimeType?.startsWith("image/")) return false;
+  if (document.storageProvider !== "supabase_storage") return false;
+  if (Array.isArray(document.links) && document.links.length > 0) return false;
   const status = String(document.ocrStatus || "").toLowerCase();
   if (status === "manual") return false;
   const unresolved = status === "needs_review" || status === "failed" || status === "error";
-  const legacy = !storedOcrMethod(document).startsWith(RECEIPT_OCR_METHOD_PREFIX);
+  const method = storedOcrMethod(document);
+  const legacy = method.startsWith("image_ocr_receipt_") && !method.startsWith(RECEIPT_OCR_METHOD_PREFIX);
   return unresolved || legacy;
 }
 
