@@ -20,7 +20,7 @@ const result:ImageOcrResult={
   layoutText:"JUAN\nFACTURA 1\nTOTAL 821,83",
   tsv:"",
   confidence:92,
-  method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v5:ppocrv6_es_geometry",
+  method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry",
   passes:[{variant:"ppocrv6_es_geometry",confidence:92,score:92,visualLayout:{version:1}} as never],
   receiptLayout:{header:["JUAN"],items:[],summary:[{label:"TOTAL",value:"821,83"}],footer:[],unparsedBody:[],source:"geometry_tsv"},
   metadata:{documentType:"invoice",documentDate:"2026-08-29",amount:821.83,merchant:"JUAN",lines:["JUAN","TOTAL 821,83"]},
@@ -54,7 +54,7 @@ const unresolvedResult:ImageOcrResult={
   validation:{status:"needs_review",confidence:.45,printedTotal:null,itemSum:null,base:679.2,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:1,contradictions:[{code:"missing_total",severity:"critical",message:"No hay un total final corroborado."}]},
 };
 const clearedMachineFields=buildStoredReceiptPersistence(baseExisting,unresolvedResult,"2026-09-02T05:01:00.000Z");
-assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando parser_v5 ya no lo considera total");
+assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando la semántica actual ya no lo considera total");
 assert.equal(clearedMachineFields.merchant,null,"Un comercio automático débil también puede retirarse si la nueva lectura no lo respalda");
 assert.equal(clearedMachineFields.ocrStatus,"needs_review");
 assert.deepEqual(storedReceiptFieldChanges(baseExisting,clearedMachineFields),[

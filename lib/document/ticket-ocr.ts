@@ -114,11 +114,29 @@ function validDate(year: number, month: number, day: number, receipt: boolean) {
 }
 
 function parseDate(text: string, receipt = false) {
+  const labeledPatterns = [
+    /\b(?:fecha|fec\.?)\s*[:#-]?\s*([0-3]?\d)[\/.-]([01]?\d)[\/.-]((?:19|20)?\d{2})\b/gi,
+    /\b(?:fecha|fec\.?)\s*[:#-]?\s*((?:19|20)\d{2})[\/.-]([01]?\d)[\/.-]([0-3]?\d)\b/gi,
+  ];
   const patterns = [
     /\b([0-3]?\d)[\/.-]([01]?\d)[\/.-]((?:19|20)?\d{2})\b/g,
     /\b((?:19|20)\d{2})[\/.-]([01]?\d)[\/.-]([0-3]?\d)\b/g,
   ];
   const candidates: Array<{ value: string; context: number }> = [];
+
+  // OCR often concatenates a clear label and its value (e.g. FECHA29/08/2026).
+  // Parse that strong context explicitly instead of weakening the generic date
+  // regex and accidentally accepting arbitrary numeric fragments elsewhere.
+  for (let index = 0; index < labeledPatterns.length; index += 1) {
+    for (const match of text.matchAll(labeledPatterns[index])) {
+      let day: number; let month: number; let year: number;
+      if (index === 0) { day = Number(match[1]); month = Number(match[2]); year = Number(match[3]); if (year < 100) year += 2000; }
+      else { year = Number(match[1]); month = Number(match[2]); day = Number(match[3]); }
+      if (!validDate(year, month, day, receipt)) continue;
+      candidates.push({ value: `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`, context: 4 });
+    }
+  }
+
   for (let index = 0; index < patterns.length; index += 1) {
     for (const match of text.matchAll(patterns[index])) {
       let day: number; let month: number; let year: number;
