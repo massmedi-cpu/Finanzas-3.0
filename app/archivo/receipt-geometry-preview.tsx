@@ -1,4 +1,5 @@
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
+import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
 import { buildReceiptVisualRules } from "@/lib/document/receipt-visual-rules";
 import { receiptTextLength } from "@/lib/document/receipt-text-fit";
 
@@ -16,6 +17,14 @@ type VisualLayout = ReceiptVisualLayoutInput & {
   engine: string;
   model: string;
   language: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  bounds: ReceiptVisualLayoutInput["bounds"] & {
+    left?: number;
+    top?: number;
+    right?: number;
+    bottom?: number;
+  };
   lines: VisualLine[];
 };
 
@@ -36,8 +45,9 @@ export function isReceiptVisualLayout(value: unknown): value is VisualLayout {
 }
 
 export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
-  const visual = buildReceiptVisualModel(layout);
-  const rules = buildReceiptVisualRules(layout);
+  const physicalLayout = receiptPhysicalPreviewLayout(layout);
+  const visual = buildReceiptVisualModel(physicalLayout);
+  const rules = buildReceiptVisualRules(physicalLayout);
 
   return <div style={{ display: "grid", gap: 12, width: "100%" }}>
     <svg
@@ -94,6 +104,6 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         </text>;
       })}
     </svg>
-    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, tamaños, ancho y posición reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
+    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, tamaños, ancho y posición reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
   </div>;
 }
