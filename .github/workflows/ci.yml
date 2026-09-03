@@ -44,6 +44,8 @@ jobs:
         run: node scripts/ocr-loader-dimension-tests.mjs
       - name: Drive/browser receipt preprocessing parity
         run: ./node_modules/.bin/tsx scripts/server-receipt-image-preprocessor-tests.ts
+      - name: OCR paper candidate arbitration
+        run: ./node_modules/.bin/tsx scripts/ocr-paper-candidate-arbitration-tests.ts
       - name: OCR deskew confidence
         run: ./node_modules/.bin/tsx scripts/ocr-deskew-confidence-tests.ts
       - name: OCR background corridor
