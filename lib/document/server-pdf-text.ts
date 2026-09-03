@@ -80,7 +80,7 @@ async function renderPagePng(pdf:PdfDocumentWithCanvas,page:{getViewport:(option
     if(failure instanceof ServerPdfTextError)throw failure;
     throw new ServerPdfTextError(`drive_pdf_page_${pageNumber}_render_failed`,true,failure);
   }finally{
-    try{canvasFactory.destroy?.(rendered);}catch{}
+    try{canvasFactory.destroy?.(rendered);}catch(failure){void failure;}
   }
 }
 
@@ -122,7 +122,7 @@ export async function extractServerPdfText(bytes:Buffer):Promise<ServerPdfTextRe
             pages.push({pageNumber:index,source:"missing",text:nativeText,textCharacters:meaningfulCharacters(nativeText),confidence:null,reason});
           }
         }finally{
-          try{page.cleanup();}catch{}
+          try{page.cleanup();}catch(failure){void failure;}
         }
       }
     }finally{
