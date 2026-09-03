@@ -3,7 +3,8 @@ import { recognizeServerReceiptImage,ServerReceiptOcrError } from "./server-rece
 const MAX_PDF_BYTES=12*1024*1024;
 const MAX_PDF_PAGES=16;
 const MAX_VISUAL_OCR_PAGES=3;
-const MIN_USEFUL_NATIVE_TEXT=40;
+const MIN_USEFUL_TEXT=40;
+const MIN_USEFUL_NATIVE_TEXT=MIN_USEFUL_TEXT;
 const MIN_USEFUL_OCR_TEXT=8;
 const MAX_RENDER_SIDE=2800;
 const MAX_RENDER_SCALE=2.5;
