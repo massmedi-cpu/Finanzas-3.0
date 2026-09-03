@@ -7,9 +7,10 @@
 - Rama de trabajo: `rebuild/phase-1-foundations`
 - Producción: no modificar hasta validación de preview
 - OCR: fuera del camino crítico; Fase 11
-- Persistencia física: SQL de Fundamentos definido como blueprints pre-migración; todavía no generado ni aplicado como historial oficial de Supabase
+- Supabase dedicado: `financial-app` (`btzukbfesxdratqnxuoj`) en `eu-west-3`
+- Persistencia física: creada y validada sobre el proyecto Supabase dedicado
 
-## Principios ya materializados en código
+## Principios ya materializados en código y base de datos
 
 1. La fuente bancaria es externa, inmutable y de solo lectura.
 2. Los movimientos se modelan en tres capas:
@@ -31,6 +32,9 @@
 15. Cuentas y categorías tienen políticas de unicidad, reordenación e integridad jerárquica antes de persistir.
 16. Los comandos de aplicación de cuentas/categorías normalizan entradas y preparan objetos persistibles sin duplicar reglas de dominio.
 17. La build ejecuta las comprobaciones de Fundamentos y falla si alguna deja de cumplirse.
+18. La base real ejecuta constraints equivalentes y una suite SQL de integridad rollback-safe.
+19. Las funciones de base fijan explícitamente `search_path` y el Security Advisor no reporta advertencias.
+20. Las claves foráneas relevantes disponen de índices de cobertura.
 
 ## Fuente lógica de verdad
 
@@ -53,58 +57,55 @@
 
 La proyección efectiva del movimiento sigue siendo una responsabilidad única del dominio (`resolveEffectiveTransaction`); la base de datos conserva las tres capas y no introduce una segunda lógica financiera paralela.
 
-## Blueprints SQL pre-migración
+## Supabase dedicado y migraciones aplicadas
 
-Los archivos de `supabase/blueprints/` contienen el SQL preparado de Fundamentos, pero **no forman parte todavía del historial oficial de migraciones de Supabase**. Esto es deliberado: el entorno actual no dispone de Supabase CLI ni de PostgreSQL local, y el proyecto Supabase dedicado aún no existe. No se inventan nombres de migración ni se da por validada una migración que no se ha ejecutado.
+Proyecto exclusivo creado para esta reconstrucción:
 
-### `financial_app_foundations.sql` — estructura base
+- Nombre: `financial-app`
+- Project ref: `btzukbfesxdratqnxuoj`
+- Región: `eu-west-3`
+- Coste confirmado por Supabase al crear el proyecto: `0 €/mes`
+- El Supabase compartido anterior no se ha modificado.
 
-- esquema aislado `financial_app`;
-- claves primarias y foráneas;
-- restricciones de tipos/estados;
-- importes en céntimos dentro del rango entero seguro de JavaScript;
-- unicidad normalizada de cuentas, categorías y aliases;
-- jerarquía de categorías sin ciclos y con tipo coherente;
-- registros bancarios protegidos contra `UPDATE` y `DELETE` también a nivel de base de datos;
-- índices para fechas, revisión, duplicados y sincronización;
-- auditoría y cursor incremental;
-- metadata fija `es-ES`, `EUR`, `Europe/Madrid`, versión `0.0.1` y objetivo `10.0.0`;
-- acceso denegado por defecto a `anon`/`authenticated`; cualquier exposición posterior deberá diseñarse explícitamente con el modelo de autenticación y RLS correspondiente.
+Historial oficial remoto y archivos sincronizados en `supabase/migrations/`:
 
-### `source_snapshot_history.sql` — historial inmutable de correcciones de origen
+1. `20260903200004_financial_app_foundations.sql`
+2. `20260903200023_source_snapshot_history.sql`
+3. `20260903200134_harden_function_search_paths.sql`
+4. `20260903200201_index_foreign_keys.sql`
 
-- `source_row_identity` estable para identificar la misma fila externa entre sincronizaciones;
-- `source_fingerprint` SHA-256 validado;
-- `supersedes_source_record_id` para enlazar correcciones externas sin reescribir observaciones anteriores;
-- historial indexado por identidad y fecha de importación;
-- idempotencia por identidad + fingerprint;
-- retirada de la unicidad que impediría conservar dos observaciones de una misma fila cuando la fuente corrige su contenido.
+La estructura física incluye 17 tablas en el esquema privado `financial_app`, metadata `0.0.1 → 10.0.0`, `es-ES`, `EUR`, `Europe/Madrid`, claves, constraints, auditoría, cursores, índices y protección de la fuente bancaria.
 
-### Suite de integridad preparada
+## Validación física realizada
 
-`supabase/tests/foundation_integrity.sql` está preparada para ejecutarse con `BEGIN`/`ROLLBACK` y comprobar en una base PostgreSQL/Supabase real:
+La suite `supabase/tests/foundation_integrity.sql` se ha ejecutado contra PostgreSQL real con transacción y `ROLLBACK` y ha terminado sin excepción. Por tanto quedan verificadas físicamente:
 
 - metadata regional y política bancaria `read_only`;
 - unicidad normalizada de cuentas;
-- coherencia y ausencia de ciclos en categorías;
-- bloqueo de `UPDATE` y `DELETE` sobre la capa bancaria original;
-- creación de una nueva instantánea cuando una fila externa cambia;
+- coherencia padre/hijo y ausencia de ciclos de categorías;
+- bloqueo de `UPDATE` y `DELETE` sobre instantáneas bancarias;
+- conservación de una nueva instantánea cuando la fuente corrige una fila;
 - rechazo de una observación idéntica repetida;
-- persistencia del borrado explícito de categoría/comercio mediante overrides.
+- persistencia del borrado explícito de categoría/comercio mediante overrides;
+- ausencia de residuos de datos de prueba por rollback.
 
-La suite **todavía no se considera superada** porque no existe en el entorno actual un PostgreSQL real donde ejecutarla.
+Además se comprobó mediante privilegios PostgreSQL que:
 
-## Flujo obligatorio de migración Supabase
+- `anon` no tiene `USAGE` sobre el esquema;
+- `authenticated` no tiene `USAGE` sobre el esquema;
+- ambos roles carecen de `SELECT` sobre `financial_app.accounts`;
+- `service_role` sí dispone de lectura/escritura normal;
+- `service_role` no dispone de `UPDATE` ni `DELETE` sobre `transaction_source_records`.
 
-Cuando exista el proyecto Supabase dedicado:
+## Seguridad
 
-1. Verificar changelog, documentación y comandos Supabase vigentes.
-2. Crear la migración mediante el mecanismo oficial disponible en ese momento (`supabase migration new ...` si se usa CLI, o el flujo MCP/documentado equivalente).
-3. Revisar e incorporar el SQL de los blueprints en la migración oficial generada.
-4. Aplicar únicamente al proyecto dedicado de Financial App; nunca al Supabase compartido actual.
-5. Ejecutar `supabase/tests/foundation_integrity.sql` y comprobar el resultado real.
-6. Ejecutar advisors de base de datos/seguridad y corregir cualquier hallazgo aplicable.
-7. Solo entonces considerar la persistencia física de Fundamentos validada.
+El Security Advisor de Supabase quedó en **0 lints** tras fijar el `search_path` de las cuatro funciones de Fundamentos.
+
+`list_tables` muestra RLS desactivado en el esquema privado y emite una advertencia genérica. No se ha activado RLS automáticamente porque Supabase indica que hacerlo sin políticas puede bloquear el acceso, y el conector exige decisión explícita para esa remediación. El riesgo de exposición directa está actualmente mitigado porque `anon` y `authenticated` no tienen uso del esquema ni privilegios de tabla. Antes de exponer cualquier API al cliente se definirá explícitamente el modelo de autenticación, grants y RLS.
+
+## Rendimiento
+
+El Performance Advisor detectó claves foráneas sin índice; se corrigieron mediante la migración `index_foreign_keys`. Tras repetir el advisor ya no aparecen FKs sin cubrir. Solo aparecen índices “unused”, comportamiento esperado en una base recién creada y vacía; no se eliminan de forma prematura.
 
 ## Cuentas y categorías
 
@@ -119,13 +120,7 @@ Ya existe una capa de comandos de aplicación que prepara altas y ediciones de c
 - reordenación sin pérdidas, duplicados ni elementos añadidos;
 - conservación de `createdAt` y actualización controlada de `updatedAt`.
 
-Falta conectar estos comandos a repositorios reales y a la interfaz. No se marca como completado hasta comprobar persistencia real.
-
-## Supabase
-
-El proyecto Supabase actualmente conectado contiene tablas de otros desarrollos y un manifiesto previo de Financial App. No se ha reutilizado ninguna tabla ni se ha realizado ninguna modificación estructural durante esta reconstrucción.
-
-La opción arquitectónica recomendada continúa siendo un **proyecto Supabase dedicado exclusivamente a Financial App**. Crear el proyecto puede consumir cuota o generar coste según el plan, por lo que la creación real requiere autorización explícita. Hasta entonces, los blueprints permanecen versionados en Git sin tocar infraestructura compartida.
+La persistencia física que soportará estas operaciones ya existe y ha sido validada. Falta cerrar el adaptador de repositorio de la aplicación y su conexión segura desde Vercel preview antes de marcar Cuentas/Categorías como completadas.
 
 ## Responsive base
 
@@ -143,10 +138,9 @@ Los componentes pueden adaptarse de forma fluida entre estos puntos; no se usar�
 
 ## Siguiente bloque de Fase 1
 
-1. Crear el Supabase dedicado cuando exista autorización explícita de cuota/coste.
-2. Generar la migración oficial con el flujo Supabase vigente e incorporar los blueprints revisados.
-3. Aplicar y verificar la estructura en el proyecto nuevo, ejecutar la suite SQL y advisors.
-4. Implementar los repositorios reales de cuentas y categorías contra esa persistencia.
-5. Completar alta/edición/archivo/orden de cuentas y categorías sin borrados destructivos.
-6. Probar que una relectura idéntica no duplica y que una corrección externa crea una revisión inmutable conservando overrides.
-7. Validar preview, responsive y regresión antes de cerrar Fase 1.
+1. Cerrar la estrategia de acceso seguro Vercel → Supabase privado sin exponer `service_role` al navegador.
+2. Implementar repositorios reales de Cuentas y Categorías contra el Supabase dedicado.
+3. Completar alta/edición/archivo/orden/fusión y verificar persistencia real.
+4. Añadir pruebas de reinicio/relectura para confirmar que la persistencia y los overrides sobreviven.
+5. Ejecutar matriz responsive real y regresión de preview.
+6. Seguir sin iniciar Inicio ni OCR.
