@@ -68,6 +68,8 @@ function detectPaperFromLightRuns(data: ImageData, width: number, height: number
 
   // Umbral adaptado a la iluminación de la foto. Solo se calcula con muestras
   // relativamente neutras para no confundir superficies de color con papel.
+  // El techo evita que una segunda hoja muy blanca vuelva invisible un ticket
+  // térmico algo más gris situado en la misma fotografía.
   const neutralSamples: number[] = [];
   const sampleStrideY = Math.max(1, Math.floor(rows / 90));
   const sampleStrideX = Math.max(1, Math.floor(columns / 90));
@@ -80,7 +82,7 @@ function detectPaperFromLightRuns(data: ImageData, width: number, height: number
       if (sample.chroma <= 90) neutralSamples.push(sample.luminance);
     }
   }
-  const luminanceThreshold = clamp(Math.round(quantile(neutralSamples, 0.65) + 18), 140, 205);
+  const luminanceThreshold = clamp(Math.round(quantile(neutralSamples, 0.65) + 18), 140, 195);
   const maxGapCells = Math.max(1, Math.round(columns * 0.012));
   const minimumRunWidth = Math.max(step * 4, Math.round(width * 0.22));
   const rowRuns: PaperSpan[][] = [];
@@ -217,7 +219,7 @@ function detectPaperFromLightRuns(data: ImageData, width: number, height: number
     const centerDistance = Math.abs(first.center - second.center);
     const distinct = centerDistance > Math.max(1, Math.min(first.medianWidth, second.medianWidth) * 0.7);
     const relativeMargin = (first.score - second.score) / Math.max(1, Math.abs(first.score));
-    if (distinct && relativeMargin < 0.08) return AMBIGUOUS_PAPER;
+    if (distinct && relativeMargin < 0.03) return AMBIGUOUS_PAPER;
   }
 
   const best = first?.track;
