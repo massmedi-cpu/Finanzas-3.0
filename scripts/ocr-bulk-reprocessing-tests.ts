@@ -51,15 +51,18 @@ assert.deepEqual(plan.selected.map(item=>item.id),many.slice(0,BULK_OCR_REPROCES
 const wrapper=fs.readFileSync("app/archivo/archive-client-shell.tsx","utf8");
 const recoveryBoundary=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery-deferred.tsx","utf8");
 const page=fs.readFileSync("app/archivo/page.tsx","utf8");
+const lifecycleClient=fs.readFileSync("app/archivo/archive-lifecycle-client.tsx","utf8");
 const canonicalClient=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
 assert.ok(wrapper.includes('import("./archive-client")')&&!wrapper.includes("ArchiveBulkOcrRecovery"),"El núcleo activo debe cargarse diferido y no montar un segundo recuperador OCR duplicado");
 assert.ok(!wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell sin recuperar un import estático del núcleo pesado");
 assert.ok(wrapper.includes("archiveRefreshKey")&&wrapper.includes("document.updatedAt"),"router.refresh debe poder remontar el núcleo con datos OCR actualizados");
 assert.ok(page.includes("<ArchiveBulkOcrRecoveryDeferred initialCount={pending} shouldCheck={true}/>") ,"Archivo debe comprobar legacy y pendientes en cualquier vista del ciclo documental");
-assert.equal((page.match(/<ArchiveBulkOcrRecoveryDeferred/g)||[]).length,1,"Archivo debe mantener una sola superficie de recuperación OCR");
+assert.equal((page.match(/<ArchiveBulkOcrRecoveryDeferred/g)||[]).length,1,"Archivo debe mantener una sola superficie de recuperación OCR masiva");
 assert.ok(!page.includes('from "./archive-bulk-ocr-recovery"'),"La página no debe cargar el recuperador pesado antes del primer render");
-assert.ok(recoveryBoundary.includes('import("./archive-bulk-ocr-recovery")'),"El único recuperador debe seguir siendo el canónico y cargarse a través del boundary diferido");
+assert.ok(recoveryBoundary.includes('import("./archive-bulk-ocr-recovery")'),"El recuperador masivo debe seguir siendo el canónico y cargarse a través del boundary diferido");
 assert.ok(canonicalClient.includes("recognizeTicketImage(file,worker,onProgress,hint)"),"El núcleo OCR canónico debe seguir intacto en archive-client.tsx");
+assert.ok(lifecycleClient.includes('action="/api/archive/reprocess-ocr"')&&lifecycleClient.includes('method="post"'),"Cada pendiente compatible debe disponer de un fallback HTML nativo que no dependa de JavaScript");
+assert.ok(lifecycleClient.includes('name="documentId"')&&lifecycleClient.includes('Reprocesar OCR'),"El fallback nativo debe enviar de forma explícita el documento seleccionado");
 
 const client=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 for(const token of [
@@ -81,12 +84,15 @@ for(const token of [
   "isLegacyReceiptOcrDocument(detail)",
   "isBulkOcrReprocessCandidate(initial)",
   'const previewReparse=reparseStoredReceiptMetadata(initial,"preview")',
-  'return recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse")',
+  'return respond(recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse"))',
   "download(initial.storagePath)",
   "buildStoredReceiptPersistence(latest,result)",
-  'return recoveryResponse(documentId,persistence,fieldChanges,"full_ocr")',
+  'return respond(recoveryResponse(documentId,persistence,fieldChanges,"full_ocr"))',
   'supabase.rpc("financial_app_archive_update"',
-])assert.ok(route.includes(token),`La API de recuperación debe proteger lifecycle, reparseo, original, carreras y escritura: ${token}`);
+  "request.formData()",
+  "NextResponse.redirect",
+  "safeArchiveReturnTo",
+])assert.ok(route.includes(token),`La API de recuperación debe proteger lifecycle, reparseo, original, carreras, formulario nativo y escritura: ${token}`);
 assert.ok(!route.includes('financial_app_archive_overview'),"La recuperación debe usar el ciclo documental paginado, no cargar la biblioteca completa");
 assert.ok(route.indexOf('const previewReparse=reparseStoredReceiptMetadata(initial,"preview")')<route.indexOf('download(initial.storagePath)'),"El parser almacenado debe intentarse antes de descargar el original");
 const parserRace=route.indexOf('const reparsed=reparseStoredReceiptMetadata(latest)');
@@ -99,4 +105,4 @@ assert.ok(fullOcrStart>=0&&fullOcrRace>fullOcrStart&&fullOcrWrite>fullOcrRace,"E
 assert.ok(route.includes('reason:"changed_during_reprocess"')&&route.includes('reason:"changed_during_reparse"'),"Una revisión manual concurrente debe cancelar cualquiera de las dos escrituras");
 assert.ok(route.includes("Los vínculos no se")&&route.includes("legacy pueden conservarlos"),"La ruta debe documentar explícitamente que el reprocesado legacy no modifica asociaciones");
 
-console.log("OCR bulk reprocessing tests OK · parser_v8 reutiliza evidencia v7, OCR visual solo cuando hace falta, lote secuencial, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · parser_v8 reutiliza evidencia v7, OCR visual solo cuando hace falta, lote secuencial, fallback nativo, sin bucles y carreras aisladas");
