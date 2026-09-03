@@ -39,6 +39,20 @@ globalThis.fetch=async(_url,options)=>{
   };
 };
 
+function jpegWithExifOrientation(orientation){
+  // APP1 Exif little-endian mínimo con una única entrada IFD0 Orientation.
+  return new Blob([new Uint8Array([
+    0xff,0xd8,
+    0xff,0xe1,0x00,0x22,
+    0x45,0x78,0x69,0x66,0x00,0x00,
+    0x49,0x49,0x2a,0x00,0x08,0x00,0x00,0x00,
+    0x01,0x00,
+    0x12,0x01,0x03,0x00,0x01,0x00,0x00,0x00,orientation,0x00,0x00,0x00,
+    0x00,0x00,0x00,0x00,
+    0xff,0xd9,
+  ])],{type:"image/jpeg"});
+}
+
 await import(new URL(`../public/vendor/receipt-ocr-loader.mjs?test=${Date.now()}`,import.meta.url));
 const engine=await window.__financialReceiptOCR.ReceiptOCR.create();
 
@@ -50,9 +64,11 @@ assert.equal(highRequest.headers["x-ocr-source-height"],"3072");
 assert.equal(highRequest.headers["x-ocr-width"],"3400");
 assert.equal(highRequest.headers["x-ocr-height"],"2560");
 assert.equal(highRequest.headers["x-ocr-scaled"],"1");
+assert.equal(highRequest.headers["x-ocr-orientation-flattened"],"0");
 assert.notEqual(highRequest.body,highRes,"Una foto 4080x3072 no puede saltarse el escalado solo por pesar poco");
 assert.equal(highResult.metrics.serverMs,120);
 assert.equal(highResult.metrics.transportScaled,true);
+assert.equal(highResult.metrics.orientationFlattened,false);
 assert.equal(highResult.metrics.sourceWidth,4080);
 assert.equal(highResult.metrics.transportWidth,3400);
 assert.ok(Number.isFinite(highResult.metrics.prepareMs));
@@ -73,8 +89,32 @@ const smallRequest=requests.at(-1);
 assert.equal(smallRequest.headers["x-ocr-width"],"1600");
 assert.equal(smallRequest.headers["x-ocr-height"],"1200");
 assert.equal(smallRequest.headers["x-ocr-scaled"],"0");
+assert.equal(smallRequest.headers["x-ocr-orientation-flattened"],"0");
 assert.equal(smallRequest.body,small);
 assert.equal(smallResult.metrics.transportScaled,false);
+assert.equal(smallResult.metrics.orientationFlattened,false);
+
+// Un JPEG que el navegador muestra girado por EXIF no puede viajar como bytes
+// directos al servidor. Se rasteriza una vez para que Tesseract reciba la misma
+// orientación visual que ve el usuario, incluso si por tamaño no hacía falta escalar.
+dimensions={width:1200,height:1600};
+const rotatedExif=jpegWithExifOrientation(6);
+const rotatedResult=(await engine.predict(rotatedExif))[0];
+const rotatedRequest=requests.at(-1);
+assert.equal(rotatedRequest.headers["x-ocr-width"],"1200");
+assert.equal(rotatedRequest.headers["x-ocr-height"],"1600");
+assert.equal(rotatedRequest.headers["x-ocr-scaled"],"0");
+assert.equal(rotatedRequest.headers["x-ocr-orientation-flattened"],"1");
+assert.notEqual(rotatedRequest.body,rotatedExif,"un JPEG EXIF rotado debe aplanarse antes de OCR aunque no requiera escalado");
+assert.equal(rotatedResult.metrics.orientationFlattened,true);
+
+// EXIF Orientation=1 no justifica recomprimir una imagen válida.
+dimensions={width:1200,height:1600};
+const uprightExif=jpegWithExifOrientation(1);
+await engine.predict(uprightExif);
+const uprightRequest=requests.at(-1);
+assert.equal(uprightRequest.headers["x-ocr-orientation-flattened"],"0");
+assert.equal(uprightRequest.body,uprightExif);
 
 // Capturas/tickets comprimidos con lado corto insuficiente se amplían de forma
 // moderada antes de la MISMA inferencia Tesseract. No se supera 2x ni 3400px.
@@ -107,7 +147,8 @@ const fallback=new Blob([new Uint8Array(400_000)],{type:"image/jpeg"});
 await engine.predict(fallback);
 const fallbackRequest=requests.at(-1);
 assert.equal(fallbackRequest.headers["x-ocr-scaled"],"0");
+assert.equal(fallbackRequest.headers["x-ocr-orientation-flattened"],"0");
 assert.equal(fallbackRequest.headers["x-ocr-width"],undefined);
 assert.equal(fallbackRequest.body,fallback);
 
-console.log("OCR loader dimension tests OK · 3400px high-res, upscaling low-res limitado y fallback legacy protegidos");
+console.log("OCR loader dimension tests OK · 3400px high-res, low-res limitado, EXIF aplanado y fallback legacy protegidos");
