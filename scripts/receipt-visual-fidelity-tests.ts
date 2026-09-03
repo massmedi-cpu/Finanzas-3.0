@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { receiptFontProfile } from "../lib/document/receipt-font-profile";
 import { receiptMoneyDisplayText } from "../lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "../lib/document/receipt-visual-physical-layout";
 import { buildReceiptVisualRules } from "../lib/document/receipt-visual-rules";
@@ -61,12 +62,46 @@ assert.equal(receiptMoneyDisplayText("12,00","12"),"12","un entero realmente imp
 assert.equal(receiptMoneyDisplayText("7,40","8,40 €"),"7,40","una evidencia original contradictoria no puede imponerse al valor validado");
 assert.equal(receiptMoneyDisplayText("DESCRIPCION LARGA","PRODUCTO"),"DESCRIPCION LARGA","la recuperación monetaria no debe tocar texto no financiero");
 
+const monoWords=["CAFE","TOSTADA","BEBIDA","PRODUCTO","SERVICIO","GRACIAS","VISITA","CLIENTE","CAMBIO"];
+const monoProfile=receiptFontProfile({
+  bounds:{width:600,height:1000},
+  lines:monoWords.map((text,index)=>({
+    text,score:98,left:10,top:8+index*6,width:Array.from(text).length*1.83,height:2,
+  })),
+});
+assert.equal(monoProfile.monospace,true,"una caja por carácter estable entre palabras distintas debe activar tipografía monoespaciada");
+assert.ok(monoProfile.fontFamily.includes("ui-monospace"));
+assert.equal(monoProfile.regularWeight,500,"el cuerpo térmico monoespaciado no debe engordarse artificialmente a semibold");
+
+const proportionalProfile=receiptFontProfile({
+  bounds:{width:600,height:1000},
+  lines:[
+    {text:"III",score:98,left:10,top:8,width:3.2,height:2},
+    {text:"WWW",score:98,left:10,top:14,width:8.4,height:2},
+    {text:"LIMA",score:98,left:10,top:20,width:5.1,height:2},
+    {text:"MOLINO",score:98,left:10,top:26,width:9.8,height:2},
+    {text:"AVENIDA",score:98,left:10,top:32,width:9.1,height:2},
+    {text:"CLIENTE",score:98,left:10,top:38,width:7.4,height:2},
+    {text:"FACTURA",score:98,left:10,top:44,width:10.7,height:2},
+    {text:"IMPORTE",score:98,left:10,top:50,width:7.0,height:2},
+    {text:"DIRECCION",score:98,left:10,top:56,width:13.8,height:2},
+  ],
+});
+assert.equal(proportionalProfile.monospace,false,"anchos por carácter claramente variables deben conservar tipografía proporcional");
+assert.ok(proportionalProfile.fontFamily.includes("Roboto"));
+assert.equal(proportionalProfile.regularWeight,600);
+
+const weakProfile=receiptFontProfile({bounds:{width:600,height:1000},lines:monoWords.slice(0,3).map((text,index)=>({text,score:98,left:10,top:10+index*5,width:12,height:2}))});
+assert.equal(weakProfile.monospace,false,"con poca evidencia tipográfica se debe fallar cerrado y conservar la sans existente");
+
 const preview=fs.readFileSync("app/archivo/receipt-geometry-preview.tsx","utf8");
 assert.ok(preview.includes("receiptPhysicalPreviewLayout(layout)"),"la vista debe intentar recuperar los márgenes físicos antes de maquetar");
 assert.ok(preview.includes("buildReceiptVisualRules(physicalLayout)"),"la vista debe usar las reglas físicas sobre el mismo espacio reconstruido");
 assert.ok(preview.includes("receiptMoneyDisplayText(token.text, originalText)"),"la reconstrucción debe separar valor financiero normalizado y tipografía monetaria impresa");
+assert.ok(preview.includes("receiptFontProfile(physicalLayout)"),"la vista debe inferir tipografía desde geometría OCR y no por comercio");
+assert.ok(preview.includes("fontFamily={fontProfile.fontFamily}"),"el perfil tipográfico debe llegar al SVG real");
 assert.ok(!preview.includes("x1={visual.width * 0.015}"),"no debe sobrevivir la raya genérica casi a ancho completo");
 assert.ok(preview.includes('token.textAnchor === "middle" ? token.centerX : token.renderX'),"una fila centrada debe conservar el centro físico OCR en vez de forzarse al centro perfecto");
 assert.ok(preview.includes('lengthAdjust="spacingAndGlyphs"'),"el ajuste de ancho OCR protegido por el contrato histórico debe seguir activo");
 
-console.log("receipt visual fidelity tests OK · separadores, centro físico, márgenes, moneda impresa y escala real protegidos");
+console.log("receipt visual fidelity tests OK · separadores, centro, márgenes, moneda, tipografía y escala real protegidos");
