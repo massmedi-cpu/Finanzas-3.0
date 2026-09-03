@@ -76,7 +76,20 @@ function orderedIds(value: unknown): asserts value is string[] {
 }
 
 function sameIdSet(current: string[], ordered: string[]) {
-  return current.length === ordered.length && ordered.every((id) => new Set(current).has(id));
+  if (current.length !== ordered.length) return false;
+  const set = new Set(current);
+  return ordered.every((id) => set.has(id));
+}
+
+async function applyOrdinalOrder(tx: any, table: "accounts" | "categories", ids: string[]) {
+  for (let sortOrder = 0; sortOrder < ids.length; sortOrder += 1) {
+    const id = ids[sortOrder];
+    if (table === "accounts") {
+      await tx`update financial_app.accounts set sort_order=${sortOrder},updated_at=now() where id=${id}::uuid`;
+    } else {
+      await tx`update financial_app.categories set sort_order=${sortOrder},updated_at=now() where id=${id}::uuid`;
+    }
+  }
 }
 
 async function verifyVercel(req: Request) {
@@ -124,11 +137,11 @@ Deno.serve(async (req) => {
     }
 
     if (action === "account.list") {
-      return json({ rows: await sql`select id, name, institution, type, opening_balance_cents, currency, lifecycle, sort_order, created_at, updated_at from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end, sort_order, name, id` });
+      return json({ rows: await sql`select id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id` });
     }
     if (action === "account.get") {
       uuid(payload.id, "account_id");
-      return json({ rows: await sql`select id, name, institution, type, opening_balance_cents, currency, lifecycle, sort_order, created_at, updated_at from financial_app.accounts where id = ${payload.id}::uuid` });
+      return json({ rows: await sql`select id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at from financial_app.accounts where id=${payload.id}::uuid` });
     }
     if (action === "account.save") {
       accountPayload(payload.account);
@@ -140,8 +153,7 @@ Deno.serve(async (req) => {
       await sql.begin(async (tx) => {
         const current = await tx`select id from financial_app.accounts order by id for update`;
         if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) throw new Error("invalid_reorder_set");
-        const incoming = JSON.stringify(payload.orderedIds);
-        await tx`with ordered as (select value::uuid id, ordinality - 1 sort_order from jsonb_array_elements_text(${incoming}::jsonb) with ordinality) update financial_app.accounts a set sort_order=ordered.sort_order,updated_at=now() from ordered where a.id=ordered.id`;
+        await applyOrdinalOrder(tx, "accounts", payload.orderedIds);
       });
       return json({ ok: true });
     }
@@ -163,8 +175,7 @@ Deno.serve(async (req) => {
       await sql.begin(async (tx) => {
         const current = await tx`select id from financial_app.categories order by id for update`;
         if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) throw new Error("invalid_reorder_set");
-        const incoming = JSON.stringify(payload.orderedIds);
-        await tx`with ordered as (select value::uuid id, ordinality - 1 sort_order from jsonb_array_elements_text(${incoming}::jsonb) with ordinality) update financial_app.categories c set sort_order=ordered.sort_order,updated_at=now() from ordered where c.id=ordered.id`;
+        await applyOrdinalOrder(tx, "categories", payload.orderedIds);
       });
       return json({ ok: true });
     }
