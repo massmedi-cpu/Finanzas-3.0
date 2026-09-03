@@ -31,4 +31,9 @@ comment on column financial_app.transaction_source_records.source_row_identity i
 comment on column financial_app.transaction_source_records.supersedes_source_record_id is
   'Previous immutable observation superseded by this externally corrected source snapshot.';
 
+update financial_app.schema_meta
+set schema_version = 2,
+    updated_at = now()
+where id = true;
+
 commit;
