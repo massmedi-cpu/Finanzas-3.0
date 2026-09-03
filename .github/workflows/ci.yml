@@ -48,6 +48,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-runtime-provenance-tests.ts
       - name: Hybrid PDF OCR coverage
         run: ./node_modules/.bin/tsx scripts/pdf-hybrid-ocr-policy-tests.ts
+      - name: Archive mixed PDF page order
+        run: node scripts/archive-pdf-page-order-tests.mjs
       - name: Canonical document OCR pipeline
         run: node scripts/audit-canonical-document-ocr-v900.mjs
       - name: OCR financial summary rows
