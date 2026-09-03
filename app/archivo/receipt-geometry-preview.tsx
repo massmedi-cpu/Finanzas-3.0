@@ -1,4 +1,5 @@
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
+import { receiptMoneyDisplayText } from "@/lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
 import { buildReceiptVisualRules } from "@/lib/document/receipt-visual-rules";
 import { receiptTextLength } from "@/lib/document/receipt-text-fit";
@@ -75,8 +76,10 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         opacity="0.72"
       />)}
       {visual.tokens.map((token) => {
+        const originalText = physicalLayout.lines[token.index]?.text;
+        const displayText = receiptMoneyDisplayText(token.text, originalText);
         const textLength = receiptTextLength({
-          text: token.text,
+          text: displayText,
           boxWidth: token.boxWidth,
           fontSize: token.fontSize,
           explicitTextLength: token.textLength,
@@ -86,7 +89,7 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         // desplazarlas artificialmente al centro perfecto si el papel no lo hizo.
         const renderX = token.textAnchor === "middle" ? token.centerX : token.renderX;
         return <text
-          key={`${token.top}-${token.left}-${token.index}-${token.text}`}
+          key={`${token.top}-${token.left}-${token.index}-${displayText}`}
           x={renderX}
           y={token.baselineY}
           fill="#171717"
@@ -100,10 +103,10 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
           lengthAdjust="spacingAndGlyphs"
         >
           <title>{`Confianza OCR ${Math.round(token.score)}%`}</title>
-          {token.text}
+          {displayText}
         </text>;
       })}
     </svg>
-    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, tamaños, ancho y posición reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
+    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, importes, tamaños, ancho y posición reconstruidos desde las coordenadas y evidencia visual reales; el original privado sigue siendo la referencia.</small>
   </div>;
 }
