@@ -1,0 +1,72 @@
+name: Cleanup invoice total block formatting
+on:
+  push:
+    branches:
+      - fix/invoice-total-evidence-20260903
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    if: contains(github.event.head_commit.message, '[cleanup-invoice-total-style]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/invoice-total-evidence-20260903
+          fetch-depth: 1
+      - name: Normalize exact block
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs');
+          const path='lib/document/ticket-ocr.ts';
+          let source=fs.readFileSync(path,'utf8');
+          const before=`  if (documentType === "invoice") {
+          // En facturas/albaranes se descarta la inferencia genérica: un número grande
+          // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
+          // explícito solo si no replica una base/subtotal conocida; como respaldo se
+          // mantiene la corroboración financiera base + IVA ya existente.
+          amount = explicitInvoiceGross(lines);
+          if (amount === null) {
+            const vatBreakdown = invoiceVatBreakdown(lines);
+            const base = labeledAmount(lines, /\\bBASE\\s+IMPONIBLE\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.base ?? null;
+            const tax = labeledAmount(lines, /\\bIMPORTE\\s+IVA\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
+            if (base !== null && tax !== null) {
+              const gross = Math.round((base + tax) * 100) / 100;
+              const candidates = lines.flatMap(extractAmounts);
+              if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
+            }
+          }
+        }`;
+          const after=`  if (documentType === "invoice") {
+            // En facturas/albaranes se descarta la inferencia genérica: un número grande
+            // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
+            // explícito solo si no replica una base/subtotal conocida; como respaldo se
+            // mantiene la corroboración financiera base + IVA ya existente.
+            amount = explicitInvoiceGross(lines);
+            if (amount === null) {
+              const vatBreakdown = invoiceVatBreakdown(lines);
+              const base = labeledAmount(lines, /\\bBASE\\s+IMPONIBLE\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.base ?? null;
+              const tax = labeledAmount(lines, /\\bIMPORTE\\s+IVA\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
+              if (base !== null && tax !== null) {
+                const gross = Math.round((base + tax) * 100) / 100;
+                const candidates = lines.flatMap(extractAmounts);
+                if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
+              }
+            }
+          }`;
+          if((source.split(before).length-1)!==1)throw new Error('style block mismatch');
+          source=source.replace(before,after);
+          if(!source.endsWith('\n'))source+='\n';
+          fs.writeFileSync(path,source);
+          NODE
+          rm .github/workflows/invoice-total-style-cleanup.yml
+          git diff --check
+      - name: Commit cleanup
+        shell: bash
+        run: |
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add lib/document/ticket-ocr.ts .github/workflows/invoice-total-style-cleanup.yml
+          git commit -m "Normalize invoice total evidence formatting"
+          git push origin HEAD:fix/invoice-total-evidence-20260903
