@@ -33,6 +33,22 @@ export type AccountsOverview = {
   accounts: FinancialAccount[];
 };
 
+export type HomeAccount = {
+  id: string;
+  name: string;
+  identifier: string;
+  role: string;
+  balance: number | null;
+  balanceDate: string | null;
+  previousBalance: number | null;
+};
+
+export type HomeAccountsOverview = {
+  version: string;
+  month: string;
+  accounts: HomeAccount[];
+};
+
 export type AccountMovement = {
   id: string;
   sourceId: string;
@@ -75,6 +91,19 @@ function normalizeAccount(value: unknown): FinancialAccount {
   };
 }
 
+function normalizeHomeAccount(value: unknown): HomeAccount {
+  const raw=asRecord(value);
+  return {
+    id:asString(raw.id),
+    name:asString(raw.name),
+    identifier:asString(raw.identifier),
+    role:asString(raw.role),
+    balance:nullableNumber(raw.balance),
+    balanceDate:nullableString(raw.balanceDate),
+    previousBalance:nullableNumber(raw.previousBalance),
+  };
+}
+
 function normalizeMovement(value: unknown): AccountMovement {
   const raw=asRecord(value);
   return {
@@ -90,6 +119,18 @@ export async function getAccountsOverview(): Promise<AccountsOverview> {
   const raw=asRecord(data);
   return {
     version:asString(raw.version,APP_VERSION),month:asString(raw.month),totalAvailable:asNumber(raw.totalAvailable),accounts:recordArray(raw.accounts).map(normalizeAccount),
+  };
+}
+
+export async function getHomeAccountsOverview(): Promise<HomeAccountsOverview> {
+  const supabase=await createClient();
+  const {data,error}=await supabase.rpc("financial_app_home_accounts");
+  if(error||!data)throw new Error(error?.message||"home_accounts_unavailable");
+  const raw=asRecord(data);
+  return {
+    version:asString(raw.version,APP_VERSION),
+    month:asString(raw.month),
+    accounts:recordArray(raw.accounts).map(normalizeHomeAccount),
   };
 }
 
