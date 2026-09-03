@@ -290,7 +290,7 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
   const protectedFinancialBoxes = new Set(
     rows.filter(isFinancialSummaryRow).flatMap((row) => row.boxes),
   );
-  let corridor: { left: number; right: number } | null = null;
+  let corridor: { left: number; right: number; top?: number; bottom?: number; verticalLimited?: boolean } | null = null;
   let inferredCorridor = false;
   let bottomLimit = sourceHeight;
 
@@ -319,19 +319,29 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
       ? Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left))
       : box.width;
     const overlapRatio = overlap / Math.max(1, box.width);
+    const outsideVerticalEnvelope = Boolean(
+      inferredCorridor
+      && corridor?.verticalLimited
+      && ((typeof corridor.top === "number" && box.bottom < corridor.top)
+        || (typeof corridor.bottom === "number" && box.top > corridor.bottom)),
+    );
     // Con una tabla reconocida se conserva el contrato histórico: los resúmenes
     // financieros pueden imprimirse desplazados respecto al cuerpo de columnas.
     // Solo el corredor inferido de tickets sin cabecera exige solapamiento para
     // impedir que un TOTAL/IVA perteneciente al fondo quede protegido por texto.
     const protectedFinancial = protectedFinancialBoxes.has(box)
       && box.score >= 35
+      && !outsideVerticalEnvelope
       && (!inferredCorridor || overlapRatio >= 0.12);
     let reject = protectedHeader || protectedFinancial ? false : obviousRecognitionNoise(box);
     if (!reject && corridor) {
-      const semanticText = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
-      const semantic = protectedHeader || protectedFinancial || (semanticText && (!inferredCorridor || overlapRatio >= 0.12));
-      if (overlapRatio < 0.28 && !semantic) reject = true;
-      if (box.top > bottomLimit && !semantic) reject = true;
+      if (outsideVerticalEnvelope) reject = true;
+      else {
+        const semanticText = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+        const semantic = protectedHeader || protectedFinancial || (semanticText && (!inferredCorridor || overlapRatio >= 0.12));
+        if (overlapRatio < 0.28 && !semantic) reject = true;
+        if (box.top > bottomLimit && !semantic) reject = true;
+      }
     }
     (reject ? discarded : accepted).push(box);
   }
