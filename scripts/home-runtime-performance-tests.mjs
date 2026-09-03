@@ -16,6 +16,8 @@ assert.ok(sql.includes("transactions_latest_source_balance_idx")===false,"El SQL
 assert.equal((sql.match(/left join lateral \(/g)||[]).length,2,"Home accounts debe resolver solo saldo actual y saldo previo, no series completas");
 for(const forbidden of ["generate_series(","account_source_aliases","count(*)::int as movements","month_income","month_expenses","month_net"])
   assert.ok(!sql.includes(forbidden),`Home accounts no debe recuperar datos exclusivos de /cuentas: ${forbidden}`);
+assert.ok(sql.includes("revoke all on function financial_app.home_accounts_core() from public,anon"),"El core privado de Home accounts debe bloquear PUBLIC/anon");
+assert.ok(sql.includes("grant execute on function financial_app.home_accounts_core() to authenticated,service_role"),"El wrapper SECURITY INVOKER necesita acceso explícito y privado al core");
 assert.ok(sql.includes("security invoker"),"El wrapper público de Home accounts debe ser SECURITY INVOKER");
 assert.ok(sql.includes("revoke all on function public.financial_app_home_accounts() from public,anon"),"Home accounts debe bloquear PUBLIC/anon");
 assert.ok(sql.includes("grant execute on function public.financial_app_home_accounts() to authenticated,service_role"),"Home accounts debe mantener acceso privado autenticado");
@@ -32,4 +34,4 @@ assert.ok(sections.includes("account.previousBalance"),"La variación reciente d
 assert.ok(!sections.includes("account.balanceSeries"),"Inicio no debe depender de la serie de 12 meses");
 assert.ok(pulse.includes("reconciliation:{"),"El parser de Home pulse debe conservar el resumen integrado");
 
-console.log("Home runtime performance tests OK · conciliación integrada en una pasada y cuentas limitadas a saldo actual/anterior");
+console.log("Home runtime performance tests OK · conciliación integrada en una pasada, cuentas estrechas y permisos del core protegidos");
