@@ -51,18 +51,20 @@ export interface MerchantRepository {
 
 /**
  * Puerto deliberadamente append-only para la capa bancaria original.
- * No expone update/delete para impedir que una implementación compatible
- * reescriba silenciosamente el origen importado.
+ * No expone update/delete. Una corrección externa de una fila produce una
+ * nueva instantánea que apunta a la observación anterior.
  */
 export interface TransactionSourceRepository {
   getById(id: EntityId): Promise<TransactionSourceRecord | null>;
   findByFingerprint(sourceFingerprint: string): Promise<TransactionSourceRecord | null>;
+  findLatestByRowIdentity(sourceRowIdentity: string): Promise<TransactionSourceRecord | null>;
   insert(record: TransactionSourceRecord): Promise<TransactionSourceRecord>;
   insertMany(records: TransactionSourceRecord[]): Promise<TransactionSourceRecord[]>;
 }
 
 export interface TransactionRepository {
   getById(id: EntityId): Promise<Transaction | null>;
+  getBySourceRowIdentity(sourceRowIdentity: string): Promise<Transaction | null>;
   list(page: PageRequest): Promise<Page<Transaction>>;
   save(transaction: Transaction): Promise<Transaction>;
 }
