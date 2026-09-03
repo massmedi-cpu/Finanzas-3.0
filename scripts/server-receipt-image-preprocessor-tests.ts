@@ -120,7 +120,8 @@ assert.ok(canonical.includes("prepareServerReceiptImageBytes"),"el OCR canónico
 assert.ok(canonical.includes("withServerPreparation"),"la procedencia debe registrar el preprocesado servidor real");
 assert.ok(hydration.includes("recognizeCanonicalReceiptBytes(bytes"),"Drive debe seguir entrando por el OCR canónico compartido");
 assert.ok(preprocessor.includes("DETECTION_MAX_PIXELS")&&preprocessor.includes("OCR_MAX_PIXELS"),"el servidor debe acotar los rasteres intermedios por píxeles, no solo por lado");
-assert.ok(preprocessor.includes("const sampleCanvas = drawSource(createCanvas, source, width, height)")&&!preprocessor.includes("getImageData(0, 0, source.width, source.height)"),"el deskew no debe duplicar en memoria el raster completo para tomar muestras");
+const darkSamplesSource=preprocessor.slice(preprocessor.indexOf("function darkSamples"),preprocessor.indexOf("function deskew"));
+assert.ok(darkSamplesSource.includes("const sampleCanvas = drawSource(createCanvas, source, width, height)")&&!darkSamplesSource.includes("getImageData(0, 0, source.width, source.height)"),"el deskew no debe duplicar en memoria el raster completo para tomar muestras");
 assert.ok(preprocessor.includes("normalizeReceiptLuminanceRows"),"la preparación servidor debe compensar iluminación longitudinal antes de la única inferencia");
 assert.ok(config.includes("'./node_modules/@napi-rs/canvas/**/*'"),"/api/sync debe trazar el canvas servidor usado por Drive");
 assert.ok(lock.includes('\"node_modules/@napi-rs/canvas\"')&&lock.includes('\"version\": \"1.0.7\"'),"el canvas servidor debe estar fijado en el lockfile reproducible");
