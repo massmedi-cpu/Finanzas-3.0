@@ -33,8 +33,9 @@ assert.equal(upgradeReceiptParserMethod(paddleV7),paddleV8);
 assert.equal(hasCurrentReceiptParser(paddleV8),true,"Parser actual no implica fingir que la procedencia visual Paddle sea Tesseract");
 assert.equal(isCurrentReceiptOcrMethod(paddleV8),false,"La procedencia visual histórica nunca puede presentarse como OCR actual");
 
+assert.equal(isCompatibleReceiptOcrMethod("image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v6:server_tesseract_7_geometry"),false,"Incluso con geometría Tesseract actual, parser_v6 queda fuera del atajo para no asumir compatibilidad no demostrada");
 assert.equal(isCompatibleReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry"),false,"parser_v6 y anteriores necesitan regeneración visual canónica");
 assert.equal(isCompatibleReceiptOcrMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry"),false);
 assert.equal(upgradeReceiptParserMethod("image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry"),null);
 
-console.log("OCR parser revision tests OK · parser_v8 separado de OCR visual; v7 compatible se reinterpreta sin rerun de Tesseract");
+console.log("OCR parser revision tests OK · parser_v8 separado de OCR visual; solo evidencia v7 demostrada se reinterpreta sin rerun de Tesseract");
