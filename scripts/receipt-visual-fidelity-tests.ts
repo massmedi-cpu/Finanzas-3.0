@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { receiptMoneyDisplayText } from "../lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "../lib/document/receipt-visual-physical-layout";
 import { buildReceiptVisualRules } from "../lib/document/receipt-visual-rules";
 
@@ -51,11 +52,21 @@ assert.equal(safeTight.bounds.width,440,"una foto con mucho fondo no debe expand
 assert.equal(safeTight.bounds.height,630);
 assert.equal(safeTight.lines[0].left,20,"el fallback estrecho debe ser idéntico al layout existente");
 
+assert.equal(receiptMoneyDisplayText("2,50","2.50"),"2.50","un punto decimal impreso válido no debe convertirse visualmente en coma");
+assert.equal(receiptMoneyDisplayText("2,50","2,50 €"),"2,50 €","el símbolo y espaciado monetario impresos deben conservarse");
+assert.equal(receiptMoneyDisplayText("14,60","1460"),"14,60","un separador decimal inequívocamente perdido por OCR sí debe reconstruirse");
+assert.equal(receiptMoneyDisplayText("14,60","1460 €"),"14,60 €","la reparación de un decimal perdido debe conservar la moneda original");
+assert.equal(receiptMoneyDisplayText("1,50","€1'50"),"€1,50","un apóstrofo OCR en lugar del separador se repara sin perder la posición de la moneda");
+assert.equal(receiptMoneyDisplayText("12,00","12"),"12","un entero realmente impreso no debe ganar decimales solo por la normalización financiera");
+assert.equal(receiptMoneyDisplayText("7,40","8,40 €"),"7,40","una evidencia original contradictoria no puede imponerse al valor validado");
+assert.equal(receiptMoneyDisplayText("DESCRIPCION LARGA","PRODUCTO"),"DESCRIPCION LARGA","la recuperación monetaria no debe tocar texto no financiero");
+
 const preview=fs.readFileSync("app/archivo/receipt-geometry-preview.tsx","utf8");
 assert.ok(preview.includes("receiptPhysicalPreviewLayout(layout)"),"la vista debe intentar recuperar los márgenes físicos antes de maquetar");
 assert.ok(preview.includes("buildReceiptVisualRules(physicalLayout)"),"la vista debe usar las reglas físicas sobre el mismo espacio reconstruido");
+assert.ok(preview.includes("receiptMoneyDisplayText(token.text, originalText)"),"la reconstrucción debe separar valor financiero normalizado y tipografía monetaria impresa");
 assert.ok(!preview.includes("x1={visual.width * 0.015}"),"no debe sobrevivir la raya genérica casi a ancho completo");
 assert.ok(preview.includes('token.textAnchor === "middle" ? token.centerX : token.renderX'),"una fila centrada debe conservar el centro físico OCR en vez de forzarse al centro perfecto");
 assert.ok(preview.includes('lengthAdjust="spacingAndGlyphs"'),"el ajuste de ancho OCR protegido por el contrato histórico debe seguir activo");
 
-console.log("receipt visual fidelity tests OK · separadores, centro físico, márgenes de papel y escala real protegidos");
+console.log("receipt visual fidelity tests OK · separadores, centro físico, márgenes, moneda impresa y escala real protegidos");
