@@ -44,6 +44,8 @@ jobs:
         run: node scripts/ocr-loader-dimension-tests.mjs
       - name: OCR deskew confidence
         run: ./node_modules/.bin/tsx scripts/ocr-deskew-confidence-tests.ts
+      - name: OCR background corridor
+        run: ./node_modules/.bin/tsx scripts/ocr-background-corridor-tests.ts
       - name: OCR loader cache freshness
         run: node scripts/ocr-loader-cache-policy-tests.mjs
       - name: OCR runtime provenance truth
