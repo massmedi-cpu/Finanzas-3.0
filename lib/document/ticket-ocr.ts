@@ -236,6 +236,24 @@ function invoiceVatBreakdown(lines: string[]) {
   return null;
 }
 
+function explicitInvoiceGross(lines: string[]) {
+  const explicit = /\b(?:TOTAL\s+(?:FACTURA|ALBAR[AÁ]N|DOCUMENTO)|IMPORTE\s+TOTAL|TOTAL\s+A\s+PAGAR|A\s+PAGAR)\b[^0-9-]{0,36}(-?\d{1,7}(?:[.\s]\d{3})*(?:,\d{2,3}|\.\d{2,3}))/i;
+  const baseLike = lines
+    .filter((line) => /\b(?:SUBTOTAL|BASE\s+IMPONIBLE|BASE\s+NETA|TOTAL\s+NETO)\b/i.test(line))
+    .flatMap(extractAmounts);
+  const zeroTaxEvidence = lines.some((line) => /\b(?:IVA\s*[:=-]?\s*0(?:[.,]0{1,3})?|EXENT[OA]\s+(?:DE\s+)?IVA|IVA\s+EXENT[OA])\b/i.test(line));
+  for (const line of [...lines].reverse()) {
+    const match = line.match(explicit);
+    if (!match) continue;
+    const value = parseEuroValue(match[1]);
+    if (value === null) continue;
+    const duplicatesBase = baseLike.some((candidate) => Math.abs(candidate - value) <= 0.03);
+    if (duplicatesBase && !zeroTaxEvidence) continue;
+    return value;
+  }
+  return null;
+}
+
 function strongTaxEvidence(lower: string) {
   return /\b(?:irpf|impuestos?|tribut(?:o|os|aria|ario|arias|arios)|aeat|autoliquidaci[oó]n)\b/.test(lower)
     || /\bagencia\s+tributaria\b/.test(lower)
@@ -285,11 +303,12 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
   }
 
   if (documentType === "invoice") {
-    // En una factura/albarán, un importe encontrado por proximidad o por una
-    // etiqueta OCR degradada no es suficiente: puede ser base/subtotal. La
-    // inferencia genérica se descarta y solo se recupera un bruto cuando base
-    // + IVA están explícitos y ese bruto aparece también en la evidencia.
-    amount = null;
+  // En facturas/albaranes se descarta la inferencia genérica: un número grande
+  // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
+  // explícito solo si no replica una base/subtotal conocida; como respaldo se
+  // mantiene la corroboración financiera base + IVA ya existente.
+  amount = explicitInvoiceGross(lines);
+  if (amount === null) {
     const vatBreakdown = invoiceVatBreakdown(lines);
     const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.base ?? null;
     const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
@@ -299,6 +318,7 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
       if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
     }
   }
+}
 
   return { documentType, documentDate, amount, merchant: likelyMerchant(lines), lines };
 }
