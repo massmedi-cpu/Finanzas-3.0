@@ -1,0 +1,4 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "alias": ["financialapp-home.vercel.app"]
+}
