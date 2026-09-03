@@ -50,8 +50,11 @@ const photoBytes=jpeg(photo);
 const isolated=await prepareServerReceiptImageBytes(photoBytes,"image/jpeg");
 assert.equal(isolated.paperDetected,true,"Drive debe aislar físicamente un ticket fotografiado antes de Tesseract");
 assert.equal(isolated.preprocessed,true);
-assert.ok(isolated.outputWidth<760&&isolated.outputWidth>350,"el resultado debe ser el papel, no la foto completa con fondo");
-assert.ok(isolated.outputHeight>850,"la rectificación debe conservar la extensión vertical del ticket");
+const photoAspect=photo.width/photo.height;
+const isolatedAspect=isolated.outputWidth/isolated.outputHeight;
+assert.ok(isolatedAspect<0.62,"el resultado debe conservar la proporción estrecha del papel aislado aunque se amplíe para OCR");
+assert.ok(isolatedAspect<photoAspect-0.08,"el papel aislado debe diferenciarse de la proporción de la foto completa con fondo");
+assert.ok(isolated.outputHeight>=1200,"tras aislar el papel se puede aumentar densidad, pero no perder resolución vertical útil");
 assert.equal(isolated.mimeType,"image/jpeg");
 const isolatedMeta=readServerImageMetadata(isolated.bytes);
 assert.ok(isolatedMeta&&isolatedMeta.width===isolated.outputWidth&&isolatedMeta.height===isolated.outputHeight,"las dimensiones declaradas deben coincidir con los bytes realmente enviados a Tesseract");
@@ -94,6 +97,6 @@ assert.ok(canonical.includes("prepareServerReceiptImageBytes"),"el OCR canónico
 assert.ok(canonical.includes("withServerPreparation"),"la procedencia debe registrar el preprocesado servidor real");
 assert.ok(hydration.includes("recognizeCanonicalReceiptBytes(bytes"),"Drive debe seguir entrando por el OCR canónico compartido");
 assert.ok(config.includes("'./node_modules/@napi-rs/canvas/**/*'"),"/api/sync debe trazar el canvas servidor usado por Drive");
-assert.ok(lock.includes('"node_modules/@napi-rs/canvas"')&&lock.includes('"version": "1.0.7"'),"el canvas servidor debe estar fijado en el lockfile reproducible");
+assert.ok(lock.includes('\"node_modules/@napi-rs/canvas\"')&&lock.includes('\"version\": \"1.0.7\"'),"el canvas servidor debe estar fijado en el lockfile reproducible");
 
 console.log("server receipt image preprocessing tests OK · Drive y cámara comparten aislamiento, orientación y densidad antes de una sola inferencia");
