@@ -1,7 +1,6 @@
 "use client";
 
 import { formatEuro, formatInteger } from "@/lib/format/es-es";
-
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { MovementItem, MovementsResponse, TransactionDetail, TransactionDetailResponse } from "@/lib/financial/movements";
 import { EMPTY_MOVEMENT_FILTERS, movementSearchParams, movementSelectionScopeKey, movementUrl, type MovementFilterState, type TriFilter } from "@/lib/financial/movement-query";
@@ -11,38 +10,30 @@ type Filters = MovementFilterState;
 type MovementSelectionResponse={ok:boolean;ids:string[];total:number;limit:number;truncated:boolean;error?:string};
 
 const MAX_BULK_MOVEMENTS=200;
-const dateFormat = new Intl.DateTimeFormat("es-ES", { day:"2-digit", month:"2-digit", year:"numeric" });
+const dateFormat=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 
-function formatDate(value:string|null) {
-  if (!value) return "—";
-  return dateFormat.format(new Date(`${value}T12:00:00`));
-}
-function formatMoney(value:number|null) { return value == null ? "—" : formatEuro(value); }
+function formatDate(value:string|null){if(!value)return "—";return dateFormat.format(new Date(`${value}T12:00:00`));}
+function formatMoney(value:number|null){return value==null?"—":formatEuro(value);}
 
-export function MovementsClient({ initialData, initialFilters }:{ initialData:MovementsResponse; initialFilters:MovementFilterState }) {
-  const [pageData,setPageData] = useState(initialData);
-  const [filters,setFilters] = useState<Filters>(initialFilters);
-  const [appliedFilters,setAppliedFilters] = useState<Filters>(initialFilters);
-  const [loading,setLoading] = useState(false);
-  const [error,setError] = useState<string|null>(null);
-  const [message,setMessage] = useState<string|null>(null);
-  const [selected,setSelected] = useState<TransactionDetail|null>(null);
-  const [selectedIds,setSelectedIds] = useState<Set<string>>(()=>new Set());
-  const [detailLoading,setDetailLoading] = useState(false);
-  const [bulkSaving,setBulkSaving] = useState(false);
-  const [selectingFiltered,setSelectingFiltered] = useState(false);
-  const [bulkEditorOpen,setBulkEditorOpen] = useState(false);
+export function MovementsClient({initialData,initialFilters}:{initialData:MovementsResponse;initialFilters:MovementFilterState}){
+  const [pageData,setPageData]=useState(initialData);
+  const [filters,setFilters]=useState<Filters>(initialFilters);
+  const [appliedFilters,setAppliedFilters]=useState<Filters>(initialFilters);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState<string|null>(null);
+  const [message,setMessage]=useState<string|null>(null);
+  const [selected,setSelected]=useState<TransactionDetail|null>(null);
+  const [selectedIds,setSelectedIds]=useState<Set<string>>(()=>new Set());
+  const [detailLoading,setDetailLoading]=useState(false);
+  const [bulkSaving,setBulkSaving]=useState(false);
+  const [selectingFiltered,setSelectingFiltered]=useState(false);
+  const [bulkEditorOpen,setBulkEditorOpen]=useState(false);
   const openRequestRef=useRef(0);
   const listRequestRef=useRef(0);
   const listAbortRef=useRef<AbortController|null>(null);
   const selectionScopeRef=useRef(movementSelectionScopeKey(initialFilters));
-  const pages = Math.max(1, Math.ceil(pageData.total / pageData.pageSize));
-  const range = useMemo(() => {
-    if (!pageData.total) return "0 movimientos";
-    const first=(pageData.page-1)*pageData.pageSize+1;
-    const last=Math.min(pageData.total,pageData.page*pageData.pageSize);
-    return `${formatInteger(first)}–${formatInteger(last)} de ${formatInteger(pageData.total)}`;
-  },[pageData]);
+  const pages=Math.max(1,Math.ceil(pageData.total/pageData.pageSize));
+  const range=useMemo(()=>{if(!pageData.total)return "0 movimientos";const first=(pageData.page-1)*pageData.pageSize+1;const last=Math.min(pageData.total,pageData.page*pageData.pageSize);return `${formatInteger(first)}–${formatInteger(last)} de ${formatInteger(pageData.total)}`;},[pageData]);
   const visibleIds=useMemo(()=>pageData.items.map(item=>item.id),[pageData.items]);
   const allVisibleSelected=visibleIds.length>0&&visibleIds.every(id=>selectedIds.has(id));
   const visibleSelectedCount=visibleIds.filter(id=>selectedIds.has(id)).length;
@@ -53,89 +44,57 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   useEffect(()=>{if(!selectedIds.size)setBulkEditorOpen(false)},[selectedIds.size]);
   useEffect(()=>()=>{listAbortRef.current?.abort();openRequestRef.current+=1},[]);
 
-  async function loadWith(next:Filters,page=1) {
+  async function loadWith(next:Filters,page=1){
     const requestId=++listRequestRef.current;
     listAbortRef.current?.abort();
     const controller=new AbortController();
     listAbortRef.current=controller;
-    setLoading(true); setError(null);
+    setLoading(true);setError(null);
     const q=movementSearchParams(next);
-    q.set("page",String(page));
-    q.set("pageSize",String(pageData.pageSize));
-    q.set("sort",next.sort);
-    q.set("facets","0");
+    q.set("page",String(page));q.set("pageSize",String(pageData.pageSize));q.set("sort",next.sort);q.set("facets","0");
     const nextSelectionScope=movementSelectionScopeKey(next);
     const selectionScopeChanged=nextSelectionScope!==selectionScopeRef.current;
-    try {
+    try{
       const response=await fetch(`/api/movements?${q.toString()}`,{cache:"no-store",signal:controller.signal});
-      const body=await response.json() as Omit<MovementsResponse,"facets"> & {facets?:MovementsResponse["facets"];error?:string};
-      if(!response.ok||!body.ok) throw new Error(body.error||"No se pudieron cargar los movimientos");
+      const body=await response.json() as Omit<MovementsResponse,"facets">&{facets?:MovementsResponse["facets"];error?:string};
+      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudieron cargar los movimientos");
       if(requestId!==listRequestRef.current)return true;
       setPageData({...body,facets:body.facets??pageData.facets} as MovementsResponse);
-      setAppliedFilters({...next});
-      selectionScopeRef.current=nextSelectionScope;
-      if(selectionScopeChanged&&selectedIds.size){
-        setSelectedIds(new Set());
-        setBulkEditorOpen(false);
-        setMessage("Selección reiniciada porque cambió el conjunto de filtros. Así no se editarán movimientos que hayan quedado ocultos.");
-      }
+      setAppliedFilters({...next});selectionScopeRef.current=nextSelectionScope;
+      if(selectionScopeChanged&&selectedIds.size){setSelectedIds(new Set());setBulkEditorOpen(false);setMessage("Selección reiniciada porque cambió el conjunto de filtros. Así no se editarán movimientos que hayan quedado ocultos.");}
       window.history.replaceState(null,"",movementUrl(next));
       return true;
-    } catch(cause) {
+    }catch(cause){
       if(cause instanceof Error&&cause.name==="AbortError")return requestId!==listRequestRef.current;
       if(requestId===listRequestRef.current)setError(cause instanceof Error?cause.message:"Error al cargar movimientos");
       return false;
-    }
-    finally {
-      if(requestId===listRequestRef.current){
-        setLoading(false);
-        if(listAbortRef.current===controller)listAbortRef.current=null;
-      }
+    }finally{
+      if(requestId===listRequestRef.current){setLoading(false);if(listAbortRef.current===controller)listAbortRef.current=null;}
     }
   }
 
-  async function submitFilters(event:FormEvent) { event.preventDefault(); await loadWith(filters,1); }
-  async function clearFilters() {
-    const cleared={...EMPTY_MOVEMENT_FILTERS};
-    setFilters(cleared);
-    await loadWith(cleared,1);
-  }
+  async function submitFilters(event:FormEvent){event.preventDefault();await loadWith(filters,1);}
+  async function clearFilters(){const cleared={...EMPTY_MOVEMENT_FILTERS};setFilters(cleared);await loadWith(cleared,1);}
 
   function toggleSelection(id:string,checked:boolean){
     if(bulkSaving||selectingFiltered)return;
-    setSelectedIds(current=>{
-      const next=new Set(current);
-      if(!checked){next.delete(id);return next;}
-      if(next.has(id))return next;
-      if(next.size>=MAX_BULK_MOVEMENTS){setError(`Puedes editar como máximo ${MAX_BULK_MOVEMENTS} movimientos por lote.`);return current;}
-      next.add(id);setError(null);return next;
-    });
+    setSelectedIds(current=>{const next=new Set(current);if(!checked){next.delete(id);return next;}if(next.has(id))return next;if(next.size>=MAX_BULK_MOVEMENTS){setError(`Puedes editar como máximo ${MAX_BULK_MOVEMENTS} movimientos por lote.`);return current;}next.add(id);setError(null);return next;});
   }
   function toggleVisible(){
     if(bulkSaving||selectingFiltered)return;
-    setSelectedIds(current=>{
-      const next=new Set(current);
-      if(allVisibleSelected){visibleIds.forEach(id=>next.delete(id));return next;}
-      const missing=visibleIds.filter(id=>!next.has(id));
-      if(next.size+missing.length>MAX_BULK_MOVEMENTS){setError(`La selección superaría el máximo de ${MAX_BULK_MOVEMENTS} movimientos.`);return current;}
-      missing.forEach(id=>next.add(id));setError(null);return next;
-    });
+    setSelectedIds(current=>{const next=new Set(current);if(allVisibleSelected){visibleIds.forEach(id=>next.delete(id));return next;}const missing=visibleIds.filter(id=>!next.has(id));if(next.size+missing.length>MAX_BULK_MOVEMENTS){setError(`La selección superaría el máximo de ${MAX_BULK_MOVEMENTS} movimientos.`);return current;}missing.forEach(id=>next.add(id));setError(null);return next;});
   }
   async function selectFiltered(){
     if(bulkSaving||selectingFiltered||!pageData.total)return;
     setSelectingFiltered(true);setError(null);setMessage(null);
-    const q=movementSearchParams(appliedFilters);
-    q.set("limit",String(MAX_BULK_MOVEMENTS));
-    q.set("sort",appliedFilters.sort);
+    const q=movementSearchParams(appliedFilters);q.set("limit",String(MAX_BULK_MOVEMENTS));q.set("sort",appliedFilters.sort);
     try{
       const response=await fetch(`/api/movements/selection?${q.toString()}`,{cache:"no-store"});
       const body=await response.json() as MovementSelectionResponse;
       if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo seleccionar el conjunto filtrado");
-      const ids=body.ids.slice(0,MAX_BULK_MOVEMENTS);
-      setSelectedIds(new Set(ids));
+      const ids=body.ids.slice(0,MAX_BULK_MOVEMENTS);setSelectedIds(new Set(ids));
       setMessage(body.truncated?`Seleccionados los primeros ${MAX_BULK_MOVEMENTS} de ${formatInteger(body.total)} movimientos filtrados. El límite seguro por lote sigue siendo ${MAX_BULK_MOVEMENTS}.`:`Seleccionados los ${formatInteger(ids.length)} movimientos que cumplen los filtros aplicados, aunque estén repartidos en varias páginas.`);
-    }catch(cause){setError(cause instanceof Error?cause.message:"Error al seleccionar movimientos filtrados");}
-    finally{setSelectingFiltered(false);}
+    }catch(cause){setError(cause instanceof Error?cause.message:"Error al seleccionar movimientos filtrados");}finally{setSelectingFiltered(false);}
   }
   function clearBulkSelection(){setSelectedIds(new Set());setBulkEditorOpen(false);}
 
@@ -146,27 +105,22 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       const response=await fetch("/api/movements/bulk",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({ids:[...selectedIds],patch})});
       const body=await response.json() as {ok?:boolean;updated?:number;error?:string};
       if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo aplicar la edición masiva");
-      const updated=Number(body.updated||selectedIds.size);
-      setSelectedIds(new Set());setBulkEditorOpen(false);
+      const updated=Number(body.updated||selectedIds.size);setSelectedIds(new Set());setBulkEditorOpen(false);
       const refreshed=await loadWith(appliedFilters,pageData.page);
       if(!refreshed){setError("Los cambios se guardaron, pero no se pudo actualizar la lista. Recarga la vista para confirmar el estado.");return true;}
-      setMessage(`${updated} movimiento${updated===1?"":"s"} actualizado${updated===1?"":"s"} en una sola operación.`);
-      return true;
-    }catch(cause){setError(cause instanceof Error?cause.message:"Error en la edición masiva");return false;}
-    finally{setBulkSaving(false);}
+      setMessage(`${updated} movimiento${updated===1?"":"s"} actualizado${updated===1?"":"s"} en una sola operación.`);return true;
+    }catch(cause){setError(cause instanceof Error?cause.message:"Error en la edición masiva");return false;}finally{setBulkSaving(false);}
   }
 
-  async function openMovement(id:string) {
-    const requestId=++openRequestRef.current;
-    setDetailLoading(true); setError(null); setMessage(null);
-    try {
+  async function openMovement(id:string){
+    const requestId=++openRequestRef.current;setDetailLoading(true);setError(null);setMessage(null);
+    try{
       const response=await fetch(`/api/movements/${id}`,{cache:"no-store"});
-      const body=await response.json() as TransactionDetailResponse & {error?:string};
-      if(!response.ok||!body.ok) throw new Error(body.error||"No se pudo abrir el movimiento");
-      if(requestId!==openRequestRef.current)return;
-      setSelected(body.transaction);
-    } catch(cause) { if(requestId===openRequestRef.current)setError(cause instanceof Error?cause.message:"Error al abrir movimiento"); }
-    finally { if(requestId===openRequestRef.current)setDetailLoading(false); }
+      const body=await response.json() as TransactionDetailResponse&{error?:string};
+      if(!response.ok||!body.ok)throw new Error(body.error||"No se pudo abrir el movimiento");
+      if(requestId!==openRequestRef.current)return;setSelected(body.transaction);
+    }catch(cause){if(requestId===openRequestRef.current)setError(cause instanceof Error?cause.message:"Error al abrir movimiento");}
+    finally{if(requestId===openRequestRef.current)setDetailLoading(false);}
   }
 
   return <div className="movements-module">
@@ -179,7 +133,7 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
     {appliedFilters.cashFlowOnly&&<div className="inline-alert info" role="status">Vista enlazada con Cash Flow: se excluyen ahorro, traspasos internos, duplicados, origen ausente y exclusiones manuales.</div>}
 
     <form className="movement-filters" onSubmit={submitFilters}>
-      <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID, importe, etiquetas u OCR" /></label>
+      <label className="search-field"><span>Buscar</span><input value={filters.search} onChange={e=>setFilters({...filters,search:e.target.value})} placeholder="Concepto, comercio, ID, importe, etiquetas u OCR"/></label>
       <label><span>Cuenta</span><select value={filters.account} onChange={e=>setFilters({...filters,account:e.target.value})}><option value="">Todas</option>{pageData.facets.accounts.map(account=><option key={account.id} value={account.id}>{account.name}</option>)}</select></label>
       <label><span>Tipo</span><select value={filters.type} onChange={e=>setFilters({...filters,type:e.target.value})}><option value="">Todos</option>{pageData.facets.types.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
       <label><span>Categoría</span><select value={filters.category} onChange={e=>setFilters({...filters,category:e.target.value})}><option value="">Todas</option>{pageData.facets.categories.map(value=><option key={value} value={value}>{value}</option>)}</select></label>
@@ -227,8 +181,6 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
       {!pageData.items.length&&<div className="empty-state"><strong>No hay movimientos con estos filtros.</strong><span>Prueba a limpiar algún criterio de búsqueda.</span></div>}
     </div>
 
-    <div className="movement-cards">{pageData.items.map(item=><div key={item.id} className={`movement-card-row ${selectedIds.has(item.id)?"is-selected":""}`}><label className="movement-select-control"><input type="checkbox" checked={selectedIds.has(item.id)} disabled={bulkSaving||selectingFiltered} onChange={e=>toggleSelection(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></label><button className="movement-card" type="button" onClick={()=>openMovement(item.id)}><div><span>{formatDate(item.date)}</span><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><small>{item.category||"Sin categoría"} · {item.account.name||"Sin cuenta"}</small>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}</div><div className="card-side"><b className={item.amount!=null&&item.amount<0?"negative":"positive"}>{formatMoney(item.amount)}</b><Status item={item}/></div></button></div>)}</div>
-
     <footer className="pagination"><span>{range}</span><div><button className="ghost" type="button" disabled={loading||bulkSaving||selectingFiltered||pageData.page<=1} onClick={()=>loadWith(appliedFilters,pageData.page-1)}>Anterior</button><span>Página {pageData.page} de {pages}</span><button className="ghost" type="button" disabled={loading||bulkSaving||selectingFiltered||pageData.page>=pages} onClick={()=>loadWith(appliedFilters,pageData.page+1)}>Siguiente</button></div></footer>
 
     {detailLoading&&<div className="detail-loading" role="status">Abriendo movimiento…</div>}
@@ -236,23 +188,23 @@ export function MovementsClient({ initialData, initialFilters }:{ initialData:Mo
   </div>;
 }
 
-function Status({item}:{item:MovementItem}) {
-  if(item.sourceMissing) return <span className="status-badge warning">Origen ausente</span>;
-  if(item.status==="new") return <span className="status-badge info">Nuevo</span>;
-  if(item.needsReview) return <span className="status-badge warning">Revisar</span>;
-  if(item.hasOverrides) return <span className="status-badge edited">Editado</span>;
-  if(item.isInternalTransfer) return <span className="status-badge muted">Traspaso</span>;
+function Status({item}:{item:MovementItem}){
+  if(item.sourceMissing)return <span className="status-badge warning">Origen ausente</span>;
+  if(item.status==="new")return <span className="status-badge info">Nuevo</span>;
+  if(item.needsReview)return <span className="status-badge warning">Revisar</span>;
+  if(item.hasOverrides)return <span className="status-badge edited">Editado</span>;
+  if(item.isInternalTransfer)return <span className="status-badge muted">Traspaso</span>;
   return <span className="status-badge ok">Correcto</span>;
 }
 
-function MovementRow({item,onOpen,selected,onToggle,selectionDisabled}:{item:MovementItem;onOpen:(id:string)=>void;selected:boolean;onToggle:(id:string,checked:boolean)=>void;selectionDisabled:boolean}) {
+function MovementRow({item,onOpen,selected,onToggle,selectionDisabled}:{item:MovementItem;onOpen:(id:string)=>void;selected:boolean;onToggle:(id:string,checked:boolean)=>void;selectionDisabled:boolean}){
   return <tr className={selected?"is-selected":""}>
     <td className="selection-cell"><input type="checkbox" checked={selected} disabled={selectionDisabled} onChange={e=>onToggle(item.id,e.target.checked)} aria-label={`Seleccionar ${item.concept||item.counterparty||item.sourceId}`}/></td>
-    <td><span className="date-main">{formatDate(item.date)}</span><small>{item.time?item.time.slice(0,5):""}</small></td>
-    <td><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}</button></td>
-    <td><span>{item.category||"Sin categoría"}</span>{item.subcategory&&<small>{item.subcategory}</small>}</td>
-    <td><span>{item.account.name||"Sin cuenta"}</span><small>{item.account.identifier||""}</small></td>
-    <td className={`numeric amount ${item.amount!=null&&item.amount<0?"negative":"positive"}`}>{formatMoney(item.amount)}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}{item.balance!=null&&<small>Saldo {formatMoney(item.balance)}</small>}</td>
-    <td><Status item={item}/></td>
+    <td className="movement-date-cell"><span className="date-main">{formatDate(item.date)}</span><small>{item.time?item.time.slice(0,5):""}</small></td>
+    <td className="movement-main-cell"><button className="movement-open" type="button" onClick={()=>onOpen(item.id)}><strong>{item.concept||item.counterparty||"Movimiento sin concepto"}</strong><span>{item.counterparty&&item.counterparty!==item.concept?item.counterparty:item.sourceId}</span>{item.hasDocuments&&<small>{item.documentCount} documento{item.documentCount===1?"":"s"}</small>}</button></td>
+    <td className="movement-category-cell"><span>{item.category||"Sin categoría"}</span>{item.subcategory&&<small>{item.subcategory}</small>}</td>
+    <td className="movement-account-cell"><span>{item.account.name||"Sin cuenta"}</span><small>{item.account.identifier||""}</small></td>
+    <td className={`movement-amount-cell numeric amount ${item.amount!=null&&item.amount<0?"negative":"positive"}`}>{formatMoney(item.amount)}{item.hasSplits&&item.personalAmount!=null&&<small>Parte personal {formatMoney(item.personalAmount)}</small>}{item.balance!=null&&<small>Saldo {formatMoney(item.balance)}</small>}</td>
+    <td className="movement-status-cell"><Status item={item}/></td>
   </tr>;
 }

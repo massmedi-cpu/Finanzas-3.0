@@ -84,7 +84,8 @@
     "test:network": "tsx scripts/network-status-tests.ts",
     "test:search": "tsx scripts/global-search-tests.ts",
     "test:control-boundary": "node scripts/control-server-boundary-tests.mjs",
-    "test:regression": "npm run test:backup && npm run test:analytics && npm run test:intelligence && npm run test:horizon && npm run test:format && npm run test:time && npm run test:explainability && npm run test:integrity && npm run test:ocr && npm run test:network && npm run test:search && npm run test:control-boundary"
+    "test:movement-render": "node scripts/movement-single-render-tests.mjs",
+    "test:regression": "npm run test:backup && npm run test:analytics && npm run test:intelligence && npm run test:horizon && npm run test:format && npm run test:time && npm run test:explainability && npm run test:integrity && npm run test:ocr && npm run test:network && npm run test:search && npm run test:control-boundary && npm run test:movement-render"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

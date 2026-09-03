@@ -18,6 +18,7 @@ const home=read("app/page.tsx");
 const homeSections=read("app/home-sections.tsx");
 const homeCss=read("app/home.css");
 const movementsCss=read("app/movements.css");
+const movementsClient=read("app/movimientos/movements-client.tsx");
 const archiveCss=read("app/archive.css");
 const detailDialogCss=read("app/detail-dialog.css");
 const editorDialogCss=read("app/editor-dialog.css");
@@ -96,12 +97,16 @@ for(const token of [
   ".home-decision-grid{contain-intrinsic-size:auto 560px}",
 ]) must(homeCss.includes(token),`Inicio perdió pintura diferida responsive: ${token}`);
 for(const token of [
-  "content-visibility:auto;contain-intrinsic-size:auto 82px",
+  ".movement-table tbody tr{content-visibility:auto;contain-intrinsic-size:auto 70px",
   "overscroll-behavior:contain;scrollbar-gutter:stable",
-  "flex:1 1 auto",
-  "flex:0 0 auto",
+  'grid-template-areas:"select date amount" "select movement amount" "select category status" "select account status"',
 ]) must(movementsCss.includes(token),`Movimientos perdió rendimiento/scroll adaptable: ${token}`);
-must(!/\.movement-card strong\{[^}]*max-width:\d+vw/.test(movementsCss),"Movimientos no debe volver a estrangular conceptos móviles con un ancho vw fijo");
+const movementRenderPaths=[...movementsClient.matchAll(/<MovementRow\b/g)];
+must(movementRenderPaths.length===1,`Movimientos debe renderizar una sola representación por item; detectadas ${movementRenderPaths.length}`);
+for(const forbidden of [".movement-cards{",".movement-card-row{",".movement-table-wrap{display:none}"])
+  must(!movementsCss.includes(forbidden),`Movimientos ha recuperado DOM/CSS móvil duplicado: ${forbidden}`);
+must(!movementsClient.includes('className="movement-cards"'),"Movimientos no debe volver a montar una segunda lista móvil");
+must(!/\.movement-open strong\{[^}]*max-width:\d+vw/.test(movementsCss),"Movimientos no debe estrangular conceptos móviles con un ancho vw fijo");
 for(const token of [
   "content-visibility:auto;contain-intrinsic-size:auto 76px",
   ".reconstruction,.receipt-table-wrap{overscroll-behavior:contain;scrollbar-gutter:stable}",
@@ -188,4 +193,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} con Patrimonio responsive · editores compartidos ${editorDialogBytes} · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
+console.log(`Financial App 6.5.0 visual runtime audit OK · Home sin paneles redundantes · visual.css global retirado · skeleton ${loadingBytes} bytes · tokens ${tokenBytes} · gráfica ${chartBytes} · cajón compartido ${detailDialogBytes} con Patrimonio responsive · editores compartidos ${editorDialogBytes} · Movimientos single-render responsive · pintura diferida y ownership CSS protegidos · 24 gráficos preservados`);
