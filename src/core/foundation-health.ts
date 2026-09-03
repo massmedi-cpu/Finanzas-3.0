@@ -1,6 +1,7 @@
 import { formatDate } from "./formatters";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "./money";
 import { REGIONAL_CONFIG } from "./regional";
+import { prepareNewAccount, prepareUpdatedCategory } from "../application/configuration-commands";
 import { validateAccountDraft, validateCategoryDraft } from "../domain/configuration";
 import {
   validateAccountUniqueness,
@@ -10,8 +11,9 @@ import {
 } from "../domain/configuration-policies";
 import { resolveEffectiveTransaction } from "../domain/effective-transaction";
 import { FINANCIAL_INVARIANTS } from "../domain/invariants";
-import type { Category, Transaction, TransactionOverride } from "../domain/models";
+import type { Account, Category, Transaction, TransactionOverride } from "../domain/models";
 import { buildSourceFingerprint, buildSourceRowIdentity } from "../domain/source-identity";
+import { planSourceObservation } from "../domain/source-sync-plan";
 
 export type FoundationCheck = {
   name: string;
@@ -98,6 +100,50 @@ export function runFoundationHealthChecks(): FoundationHealth {
     accountExternalKey: "Cuenta principal",
   } as const;
 
+  const sourceRowIdentity = buildSourceRowIdentity(sourceIdentityInput);
+  const sourceFingerprint = buildSourceFingerprint(sourceIdentityInput);
+  const firstObservation = planSourceObservation(sourceIdentityInput, null);
+  const repeatedObservation = planSourceObservation(sourceIdentityInput, {
+    id: "source-snapshot-1",
+    sourceRowIdentity,
+    sourceFingerprint,
+  });
+  const correctedObservation = planSourceObservation(
+    { ...sourceIdentityInput, amountCents: -2600 },
+    {
+      id: "source-snapshot-1",
+      sourceRowIdentity,
+      sourceFingerprint,
+    },
+  );
+
+  const accountExisting: Account = {
+    id: "account-existing",
+    name: "Ahorro",
+    institution: "Banco",
+    type: "savings",
+    openingBalanceCents: 0,
+    currency: "EUR",
+    lifecycle: "active",
+    sortOrder: 0,
+    createdAt: "2026-09-03T10:00:00Z",
+    updatedAt: "2026-09-03T10:00:00Z",
+  };
+
+  const preparedAccount = prepareNewAccount(
+    {
+      name: "  Cuenta   principal ",
+      institution: " Banco  Demo ",
+      type: "checking",
+      openingBalanceCents: 123456,
+      lifecycle: "active",
+      sortOrder: 1,
+    },
+    [accountExisting],
+    "account-new",
+    "2026-09-03T11:00:00Z",
+  );
+
   const categoryA: Category = {
     id: "category-a",
     name: "Hogar",
@@ -118,6 +164,21 @@ export function runFoundationHealthChecks(): FoundationHealth {
     parentCategoryId: categoryA.id,
     sortOrder: 1,
   };
+
+  const preparedCategory = prepareUpdatedCategory(
+    categoryB,
+    {
+      name: "  Suministros   hogar ",
+      kind: "expense",
+      parentCategoryId: categoryA.id,
+      iconKey: " utilities ",
+      colorToken: " category.utilities ",
+      lifecycle: "active",
+      sortOrder: 1,
+    },
+    [categoryA, categoryB],
+    "2026-09-03T11:00:00Z",
+  );
 
   const checks: FoundationCheck[] = [
     {
@@ -160,10 +221,23 @@ export function runFoundationHealthChecks(): FoundationHealth {
     {
       name: "source-row-identity-stable",
       passed:
-        buildSourceRowIdentity(sourceIdentityInput) === "bank-sheet::movements::row-42" &&
-        buildSourceFingerprint(sourceIdentityInput) === buildSourceFingerprint(sourceIdentityInput) &&
-        buildSourceFingerprint(sourceIdentityInput) !==
-          buildSourceFingerprint({ ...sourceIdentityInput, amountCents: -2600 }),
+        sourceRowIdentity === "bank-sheet::movements::row-42" &&
+        sourceFingerprint === buildSourceFingerprint(sourceIdentityInput) &&
+        sourceFingerprint !== buildSourceFingerprint({ ...sourceIdentityInput, amountCents: -2600 }),
+    },
+    {
+      name: "source-sync-idempotent",
+      passed:
+        firstObservation.action === "insert" &&
+        repeatedObservation.action === "skip" &&
+        repeatedObservation.existingSourceRecordId === "source-snapshot-1",
+    },
+    {
+      name: "source-correction-appends-immutable-revision",
+      passed:
+        correctedObservation.action === "append_revision" &&
+        correctedObservation.supersedesSourceRecordId === "source-snapshot-1" &&
+        correctedObservation.sourceFingerprint !== sourceFingerprint,
     },
     {
       name: "user-override-projection-is-non-destructive",
@@ -200,6 +274,14 @@ export function runFoundationHealthChecks(): FoundationHealth {
         ).some((issue) => issue.code === "duplicate_account_name"),
     },
     {
+      name: "account-command-normalization",
+      passed:
+        preparedAccount.name === "Cuenta principal" &&
+        preparedAccount.institution === "Banco Demo" &&
+        preparedAccount.currency === "EUR" &&
+        preparedAccount.createdAt === preparedAccount.updatedAt,
+    },
+    {
       name: "category-validation",
       passed:
         validateCategoryDraft({
@@ -227,6 +309,15 @@ export function runFoundationHealthChecks(): FoundationHealth {
           { ...categoryA, parentCategoryId: categoryB.id },
           [categoryA, categoryB],
         ).some((issue) => issue.code === "category_cycle"),
+    },
+    {
+      name: "category-command-normalization",
+      passed:
+        preparedCategory.name === "Suministros hogar" &&
+        preparedCategory.iconKey === "utilities" &&
+        preparedCategory.colorToken === "category.utilities" &&
+        preparedCategory.createdAt === categoryB.createdAt &&
+        preparedCategory.updatedAt === "2026-09-03T11:00:00Z",
     },
     {
       name: "reorder-set-integrity",
