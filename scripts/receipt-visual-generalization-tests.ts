@@ -77,6 +77,56 @@ assert.equal(wrapped.tokens.filter(token=>token.text==="2,00").length,2,"la fila
 const wrappedWidth=receiptTextLength({text:wrappedContinuation.text,boxWidth:wrappedContinuation.boxWidth,fontSize:wrappedContinuation.fontSize});
 assert.ok(wrappedWidth&&Math.abs(wrappedWidth-wrappedContinuation.boxWidth)<.01,"una descripción con geometría plausible debe conservar el ancho físico OCR");
 
+// Algunos TPV imprimen cantidad + inicio de descripción y desplazan precio e
+// importe a la línea siguiente. Ambas líneas deben pertenecer a la misma tabla,
+// no renderizar la primera como texto libre fuera de las columnas.
+const splitFamily=visual(600,900,[
+  {text:"UND.",score:98,left:8,top:20,width:8,height:2.8},
+  {text:"DESCRIPCION",score:98,left:22,top:20,width:24,height:2.8},
+  {text:"PRECIO",score:98,left:64,top:20,width:12,height:2.8},
+  {text:"IMPORTE",score:98,left:82,top:20,width:14,height:2.8},
+  {text:"1",score:98,left:9,top:27,width:2,height:2.5},
+  {text:"HAMBURGUESA ESPECIAL",score:97,left:26,top:27,width:34,height:2.5},
+  {text:"CON QUESO",score:97,left:22,top:31,width:20,height:2.5},
+  {text:"8,50",score:98,left:68,top:31,width:8,height:2.5},
+  {text:"8,50",score:98,left:87,top:31,width:8,height:2.5},
+  {text:"1",score:98,left:10,top:37,width:2,height:2.5},
+  {text:"AGUA",score:98,left:22,top:37,width:10,height:2.5},
+  {text:"1,50",score:98,left:68,top:37,width:8,height:2.5},
+  {text:"1,50",score:98,left:87,top:37,width:8,height:2.5},
+]);
+const splitQuantities=splitFamily.tokens.filter(token=>token.text==="1").sort((a,b)=>a.baselineY-b.baselineY);
+const splitLead=splitFamily.tokens.find(token=>token.text==="HAMBURGUESA ESPECIAL");
+const splitContinuation=splitFamily.tokens.find(token=>token.text==="CON QUESO");
+const splitFollowing=splitFamily.tokens.find(token=>token.text==="AGUA");
+assert.equal(splitQuantities.length,2);
+assert.ok(splitQuantities.every(token=>token.textAnchor==="end"),"la cantidad de una línea partida debe seguir anclada a la columna de unidades");
+assert.ok(splitLead&&splitContinuation&&splitFollowing);
+assert.ok(Math.abs(splitLead.renderX-splitContinuation.renderX)<1&&Math.abs(splitContinuation.renderX-splitFollowing.renderX)<1,"las dos líneas del producto deben compartir la columna de descripción");
+assert.equal(splitFamily.tokens.filter(token=>token.text==="8,50").length,2,"precio e importe impresos en la segunda línea deben conservarse");
+assert.equal(splitFamily.tokens.filter(token=>token.text==="1,50").length,2,"la fila siguiente no puede desaparecer al cerrar la familia multilínea");
+
+// El mismo patrón debe funcionar sin cabecera explícita: la geometría de dos
+// filas encadenadas puede descubrir una tabla implícita sin vocabulario fijo.
+const implicitSplitFamily=visual(500,800,[
+  {text:"1",score:98,left:8,top:20,width:3,height:2.8},
+  {text:"SERVICIO ESPECIAL",score:97,left:24,top:20,width:34,height:2.8},
+  {text:"CON EXTRA",score:97,left:20,top:24,width:20,height:2.8},
+  {text:"5,00",score:98,left:80,top:24,width:11,height:2.8},
+  {text:"1",score:98,left:8,top:31,width:3,height:2.8},
+  {text:"BEBIDA",score:98,left:20,top:31,width:14,height:2.8},
+  {text:"2,00",score:98,left:80,top:31,width:11,height:2.8},
+]);
+const implicitSplitQuantities=implicitSplitFamily.tokens.filter(token=>token.text==="1").sort((a,b)=>a.baselineY-b.baselineY);
+const implicitSplitLead=implicitSplitFamily.tokens.find(token=>token.text==="SERVICIO ESPECIAL");
+const implicitSplitContinuation=implicitSplitFamily.tokens.find(token=>token.text==="CON EXTRA");
+const implicitSplitFollowing=implicitSplitFamily.tokens.find(token=>token.text==="BEBIDA");
+assert.equal(implicitSplitQuantities.length,2);
+assert.ok(implicitSplitQuantities.every(token=>token.textAnchor==="end"),"la tabla implícita debe reconocer también la línea inicial sin importe");
+assert.ok(implicitSplitLead&&implicitSplitContinuation&&implicitSplitFollowing);
+assert.ok(Math.abs(implicitSplitLead.renderX-implicitSplitContinuation.renderX)<1&&Math.abs(implicitSplitContinuation.renderX-implicitSplitFollowing.renderX)<1,"la familia implícita debe conservar un único inicio de descripción");
+assert.ok(implicitSplitFamily.tokens.some(token=>token.text==="5,00")&&implicitSplitFamily.tokens.some(token=>token.text==="2,00"));
+
 // El ancho medido se usa solo cuando la caja es plausible: no se debe estirar
 // texto a partir de una segmentación absurda ni deformar cantidades de un glifo.
 assert.equal(receiptTextLength({text:"DESCRIPCION",boxWidth:118,fontSize:18}),118);
@@ -102,4 +152,4 @@ const narrowAmount=narrow.tokens.find(token=>token.text==="4,25"&&token.renderX>
 const wideAmount=wide.tokens.find(token=>token.text==="4,25"&&token.renderX>wide.width*.75)!;
 assert.ok(Math.abs(narrowAmount.renderX/narrow.width-wideAmount.renderX/wide.width)<.002,"las columnas deben escalar por geometría normalizada, no por píxeles fijos");
 
-console.log("receipt visual generalization tests OK · cabeceras alternativas, tabla implícita, descripciones envueltas, ancho físico y escalado geométrico protegidos");
+console.log("receipt visual generalization tests OK · cabeceras alternativas, tablas implícitas, familias multilínea, ancho físico y escalado geométrico protegidos");
