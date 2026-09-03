@@ -291,6 +291,7 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
     rows.filter(isFinancialSummaryRow).flatMap((row) => row.boxes),
   );
   let corridor: { left: number; right: number } | null = null;
+  let inferredCorridor = false;
   let bottomLimit = sourceHeight;
 
   if (tableIndex >= 0) {
@@ -307,6 +308,7 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
     if (lastFooter) bottomLimit = Math.min(sourceHeight, lastFooter.bottom + Math.max(lastFooter.height * 4, sourceHeight * 0.045));
   } else {
     corridor = inferReceiptTextCorridor(rows, sourceWidth, sourceHeight);
+    inferredCorridor = Boolean(corridor);
   }
 
   const accepted: Box[] = [];
@@ -317,13 +319,17 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
       ? Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left))
       : box.width;
     const overlapRatio = overlap / Math.max(1, box.width);
+    // Con una tabla reconocida se conserva el contrato histórico: los resúmenes
+    // financieros pueden imprimirse desplazados respecto al cuerpo de columnas.
+    // Solo el corredor inferido de tickets sin cabecera exige solapamiento para
+    // impedir que un TOTAL/IVA perteneciente al fondo quede protegido por texto.
     const protectedFinancial = protectedFinancialBoxes.has(box)
       && box.score >= 35
-      && (!corridor || overlapRatio >= 0.12);
+      && (!inferredCorridor || overlapRatio >= 0.12);
     let reject = protectedHeader || protectedFinancial ? false : obviousRecognitionNoise(box);
     if (!reject && corridor) {
       const semanticText = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
-      const semantic = protectedHeader || protectedFinancial || (semanticText && overlapRatio >= 0.12);
+      const semantic = protectedHeader || protectedFinancial || (semanticText && (!inferredCorridor || overlapRatio >= 0.12));
       if (overlapRatio < 0.28 && !semantic) reject = true;
       if (box.top > bottomLimit && !semantic) reject = true;
     }
