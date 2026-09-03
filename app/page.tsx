@@ -4,6 +4,16 @@ import { runFoundationHealthChecks } from "../src/core/foundation-health";
 export default function Home() {
   const build = getBuildInfo();
   const health = runFoundationHealthChecks();
+
+  if (health.status !== "ok") {
+    const failedChecks = health.checks
+      .filter((check) => !check.passed)
+      .map((check) => check.name)
+      .join(", ");
+
+    throw new Error(`Fundamentos no válidos: ${failedChecks}`);
+  }
+
   const shortCommit = build.commit === "local" ? "local" : build.commit.slice(0, 8);
 
   return (
@@ -21,7 +31,7 @@ export default function Home() {
           <span>Fuente bancaria · solo lectura</span>
           <span>OCR · Fase 11</span>
           <span>
-            Fundamentos · {health.passed}/{health.total} {health.status === "ok" ? "OK" : "ERROR"}
+            Fundamentos · {health.passed}/{health.total} OK
           </span>
         </div>
 
