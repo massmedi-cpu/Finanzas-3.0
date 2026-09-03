@@ -11,16 +11,16 @@ const sloped: ReceiptVisualLayoutInput = {
     { text: "IMPORTE", score: 98, left: 84, top: 21.5, width: 12, height: 2.5 },
     { text: "1", score: 98, left: 10, top: 28.0, width: 2, height: 2.5 },
     { text: "PRODUCTO UNO", score: 98, left: 22, top: 28.25, width: 25, height: 2.5 },
-    { text: "3,00", score: 98, left: 68, top: 29.2, width: 8, height: 2.5 },
-    { text: "3,00", score: 98, left: 87, top: 29.55, width: 8, height: 2.5 },
+    { text: "3,10", score: 98, left: 68, top: 29.2, width: 8, height: 2.5 },
+    { text: "3,10", score: 98, left: 87, top: 29.55, width: 8, height: 2.5 },
     { text: "2", score: 98, left: 10, top: 35.0, width: 2, height: 2.5 },
     { text: "PRODUCTO DOS", score: 98, left: 22, top: 35.25, width: 25, height: 2.5 },
-    { text: "2,00", score: 98, left: 68, top: 36.2, width: 8, height: 2.5 },
-    { text: "4,00", score: 98, left: 87, top: 36.55, width: 8, height: 2.5 },
+    { text: "2,20", score: 98, left: 68, top: 36.2, width: 8, height: 2.5 },
+    { text: "4,40", score: 98, left: 87, top: 36.55, width: 8, height: 2.5 },
     { text: "3", score: 98, left: 10, top: 42.0, width: 2, height: 2.5 },
     { text: "PRODUCTO TRES", score: 98, left: 22, top: 42.25, width: 26, height: 2.5 },
-    { text: "1,00", score: 98, left: 68, top: 43.2, width: 8, height: 2.5 },
-    { text: "3,00", score: 98, left: 87, top: 43.55, width: 8, height: 2.5 },
+    { text: "1,10", score: 98, left: 68, top: 43.2, width: 8, height: 2.5 },
+    { text: "3,30", score: 98, left: 87, top: 43.55, width: 8, height: 2.5 },
   ],
 };
 
@@ -28,7 +28,7 @@ const normalized = normalizeReceiptRowPerspective(sloped);
 assert.notStrictEqual(normalized, sloped, "una pendiente repetida entre columnas debe normalizarse");
 const model = buildReceiptVisualModel(normalized);
 
-for (const [quantity, price, amount] of [["1", "3,00", "3,00"], ["2", "2,00", "4,00"], ["3", "1,00", "3,00"]] as const) {
+for (const [quantity, price, amount] of [["1", "3,10", "3,10"], ["2", "2,20", "4,40"], ["3", "1,10", "3,30"]] as const) {
   const quantityToken = model.tokens.find((token) => token.text === quantity);
   const priceTokens = model.tokens.filter((token) => token.text === price);
   const amountToken = amount === price ? priceTokens.at(-1) : model.tokens.find((token) => token.text === amount);
@@ -38,8 +38,8 @@ for (const [quantity, price, amount] of [["1", "3,00", "3,00"], ["2", "2,00", "4
   assert.equal(quantityToken.rowIndex, amountToken.rowIndex, `importe de fila ${quantity} no puede separarse por perspectiva residual`);
 }
 
-const rightAmounts = model.tokens.filter((token) => ["3,00", "4,00"].includes(token.text) && token.textAnchor === "end" && token.renderX > model.width * 0.8);
-assert.ok(rightAmounts.length >= 3, "los importes inclinados deben seguir formando la columna derecha");
+const rightAmounts = model.tokens.filter((token) => ["3,10", "4,40", "3,30"].includes(token.text) && token.textAnchor === "end" && token.renderX > model.width * 0.8);
+assert.equal(rightAmounts.length, 3, "los tres importes inclinados deben seguir formando la columna derecha");
 assert.equal(new Set(rightAmounts.map((token) => Math.round(token.renderX))).size, 1, "la perspectiva residual no debe romper el ancla de importes");
 
 const tooSmall: ReceiptVisualLayoutInput = {
