@@ -80,6 +80,27 @@ const grayGeometry = detectPaper(detectionData(gray), gray.width, gray.height);
 assert.ok(grayGeometry, "el fallback por bordes debe seguir detectando tickets grises");
 assert.ok(averageWidth(grayGeometry) > 480 && averageWidth(grayGeometry) < 720, "el fallback gris debe conservar la anchura física del papel");
 
+// Una sombra longitudinal puede dejar la parte superior por encima del umbral
+// de superficie clara y oscurecer la mitad inferior sin romper los bordes
+// físicos del mismo ticket. La detección luminosa aislada truncaría el papel en
+// la sombra; la geometría final debe conservar la extensión completa demostrada
+// por los bordes largos del mismo componente.
+const shadowed = createCanvas(1100, 1800);
+const shadowedCtx = shadowed.getContext("2d");
+shadowedCtx.fillStyle = "#20262c";
+shadowedCtx.fillRect(0, 0, shadowed.width, shadowed.height);
+shadowedCtx.fillStyle = "#deddd7";
+shadowedCtx.fillRect(250, 70, 600, 790);
+shadowedCtx.fillStyle = "#9f9f9b";
+shadowedCtx.fillRect(250, 860, 600, 870);
+drawRows(shadowed, 300, 800, 150, 790, 55, "#343434");
+drawRows(shadowed, 300, 800, 920, 1660, 55, "#343434");
+const shadowedGeometry = detectPaper(detectionData(shadowed), shadowed.width, shadowed.height);
+assert.ok(shadowedGeometry, "un ticket con sombra longitudinal debe seguir detectándose como un solo papel");
+assert.ok(shadowedGeometry.top < 150, "la geometría con sombra debe conservar la cabecera del papel");
+assert.ok(shadowedGeometry.bottom > 1550, "la geometría con sombra debe conservar también la mitad inferior y el pie");
+assert.ok(shadowedGeometry.bottom - shadowedGeometry.top > 1400, "la sombra no puede convertir un ticket completo en un recorte parcial");
+
 // Un ticket ya recortado hasta los bordes no se rechaza por tocar el marco de
 // la imagen. La penalización de borde es evidencia, no una prohibición.
 const cropped = createCanvas(720, 1450);
@@ -90,4 +111,4 @@ drawRows(cropped, 45, 675, 90, 1370, 51, "#333333");
 const croppedGeometry = detectPaper(detectionData(cropped), cropped.width, cropped.height);
 assert.ok(croppedGeometry, "un ticket correctamente recortado que toca bordes debe seguir siendo válido");
 
-console.log("OCR paper candidate arbitration tests OK · papel vecino excluido, ambigüedad fail-closed y fallback gris preservado");
+console.log("OCR paper candidate arbitration tests OK · papel vecino excluido, ambigüedad fail-closed, sombra longitudinal íntegra y fallback gris preservado");
