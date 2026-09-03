@@ -53,6 +53,7 @@ const recoveryBoundary=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery-de
 const page=fs.readFileSync("app/archivo/page.tsx","utf8");
 const lifecycleClient=fs.readFileSync("app/archivo/archive-lifecycle-client.tsx","utf8");
 const canonicalClient=fs.readFileSync("app/archivo/archive-client.tsx","utf8");
+const archivePayloadContract=fs.readFileSync("database/FINANCIAL_APP_9.0.0_ARCHIVE_STORAGE_PROVIDER_CONTRACT.sql","utf8");
 assert.ok(wrapper.includes('import("./archive-client")')&&!wrapper.includes("ArchiveBulkOcrRecovery"),"El núcleo activo debe cargarse diferido y no montar un segundo recuperador OCR duplicado");
 assert.ok(!wrapper.includes('from "./archive-client"')&&page.includes('from "./archive-client-shell"'),"La página debe montar el shell sin recuperar un import estático del núcleo pesado");
 assert.ok(wrapper.includes("archiveRefreshKey")&&wrapper.includes("document.updatedAt"),"router.refresh debe poder remontar el núcleo con datos OCR actualizados");
@@ -63,6 +64,8 @@ assert.ok(recoveryBoundary.includes('import("./archive-bulk-ocr-recovery")'),"El
 assert.ok(canonicalClient.includes("recognizeTicketImage(file,worker,onProgress,hint)"),"El núcleo OCR canónico debe seguir intacto en archive-client.tsx");
 assert.ok(lifecycleClient.includes('action="/api/archive/reprocess-ocr"')&&lifecycleClient.includes('method="post"'),"Cada pendiente compatible debe disponer de un fallback HTML nativo que no dependa de JavaScript");
 assert.ok(lifecycleClient.includes('name="documentId"')&&lifecycleClient.includes('Reprocesar OCR'),"El fallback nativo debe enviar de forma explícita el documento seleccionado");
+assert.ok(archivePayloadContract.includes("'storageProvider',d.storage_provider"),"El payload documental debe exponer storageProvider para que la recuperación distinga originales privados");
+assert.ok(archivePayloadContract.includes("'storageUrl',d.storage_url"),"El payload documental debe conservar el contrato storageUrl junto al proveedor canónico");
 
 const client=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 for(const token of [
@@ -105,4 +108,4 @@ assert.ok(fullOcrStart>=0&&fullOcrRace>fullOcrStart&&fullOcrWrite>fullOcrRace,"E
 assert.ok(route.includes('reason:"changed_during_reprocess"')&&route.includes('reason:"changed_during_reparse"'),"Una revisión manual concurrente debe cancelar cualquiera de las dos escrituras");
 assert.ok(route.includes("Los vínculos no se")&&route.includes("legacy pueden conservarlos"),"La ruta debe documentar explícitamente que el reprocesado legacy no modifica asociaciones");
 
-console.log("OCR bulk reprocessing tests OK · parser_v8 reutiliza evidencia v7, OCR visual solo cuando hace falta, lote secuencial, fallback nativo, sin bucles y carreras aisladas");
+console.log("OCR bulk reprocessing tests OK · payload de almacenamiento completo, parser_v8 reutiliza evidencia v7, OCR visual solo cuando hace falta, lote secuencial, fallback nativo, sin bucles y carreras aisladas");
