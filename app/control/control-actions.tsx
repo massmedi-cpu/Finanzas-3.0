@@ -6,7 +6,6 @@ import { useState,useTransition } from "react";
 import type { ControlAlertState } from "@/lib/financial/control";
 
 type Feedback={tone:"success"|"error"|"warning";message:string};
-
 type ApiErrorPayload={error?:string};
 
 async function postControl(payload:unknown){
@@ -53,7 +52,7 @@ export function ControlAlertActions({alertKey,originHref}:{alertKey:string;origi
   </>;
 }
 
-export function CloseMonthActions({month,closeReady}:{month:string;closeReady:boolean}){
+export function CloseMonthActions({month,monthLabel,closeReady}:{month:string;monthLabel:string;closeReady:boolean}){
   const router=useRouter();
   const [notes,setNotes]=useState("");
   const [busy,setBusy]=useState(false);
@@ -63,12 +62,12 @@ export function CloseMonthActions({month,closeReady}:{month:string;closeReady:bo
 
   async function closeMonth(){
     if(!closeReady){setFeedback({tone:"warning",message:"Este mes todavía tiene bloqueos que deben resolverse antes del cierre."});return;}
-    if(!window.confirm("¿Cerrar este mes? Se guardará una fotografía verificable de sus cifras y avisos."))return;
+    if(!window.confirm(`¿Cerrar ${monthLabel}? Se guardará una fotografía verificable de sus cifras y avisos.`))return;
     setBusy(true);setFeedback(null);
     try{
       await postControl({kind:"close",month,notes});
       setNotes("");
-      setFeedback({tone:"success",message:"Cierre mensual guardado."});
+      setFeedback({tone:"success",message:`Cierre de ${monthLabel} guardado.`});
       startTransition(()=>router.refresh());
     }catch(error){
       const message=error instanceof Error?error.message:"No se ha podido cerrar el mes";
@@ -83,7 +82,7 @@ export function CloseMonthActions({month,closeReady}:{month:string;closeReady:bo
   </div>;
 }
 
-export function ReopenMonthAction({month}:{month:string}){
+export function ReopenMonthAction({month,monthLabel}:{month:string;monthLabel:string}){
   const router=useRouter();
   const [busy,setBusy]=useState(false);
   const [refreshing,startTransition]=useTransition();
@@ -91,11 +90,11 @@ export function ReopenMonthAction({month}:{month:string}){
   const disabled=busy||refreshing;
 
   async function reopen(){
-    if(!window.confirm("¿Reabrir este mes? El snapshot histórico se conserva, pero el mes volverá a quedar editable para un nuevo cierre."))return;
+    if(!window.confirm(`¿Reabrir ${monthLabel}? El snapshot histórico se conserva, pero el mes volverá a quedar editable para un nuevo cierre.`))return;
     setBusy(true);setFeedback(null);
     try{
       await postControl({kind:"reopen",month});
-      setFeedback({tone:"success",message:"Mes reabierto."});
+      setFeedback({tone:"success",message:`Mes ${monthLabel} reabierto.`});
       startTransition(()=>router.refresh());
     }catch(error){
       setFeedback({tone:"error",message:error instanceof Error?error.message:"No se ha podido reabrir el mes"});
