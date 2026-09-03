@@ -1,4 +1,5 @@
-import { receiptOcrRuntime } from "./receipt-ocr-provenance";
+import { RECEIPT_OCR_METHOD_PREFIX } from "./receipt-ocr-revision";
+import { receiptOcrRuntime, receiptOcrVariant } from "./receipt-ocr-provenance";
 import { prepareServerReceiptImageBytes, type ServerPreparedReceiptImage } from "./server-receipt-image-preprocessor";
 import { recognizeServerReceiptImage } from "./server-receipt-ocr";
 import { recognizeTicketImage, type DocumentTypeHint, type ImageOcrResult } from "./ticket-ocr-engine";
@@ -26,6 +27,39 @@ function originalPreparation(bytes: Buffer, mimeType: string): ServerPreparedRec
     orientationFlattened: false,
     preprocessed: false,
     durationMs: 0,
+  };
+}
+
+function withServerPreparation(result: ImageOcrResult, preparation: ServerPreparedReceiptImage): ImageOcrResult {
+  if (!preparation.preprocessed) return result;
+  const variant = receiptOcrVariant(preparation.paperDetected);
+  const firstPass = result.passes[0] as (ImageOcrResult["passes"][number] & Record<string, unknown>) | undefined;
+  const passes = firstPass ? [{
+    ...firstPass,
+    variant,
+    paperDetected: preparation.paperDetected,
+    serverPreprocessed: true,
+    perspectiveCorrected: preparation.perspectiveCorrected,
+    deskewAngle: preparation.deskewAngle,
+    inputScaled: preparation.scaled,
+    orientationFlattened: preparation.orientationFlattened,
+    preprocessingSourceWidth: preparation.sourceWidth,
+    preprocessingSourceHeight: preparation.sourceHeight,
+    preprocessingOutputWidth: preparation.outputWidth,
+    preprocessingOutputHeight: preparation.outputHeight,
+  }, ...result.passes.slice(1)] : result.passes;
+  const metrics = result.metrics ? {
+    ...result.metrics,
+    preprocessMs: Math.max(result.metrics.preprocessMs, preparation.durationMs),
+    totalMs: result.metrics.totalMs + preparation.durationMs,
+  } : result.metrics;
+  return {
+    ...result,
+    method: `${RECEIPT_OCR_METHOD_PREFIX}${variant}`,
+    passes,
+    metrics,
+    deskewAngle: preparation.deskewAngle,
+    perspectiveCorrected: preparation.perspectiveCorrected,
   };
 }
 
@@ -81,27 +115,15 @@ export async function recognizeCanonicalReceiptBytes(
         items: recognized.items,
         metrics: recognized.metrics,
         runtime,
-        preprocessing: {
-          paperDetected: preparation.paperDetected,
-          perspectiveCorrected: preparation.perspectiveCorrected,
-          deskewAngle: preparation.deskewAngle,
-          durationMs: preparation.durationMs,
-          preprocessed: preparation.preprocessed,
-          scaled: preparation.scaled,
-          orientationFlattened: preparation.orientationFlattened,
-          sourceWidth: preparation.sourceWidth,
-          sourceHeight: preparation.sourceHeight,
-          outputWidth: preparation.outputWidth,
-          outputHeight: preparation.outputHeight,
-        },
       }];
     },
   };
 
-  return recognizeTicketImage(
+  const result = await recognizeTicketImage(
     source,
     engine,
     () => undefined,
     options.hint ?? "receipt",
   );
+  return withServerPreparation(result, preparation);
 }
