@@ -2,7 +2,9 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { SUPABASE_PUBLISHABLE_KEY,SUPABASE_URL } from "@/lib/supabase/config";
 import { asArray,asNumber,asRecord,asString,nullableString } from "@/lib/validation/json";
 import { inferDocumentMetadata,type DocumentMetadata } from "./ticket-ocr";
-import { extractServerPdfText,ServerPdfTextError } from "./server-pdf-text";
+import { extractServerPdfText,ServerPdfTextError,type ServerPdfTextResult } from "./server-pdf-text";
+import { parseReceiptLayout } from "./receipt-layout";
+import { validateReceiptFinancials } from "./receipt-financial-validator";
 import { SERVER_RECEIPT_OCR_ENGINE,SERVER_RECEIPT_OCR_MODEL,SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
 import { recognizeCanonicalReceiptBytes } from "./server-canonical-receipt";
 import { ServerReceiptOcrError } from "./server-receipt-ocr";
@@ -28,6 +30,7 @@ function merchantAgrees(left:string,right:string){const a=norm(left),b=norm(righ
 function mergedMetadata(claim:Claim,inferred:DocumentMetadata):DocumentMetadata{
   return{documentType:inferred.documentType!=="other"?inferred.documentType:claim.documentType||"other",documentDate:inferred.documentDate||claim.documentDate,amount:inferred.amount??claim.amount,merchant:inferred.merchant||claim.merchant,lines:inferred.lines};
 }
+function claimMetadata(claim:Claim):DocumentMetadata{return{documentType:claim.documentType,documentDate:claim.documentDate,amount:claim.amount,merchant:claim.merchant,lines:[]};}
 function completeMetadata(meta:DocumentMetadata){return meta.documentType!=="other"&&Boolean(meta.documentDate)&&meta.amount!=null&&Number.isFinite(meta.amount)&&Boolean(meta.merchant?.trim());}
 function imageAgreement(claim:Claim,inferred:DocumentMetadata){
   let compared=0,agreed=0;
@@ -36,6 +39,19 @@ function imageAgreement(claim:Claim,inferred:DocumentMetadata){
   if(claim.merchant&&inferred.merchant){compared++;if(merchantAgrees(claim.merchant,inferred.merchant))agreed++;}
   if(claim.documentType&&claim.documentType!=="other"&&inferred.documentType!=="other"){compared++;if(claim.documentType===inferred.documentType)agreed++;}
   return{compared,agreed};
+}
+function pdfMethod(pdf:ServerPdfTextResult){
+  if(pdf.sourceMode==="pdf_hybrid")return"drive_auto_pdf_hybrid_tesseract_v2";
+  if(pdf.sourceMode==="pdf_ocr")return"drive_auto_pdf_ocr_tesseract_v2";
+  if(pdf.sourceMode==="pdf_incomplete")return"drive_auto_pdf_incomplete_v2";
+  return"drive_auto_pdf_text_v1";
+}
+function pdfEvidence(pdf:ServerPdfTextResult,claim:Claim){
+  const visual=pdf.ocrPages.length>0;
+  return{
+    ...(visual?{engine:SERVER_RECEIPT_OCR_ENGINE,model:SERVER_RECEIPT_OCR_MODEL,runtime:SERVER_RECEIPT_OCR_RUNTIME}:{}),
+    method:pdfMethod(pdf),automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,completeCoverage:pdf.completeCoverage,sourceMode:pdf.sourceMode,nativePages:pdf.nativePages,ocrPages:pdf.ocrPages,missingPages:pdf.missingPages,confidence:pdf.confidence,textCharacters:pdf.text.length,pageSources:pdf.pages.map(page=>({pageNumber:page.pageNumber,source:page.source,textCharacters:page.textCharacters,confidence:page.confidence,reason:page.reason})),
+  };
 }
 async function markFailure(supabase:SupabaseClient,claim:Claim,errorCode:string,retryable:boolean){
   await supabase.rpc("financial_app_drive_document_hydration_fail",{p_document_id:claim.documentId,p_source_modified_at:claim.sourceModifiedAt,p_error_code:errorCode,p_retryable:retryable});
@@ -54,14 +70,14 @@ async function sourceBytes(accessToken:string,claim:Claim){
 async function processClaim(supabase:SupabaseClient,accessToken:string,claim:Claim){
   const bytes=await sourceBytes(accessToken,claim);
   if(claim.mimeType==="application/pdf"){
-    const pdf=await extractServerPdfText(bytes);
+    const pdf=await extractServerPdfText(bytes);const evidence=pdfEvidence(pdf,claim);
     if(!pdf.useful){
-      const meta:DocumentMetadata={documentType:claim.documentType,documentDate:claim.documentDate,amount:claim.amount,merchant:claim.merchant,lines:[]};
-      await complete(supabase,claim,meta,"",{method:"drive_auto_pdf_scan_pending_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,reason:"scanned_pdf_requires_visual_ocr"},"needs_review");
+      const inferred=pdf.text?inferDocumentMetadata(pdf.text,claim.documentType==="receipt"?"receipt":null):null;const meta=inferred?mergedMetadata(claim,inferred):claimMetadata(claim);
+      await complete(supabase,claim,meta,pdf.text,{...evidence,reason:pdf.truncated?"pdf_truncated":pdf.missingPages.length?"pdf_page_coverage_incomplete":"pdf_text_insufficient"},"needs_review");
       return"review" as const;
     }
-    const inferred=inferDocumentMetadata(pdf.text,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const status=completeMetadata(meta)?"complete":"needs_review";
-    await complete(supabase,claim,meta,pdf.text,{method:"drive_auto_pdf_text_v1",automaticOnSync:true,sourceModifiedAt:claim.sourceModifiedAt,pagesRead:pdf.pagesRead,totalPages:pdf.totalPages,truncated:pdf.truncated,textCharacters:pdf.text.length},status);
+    const inferred=inferDocumentMetadata(pdf.text,claim.documentType==="receipt"?"receipt":null);const meta=mergedMetadata(claim,inferred);const receiptLayout=meta.documentType==="receipt"?parseReceiptLayout(pdf.text):null;const validation=receiptLayout?validateReceiptFinancials(receiptLayout,[pdf.text]):null;const financiallyValid=meta.documentType!=="receipt"||validation?.status==="complete";const status=completeMetadata(meta)&&pdf.completeCoverage&&financiallyValid?"complete":"needs_review";
+    await complete(supabase,claim,meta,pdf.text,{...evidence,receiptLayout,validation,financiallyValid},status);
     return status==="complete"?"completed" as const:"review" as const;
   }
   if(claim.mimeType.startsWith("image/")){
