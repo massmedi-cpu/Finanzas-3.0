@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createCanvas } from "@napi-rs/canvas/node-canvas";
 import {
+  normalizeReceiptLuminanceRows,
   prepareServerReceiptImageBytes,
   serverJpegExifOrientation,
   serverReceiptOcrSize,
@@ -28,8 +29,29 @@ function addExifOrientation(source: Buffer, orientation: number) {
 
 assert.deepEqual(serverReceiptOcrSize(520,1040),{width:1000,height:2000},"Drive debe recuperar la misma densidad de una captura pequeña que cámara/galería");
 assert.deepEqual(serverReceiptOcrSize(300,600),{width:600,height:1200},"el aumento servidor debe conservar el límite 2x");
-assert.deepEqual(serverReceiptOcrSize(4080,3072),{width:3400,height:2560},"las fotos grandes deben conservar el mismo techo de 3400px");
+const boundedLarge=serverReceiptOcrSize(4080,3072);
+assert.deepEqual(boundedLarge,{width:2524,height:1901},"una foto grande debe acotarse también por píxeles y no solo por lado máximo");
+assert.ok(boundedLarge.width*boundedLarge.height<=4_800_000,"la entrada raster de OCR debe mantener un techo de memoria predecible");
 assert.deepEqual(serverReceiptOcrSize(1600,1200),{width:1600,height:1200},"una imagen con densidad adecuada no debe reescalarse");
+
+const localWidth=80;
+const localHeight=80;
+const localPixels=new Uint8ClampedArray(localWidth*localHeight*4);
+for(let y=0;y<localHeight;y+=1){
+  const background=y<40?235:145;
+  const ink=y<40?95:78;
+  for(let x=0;x<localWidth;x+=1){
+    const value=y%8<3&&x>=10&&x<70?ink:background;
+    const offset=(y*localWidth+x)*4;
+    localPixels[offset]=localPixels[offset+1]=localPixels[offset+2]=value;
+    localPixels[offset+3]=255;
+  }
+}
+normalizeReceiptLuminanceRows(localPixels,localWidth,localHeight);
+const localLuma=(x:number,y:number)=>localPixels[(y*localWidth+x)*4];
+assert.ok(localLuma(5,50)>=185,"una mitad inferior sombreada debe recuperar un fondo claro útil para OCR");
+assert.ok(localLuma(5,50)-localLuma(20,50)>=70,"la compensación local debe conservar el contraste de tinta dentro de la sombra");
+assert.ok(localLuma(5,10)-localLuma(20,10)>=100,"la zona ya bien iluminada no debe perder jerarquía de tinta");
 
 const photo=createCanvas(800,1200);
 const ctx=photo.getContext("2d");
@@ -91,12 +113,16 @@ assert.notDeepEqual(flattened.bytes,exifBytes,"los bytes EXIF rotados no pueden 
 
 const canonical=fs.readFileSync("lib/document/server-canonical-receipt.ts","utf8");
 const hydration=fs.readFileSync("lib/document/drive-content-hydration.ts","utf8");
+const preprocessor=fs.readFileSync("lib/document/server-receipt-image-preprocessor.ts","utf8");
 const config=fs.readFileSync("next.config.ts","utf8");
 const lock=fs.readFileSync("package-lock.json","utf8");
 assert.ok(canonical.includes("prepareServerReceiptImageBytes"),"el OCR canónico servidor debe ejecutar el acondicionamiento antes de Tesseract");
 assert.ok(canonical.includes("withServerPreparation"),"la procedencia debe registrar el preprocesado servidor real");
 assert.ok(hydration.includes("recognizeCanonicalReceiptBytes(bytes"),"Drive debe seguir entrando por el OCR canónico compartido");
+assert.ok(preprocessor.includes("DETECTION_MAX_PIXELS")&&preprocessor.includes("OCR_MAX_PIXELS"),"el servidor debe acotar los rasteres intermedios por píxeles, no solo por lado");
+assert.ok(preprocessor.includes("const sampleCanvas = drawSource(createCanvas, source, width, height)")&&!preprocessor.includes("getImageData(0, 0, source.width, source.height)"),"el deskew no debe duplicar en memoria el raster completo para tomar muestras");
+assert.ok(preprocessor.includes("normalizeReceiptLuminanceRows"),"la preparación servidor debe compensar iluminación longitudinal antes de la única inferencia");
 assert.ok(config.includes("'./node_modules/@napi-rs/canvas/**/*'"),"/api/sync debe trazar el canvas servidor usado por Drive");
 assert.ok(lock.includes('\"node_modules/@napi-rs/canvas\"')&&lock.includes('\"version\": \"1.0.7\"'),"el canvas servidor debe estar fijado en el lockfile reproducible");
 
-console.log("server receipt image preprocessing tests OK · Drive y cámara comparten aislamiento, orientación y densidad antes de una sola inferencia");
+console.log("server receipt image preprocessing tests OK · aislamiento, luz local, memoria, orientación y densidad antes de una sola inferencia");
