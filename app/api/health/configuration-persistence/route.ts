@@ -1,4 +1,5 @@
 import { createEdgeConfigurationService } from "../../../../src/infrastructure/persistence/edge-configuration-runtime";
+import { callPersistenceGateway } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import type { Clock, IdentityProvider } from "../../../../src/application/configuration-service";
 
 export const dynamic = "force-dynamic";
@@ -9,7 +10,15 @@ const TEST_IDS = {
   sourceCategory: "20000000-0000-4000-8000-000000000002",
 } as const;
 
+async function cleanup() {
+  await callPersistenceGateway<{ ok: true }>("test.cleanup");
+}
+
 export async function GET() {
+  if (process.env.VERCEL_ENV !== "preview") {
+    return Response.json({ error: "preview_only" }, { status: 404 });
+  }
+
   const ids = [TEST_IDS.account, TEST_IDS.targetCategory, TEST_IDS.sourceCategory];
   let idIndex = 0;
   let tick = 0;
@@ -23,25 +32,20 @@ export async function GET() {
   };
 
   try {
+    await cleanup();
     const service = createEdgeConfigurationService({ identities, clock });
+
     const [beforeAccounts, beforeCategories] = await Promise.all([
       service.listAccounts(),
       service.listCategories(),
     ]);
 
-    const occupied =
-      beforeAccounts.some((account) => account.id === TEST_IDS.account) ||
-      beforeCategories.some(
+    const cleanStart =
+      !beforeAccounts.some((account) => account.id === TEST_IDS.account) &&
+      !beforeCategories.some(
         (category) =>
           category.id === TEST_IDS.targetCategory || category.id === TEST_IDS.sourceCategory,
       );
-
-    if (occupied) {
-      return Response.json(
-        { status: "failed", reason: "test_ids_already_present", testIds: TEST_IDS },
-        { status: 409 },
-      );
-    }
 
     const createdAccount = await service.createAccount({
       name: "  Cuenta   validación runtime  ",
@@ -97,6 +101,7 @@ export async function GET() {
     const rereadSource = afterCategories.find((category) => category.id === source.id);
 
     const checks = [
+      { name: "clean-test-start", passed: cleanStart },
       {
         name: "account-created-and-normalized",
         passed:
@@ -104,27 +109,23 @@ export async function GET() {
           createdAccount.name === "Cuenta validación runtime" &&
           createdAccount.currency === "EUR",
       },
-      {
-        name: "account-updated",
-        passed: updatedAccount.institution === "Banco temporal actualizado",
-      },
+      { name: "account-updated", passed: updatedAccount.institution === "Banco temporal actualizado" },
       {
         name: "account-archived-and-reread",
         passed: archivedAccount.lifecycle === "archived" && rereadAccount?.lifecycle === "archived",
       },
       {
-        name: "categories-created",
+        name: "categories-created-and-reordered",
         passed:
-          target.id === TEST_IDS.targetCategory && source.id === TEST_IDS.sourceCategory,
+          target.id === TEST_IDS.targetCategory &&
+          source.id === TEST_IDS.sourceCategory &&
+          rereadTarget?.sortOrder === 1,
       },
       {
         name: "category-merge-reread",
         passed: rereadTarget?.lifecycle === "active" && rereadSource?.lifecycle === "archived",
       },
-      {
-        name: "database-roundtrip",
-        passed: Boolean(rereadAccount && rereadTarget && rereadSource),
-      },
+      { name: "database-roundtrip", passed: Boolean(rereadAccount && rereadTarget && rereadSource) },
     ];
 
     const passed = checks.filter((check) => check.passed).length;
@@ -134,7 +135,6 @@ export async function GET() {
         passed,
         total: checks.length,
         checks,
-        testIds: TEST_IDS,
       },
       {
         status: passed === checks.length ? 200 : 500,
@@ -146,9 +146,15 @@ export async function GET() {
       "configuration-persistence-health",
       error instanceof Error ? error.message : String(error),
     );
-    return Response.json(
-      { status: "failed", reason: "roundtrip_error", testIds: TEST_IDS },
-      { status: 500 },
-    );
+    return Response.json({ status: "failed", reason: "roundtrip_error" }, { status: 500 });
+  } finally {
+    try {
+      await cleanup();
+    } catch (cleanupError) {
+      console.error(
+        "configuration-persistence-cleanup",
+        cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      );
+    }
   }
 }
