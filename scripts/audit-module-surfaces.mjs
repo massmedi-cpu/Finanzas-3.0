@@ -66,16 +66,24 @@ for(const token of [
 for(const legacy of ["rules-feedback","rule-status",'className="text-link"']) must(!rules.includes(legacy),`Reglas ha recuperado clase legacy ${legacy}`);
 
 const control=read("app/control/control-client.tsx");
+const controlActions=read("app/control/control-actions.tsx");
+for(const token of [
+  'className={`status-badge ${severityTone[alert.severity]}`}',
+  'className={`status-badge ${stateTone[alert.state]}`}',
+  'className="control-empty compact"',
+]) must(control.includes(token),`Control ha perdido contrato canónico de presentación: ${token}`);
 for(const token of [
   'type Feedback={tone:"success"|"error"|"warning";message:string}',
   'className={`inline-alert ${feedback.tone} module-feedback`}',
-  'className={`status-badge ${severityTone[alert.severity]}`}',
-  'className={`status-badge ${stateTone[alert.state]}`}',
   'className="text-button button-link"',
-  'className="control-empty compact"',
-  'aria-busy={loading?"true":undefined}',
-]) must(control.includes(token),`Control ha perdido contrato canónico: ${token}`);
-for(const legacy of ["control-feedback","severity-badge","alert-state","close-status",'className="text-link"']) must(!control.includes(legacy),`Control ha recuperado clase legacy ${legacy}`);
+  'aria-busy={disabled?"true":undefined}',
+]) must(controlActions.includes(token),`Control ha perdido contrato canónico de interacción: ${token}`);
+must(!/^\s*["']use client["'];/m.test(control),"Control no debe volver a hidratar el snapshot financiero completo");
+must(/^\s*["']use client["'];/m.test(controlActions),"Control debe mantener sus mutaciones en una frontera cliente explícita");
+for(const legacy of ["control-feedback","severity-badge","alert-state","close-status",'className="text-link"']){
+  must(!control.includes(legacy),`Control ha recuperado clase legacy ${legacy}`);
+  must(!controlActions.includes(legacy),`Acciones de Control han recuperado clase legacy ${legacy}`);
+}
 
 if(failures.length){console.error("Module surfaces audit FAILED");for(const failure of failures)console.error(`- ${failure}`);process.exit(1)}
-console.log("Module surfaces audit OK · toolbars/paneles/vacíos compartidos · feedback y badges canónicos · CSS limitado a Presupuesto/Objetivos/Reglas/Control");
+console.log("Module surfaces audit OK · toolbars/paneles/vacíos compartidos · feedback y badges canónicos · Control server-first con mutaciones cliente aisladas · CSS limitado a Presupuesto/Objetivos/Reglas/Control");
