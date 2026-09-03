@@ -33,13 +33,6 @@ export type ServerPreparedReceiptImage = {
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
-function median(values: number[]) {
-  if (!values.length) return 0;
-  const ordered = [...values].sort((a, b) => a - b);
-  const middle = Math.floor(ordered.length / 2);
-  return ordered.length % 2 ? ordered[middle] : (ordered[middle - 1] + ordered[middle]) / 2;
-}
-
 function detectionSize(width: number, height: number) {
   let scale = width < 1200 ? Math.min(1.35, 1500 / Math.max(1, width)) : 1;
   if (width * scale > DETECTION_MAX_WIDTH) scale = DETECTION_MAX_WIDTH / width;
