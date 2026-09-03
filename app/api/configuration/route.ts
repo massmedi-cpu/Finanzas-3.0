@@ -1,9 +1,9 @@
-import { ConfigurationValidationError } from "../../src/application/configuration-commands";
-import { ConfigurationNotFoundError } from "../../src/application/configuration-service";
-import type { AccountDraft, CategoryDraft } from "../../src/domain/configuration";
-import type { EntityId } from "../../src/domain/models";
-import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
-import { createEdgeConfigurationService } from "../../src/infrastructure/persistence/edge-configuration-runtime";
+import { ConfigurationValidationError } from "../../../src/application/configuration-commands";
+import { ConfigurationNotFoundError } from "../../../src/application/configuration-service";
+import type { AccountDraft, CategoryDraft } from "../../../src/domain/configuration";
+import type { EntityId } from "../../../src/domain/models";
+import { PersistenceGatewayError } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { createEdgeConfigurationService } from "../../../src/infrastructure/persistence/edge-configuration-runtime";
 
 export const dynamic = "force-dynamic";
 
