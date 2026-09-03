@@ -34,6 +34,9 @@ type PaperEdgeLine = {
   score: number;
 };
 
+const AMBIGUOUS_PAPER = Symbol("ambiguous-paper");
+type LightPaperDetection = PaperGeometry | typeof AMBIGUOUS_PAPER | null;
+
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 const median = (values: number[]) => {
   if (!values.length) return 0;
@@ -58,13 +61,15 @@ function neutralLuminance(red: number, green: number, blue: number) {
  * claros de la fotografía. Esto evita incorporar carteles, pantallas, sobres u
  * otras superficies claras con texto que estén detrás del ticket.
  */
-function detectPaperFromLightRuns(data: ImageData, width: number, height: number): PaperGeometry | null {
+function detectPaperFromLightRuns(data: ImageData, width: number, height: number): LightPaperDetection {
   const step = Math.max(4, Math.floor(Math.max(width, height) / 700));
   const rows = Math.ceil(height / step);
   const columns = Math.ceil(width / step);
 
   // Umbral adaptado a la iluminación de la foto. Solo se calcula con muestras
   // relativamente neutras para no confundir superficies de color con papel.
+  // El techo evita que una segunda hoja muy blanca vuelva invisible un ticket
+  // térmico algo más gris situado en la misma fotografía.
   const neutralSamples: number[] = [];
   const sampleStrideY = Math.max(1, Math.floor(rows / 90));
   const sampleStrideX = Math.max(1, Math.floor(columns / 90));
@@ -77,7 +82,7 @@ function detectPaperFromLightRuns(data: ImageData, width: number, height: number
       if (sample.chroma <= 90) neutralSamples.push(sample.luminance);
     }
   }
-  const luminanceThreshold = clamp(Math.round(quantile(neutralSamples, 0.65) + 18), 140, 205);
+  const luminanceThreshold = clamp(Math.round(quantile(neutralSamples, 0.65) + 18), 140, 195);
   const maxGapCells = Math.max(1, Math.round(columns * 0.012));
   const minimumRunWidth = Math.max(step * 4, Math.round(width * 0.22));
   const rowRuns: PaperSpan[][] = [];
@@ -205,10 +210,19 @@ function detectPaperFromLightRuns(data: ImageData, width: number, height: number
       + medianWidth / width * 0.25
       - borderTouches * 0.95;
 
-    return [{ track, score }];
+    return [{ track, score, center, medianWidth }];
   }).sort((a, b) => b.score - a.score);
 
-  const best = candidates[0]?.track;
+  const first = candidates[0];
+  const second = candidates[1];
+  if (first && second) {
+    const centerDistance = Math.abs(first.center - second.center);
+    const distinct = centerDistance > Math.max(1, Math.min(first.medianWidth, second.medianWidth) * 0.7);
+    const relativeMargin = (first.score - second.score) / Math.max(1, Math.abs(first.score));
+    if (distinct && relativeMargin < 0.03) return AMBIGUOUS_PAPER;
+  }
+
+  const best = first?.track;
   if (!best) return null;
   const spans = best.spans;
   const top = spans[0].y;
@@ -398,7 +412,10 @@ function detectPaperFromLongEdges(data: ImageData, width: number, height: number
 }
 
 export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
-  return detectPaperFromLongEdges(data, width, height) || detectPaperFromLightRuns(data, width, height);
+  const light = detectPaperFromLightRuns(data, width, height);
+  if (light === AMBIGUOUS_PAPER) return null;
+  if (light) return light;
+  return detectPaperFromLongEdges(data, width, height);
 }
 
 function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null) {
