@@ -37,14 +37,26 @@ export function resolveEffectiveTransaction(
     throw new RangeError("La modificación no pertenece al movimiento indicado");
   }
 
+  const merchantId = override
+    ? override.merchantOverrideSet === true
+      ? override.merchantIdOverride
+      : (override.merchantIdOverride ?? transaction.merchantId)
+    : transaction.merchantId;
+
+  const categoryId = override
+    ? override.categoryOverrideSet === true
+      ? override.categoryIdOverride
+      : (override.categoryIdOverride ?? transaction.categoryId)
+    : transaction.categoryId;
+
   return {
     id: transaction.id,
     sourceRecordId: transaction.sourceRecordId,
     accountId: transaction.accountId,
     bankDate: transaction.bankDate,
     concept: override?.conceptOverride ?? transaction.conceptNormalized,
-    merchantId: override?.merchantIdOverride ?? transaction.merchantId,
-    categoryId: override?.categoryIdOverride ?? transaction.categoryId,
+    merchantId,
+    categoryId,
     kind: override?.kindOverride ?? transaction.kind,
     amountCents: transaction.amountCents,
     balanceAfterCents: transaction.balanceAfterCents,
