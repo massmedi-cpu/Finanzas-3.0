@@ -21,6 +21,9 @@ const pdfRenderRuntimeAssets = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Native canvas contains platform binaries and must stay a Node dependency;
+  // Turbopack must not try to place its binding inside ESM chunks.
+  serverExternalPackages: ['@napi-rs/canvas'],
   outputFileTracingIncludes: {
     '/api/ocr/receipt': ocrRuntimeAssets,
     '/api/sync': [...ocrRuntimeAssets, ...pdfRenderRuntimeAssets],
