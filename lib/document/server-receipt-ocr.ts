@@ -97,7 +97,12 @@ function wordsFromTsv(tsv:unknown){
   return items;
 }
 async function recognizeExclusive(bytes:Buffer,timeoutMs:number,queueTimeoutMs:number){
-  return withExclusiveOcr(async()=>{try{const worker=await withTimeout(getWorker(),timeoutMs,"ocr_worker");return await withTimeout(worker.recognize(bytes,{}, {text:true,blocks:true,tsv:true}),timeoutMs,"ocr_recognize")}catch(failure){if(failure instanceof TimeoutError||failure instanceof Error)invalidateWorker();throw failure}},queueTimeoutMs);
+  return withExclusiveOcr(async()=>{try{
+    const worker=await withTimeout(getWorker(),timeoutMs,"ocr_worker");
+    // Mantiene una sola inferencia, pero permite a Tesseract corregir una
+    // orientación residual si los metadatos EXIF o el origen no la aplanaron.
+    return await withTimeout(worker.recognize(bytes,{rotateAuto:true},{text:true,blocks:true,tsv:true}),timeoutMs,"ocr_recognize");
+  }catch(failure){if(failure instanceof TimeoutError||failure instanceof Error)invalidateWorker();throw failure}},queueTimeoutMs);
 }
 
 export async function recognizeServerReceiptImage(bytes:Buffer,options:ServerReceiptOcrOptions={}):Promise<ServerReceiptOcrResult>{
