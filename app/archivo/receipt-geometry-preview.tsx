@@ -2,6 +2,7 @@ import { receiptFontProfile } from "@/lib/document/receipt-font-profile";
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
 import { receiptMoneyDisplayText } from "@/lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
+import { normalizeReceiptRowPerspective } from "@/lib/document/receipt-row-perspective";
 import { buildReceiptVisualRules } from "@/lib/document/receipt-visual-rules";
 import { receiptTextLength } from "@/lib/document/receipt-text-fit";
 
@@ -48,7 +49,8 @@ export function isReceiptVisualLayout(value: unknown): value is VisualLayout {
 
 export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
   const physicalLayout = receiptPhysicalPreviewLayout(layout);
-  const visual = buildReceiptVisualModel(physicalLayout);
+  const geometryLayout = normalizeReceiptRowPerspective(physicalLayout);
+  const visual = buildReceiptVisualModel(geometryLayout);
   const rules = buildReceiptVisualRules(physicalLayout);
   const fontProfile = receiptFontProfile(physicalLayout);
 
@@ -86,13 +88,7 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
           fontSize: token.fontSize,
           explicitTextLength: token.textLength,
         });
-        // Las filas centradas conservan el centro físico medido. El modelo puede
-        // clasificarlas como centradas para anclaje tipográfico, pero no debe
-        // desplazarlas artificialmente al centro perfecto si el papel no lo hizo.
         const renderX = token.textAnchor === "middle" ? token.centerX : token.renderX;
-        // En impresión monoespaciada la caja OCR aporta evidencia suficiente para
-        // usar una familia mono; el texto normal baja a peso 500 para no engordar
-        // artificialmente tickets térmicos. Cabeceras/totales 700 se conservan.
         const fontWeight = fontProfile.monospace && token.fontWeight === 600
           ? fontProfile.regularWeight
           : token.fontWeight;
