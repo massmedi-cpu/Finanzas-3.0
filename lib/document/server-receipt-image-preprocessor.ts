@@ -48,7 +48,7 @@ function scaledDimensions(width: number, height: number, scale: number) {
 
 function pixelScale(width: number, height: number, maxPixels: number) {
   const pixels = width * height;
-  if (!pixels || pixels <= maxPixels) return 1;
+  if (!pixels) return 1;
   return Math.sqrt(maxPixels / pixels);
 }
 
