@@ -2,7 +2,9 @@ import { detectPaper, estimateDeskewFromSamples } from "./receipt-image-preproce
 
 const DETECTION_MAX_WIDTH = 2100;
 const DETECTION_MAX_HEIGHT = 3600;
+const DETECTION_MAX_PIXELS = 3_200_000;
 const OCR_MAX_SIDE = 3400;
+const OCR_MAX_PIXELS = 4_800_000;
 const OCR_MIN_SHORT_SIDE = 1000;
 const OCR_MAX_UPSCALE = 2;
 const MIN_COMPRESSED_SIDE = 1200;
@@ -32,32 +34,52 @@ export type ServerPreparedReceiptImage = {
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+const luminanceAt = (data: Uint8ClampedArray, offset: number) => (
+  data[offset] * 0.2126 + data[offset + 1] * 0.7152 + data[offset + 2] * 0.0722
+);
+
+function scaledDimensions(width: number, height: number, scale: number) {
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) return { width, height };
+  return {
+    width: Math.max(1, Math.floor(width * scale)),
+    height: Math.max(1, Math.floor(height * scale)),
+  };
+}
+
+function pixelScale(width: number, height: number, maxPixels: number) {
+  const pixels = width * height;
+  if (!pixels || pixels <= maxPixels) return 1;
+  return Math.sqrt(maxPixels / pixels);
+}
 
 function detectionSize(width: number, height: number) {
   let scale = width < 1200 ? Math.min(1.35, 1500 / Math.max(1, width)) : 1;
-  if (width * scale > DETECTION_MAX_WIDTH) scale = DETECTION_MAX_WIDTH / width;
-  if (height * scale > DETECTION_MAX_HEIGHT) scale = Math.min(scale, DETECTION_MAX_HEIGHT / height);
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-  };
+  scale = Math.min(
+    scale,
+    DETECTION_MAX_WIDTH / Math.max(1, width),
+    DETECTION_MAX_HEIGHT / Math.max(1, height),
+    pixelScale(width, height, DETECTION_MAX_PIXELS),
+  );
+  return scaledDimensions(width, height, scale);
 }
 
 export function serverReceiptOcrSize(width: number, height: number) {
   const largest = Math.max(width, height);
   const shortest = Math.min(width, height);
   if (!largest || !shortest) return { width, height };
-  let scale = 1;
-  if (largest > OCR_MAX_SIDE) {
-    scale = OCR_MAX_SIDE / largest;
-  } else if (shortest < OCR_MIN_SHORT_SIDE) {
-    scale = Math.min(OCR_MAX_UPSCALE, OCR_MIN_SHORT_SIDE / shortest, OCR_MAX_SIDE / largest);
+  const maxAllowedScale = Math.min(
+    OCR_MAX_SIDE / largest,
+    pixelScale(width, height, OCR_MAX_PIXELS),
+  );
+  let scale = Math.min(1, maxAllowedScale);
+  if (scale >= 0.999 && shortest < OCR_MIN_SHORT_SIDE) {
+    scale = Math.min(
+      OCR_MAX_UPSCALE,
+      OCR_MIN_SHORT_SIDE / shortest,
+      maxAllowedScale,
+    );
   }
-  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) return { width, height };
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-  };
+  return scaledDimensions(width, height, scale);
 }
 
 function readUint16(view: DataView, offset: number, littleEndian: boolean) {
@@ -151,24 +173,19 @@ function rectifyPaper(createCanvas: CanvasModule["createCanvas"], source: Server
   return { canvas: output, corrected };
 }
 
-function darkSamples(source: ServerCanvas) {
+function darkSamples(createCanvas: CanvasModule["createCanvas"], source: ServerCanvas) {
   const maxSide = 900;
   const scale = Math.min(1, maxSide / Math.max(source.width, source.height));
   const width = Math.max(1, Math.round(source.width * scale));
   const height = Math.max(1, Math.round(source.height * scale));
-  const context = source.getContext("2d");
-  const full = context.getImageData(0, 0, source.width, source.height);
+  const sampleCanvas = drawSource(createCanvas, source, width, height);
+  const sample = sampleCanvas.getContext("2d").getImageData(0, 0, width, height);
   const points: Array<{ x: number; y: number }> = [];
   const stride = Math.max(1, Math.round(Math.max(width, height) / 700));
-  const sourceStrideX = source.width / width;
-  const sourceStrideY = source.height / height;
   for (let y = 0; y < height; y += stride) {
-    const sourceY = Math.min(source.height - 1, Math.round(y * sourceStrideY));
     for (let x = 0; x < width; x += stride) {
-      const sourceX = Math.min(source.width - 1, Math.round(x * sourceStrideX));
-      const offset = (sourceY * source.width + sourceX) * 4;
-      const luminance = full.data[offset] * 0.2126 + full.data[offset + 1] * 0.7152 + full.data[offset + 2] * 0.0722;
-      if (luminance < 150) points.push({ x, y });
+      const offset = (y * width + x) * 4;
+      if (luminanceAt(sample.data, offset) < 150) points.push({ x, y });
     }
   }
   if (points.length > 18000) {
@@ -179,7 +196,7 @@ function darkSamples(source: ServerCanvas) {
 }
 
 function deskew(createCanvas: CanvasModule["createCanvas"], source: ServerCanvas) {
-  const sample = darkSamples(source);
+  const sample = darkSamples(createCanvas, source);
   const angle = estimateDeskewFromSamples(sample.points, sample.width, sample.height);
   if (!angle) return { canvas: source, angle: 0 };
   const radians = (-angle * Math.PI) / 180;
@@ -198,26 +215,82 @@ function deskew(createCanvas: CanvasModule["createCanvas"], source: ServerCanvas
   return { canvas: output, angle };
 }
 
-function contrastStretch(source: ServerCanvas) {
-  const context = source.getContext("2d");
-  const data = context.getImageData(0, 0, source.width, source.height);
-  const luminances: number[] = [];
-  const every = Math.max(1, Math.floor((source.width * source.height) / 30000));
-  for (let pixel = 0; pixel < source.width * source.height; pixel += every) {
+function percentile(values: number[], ratio: number, fallback: number) {
+  if (!values.length) return fallback;
+  values.sort((a, b) => a - b);
+  return values[Math.min(values.length - 1, Math.max(0, Math.floor(values.length * ratio)))] ?? fallback;
+}
+
+/**
+ * Compensa gradientes longitudinales de iluminación sin binarizar el ticket.
+ * El fondo del papel se estima por fila usando percentiles claros y se suaviza;
+ * después se aplica una corrección limitada y un contraste global sobre la
+ * luminancia ya normalizada. Mantiene una sola imagen y una sola inferencia OCR.
+ */
+export function normalizeReceiptLuminanceRows(data: Uint8ClampedArray, width: number, height: number) {
+  if (width < 1 || height < 1 || data.length < width * height * 4) return data;
+  const rowBackground = new Float64Array(height);
+  const xStep = Math.max(1, Math.floor(width / 128));
+  for (let y = 0; y < height; y += 1) {
+    const samples: number[] = [];
+    for (let x = 0; x < width; x += xStep) {
+      samples.push(luminanceAt(data, (y * width + x) * 4));
+    }
+    rowBackground[y] = percentile(samples, 0.84, 230);
+  }
+
+  const radius = clamp(Math.round(height / 80), 3, 48);
+  const prefix = new Float64Array(height + 1);
+  for (let y = 0; y < height; y += 1) prefix[y + 1] = prefix[y] + rowBackground[y];
+  const smooth = new Float64Array(height);
+  for (let y = 0; y < height; y += 1) {
+    const start = Math.max(0, y - radius);
+    const end = Math.min(height, y + radius + 1);
+    smooth[y] = (prefix[end] - prefix[start]) / Math.max(1, end - start);
+  }
+
+  const backgrounds = Array.from(smooth);
+  const targetBackground = clamp(percentile([...backgrounds], 0.75, 230), 185, 245);
+  const lowBackground = percentile([...backgrounds], 0.10, targetBackground);
+  const highBackground = percentile([...backgrounds], 0.90, targetBackground);
+  const compensate = highBackground - lowBackground >= 12;
+  const correction = new Float64Array(height);
+  for (let y = 0; y < height; y += 1) {
+    correction[y] = compensate ? clamp(targetBackground - smooth[y], -45, 95) : 0;
+  }
+
+  const correctedSamples: number[] = [];
+  const pixelCount = width * height;
+  const every = Math.max(1, Math.floor(pixelCount / 30000));
+  for (let pixel = 0; pixel < pixelCount; pixel += every) {
     const offset = pixel * 4;
-    luminances.push(Math.round(data.data[offset] * 0.2126 + data.data[offset + 1] * 0.7152 + data.data[offset + 2] * 0.0722));
+    const raw = luminanceAt(data, offset);
+    const y = Math.floor(pixel / width);
+    const weight = 0.45 + 0.55 * (raw / 255);
+    correctedSamples.push(clamp(raw + correction[y] * weight, 0, 255));
   }
-  luminances.sort((a, b) => a - b);
-  const low = luminances[Math.floor(luminances.length * 0.03)] ?? 0;
-  const high = luminances[Math.floor(luminances.length * 0.97)] ?? 255;
-  const span = Math.max(40, high - low);
-  for (let offset = 0; offset < data.data.length; offset += 4) {
-    const raw = data.data[offset] * 0.2126 + data.data[offset + 1] * 0.7152 + data.data[offset + 2] * 0.0722;
-    const value = clamp(Math.round(((raw - low) / span) * 255), 0, 255);
-    data.data[offset] = data.data[offset + 1] = data.data[offset + 2] = value;
-    data.data[offset + 3] = 255;
+  const low = percentile(correctedSamples, 0.03, 0);
+  const high = percentile(correctedSamples, 0.97, 255);
+  const span = Math.max(48, high - low);
+
+  for (let pixel = 0; pixel < pixelCount; pixel += 1) {
+    const offset = pixel * 4;
+    const raw = luminanceAt(data, offset);
+    const y = Math.floor(pixel / width);
+    const weight = 0.45 + 0.55 * (raw / 255);
+    const corrected = clamp(raw + correction[y] * weight, 0, 255);
+    const value = clamp(Math.round(((corrected - low) / span) * 255), 0, 255);
+    data[offset] = data[offset + 1] = data[offset + 2] = value;
+    data[offset + 3] = 255;
   }
-  context.putImageData(data, 0, 0);
+  return data;
+}
+
+function normalizeReceiptContrast(source: ServerCanvas) {
+  const context = source.getContext("2d");
+  const image = context.getImageData(0, 0, source.width, source.height);
+  normalizeReceiptLuminanceRows(image.data, source.width, source.height);
+  context.putImageData(image, 0, 0);
   return source;
 }
 
@@ -254,6 +327,12 @@ function encodeWithinLimit(createCanvas: CanvasModule["createCanvas"], initial: 
   throw new Error("server_receipt_preprocess_too_large");
 }
 
+function detectServerPaper(canvas: ServerCanvas) {
+  const context = canvas.getContext("2d");
+  const image = context.getImageData(0, 0, canvas.width, canvas.height);
+  return detectPaper(image as unknown as ImageData, canvas.width, canvas.height);
+}
+
 /**
  * Equivalente server-side del preprocesado seguro usado por cámara/galería.
  * Se usa en sincronización Drive antes de la MISMA y única inferencia Tesseract.
@@ -275,13 +354,7 @@ export async function prepareServerReceiptImageBytes(
 
   const detectSize = detectionSize(sourceWidth, sourceHeight);
   const detectionCanvas = drawSource(canvasModule.createCanvas, image, detectSize.width, detectSize.height);
-  const detectionContext = detectionCanvas.getContext("2d");
-  const detectionData = detectionContext.getImageData(0, 0, detectionCanvas.width, detectionCanvas.height);
-  const geometry = detectPaper(
-    detectionData as unknown as ImageData,
-    detectionCanvas.width,
-    detectionCanvas.height,
-  );
+  const geometry = detectServerPaper(detectionCanvas);
 
   let working: ServerCanvas;
   let perspectiveCorrected = false;
@@ -291,7 +364,7 @@ export async function prepareServerReceiptImageBytes(
   if (geometry) {
     const rectified = rectifyPaper(canvasModule.createCanvas, detectionCanvas, geometry);
     const straight = deskew(canvasModule.createCanvas, rectified.canvas);
-    working = contrastStretch(straight.canvas);
+    working = normalizeReceiptContrast(straight.canvas);
     perspectiveCorrected = rectified.corrected;
     deskewAngle = straight.angle;
     paperDetected = true;
