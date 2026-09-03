@@ -25,6 +25,7 @@ import {
   receiptOcrVariant,
 } from "./receipt-ocr-provenance";
 import { prepareReceiptImage } from "./receipt-image-preprocessor";
+import { inferReceiptTextCorridor } from "./receipt-text-corridor";
 
 export {
   inferDocumentMetadata,
@@ -304,18 +305,25 @@ function filterReceiptBoxes(boxes: Box[], sourceWidth: number, sourceHeight: num
     const footerRows = rows.slice(tableIndex + 1).filter((row) => isFinancialSummaryRow(row) || /\b(PENDIENTE|PAGADO|GRACIAS)\b/i.test(normalizedKey(row.text)));
     const lastFooter = footerRows.at(-1);
     if (lastFooter) bottomLimit = Math.min(sourceHeight, lastFooter.bottom + Math.max(lastFooter.height * 4, sourceHeight * 0.045));
+  } else {
+    corridor = inferReceiptTextCorridor(rows, sourceWidth, sourceHeight);
   }
 
   const accepted: Box[] = [];
   const discarded: Box[] = [];
   for (const box of boxes) {
     const protectedHeader = protectedHeaderBoxes.has(box);
-    const protectedFinancial = protectedFinancialBoxes.has(box) && box.score >= 35;
+    const overlap = corridor
+      ? Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left))
+      : box.width;
+    const overlapRatio = overlap / Math.max(1, box.width);
+    const protectedFinancial = protectedFinancialBoxes.has(box)
+      && box.score >= 35
+      && (!corridor || overlapRatio >= 0.12);
     let reject = protectedHeader || protectedFinancial ? false : obviousRecognitionNoise(box);
     if (!reject && corridor) {
-      const overlap = Math.max(0, Math.min(box.right, corridor.right) - Math.max(box.left, corridor.left));
-      const overlapRatio = overlap / Math.max(1, box.width);
-      const semantic = protectedHeader || protectedFinancial || /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+      const semanticText = /\b(DESCRIP|UDS|PRECIO|IMPORTE|TOTAL|BASE|IVA|FECHA|HORA|TELEFONO|TELÉFONO|PEDIDO|DIRECCION|DIRECCIÓN|PENDIENTE|PAGADO)\b/i.test(normalizedKey(box.text));
+      const semantic = protectedHeader || protectedFinancial || (semanticText && overlapRatio >= 0.12);
       if (overlapRatio < 0.28 && !semantic) reject = true;
       if (box.top > bottomLimit && !semantic) reject = true;
     }
