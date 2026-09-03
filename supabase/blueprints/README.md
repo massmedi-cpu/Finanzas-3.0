@@ -1,24 +1,24 @@
-# Financial App — SQL blueprints de Fundamentos
+# Supabase blueprints — Financial App
 
-Estos archivos son **blueprints previos a migración**, no entradas del historial de migraciones de Supabase.
+Estos SQL nacieron como blueprints previos a la creación del Supabase dedicado. Desde el 03/09/2026 la estructura ya está materializada y validada en el proyecto exclusivo `financial-app` (`btzukbfesxdratqnxuoj`).
 
-## Motivo
+## Historial oficial aplicado
 
-La base dedicada de Financial App todavía no existe y no hay Supabase CLI local disponible en el entorno actual. Por seguridad y trazabilidad, no se inventan nombres de migración ni se escribe historial de migraciones antes de poder generarlo con el flujo oficial.
+El historial remoto de Supabase contiene:
 
-## Flujo obligatorio cuando exista el Supabase dedicado
+1. `20260903200004_financial_app_foundations`
+2. `20260903200023_source_snapshot_history`
+3. `20260903200134_harden_function_search_paths`
+4. `20260903200201_index_foreign_keys`
 
-1. Verificar la versión y comandos disponibles de Supabase CLI/MCP.
-2. Crear la migración con el mecanismo oficial vigente (`supabase migration new ...` si CLI está disponible, o el flujo MCP/documentado equivalente).
-3. Copiar/revisar el SQL de estos blueprints en la migración recién generada.
-4. Ejecutar primero contra el proyecto dedicado, nunca contra el Supabase compartido actual.
-5. Ejecutar `supabase/tests/foundation_integrity.sql` dentro de una transacción con rollback.
-6. Ejecutar advisors de base de datos/seguridad y resolver cualquier advertencia aplicable.
-7. Solo después considerar la persistencia física de Fundamentos validada.
+Los archivos equivalentes están sincronizados en `supabase/migrations/`.
 
-## Blueprints
+## Estado de validación
 
-- `financial_app_foundations.sql`: estructura inicial, constraints, índices, permisos y metadatos regionales.
-- `source_snapshot_history.sql`: historial inmutable para correcciones externas de filas bancarias.
+- Suite `supabase/tests/foundation_integrity.sql`: ejecutada contra PostgreSQL real y superada dentro de transacción con rollback.
+- Security Advisor: 0 lints tras fijar `search_path`.
+- Performance Advisor: las FKs inicialmente no cubiertas quedaron indexadas; solo aparecen avisos de índices no usados, esperables en una base nueva sin datos reales.
+- Fuente bancaria: protegida contra `UPDATE` y `DELETE` también para `service_role`.
+- `anon` y `authenticated`: sin `USAGE` sobre el esquema `financial_app` y sin privilegios directos de tabla.
 
-La fuente bancaria oficial continúa siendo estrictamente de solo lectura para Financial App.
+Los blueprints se conservan como referencia histórica de diseño. Cualquier cambio futuro debe hacerse mediante nuevas migraciones acumulativas; no se deben reescribir las migraciones ya aplicadas.
