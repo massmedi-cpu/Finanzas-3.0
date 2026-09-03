@@ -2,6 +2,14 @@ import { APP_VERSION } from "@/lib/app-version";
 import { createClient } from "@/lib/supabase/server";
 import { asBoolean, asNumber, asRecord, asString, nullableString } from "@/lib/validation/json";
 
+export type HomeReconciliation = {
+  total: number;
+  reconciled: number;
+  pending: number;
+  notReconciled: number;
+  notApplicable: number;
+};
+
 export type HomePulse = {
   version: string;
   month: string;
@@ -11,13 +19,7 @@ export type HomePulse = {
   needsReview: number;
   reviewSource: number;
   lastMovementDate: string | null;
-  reconciliation: {
-    total: number;
-    reconciled: number;
-    pending: number;
-    notReconciled: number;
-    notApplicable: number;
-  };
+  reconciliation: HomeReconciliation;
   sync: {
     status: string;
     finishedAt: string | null;
