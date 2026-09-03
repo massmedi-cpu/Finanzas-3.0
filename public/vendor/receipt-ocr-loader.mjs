@@ -14,6 +14,7 @@ const MAX_SERVER_BYTES = 4.5 * 1024 * 1024;
 const MIN_COMPRESSED_SIDE = 1200;
 const JPEG_QUALITIES = [0.94, 0.88, 0.82, 0.76];
 const DIRECT_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const EXIF_SCAN_BYTES = 128 * 1024;
 
 const nowMs = () => typeof performance !== "undefined" && typeof performance.now === "function" ? performance.now() : Date.now();
 const roundedMs = (value) => Math.max(0, Math.round(value * 10) / 10);
@@ -83,12 +84,84 @@ async function constrainedCanvasBlob(sourceCanvas) {
   throw new Error("La imagen sigue siendo demasiado grande para el OCR después de optimizarla");
 }
 
+function uint16(view, offset, littleEndian) {
+  if (offset < 0 || offset + 2 > view.byteLength) return null;
+  return view.getUint16(offset, littleEndian);
+}
+
+function uint32(view, offset, littleEndian) {
+  if (offset < 0 || offset + 4 > view.byteLength) return null;
+  return view.getUint32(offset, littleEndian);
+}
+
+/**
+ * Lee únicamente el tag EXIF Orientation de JPEG. No interpreta ni persiste
+ * metadatos privados. El objetivo es saber si el bitmap que ve el usuario debe
+ * rasterizarse antes de enviarlo a Tesseract para que el servidor reciba los
+ * píxeles con la misma orientación visual.
+ */
+async function jpegExifOrientation(blob) {
+  if (String(blob?.type || "").toLowerCase() !== "image/jpeg" || typeof blob.slice !== "function") return null;
+  try {
+    const buffer = await blob.slice(0, EXIF_SCAN_BYTES).arrayBuffer();
+    const view = new DataView(buffer);
+    if (view.byteLength < 4 || view.getUint16(0, false) !== 0xffd8) return null;
+
+    let offset = 2;
+    while (offset + 4 <= view.byteLength) {
+      if (view.getUint8(offset) !== 0xff) { offset += 1; continue; }
+      const marker = view.getUint8(offset + 1);
+      if (marker === 0xd9 || marker === 0xda) break;
+      if (marker === 0x00 || marker === 0xff) { offset += 1; continue; }
+      const segmentLength = view.getUint16(offset + 2, false);
+      if (segmentLength < 2 || offset + 2 + segmentLength > view.byteLength) break;
+      const payload = offset + 4;
+
+      if (marker === 0xe1 && segmentLength >= 10
+        && view.getUint8(payload) === 0x45
+        && view.getUint8(payload + 1) === 0x78
+        && view.getUint8(payload + 2) === 0x69
+        && view.getUint8(payload + 3) === 0x66
+        && view.getUint8(payload + 4) === 0x00
+        && view.getUint8(payload + 5) === 0x00) {
+        const tiff = payload + 6;
+        if (tiff + 8 > view.byteLength) return null;
+        const byteOrder = view.getUint16(tiff, false);
+        const littleEndian = byteOrder === 0x4949;
+        if (!littleEndian && byteOrder !== 0x4d4d) return null;
+        if (uint16(view, tiff + 2, littleEndian) !== 0x2a) return null;
+        const ifdOffset = uint32(view, tiff + 4, littleEndian);
+        if (ifdOffset == null) return null;
+        const ifd = tiff + ifdOffset;
+        const entryCount = uint16(view, ifd, littleEndian);
+        if (entryCount == null) return null;
+        for (let index = 0; index < entryCount; index += 1) {
+          const entry = ifd + 2 + index * 12;
+          if (entry + 12 > view.byteLength) return null;
+          if (uint16(view, entry, littleEndian) !== 0x0112) continue;
+          const orientation = uint16(view, entry + 8, littleEndian);
+          return orientation != null && orientation >= 1 && orientation <= 8 ? orientation : null;
+        }
+        return null;
+      }
+      offset += 2 + segmentLength;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
 async function decodeBlob(blob) {
   if (typeof createImageBitmap !== "function") {
     throw new Error("Este navegador no puede convertir este formato de imagen para OCR");
   }
   try {
-    return await createImageBitmap(blob);
+    try {
+      return await createImageBitmap(blob, { imageOrientation: "from-image" });
+    } catch {
+      return await createImageBitmap(blob);
+    }
   } catch {
     const type = String(blob.type || "").toLowerCase();
     if (type === "image/heic" || type === "image/heif") {
@@ -113,6 +186,7 @@ async function prepareServerInput(input) {
       sourceWidth,
       sourceHeight,
       scaled: canvas.width !== sourceWidth || canvas.height !== sourceHeight,
+      orientationFlattened: false,
     };
   }
 
@@ -123,7 +197,7 @@ async function prepareServerInput(input) {
   // Preserve compatibility on browsers that cannot inspect image dimensions.
   // Modern browsers decide by dimensions, not only compressed bytes.
   if (directCandidate && typeof createImageBitmap !== "function") {
-    return { blob: input, width: 0, height: 0, sourceWidth: 0, sourceHeight: 0, scaled: false };
+    return { blob: input, width: 0, height: 0, sourceWidth: 0, sourceHeight: 0, scaled: false, orientationFlattened: false };
   }
 
   const bitmap = await decodeBlob(input);
@@ -132,9 +206,17 @@ async function prepareServerInput(input) {
     const sourceHeight = bitmap.height;
     const target = scaledSize(sourceWidth, sourceHeight);
     const scaled = target.width !== sourceWidth || target.height !== sourceHeight;
+    const exifOrientation = directCandidate && !scaled && type === "image/jpeg"
+      ? await jpegExifOrientation(input)
+      : null;
+    const orientationFlattened = exifOrientation != null && exifOrientation !== 1;
 
-    if (directCandidate && !scaled) {
-      return { blob: input, width: sourceWidth, height: sourceHeight, sourceWidth, sourceHeight, scaled: false };
+    // Un JPEG con orientación EXIF no puede viajar como bytes directos aunque
+    // sus dimensiones sean adecuadas: el navegador lo muestra ya orientado,
+    // pero el decodificador del servidor no tiene por qué aplicar el mismo tag.
+    // Rasterizar el bitmap aplana esa orientación sin una segunda pasada OCR.
+    if (directCandidate && !scaled && !orientationFlattened) {
+      return { blob: input, width: sourceWidth, height: sourceHeight, sourceWidth, sourceHeight, scaled: false, orientationFlattened: false };
     }
 
     const canvas = drawToCanvas(bitmap, target.width, target.height);
@@ -145,6 +227,7 @@ async function prepareServerInput(input) {
       sourceWidth,
       sourceHeight,
       scaled,
+      orientationFlattened,
     };
   } finally {
     bitmap.close?.();
@@ -171,6 +254,7 @@ async function serverPredict(input) {
         ...(prepared.sourceWidth > 0 ? { "x-ocr-source-width": String(prepared.sourceWidth) } : {}),
         ...(prepared.sourceHeight > 0 ? { "x-ocr-source-height": String(prepared.sourceHeight) } : {}),
         "x-ocr-scaled": prepared.scaled ? "1" : "0",
+        "x-ocr-orientation-flattened": prepared.orientationFlattened ? "1" : "0",
       },
       body: prepared.blob,
       cache: "no-store",
@@ -198,6 +282,7 @@ async function serverPredict(input) {
         transportWidth: prepared.width || null,
         transportHeight: prepared.height || null,
         transportScaled: prepared.scaled,
+        orientationFlattened: prepared.orientationFlattened,
       },
     }];
   } finally {
