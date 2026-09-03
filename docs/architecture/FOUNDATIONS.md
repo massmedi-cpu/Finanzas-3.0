@@ -9,31 +9,29 @@
 - OCR: fuera del camino crítico; Fase 11
 - Supabase dedicado: `financial-app` (`btzukbfesxdratqnxuoj`) en `eu-west-3`
 - Persistencia física: creada y validada sobre el proyecto Supabase dedicado
+- Persistencia de Configuración: repositorios PostgreSQL + servicio de aplicación implementados y compilados
 
 ## Principios ya materializados en código y base de datos
 
 1. La fuente bancaria es externa, inmutable y de solo lectura.
-2. Los movimientos se modelan en tres capas:
-   - instantáneas originales de origen;
-   - transacción procesada/normalizada;
-   - modificación explícita del usuario.
+2. Los movimientos se modelan en tres capas: instantáneas originales de origen, transacción procesada/normalizada y modificación explícita del usuario.
 3. Las modificaciones del usuario no sobrescriben el dato bancario original.
 4. El usuario puede corregir o vaciar expresamente categoría/comercio sin perder la distinción entre “sin override” y “valor borrado por el usuario”.
-5. Si una fila histórica cambia en la fuente externa, Financial App no reescribe la observación anterior: añade una nueva instantánea inmutable enlazada a la anterior.
+5. Si una fila histórica cambia en la fuente externa, Financial App añade una nueva instantánea inmutable enlazada a la anterior.
 6. Las transferencias internas no se consideran ingreso/gasto por defecto.
-7. Sincronización futura: incremental, idempotente y conservadora de overrides.
-8. La identidad de una fila bancaria y su fingerprint SHA-256 son deterministas: misma identidad + mismo fingerprint se ignora; misma identidad + fingerprint distinto crea una revisión inmutable.
-9. Una sola capa central de formato regional es-ES.
+7. La sincronización se diseña incremental, idempotente y conservadora de overrides.
+8. Identidad de fila + fingerprint SHA-256: repetición idéntica se omite; contenido corregido crea una revisión inmutable.
+9. Formato regional único: es-ES, EUR, Europe/Madrid, DD/MM/AAAA y dos decimales monetarios.
 10. Dinero en lógica de aplicación: céntimos enteros seguros.
-11. Moneda visual: EUR con exactamente dos decimales.
-12. Fecha visual: DD/MM/AAAA en zona Europe/Madrid.
-13. Diseño y responsive nacen desde el primer componente mediante tokens globales.
-14. Build, rama y commit son identificables desde la propia aplicación y `/api/build`.
-15. Cuentas y categorías tienen políticas de unicidad, reordenación e integridad jerárquica antes de persistir.
-16. Los comandos de aplicación de cuentas/categorías normalizan entradas y preparan objetos persistibles sin duplicar reglas de dominio.
+11. Diseño/responsive nacen desde el primer componente mediante tokens globales.
+12. Build, rama y commit son identificables desde la aplicación y `/api/build`.
+13. Cuentas y categorías tienen validación, unicidad, orden e integridad jerárquica antes y durante la persistencia.
+14. La fusión de categorías prohíbe destino igual, tipo incompatible y fusión de una categoría dentro de una descendiente.
+15. Los comandos y el servicio de Configuración centralizan alta, edición, archivo, reordenación y fusión sin borrados destructivos.
+16. Los repositorios PostgreSQL traducen el dominio a `financial_app.accounts` y `financial_app.categories` sin introducir reglas financieras paralelas.
 17. La build ejecuta las comprobaciones de Fundamentos y falla si alguna deja de cumplirse.
-18. La base real ejecuta constraints equivalentes y una suite SQL de integridad rollback-safe.
-19. Las funciones de base fijan explícitamente `search_path` y el Security Advisor no reporta advertencias.
+18. PostgreSQL ejecuta suites de integridad con rollback y sin dejar datos ficticios.
+19. Las funciones de base fijan `search_path`; Security Advisor queda sin lints.
 20. Las claves foráneas relevantes disponen de índices de cobertura.
 
 ## Fuente lógica de verdad
@@ -55,92 +53,104 @@
 | Cursor incremental | `sync_cursors` |
 | Auditoría | `audit_changes` |
 
-La proyección efectiva del movimiento sigue siendo una responsabilidad única del dominio (`resolveEffectiveTransaction`); la base de datos conserva las tres capas y no introduce una segunda lógica financiera paralela.
+La proyección efectiva del movimiento sigue siendo responsabilidad única del dominio (`resolveEffectiveTransaction`).
 
 ## Supabase dedicado y migraciones aplicadas
 
-Proyecto exclusivo creado para esta reconstrucción:
+Proyecto exclusivo:
 
 - Nombre: `financial-app`
 - Project ref: `btzukbfesxdratqnxuoj`
 - Región: `eu-west-3`
-- Coste confirmado por Supabase al crear el proyecto: `0 €/mes`
+- Coste confirmado al crearlo: `0 €/mes`
 - El Supabase compartido anterior no se ha modificado.
 
-Historial oficial remoto y archivos sincronizados en `supabase/migrations/`:
+Historial oficial remoto y archivos en `supabase/migrations/`:
 
 1. `20260903200004_financial_app_foundations.sql`
 2. `20260903200023_source_snapshot_history.sql`
 3. `20260903200134_harden_function_search_paths.sql`
 4. `20260903200201_index_foreign_keys.sql`
 
-La estructura física incluye 17 tablas en el esquema privado `financial_app`, metadata `0.0.1 → 10.0.0`, `es-ES`, `EUR`, `Europe/Madrid`, claves, constraints, auditoría, cursores, índices y protección de la fuente bancaria.
+La estructura física incluye 17 tablas en el esquema privado `financial_app`, metadata `0.0.1 → 10.0.0`, `es-ES`, `EUR`, `Europe/Madrid`, claves, constraints, auditoría, cursores, índices y protección bancaria.
 
-## Validación física realizada
+## Validación física
 
-La suite `supabase/tests/foundation_integrity.sql` se ha ejecutado contra PostgreSQL real con transacción y `ROLLBACK` y ha terminado sin excepción. Por tanto quedan verificadas físicamente:
+### Suite general
 
-- metadata regional y política bancaria `read_only`;
-- unicidad normalizada de cuentas;
-- coherencia padre/hijo y ausencia de ciclos de categorías;
-- bloqueo de `UPDATE` y `DELETE` sobre instantáneas bancarias;
-- conservación de una nueva instantánea cuando la fuente corrige una fila;
-- rechazo de una observación idéntica repetida;
-- persistencia del borrado explícito de categoría/comercio mediante overrides;
-- ausencia de residuos de datos de prueba por rollback.
+`supabase/tests/foundation_integrity.sql` se ejecutó contra PostgreSQL real dentro de `BEGIN`/`ROLLBACK` y terminó sin excepción. Verifica metadata regional, unicidad, jerarquía, inmutabilidad bancaria, revisiones de origen, idempotencia y overrides explícitos.
 
-Además se comprobó mediante privilegios PostgreSQL que:
+### Suite de Configuración
 
-- `anon` no tiene `USAGE` sobre el esquema;
-- `authenticated` no tiene `USAGE` sobre el esquema;
-- ambos roles carecen de `SELECT` sobre `financial_app.accounts`;
-- `service_role` sí dispone de lectura/escritura normal;
-- `service_role` no dispone de `UPDATE` ni `DELETE` sobre `transaction_source_records`.
+`supabase/tests/configuration_persistence.sql` también se ejecutó sobre PostgreSQL real con rollback. Verifica:
+
+- alta, edición y archivo de cuenta conservando EUR;
+- creación de categorías y jerarquía;
+- fusión de categorías sin borrar el origen: el origen queda archivado;
+- traslado de hijos al destino;
+- traslado de referencias de comercio, movimiento, override, regla, recurrente, presupuesto y previsión;
+- ausencia total de residuos tras el rollback.
+
+Después de ejecutar ambas suites se comprobó que las tablas operativas usadas por las pruebas permanecen con `0` filas.
+
+### Privilegios
+
+Comprobación PostgreSQL real:
+
+- `anon`: sin `USAGE` sobre `financial_app` y sin `SELECT` en cuentas;
+- `authenticated`: sin `USAGE` sobre `financial_app` y sin `SELECT` en cuentas;
+- `service_role`: acceso ordinario al esquema privado;
+- `service_role`: sin `UPDATE` ni `DELETE` sobre `transaction_source_records`.
 
 ## Seguridad
 
-El Security Advisor de Supabase quedó en **0 lints** tras fijar el `search_path` de las cuatro funciones de Fundamentos.
+El Security Advisor quedó en **0 lints** tras fijar `search_path` en las funciones de Fundamentos.
 
-`list_tables` muestra RLS desactivado en el esquema privado y emite una advertencia genérica. No se ha activado RLS automáticamente porque Supabase indica que hacerlo sin políticas puede bloquear el acceso, y el conector exige decisión explícita para esa remediación. El riesgo de exposición directa está actualmente mitigado porque `anon` y `authenticated` no tienen uso del esquema ni privilegios de tabla. Antes de exponer cualquier API al cliente se definirá explícitamente el modelo de autenticación, grants y RLS.
+Supabase sigue señalando que RLS está desactivado en las 17 tablas. No se activa automáticamente: el propio asesor advierte que RLS sin políticas bloquearía acceso y requiere definir el modelo real de autorización. La exposición directa está actualmente cerrada porque `anon` y `authenticated` no tienen uso del esquema ni privilegios sobre las tablas. Ninguna clave `service_role` debe llegar al navegador.
+
+El acceso definitivo Vercel → Supabase seguirá siendo exclusivamente server-side. Aún falta materializar el secreto/conexión de ejecución en Vercel; el conector disponible permite inspeccionar despliegues pero no escribir variables de entorno, por lo que no se inventa ni incrusta ninguna credencial en Git.
 
 ## Rendimiento
 
-El Performance Advisor detectó claves foráneas sin índice; se corrigieron mediante la migración `index_foreign_keys`. Tras repetir el advisor ya no aparecen FKs sin cubrir. Solo aparecen índices “unused”, comportamiento esperado en una base recién creada y vacía; no se eliminan de forma prematura.
+El Performance Advisor detectó inicialmente claves foráneas sin índice. Se corrigieron mediante `index_foreign_keys`. La repetición del advisor ya no muestra FKs sin cubrir; solo informa de índices todavía no usados, normal en una base recién creada y sin datos reales.
 
 ## Cuentas y categorías
 
-Ya existe una capa de comandos de aplicación que prepara altas y ediciones de cuentas/categorías con:
+Implementado:
 
-- normalización de espacios y texto;
-- EUR forzado en cuentas;
-- unicidad de nombre;
-- jerarquía de categorías sin ciclos;
-- coherencia del tipo padre/hijo;
-- fusión solo entre categorías compatibles;
-- reordenación sin pérdidas, duplicados ni elementos añadidos;
-- conservación de `createdAt` y actualización controlada de `updatedAt`.
+- `SqlExecutor`: puerto mínimo de PostgreSQL con transacciones;
+- `PostgresAccountRepository`: listar, obtener, persistir y reordenar;
+- `PostgresCategoryRepository`: listar, obtener, persistir, reordenar y fusionar atómicamente;
+- preflight de fusión para no inventar cómo combinar presupuestos incompatibles ni subcategorías duplicadas;
+- `ConfigurationService`: crear/editar/archivar/reactivar/reordenar cuentas y categorías, y fusionar categorías;
+- composition root `createConfigurationService` sobre el ejecutor SQL;
+- UUID y reloj desacoplados para testabilidad.
 
-La persistencia física que soportará estas operaciones ya existe y ha sido validada. Falta cerrar el adaptador de repositorio de la aplicación y su conexión segura desde Vercel preview antes de marcar Cuentas/Categorías como completadas.
+El código compila correctamente en Vercel. Falta el adaptador concreto que abra la conexión PostgreSQL desde una función server-only de Vercel usando una credencial secreta del proyecto dedicado. Esa credencial no se expone ni se guarda en el repositorio.
+
+## Validación de aplicación
+
+La comprobación runtime de preview devuelve **20/20 controles de Fundamentos superados** en `/api/health/foundations`, incluyendo la nueva protección contra fusionar una categoría dentro de una descendiente.
 
 ## Responsive base
 
-Breakpoints de referencia compartidos:
+Breakpoints compartidos:
 
-- 360 px: móvil pequeño
-- 480 px: móvil grande
-- 768 px: tablet vertical
-- 1024 px: tablet horizontal
-- 1280 px: portátil
-- 1440 px: escritorio
-- 1728 px: pantalla ancha
+- 360 px móvil pequeño
+- 480 px móvil grande
+- 768 px tablet vertical
+- 1024 px tablet horizontal
+- 1280 px portátil
+- 1440 px escritorio
+- 1728 px pantalla ancha
 
-Los componentes pueden adaptarse de forma fluida entre estos puntos; no se usarán como fotografías aisladas.
+La matriz visual real multidispositivo sigue pendiente; no se declara validada aún.
 
 ## Siguiente bloque de Fase 1
 
-1. Cerrar la estrategia de acceso seguro Vercel → Supabase privado sin exponer `service_role` al navegador.
-2. Implementar repositorios reales de Cuentas y Categorías contra el Supabase dedicado.
-3. Completar alta/edición/archivo/orden/fusión y verificar persistencia real.
-4. Añadir pruebas de reinicio/relectura para confirmar que la persistencia y los overrides sobreviven.
-5. Ejecutar matriz responsive real y regresión de preview.
+1. Materializar de forma segura la conexión server-only Vercel → PostgreSQL dedicado, sin credenciales en cliente/Git.
+2. Ejecutar desde la propia aplicación pruebas CRUD persistentes de Cuentas/Categorías y relectura tras nueva petición.
+3. Conectar la UI funcional de Configuración a esos casos de uso.
+4. Validar matriz responsive real y regresión de preview.
+5. Cerrar Fase 1 solo cuando lo anterior esté probado.
 6. Seguir sin iniciar Inicio ni OCR.
