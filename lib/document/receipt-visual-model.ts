@@ -361,7 +361,10 @@ function tableBodyRange(rows:Row[],headerIndex:number,medianHeight:number,width:
 }
 
 function rowFontSize(rowHeight: number, medianHeight: number, scale = 1) {
-  return clamp(rowHeight * 1.02 * scale, medianHeight * 0.76, medianHeight * 1.58);
+  // Conserva la jerarquía física medida por OCR: una cabecera realmente grande
+  // o un pie pequeño no deben normalizarse casi al mismo tamaño que el cuerpo.
+  // Los límites siguen descartando cajas extremas/ruidosas sin inventar estilos.
+  return clamp(rowHeight * 1.02 * scale, medianHeight * 0.5, medianHeight * 2.6);
 }
 
 function rowFontWeight(rowHeight: number, medianHeight: number): 500 | 600 | 700 {
