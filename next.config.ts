@@ -14,10 +14,16 @@ const ocrRuntimeAssets = [
   './node_modules/idb-keyval/**/*',
 ];
 
+const pdfRenderRuntimeAssets = [
+  './node_modules/@napi-rs/canvas/**/*',
+  './node_modules/@napi-rs/canvas-linux-x64-gnu/**/*',
+];
+
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   outputFileTracingIncludes: {
     '/api/ocr/receipt': ocrRuntimeAssets,
+    '/api/sync': [...ocrRuntimeAssets, ...pdfRenderRuntimeAssets],
   },
   async redirects() {
     return [{ source: '/favicon.ico', destination: '/icon.png', permanent: true }];
