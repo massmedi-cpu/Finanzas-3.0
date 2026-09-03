@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { formatEuro } from "@/lib/format/es-es";
 import type { ControlAlert,ControlAlertState,ControlOverview,ControlSeverity,ControlSnapshot } from "@/lib/financial/control";
-import { CloseMonthActions,ControlAlertActions,ReopenMonthAction } from "./control-actions";
+import { CloseMonthActions,ControlAlertActions,ControlMutationBoundary,ControlMutationFeedback,ReopenMonthAction } from "./control-actions";
 
 const monthFmt=new Intl.DateTimeFormat("es-ES",{month:"long",year:"numeric",timeZone:"Europe/Madrid"});
 const dateTimeFmt=new Intl.DateTimeFormat("es-ES",{dateStyle:"short",timeStyle:"short",timeZone:"Europe/Madrid"});
@@ -23,11 +23,12 @@ export function ControlClient({initialData:data}:{initialData:ControlOverview}){
   const snapshot=data.snapshot;
   const selectedMonthLabel=monthLabel(data.month);
 
-  return <div className="control-module">
+  return <ControlMutationBoundary>
     <div className="control-toolbar">
       <div className="control-month-nav"><Link className="ghost button-link" href={`/control?month=${shiftMonth(data.month,-1)}`} aria-label="Mes anterior">←</Link><form action="/control"><label>Periodo<input type="month" name="month" defaultValue={data.month}/></label><button className="primary-action" type="submit">Ver mes</button></form><Link className="ghost button-link" href={`/control?month=${shiftMonth(data.month,1)}`} aria-label="Mes siguiente">→</Link></div>
       <div><strong>{selectedMonthLabel}</strong><span>{openCritical?`${openCritical} prioridades altas`:data.alerts.length?`${data.alerts.length} avisos abiertos`:"Sin avisos abiertos"}</span></div>
     </div>
+    <ControlMutationFeedback/>
 
     <section className="control-summary" aria-label="Resumen del mes">
       <article><span>Ingresos</span><strong>{formatEuro(snapshot.income)}</strong><small>Cash Flow computable</small></article>
@@ -53,7 +54,7 @@ export function ControlClient({initialData:data}:{initialData:ControlOverview}){
     <section className="control-panel control-history"><div className="control-panel-head"><div><p className="eyebrow">TRAZABILIDAD</p><h2>Últimos cierres</h2></div><span className="pill">{data.closes.length} registrados</span></div>{!data.closes.length?<div className="control-empty compact"><strong>Todavía no hay cierres guardados.</strong><p>Cuando cierres un mes aparecerá aquí con su snapshot financiero.</p></div>:<div className="close-history-list">{data.closes.map(close=><Link href={`/control?month=${close.month}`} key={close.id}><span><strong>{monthLabel(close.month)}</strong><small>{close.status==="closed"?"Cierre vigente":"Reabierto"}</small></span><span><b>{formatEuro(close.snapshot.net)}</b><small>{close.snapshot.closeWarnings} avisos en el snapshot</small></span></Link>)}</div>}</section>
 
     <aside className="control-rules"><strong>Reglas del centro de control</strong><p><b>Gasto anómalo:</b> {data.rules.highExpense}. <b>Bloqueos de cierre:</b> {data.rules.closeBlockers}. <b>Avisos no bloqueantes:</b> {data.rules.closeWarnings}. Resolver o ignorar un aviso no modifica ningún movimiento; el dato financiero solo cambia desde su módulo de origen.</p></aside>
-  </div>;
+  </ControlMutationBoundary>;
 }
 
 function CloseChecklist({snapshot}:{snapshot:ControlSnapshot}){const rows=[
