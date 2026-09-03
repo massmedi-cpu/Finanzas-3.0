@@ -10,13 +10,23 @@ export type ReceiptCorridorRow = {
 export type ReceiptTextCorridor = {
   left: number;
   right: number;
+  top: number;
+  bottom: number;
   center: number;
   supportRatio: number;
   rowCount: number;
   verticalExtent: number;
+  verticalLimited: boolean;
 };
 
 const clamp = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
+function median(values: number[]) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
 
 function quantile(values: number[], ratio: number) {
   if (!values.length) return 0;
@@ -37,14 +47,67 @@ function supportsCenter(row: ReceiptCorridorRow, center: number, window: number)
   return Math.abs(rowCenter - center) <= window || (row.left <= center && row.right >= center);
 }
 
+function safeVerticalEnvelope(rows: ReceiptCorridorRow[], sourceHeight: number) {
+  const ordered = [...rows].sort((a, b) => a.top - b.top || a.left - b.left);
+  if (ordered.length < 6) return { top: 0, bottom: sourceHeight, limited: false };
+
+  const medianHeight = Math.max(1, median(ordered.map((row) => row.bottom - row.top)));
+  const gapThreshold = Math.max(sourceHeight * 0.11, medianHeight * 7);
+  let topIndex = 0;
+  let bottomIndex = ordered.length - 1;
+  let limited = false;
+
+  // Solo se elimina una fila extrema aislada. Para evitar confundir una
+  // cabecera/pie real con fondo, además debe estar cerca del borde de la foto y
+  // separada del cuerpo por un hueco claramente anómalo.
+  const first = ordered[0];
+  const second = ordered[1];
+  const topGap = second.top - first.bottom;
+  if (
+    ordered.length - 1 >= 5
+    && first.bottom <= sourceHeight * 0.18
+    && topGap >= gapThreshold
+  ) {
+    topIndex = 1;
+    limited = true;
+  }
+
+  const last = ordered.at(-1)!;
+  const beforeLast = ordered.at(-2)!;
+  const bottomGap = last.top - beforeLast.bottom;
+  if (
+    bottomIndex - topIndex >= 5
+    && last.top >= sourceHeight * 0.82
+    && bottomGap >= gapThreshold
+  ) {
+    bottomIndex -= 1;
+    limited = true;
+  }
+
+  if (!limited) return { top: 0, bottom: sourceHeight, limited: false };
+
+  const core = ordered.slice(topIndex, bottomIndex + 1);
+  if (core.length < 5) return { top: 0, bottom: sourceHeight, limited: false };
+  const coreTop = Math.min(...core.map((row) => row.top));
+  const coreBottom = Math.max(...core.map((row) => row.bottom));
+  const coreExtent = Math.max(1, coreBottom - coreTop);
+  const margin = Math.max(sourceHeight * 0.035, medianHeight * 4, coreExtent * 0.055);
+
+  return {
+    top: topIndex > 0 ? clamp(coreTop - margin, 0, sourceHeight) : 0,
+    bottom: bottomIndex < ordered.length - 1 ? clamp(coreBottom + margin, 0, sourceHeight) : sourceHeight,
+    limited: true,
+  };
+}
+
 /**
- * Infiere el corredor horizontal del cuerpo del ticket cuando no existe una
- * cabecera semántica de tabla. Se basa únicamente en la repetición geométrica
- * de filas alrededor de un mismo eje, por lo que funciona con tickets de bar,
- * comercio, parking o cualquier otro formato sin vocabulario específico.
+ * Infiere el corredor del cuerpo del ticket cuando no existe una cabecera
+ * semántica de tabla. Se basa únicamente en la repetición geométrica de filas
+ * alrededor de un mismo eje, por lo que funciona con tickets de bar, comercio,
+ * parking o cualquier otro formato sin vocabulario específico.
  *
  * Falla de forma cerrada: si no hay un grupo dominante, suficiente número de
- * filas o continuidad vertical, devuelve null y el OCR conserva la evidencia.
+ * filas o continuidad, devuelve null y el OCR conserva la evidencia.
  */
 export function inferReceiptTextCorridor(
   rows: ReceiptCorridorRow[],
@@ -97,9 +160,9 @@ export function inferReceiptTextCorridor(
   bestCenter = clamp(refinedCenter, 0, sourceWidth);
   bestRows = candidates.filter((row) => supportsCenter(row, bestCenter, window));
 
-  const top = Math.min(...bestRows.map((row) => row.top));
-  const bottom = Math.max(...bestRows.map((row) => row.bottom));
-  const verticalExtent = bottom - top;
+  const rawTop = Math.min(...bestRows.map((row) => row.top));
+  const rawBottom = Math.max(...bestRows.map((row) => row.bottom));
+  const verticalExtent = rawBottom - rawTop;
   if (bestRows.length < 5 || verticalExtent < sourceHeight * 0.22) return null;
 
   // Una frase o cartel ancho del fondo puede cruzar el eje del ticket y, por
@@ -133,12 +196,16 @@ export function inferReceiptTextCorridor(
   // sería peligroso fingir una detección que no discrimina fondo de ticket.
   if (width < sourceWidth * 0.22 || width > sourceWidth * 0.94) return null;
 
+  const vertical = safeVerticalEnvelope(bestRows, sourceHeight);
   return {
     left,
     right,
+    top: vertical.top,
+    bottom: vertical.bottom,
     center: bestCenter,
     supportRatio: Math.round(supportRatio * 1000) / 1000,
     rowCount: bestRows.length,
     verticalExtent,
+    verticalLimited: vertical.limited,
   };
 }
