@@ -1,4 +1,6 @@
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
+import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
+import { buildReceiptVisualRules } from "@/lib/document/receipt-visual-rules";
 import { receiptTextLength } from "@/lib/document/receipt-text-fit";
 
 type VisualLine = {
@@ -15,6 +17,14 @@ type VisualLayout = ReceiptVisualLayoutInput & {
   engine: string;
   model: string;
   language: string;
+  sourceWidth?: number;
+  sourceHeight?: number;
+  bounds: ReceiptVisualLayoutInput["bounds"] & {
+    left?: number;
+    top?: number;
+    right?: number;
+    bottom?: number;
+  };
   lines: VisualLine[];
 };
 
@@ -35,7 +45,9 @@ export function isReceiptVisualLayout(value: unknown): value is VisualLayout {
 }
 
 export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
-  const visual = buildReceiptVisualModel(layout);
+  const physicalLayout = receiptPhysicalPreviewLayout(layout);
+  const visual = buildReceiptVisualModel(physicalLayout);
+  const rules = buildReceiptVisualRules(physicalLayout);
 
   return <div style={{ display: "grid", gap: 12, width: "100%" }}>
     <svg
@@ -46,14 +58,20 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
       preserveAspectRatio="xMinYMin meet"
     >
       <rect x="0" y="0" width={visual.width} height={visual.height} fill="#fffdf6" />
-      {visual.rules.map((y, index) => <line
-        key={`rule-${index}`}
-        x1={visual.width * 0.015}
-        x2={visual.width * 0.985}
-        y1={y}
-        y2={y}
+      {rules.map((rule, index) => <line
+        key={`rule-${index}-${rule.x1}-${rule.y}`}
+        x1={rule.x1}
+        x2={rule.x2}
+        y1={rule.y}
+        y2={rule.y}
         stroke="#6d695d"
-        strokeWidth={Math.max(0.45, visual.medianHeight * 0.045)}
+        strokeWidth={rule.strokeWidth}
+        strokeDasharray={rule.pattern === "dotted"
+          ? `${rule.strokeWidth} ${rule.strokeWidth * 2.4}`
+          : rule.pattern === "dashed"
+            ? `${rule.strokeWidth * 4} ${rule.strokeWidth * 2.5}`
+            : undefined}
+        strokeLinecap={rule.pattern === "dotted" ? "round" : "butt"}
         opacity="0.72"
       />)}
       {visual.tokens.map((token) => {
@@ -63,9 +81,13 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
           fontSize: token.fontSize,
           explicitTextLength: token.textLength,
         });
+        // Las filas centradas conservan el centro físico medido. El modelo puede
+        // clasificarlas como centradas para anclaje tipográfico, pero no debe
+        // desplazarlas artificialmente al centro perfecto si el papel no lo hizo.
+        const renderX = token.textAnchor === "middle" ? token.centerX : token.renderX;
         return <text
           key={`${token.top}-${token.left}-${token.index}-${token.text}`}
-          x={token.renderX}
+          x={renderX}
           y={token.baselineY}
           fill="#171717"
           fontFamily={'"Roboto", "Arial Narrow", Arial, Helvetica, sans-serif'}
@@ -82,6 +104,6 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         </text>;
       })}
     </svg>
-    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, tamaños, ancho y centrado reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
+    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, tamaños, ancho y posición reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
   </div>;
 }
