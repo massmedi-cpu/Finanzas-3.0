@@ -2,17 +2,16 @@ import { formatEuro, formatInteger, formatPercent } from "@/lib/format/es-es";
 import { IntentLink } from "@/components/intent-link";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 import { movementState,movementUrl } from "@/lib/financial/movement-query";
-import type { AccountsOverview } from "@/lib/financial/accounts";
+import type { HomeAccountsOverview } from "@/lib/financial/accounts";
+import type { HomeReconciliation } from "@/lib/financial/home-pulse";
 import type { BudgetMonth } from "@/lib/financial/budget";
 import type { ForecastLiquidityOverview } from "@/lib/financial/forecast-liquidity";
 import type { AnalysisOverview } from "@/lib/financial/analysis";
-import type { ReconciliationSummary } from "@/lib/financial/reconciliation";
 import type { HomeControlSummary } from "@/lib/financial/home-streaming";
 import type { CashFlowPoint } from "@/lib/financial/cash-flow";
 
 const date=new Intl.DateTimeFormat("es-ES",{day:"2-digit",month:"2-digit",year:"numeric"});
 function fmtDate(value:string|null|undefined){return value?date.format(new Date(`${value.slice(0,10)}T12:00:00`)):"—"}
-function variation(series:{balance:number|null}[]){const values=series.map(x=>x.balance).filter((x):x is number=>x!=null&&Number.isFinite(x));return values.length>=2?values.at(-1)!-values.at(-2)!:null}
 function signed(value:number){return `${value>0?"+":""}${formatEuro(value)}`}
 
 export function HomeAccountsFallback(){
@@ -22,20 +21,20 @@ export function HomeAccountsFallback(){
   </section>;
 }
 
-export async function HomeAccountsSection({data}:{data:Promise<AccountsOverview>}){
+export async function HomeAccountsSection({data}:{data:Promise<HomeAccountsOverview>}){
   const accounts=await data;
-  return <section className="home-accounts-section" aria-labelledby="home-accounts-title"><div className="home-section-heading compact"><div><p className="eyebrow">CUENTAS</p><h2 id="home-accounts-title">Disponibilidad por cuenta</h2><p>Consulta cada cuenta por separado; el saldo total queda reservado para Patrimonio.</p></div><IntentLink href="/cuentas">Ver cuentas →</IntentLink></div><div className="home-account-ledger" aria-label="Cuentas">{accounts.accounts.map(account=>{const change=variation(account.balanceSeries||[]);return <IntentLink key={account.id} href={`/cuentas/${account.id}`} className="home-account-row"><div><strong>{account.name}</strong><small>{account.identifier} · {account.role==="operating"?"Operativa":"Ahorro"}</small></div><div className="home-account-balance"><strong>{account.balance==null?"—":formatEuro(account.balance)}</strong><small>{change==null?"Variación reciente no disponible":`${signed(change)} vs. mes anterior`}</small></div></IntentLink>})}</div></section>;
+  return <section className="home-accounts-section" aria-labelledby="home-accounts-title"><div className="home-section-heading compact"><div><p className="eyebrow">CUENTAS</p><h2 id="home-accounts-title">Disponibilidad por cuenta</h2><p>Consulta cada cuenta por separado; el saldo total queda reservado para Patrimonio.</p></div><IntentLink href="/cuentas">Ver cuentas →</IntentLink></div><div className="home-account-ledger" aria-label="Cuentas">{accounts.accounts.map(account=>{const change=account.balance!=null&&account.previousBalance!=null?account.balance-account.previousBalance:null;return <IntentLink key={account.id} href={`/cuentas/${account.id}`} className="home-account-row"><div><strong>{account.name}</strong><small>{account.identifier} · {account.role==="operating"?"Operativa":"Ahorro"}</small></div><div className="home-account-balance"><strong>{account.balance==null?"—":formatEuro(account.balance)}</strong><small>{change==null?"Variación reciente no disponible":`${signed(change)} vs. mes anterior`}</small></div></IntentLink>})}</div></section>;
 }
 
 export function HomePulseSecondaryFallback(){
   return <><div className="home-stream-pulse-placeholder" aria-hidden="true"><span>Conciliación</span><strong>—</strong><small>Calculando…</small></div><div className="home-stream-pulse-placeholder" aria-hidden="true"><span>Alertas</span><strong>—</strong><small>Calculando…</small></div></>;
 }
 
-export async function HomePulseSecondary({reconciliation,control}:{reconciliation:Promise<ReconciliationSummary>;control:Promise<HomeControlSummary>}){
-  const [r,c]=await Promise.all([reconciliation,control]);
-  const open=r.pending+r.notReconciled;
+export async function HomePulseSecondary({reconciliation,control}:{reconciliation:HomeReconciliation;control:Promise<HomeControlSummary>}){
+  const c=await control;
+  const open=reconciliation.pending+reconciliation.notReconciled;
   const alerts=c.visibleAlerts+c.hiddenAlerts;
-  return <><IntentLink href="/movimientos/conciliacion"><span>Conciliación</span><strong>{formatInteger(open)}</strong><small>{r.reconciled} conciliados</small></IntentLink><IntentLink href="/control"><span>Alertas</span><strong>{formatInteger(alerts)}</strong><small>{c.closeReady?"mes listo para cierre":`${c.closeBlockers} bloqueos · ${c.closeWarnings} avisos`}</small></IntentLink></>;
+  return <><IntentLink href="/movimientos/conciliacion"><span>Conciliación</span><strong>{formatInteger(open)}</strong><small>{reconciliation.reconciled} conciliados</small></IntentLink><IntentLink href="/control"><span>Alertas</span><strong>{formatInteger(alerts)}</strong><small>{c.closeReady?"mes listo para cierre":`${c.closeBlockers} bloqueos · ${c.closeWarnings} avisos`}</small></IntentLink></>;
 }
 
 export function HomeFlowFallback(){

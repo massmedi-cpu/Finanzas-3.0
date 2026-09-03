@@ -7,11 +7,11 @@ import { formatEuro, formatInteger } from "@/lib/format/es-es";
 import { IntentLink } from "@/components/intent-link";
 import { requireAuthorizedUser } from "@/lib/auth/require-user";
 import { getHomePulse } from "@/lib/financial/home-pulse";
-import { getAccountsOverview } from "@/lib/financial/accounts";
+import { getHomeAccountsOverview } from "@/lib/financial/accounts";
 import { getBudgetMonth } from "@/lib/financial/budget";
 import { getForecastLiquidity } from "@/lib/financial/forecast-liquidity";
 import { getAnalysisOverview } from "@/lib/financial/analysis";
-import { getHomeControlSummary,getHomeReconciliationSummary } from "@/lib/financial/home-streaming";
+import { getHomeControlSummary } from "@/lib/financial/home-streaming";
 import { madridToday } from "@/lib/time/madrid";
 import { SyncButton } from "@/components/sync-button";
 import { APP_VERSION } from "@/lib/app-version";
@@ -35,11 +35,10 @@ export default async function Home(){
   const year=Number(today.slice(0,4));
   const month=today.slice(0,7);
   const pulsePromise=getHomePulse();
-  const accountsPromise=getAccountsOverview();
+  const accountsPromise=getHomeAccountsOverview();
   const budgetPromise=getBudgetMonth(month);
   const forecastPromise=getForecastLiquidity(30);
   const analysisPromise=getAnalysisOverview(year);
-  const reconciliationPromise=getHomeReconciliationSummary();
   const controlPromise=Promise.all([pulsePromise,budgetPromise]).then(([pulse,budget])=>getHomeControlSummary(pulse,budget));
   const pulse=await pulsePromise;
 
@@ -51,7 +50,7 @@ export default async function Home(){
       <IntentLink href="/presupuesto"><span>Gastos</span><strong className="negative">{formatEuro(pulse.expenses)}</strong><small>gasto personal real</small></IntentLink>
       <IntentLink href="/cash-flow"><span>Cash Flow</span><strong className={pulse.cashFlow<0?"negative":"positive"}>{formatEuro(pulse.cashFlow)}</strong><small>sin ahorro ni traspasos</small></IntentLink>
       <IntentLink href="/movimientos?review=1"><span>Por revisar</span><strong>{formatInteger(pulse.needsReview)}</strong><small>{pulse.reviewSource}</small></IntentLink>
-      <Suspense fallback={<HomePulseSecondaryFallback/>}><HomePulseSecondary reconciliation={reconciliationPromise} control={controlPromise}/></Suspense>
+      <Suspense fallback={<HomePulseSecondaryFallback/>}><HomePulseSecondary reconciliation={pulse.reconciliation} control={controlPromise}/></Suspense>
     </section>
     <Suspense fallback={<HomeFlowFallback/>}><HomeFlowSection analysis={analysisPromise} budget={budgetPromise}/></Suspense>
     <Suspense fallback={<HomeForecastFallback/>}><HomeForecastSection data={forecastPromise}/></Suspense>

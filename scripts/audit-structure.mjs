@@ -25,7 +25,10 @@ if(av==="3.1.0"){
 }
 
 const home=readFileSync("app/page.tsx","utf8");
-for(const contract of ["getHomeControlSummary","getHomeReconciliationSummary","Suspense"])if(!home.includes(contract))errors.push(`Inicio no respeta arquitectura progresiva: falta ${contract}`);
+for(const contract of ["getHomeControlSummary","getHomeAccountsOverview","Suspense"])if(!home.includes(contract))errors.push(`Inicio no respeta arquitectura progresiva: falta ${contract}`);
+if(home.includes("getHomeReconciliationSummary"))errors.push("Inicio no debe volver a lanzar una RPC separada de conciliación; debe reutilizar home_pulse");
+if(home.includes("getAccountsOverview"))errors.push("Inicio no debe volver a cargar el payload completo de Cuentas");
+if(!home.includes("reconciliation={pulse.reconciliation}"))errors.push("Inicio debe reutilizar la conciliación integrada en getHomePulse");
 const modernPulse=/^(?:4\.[5-9]|[5-9]\.|\d{2,}\.)/.test(av||"");
 if(modernPulse){
   if(!home.includes("getHomePulse"))errors.push("Inicio 4.5+ debe usar el núcleo crítico ligero getHomePulse");
