@@ -195,6 +195,9 @@ begin
 end;
 $function$;
 
+revoke all on function financial_app.home_accounts_core() from public,anon;
+grant execute on function financial_app.home_accounts_core() to authenticated,service_role;
+
 create or replace function public.financial_app_home_accounts()
 returns jsonb
 language sql
