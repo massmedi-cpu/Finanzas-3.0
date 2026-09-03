@@ -278,10 +278,9 @@ function lineX(line: PaperEdgeLine, y: number, gridHeight: number) {
 }
 
 /**
- * Fallback geométrico para tickets grises, arrugados o apoyados sobre otra
- * superficie clara. Busca dos bordes largos y de polaridad opuesta: entrada al
- * papel por la izquierda y salida por la derecha. El texto del fondo produce
- * trazos cortos, pero no dos líneas paralelas durante casi toda la fotografía.
+ * Detector geométrico complementario para tickets grises, arrugados, con
+ * iluminación desigual o apoyados sobre otra superficie clara. Busca dos
+ * bordes largos y de polaridad opuesta durante casi toda la fotografía.
  */
 function detectPaperFromLongEdges(data: ImageData, width: number, height: number): PaperGeometry | null {
   const step = clamp(Math.round(Math.max(width, height) / 500), 3, 8);
@@ -411,11 +410,50 @@ function detectPaperFromLongEdges(data: ImageData, width: number, height: number
   };
 }
 
+function geometryCenter(geometry: PaperGeometry) {
+  return (geometry.topLeft + geometry.topRight + geometry.bottomLeft + geometry.bottomRight) / 4;
+}
+
+function geometryWidth(geometry: PaperGeometry) {
+  return ((geometry.topRight - geometry.topLeft) + (geometry.bottomRight - geometry.bottomLeft)) / 2;
+}
+
+function choosePaperGeometry(light: PaperGeometry, edges: PaperGeometry) {
+  const lightWidth = Math.max(1, geometryWidth(light));
+  const edgeWidth = Math.max(1, geometryWidth(edges));
+  const widthRatio = Math.max(lightWidth, edgeWidth) / Math.max(1, Math.min(lightWidth, edgeWidth));
+  const centerDistance = Math.abs(geometryCenter(light) - geometryCenter(edges));
+  const samePaper = widthRatio <= 1.45 && centerDistance <= Math.max(lightWidth, edgeWidth) * 0.22;
+  if (!samePaper) return light;
+
+  const lightHeight = Math.max(1, light.bottom - light.top);
+  const edgeHeight = Math.max(1, edges.bottom - edges.top);
+
+  // Las sombras longitudinales pueden cortar el componente luminoso en mitad
+  // del ticket aunque sus bordes físicos sigan siendo continuos. Cuando ambos
+  // detectores describen el mismo papel y los bordes cubren claramente más
+  // altura, se conserva esa geometría completa en lugar de truncar contenido.
+  if (edgeHeight >= lightHeight * 1.18) return edges;
+  return light;
+}
+
 export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
   const light = detectPaperFromLightRuns(data, width, height);
+  // Dos superficies luminosas equivalentes siguen siendo una escena ambigua:
+  // los bordes largos no deben fusionarlas ni decidir arbitrariamente una.
   if (light === AMBIGUOUS_PAPER) return null;
-  if (light) return light;
-  return detectPaperFromLongEdges(data, width, height);
+  if (!light) return detectPaperFromLongEdges(data, width, height);
+
+  // Solo se paga el detector complementario cuando la superficie luminosa es
+  // lo bastante corta para poder estar truncada por una sombra longitudinal.
+  // Los tickets ya bien delimitados conservan el camino rápido histórico.
+  const lightHeight = Math.max(1, light.bottom - light.top);
+  const lightWidth = Math.max(1, geometryWidth(light));
+  const suspiciousVerticalCoverage = lightHeight < height * 0.74 || lightHeight < lightWidth * 1.28;
+  if (!suspiciousVerticalCoverage) return light;
+
+  const edges = detectPaperFromLongEdges(data, width, height);
+  return edges ? choosePaperGeometry(light, edges) : light;
 }
 
 function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null) {
