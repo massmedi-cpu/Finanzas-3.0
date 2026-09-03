@@ -49,6 +49,9 @@ export function isReceiptVisualLayout(value: unknown): value is VisualLayout {
 
 export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
   const physicalLayout = receiptPhysicalPreviewLayout(layout);
+  // Una foto rectificada puede conservar una pendiente residual pequeña en las
+  // cajas OCR. Solo la normalizamos cuando varias filas sostienen la misma
+  // pendiente; separadores, fuente y evidencia original permanecen intactos.
   const geometryLayout = normalizeReceiptRowPerspective(physicalLayout);
   const visual = buildReceiptVisualModel(geometryLayout);
   const rules = buildReceiptVisualRules(physicalLayout);
@@ -88,7 +91,13 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
           fontSize: token.fontSize,
           explicitTextLength: token.textLength,
         });
+        // Las filas centradas conservan el centro físico medido. El modelo puede
+        // clasificarlas como centradas para anclaje tipográfico, pero no debe
+        // desplazarlas artificialmente al centro perfecto si el papel no lo hizo.
         const renderX = token.textAnchor === "middle" ? token.centerX : token.renderX;
+        // En impresión monoespaciada la caja OCR aporta evidencia suficiente para
+        // usar una familia mono; el texto normal baja a peso 500 para no engordar
+        // artificialmente tickets térmicos. Cabeceras/totales 700 se conservan.
         const fontWeight = fontProfile.monospace && token.fontWeight === 600
           ? fontProfile.regularWeight
           : token.fontWeight;
