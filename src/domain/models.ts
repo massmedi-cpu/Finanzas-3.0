@@ -85,15 +85,19 @@ export interface MerchantAlias {
 }
 
 /**
- * Capa 1: representación inmutable del dato bancario recibido de la fuente.
- * No contiene correcciones manuales del usuario.
+ * Capa 1: instantánea inmutable del dato bancario observado.
+ * Si la fuente externa corrige una fila histórica, se añade una nueva
+ * instantánea enlazada mediante supersedesSourceRecordId; nunca se reescribe
+ * ni elimina la observación anterior.
  */
 export interface TransactionSourceRecord {
   id: EntityId;
   sourceFileId: string;
   sourceSheetId: string | null;
   sourceRowKey: string;
+  sourceRowIdentity: string;
   sourceFingerprint: string;
+  supersedesSourceRecordId: EntityId | null;
   sourcePayload: Readonly<Record<string, unknown>>;
   bankDate: ISODate;
   conceptOriginal: string;
@@ -105,7 +109,7 @@ export interface TransactionSourceRecord {
 
 /**
  * Capa 2: dato financiero procesado y normalizado por Financial App.
- * Mantiene referencia obligatoria al registro original.
+ * Mantiene referencia obligatoria a la instantánea bancaria vigente.
  */
 export interface Transaction {
   id: EntityId;
