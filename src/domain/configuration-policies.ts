@@ -1,0 +1,167 @@
+import type { Account, Category, EntityId } from "./models";
+import type { ValidationIssue } from "./configuration";
+
+function normalizedLabel(value: string) {
+  return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-ES");
+}
+
+export function validateAccountUniqueness(
+  candidate: Pick<Account, "id" | "name">,
+  accounts: ReadonlyArray<Pick<Account, "id" | "name">>,
+): ValidationIssue[] {
+  const name = normalizedLabel(candidate.name);
+  const duplicated = accounts.some(
+    (account) => account.id !== candidate.id && normalizedLabel(account.name) === name,
+  );
+
+  return duplicated
+    ? [
+        {
+          field: "name",
+          code: "duplicate_account_name",
+          message: "Ya existe una cuenta con ese nombre.",
+        },
+      ]
+    : [];
+}
+
+export function validateCategoryUniqueness(
+  candidate: Pick<Category, "id" | "name" | "kind" | "parentCategoryId">,
+  categories: ReadonlyArray<Pick<Category, "id" | "name" | "kind" | "parentCategoryId">>,
+): ValidationIssue[] {
+  const name = normalizedLabel(candidate.name);
+  const duplicated = categories.some(
+    (category) =>
+      category.id !== candidate.id &&
+      category.kind === candidate.kind &&
+      category.parentCategoryId === candidate.parentCategoryId &&
+      normalizedLabel(category.name) === name,
+  );
+
+  return duplicated
+    ? [
+        {
+          field: "name",
+          code: "duplicate_category_name",
+          message: "Ya existe una categoría con ese nombre en este nivel.",
+        },
+      ]
+    : [];
+}
+
+export function validateCategoryHierarchy(
+  candidate: Pick<Category, "id" | "kind" | "parentCategoryId">,
+  categories: ReadonlyArray<Pick<Category, "id" | "kind" | "parentCategoryId">>,
+): ValidationIssue[] {
+  if (!candidate.parentCategoryId) {
+    return [];
+  }
+
+  if (candidate.parentCategoryId === candidate.id) {
+    return [
+      {
+        field: "parentCategoryId",
+        code: "self_parent",
+        message: "Una categoría no puede depender de sí misma.",
+      },
+    ];
+  }
+
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const parent = byId.get(candidate.parentCategoryId);
+
+  if (!parent) {
+    return [
+      {
+        field: "parentCategoryId",
+        code: "parent_not_found",
+        message: "La categoría superior no existe.",
+      },
+    ];
+  }
+
+  if (parent.kind !== candidate.kind) {
+    return [
+      {
+        field: "parentCategoryId",
+        code: "parent_kind_mismatch",
+        message: "La categoría superior debe ser del mismo tipo.",
+      },
+    ];
+  }
+
+  const visited = new Set<EntityId>([candidate.id]);
+  let cursor: Pick<Category, "id" | "kind" | "parentCategoryId"> | undefined = parent;
+
+  while (cursor) {
+    if (visited.has(cursor.id)) {
+      return [
+        {
+          field: "parentCategoryId",
+          code: "category_cycle",
+          message: "La jerarquía de categorías no puede contener ciclos.",
+        },
+      ];
+    }
+
+    visited.add(cursor.id);
+    cursor = cursor.parentCategoryId ? byId.get(cursor.parentCategoryId) : undefined;
+  }
+
+  return [];
+}
+
+export function validateCategoryMerge(
+  source: Pick<Category, "id" | "kind">,
+  target: Pick<Category, "id" | "kind">,
+): ValidationIssue[] {
+  if (source.id === target.id) {
+    return [
+      {
+        field: "targetCategoryId",
+        code: "same_category",
+        message: "La categoría de destino debe ser distinta de la categoría de origen.",
+      },
+    ];
+  }
+
+  if (source.kind !== target.kind) {
+    return [
+      {
+        field: "targetCategoryId",
+        code: "category_kind_mismatch",
+        message: "Solo pueden fusionarse categorías del mismo tipo.",
+      },
+    ];
+  }
+
+  return [];
+}
+
+export function validateReorder(
+  currentIds: ReadonlyArray<EntityId>,
+  orderedIds: ReadonlyArray<EntityId>,
+): ValidationIssue[] {
+  if (currentIds.length !== orderedIds.length || new Set(orderedIds).size !== orderedIds.length) {
+    return [
+      {
+        field: "sortOrder",
+        code: "invalid_reorder_set",
+        message: "La reordenación debe contener cada elemento exactamente una vez.",
+      },
+    ];
+  }
+
+  const current = new Set(currentIds);
+  const sameSet = orderedIds.every((id) => current.has(id));
+
+  return sameSet
+    ? []
+    : [
+        {
+          field: "sortOrder",
+          code: "invalid_reorder_set",
+          message: "La reordenación no puede añadir ni eliminar elementos.",
+        },
+      ];
+}
