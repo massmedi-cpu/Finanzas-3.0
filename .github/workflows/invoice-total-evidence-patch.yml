@@ -14,7 +14,13 @@ jobs:
         with:
           ref: fix/invoice-total-evidence-20260903
           fetch-depth: 1
-      - name: Apply exact source transformation
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install reproducibly
+        run: npm ci --no-audit --no-fund
+      - name: Apply bounded source transformation
         shell: bash
         run: |
           node <<'NODE'
@@ -44,21 +50,12 @@ jobs:
           if((source.split(anchor).length-1)!==1)throw new Error('strongTaxEvidence anchor mismatch');
           source=source.replace(anchor,helper+anchor);
 
-          const before=`  if (documentType === "invoice") {
-            // En una factura/albarán, un importe encontrado por proximidad o por una
-            // etiqueta OCR degradada no es suficiente: puede ser base/subtotal. La
-            // inferencia genérica se descarta y solo se recupera un bruto cuando base
-            // + IVA están explícitos y ese bruto aparece también en la evidencia.
-            amount = null;
-            const vatBreakdown = invoiceVatBreakdown(lines);
-            const base = labeledAmount(lines, /\\bBASE\\s+IMPONIBLE\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.base ?? null;
-            const tax = labeledAmount(lines, /\\bIMPORTE\\s+IVA\\b[^0-9]{0,24}(\\d{1,7}[.,]\\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
-            if (base !== null && tax !== null) {
-              const gross = Math.round((base + tax) * 100) / 100;
-              const candidates = lines.flatMap(extractAmounts);
-              if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
-            }
-          }`;
+          const startMarker='  if (documentType === "invoice") {';
+          const endMarker='\n\n  return { documentType, documentDate, amount, merchant: likelyMerchant(lines), lines };';
+          const start=source.indexOf(startMarker);
+          const end=source.indexOf(endMarker,start);
+          if(start<0||end<0)throw new Error(`invoice boundaries missing start=${start} end=${end}`);
+          if(source.indexOf(startMarker,start+1)>=0&&source.indexOf(startMarker,start+1)<end)throw new Error('multiple invoice blocks before return');
           const after=`  if (documentType === "invoice") {
             // En facturas/albaranes se descarta la inferencia genérica: un número grande
             // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
@@ -76,8 +73,7 @@ jobs:
               }
             }
           }`;
-          if((source.split(before).length-1)!==1)throw new Error('invoice block mismatch');
-          source=source.replace(before,after);
+          source=source.slice(0,start)+after+source.slice(end);
           fs.writeFileSync(path,source);
           NODE
 
