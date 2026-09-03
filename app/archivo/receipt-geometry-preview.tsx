@@ -2,6 +2,7 @@ import { receiptFontProfile } from "@/lib/document/receipt-font-profile";
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
 import { receiptMoneyDisplayText } from "@/lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
+import { normalizeReceiptRowPerspective } from "@/lib/document/receipt-row-perspective";
 import { buildReceiptVisualRules } from "@/lib/document/receipt-visual-rules";
 import { receiptTextLength } from "@/lib/document/receipt-text-fit";
 
@@ -48,7 +49,11 @@ export function isReceiptVisualLayout(value: unknown): value is VisualLayout {
 
 export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
   const physicalLayout = receiptPhysicalPreviewLayout(layout);
-  const visual = buildReceiptVisualModel(physicalLayout);
+  // Una foto rectificada puede conservar una pendiente residual pequeña en las
+  // cajas OCR. Solo la normalizamos cuando varias filas sostienen la misma
+  // pendiente; separadores, fuente y evidencia original permanecen intactos.
+  const geometryLayout = normalizeReceiptRowPerspective(physicalLayout);
+  const visual = buildReceiptVisualModel(geometryLayout);
   const rules = buildReceiptVisualRules(physicalLayout);
   const fontProfile = receiptFontProfile(physicalLayout);
 
