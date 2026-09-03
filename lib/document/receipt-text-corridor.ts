@@ -102,8 +102,18 @@ export function inferReceiptTextCorridor(
   const verticalExtent = bottom - top;
   if (bestRows.length < 5 || verticalExtent < sourceHeight * 0.22) return null;
 
-  let left = quantile(bestRows.map((row) => row.left), 0.08);
-  let right = quantile(bestRows.map((row) => row.right), 0.92);
+  // Una frase o cartel ancho del fondo puede cruzar el eje del ticket y, por
+  // tanto, pertenecer al grupo central. No permitimos que una anchura aislada
+  // defina los bordes físicos: se compara con el cuartil alto del propio grupo.
+  // Esa fila no se elimina aquí; simplemente deja de ensanchar el corredor.
+  const widths = bestRows.map((row) => row.right - row.left);
+  const widthReference = quantile(widths, 0.75);
+  const maximumEdgeWidth = Math.max(sourceWidth * 0.34, widthReference * 1.6);
+  const edgeRows = bestRows.filter((row) => row.right - row.left <= maximumEdgeWidth);
+  if (edgeRows.length < 4) return null;
+
+  let left = quantile(edgeRows.map((row) => row.left), 0.08);
+  let right = quantile(edgeRows.map((row) => row.right), 0.92);
   let width = right - left;
   if (width <= 0) return null;
 
