@@ -14,6 +14,11 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const ACCOUNT_TYPES = new Set(["checking", "savings", "credit", "cash", "investment", "other"]);
 const CATEGORY_KINDS = new Set(["income", "expense", "transfer"]);
 const LIFECYCLES = new Set(["active", "archived"]);
+const TEST_ACCOUNT_ID = "10000000-0000-4000-8000-000000000001";
+const TEST_CATEGORY_IDS = [
+  "20000000-0000-4000-8000-000000000001",
+  "20000000-0000-4000-8000-000000000002",
+] as const;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -29,19 +34,15 @@ function json(body: unknown, status = 200) {
 function uuid(value: unknown, field: string): asserts value is string {
   if (typeof value !== "string" || !UUID.test(value)) throw new Error(`invalid_${field}`);
 }
-
 function text(value: unknown, field: string, allowEmpty = false): asserts value is string {
   if (typeof value !== "string" || (!allowEmpty && !value.trim())) throw new Error(`invalid_${field}`);
 }
-
 function safeInteger(value: unknown, field: string): asserts value is number {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`invalid_${field}`);
 }
-
 function nonNegativeInteger(value: unknown, field: string): asserts value is number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < 0) throw new Error(`invalid_${field}`);
 }
-
 function accountPayload(account: any) {
   uuid(account?.id, "account_id");
   text(account?.name, "account_name");
@@ -54,7 +55,6 @@ function accountPayload(account: any) {
   text(account?.createdAt, "created_at");
   text(account?.updatedAt, "updated_at");
 }
-
 function categoryPayload(category: any) {
   uuid(category?.id, "category_id");
   text(category?.name, "category_name");
@@ -67,20 +67,17 @@ function categoryPayload(category: any) {
   text(category?.createdAt, "created_at");
   text(category?.updatedAt, "updated_at");
 }
-
 function orderedIds(value: unknown): asserts value is string[] {
   if (!Array.isArray(value) || value.some((id) => typeof id !== "string" || !UUID.test(id))) {
     throw new Error("invalid_ordered_ids");
   }
   if (new Set(value).size !== value.length) throw new Error("duplicate_ordered_ids");
 }
-
 function sameIdSet(current: string[], ordered: string[]) {
   if (current.length !== ordered.length) return false;
   const set = new Set(current);
   return ordered.every((id) => set.has(id));
 }
-
 async function applyOrdinalOrder(tx: any, table: "accounts" | "categories", ids: string[]) {
   for (let sortOrder = 0; sortOrder < ids.length; sortOrder += 1) {
     const id = ids[sortOrder];
@@ -91,7 +88,6 @@ async function applyOrdinalOrder(tx: any, table: "accounts" | "categories", ids:
     }
   }
 }
-
 async function verifyVercel(req: Request) {
   const auth = req.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -114,6 +110,7 @@ async function verifyVercel(req: Request) {
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
+
   let identity;
   try {
     identity = await verifyVercel(req);
@@ -124,12 +121,27 @@ Deno.serve(async (req) => {
 
   const databaseUrl = Deno.env.get("SUPABASE_DB_URL");
   if (!databaseUrl) return json({ error: "database_url_unavailable" }, 500);
-  const sql = postgres(databaseUrl, { max: 1, prepare: false, idle_timeout: 5, connect_timeout: 5, transform: { undefined: null } });
+  const sql = postgres(databaseUrl, {
+    max: 1,
+    prepare: false,
+    idle_timeout: 5,
+    connect_timeout: 5,
+    transform: { undefined: null },
+  });
 
   try {
     const body = await req.json().catch(() => ({}));
     const action = body?.action;
     const payload = body?.payload ?? {};
+
+    if (action === "test.cleanup") {
+      if (identity.environment !== "preview") return json({ error: "test_cleanup_preview_only" }, 403);
+      await sql.begin(async (tx) => {
+        await tx`delete from financial_app.categories where id in (${TEST_CATEGORY_IDS[0]}::uuid,${TEST_CATEGORY_IDS[1]}::uuid)`;
+        await tx`delete from financial_app.accounts where id=${TEST_ACCOUNT_ID}::uuid`;
+      });
+      return json({ ok: true });
+    }
 
     if (action === "health") {
       const rows = await sql`select 1::int as ok`;
@@ -152,7 +164,9 @@ Deno.serve(async (req) => {
       orderedIds(payload.orderedIds);
       await sql.begin(async (tx) => {
         const current = await tx`select id from financial_app.accounts order by id for update`;
-        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) throw new Error("invalid_reorder_set");
+        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) {
+          throw new Error("invalid_reorder_set");
+        }
         await applyOrdinalOrder(tx, "accounts", payload.orderedIds);
       });
       return json({ ok: true });
@@ -174,11 +188,14 @@ Deno.serve(async (req) => {
       orderedIds(payload.orderedIds);
       await sql.begin(async (tx) => {
         const current = await tx`select id from financial_app.categories order by id for update`;
-        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) throw new Error("invalid_reorder_set");
+        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) {
+          throw new Error("invalid_reorder_set");
+        }
         await applyOrdinalOrder(tx, "categories", payload.orderedIds);
       });
       return json({ ok: true });
     }
+
     if (action === "category.merge") {
       uuid(payload.sourceCategoryId, "source_category_id");
       uuid(payload.targetCategoryId, "target_category_id");
@@ -189,12 +206,16 @@ Deno.serve(async (req) => {
         const target = categories.find((row: any) => String(row.id) === payload.targetCategoryId);
         if (!source || !target) throw new Error("category_not_found");
         if (source.kind !== target.kind) throw new Error("category_kind_mismatch");
+
         const descendant = await tx`with recursive d as (select id from financial_app.categories where parent_category_id=${payload.sourceCategoryId}::uuid union all select c.id from financial_app.categories c join d on c.parent_category_id=d.id) select exists(select 1 from d where id=${payload.targetCategoryId}::uuid) exists`;
         if (descendant[0]?.exists) throw new Error("target_is_descendant");
+
         const childCollision = await tx`select exists(select 1 from financial_app.categories sc join financial_app.categories tc on tc.parent_category_id=${payload.targetCategoryId}::uuid and tc.kind=sc.kind and financial_app.normalize_label(tc.name)=financial_app.normalize_label(sc.name) where sc.parent_category_id=${payload.sourceCategoryId}::uuid and sc.id<>tc.id) exists`;
         if (childCollision[0]?.exists) throw new Error("child_category_collision");
+
         const budgetCollision = await tx`select exists(select 1 from financial_app.budgets sb join financial_app.budgets tb on tb.month=sb.month and tb.category_id=${payload.targetCategoryId}::uuid where sb.category_id=${payload.sourceCategoryId}::uuid) exists`;
         if (budgetCollision[0]?.exists) throw new Error("budget_collision");
+
         await tx`update financial_app.categories set parent_category_id=${payload.targetCategoryId}::uuid,updated_at=now() where parent_category_id=${payload.sourceCategoryId}::uuid`;
         await tx`update financial_app.merchants set default_category_id=${payload.targetCategoryId}::uuid,updated_at=now() where default_category_id=${payload.sourceCategoryId}::uuid`;
         await tx`update financial_app.transactions set category_id=${payload.targetCategoryId}::uuid,updated_at=now() where category_id=${payload.sourceCategoryId}::uuid`;
