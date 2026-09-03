@@ -9,7 +9,7 @@ assert.equal(rowRenderPaths.length,1,"Movimientos debe tener una sola ruta visua
 assert.ok(!view.includes('className="movement-cards"'),"no debe existir una segunda lista móvil de movimientos");
 assert.ok(view.includes('className="movement-date-cell"'),"la fila única debe exponer áreas responsive explícitas");
 assert.ok(view.includes('className="movement-main-cell"'),"la fila única debe conservar concepto y origen en la misma representación");
-assert.ok(view.includes('className="movement-amount-cell'),"la fila única debe conservar importe/saldo/parte personal");
+assert.ok(view.includes("movement-amount-cell")&&view.includes("item.personalAmount")&&view.includes("item.balance"),"la fila única debe conservar importe, parte personal y saldo");
 assert.ok(css.includes(".movement-table tbody tr{content-visibility:auto"),"las filas deben conservar renderizado diferido fuera de viewport");
 assert.ok(css.includes("@media(max-width:760px)"),"la representación única debe seguir siendo responsive");
 assert.ok(css.includes("grid-template-areas"),"el layout móvil debe remaquetar la misma fila, no crear otra lista");
