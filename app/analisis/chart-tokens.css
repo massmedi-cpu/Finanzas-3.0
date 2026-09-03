@@ -1,9 +1,0 @@
-.analysis-workspace{
-  --chart-income:var(--positive);
-  --chart-expense:var(--negative);
-  --chart-accent:var(--accent-primary);
-  --chart-prior:#7b817d;
-  --chart-grid:color-mix(in srgb,var(--border-subtle) 86%,transparent);
-  --chart-fill:color-mix(in srgb,var(--accent-primary) 10%,transparent);
-}
-html[data-theme="dark"] .analysis-workspace{--chart-prior:#9aa39d;--chart-grid:color-mix(in srgb,var(--border-subtle) 78%,transparent);--chart-fill:color-mix(in srgb,var(--accent-primary) 14%,transparent)}

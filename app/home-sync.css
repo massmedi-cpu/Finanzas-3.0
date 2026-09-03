@@ -1,5 +1,0 @@
-.sync-button-stack{display:grid;justify-items:end;gap:5px;max-width:min(680px,70vw)}
-.sync-button-stack>.ghost{justify-self:end}
-.sync-result{display:block;color:var(--text-secondary);font-size:14px;line-height:1.35;text-align:right;white-space:normal;font-variant-numeric:tabular-nums}
-.sync-result.warning{font-weight:650}
-@media(max-width:680px){.sync-button-stack{justify-items:stretch;max-width:none}.sync-button-stack>.ghost{justify-self:stretch}.sync-result{text-align:left}}

@@ -1,33 +1,9 @@
 node_modules/
 .next/
 out/
-.vercel/
 .env
 .env.*
 !.env.example
-*.log
-*.tsbuildinfo
-*.zip
+.vercel/
 .DS_Store
-Thumbs.db
-
-# Generated first-party document engine assets (recreated from package-lock)
-public/vendor/document-engine/
-
-# Local/private financial data must never be committed
-*.sqlite
-*.sqlite3
-*.db
-*.csv
-*.xlsx
-*.xls
-*.ods
-*.ofx
-*.qfx
-*.qif
-*.pdf
-private-data/
-exports/
-backups/
-credentials/
-secrets/
+*.log

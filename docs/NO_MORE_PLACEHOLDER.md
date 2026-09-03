@@ -1,1 +1,0 @@
-V1.5.0 implementation complete. Release is gated by automated validation.
