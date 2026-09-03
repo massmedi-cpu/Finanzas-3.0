@@ -1,5 +1,10 @@
 import assert from "node:assert/strict";
-import { buildStoredReceiptPersistence, storedReceiptFieldChanges, type StoredArchiveOcrDocument } from "../lib/document/server-archive-ocr-reprocess";
+import {
+  buildStoredReceiptPersistence,
+  reparseStoredReceiptMetadata,
+  storedReceiptFieldChanges,
+  type StoredArchiveOcrDocument,
+} from "../lib/document/server-archive-ocr-reprocess";
 import type { ImageOcrResult } from "../lib/document/ticket-ocr";
 
 const baseExisting:StoredArchiveOcrDocument={
@@ -20,8 +25,8 @@ const result:ImageOcrResult={
   layoutText:"JUAN\nFACTURA 1\nTOTAL 821,83",
   tsv:"",
   confidence:92,
-  method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v6:ppocrv6_es_geometry",
-  passes:[{variant:"ppocrv6_es_geometry",confidence:92,score:92,visualLayout:{version:1}} as never],
+  method:"image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v8:server_tesseract_7_geometry",
+  passes:[{variant:"server_tesseract_7_geometry",confidence:92,score:92,visualLayout:{version:1}} as never],
   receiptLayout:{header:["JUAN"],items:[],summary:[{label:"TOTAL",value:"821,83"}],footer:[],unparsedBody:[],source:"geometry_tsv"},
   metadata:{documentType:"invoice",documentDate:"2026-08-29",amount:821.83,merchant:"JUAN",lines:["JUAN","TOTAL 821,83"]},
   validation:{status:"complete",confidence:1,printedTotal:821.83,itemSum:null,base:null,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:0,contradictions:[]},
@@ -38,6 +43,7 @@ assert.deepEqual(machineOwned.humanFieldsPreserved,[]);
 assert.equal(machineOwned.digitalReconstruction.amount,821.83,"La reconstrucción debe conservar la nueva inferencia de máquina");
 assert.equal(machineOwned.ocrData.bulkReprocessed,true);
 assert.equal(machineOwned.ocrData.sourceOriginal,true);
+assert.equal(machineOwned.ocrData.metadataParserRevision,"parser_v8");
 assert.deepEqual(storedReceiptFieldChanges(baseExisting,machineOwned),[
   {field:"documentDate",kind:"updated"},
   {field:"amount",kind:"updated"},
@@ -54,13 +60,13 @@ const unresolvedResult:ImageOcrResult={
   validation:{status:"needs_review",confidence:.45,printedTotal:null,itemSum:null,base:679.2,tax:null,basePlusTax:null,validItems:0,invalidItems:0,unparsedBodyRows:1,contradictions:[{code:"missing_total",severity:"critical",message:"No hay un total final corroborado."}]},
 };
 const clearedMachineFields=buildStoredReceiptPersistence(baseExisting,unresolvedResult,"2026-09-02T05:01:00.000Z");
-assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando la semántica actual ya no lo considera total");
-assert.equal(clearedMachineFields.merchant,null,"Un comercio automático débil también puede retirarse si la nueva lectura no lo respalda");
+assert.equal(clearedMachineFields.amount,null,"Un subtotal automático anterior debe poder retirarse cuando una relectura visual nueva ya no lo considera total");
+assert.equal(clearedMachineFields.merchant,null,"Una relectura visual nueva puede retirar un comercio automático débil que ya no respalda");
 assert.equal(clearedMachineFields.ocrStatus,"needs_review");
 assert.deepEqual(storedReceiptFieldChanges(baseExisting,clearedMachineFields),[
   {field:"amount",kind:"cleared"},
   {field:"merchant",kind:"cleared"},
-],"La recuperación debe hacer visible cuándo retira metadatos automáticos no confirmados");
+],"La recuperación OCR completa debe hacer visible cuándo retira metadatos automáticos no confirmados");
 
 const edited:StoredArchiveOcrDocument={
   ...baseExisting,
@@ -88,4 +94,48 @@ const conservative=buildStoredReceiptPersistence(missingPrevious,result);
 assert.equal(conservative.merchant,"NO PISAR","Sin huella previa, un valor existente se conserva de forma conservadora");
 assert.equal(conservative.ocrStatus,"needs_review");
 
-console.log("OCR server reprocess safety tests OK · huella de máquina separada, cambios visibles, retiros seguros, correcciones humanas preservadas y auto-validación bloqueada cuando procede");
+const storedV7:StoredArchiveOcrDocument={
+  documentType:"invoice",
+  documentDate:"2026-08-28",
+  amount:null,
+  merchant:"EMPRESA EJEMPLO SL",
+  ocrText:`EMPRESA EJEMPLO SL
+ALBARAN
+FECHA 28/08/2026
+SUBTOTAL 679,200
+PORTES 142,630
+TOTAL ALBARAN 821,830`,
+  ocrStatus:"needs_review",
+  ocrData:{
+    method:"image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v7:server_tesseract_7_geometry",
+    confidence:81,
+    validation:{status:"failed"},
+    passes:[{variant:"server_tesseract_7_geometry"}],
+    processedAt:"2026-09-02T20:00:47.448Z",
+  },
+  digitalReconstruction:{documentType:"invoice",documentDate:"2026-08-28",amount:null,merchant:"EMPRESA EJEMPLO SL",method:"image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v7:server_tesseract_7_geometry"},
+};
+const parserOnly=reparseStoredReceiptMetadata(storedV7,"2026-09-03T05:00:00.000Z");
+assert.ok(parserOnly,"Un OCR visual Tesseract 7 con parser v7 debe poder migrar sin releer la imagen");
+assert.equal(parserOnly.persistence.amount,821.83,"El parser v8 debe recuperar TOTAL ALBARAN desde el texto ya almacenado");
+assert.equal(parserOnly.persistence.ocrText,storedV7.ocrText,"El reparseo no debe cambiar una sola línea de evidencia OCR");
+assert.equal(parserOnly.persistence.ocrStatus,"needs_review","Reinterpretar texto no puede auto-validar evidencia que ya estaba pendiente");
+assert.equal(parserOnly.persistence.method,"image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v8:server_tesseract_7_geometry");
+assert.equal(parserOnly.persistence.ocrData.metadataReparsed,true);
+assert.equal(parserOnly.persistence.ocrData.metadataReparseSource,"stored_ocr_text");
+assert.equal(parserOnly.persistence.ocrData.metadataParserRevision,"parser_v8");
+assert.equal(parserOnly.persistence.ocrData.processedAt,"2026-09-02T20:00:47.448Z","Reparsear metadatos no puede fingir una nueva fecha de OCR visual");
+assert.deepEqual(parserOnly.fieldChanges,[{field:"amount",kind:"updated"}]);
+
+const parserOnlyHumanEdit=reparseStoredReceiptMetadata({...storedV7,amount:800,digitalReconstruction:{...storedV7.digitalReconstruction,amount:null}});
+assert.ok(parserOnlyHumanEdit);
+assert.equal(parserOnlyHumanEdit.persistence.amount,800,"El parser-only nunca pisa un importe humano existente");
+assert.ok(parserOnlyHumanEdit.persistence.humanFieldsPreserved.includes("amount"));
+assert.ok(!parserOnlyHumanEdit.fieldChanges.some(change=>change.field==="amount"),"Un dato humano preservado no se anuncia como cambio automático");
+
+const alreadyV8=reparseStoredReceiptMetadata({...storedV7,ocrData:{...storedV7.ocrData,method:"image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v8:server_tesseract_7_geometry"}});
+assert.equal(alreadyV8,null,"Un documento que ya usa parser v8 no entra en un bucle de reparseo");
+const legacyV2=reparseStoredReceiptMetadata({...storedV7,ocrData:{method:"image_ocr_receipt_v501:paddle_layout_v6:parser_v2:ppocrv6_es_geometry"}});
+assert.equal(legacyV2,null,"Un OCR visual realmente antiguo debe seguir pasando por relectura canónica completa");
+
+console.log("OCR server reprocess safety tests OK · reparseo parser_v8 sin Tesseract, evidencia intacta, cambios humanos preservados y fallback visual seguro");

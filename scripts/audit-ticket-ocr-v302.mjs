@@ -83,8 +83,8 @@ for(const token of [
   'SERVER_RECEIPT_OCR_MODEL = "spa.traineddata"',
   'SERVER_RECEIPT_OCR_GEOMETRY_REVISION = "server_tesseract_7_geometry_v1"',
 ]) must(provenance.includes(token),`Procedencia OCR canónica incompleta: ${token}`);
-must(revision.includes("SERVER_RECEIPT_OCR_GEOMETRY_REVISION")&&revision.includes('RECEIPT_PARSER_REVISION = "parser_v7"')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR geométrica actual no está identificada de forma estable");
-must(revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),"La compatibilidad histórica debe quedar limitada a la revisión parser_v7 equivalente");
+must(revision.includes("SERVER_RECEIPT_OCR_GEOMETRY_REVISION")&&revision.includes('RECEIPT_PARSER_REVISION = "parser_v8"')&&revision.includes('image_ocr_receipt_v501:'),"La revisión OCR geométrica actual no está identificada de forma estable");
+must(revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),"La compatibilidad histórica debe conservar de forma explícita la revisión parser_v7 equivalente");
 
 for(const token of ["rawText","normalizedText","layoutText","tsv","validation","metrics"])
   must(baseOcr.includes(token),`El contrato OCR ha perdido ${token}`);

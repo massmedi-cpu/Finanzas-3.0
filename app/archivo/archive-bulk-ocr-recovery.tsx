@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-type Candidate={id:string;fileName:string;ocrStatus:string};
+type RecoveryMode="metadata_reparse"|"full_ocr";
+type Candidate={id:string;fileName:string;ocrStatus:string;recoveryMode?:RecoveryMode};
 type FieldChange={field:"documentType"|"documentDate"|"amount"|"merchant";kind:"updated"|"cleared"};
 type PlanResponse={ok:true;total:number;candidates:Candidate[];limit:number;remaining:number;truncated:boolean;error?:string};
 type ReprocessResponse={
@@ -13,6 +14,7 @@ type ReprocessResponse={
   skipped?:boolean;
   reason?:string;
   ocrStatus?:string;
+  mode?:RecoveryMode;
   humanFieldsPreserved?:string[];
   fieldChanges?:FieldChange[];
   missingFields?:string[];
@@ -66,7 +68,8 @@ function outcomeFor(candidate:Candidate,response:ReprocessResponse):RecoveryOutc
   }
   const correction=preserved.length?` Se han conservado tus correcciones en ${preservedLabel(preserved)}.`:"";
   const missing=missingFieldDetail(response.missingFields);
-  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura se ha guardado como evidencia provisional.${changes}${missing}${correction}`};
+  if(response.mode==="metadata_reparse")return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Metadatos actualizados sin releer la imagen",detail:`Se ha reutilizado el texto OCR ya guardado con el parser actual; el original no se ha reprocesado.${changes}${missing}${correction}`};
+  return{id:candidate.id,fileName:candidate.fileName,tone:"review",title:"Sigue pendiente de revisión",detail:`La nueva lectura del original se ha guardado como evidencia provisional.${changes}${missing}${correction}`};
 }
 
 export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:number;shouldCheck:boolean}){
@@ -117,7 +120,7 @@ export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:
           const body=await response.json().catch(()=>({ok:false,error:"ocr_reprocess_failed"})) as ReprocessResponse;
           if(!response.ok||!body.ok){
             failed+=1;
-            nextOutcomes.push({id:candidate.id,fileName:candidate.fileName,tone:"error",title:"No se pudo releer",detail:"La evidencia y los datos anteriores permanecen intactos."});
+            nextOutcomes.push({id:candidate.id,fileName:candidate.fileName,tone:"error",title:"No se pudo actualizar",detail:"La evidencia y los datos anteriores permanecen intactos."});
             continue;
           }
           const outcome=outcomeFor(candidate,body);
@@ -128,7 +131,7 @@ export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:
           if((body.humanFieldsPreserved?.length||0)>0)preserved+=1;
         }catch{
           failed+=1;
-          nextOutcomes.push({id:candidate.id,fileName:candidate.fileName,tone:"error",title:"No se pudo releer",detail:"La evidencia y los datos anteriores permanecen intactos."});
+          nextOutcomes.push({id:candidate.id,fileName:candidate.fileName,tone:"error",title:"No se pudo actualizar",detail:"La evidencia y los datos anteriores permanecen intactos."});
           continue;
         }finally{
           setDone(index+1);
@@ -139,8 +142,8 @@ export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:
       if(preserved)parts.push(`${preserved} con correcciones humanas preservadas`);
       if(skipped)parts.push(`${skipped} omitido${skipped===1?"":"s"} por cambio de estado`);
       if(failed)parts.push(`${failed} fallo${failed===1?"":"s"} sin sustituir la evidencia anterior`);
-      setMessage(`Recuperación OCR terminada · ${parts.join(" · ")}.`);
-      if(failed)setError("Algún original no pudo releerse. Los resultados anteriores de esos documentos se han conservado intactos.");
+      setMessage(`Recuperación documental terminada · ${parts.join(" · ")}.`);
+      if(failed)setError("Algún documento no pudo actualizarse. Sus resultados anteriores se han conservado intactos.");
       await loadPlan();
       router.refresh();
     }catch(cause){
@@ -156,11 +159,11 @@ export function ArchiveBulkOcrRecovery({initialCount,shouldCheck}:{initialCount:
   const visibleCount=plan?.total??initialCount;
   return <div className="archive-bulk-recovery">
     <div className="archive-library-note">
-      <span><strong>Actualización segura de OCR</strong><br/>{loading&&!plan?"Comprobando OCR pendiente e histórico…":running?`Procesando ${Math.min(done+1,batchSize)}/${batchSize}${current?` · ${current}`:""}`:visibleCount?`${visibleCount} documento${visibleCount===1?"":"s"} puede${visibleCount===1?"":"n"} releerse desde el original privado con el motor actual.`:"No hay documentos que necesiten una actualización OCR segura."}</span>
-      {Boolean(visibleCount)&&<button className="secondary-action" type="button" onClick={runBulkRecovery} disabled={running||loading} aria-busy={running||undefined}>{running?"Actualizando OCR…":`Actualizar OCR · ${visibleCount}`}</button>}
+      <span><strong>Actualización segura de OCR</strong><br/>{loading&&!plan?"Comprobando OCR pendiente e histórico…":running?`Procesando ${Math.min(done+1,batchSize)}/${batchSize}${current?` · ${current}`:""}`:visibleCount?`${visibleCount} documento${visibleCount===1?"":"s"} puede${visibleCount===1?"":"n"} actualizarse de forma segura. Se reutiliza el OCR existente cuando basta y solo se relee el original cuando hace falta.`:"No hay documentos que necesiten una actualización OCR segura."}</span>
+      {Boolean(visibleCount)&&<button className="secondary-action" type="button" onClick={runBulkRecovery} disabled={running||loading} aria-busy={running||undefined}>{running?"Actualizando…":`Actualizar OCR y metadatos · ${visibleCount}`}</button>}
     </div>
-    {!running&&Boolean(visibleCount)&&<div className="ocr-warning" role="note"><strong>El reprocesado conserva el original, tus correcciones y sus asociaciones</strong><span>Puede incluir documentos pendientes y lecturas históricas realizadas con motores anteriores. Si el nuevo OCR sigue indicando «Revisar OCR», su fecha, comercio e importe continúan siendo provisionales: solo un OCR validado o una revisión manual confirma esos datos.</span></div>}
-    {running&&<div className="ocr-progress" role="status"><div><span>{current||"Preparando lote OCR"}</span><b>{batchSize?Math.round(done/batchSize*100):0}%</b></div><progress max={Math.max(1,batchSize)} value={done}/><small>Originales procesados uno a uno. Una relectura fallida no sustituye la evidencia anterior, una revisión manual ni las asociaciones existentes.</small></div>}
+    {!running&&Boolean(visibleCount)&&<div className="ocr-warning" role="note"><strong>La actualización conserva el original, tus correcciones y sus asociaciones</strong><span>Primero reutiliza el texto OCR existente con el parser actual. Solo vuelve a leer la imagen cuando la evidencia guardada no basta. Si sigue indicando «Revisar OCR», sus datos continúan siendo provisionales: solo un OCR validado o una revisión manual los confirma.</span></div>}
+    {running&&<div className="ocr-progress" role="status"><div><span>{current||"Preparando lote OCR"}</span><b>{batchSize?Math.round(done/batchSize*100):0}%</b></div><progress max={Math.max(1,batchSize)} value={done}/><small>Documentos procesados uno a uno. Se reutiliza primero la evidencia guardada; una actualización fallida no sustituye la evidencia anterior, una revisión manual ni las asociaciones existentes.</small></div>}
     {!running&&plan&&plan.remaining>0&&<div className="archive-library-note"><span>Este lote está limitado a {plan.limit} originales para proteger rendimiento. Quedan {plan.remaining} para una siguiente pasada.</span></div>}
     {message&&<div className="inline-alert success" role="status">{message}</div>}
     {error&&<div className="inline-alert error" role="alert">{error}</div>}

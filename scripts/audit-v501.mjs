@@ -89,8 +89,9 @@ for(const token of [
   'SERVER_RECEIPT_OCR_MODEL = "spa.traineddata"',
   'SERVER_RECEIPT_OCR_GEOMETRY_REVISION = "server_tesseract_7_geometry_v1"',
 ]) must(provenance.includes(token),`Procedencia OCR canónica incompleta: ${token}`);
-must(revision.includes("SERVER_RECEIPT_OCR_GEOMETRY_REVISION")&&revision.includes('RECEIPT_PARSER_REVISION = "parser_v7"'),"La revisión OCR debe conservar parser_v7 y declarar la geometría Tesseract actual");
-must(revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),"La transición debe reconocer únicamente la revisión Paddle histórica equivalente para evitar reprocesado por renombrado");
+must(revision.includes("SERVER_RECEIPT_OCR_GEOMETRY_REVISION")&&revision.includes('RECEIPT_PARSER_REVISION = "parser_v8"'),"La revisión OCR debe conservar la geometría Tesseract 7 y versionar la interpretación financiera actual como parser_v8");
+must(revision.includes('image_ocr_receipt_v501:${RECEIPT_OCR_REVISION}:parser_v7:')&&revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),"La transición parser-only debe reconocer evidencia visual v7 compatible desde la constante canónica sin presentar Paddle histórico como Tesseract actual");
+must(revision.includes("needsReceiptMetadataReparse")&&revision.includes("upgradeReceiptParserMethod"),"La evolución de parser debe poder reutilizar evidencia visual compatible antes de repetir OCR");
 must(ocrEngine.includes("prepareReceiptImage")&&ocrEngine.includes("if (prepared.paperDetected)")&&ocrEngine.includes("input = prepared.grayscale"),"El OCR debe aislar el papel únicamente cuando la detección sea segura");
 must(ocrEngine.includes("input = file")&&!ocrEngine.includes("input = prepared.adaptive"),"El aislamiento de papel debe tener fallback al original y no usar binarización destructiva");
 must((ocrEngine.match(/engine\.predict\(/g)||[]).length===1,"El OCR canónico debe ejecutar una única inferencia de reconocimiento");
@@ -164,4 +165,4 @@ if(failures.length){
   for(const failure of failures)console.error(`- ${failure}`);
   process.exit(1);
 }
-console.log("Financial App 5.0.1 baseline audit OK · Tesseract español veraz en servidor · papel aislado con fallback seguro · geometría preservada · una sola inferencia · validación financiera estricta · hidratación Drive con frontera SECURITY INVOKER");
+console.log("Financial App 5.0.1 baseline audit OK · Tesseract español veraz en servidor · papel aislado con fallback seguro · geometría preservada · parser versionado independientemente · una sola inferencia · validación financiera estricta · hidratación Drive con frontera SECURITY INVOKER");
