@@ -434,11 +434,10 @@ function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null)
   for (let destinationY = 0; destinationY < sourceHeight; destinationY += strip) {
     const ratio = destinationY / Math.max(1, sourceHeight - 1);
     const left = geometry.topLeft + (geometry.bottomLeft - geometry.topLeft) * ratio;
-    const right = geometry.topRight + (geometry.bottomRight - geometry.bottomLeft) * 0 + (geometry.bottomRight - geometry.bottomLeft) * 0;
-    const actualRight = geometry.topRight + (geometry.bottomRight - geometry.topRight) * ratio;
+    const right = geometry.topRight + (geometry.bottomRight - geometry.topRight) * ratio;
     const y = geometry.top + destinationY;
     const h = Math.min(strip, sourceHeight - destinationY);
-    context.drawImage(source, left, y, Math.max(1, actualRight - left), h, marginX, marginY + destinationY, targetWidth, h);
+    context.drawImage(source, left, y, Math.max(1, right - left), h, marginX, marginY + destinationY, targetWidth, h);
   }
   const corrected = Math.abs(topWidth - bottomWidth) > Math.max(10, targetWidth * 0.02)
     || Math.abs(geometry.topLeft - geometry.bottomLeft) > Math.max(10, targetWidth * 0.02);
