@@ -2,9 +2,16 @@ import { formatDate } from "./formatters";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "./money";
 import { REGIONAL_CONFIG } from "./regional";
 import { validateAccountDraft, validateCategoryDraft } from "../domain/configuration";
+import {
+  validateAccountUniqueness,
+  validateCategoryHierarchy,
+  validateCategoryUniqueness,
+  validateReorder,
+} from "../domain/configuration-policies";
 import { resolveEffectiveTransaction } from "../domain/effective-transaction";
 import { FINANCIAL_INVARIANTS } from "../domain/invariants";
-import type { Transaction, TransactionOverride } from "../domain/models";
+import type { Category, Transaction, TransactionOverride } from "../domain/models";
+import { buildSourceFingerprint, buildSourceRowIdentity } from "../domain/source-identity";
 
 export type FoundationCheck = {
   name: string;
@@ -38,8 +45,8 @@ export function runFoundationHealthChecks(): FoundationHealth {
     accountId: "account-validation",
     bankDate: "2026-09-03",
     conceptNormalized: "Concepto original procesado",
-    merchantId: null,
-    categoryId: null,
+    merchantId: "merchant-original",
+    categoryId: "category-original",
     kind: "expense",
     amountCents: -1234,
     balanceAfterCents: 500000,
@@ -64,8 +71,53 @@ export function runFoundationHealthChecks(): FoundationHealth {
     updatedAt: "2026-09-03T10:00:00Z",
   };
 
+  const clearOverride: TransactionOverride = {
+    ...override,
+    id: "override-clear-validation",
+    conceptOverride: null,
+    merchantIdOverride: null,
+    merchantOverrideSet: true,
+    categoryIdOverride: null,
+    categoryOverrideSet: true,
+    reviewStateOverride: null,
+    note: null,
+  };
+
   const transactionBefore = JSON.stringify(transaction);
   const effective = resolveEffectiveTransaction(transaction, override);
+  const effectiveCleared = resolveEffectiveTransaction(transaction, clearOverride);
+
+  const sourceIdentityInput = {
+    sourceFileId: "bank-sheet",
+    sourceSheetId: "movements",
+    sourceRowKey: "row-42",
+    bankDate: "2026-09-03",
+    conceptOriginal: "  COMPRA   SUPERMERCADO  ",
+    amountCents: -2599,
+    balanceAfterCents: 145001,
+    accountExternalKey: "Cuenta principal",
+  } as const;
+
+  const categoryA: Category = {
+    id: "category-a",
+    name: "Hogar",
+    kind: "expense",
+    parentCategoryId: null,
+    iconKey: "home",
+    colorToken: "category.home",
+    lifecycle: "active",
+    sortOrder: 0,
+    createdAt: "2026-09-03T10:00:00Z",
+    updatedAt: "2026-09-03T10:00:00Z",
+  };
+
+  const categoryB: Category = {
+    ...categoryA,
+    id: "category-b",
+    name: "Suministros",
+    parentCategoryId: categoryA.id,
+    sortOrder: 1,
+  };
 
   const checks: FoundationCheck[] = [
     {
@@ -106,13 +158,26 @@ export function runFoundationHealthChecks(): FoundationHealth {
         FINANCIAL_INVARIANTS.synchronization.idempotent === true,
     },
     {
+      name: "source-row-identity-stable",
+      passed:
+        buildSourceRowIdentity(sourceIdentityInput) === "bank-sheet::movements::row-42" &&
+        buildSourceFingerprint(sourceIdentityInput) === buildSourceFingerprint(sourceIdentityInput) &&
+        buildSourceFingerprint(sourceIdentityInput) !==
+          buildSourceFingerprint({ ...sourceIdentityInput, amountCents: -2600 }),
+    },
+    {
       name: "user-override-projection-is-non-destructive",
       passed:
         effective.concept === "Concepto corregido por el usuario" &&
+        effective.merchantId === transaction.merchantId &&
         effective.categoryId === "category-validation" &&
         effective.reviewState === "confirmed" &&
         effective.amountCents === transaction.amountCents &&
         JSON.stringify(transaction) === transactionBefore,
+    },
+    {
+      name: "user-can-explicitly-clear-derived-values",
+      passed: effectiveCleared.merchantId === null && effectiveCleared.categoryId === null,
     },
     {
       name: "account-validation",
@@ -127,6 +192,14 @@ export function runFoundationHealthChecks(): FoundationHealth {
         }).length === 0,
     },
     {
+      name: "account-name-uniqueness",
+      passed:
+        validateAccountUniqueness(
+          { id: "account-new", name: "  CUENTA principal " },
+          [{ id: "account-existing", name: "Cuenta principal" }],
+        ).some((issue) => issue.code === "duplicate_account_name"),
+    },
+    {
       name: "category-validation",
       passed:
         validateCategoryDraft({
@@ -138,6 +211,30 @@ export function runFoundationHealthChecks(): FoundationHealth {
           lifecycle: "active",
           sortOrder: 0,
         }).length === 0,
+    },
+    {
+      name: "category-name-uniqueness-per-level",
+      passed:
+        validateCategoryUniqueness(
+          { ...categoryB, id: "category-new", name: " suministros " },
+          [categoryA, categoryB],
+        ).some((issue) => issue.code === "duplicate_category_name"),
+    },
+    {
+      name: "category-hierarchy-cycle-protection",
+      passed:
+        validateCategoryHierarchy(
+          { ...categoryA, parentCategoryId: categoryB.id },
+          [categoryA, categoryB],
+        ).some((issue) => issue.code === "category_cycle"),
+    },
+    {
+      name: "reorder-set-integrity",
+      passed:
+        validateReorder(["a", "b", "c"], ["c", "a", "b"]).length === 0 &&
+        validateReorder(["a", "b", "c"], ["a", "a", "c"]).some(
+          (issue) => issue.code === "invalid_reorder_set",
+        ),
     },
   ];
 
