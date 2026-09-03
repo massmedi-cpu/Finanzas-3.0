@@ -16,7 +16,7 @@ function averageCenter(geometry: NonNullable<ReturnType<typeof detectPaper>>) {
 }
 
 function drawRows(
-  context: ReturnType<ReturnType<typeof createCanvas>["getContext"]>,
+  canvas: ReturnType<typeof createCanvas>,
   left: number,
   right: number,
   top: number,
@@ -24,6 +24,7 @@ function drawRows(
   spacing: number,
   shade: string,
 ) {
+  const context = canvas.getContext("2d");
   context.fillStyle = shade;
   for (let y = top; y < bottom; y += spacing) {
     context.fillRect(left, y, Math.max(1, right - left), 4);
@@ -39,10 +40,10 @@ competingCtx.fillStyle = "#242a31";
 competingCtx.fillRect(0, 0, competing.width, competing.height);
 competingCtx.fillStyle = "#c7c5bd";
 competingCtx.fillRect(220, 70, 490, 1460);
-drawRows(competingCtx, 270, 650, 150, 1450, 54, "#353535");
+drawRows(competing, 270, 650, 150, 1450, 54, "#353535");
 competingCtx.fillStyle = "#f2f2ed";
 competingCtx.fillRect(785, 170, 370, 1260);
-drawRows(competingCtx, 820, 1120, 220, 1380, 38, "#515151");
+drawRows(competing, 820, 1120, 220, 1380, 38, "#515151");
 const competingGeometry = detectPaper(detectionData(competing), competing.width, competing.height);
 assert.ok(competingGeometry, "debe localizar el ticket aunque haya otra hoja clara al lado");
 assert.ok(averageWidth(competingGeometry) < 650, "no debe fusionar ticket y papel vecino en un único recorte ancho");
@@ -58,8 +59,8 @@ ambiguousCtx.fillRect(0, 0, ambiguous.width, ambiguous.height);
 ambiguousCtx.fillStyle = "#deddd7";
 ambiguousCtx.fillRect(90, 90, 430, 1420);
 ambiguousCtx.fillRect(680, 90, 430, 1420);
-drawRows(ambiguousCtx, 135, 475, 160, 1450, 52, "#383838");
-drawRows(ambiguousCtx, 725, 1065, 160, 1450, 52, "#383838");
+drawRows(ambiguous, 135, 475, 160, 1450, 52, "#383838");
+drawRows(ambiguous, 725, 1065, 160, 1450, 52, "#383838");
 assert.equal(
   detectPaper(detectionData(ambiguous), ambiguous.width, ambiguous.height),
   null,
@@ -74,7 +75,7 @@ grayCtx.fillStyle = "#20262c";
 grayCtx.fillRect(0, 0, gray.width, gray.height);
 grayCtx.fillStyle = "#7d7d79";
 grayCtx.fillRect(250, 70, 600, 1460);
-drawRows(grayCtx, 300, 800, 150, 1450, 57, "#303030");
+drawRows(gray, 300, 800, 150, 1450, 57, "#303030");
 const grayGeometry = detectPaper(detectionData(gray), gray.width, gray.height);
 assert.ok(grayGeometry, "el fallback por bordes debe seguir detectando tickets grises");
 assert.ok(averageWidth(grayGeometry) > 480 && averageWidth(grayGeometry) < 720, "el fallback gris debe conservar la anchura física del papel");
@@ -85,7 +86,7 @@ const cropped = createCanvas(720, 1450);
 const croppedCtx = cropped.getContext("2d");
 croppedCtx.fillStyle = "#d8d6cf";
 croppedCtx.fillRect(0, 0, cropped.width, cropped.height);
-drawRows(croppedCtx, 45, 675, 90, 1370, 51, "#333333");
+drawRows(cropped, 45, 675, 90, 1370, 51, "#333333");
 const croppedGeometry = detectPaper(detectionData(cropped), cropped.width, cropped.height);
 assert.ok(croppedGeometry, "un ticket correctamente recortado que toca bordes debe seguir siendo válido");
 
