@@ -4,6 +4,11 @@ const SERVER_TIMEOUT_MS = 55_000;
 // 3400px still cuts a 4080x3072 phone photo from 12.5MP to ~8.7MP while
 // preserving substantially more small text than the previous 2600px ceiling.
 const MAX_SIDE = 3400;
+// Capturas, imágenes reenviadas y tickets comprimidos pueden llegar con menos
+// de 600px en el lado corto. Se amplían una sola vez antes de Tesseract, sin
+// inventar una segunda inferencia y sin superar 2x ni el techo global.
+const MIN_OCR_SHORT_SIDE = 1000;
+const MAX_UPSCALE = 2;
 const DIRECT_BLOB_LIMIT = 3.5 * 1024 * 1024;
 const MAX_SERVER_BYTES = 4.5 * 1024 * 1024;
 const MIN_COMPRESSED_SIDE = 1200;
@@ -27,9 +32,24 @@ async function canvasToBlob(canvas, quality = 0.94) {
 
 function scaledSize(width, height, maxSide = MAX_SIDE) {
   const largest = Math.max(width, height);
-  if (!largest || largest <= maxSide) return { width, height };
-  const scale = maxSide / largest;
-  return { width: Math.max(1, Math.round(width * scale)), height: Math.max(1, Math.round(height * scale)) };
+  const shortest = Math.min(width, height);
+  if (!largest || !shortest) return { width, height };
+
+  let scale = 1;
+  if (largest > maxSide) {
+    scale = maxSide / largest;
+  } else if (shortest < MIN_OCR_SHORT_SIDE) {
+    scale = Math.min(
+      MAX_UPSCALE,
+      MIN_OCR_SHORT_SIDE / shortest,
+      maxSide / largest,
+    );
+  }
+  if (!Number.isFinite(scale) || Math.abs(scale - 1) < 0.001) return { width, height };
+  return {
+    width: Math.max(1, Math.round(width * scale)),
+    height: Math.max(1, Math.round(height * scale)),
+  };
 }
 
 function drawToCanvas(source, width, height) {

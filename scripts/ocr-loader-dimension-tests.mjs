@@ -65,7 +65,7 @@ const transportPixels=3400*2560;
 assert.ok(transportPixels/originalPixels<0.70,"El límite de calidad debe seguir reduciendo al menos ~30% de píxeles frente al original");
 assert.ok(transportPixels>2600*1958,"La entrada densa debe conservar más detalle que el antiguo límite de 2600px");
 
-// Una imagen que ya está dentro del límite dimensional y de bytes conserva el blob original.
+// Una imagen normal que ya tiene suficiente densidad conserva el blob original.
 dimensions={width:1600,height:1200};
 const small=new Blob([new Uint8Array(500_000)],{type:"image/jpeg"});
 const smallResult=(await engine.predict(small))[0];
@@ -76,6 +76,31 @@ assert.equal(smallRequest.headers["x-ocr-scaled"],"0");
 assert.equal(smallRequest.body,small);
 assert.equal(smallResult.metrics.transportScaled,false);
 
+// Capturas/tickets comprimidos con lado corto insuficiente se amplían de forma
+// moderada antes de la MISMA inferencia Tesseract. No se supera 2x ni 3400px.
+dimensions={width:520,height:1040};
+const lowRes=new Blob([new Uint8Array(280_000)],{type:"image/jpeg"});
+const lowResult=(await engine.predict(lowRes))[0];
+const lowRequest=requests.at(-1);
+assert.equal(lowRequest.headers["x-ocr-source-width"],"520");
+assert.equal(lowRequest.headers["x-ocr-source-height"],"1040");
+assert.equal(lowRequest.headers["x-ocr-width"],"1000");
+assert.equal(lowRequest.headers["x-ocr-height"],"2000");
+assert.equal(lowRequest.headers["x-ocr-scaled"],"1");
+assert.notEqual(lowRequest.body,lowRes,"una captura de 520px de ancho necesita más densidad de caracteres para Tesseract");
+assert.equal(lowResult.metrics.sourceWidth,520);
+assert.equal(lowResult.metrics.transportWidth,1000);
+assert.equal(lowResult.metrics.transportScaled,true);
+
+// Una imagen extremadamente pequeña no puede crecer sin límite: 2x máximo.
+dimensions={width:300,height:600};
+const tiny=new Blob([new Uint8Array(150_000)],{type:"image/jpeg"});
+await engine.predict(tiny);
+const tinyRequest=requests.at(-1);
+assert.equal(tinyRequest.headers["x-ocr-width"],"600");
+assert.equal(tinyRequest.headers["x-ocr-height"],"1200");
+assert.equal(tinyRequest.headers["x-ocr-scaled"],"1");
+
 // Compatibilidad: sin createImageBitmap, las imágenes directas pequeñas siguen funcionando.
 globalThis.createImageBitmap=undefined;
 const fallback=new Blob([new Uint8Array(400_000)],{type:"image/jpeg"});
@@ -85,4 +110,4 @@ assert.equal(fallbackRequest.headers["x-ocr-scaled"],"0");
 assert.equal(fallbackRequest.headers["x-ocr-width"],undefined);
 assert.equal(fallbackRequest.body,fallback);
 
-console.log("OCR loader dimension tests OK · Tesseract server adapter preserves 3400px transport, small direct and legacy browser fallback");
+console.log("OCR loader dimension tests OK · 3400px high-res, upscaling low-res limitado y fallback legacy protegidos");
