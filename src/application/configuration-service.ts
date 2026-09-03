@@ -126,9 +126,10 @@ export class ConfigurationService {
   }
 
   async mergeCategories(sourceCategoryId: EntityId, targetCategoryId: EntityId): Promise<void> {
-    const [source, target] = await Promise.all([
+    const [source, target, existing] = await Promise.all([
       this.categories.getById(sourceCategoryId),
       this.categories.getById(targetCategoryId),
+      this.categories.list(),
     ]);
     if (!source) {
       throw new ConfigurationNotFoundError("categoría", sourceCategoryId);
@@ -137,7 +138,7 @@ export class ConfigurationService {
       throw new ConfigurationNotFoundError("categoría", targetCategoryId);
     }
 
-    const prepared = prepareCategoryMerge(source, target);
+    const prepared = prepareCategoryMerge(source, target, existing);
     await this.categories.merge(prepared.sourceCategoryId, prepared.targetCategoryId);
   }
 }
