@@ -1,0 +1,63 @@
+name: Apply Archive PDF page-order fix
+on:
+  push:
+    branches:
+      - fix/archive-pdf-page-order-20260903
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-archive-pdf-order]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/archive-pdf-page-order-20260903
+          fetch-depth: 1
+      - name: Apply exact source transformation
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs');
+          const path='app/archivo/archive-client.tsx';
+          let source=fs.readFileSync(path,'utf8');
+          const replacements=[
+            [
+              'pages=pdf.numPages;const chunks:string[]=[];const scanned:number[]=[];',
+              'pages=pdf.numPages;const pageChunks=Array<string>(pdf.numPages).fill("");const scanned:number[]=[];const nativePages:number[]=[];'
+            ],
+            [
+              'if(pageText.replace(/\\s/g,"").length>=40)chunks.push(pageText);else scanned.push(i)',
+              'if(pageText.replace(/\\s/g,"").length>=40){pageChunks[i-1]=pageText;nativePages.push(i)}else scanned.push(i)'
+            ],
+            [
+              'method=chunks.length?"pdf_hybrid_server_tesseract_v1":"pdf_ocr_server_tesseract_v1"',
+              'method=nativePages.length?"pdf_hybrid_server_tesseract_v1":"pdf_ocr_server_tesseract_v1"'
+            ],
+            [
+              'chunks.push(String(recognized.data?.text||""))',
+              'pageChunks[pageNo-1]=String(recognized.data?.text||"").trim()'
+            ],
+            [
+              'confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null}\n    else method="pdf_text";text=chunks.join("\\n\\n");layoutText=text;',
+              'confidence=scores.length?scores.reduce((a,b)=>a+b,0)/scores.length:null;status="needs_review"}\n    else method="pdf_text";text=pageChunks.join("\\n\\n").trim();layoutText=text;evidence={...evidence,pdfPageSources:pageChunks.map((value,index)=>({pageNumber:index+1,source:scanned.includes(index+1)?"ocr":"text",textCharacters:value.replace(/\\s/g,"").length})),nativePages,scannedPages:scanned};'
+            ],
+          ];
+          for(const [before,after] of replacements){
+            const hits=source.split(before).length-1;
+            if(hits!==1)throw new Error(`Expected exactly one source match, got ${hits}: ${before.slice(0,90)}`);
+            source=source.replace(before,after);
+          }
+          fs.writeFileSync(path,source);
+          NODE
+          node scripts/archive-pdf-page-order-tests.mjs
+          rm .github/workflows/archive-pdf-page-order-patch.yml
+          git diff --check
+      - name: Commit source-only fix
+        shell: bash
+        run: |
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add app/archivo/archive-client.tsx .github/workflows/archive-pdf-page-order-patch.yml
+          git commit -m "Fix Archive mixed PDF page order"
+          git push origin HEAD:fix/archive-pdf-page-order-20260903
