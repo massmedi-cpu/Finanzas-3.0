@@ -16,7 +16,9 @@ const nextConfig=fs.readFileSync("next.config.ts","utf8");
 
 for(const token of ["MAX_VISUAL_OCR_PAGES","page.getTextContent()","page.render(","recognizeServerReceiptImage","completeCoverage","nativePages","ocrPages","missingPages","serverPdfSourceMode"])
   assert.ok(server.includes(token),`Pipeline PDF híbrido incompleto: ${token}`);
-assert.ok(server.indexOf("page.getTextContent()")<server.indexOf("recognizeServerReceiptImage"),"El PDF debe intentar texto nativo antes de gastar OCR visual");
+const nativeRead=server.indexOf("const content=await page.getTextContent()");
+const visualRead=server.indexOf("const recognized=await recognizeServerReceiptImage");
+assert.ok(nativeRead>=0&&visualRead>nativeRead,"El PDF debe intentar texto nativo antes de gastar OCR visual");
 assert.ok(server.includes('source:"missing"')&&server.includes('source:"ocr"')&&server.includes('source:"text"'),"Cada página debe conservar su procedencia");
 
 for(const token of ["drive_auto_pdf_hybrid_tesseract_v2","drive_auto_pdf_ocr_tesseract_v2","drive_auto_pdf_incomplete_v2","completeCoverage","pageSources","validateReceiptFinancials"])
