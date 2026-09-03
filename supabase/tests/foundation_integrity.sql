@@ -7,7 +7,7 @@ declare
   child_category_id uuid;
   first_source_id uuid;
   second_source_id uuid;
-  transaction_id uuid;
+  v_transaction_id uuid;
   blocked boolean;
   meta_ok boolean;
 begin
@@ -223,7 +223,7 @@ begin
     145000,
     'pending',
     'none'
-  ) returning id into transaction_id;
+  ) returning id into v_transaction_id;
 
   insert into financial_app.transaction_overrides (
     transaction_id,
@@ -236,7 +236,7 @@ begin
     review_state_override,
     note
   ) values (
-    transaction_id,
+    v_transaction_id,
     null,
     null,
     true,
@@ -249,12 +249,12 @@ begin
 
   if not exists (
     select 1
-    from financial_app.transaction_overrides
-    where transaction_id = transaction_id
-      and merchant_override_set = true
-      and merchant_id_override is null
-      and category_override_set = true
-      and category_id_override is null
+    from financial_app.transaction_overrides o
+    where o.transaction_id = v_transaction_id
+      and o.merchant_override_set = true
+      and o.merchant_id_override is null
+      and o.category_override_set = true
+      and o.category_id_override is null
   ) then
     raise exception 'explicit clear override was not persisted';
   end if;
