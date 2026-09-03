@@ -3,7 +3,7 @@ import { IntentLink } from "@/components/intent-link";
 import { CashFlowChart } from "@/components/cash-flow-chart";
 import { movementState,movementUrl } from "@/lib/financial/movement-query";
 import type { HomeAccountsOverview } from "@/lib/financial/accounts";
-import type { HomePulse } from "@/lib/financial/home-pulse";
+import type { HomeReconciliation } from "@/lib/financial/home-pulse";
 import type { BudgetMonth } from "@/lib/financial/budget";
 import type { ForecastLiquidityOverview } from "@/lib/financial/forecast-liquidity";
 import type { AnalysisOverview } from "@/lib/financial/analysis";
@@ -30,7 +30,7 @@ export function HomePulseSecondaryFallback(){
   return <><div className="home-stream-pulse-placeholder" aria-hidden="true"><span>Conciliación</span><strong>—</strong><small>Calculando…</small></div><div className="home-stream-pulse-placeholder" aria-hidden="true"><span>Alertas</span><strong>—</strong><small>Calculando…</small></div></>;
 }
 
-export async function HomePulseSecondary({reconciliation,control}:{reconciliation:HomePulse["reconciliation"];control:Promise<HomeControlSummary>}){
+export async function HomePulseSecondary({reconciliation,control}:{reconciliation:HomeReconciliation;control:Promise<HomeControlSummary>}){
   const c=await control;
   const open=reconciliation.pending+reconciliation.notReconciled;
   const alerts=c.visibleAlerts+c.hiddenAlerts;
