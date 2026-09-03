@@ -11,6 +11,13 @@ export type HomePulse = {
   needsReview: number;
   reviewSource: number;
   lastMovementDate: string | null;
+  reconciliation: {
+    total: number;
+    reconciled: number;
+    pending: number;
+    notReconciled: number;
+    notApplicable: number;
+  };
   sync: {
     status: string;
     finishedAt: string | null;
@@ -36,6 +43,7 @@ export async function getHomePulse(): Promise<HomePulse> {
   const {data,error}=await supabase.rpc("financial_app_home_pulse");
   if(error||!data)throw new Error(error?.message||"home_pulse_unavailable");
   const raw=asRecord(data);
+  const reconciliationRaw=asRecord(raw.reconciliation);
   const syncRaw=raw.sync==null?null:asRecord(raw.sync);
   const driveSyncRaw=asRecord(raw.driveSync);
   const rules=asRecord(raw.rules);
@@ -48,6 +56,13 @@ export async function getHomePulse(): Promise<HomePulse> {
     needsReview:asNumber(raw.needsReview),
     reviewSource:asNumber(raw.reviewSource),
     lastMovementDate:nullableString(raw.lastMovementDate),
+    reconciliation:{
+      total:asNumber(reconciliationRaw.total),
+      reconciled:asNumber(reconciliationRaw.reconciled),
+      pending:asNumber(reconciliationRaw.pending),
+      notReconciled:asNumber(reconciliationRaw.notReconciled),
+      notApplicable:asNumber(reconciliationRaw.notApplicable),
+    },
     sync:syncRaw?{
       status:asString(syncRaw.status),
       finishedAt:nullableString(syncRaw.finishedAt),
