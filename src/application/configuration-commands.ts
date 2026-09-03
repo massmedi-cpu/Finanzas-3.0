@@ -137,8 +137,12 @@ export function prepareUpdatedCategory(
   return candidate;
 }
 
-export function prepareCategoryMerge(source: Category, target: Category) {
-  requireValid(validateCategoryMerge(source, target));
+export function prepareCategoryMerge(
+  source: Category,
+  target: Category,
+  existing: ReadonlyArray<Category> = [],
+) {
+  requireValid(validateCategoryMerge(source, target, existing));
   return { sourceCategoryId: source.id, targetCategoryId: target.id } as const;
 }
 
