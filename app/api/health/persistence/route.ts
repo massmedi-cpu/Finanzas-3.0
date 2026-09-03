@@ -1,22 +1,28 @@
+import { getVercelOidcToken } from "@vercel/oidc";
+
 const SUPABASE_GATEWAY_URL =
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const oidcToken = process.env.VERCEL_OIDC_TOKEN;
-
-  if (!oidcToken) {
-    return Response.json(
-      {
-        status: "failed",
-        reason: "vercel_oidc_unavailable",
-      },
-      { status: 503 },
-    );
-  }
-
   try {
+    const oidcToken = await getVercelOidcToken({
+      project: "prj_SbZ64E02YhCK4ds24Yi7qf5CeQjo",
+      team: "team_xrSskbkRKwQkyYc0vvLVGUnb",
+      expirationBufferMs: 60_000,
+    });
+
+    if (!oidcToken) {
+      return Response.json(
+        {
+          status: "failed",
+          reason: "vercel_oidc_unavailable",
+        },
+        { status: 503 },
+      );
+    }
+
     const response = await fetch(SUPABASE_GATEWAY_URL, {
       method: "POST",
       headers: {
@@ -54,7 +60,12 @@ export async function GET() {
         },
       },
     );
-  } catch {
+  } catch (error) {
+    console.error(
+      "persistence-health",
+      error instanceof Error ? error.message : String(error),
+    );
+
     return Response.json(
       {
         status: "failed",
