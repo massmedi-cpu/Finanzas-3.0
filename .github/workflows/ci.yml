@@ -46,6 +46,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/server-receipt-image-preprocessor-tests.ts
       - name: OCR paper candidate arbitration
         run: ./node_modules/.bin/tsx scripts/ocr-paper-candidate-arbitration-tests.ts
+      - name: OCR physical type scale
+        run: ./node_modules/.bin/tsx scripts/ocr-physical-type-scale-tests.ts
       - name: OCR deskew confidence
         run: ./node_modules/.bin/tsx scripts/ocr-deskew-confidence-tests.ts
       - name: OCR background corridor
