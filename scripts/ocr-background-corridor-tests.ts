@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { inferReceiptTextCorridor, type ReceiptCorridorRow } from "../lib/document/receipt-text-corridor";
+import { recognizeTicketImage } from "../lib/document/ticket-ocr-engine";
 
 const row = (text:string,left:number,right:number,top:number,score=92):ReceiptCorridorRow => ({
   text, score, left, right, top, bottom:top+26,
@@ -68,4 +69,35 @@ assert.equal(
   "con pocas filas el filtro debe fallar de forma cerrada",
 );
 
-console.log("OCR background corridor tests OK · tickets simples/off-center aislados y casos ambiguos rechazados");
+// Integración: en un ticket sin cabecera, una palabra financiera situada en
+// otro papel no puede saltarse el corredor solo por llamarse TOTAL. El total
+// del ticket, dentro de su geometría dominante, sí debe conservarse.
+const ocrItem=(text:string,left:number,top:number,width:number,score=.94)=>({
+  text,
+  score,
+  poly:[[left,top],[left+width,top],[left+width,top+20],[left,top+20]],
+});
+const headerlessResult={
+  image:{width:1000,height:700},
+  items:[
+    ocrItem("CAFETERIA CENTRAL",330,60,300),
+    ocrItem("03/09/2026 08:00",345,105,270),
+    ocrItem("CAFE 1,40",275,200,430),
+    ocrItem("TOSTADA 2,10",265,250,445),
+    ocrItem("ZUMO 2,50",280,300,420),
+    ocrItem("TOTAL 6,00",430,380,275),
+    ocrItem("GRACIAS",420,455,165),
+    ocrItem("TOTAL 99,99",825,275,150,.97),
+  ],
+  metrics:{detMs:8,recMs:15,totalMs:23,detectedBoxes:8,recognizedCount:8},
+  runtime:"server-tesseract-7",
+};
+const headerlessEngine={async predict(){return[headerlessResult];}};
+const headerlessFile=new File([new Uint8Array([1,2,3])],"headerless.jpg",{type:"image/jpeg"});
+const headerlessRecognized=await recognizeTicketImage(headerlessFile,headerlessEngine,()=>undefined,"receipt");
+assert.ok(headerlessRecognized.text.includes("TOTAL 6,00"),"el total que pertenece al corredor debe conservarse");
+assert.ok(!headerlessRecognized.text.includes("99,99"),"un TOTAL financiero del fondo no debe quedar protegido fuera del corredor inferido");
+const discarded=(headerlessRecognized.passes[0] as typeof headerlessRecognized.passes[0]&{discardedBoxes?:Array<{text?:string}>}).discardedBoxes||[];
+assert.ok(discarded.some(box=>String(box.text||"").includes("99,99")),"el total exterior debe quedar trazado como evidencia descartada");
+
+console.log("OCR background corridor tests OK · tickets simples/off-center aislados, TOTAL exterior rechazado y casos ambiguos protegidos");
