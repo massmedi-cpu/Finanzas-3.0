@@ -1,3 +1,4 @@
+import { receiptFontProfile } from "@/lib/document/receipt-font-profile";
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
 import { receiptMoneyDisplayText } from "@/lib/document/receipt-money-display";
 import { receiptPhysicalPreviewLayout } from "@/lib/document/receipt-visual-physical-layout";
@@ -49,6 +50,7 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
   const physicalLayout = receiptPhysicalPreviewLayout(layout);
   const visual = buildReceiptVisualModel(physicalLayout);
   const rules = buildReceiptVisualRules(physicalLayout);
+  const fontProfile = receiptFontProfile(physicalLayout);
 
   return <div style={{ display: "grid", gap: 12, width: "100%" }}>
     <svg
@@ -88,14 +90,20 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         // clasificarlas como centradas para anclaje tipográfico, pero no debe
         // desplazarlas artificialmente al centro perfecto si el papel no lo hizo.
         const renderX = token.textAnchor === "middle" ? token.centerX : token.renderX;
+        // En impresión monoespaciada la caja OCR aporta evidencia suficiente para
+        // usar una familia mono; el texto normal baja a peso 500 para no engordar
+        // artificialmente tickets térmicos. Cabeceras/totales 700 se conservan.
+        const fontWeight = fontProfile.monospace && token.fontWeight === 600
+          ? fontProfile.regularWeight
+          : token.fontWeight;
         return <text
           key={`${token.top}-${token.left}-${token.index}-${displayText}`}
           x={renderX}
           y={token.baselineY}
           fill="#171717"
-          fontFamily={'"Roboto", "Arial Narrow", Arial, Helvetica, sans-serif'}
+          fontFamily={fontProfile.fontFamily}
           fontSize={token.fontSize}
-          fontWeight={token.fontWeight}
+          fontWeight={fontWeight}
           textAnchor={token.textAnchor}
           dominantBaseline="alphabetic"
           letterSpacing={token.letterSpacing}
@@ -107,6 +115,6 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         </text>;
       })}
     </svg>
-    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, importes, tamaños, ancho y posición reconstruidos desde las coordenadas y evidencia visual reales; el original privado sigue siendo la referencia.</small>
+    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, separadores, márgenes, importes, tipografía, tamaños, ancho y posición reconstruidos desde las coordenadas y evidencia visual reales; el original privado sigue siendo la referencia.</small>
   </div>;
 }
