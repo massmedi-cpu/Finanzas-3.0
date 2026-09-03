@@ -128,13 +128,20 @@ export interface Transaction {
 /**
  * Capa 3: modificaciones explícitas del usuario.
  * Nunca sobreescribe el registro bancario original.
+ *
+ * merchantOverrideSet/categoryOverrideSet permiten diferenciar entre
+ * "sin modificación" y "el usuario ha vaciado expresamente el valor".
+ * Se mantienen opcionales para compatibilidad acumulativa con registros
+ * creados antes de introducir esta distinción.
  */
 export interface TransactionOverride {
   id: EntityId;
   transactionId: EntityId;
   conceptOverride: string | null;
   merchantIdOverride: EntityId | null;
+  merchantOverrideSet?: boolean;
   categoryIdOverride: EntityId | null;
+  categoryOverrideSet?: boolean;
   kindOverride: TransactionKind | null;
   excludedFromAnalytics: boolean;
   reviewStateOverride: TransactionReviewState | null;
