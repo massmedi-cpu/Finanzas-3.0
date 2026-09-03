@@ -439,10 +439,21 @@ function choosePaperGeometry(light: PaperGeometry, edges: PaperGeometry) {
 
 export function detectPaper(data: ImageData, width: number, height: number): PaperGeometry | null {
   const light = detectPaperFromLightRuns(data, width, height);
+  // Dos superficies luminosas equivalentes siguen siendo una escena ambigua:
+  // los bordes largos no deben fusionarlas ni decidir arbitrariamente una.
+  if (light === AMBIGUOUS_PAPER) return null;
+  if (!light) return detectPaperFromLongEdges(data, width, height);
+
+  // Solo se paga el detector complementario cuando la superficie luminosa es
+  // lo bastante corta para poder estar truncada por una sombra longitudinal.
+  // Los tickets ya bien delimitados conservan el camino rápido histórico.
+  const lightHeight = Math.max(1, light.bottom - light.top);
+  const lightWidth = Math.max(1, geometryWidth(light));
+  const suspiciousVerticalCoverage = lightHeight < height * 0.74 || lightHeight < lightWidth * 1.28;
+  if (!suspiciousVerticalCoverage) return light;
+
   const edges = detectPaperFromLongEdges(data, width, height);
-  if (light === AMBIGUOUS_PAPER) return edges;
-  if (light && edges) return choosePaperGeometry(light, edges);
-  return light || edges;
+  return edges ? choosePaperGeometry(light, edges) : light;
 }
 
 function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null) {
