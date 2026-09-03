@@ -1,0 +1,40 @@
+name: Apply invoice total formatting
+on:
+  push:
+    branches:
+      - fix/invoice-total-evidence-20260903
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[apply-invoice-total-format]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/invoice-total-evidence-20260903
+          fetch-depth: 1
+      - name: Normalize indentation
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs');
+          const path='lib/document/ticket-ocr.ts';
+          const lines=fs.readFileSync(path,'utf8').split('\n');
+          const start=lines.findIndex((line)=>line==='  if (documentType === "invoice") {');
+          const returnIndex=lines.findIndex((line,index)=>index>start&&line.startsWith('  return { documentType, documentDate, amount'));
+          const end=returnIndex-2;
+          if(start<0||returnIndex<0||end<=start||lines[end]!=='}')throw new Error(`invoice block boundaries invalid start=${start} end=${end} return=${returnIndex}`);
+          for(let index=start+1;index<=end;index++)if(lines[index])lines[index]='  '+lines[index];
+          fs.writeFileSync(path,lines.join('\n'));
+          NODE
+          rm .github/workflows/invoice-total-format-patch.yml
+          git diff --check
+      - name: Commit source-only formatting
+        shell: bash
+        run: |
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add lib/document/ticket-ocr.ts .github/workflows/invoice-total-format-patch.yml
+          git commit -m "Normalize invoice total evidence formatting"
+          git push origin HEAD:fix/invoice-total-evidence-20260903
