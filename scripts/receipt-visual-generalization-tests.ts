@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "../lib/document/receipt-visual-model";
+import { receiptTextLength } from "../lib/document/receipt-text-fit";
 
 function visual(width:number,height:number,lines:ReceiptVisualLayoutInput["lines"]){
   return buildReceiptVisualModel({bounds:{width,height},lines});
@@ -73,6 +74,15 @@ const wrappedFirst=wrapped.tokens.find(token=>token.text==="PRODUCTO");
 assert.ok(wrappedContinuation&&wrappedFirst,"la continuación física debe seguir visible");
 assert.ok(Math.abs(wrappedContinuation.renderX-wrappedFirst.renderX)<1,"las líneas continuadas deben respetar el inicio de la columna descripción");
 assert.equal(wrapped.tokens.filter(token=>token.text==="2,00").length,2,"la fila posterior a una descripción envuelta debe conservar precio e importe");
+const wrappedWidth=receiptTextLength({text:wrappedContinuation.text,boxWidth:wrappedContinuation.boxWidth,fontSize:wrappedContinuation.fontSize});
+assert.ok(wrappedWidth&&Math.abs(wrappedWidth-wrappedContinuation.boxWidth)<.01,"una descripción con geometría plausible debe conservar el ancho físico OCR");
+
+// El ancho medido se usa solo cuando la caja es plausible: no se debe estirar
+// texto a partir de una segmentación absurda ni deformar cantidades de un glifo.
+assert.equal(receiptTextLength({text:"DESCRIPCION",boxWidth:118,fontSize:18}),118);
+assert.equal(receiptTextLength({text:"DESCRIPCION",boxWidth:900,fontSize:18}),undefined);
+assert.equal(receiptTextLength({text:"1",boxWidth:20,fontSize:18}),undefined);
+assert.equal(receiptTextLength({text:"IMPORTE",boxWidth:70,fontSize:18,explicitTextLength:64}),64);
 
 // La geometría normalizada debe escalar sin cambiar la estructura al recibir
 // una imagen estrecha o una captura de mucha más resolución.
@@ -92,4 +102,4 @@ const narrowAmount=narrow.tokens.find(token=>token.text==="4,25"&&token.renderX>
 const wideAmount=wide.tokens.find(token=>token.text==="4,25"&&token.renderX>wide.width*.75)!;
 assert.ok(Math.abs(narrowAmount.renderX/narrow.width-wideAmount.renderX/wide.width)<.002,"las columnas deben escalar por geometría normalizada, no por píxeles fijos");
 
-console.log("receipt visual generalization tests OK · cabeceras alternativas, tabla implícita, descripciones envueltas y escalado geométrico protegidos");
+console.log("receipt visual generalization tests OK · cabeceras alternativas, tabla implícita, descripciones envueltas, ancho físico y escalado geométrico protegidos");
