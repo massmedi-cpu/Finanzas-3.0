@@ -113,7 +113,8 @@ export function validateCategoryHierarchy(
 
 export function validateCategoryMerge(
   source: Pick<Category, "id" | "kind">,
-  target: Pick<Category, "id" | "kind">,
+  target: Pick<Category, "id" | "kind" | "parentCategoryId">,
+  categories: ReadonlyArray<Pick<Category, "id" | "parentCategoryId">> = [],
 ): ValidationIssue[] {
   if (source.id === target.id) {
     return [
@@ -133,6 +134,29 @@ export function validateCategoryMerge(
         message: "Solo pueden fusionarse categorías del mismo tipo.",
       },
     ];
+  }
+
+  if (categories.length > 0) {
+    const byId = new Map(categories.map((category) => [category.id, category]));
+    const visited = new Set<EntityId>();
+    let cursor: Pick<Category, "id" | "parentCategoryId"> | undefined = target;
+
+    while (cursor) {
+      if (cursor.id === source.id) {
+        return [
+          {
+            field: "targetCategoryId",
+            code: "merge_into_descendant",
+            message: "Una categoría no puede fusionarse dentro de una de sus descendientes.",
+          },
+        ];
+      }
+      if (visited.has(cursor.id)) {
+        break;
+      }
+      visited.add(cursor.id);
+      cursor = cursor.parentCategoryId ? byId.get(cursor.parentCategoryId) : undefined;
+    }
   }
 
   return [];
