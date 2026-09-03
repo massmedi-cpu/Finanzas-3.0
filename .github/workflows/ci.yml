@@ -42,6 +42,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-operational-status-tests.ts
       - name: OCR dimension-aware transport
         run: node scripts/ocr-loader-dimension-tests.mjs
+      - name: Drive/browser receipt preprocessing parity
+        run: ./node_modules/.bin/tsx scripts/server-receipt-image-preprocessor-tests.ts
       - name: OCR deskew confidence
         run: ./node_modules/.bin/tsx scripts/ocr-deskew-confidence-tests.ts
       - name: OCR background corridor
