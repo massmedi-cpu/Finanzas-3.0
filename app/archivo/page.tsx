@@ -17,7 +17,14 @@ function archiveUrl(view:ArchiveLifecycleState,query:string,page:number){
   return `/archivo?${params.toString()}`;
 }
 
-export default async function ArchivePage({searchParams}:{searchParams:Promise<{view?:string;q?:string;page?:string}>}){
+function recoveryFeedback(state:string|undefined){
+  if(state==="updated")return{tone:"success",message:"OCR reprocesado desde el original. Se han conservado las correcciones y asociaciones existentes."};
+  if(state==="skipped")return{tone:"success",message:"El documento ya no necesitaba reprocesado o cambió durante la operación. No se ha sobrescrito nada."};
+  if(state==="error")return{tone:"error",message:"No se pudo reprocesar el OCR. La evidencia anterior permanece intacta."};
+  return null;
+}
+
+export default async function ArchivePage({searchParams}:{searchParams:Promise<{view?:string;q?:string;page?:string;ocrRecovery?:string;ocrDocument?:string}>}){
   await requireAuthorizedUser();
   const params=await searchParams;
   const view:ArchiveLifecycleState=params.view==="pending"||params.view==="archived"?params.view:"new";
@@ -25,6 +32,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const requestedPage=Number.parseInt(String(params.page||"1"),10);
   const page=Number.isFinite(requestedPage)&&requestedPage>0?requestedPage:1;
   const offset=(page-1)*PAGE_SIZE;
+  const feedback=recoveryFeedback(params.ocrRecovery);
 
   const lifecyclePromise=getArchiveLifecycleOverview(
     view,
@@ -41,6 +49,7 @@ export default async function ArchivePage({searchParams}:{searchParams:Promise<{
   const pending=lifecycle.counts.pending;
   return <main className="app-shell"><section id="main-content" tabIndex={-1} className="workspace archive-workspace">
     <header className="topbar"><div><p className="eyebrow">ARCHIVO · {lifecycle.version}</p><h1>Archivo</h1><p>Centro documental para facturas, tickets y justificantes. Los originales permanecen privados, los documentos nuevos no se archivan automáticamente y el histórico siempre puede recuperarse.</p></div><div className="topbar-actions"><Link className="ghost button-link" href="/archivo/duplicados">Revisar duplicados</Link>{view!=="pending"&&<Link className="ghost button-link" href="/archivo/revision">Revisar pendientes{pending?` · ${pending}`:""}</Link>}</div></header>
+    {feedback&&<div className={`inline-alert ${feedback.tone}`} role={feedback.tone==="error"?"alert":"status"}>{feedback.message}</div>}
     <ArchiveBulkOcrRecoveryDeferred initialCount={pending} shouldCheck={true}/>
     <ArchiveLifecycleClient
       documents={view==="new"?[]:lifecycle.documents}
