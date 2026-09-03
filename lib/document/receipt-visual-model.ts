@@ -331,7 +331,10 @@ function classifyTableRow(row: Row, rowIndex: number, width: number, columns:Tab
   }
 
   const excluded=new Set([quantity?.index,price?.index,amount?.index].filter((value):value is number=>typeof value==="number"));
-  const description=ordered.filter(token=>!excluded.has(token.index)&&token.x<(price?.x??amount?.x??columns.descriptionEnd)&&token.centerX>Math.min(width*.18,(columns.quantityRight??width*.12)));
+  const descriptionFloor=quantity||columns.quantityRight
+    ? Math.min(width*.22,columns.quantityRight??quantity?.right??width*.12)
+    : Math.max(0,(columns.descriptionLeft??row.left)-width*.025);
+  const description=ordered.filter(token=>!excluded.has(token.index)&&token.x<(price?.x??amount?.x??columns.descriptionEnd)&&token.centerX>=descriptionFloor);
   const quantityValue=quantity?Number(quantity.text.trim()):null;
   let priceValue=price?parseMoneyCell(price.text):null;
   let amountValue=amount?parseMoneyCell(amount.text):null;
