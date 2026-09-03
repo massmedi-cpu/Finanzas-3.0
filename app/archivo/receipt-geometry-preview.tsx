@@ -1,4 +1,5 @@
 import { buildReceiptVisualModel, type ReceiptVisualLayoutInput } from "@/lib/document/receipt-visual-model";
+import { receiptTextLength } from "@/lib/document/receipt-text-fit";
 
 type VisualLine = {
   text: string;
@@ -55,24 +56,32 @@ export function ReceiptGeometryPreview({ layout }: { layout: VisualLayout }) {
         strokeWidth={Math.max(0.45, visual.medianHeight * 0.045)}
         opacity="0.72"
       />)}
-      {visual.tokens.map((token) => <text
-        key={`${token.top}-${token.left}-${token.index}-${token.text}`}
-        x={token.renderX}
-        y={token.baselineY}
-        fill="#171717"
-        fontFamily={'"Roboto", "Arial Narrow", Arial, Helvetica, sans-serif'}
-        fontSize={token.fontSize}
-        fontWeight={token.fontWeight}
-        textAnchor={token.textAnchor}
-        dominantBaseline="alphabetic"
-        letterSpacing={token.letterSpacing}
-        textLength={token.textLength}
-        lengthAdjust="spacingAndGlyphs"
-      >
-        <title>{`Confianza OCR ${Math.round(token.score)}%`}</title>
-        {token.text}
-      </text>)}
+      {visual.tokens.map((token) => {
+        const textLength = receiptTextLength({
+          text: token.text,
+          boxWidth: token.boxWidth,
+          fontSize: token.fontSize,
+          explicitTextLength: token.textLength,
+        });
+        return <text
+          key={`${token.top}-${token.left}-${token.index}-${token.text}`}
+          x={token.renderX}
+          y={token.baselineY}
+          fill="#171717"
+          fontFamily={'"Roboto", "Arial Narrow", Arial, Helvetica, sans-serif'}
+          fontSize={token.fontSize}
+          fontWeight={token.fontWeight}
+          textAnchor={token.textAnchor}
+          dominantBaseline="alphabetic"
+          letterSpacing={token.letterSpacing}
+          textLength={textLength}
+          lengthAdjust="spacingAndGlyphs"
+        >
+          <title>{`Confianza OCR ${Math.round(token.score)}%`}</title>
+          {token.text}
+        </text>;
+      })}
     </svg>
-    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, tamaños y centrado reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
+    <small style={{ color: "#655f51", fontSize: 10, lineHeight: 1.45 }}>Filas, columnas, tamaños, ancho y centrado reconstruidos desde las coordenadas reales; el original privado sigue siendo la referencia.</small>
   </div>;
 }
