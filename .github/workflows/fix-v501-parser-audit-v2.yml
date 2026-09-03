@@ -1,0 +1,41 @@
+name: Fix v501 parser audit v2
+on:
+  push:
+    branches:
+      - fix/archive-parser-only-recovery-20260903
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: contains(github.event.head_commit.message, '[fix-v501-parser-audit-v2]')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/archive-parser-only-recovery-20260903
+          fetch-depth: 1
+      - name: Patch and verify v501 audit
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('node:fs');
+          const path='scripts/audit-v501.mjs';
+          let source=fs.readFileSync(path,'utf8');
+          const before="must(revision.includes('image_ocr_receipt_v501:server_tesseract_7_geometry_v1:parser_v7:')&&revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),\"La transición parser-only debe reconocer evidencia visual v7 compatible sin presentar Paddle histórico como Tesseract actual\");";
+          const after="must(revision.includes('image_ocr_receipt_v501:${RECEIPT_OCR_REVISION}:parser_v7:')&&revision.includes('image_ocr_receipt_v501:paddle_layout_v6:parser_v7:'),\"La transición parser-only debe reconocer evidencia visual v7 compatible desde la constante canónica sin presentar Paddle histórico como Tesseract actual\");";
+          const hits=source.split(before).length-1;
+          if(hits!==1)throw new Error(`Expected one v501 assertion, got ${hits}`);
+          source=source.replace(before,after);
+          fs.writeFileSync(path,source);
+          NODE
+          node scripts/audit-v501.mjs
+          rm .github/workflows/fix-v501-parser-audit-v2.yml
+          git diff --check
+      - name: Commit verified audit fix
+        shell: bash
+        run: |
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add scripts/audit-v501.mjs .github/workflows/fix-v501-parser-audit-v2.yml
+          git commit -m "Align v501 audit with canonical parser compatibility"
+          git push origin HEAD:fix/archive-parser-only-recovery-20260903
