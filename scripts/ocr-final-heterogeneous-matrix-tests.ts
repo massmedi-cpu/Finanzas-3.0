@@ -110,9 +110,13 @@ assert.equal(mono.monospace, true);
 const weak = receiptFontProfile({ bounds: { width: 600, height: 1000 }, lines: monoWords.slice(0, 3).map((text, index) => ({ text, score: 98, left: 10, top: 10 + index * 5, width: 12, height: 2 })) });
 assert.equal(weak.monospace, false);
 
-// 6) Origen: Drive y navegador comparten la misma política de densidad útil.
+// 6) Origen: Drive y navegador comparten densidad útil, pero el raster servidor
+// de una foto grande debe quedar acotado por píxeles para no agotar memoria.
 assert.deepEqual(serverReceiptOcrSize(520, 1040), { width: 1000, height: 2000 });
-assert.deepEqual(serverReceiptOcrSize(4080, 3072), { width: 3400, height: 2560 });
+const largeServerRaster = serverReceiptOcrSize(4080, 3072);
+assert.ok(largeServerRaster.width * largeServerRaster.height <= 4_800_000, "la matriz final debe proteger el techo de memoria del OCR servidor");
+assert.ok(Math.abs((largeServerRaster.width / largeServerRaster.height) - (4080 / 3072)) < 0.002, "el límite de memoria no puede deformar la imagen");
+assert.ok(Math.min(largeServerRaster.width, largeServerRaster.height) >= 1800, "el límite de memoria debe conservar densidad sobrada para texto impreso");
 assert.deepEqual(serverReceiptOcrSize(1600, 1200), { width: 1600, height: 1200 });
 
 // 7) Contratos de origen documental: Drive sigue entrando por el OCR canónico y
@@ -124,4 +128,4 @@ assert.ok(hydration.includes("recognizeCanonicalReceiptBytes(bytes"), "Drive deb
 assert.ok(canonical.includes("prepareServerReceiptImageBytes"), "el OCR servidor debe acondicionar físicamente la imagen antes de Tesseract");
 assert.ok(pdfPolicy.includes("page"), "la cobertura PDF híbrida por página debe seguir protegida por pruebas específicas");
 
-console.log("OCR final heterogeneous matrix OK · origen, papel, perspectiva, 2/4 columnas, multilínea, moneda, tipografía y PDF protegidos");
+console.log("OCR final heterogeneous matrix OK · origen, papel, perspectiva, 2/4 columnas, multilínea, moneda, tipografía, memoria y PDF protegidos");
