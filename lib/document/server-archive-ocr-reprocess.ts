@@ -1,7 +1,12 @@
 import { operationalOcrStatus } from "./ocr-operational-status";
 import { SERVER_RECEIPT_OCR_ENGINE, SERVER_RECEIPT_OCR_MODEL, SERVER_RECEIPT_OCR_RUNTIME } from "./receipt-ocr-provenance";
+import {
+  RECEIPT_PARSER_REVISION,
+  needsReceiptMetadataReparse,
+  upgradeReceiptParserMethod,
+} from "./receipt-ocr-revision";
 import { recognizeCanonicalReceiptBytes } from "./server-canonical-receipt";
-import { normalizeOcrText } from "./ticket-ocr";
+import { inferDocumentMetadata, normalizeOcrText } from "./ticket-ocr";
 import type { ImageOcrResult } from "./ticket-ocr-engine";
 
 export type StoredArchiveOcrDocument = {
@@ -32,6 +37,11 @@ export type StoredArchiveOcrPersistence = {
 export type StoredArchiveFieldChange = {
   field: "documentType" | "documentDate" | "amount" | "merchant";
   kind: "updated" | "cleared";
+};
+
+export type StoredArchiveMetadataReparse = {
+  persistence: StoredArchiveOcrPersistence;
+  fieldChanges: StoredArchiveFieldChange[];
 };
 
 function asRecord(value: unknown) {
@@ -71,6 +81,20 @@ function selectMachineValue(
   return current;
 }
 
+function selectReparsedValue(
+  field: string,
+  current: unknown,
+  previousMachineValue: unknown,
+  nextMachineValue: unknown,
+  preserved: string[],
+) {
+  if (blank(current)) return nextMachineValue;
+  if (blank(nextMachineValue)) return current;
+  if (previousMachineValue !== undefined && sameValue(field, current, previousMachineValue)) return nextMachineValue;
+  preserved.push(field);
+  return current;
+}
+
 export function storedReceiptFieldChanges(
   existing: StoredArchiveOcrDocument,
   persistence: Pick<StoredArchiveOcrPersistence, "documentType" | "documentDate" | "amount" | "merchant">,
@@ -84,6 +108,85 @@ export function storedReceiptFieldChanges(
     changes.push({ field, kind: blank(after) ? "cleared" : "updated" });
   }
   return changes;
+}
+
+export function reparseStoredReceiptMetadata(
+  existing: StoredArchiveOcrDocument,
+  reparsedAt = new Date().toISOString(),
+): StoredArchiveMetadataReparse | null {
+  const previousOcrData = asRecord(existing.ocrData);
+  const previousReconstruction = asRecord(existing.digitalReconstruction);
+  const currentMethod = String(previousOcrData?.method || "");
+  if (existing.ocrStatus !== "needs_review" || blank(existing.ocrText) || !needsReceiptMetadataReparse(currentMethod)) return null;
+  const method = upgradeReceiptParserMethod(currentMethod);
+  if (!method) return null;
+
+  const inferred = inferDocumentMetadata(existing.ocrText || "", existing.documentType === "receipt" ? "receipt" : null);
+  const preserved: string[] = [];
+  const documentType = String(selectReparsedValue(
+    "documentType",
+    existing.documentType,
+    previousReconstruction?.documentType,
+    inferred.documentType,
+    preserved,
+  ) || existing.documentType || inferred.documentType || "other");
+  const selectedDate = selectReparsedValue(
+    "documentDate",
+    existing.documentDate,
+    previousReconstruction?.documentDate,
+    inferred.documentDate,
+    preserved,
+  );
+  const selectedAmount = selectReparsedValue(
+    "amount",
+    existing.amount,
+    previousReconstruction?.amount,
+    inferred.amount,
+    preserved,
+  );
+  const selectedMerchant = selectReparsedValue(
+    "merchant",
+    existing.merchant,
+    previousReconstruction?.merchant,
+    inferred.merchant,
+    preserved,
+  );
+  const validation = asRecord(previousOcrData?.validation);
+  const validationStatus = validation && !blank(validation.status) ? String(validation.status) : null;
+
+  const persistence: StoredArchiveOcrPersistence = {
+    documentType,
+    documentDate: blank(selectedDate) ? null : String(selectedDate),
+    amount: selectedAmount == null || selectedAmount === "" ? null : Number(selectedAmount),
+    merchant: blank(selectedMerchant) ? null : String(selectedMerchant),
+    ocrText: existing.ocrText,
+    // Reinterpretar texto guardado puede completar metadatos, pero nunca eleva
+    // por sí solo una evidencia provisional a OCR validado.
+    ocrStatus: "needs_review",
+    ocrData: {
+      ...(previousOcrData || {}),
+      method,
+      bulkReprocessed: true,
+      metadataReparsed: true,
+      metadataParserRevision: RECEIPT_PARSER_REVISION,
+      metadataReparseSource: "stored_ocr_text",
+      metadataReparsedAt: reparsedAt,
+    },
+    digitalReconstruction: {
+      ...(previousReconstruction || {}),
+      generated: true,
+      label: "Reconstrucción geométrica pendiente de revisión. El original y las líneas OCR siguen siendo la referencia.",
+      method,
+      documentType: inferred.documentType,
+      documentDate: inferred.documentDate,
+      amount: inferred.amount,
+      merchant: inferred.merchant,
+    },
+    humanFieldsPreserved: [...new Set(preserved)],
+    method,
+    validationStatus,
+  };
+  return { persistence, fieldChanges: storedReceiptFieldChanges(existing, persistence) };
 }
 
 export function buildStoredReceiptPersistence(
@@ -159,6 +262,7 @@ export function buildStoredReceiptPersistence(
     processedAt,
     bulkReprocessed: true,
     sourceOriginal: true,
+    metadataParserRevision: RECEIPT_PARSER_REVISION,
     rawText: result.rawText,
     normalizedText: result.normalizedText,
     tsv: result.tsv,
