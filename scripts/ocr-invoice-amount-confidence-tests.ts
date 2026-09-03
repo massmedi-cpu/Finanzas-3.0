@@ -54,4 +54,4 @@ IMPORTE TOTAL 125,50 EUR`);
 assert.equal(generic.documentType,"statement");
 assert.equal(generic.amount,125.5,"Documentos no factura conservan el fallback genérico existente");
 
-console.log("OCR invoice amount confidence tests OK · subtotal no corroborado => null; base+IVA+bruto => importe; tickets y otros documentos sin regresión");
+console.log("OCR invoice amount confidence tests OK · total documental explícito fuerte; subtotal protegido; base+IVA, tickets y otros documentos sin regresión");
