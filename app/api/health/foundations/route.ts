@@ -3,7 +3,9 @@ import { formatDate } from "../../../../src/core/formatters";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "../../../../src/core/money";
 import { REGIONAL_CONFIG } from "../../../../src/core/regional";
 import { validateAccountDraft, validateCategoryDraft } from "../../../../src/domain/configuration";
+import { resolveEffectiveTransaction } from "../../../../src/domain/effective-transaction";
 import { FINANCIAL_INVARIANTS } from "../../../../src/domain/invariants";
+import type { Transaction, TransactionOverride } from "../../../../src/domain/models";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +18,51 @@ function normalizeSpaces(value: string) {
   return value.replace(/\u00a0|\u202f/g, " ");
 }
 
+function throws(callback: () => unknown) {
+  try {
+    callback();
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 export function GET() {
+  const transaction: Transaction = {
+    id: "tx-validation",
+    sourceRecordId: "source-validation",
+    accountId: "account-validation",
+    bankDate: "2026-09-03",
+    conceptNormalized: "Concepto original procesado",
+    merchantId: null,
+    categoryId: null,
+    kind: "expense",
+    amountCents: -1234,
+    balanceAfterCents: 500000,
+    reviewState: "pending",
+    duplicateState: "none",
+    transferPairId: null,
+    createdAt: "2026-09-03T10:00:00Z",
+    updatedAt: "2026-09-03T10:00:00Z",
+  };
+
+  const override: TransactionOverride = {
+    id: "override-validation",
+    transactionId: transaction.id,
+    conceptOverride: "Concepto corregido por el usuario",
+    merchantIdOverride: null,
+    categoryIdOverride: "category-validation",
+    kindOverride: null,
+    excludedFromAnalytics: false,
+    reviewStateOverride: "confirmed",
+    note: "Validación",
+    createdAt: "2026-09-03T10:00:00Z",
+    updatedAt: "2026-09-03T10:00:00Z",
+  };
+
+  const transactionBefore = JSON.stringify(transaction);
+  const effective = resolveEffectiveTransaction(transaction, override);
+
   const checks: FoundationCheck[] = [
     {
       name: "locale-es-ES",
@@ -30,6 +76,12 @@ export function GET() {
       passed:
         parseSpanishMoneyToCents("1.234.567,89 €") === 123456789 &&
         parseSpanishMoneyToCents("-0,09 €") === -9,
+    },
+    {
+      name: "reject-invalid-money",
+      passed:
+        throws(() => parseSpanishMoneyToCents("1,234.56 €")) &&
+        throws(() => parseSpanishMoneyToCents("12,345 €")),
     },
     {
       name: "format-money-two-decimals",
@@ -48,6 +100,15 @@ export function GET() {
         FINANCIAL_INVARIANTS.bankSource.mutable === false &&
         FINANCIAL_INVARIANTS.synchronization.writesToSource === false &&
         FINANCIAL_INVARIANTS.synchronization.idempotent === true,
+    },
+    {
+      name: "user-override-projection-is-non-destructive",
+      passed:
+        effective.concept === "Concepto corregido por el usuario" &&
+        effective.categoryId === "category-validation" &&
+        effective.reviewState === "confirmed" &&
+        effective.amountCents === transaction.amountCents &&
+        JSON.stringify(transaction) === transactionBefore,
     },
     {
       name: "account-validation",
