@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { inferReceiptTextCorridor, type ReceiptCorridorRow } from "../lib/document/receipt-text-corridor";
+
+const row = (text:string,left:number,right:number,top:number,score=92):ReceiptCorridorRow => ({
+  text, score, left, right, top, bottom:top+26,
+});
+
+const simple=[
+  row("CAFETERIA CENTRAL",330,670,80),
+  row("Calle Ejemplo 12",350,650,120),
+  row("CAFE              1,40",260,720,220),
+  row("TOSTADA           2,10",250,725,265),
+  row("ZUMO              2,50",265,718,310),
+  row("TOTAL             6,00",430,725,390),
+  row("GRACIAS",420,580,470),
+  row("PUBLICIDAD LATERAL",20,190,245,96),
+  row("OTRO TEXTO DEL FONDO",805,990,335,94),
+];
+const simpleCorridor=inferReceiptTextCorridor(simple,1000,700);
+assert.ok(simpleCorridor,"un ticket simple sin cabecera semántica debe generar corredor geométrico");
+assert.ok(simpleCorridor.left>190,"el texto lateral izquierdo del fondo debe quedar fuera");
+assert.ok(simpleCorridor.right<805,"el texto lateral derecho del fondo debe quedar fuera");
+assert.ok(simpleCorridor.left<270&&simpleCorridor.right>720,"el cuerpo completo del ticket debe permanecer dentro");
+
+const offCenter=[
+  row("TIENDA",120,360,60),
+  row("A 1,20",90,405,150),
+  row("B 2,40",85,410,205),
+  row("C 0,90",95,400,260),
+  row("D 4,10",92,408,315),
+  row("TOTAL 8,60",170,410,390),
+  row("GRACIAS",165,340,455),
+  row("CARTEL DEL FONDO",700,970,220),
+  row("TEXTO EXTERIOR",720,965,310),
+];
+const offCenterCorridor=inferReceiptTextCorridor(offCenter,1000,650);
+assert.ok(offCenterCorridor,"el ticket no tiene que estar centrado en la fotografía");
+assert.ok(offCenterCorridor.center<420,"el eje debe seguir al ticket desplazado, no al centro de la imagen");
+assert.ok(offCenterCorridor.right<700,"el bloque de fondo distante debe excluirse");
+
+const broadBackground=[
+  row("NEGOCIO",350,650,55),
+  row("LINEA UNO",300,700,150),
+  row("LINEA DOS",295,705,205),
+  row("LINEA TRES",305,698,260),
+  row("LINEA CUATRO",300,700,315),
+  row("TOTAL 12,30",430,705,390),
+  row("GRACIAS",420,580,460),
+  row("UN CARTEL MUY ANCHO DETRAS DEL TICKET",30,960,290,99),
+];
+const broadCorridor=inferReceiptTextCorridor(broadBackground,1000,650);
+assert.ok(broadCorridor,"una sola línea ancha del fondo no debe arrastrar el corredor");
+assert.ok(broadCorridor.left>100&&broadCorridor.right<900);
+
+const splitClusters=[
+  row("A1",80,260,80),row("A2",80,260,160),row("A3",80,260,240),row("A4",80,260,320),row("A5",80,260,400),
+  row("B1",740,920,85),row("B2",740,920,165),row("B3",740,920,245),row("B4",740,920,325),row("B5",740,920,405),
+];
+assert.equal(
+  inferReceiptTextCorridor(splitClusters,1000,600),
+  null,
+  "dos bloques equivalentes no deben forzar una elección insegura",
+);
+
+assert.equal(
+  inferReceiptTextCorridor([row("A",300,500,100),row("B",300,500,180),row("C",300,500,260)],1000,600),
+  null,
+  "con pocas filas el filtro debe fallar de forma cerrada",
+);
+
+console.log("OCR background corridor tests OK · tickets simples/off-center aislados y casos ambiguos rechazados");
