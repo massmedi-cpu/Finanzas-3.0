@@ -6,6 +6,7 @@ import { validateAccountDraft, validateCategoryDraft } from "../domain/configura
 import {
   validateAccountUniqueness,
   validateCategoryHierarchy,
+  validateCategoryMerge,
   validateCategoryUniqueness,
   validateReorder,
 } from "../domain/configuration-policies";
@@ -309,6 +310,12 @@ export function runFoundationHealthChecks(): FoundationHealth {
           { ...categoryA, parentCategoryId: categoryB.id },
           [categoryA, categoryB],
         ).some((issue) => issue.code === "category_cycle"),
+    },
+    {
+      name: "category-merge-descendant-protection",
+      passed: validateCategoryMerge(categoryA, categoryB, [categoryA, categoryB]).some(
+        (issue) => issue.code === "merge_into_descendant",
+      ),
     },
     {
       name: "category-command-normalization",
