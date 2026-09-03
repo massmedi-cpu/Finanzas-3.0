@@ -429,27 +429,56 @@ function rectifyPaper(source: HTMLCanvasElement, geometry: PaperGeometry | null)
   return { canvas: output, corrected };
 }
 
+function deskewProjectionScore(
+  samples: Array<{ x: number; y: number }>,
+  width: number,
+  height: number,
+  angle: number,
+  step: number,
+) {
+  const radians = (angle * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const bins = new Uint32Array(Math.ceil((height + Math.abs(width * sine)) / step) + 8);
+  for (const point of samples) {
+    const projected = point.y * cosine - point.x * sine + Math.abs(width * sine) + step * 2;
+    const index = Math.floor(projected / step);
+    if (index >= 0 && index < bins.length) bins[index] += 1;
+  }
+  let score = 0;
+  for (let index = 1; index < bins.length - 1; index += 1) {
+    const value = bins[index] * 2 + bins[index - 1] + bins[index + 1];
+    score += value * value;
+  }
+  return score;
+}
+
 export function estimateDeskewFromSamples(samples: Array<{ x: number; y: number }>, width: number, height: number) {
   if (samples.length < 80) return 0;
-  let bestAngle = 0; let bestScore = -Infinity;
   const step = Math.max(2, Math.round(height / 450));
+  const zeroScore = deskewProjectionScore(samples, width, height, 0, step);
+  let bestAngle = 0;
+  let bestScore = zeroScore;
+
   for (let angle = -8; angle <= 8; angle += 0.5) {
-    const radians = (angle * Math.PI) / 180;
-    const cosine = Math.cos(radians); const sine = Math.sin(radians);
-    const bins = new Uint32Array(Math.ceil((height + Math.abs(width * sine)) / step) + 8);
-    for (const point of samples) {
-      const projected = point.y * cosine - point.x * sine + Math.abs(width * sine) + step * 2;
-      const index = Math.floor(projected / step);
-      if (index >= 0 && index < bins.length) bins[index] += 1;
+    if (angle === 0) continue;
+    const score = deskewProjectionScore(samples, width, height, angle, step);
+    if (score > bestScore) {
+      bestScore = score;
+      bestAngle = angle;
     }
-    let score = 0;
-    for (let index = 1; index < bins.length - 1; index += 1) {
-      const value = bins[index] * 2 + bins[index - 1] + bins[index + 1];
-      score += value * value;
-    }
-    if (score > bestScore) { bestScore = score; bestAngle = angle; }
   }
-  return Math.abs(bestAngle) < 0.4 ? 0 : Math.round(bestAngle * 2) / 2;
+
+  if (Math.abs(bestAngle) < 0.4 || zeroScore <= 0) return 0;
+
+  // No se gira una foto porque un ángulo sea simplemente "el mejor" entre
+  // varios malos. Debe concentrar las filas horizontales al menos un 3 % mejor
+  // que mantener 0°. Con fondos, sombras o arrugas esa ventaja suele ser
+  // marginal; con texto realmente inclinado la mejora geométrica es clara.
+  const gain = bestScore / zeroScore;
+  if (!Number.isFinite(gain) || gain < 1.03) return 0;
+
+  return Math.round(bestAngle * 2) / 2;
 }
 
 function deskew(source: HTMLCanvasElement) {
