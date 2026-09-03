@@ -233,15 +233,39 @@ function headerAnchors(row:Row|null){
 function moneyTokens(row:Row){return row.tokens.filter(token=>parseMoneyCell(token.text)!=null);}
 function textTokens(row:Row){return row.tokens.filter(token=>/\p{L}/u.test(token.text));}
 
+function rowStructure(row:Row,width:number){
+  return {
+    rightMoney:moneyTokens(row).some(token=>token.centerX>width*.62),
+    descriptive:textTokens(row).some(token=>token.centerX<width*.68),
+    quantity:row.tokens.some(token=>integerLike(token.text)&&token.centerX<width*.3),
+  };
+}
+
+function leadsWrappedMonetaryRow(rows:Row[],index:number,width:number,medianHeight:number){
+  const row=rows[index];
+  const next=rows[index+1];
+  if(!row||!next||summaryLike(row)||summaryLike(next))return false;
+  const current=rowStructure(row,width);
+  const following=rowStructure(next,width);
+  const gap=next.top-row.bottom;
+  return current.descriptive
+    &&current.quantity
+    &&!current.rightMoney
+    &&following.descriptive
+    &&following.rightMoney
+    &&!following.quantity
+    &&gap>=-medianHeight*.45
+    &&gap<=medianHeight*1.6;
+}
+
 function implicitTableBody(rows:Row[],width:number,medianHeight:number){
   const groups:number[][]=[];
   let current:number[]=[];
   let previous:Row|null=null;
   for(let index=0;index<rows.length;index++){
     const row=rows[index];
-    const rightMoney=moneyTokens(row).some(token=>token.centerX>width*.62);
-    const descriptive=textTokens(row).some(token=>token.centerX<width*.68);
-    const candidate=rightMoney&&descriptive&&!summaryLike(row);
+    const structure=rowStructure(row,width);
+    const candidate=(structure.rightMoney&&structure.descriptive&&!summaryLike(row))||leadsWrappedMonetaryRow(rows,index,width,medianHeight);
     const gap=previous?row.top-previous.bottom:0;
     if(candidate&&(current.length===0||gap<=medianHeight*2.2)){current.push(index);previous=row;continue;}
     if(current.length>=2)groups.push(current);
@@ -326,12 +350,11 @@ function tableBodyRange(rows:Row[],headerIndex:number,medianHeight:number,width:
     const gap=row.top-previous.bottom;
     if(started&&gap>medianHeight*2.15)break;
     if(summaryLike(row)){if(started)break;continue;}
-    const hasRightMoney=moneyTokens(row).some(token=>token.centerX>width*.42);
-    const hasDescription=textTokens(row).some(token=>token.centerX>width*.16&&token.centerX<width*.76);
-    const hasQuantity=row.tokens.some(token=>integerLike(token.text)&&token.centerX<width*.3);
-    const item=hasDescription&&hasRightMoney&&(hasQuantity||moneyTokens(row).length>=1);
-    const continuation=started&&hasDescription&&!hasRightMoney&&!hasQuantity&&gap<=medianHeight*1.35;
-    if(!item&&!continuation){if(started)break;continue;}
+    const structure=rowStructure(row,width);
+    const item=structure.descriptive&&structure.rightMoney&&(structure.quantity||moneyTokens(row).length>=1);
+    const continuation=started&&structure.descriptive&&!structure.rightMoney&&!structure.quantity&&gap<=medianHeight*1.35;
+    const leadingWrapped=leadsWrappedMonetaryRow(rows,index,width,medianHeight);
+    if(!item&&!continuation&&!leadingWrapped){if(started)break;continue;}
     indices.push(index);started=true;previous=row;
   }
   return indices;
