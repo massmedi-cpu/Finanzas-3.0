@@ -303,22 +303,22 @@ export function inferDocumentMetadata(rawText: string, hint: DocumentTypeHint = 
   }
 
   if (documentType === "invoice") {
-  // En facturas/albaranes se descarta la inferencia genérica: un número grande
-  // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
-  // explícito solo si no replica una base/subtotal conocida; como respaldo se
-  // mantiene la corroboración financiera base + IVA ya existente.
-  amount = explicitInvoiceGross(lines);
-  if (amount === null) {
-    const vatBreakdown = invoiceVatBreakdown(lines);
-    const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.base ?? null;
-    const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
-    if (base !== null && tax !== null) {
-      const gross = Math.round((base + tax) * 100) / 100;
-      const candidates = lines.flatMap(extractAmounts);
-      if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
+    // En facturas/albaranes se descarta la inferencia genérica: un número grande
+    // puede ser base, subtotal o precio unitario. Se acepta un TOTAL documental
+    // explícito solo si no replica una base/subtotal conocida; como respaldo se
+    // mantiene la corroboración financiera base + IVA ya existente.
+    amount = explicitInvoiceGross(lines);
+    if (amount === null) {
+      const vatBreakdown = invoiceVatBreakdown(lines);
+      const base = labeledAmount(lines, /\bBASE\s+IMPONIBLE\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.base ?? null;
+      const tax = labeledAmount(lines, /\bIMPORTE\s+IVA\b[^0-9]{0,24}(\d{1,7}[.,]\d{2,3})/i) ?? vatBreakdown?.tax ?? null;
+      if (base !== null && tax !== null) {
+        const gross = Math.round((base + tax) * 100) / 100;
+        const candidates = lines.flatMap(extractAmounts);
+        if (candidates.some((value) => Math.abs(value - gross) <= 0.03)) amount = gross;
+      }
     }
   }
-}
 
   return { documentType, documentDate, amount, merchant: likelyMerchant(lines), lines };
 }
