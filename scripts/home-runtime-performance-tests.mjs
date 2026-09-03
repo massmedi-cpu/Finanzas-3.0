@@ -2,14 +2,25 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 const sql=fs.readFileSync("database/FINANCIAL_APP_9.0.0_HOME_RUNTIME_OPTIMIZATION.sql","utf8");
+const fastSql=fs.readFileSync("database/FINANCIAL_APP_9.0.0_RECONCILIATION_STATUS_FAST_PATH.sql","utf8");
 const page=fs.readFileSync("app/page.tsx","utf8");
 const sections=fs.readFileSync("app/home-sections.tsx","utf8");
 const accounts=fs.readFileSync("lib/financial/accounts.ts","utf8");
 const pulse=fs.readFileSync("lib/financial/home-pulse.ts","utf8");
 
-assert.ok(sql.includes("financial_app.effective_reconciliation_status(t) as reconciliation_status"),"Home pulse debe calcular conciliación durante su única pasada de movimientos");
+assert.ok(sql.includes("financial_app.effective_reconciliation_status(t) as reconciliation_status"),"La migración histórica de Home debe documentar el punto de partida medido");
 assert.ok(sql.includes("'reconciliation',jsonb_build_object("),"Home pulse debe devolver el resumen de conciliación integrado");
 assert.ok(!sql.includes("reconciliation_summary_core()"),"Home pulse no debe lanzar una segunda agregación completa de conciliación");
+
+assert.ok(fastSql.includes("reconciliation_status_effective text"),"Debe existir un estado de conciliación generado por PostgreSQL");
+assert.ok(fastSql.includes("generated always as"),"El estado rápido debe derivarse automáticamente de la evidencia canónica");
+assert.ok(fastSql.includes("transactions_reconciliation_status_effective_idx"),"El estado generado debe quedar indexado para filtros masivos");
+assert.ok(fastSql.includes("t.reconciliation_status_effective as reconciliation_status"),"Home pulse debe leer el estado generado sin función por fila");
+assert.ok(!fastSql.includes("financial_app.effective_reconciliation_status(t)"),"La ruta rápida no puede volver a materializar cada movimiento como registro ancho");
+assert.ok(fastSql.includes("count(*) filter(where reconciliation_status_effective='reconciled')"),"El resumen de conciliación debe usar directamente el estado generado");
+assert.ok(fastSql.includes("'generatedReconciliationStatus',true"),"Home pulse debe declarar la ruta rápida en sus reglas de diagnóstico");
+for(const token of ["is_reconciled is true","is_reconciled is false","source_reconciled","'no aplica'","'pendiente'","'not_reconciled'","'not_applicable'"])
+  assert.ok(fastSql.includes(token),`La columna generada debe conservar la semántica canónica de conciliación: ${token}`);
 
 assert.ok(sql.includes("create or replace function financial_app.home_accounts_core()"),"Debe existir un snapshot de cuentas específico para Inicio");
 assert.ok(sql.includes("transactions_latest_source_balance_idx")===false,"El SQL no debe acoplarse al nombre físico del índice; debe beneficiarse del predicado canónico");
@@ -34,4 +45,4 @@ assert.ok(sections.includes("account.previousBalance"),"La variación reciente d
 assert.ok(!sections.includes("account.balanceSeries"),"Inicio no debe depender de la serie de 12 meses");
 assert.ok(pulse.includes("reconciliation:{"),"El parser de Home pulse debe conservar el resumen integrado");
 
-console.log("Home runtime performance tests OK · conciliación integrada en una pasada, cuentas estrechas y permisos del core protegidos");
+console.log("Home runtime performance tests OK · cuentas estrechas, conciliación integrada y estado generado indexable sin función compuesta por fila");
