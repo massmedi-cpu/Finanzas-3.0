@@ -1,7 +1,9 @@
 import { getBuildInfo } from "../src/core/build-info";
+import { runFoundationHealthChecks } from "../src/core/foundation-health";
 
 export default function Home() {
   const build = getBuildInfo();
+  const health = runFoundationHealthChecks();
   const shortCommit = build.commit === "local" ? "local" : build.commit.slice(0, 8);
 
   return (
@@ -18,6 +20,9 @@ export default function Home() {
           <span>es-ES · EUR</span>
           <span>Fuente bancaria · solo lectura</span>
           <span>OCR · Fase 11</span>
+          <span>
+            Fundamentos · {health.passed}/{health.total} {health.status === "ok" ? "OK" : "ERROR"}
+          </span>
         </div>
 
         <dl className="build-meta">
