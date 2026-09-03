@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getAuthorizedClient } from "@/lib/auth/authorized-client";
 import { apiError, apiFailure, apiJson, apiUnauthorized } from "@/lib/api/response";
 import { BULK_OCR_REPROCESS_LIMIT, isBulkOcrReprocessCandidate, isLegacyReceiptOcrDocument } from "@/lib/document/ocr-bulk-reprocess-policy";
@@ -125,6 +125,29 @@ function recoveryResponse(documentId:string,persistence:StoredArchiveOcrPersiste
   });
 }
 
+function nativeFormRequest(request:NextRequest){
+  const contentType=request.headers.get("content-type")||"";
+  return contentType.includes("application/x-www-form-urlencoded")||contentType.includes("multipart/form-data");
+}
+
+function safeArchiveReturnTo(value:FormDataEntryValue|null){
+  const requested=String(value||"").trim();
+  return requested.startsWith("/archivo")&&!requested.startsWith("//")?requested:"/archivo?view=pending";
+}
+
+async function nativeFormResponse(request:NextRequest,response:Response,documentId:string,returnTo:string){
+  if(!nativeFormRequest(request))return response;
+  let state="error";
+  if(response.ok){
+    const payload=await response.clone().json().catch(()=>null) as {updated?:boolean;skipped?:boolean}|null;
+    state=payload?.updated&&!payload.skipped?"updated":"skipped";
+  }
+  const target=new URL(returnTo,request.url);
+  target.searchParams.set("ocrRecovery",state);
+  if(documentId)target.searchParams.set("ocrDocument",documentId);
+  return NextResponse.redirect(target,303);
+}
+
 export async function GET(){
   const supabase=await getAuthorizedClient();
   if(!supabase)return apiUnauthorized();
@@ -134,16 +157,35 @@ export async function GET(){
 }
 
 export async function POST(request:NextRequest){
+  const isNativeForm=nativeFormRequest(request);
   const supabase=await getAuthorizedClient();
-  if(!supabase)return apiUnauthorized();
-  let raw:unknown;
-  try{raw=await request.json();}catch{return apiError("invalid_json");}
-  const documentId=String(asRecord(raw).documentId||"").trim();
-  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(documentId))return apiError("invalid_document_id");
+  if(!supabase){
+    if(isNativeForm)return NextResponse.redirect(new URL("/login",request.url),303);
+    return apiUnauthorized();
+  }
+
+  let documentId="";
+  let returnTo="/archivo?view=pending";
+  if(isNativeForm){
+    try{
+      const form=await request.formData();
+      documentId=String(form.get("documentId")||"").trim();
+      returnTo=safeArchiveReturnTo(form.get("returnTo"));
+    }catch{
+      return nativeFormResponse(request,apiError("invalid_form"),documentId,returnTo);
+    }
+  }else{
+    let raw:unknown;
+    try{raw=await request.json();}catch{return apiError("invalid_json");}
+    documentId=String(asRecord(raw).documentId||"").trim();
+  }
+
+  const respond=(response:Response)=>nativeFormResponse(request,response,documentId,returnTo);
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(documentId))return respond(apiError("invalid_document_id"));
 
   const initial=await documentDetail(supabase,documentId);
-  if(!initial)return apiError("document_unavailable",404);
-  if(!isBulkOcrReprocessCandidate(initial))return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"no_longer_candidate"});
+  if(!initial)return respond(apiError("document_unavailable",404));
+  if(!isBulkOcrReprocessCandidate(initial))return respond(apiJson({ok:true,documentId,updated:false,skipped:true,reason:"no_longer_candidate"}));
 
   // Primero se intenta la recuperación barata: si la evidencia visual vigente ya
   // contiene los datos, solo se ejecuta el parser actual sobre el texto guardado.
@@ -151,20 +193,20 @@ export async function POST(request:NextRequest){
   const previewReparse=reparseStoredReceiptMetadata(initial,"preview");
   if(previewReparse?.fieldChanges.length){
     const latest=await documentDetail(supabase,documentId);
-    if(!latest)return apiError("document_unavailable",404);
-    if(!isBulkOcrReprocessCandidate(latest))return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reparse"});
+    if(!latest)return respond(apiError("document_unavailable",404));
+    if(!isBulkOcrReprocessCandidate(latest))return respond(apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reparse"}));
     const reparsed=reparseStoredReceiptMetadata(latest);
     if(reparsed?.fieldChanges.length){
       const updated=await persistRecovery(supabase,documentId,latest,reparsed.persistence);
-      if(updated.error)return apiFailure("archive.ocr.reprocess.metadata",updated.error,"ocr_metadata_reparse_update_failed");
-      return recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse");
+      if(updated.error)return respond(apiFailure("archive.ocr.reprocess.metadata",updated.error,"ocr_metadata_reparse_update_failed"));
+      return respond(recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse"));
     }
   }
 
-  if(initial.storageProvider!=="supabase_storage"||!initial.storagePath)return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"private_original_unavailable"});
+  if(initial.storageProvider!=="supabase_storage"||!initial.storagePath)return respond(apiJson({ok:true,documentId,updated:false,skipped:true,reason:"private_original_unavailable"}));
 
   const stored=await supabase.storage.from("financial-app-documents").download(initial.storagePath);
-  if(stored.error||!stored.data)return apiFailure("archive.ocr.reprocess.original",stored.error,"ocr_original_unavailable",404);
+  if(stored.error||!stored.data)return respond(apiFailure("archive.ocr.reprocess.original",stored.error,"ocr_original_unavailable",404));
 
   let result:Awaited<ReturnType<typeof reprocessStoredReceiptBytes>>["result"];
   try{
@@ -172,19 +214,19 @@ export async function POST(request:NextRequest){
     result=processed.result;
   }catch(failure){
     console.error("financial_app_archive_ocr_reprocess_failed",{documentId,name:failure instanceof Error?failure.name:"unknown"});
-    return apiError("ocr_reprocess_failed",503);
+    return respond(apiError("ocr_reprocess_failed",503));
   }
 
   // Releer justo antes de escribir evita pisar una confirmación manual o una
   // corrección guardada mientras el OCR estaba trabajando. Los vínculos no se
   // modifican por financial_app_archive_update y los legacy pueden conservarlos.
   const latest=await documentDetail(supabase,documentId);
-  if(!latest)return apiError("document_unavailable",404);
-  if(!isBulkOcrReprocessCandidate(latest))return apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reprocess"});
+  if(!latest)return respond(apiError("document_unavailable",404));
+  if(!isBulkOcrReprocessCandidate(latest))return respond(apiJson({ok:true,documentId,updated:false,skipped:true,reason:"changed_during_reprocess"}));
   const persistence=buildStoredReceiptPersistence(latest,result);
   const fieldChanges=storedReceiptFieldChanges(latest,persistence);
   const updated=await persistRecovery(supabase,documentId,latest,persistence);
-  if(updated.error)return apiFailure("archive.ocr.reprocess.update",updated.error,"ocr_reprocess_update_failed");
+  if(updated.error)return respond(apiFailure("archive.ocr.reprocess.update",updated.error,"ocr_reprocess_update_failed"));
 
-  return recoveryResponse(documentId,persistence,fieldChanges,"full_ocr");
+  return respond(recoveryResponse(documentId,persistence,fieldChanges,"full_ocr"));
 }

@@ -3,6 +3,7 @@ import fs from "node:fs";
 
 const source=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery.tsx","utf8");
 const deferred=fs.readFileSync("app/archivo/archive-bulk-ocr-recovery-deferred.tsx","utf8");
+const lifecycle=fs.readFileSync("app/archivo/archive-lifecycle-client.tsx","utf8");
 const route=fs.readFileSync("app/api/archive/reprocess-ocr/route.ts","utf8");
 const page=fs.readFileSync("app/archivo/page.tsx","utf8");
 
@@ -45,11 +46,13 @@ for(const token of [
   'RecoveryMode="metadata_reparse"|"full_ocr"',
   'const previewReparse=reparseStoredReceiptMetadata(initial,"preview")',
   'if(previewReparse?.fieldChanges.length)',
-  'return recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse")',
-  'return recoveryResponse(documentId,persistence,fieldChanges,"full_ocr")',
+  'return respond(recoveryResponse(documentId,reparsed.persistence,reparsed.fieldChanges,"metadata_reparse"))',
+  'return respond(recoveryResponse(documentId,persistence,fieldChanges,"full_ocr"))',
   'manualReviewMissingFields',
   'missingFields:manualReviewMissingFields(persistence.documentType,persistence.documentDate,persistence.amount)',
-]) assert.ok(route.includes(token),`La API debe preferir reparseo seguro y mantener revisión explícita: ${token}`);
+  'request.formData()',
+  'NextResponse.redirect',
+]) assert.ok(route.includes(token),`La API debe preferir reparseo seguro, aceptar fallback nativo y mantener revisión explícita: ${token}`);
 
 assert.ok(route.indexOf('const previewReparse=reparseStoredReceiptMetadata(initial,"preview")')<route.indexOf('supabase.storage.from("financial-app-documents").download'),"El parser debe probarse antes de descargar/releer el original");
 assert.ok(route.indexOf('const latest=await documentDetail(supabase,documentId)')<route.indexOf('const reparsed=reparseStoredReceiptMetadata(latest)'),"El reparseo debe releer estado antes de escribir para preservar cambios concurrentes");
@@ -57,16 +60,20 @@ assert.ok(route.includes('if(reparsed?.fieldChanges.length)'),"Un reparseo que n
 
 assert.ok(page.includes('import {ArchiveBulkOcrRecoveryDeferred} from "./archive-bulk-ocr-recovery-deferred"'),"Archivo debe montar el recuperador seguro a través de un boundary diferido");
 assert.ok(page.includes('<ArchiveBulkOcrRecoveryDeferred initialCount={pending} shouldCheck={true}/>'),"Archivo debe comprobar OCR pendiente y legacy aunque la vista actual no sea Pending");
-assert.equal((page.match(/<ArchiveBulkOcrRecoveryDeferred/g)||[]).length,1,"Debe existir una sola superficie de recuperación OCR para evitar estados duplicados");
+assert.equal((page.match(/<ArchiveBulkOcrRecoveryDeferred/g)||[]).length,1,"Debe existir un único recuperador masivo para evitar estados duplicados");
 assert.ok(page.indexOf('<ArchiveBulkOcrRecoveryDeferred initialCount={pending}')<page.indexOf('<ArchiveLifecycleClient'),"La recuperación segura debe conservar su posición lógica antes de la cola/listado documental");
 assert.ok(!page.includes('from "./archive-bulk-ocr-recovery"'),"La seguridad OCR no requiere cargar el recuperador pesado en el camino inicial");
 assert.ok(deferred.includes('import("./archive-bulk-ocr-recovery")'),"El boundary debe cargar exactamente el recuperador OCR seguro bajo demanda");
 assert.ok(deferred.includes('requestIdleCallback'),"La recuperación debe prepararse automáticamente tras liberar el render inicial");
 assert.ok(deferred.includes('Reintentar recuperación OCR'),"Un fallo de descarga del chunk debe ofrecer reintento sin tocar documentos");
 
+assert.ok(lifecycle.includes('action="/api/archive/reprocess-ocr"')&&lifecycle.includes('method="post"'),"Los pendientes compatibles deben disponer de una recuperación nativa que funcione sin hidratar JavaScript");
+assert.ok(lifecycle.includes('name="documentId"')&&lifecycle.includes('name="returnTo"'),"La recuperación nativa debe enviar solo el documento seleccionado y una vuelta segura a Archivo");
+assert.ok(page.includes('OCR reprocesado desde el original')&&page.includes('La evidencia anterior permanece intacta'),"El resultado del fallback nativo debe explicar éxito o fallo sin fingir validación");
+
 const loop=source.slice(source.indexOf("for(let index=0;index<selected.length;index++)"),source.indexOf("setOutcomes(nextOutcomes)"));
 assert.ok(loop.includes("await fetch(\"/api/archive/reprocess-ocr\""),"El lote debe seguir esperando cada documento antes de avanzar");
 assert.ok(!loop.includes("Promise.all"),"La mejora de UX no puede convertir la recuperación segura en paralelo");
 assert.ok(loop.includes("failed+=1")&&loop.includes("continue"),"Un fallo individual debe seguir aislado del resto del lote");
 
-console.log("OCR bulk recovery trust UX tests OK · parser almacenado primero, OCR completo solo si hace falta, recuperación secuencial y confianza explícita");
+console.log("OCR bulk recovery trust UX tests OK · parser almacenado primero, OCR completo solo si hace falta, lote secuencial, fallback nativo y confianza explícita");

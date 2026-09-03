@@ -40,6 +40,14 @@ function statusCopy(document:ArchiveDocument){
   return"Pendiente";
 }
 function statusClass(document:ArchiveDocument){if(document.archivedAt)return"muted";if(isPending(document))return"warning";return"ok"}
+function canNativeReprocess(document:ArchiveDocument){
+  return Boolean(
+    document.mimeType?.startsWith("image/")&&
+    document.storageProvider==="supabase_storage"&&
+    document.links.length===0&&
+    ["needs_review","failed","error"].includes(document.ocrStatus),
+  );
+}
 function DocumentIcon({image}:{image:boolean}){return <span className="archive-lifecycle-icon" aria-hidden="true"><svg className="financial-icon" viewBox="0 0 24 24" fill="none"><path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4"/>{image?<><circle cx="10" cy="12" r="1.4"/><path d="m8.5 17 2.7-2.7 1.9 1.9 1.4-1.4 1.5 1.5"/></>:<><path d="M9 12h6M9 15h6"/></>}</svg></span>}
 function archiveHref(view:ArchiveLifecycleState,query:string,page=1){const params=new URLSearchParams({view});if(query)params.set("q",query);if(page>1)params.set("page",String(page));return `/archivo?${params.toString()}`}
 
@@ -50,6 +58,7 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
   const totalPages=Math.max(1,Math.ceil(total/pageSize));
   const firstVisible=total===0?0:(page-1)*pageSize+1;
   const lastVisible=Math.min(total,page*pageSize);
+  const currentArchiveHref=archiveHref(view,query,page);
 
   async function restoreDocument(document:ArchiveDocument){
     if(busy)return;
@@ -89,7 +98,15 @@ export function ArchiveLifecycleClient({documents,counts,total,view,query,page,p
         {documents.map(document=><article key={document.id} className="archive-lifecycle-row">
           <DocumentIcon image={Boolean(document.mimeType?.startsWith("image/"))}/>
           <div className="archive-lifecycle-copy"><strong>{document.merchant||document.fileName}</strong><span>{document.merchant?document.fileName:document.documentType} · {formatDate(document.documentDate,document.createdAt)}</span><small>{amountCopy(document)} · {document.links.length} vínculo{document.links.length===1?"":"s"}</small>{view==="pending"&&<small className="archive-pending-reasons">Requiere: {pendingReasonCopy(document)}</small>}</div>
-          <div className="archive-lifecycle-side"><span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>{view==="archived"?<button className="secondary-action" type="button" disabled={Boolean(busy)} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}</div>
+          <div className="archive-lifecycle-side">
+            <span className={`status-badge ${statusClass(document)}`}>{statusCopy(document)}</span>
+            {view==="pending"&&canNativeReprocess(document)?<form action="/api/archive/reprocess-ocr" method="post">
+              <input type="hidden" name="documentId" value={document.id}/>
+              <input type="hidden" name="returnTo" value={currentArchiveHref}/>
+              <button className="secondary-action" type="submit">Reprocesar OCR</button>
+            </form>:null}
+            {view==="archived"?<button className="secondary-action" type="button" disabled={Boolean(busy)} aria-busy={busy===document.id||undefined} onClick={()=>restoreDocument(document)}>{busy===document.id?"Desarchivando…":"Desarchivar"}</button>:null}
+          </div>
         </article>)}
       </div>
 
