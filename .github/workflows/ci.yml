@@ -50,6 +50,8 @@ jobs:
         run: ./node_modules/.bin/tsx scripts/ocr-physical-type-scale-tests.ts
       - name: OCR residual row perspective
         run: ./node_modules/.bin/tsx scripts/ocr-row-perspective-tests.ts
+      - name: OCR left-edge descriptions
+        run: ./node_modules/.bin/tsx scripts/ocr-left-edge-description-tests.ts
       - name: OCR deskew confidence
         run: ./node_modules/.bin/tsx scripts/ocr-deskew-confidence-tests.ts
       - name: OCR background corridor
