@@ -97,6 +97,25 @@ function validateFailure(failure: any) {
   if (failure.details !== null) object(failure.details, "issue_details");
 }
 
+async function findMissingSourceRows(
+  sql: any,
+  sourceFileId: string,
+  presentRowIdentities: string[],
+) {
+  return sql`
+    select
+      t.id as transaction_id,
+      sr.source_sheet_id,
+      sr.source_row_key,
+      t.source_row_identity
+    from financial_app.transactions t
+    join financial_app.transaction_source_records sr on sr.id=t.source_record_id
+    where sr.source_file_id=${sourceFileId}
+      and not (t.source_row_identity = any(${presentRowIdentities}::text[]))
+    order by sr.source_sheet_id,sr.source_row_key,t.id
+  `;
+}
+
 export async function handleSourceSyncAction(input: {
   action: unknown;
   payload: any;
@@ -186,10 +205,29 @@ export async function handleSourceSyncAction(input: {
           : [{ count: 0 }];
         const duplicatesDetected = duplicateRows[0]?.count ?? 0;
 
+        const presentRowIdentities = batch.observations.map((observation: any) => observation.sourceRowIdentity);
+        const missingRows = await findMissingSourceRows(tx, batch.sourceFileId, presentRowIdentities);
+        for (const missing of missingRows) {
+          await tx`
+            insert into financial_app.sync_issues (
+              sync_run_id,severity,issue_code,source_sheet_id,source_row_key,field_name,message,details
+            ) values (
+              ${syncRunId}::uuid,'warning','source_row_missing_from_snapshot',${missing.source_sheet_id},
+              ${missing.source_row_key},null,'Una fila importada anteriormente ya no aparece en la fotografía completa de la fuente oficial.',
+              ${JSON.stringify({
+                transactionId: missing.transaction_id,
+                sourceRowIdentity: missing.source_row_identity,
+                sourceRevision: batch.sourceRevision,
+              })}::jsonb
+            )
+          `;
+        }
+        const warningsCount = missingRows.length;
+
         await tx`
           update financial_app.sync_runs
           set status='success',finished_at=now(),rows_inserted=${rowsInserted},rows_revised=${rowsRevised},
-              rows_skipped=${rowsSkipped},rows_failed=0,duplicates_detected=${duplicatesDetected},warnings_count=0,
+              rows_skipped=${rowsSkipped},rows_failed=0,duplicates_detected=${duplicatesDetected},warnings_count=${warningsCount},
               error_code=null,error_message=null
           where id=${syncRunId}::uuid
         `;
@@ -221,7 +259,9 @@ export async function handleSourceSyncAction(input: {
           rowsInserted,
           rowsRevised,
           rowsSkipped,
+          rowsMissing: missingRows.length,
           duplicatesDetected,
+          warningsCount,
           cursorsAdvanced: lastRowBySheet.size,
         };
       });
@@ -299,6 +339,60 @@ export async function handleSourceSyncAction(input: {
         `;
         if (first[0]?.action !== 'insert' || repeated[0]?.action !== 'skip') {
           throw new Error("test_source_idempotency_failed");
+        }
+
+        const duplicateA = await tx`
+          select * from financial_app.ingest_source_observation(
+            '__phase2_gateway_test__','sheet-1','DUP-A','__phase2_gateway_test__::sheet-1::DUP-A',${"b".repeat(64)},
+            ${JSON.stringify({ id: "DUP-A" })}::jsonb,'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,400,
+            'Cuenta prueba gateway','expense','pending',now()
+          )
+        `;
+        const duplicateB = await tx`
+          select * from financial_app.ingest_source_observation(
+            '__phase2_gateway_test__','sheet-1','DUP-B','__phase2_gateway_test__::sheet-1::DUP-B',${"c".repeat(64)},
+            ${JSON.stringify({ id: "DUP-B" })}::jsonb,'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,-100,
+            'Cuenta prueba gateway','expense','pending',now()
+          )
+        `;
+        const suspected = await tx`
+          select count(*)::int as count
+          from financial_app.transactions
+          where id = any(${[duplicateA[0]?.transaction_id, duplicateB[0]?.transaction_id]}::uuid[])
+            and duplicate_state='suspected'
+        `;
+        if (suspected[0]?.count !== 2) throw new Error("test_duplicate_suspicion_failed");
+
+        await tx`
+          select * from financial_app.ingest_source_observation(
+            '__phase2_gateway_test__','sheet-1','DUP-A','__phase2_gateway_test__::sheet-1::DUP-A',${"d".repeat(64)},
+            ${JSON.stringify({ id: "DUP-A", corrected: true })}::jsonb,'2026-09-02'::date,'CORREGIDO','CORREGIDO',-600,300,
+            'Cuenta prueba gateway','expense','needs_review',now()
+          )
+        `;
+        const cleared = await tx`
+          select count(*)::int as count
+          from financial_app.transactions
+          where id = any(${[duplicateA[0]?.transaction_id, duplicateB[0]?.transaction_id]}::uuid[])
+            and duplicate_state='none'
+        `;
+        if (cleared[0]?.count !== 2) throw new Error("test_duplicate_recomputation_failed");
+
+        const rowIdentity = '__phase2_gateway_test__::sheet-1::ROW-1';
+        const missing = await findMissingSourceRows(tx, '__phase2_gateway_test__', [
+          '__phase2_gateway_test__::sheet-1::DUP-A',
+          '__phase2_gateway_test__::sheet-1::DUP-B',
+        ]);
+        if (!missing.some((row: any) => row.source_row_identity === rowIdentity)) {
+          throw new Error("test_missing_source_row_detection_failed");
+        }
+        const present = await findMissingSourceRows(tx, '__phase2_gateway_test__', [
+          rowIdentity,
+          '__phase2_gateway_test__::sheet-1::DUP-A',
+          '__phase2_gateway_test__::sheet-1::DUP-B',
+        ]);
+        if (present.some((row: any) => row.source_row_identity === rowIdentity)) {
+          throw new Error("test_present_source_row_flagged_missing");
         }
 
         await tx`
