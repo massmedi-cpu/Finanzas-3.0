@@ -56,6 +56,31 @@ const currentOldest: SourceCellValue[] = [
   "Documento de prueba",
 ];
 
+const prepaidMixedRow: SourceCellValue[] = [
+  "PP-ORDER-1",
+  46266,
+  null,
+  "Tarjeta prepago Openbank · 8403",
+  "Openbank",
+  "****8403",
+  "Tarjeta",
+  "Gasto",
+  "Compras",
+  "Prueba",
+  "COMPRA PREPAGO",
+  "COMPRA PREPAGO",
+  "Comercio prueba",
+  -5,
+  0,
+  "Tarjeta",
+  null,
+  null,
+  "No aplica",
+  "No",
+  null,
+  "Documento de prueba",
+];
+
 const savingsRow: SourceCellValue[] = [
   "AH-ORDER-1",
   46267,
@@ -111,6 +136,23 @@ test("official source preserves newest-first order before deriving opening balan
     "CC-ORDER-NEW",
     "CC-ORDER-OLD",
   ]);
+});
+
+test("mixed logical products keep the original physical sheet order for per-sheet cursors", () => {
+  const prepared = prepareOfficialSourceSyncBatch(
+    workbook([currentNewest, prepaidMixedRow, currentOldest]),
+  );
+  const currentSheetRows = prepared.observations
+    .filter((row) => row.sourceSheetId === "725351515")
+    .map((row) => row.sourceRowKey);
+  const prepaid = prepared.accounts.find(
+    (account) => account.accountName === "Tarjeta prepago Openbank · 8403",
+  );
+
+  expect(currentSheetRows).toEqual(["CC-ORDER-NEW", "PP-ORDER-1", "CC-ORDER-OLD"]);
+  expect(currentSheetRows.at(-1)).toBe("CC-ORDER-OLD");
+  expect(prepaid?.lifecycle).toBe("archived");
+  expect(prepaid?.openingBalanceCents).toBe(0);
 });
 
 test("official source rejects chronological reordering instead of guessing", () => {

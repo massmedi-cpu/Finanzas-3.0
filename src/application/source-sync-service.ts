@@ -284,7 +284,7 @@ export function prepareOfficialSourceSyncBatch(
   });
 
   const accounts: PreparedSourceAccount[] = [];
-  const observations: PreparedSourceObservation[] = [];
+  const preparedByIdentity = new Map<string, PreparedSourceObservation>();
   const seenIdentities = new Set<string>();
 
   for (const contract of Object.values(OFFICIAL_SOURCE_ACCOUNT_CONTRACTS)) {
@@ -302,6 +302,7 @@ export function prepareOfficialSourceSyncBatch(
         );
       }
       seenIdentities.add(observation.sourceRowIdentity);
+      preparedByIdentity.set(observation.sourceRowIdentity, observation);
     }
 
     accounts.push({
@@ -314,8 +315,18 @@ export function prepareOfficialSourceSyncBatch(
       openingBalanceCents: openingBalanceForContract(contract, preparedProduct),
       sourceIdentifier: contract.identifier,
     });
-    observations.push(...preparedProduct);
   }
+
+  // La selección de autoridad se resuelve por producto, pero la persistencia avanza
+  // cursores por pestaña física. Reconstruimos el batch en el orden físico original
+  // para que un segundo producto de la misma pestaña no pueda sobrescribir el cursor
+  // con una fila anterior solo por el orden del contrato lógico.
+  const observations = parsedSheets.flatMap((sheet) =>
+    sheet.rows.flatMap((parsed) => {
+      const observation = preparedByIdentity.get(parsed.sourceRowIdentity);
+      return observation ? [observation] : [];
+    }),
+  );
 
   if (!accounts.length || !observations.length) {
     throw new SourceWorkbookContractError(
