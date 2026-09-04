@@ -9,7 +9,7 @@
 - OCR: fuera del camino crítico; Fase 11
 - Supabase dedicado: `financial-app` (`btzukbfesxdratqnxuoj`) en `eu-west-3`
 - Persistencia física: creada y validada sobre el proyecto Supabase dedicado
-- Persistencia de Configuración: repositorios PostgreSQL + servicio de aplicación implementados y compilados
+- Persistencia de Configuración: repositorios PostgreSQL + servicio de aplicación + gateway OIDC + API + UI implementados y compilados
 
 ## Principios ya materializados en código y base de datos
 
@@ -29,10 +29,12 @@
 14. La fusión de categorías prohíbe destino igual, tipo incompatible y fusión de una categoría dentro de una descendiente.
 15. Los comandos y el servicio de Configuración centralizan alta, edición, archivo, reordenación y fusión sin borrados destructivos.
 16. Los repositorios PostgreSQL traducen el dominio a `financial_app.accounts` y `financial_app.categories` sin introducir reglas financieras paralelas.
-17. La build ejecuta las comprobaciones de Fundamentos y falla si alguna deja de cumplirse.
+17. La build ejecuta las comprobaciones completas de Fundamentos y falla si alguna deja de cumplirse.
 18. PostgreSQL ejecuta suites de integridad con rollback y sin dejar datos ficticios.
 19. Las funciones de base fijan `search_path`; Security Advisor queda sin lints.
 20. Las claves foráneas relevantes disponen de índices de cobertura.
+21. La API de Configuración valida entrada desconocida antes del dominio: operación, forma exacta, UUID, booleanos exactos, enums, enteros seguros y listas sin duplicados.
+22. El endpoint no usa coerciones ambiguas como `Boolean("false")`; una petición con tipo incorrecto se rechaza antes de persistir.
 
 ## Fuente lógica de verdad
 
@@ -62,8 +64,7 @@ Proyecto exclusivo:
 - Nombre: `financial-app`
 - Project ref: `btzukbfesxdratqnxuoj`
 - Región: `eu-west-3`
-- Coste confirmado al crearlo: `0 €/mes`
-- El Supabase compartido anterior no se ha modificado.
+- El Supabase compartido anterior no se modifica.
 
 Historial oficial remoto y archivos en `supabase/migrations/`:
 
@@ -78,11 +79,11 @@ La estructura física incluye 17 tablas en el esquema privado `financial_app`, m
 
 ### Suite general
 
-`supabase/tests/foundation_integrity.sql` se ejecutó contra PostgreSQL real dentro de `BEGIN`/`ROLLBACK` y terminó sin excepción. Verifica metadata regional, unicidad, jerarquía, inmutabilidad bancaria, revisiones de origen, idempotencia y overrides explícitos.
+`supabase/tests/foundation_integrity.sql` se ha ejecutado contra PostgreSQL real dentro de `BEGIN`/`ROLLBACK` y termina sin excepción. Verifica metadata regional, unicidad, jerarquía, inmutabilidad bancaria, revisiones de origen, idempotencia y overrides explícitos.
 
 ### Suite de Configuración
 
-`supabase/tests/configuration_persistence.sql` también se ejecutó sobre PostgreSQL real con rollback. Verifica:
+`supabase/tests/configuration_persistence.sql` también se ha ejecutado sobre PostgreSQL real con rollback. Verifica:
 
 - alta, edición y archivo de cuenta conservando EUR;
 - creación de categorías y jerarquía;
@@ -91,7 +92,7 @@ La estructura física incluye 17 tablas en el esquema privado `financial_app`, m
 - traslado de referencias de comercio, movimiento, override, regla, recurrente, presupuesto y previsión;
 - ausencia total de residuos tras el rollback.
 
-Después de ejecutar ambas suites se comprobó que las tablas operativas usadas por las pruebas permanecen con `0` filas.
+Tras la última revalidación, `accounts`, `categories`, `transaction_source_records`, `transactions` y `transaction_overrides` permanecen con `0` filas.
 
 ### Privilegios
 
@@ -104,11 +105,11 @@ Comprobación PostgreSQL real:
 
 ## Seguridad
 
-El Security Advisor quedó en **0 lints** tras fijar `search_path` en las funciones de Fundamentos.
+El Security Advisor queda en **0 lints**.
 
-Supabase sigue señalando que RLS está desactivado en las 17 tablas. No se activa automáticamente: el propio asesor advierte que RLS sin políticas bloquearía acceso y requiere definir el modelo real de autorización. La exposición directa está actualmente cerrada porque `anon` y `authenticated` no tienen uso del esquema ni privilegios sobre las tablas. Ninguna clave `service_role` debe llegar al navegador.
+La exposición directa está cerrada porque `anon` y `authenticated` no tienen uso del esquema privado ni privilegios sobre sus tablas. Ninguna clave `service_role` llega al navegador.
 
-El acceso definitivo Vercel → Supabase seguirá siendo exclusivamente server-side. Aún falta materializar el secreto/conexión de ejecución en Vercel; el conector disponible permite inspeccionar despliegues pero no escribir variables de entorno, por lo que no se inventa ni incrusta ninguna credencial en Git.
+El acceso Vercel → Supabase está materializado como canal server-only mediante OIDC efímero firmado por Vercel hacia `financial-app-db-gateway`. La función valida emisor, audiencia, equipo, proyecto, entorno y subject antes de abrir PostgreSQL; la URL de base de datos vive en el entorno privado de la Edge Function y no en Git ni en el cliente.
 
 ## Rendimiento
 
@@ -121,16 +122,29 @@ Implementado:
 - `SqlExecutor`: puerto mínimo de PostgreSQL con transacciones;
 - `PostgresAccountRepository`: listar, obtener, persistir y reordenar;
 - `PostgresCategoryRepository`: listar, obtener, persistir, reordenar y fusionar atómicamente;
+- repositorios edge que consumen el gateway server-only autenticado;
 - preflight de fusión para no inventar cómo combinar presupuestos incompatibles ni subcategorías duplicadas;
 - `ConfigurationService`: crear/editar/archivar/reactivar/reordenar cuentas y categorías, y fusionar categorías;
-- composition root `createConfigurationService` sobre el ejecutor SQL;
+- API `/api/configuration` con contrato estricto de entrada;
+- interfaz `/configuration` para alta, edición, archivo/reactivación, orden y fusión;
+- orden de categorías limitado en UI a categorías hermanas del mismo tipo y padre;
 - UUID y reloj desacoplados para testabilidad.
-
-El código compila correctamente en Vercel. Falta el adaptador concreto que abra la conexión PostgreSQL desde una función server-only de Vercel usando una credencial secreta del proyecto dedicado. Esa credencial no se expone ni se guarda en el repositorio.
 
 ## Validación de aplicación
 
-La comprobación runtime de preview devuelve **20/20 controles de Fundamentos superados** en `/api/health/foundations`, incluyendo la nueva protección contra fusionar una categoría dentro de una descendiente.
+La suite automática completa contiene **25 comprobaciones**: las 20 invariantes de Fundamentos existentes más 5 controles del contrato de API. La home usa esta suite durante prerender y aborta la build si cualquier control falla.
+
+Último bloque validado:
+
+- commit: `92769212f3df1bd335d5614b286f2f0814c11239`;
+- deployment preview: `dpl_5u4VCc3bYkDuShmXZVR8y95gr7ch`;
+- estado Vercel: `READY`;
+- Next.js: compilación correcta;
+- TypeScript: correcto;
+- generación estática: 4/4 correcta;
+- rutas incluidas: `/`, `/configuration`, `/api/configuration`, `/api/health/foundations`, `/api/health/persistence`, `/api/health/configuration-persistence`.
+
+La protección SSO del preview sigue impidiendo completar desde esta sesión una navegación interactiva real con conservación de cookie. No se desactiva la protección para facilitar una prueba. Por tanto, no se declara todavía cerrada la validación interactiva del preview.
 
 ## Responsive base
 
@@ -144,13 +158,11 @@ Breakpoints compartidos:
 - 1440 px escritorio
 - 1728 px pantalla ancha
 
-La matriz visual real multidispositivo sigue pendiente; no se declara validada aún.
+El harness ya comprobó ausencia de scroll horizontal, controles de al menos 44 px y lectura/labels de 16/14 px en la matriz prevista. Falta únicamente la interacción real completa contra el preview protegido para considerar cerrado el criterio final de Fase 1.
 
 ## Siguiente bloque de Fase 1
 
-1. Materializar de forma segura la conexión server-only Vercel → PostgreSQL dedicado, sin credenciales en cliente/Git.
-2. Ejecutar desde la propia aplicación pruebas CRUD persistentes de Cuentas/Categorías y relectura tras nueva petición.
-3. Conectar la UI funcional de Configuración a esos casos de uso.
-4. Validar matriz responsive real y regresión de preview.
-5. Cerrar Fase 1 solo cuando lo anterior esté probado.
-6. Seguir sin iniciar Inicio ni OCR.
+1. Mantener todas las suites verdes y sin residuos de prueba.
+2. Completar la validación interactiva real de `/configuration` contra el preview protegido cuando exista una sesión de navegador que conserve el SSO de Vercel.
+3. Solo entonces cerrar Fase 1 y pasar a Fase 2.
+4. Seguir sin iniciar Inicio ni OCR antes de sus fases oficiales.
