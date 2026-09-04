@@ -55,8 +55,9 @@ test("un cambio concurrente de la fuente se presenta como conflicto recuperable 
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
-  await expect(page.getByRole("alert")).toContainText("La fuente bancaria cambió mientras se estaba leyendo");
-  await expect(page.getByRole("alert")).toContainText("Vuelve a intentarlo");
-  await expect(page.getByRole("status")).toHaveCount(0);
+  const appError = page.locator(".config-message.error");
+  await expect(appError).toContainText("La fuente bancaria cambió mientras se estaba leyendo");
+  await expect(appError).toContainText("Vuelve a intentarlo");
+  await expect(page.locator(".config-message.success")).toHaveCount(0);
   await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
 });
