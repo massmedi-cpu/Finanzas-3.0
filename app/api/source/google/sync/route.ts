@@ -1,10 +1,23 @@
+import {
+  SourceSyncRuntimeCompatibilityError,
+  assertSourceSyncRuntimeCapabilities,
+  type SourceSyncRuntimeCapabilities,
+} from "../../../../../src/application/source-sync-runtime-contract";
 import { GoogleSourceRuntimeConfigurationError, createGoogleSourceRuntime } from "../../../../../src/infrastructure/google/google-source-runtime";
+import {
+  PersistenceGatewayError,
+  callPersistenceGateway,
+} from "../../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
     const runtime = createGoogleSourceRuntime();
+
+    const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
+    assertSourceSyncRuntimeCapabilities(capabilities);
+
     const connection = await runtime.oauth.status();
     if (!connection) {
       return Response.json(
@@ -37,6 +50,15 @@ export async function POST() {
     if (error instanceof GoogleSourceRuntimeConfigurationError) {
       return Response.json(
         { error: "google_oauth_not_configured", missing: error.missing },
+        { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (
+      error instanceof SourceSyncRuntimeCompatibilityError ||
+      (error instanceof PersistenceGatewayError && error.code === "unsupported_action")
+    ) {
+      return Response.json(
+        { error: "source_runtime_incompatible" },
         { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
