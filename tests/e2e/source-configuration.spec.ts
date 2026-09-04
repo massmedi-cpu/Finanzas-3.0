@@ -163,7 +163,7 @@ test.describe("Configuración · Fuente bancaria", () => {
 
     await page.goto("/configuration/source?google=error&code=google_account_not_allowed");
 
-    await expect(page.getByRole("alert")).toContainText("La cuenta Google utilizada no es la autorizada");
+    await expect(page.locator(".config-message.error")).toContainText("La cuenta Google utilizada no es la autorizada");
     await expect.poll(() => new URL(page.url()).search).toBe("");
   });
 });
