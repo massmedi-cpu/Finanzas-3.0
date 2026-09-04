@@ -166,4 +166,122 @@ test.describe("Configuración · Fuente bancaria", () => {
     await expect(page.locator(".config-message.error")).toContainText("La cuenta Google utilizada no es la autorizada");
     await expect.poll(() => new URL(page.url()).search).toBe("");
   });
+
+  test("desconectar Google elimina la autorización pero conserva la sincronización persistida", async ({ page }) => {
+    let connected = true;
+    await routeRuntime(page);
+    await page.route("**/api/source/google/status", async (route) => {
+      if (route.request().method() === "DELETE") {
+        connected = false;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ disconnected: true }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          configured: true,
+          connection: connected
+            ? {
+                connected: true,
+                accountEmail: "alberto@example.test",
+                sourceFileName: "Movimientos bancarios - fuente",
+                connectedAt: "2026-09-04T17:00:00.000Z",
+                lastVerifiedAt: "2026-09-04T17:30:00.000Z",
+                readonly: true,
+              }
+            : null,
+        }),
+      });
+    });
+    await page.route("**/api/source/google/sync", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          run: {
+            id: "10000000-0000-4000-8000-000000000077",
+            sourceFileId: "sheet-test",
+            sourceRevision: "drive-version:disconnect",
+            status: "success",
+            startedAt: "2026-09-04T17:29:00.000Z",
+            finishedAt: "2026-09-04T17:30:00.000Z",
+            rowsSeen: 12,
+            rowsInserted: 12,
+            rowsRevised: 0,
+            rowsSkipped: 0,
+            rowsFailed: 0,
+            duplicatesDetected: 0,
+            warningsCount: 0,
+            errorCode: null,
+            errorMessage: null,
+          },
+          cursors: [],
+        }),
+      }),
+    );
+
+    await page.goto("/configuration/source");
+    await expect(page.getByRole("button", { name: "Desconectar Google" })).toBeVisible();
+    await expect(page.getByText("drive-version:disconnect")).toBeVisible();
+
+    await page.getByRole("button", { name: "Desconectar Google" }).click();
+
+    await expect(page.getByRole("status")).toContainText(
+      "Conexión Google eliminada. Los movimientos ya importados permanecen intactos.",
+    );
+    await expect(page.getByRole("link", { name: "Conectar Google" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Desconectar Google" })).toHaveCount(0);
+    await expect(page.getByText("drive-version:disconnect")).toBeVisible();
+  });
+
+  test("un fallo al desconectar Google no muestra falso éxito ni oculta la conexión", async ({ page }) => {
+    await routeRuntime(page);
+    await page.route("**/api/source/google/status", async (route) => {
+      if (route.request().method() === "DELETE") {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "google_disconnect_failed" }),
+        });
+        return;
+      }
+
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          configured: true,
+          connection: {
+            connected: true,
+            accountEmail: "alberto@example.test",
+            sourceFileName: "Movimientos bancarios - fuente",
+            connectedAt: "2026-09-04T17:00:00.000Z",
+            lastVerifiedAt: null,
+            readonly: true,
+          },
+        }),
+      });
+    });
+    await page.route("**/api/source/google/sync", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ run: null, cursors: [] }),
+      }),
+    );
+
+    await page.goto("/configuration/source");
+    await page.getByRole("button", { name: "Desconectar Google" }).click();
+
+    await expect(page.locator(".config-message.error")).toContainText("No se ha podido desconectar Google.");
+    await expect(page.getByRole("button", { name: "Desconectar Google" })).toBeVisible();
+    await expect(page.getByText("alberto@example.test")).toBeVisible();
+    await expect(page.getByRole("status")).toHaveCount(0);
+  });
 });
