@@ -14,6 +14,7 @@ import {
   OFFICIAL_GOOGLE_SOURCE_NAME,
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
+  getGoogleAllowedAccountEmail,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
 import { GoogleOfficialSourceReadError } from "../../../../../src/infrastructure/google/official-bank-source-reader";
@@ -64,8 +65,9 @@ function connectionMatchesContract(
 
 export async function GET() {
   try {
-    const configuration = getGoogleSourceServerConfiguration();
+    getGoogleSourceServerConfiguration();
     const oauth = new GoogleOauthGateway();
+    const allowedEmail = await getGoogleAllowedAccountEmail(oauth);
     const connection = await oauth.status();
     if (!connection) {
       return Response.json(
@@ -73,7 +75,7 @@ export async function GET() {
         { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
-    if (!connectionMatchesContract(connection, configuration.allowedEmail)) {
+    if (!connectionMatchesContract(connection, allowedEmail)) {
       return Response.json(
         { error: "google_connection_contract_mismatch" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
@@ -132,8 +134,9 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const configuration = getGoogleSourceServerConfiguration();
+    getGoogleSourceServerConfiguration();
     const oauth = new GoogleOauthGateway();
+    const allowedEmail = await getGoogleAllowedAccountEmail(oauth);
 
     const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
     assertSourceSyncRuntimeCapabilities(capabilities);
@@ -145,7 +148,7 @@ export async function POST() {
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
-    if (!connectionMatchesContract(connection, configuration.allowedEmail)) {
+    if (!connectionMatchesContract(connection, allowedEmail)) {
       return Response.json(
         { error: "google_connection_contract_mismatch" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },

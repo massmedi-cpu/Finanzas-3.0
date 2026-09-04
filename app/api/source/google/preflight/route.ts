@@ -10,6 +10,7 @@ import { GoogleOauthGateway } from "../../../../../src/infrastructure/google/goo
 import {
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
+  getGoogleAllowedAccountEmail,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
 import { GoogleOfficialSourceReadError } from "../../../../../src/infrastructure/google/official-bank-source-reader";
@@ -20,14 +21,15 @@ const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 export async function POST() {
   try {
-    const configuration = getGoogleSourceServerConfiguration();
+    getGoogleSourceServerConfiguration();
     const oauth = new GoogleOauthGateway();
+    const allowedEmail = await getGoogleAllowedAccountEmail(oauth);
     const connection = await oauth.status();
 
     if (!connection) {
       return Response.json({ error: "google_oauth_not_connected" }, { status: 409, headers: HEADERS });
     }
-    if (connection.account_email.toLowerCase() !== configuration.allowedEmail) {
+    if (connection.account_email.toLowerCase() !== allowedEmail) {
       return Response.json({ error: "google_connection_contract_mismatch" }, { status: 409, headers: HEADERS });
     }
 
