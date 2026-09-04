@@ -1,4 +1,9 @@
 import {
+  SourceWorkbookContractError,
+  prepareOfficialSourceSyncBatch,
+  type OfficialSourceWorkbookSnapshot,
+} from "../application/source-sync-service";
+import {
   OFFICIAL_BANK_SOURCE_HEADERS,
   OfficialSourceContractError,
   buildOfficialSourceSchemaFingerprint,
@@ -40,12 +45,85 @@ const baseRow: SourceCellValue[] = [
   "Documento de prueba",
 ];
 
+const workbookCurrentRow: SourceCellValue[] = [
+  "CC-WORKBOOK-1",
+  46267,
+  null,
+  "Cuenta corriente Openbank · 3967",
+  "Openbank",
+  "****3967",
+  "Cuenta bancaria",
+  "Ingreso",
+  "Otros ingresos",
+  "Prueba",
+  "INGRESO PRUEBA",
+  "INGRESO PRUEBA",
+  "Openbank",
+  1,
+  1,
+  "Cuenta",
+  null,
+  null,
+  "No aplica",
+  "No",
+  null,
+  "Documento de prueba",
+];
+
+const workbookSavingsRow: SourceCellValue[] = [
+  "AH-WORKBOOK-1",
+  46267,
+  null,
+  "Cuenta ahorro Openbank · 2504",
+  "Openbank",
+  "****2504",
+  "Cuenta bancaria",
+  "Ingreso",
+  "Ingresos financieros",
+  "Intereses cuenta ahorro",
+  "LIQUIDACION CUENTA PRUEBA",
+  "LIQUIDACION CUENTA PRUEBA",
+  "Openbank",
+  2,
+  2,
+  "Abono de intereses",
+  null,
+  null,
+  "No aplica",
+  "No",
+  null,
+  "Documento de prueba",
+];
+
+function createWorkbookSnapshot(): OfficialSourceWorkbookSnapshot {
+  return {
+    sourceFileId: "official-workbook-test",
+    sourceRevision: "revision-test",
+    sheets: [
+      {
+        sourceSheetId: "725351515",
+        title: "Cuenta corriente · 3967",
+        headers: OFFICIAL_BANK_SOURCE_HEADERS,
+        rows: [workbookCurrentRow],
+      },
+      {
+        sourceSheetId: "2504001",
+        title: "Cuenta ahorro · 2504",
+        headers: OFFICIAL_BANK_SOURCE_HEADERS,
+        rows: [workbookSavingsRow],
+      },
+    ],
+  };
+}
+
 function errorCode(callback: () => unknown) {
   try {
     callback();
     return null;
   } catch (error) {
-    return error instanceof OfficialSourceContractError ? error.code : "unexpected";
+    return error instanceof OfficialSourceContractError || error instanceof SourceWorkbookContractError
+      ? error.code
+      : "unexpected";
   }
 }
 
@@ -96,6 +174,23 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
 
   const accountMismatch: SourceCellValue[] = [...baseRow];
   accountMismatch[5] = "****9999";
+
+  const workbook = createWorkbookSnapshot();
+  const preparedWorkbook = prepareOfficialSourceSyncBatch(workbook);
+  const missingSheetWorkbook: OfficialSourceWorkbookSnapshot = {
+    ...workbook,
+    sheets: [workbook.sheets[0]],
+  };
+  const duplicateIdentityWorkbook: OfficialSourceWorkbookSnapshot = {
+    ...workbook,
+    sheets: [
+      {
+        ...workbook.sheets[0],
+        rows: [workbookCurrentRow, [...workbookCurrentRow]],
+      },
+      workbook.sheets[1],
+    ],
+  };
 
   const checks: DataQualityCheck[] = [
     {
@@ -184,6 +279,30 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
         Object.keys(parsed.sourcePayload).length === OFFICIAL_BANK_SOURCE_HEADERS.length &&
         parsed.sourcePayload["Categoría"] === "Vivienda" &&
         parsed.sourcePayload["Fuente"] === "Documento de prueba",
+    },
+    {
+      name: "official-workbook-requires-both-verified-sheets",
+      passed:
+        preparedWorkbook.accounts.length === 2 &&
+        preparedWorkbook.observations.length === 2 &&
+        preparedWorkbook.schemaFingerprint.length === 64,
+    },
+    {
+      name: "opening-balance-is-derived-from-oldest-source-row",
+      passed:
+        preparedWorkbook.accounts.every((account) => account.openingBalanceCents === 0) &&
+        preparedWorkbook.accounts.some((account) => account.accountType === "checking") &&
+        preparedWorkbook.accounts.some((account) => account.accountType === "savings"),
+    },
+    {
+      name: "missing-official-sheet-is-rejected",
+      passed: errorCode(() => prepareOfficialSourceSyncBatch(missingSheetWorkbook)) === "sheet_set_mismatch",
+    },
+    {
+      name: "duplicate-source-row-identity-is-rejected-before-persistence",
+      passed:
+        errorCode(() => prepareOfficialSourceSyncBatch(duplicateIdentityWorkbook)) ===
+        "duplicate_source_row_identity",
     },
   ];
 
