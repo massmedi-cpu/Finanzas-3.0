@@ -128,6 +128,17 @@ test.describe("Configuración interactiva sin residuos", () => {
   });
 });
 
+test.describe("Fase 2 · Calidad del dato", () => {
+  test("el contrato estricto de la fuente permanece verde", async ({ request }) => {
+    const response = await request.get("/api/health/data-quality");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.passed).toBe(payload.total);
+    expect(payload.total).toBeGreaterThanOrEqual(12);
+  });
+});
+
 test.describe("Preview protegido real", () => {
   test.skip(
     !process.env.VERCEL_PREVIEW_URL,
@@ -141,6 +152,15 @@ test.describe("Preview protegido real", () => {
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
     expect(payload.total).toBeGreaterThanOrEqual(36);
+  });
+
+  test("calidad del dato de Fase 2 permanece verde", async ({ request }) => {
+    const response = await request.get("/api/health/data-quality");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.passed).toBe(payload.total);
+    expect(payload.total).toBeGreaterThanOrEqual(12);
   });
 
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {

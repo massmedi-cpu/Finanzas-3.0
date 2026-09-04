@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - rebuild/phase-1-foundations
+      - rebuild/phase-2-data-quality
 
 permissions:
   contents: read
@@ -28,7 +29,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Run interactive configuration E2E
+      - name: Run browser and core-health E2E
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
@@ -40,6 +41,7 @@ jobs:
           retention-days: 7
 
   protected-preview-access:
+    if: github.ref_name == 'rebuild/phase-1-foundations'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -87,7 +89,7 @@ jobs:
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "method=none" >> "$GITHUB_OUTPUT"
-            echo "Protected preview access is not authorized yet. The Live E2E job will remain skipped until VERCEL_AUTOMATION_BYPASS_SECRET exists or GitHub Actions is authorized as a Vercel Trusted Source."
+            echo "Protected preview access is not authorized yet."
           fi
 
   protected-preview-live:
