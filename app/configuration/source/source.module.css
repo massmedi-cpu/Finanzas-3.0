@@ -59,8 +59,12 @@
   display: block;
 }
 
+.missingBox p,
 .missingBox ul {
   margin: 0.5rem 0 0;
+}
+
+.missingBox ul {
   padding-left: 1.15rem;
 }
 
@@ -73,6 +77,49 @@
 
 .buttonLink {
   text-decoration: none;
+}
+
+.preflightBlock {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(137, 173, 255, 0.12);
+}
+
+.preflightBlock h3 {
+  margin: 0.15rem 0 0;
+  font-size: var(--font-subtitle);
+}
+
+.preflightProducts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.preflightProducts article {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid rgba(53, 208, 127, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(53, 208, 127, 0.045);
+}
+
+.preflightProducts span,
+.preflightProducts small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.preflightProducts strong {
+  display: block;
+  margin: 0.2rem 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.preflightProducts small + small {
+  margin-top: 0.2rem;
 }
 
 .guarantees {
@@ -203,7 +250,8 @@
     grid-template-columns: 1fr;
   }
 
-  .statusList {
+  .statusList,
+  .preflightProducts {
     grid-template-columns: 1fr;
   }
 
