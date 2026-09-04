@@ -9,7 +9,36 @@ permissions:
   contents: read
 
 jobs:
-  protected-preview-e2e:
+  browser-interaction-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout branch commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run interactive configuration E2E
+        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-local-report
+          path: playwright-report/
+          retention-days: 7
+
+  protected-preview-live:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -24,7 +53,7 @@ jobs:
             echo "available=true" >> "$GITHUB_OUTPUT"
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview E2E is pending."
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview live checks remain pending."
           fi
 
       - name: Checkout branch commit
@@ -64,7 +93,7 @@ jobs:
           echo "The branch preview did not reach commit $GITHUB_SHA."
           exit 1
 
-      - name: Run protected preview E2E
+      - name: Run protected preview live E2E
         if: steps.bypass.outputs.available == 'true'
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
@@ -72,6 +101,6 @@ jobs:
         if: failure() && steps.bypass.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report
+          name: playwright-protected-preview-report
           path: playwright-report/
           retention-days: 7
