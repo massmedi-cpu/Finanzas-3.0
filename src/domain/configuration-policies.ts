@@ -205,3 +205,62 @@ export function validateReorder(
         },
       ];
 }
+
+export function validateAccountReorder(
+  accounts: ReadonlyArray<Pick<Account, "id" | "lifecycle">>,
+  orderedIds: ReadonlyArray<EntityId>,
+): ValidationIssue[] {
+  const setIssues = validateReorder(accounts.map((account) => account.id), orderedIds);
+  if (setIssues.length > 0) {
+    return setIssues;
+  }
+
+  const byId = new Map(accounts.map((account) => [account.id, account]));
+  const crossesLifecycleBoundary = orderedIds.some((id, index) => {
+    const current = accounts[index];
+    const incoming = byId.get(id);
+    return !current || !incoming || current.lifecycle !== incoming.lifecycle;
+  });
+
+  return crossesLifecycleBoundary
+    ? [
+        {
+          field: "sortOrder",
+          code: "account_reorder_group_mismatch",
+          message: "Las cuentas solo pueden reordenarse dentro del mismo estado activo o archivado.",
+        },
+      ]
+    : [];
+}
+
+export function validateCategoryReorder(
+  categories: ReadonlyArray<Pick<Category, "id" | "kind" | "parentCategoryId">>,
+  orderedIds: ReadonlyArray<EntityId>,
+): ValidationIssue[] {
+  const setIssues = validateReorder(categories.map((category) => category.id), orderedIds);
+  if (setIssues.length > 0) {
+    return setIssues;
+  }
+
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const crossesCategoryBoundary = orderedIds.some((id, index) => {
+    const current = categories[index];
+    const incoming = byId.get(id);
+    return (
+      !current ||
+      !incoming ||
+      current.kind !== incoming.kind ||
+      current.parentCategoryId !== incoming.parentCategoryId
+    );
+  });
+
+  return crossesCategoryBoundary
+    ? [
+        {
+          field: "sortOrder",
+          code: "category_reorder_group_mismatch",
+          message: "Las categorías solo pueden reordenarse entre hermanas del mismo tipo y nivel.",
+        },
+      ]
+    : [];
+}
