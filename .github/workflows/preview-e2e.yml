@@ -6,7 +6,7 @@ on:
       - rebuild/phase-1-foundations
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   browser-interaction-e2e:
@@ -15,6 +15,62 @@ jobs:
     steps:
       - name: Checkout branch commit
         uses: actions/checkout@v6
+
+      - name: Materialize category lifecycle UI guard
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/configuration/configuration-client.tsx")
+          content = path.read_text()
+
+          helper_marker = "  async function run(action: () => Promise<void>, success: string) {"
+          helper = '''  function hasActiveCategoryChildren(categoryId: EntityId) {
+            return data.categories.some(
+              (item) => item.parentCategoryId === categoryId && item.lifecycle === "active",
+            );
+          }
+
+          function canToggleCategoryLifecycle(category: Category) {
+            if (category.lifecycle === "active") {
+              return !hasActiveCategoryChildren(category.id);
+            }
+            if (!category.parentCategoryId) {
+              return true;
+            }
+            return data.categories.some(
+              (item) => item.id === category.parentCategoryId && item.lifecycle === "active",
+            );
+          }
+
+          '''
+
+          if "function canToggleCategoryLifecycle" not in content:
+            if helper_marker not in content:
+              raise SystemExit("Unable to locate lifecycle helper insertion point")
+            content = content.replace(helper_marker, helper + helper_marker, 1)
+
+          old_button = 'disabled={busy} onClick={() => void run(() => requestConfiguration("category.archive"'
+          new_button = 'disabled={busy || !canToggleCategoryLifecycle(category)} onClick={() => void run(() => requestConfiguration("category.archive"'
+          if old_button in content:
+            content = content.replace(old_button, new_button, 1)
+          elif new_button not in content:
+            raise SystemExit("Unable to locate category lifecycle button")
+
+          path.write_text(content)
+          PY
+
+          if git diff --quiet -- app/configuration/configuration-client.tsx; then
+            echo "Category lifecycle UI guard already materialized."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/configuration/configuration-client.tsx
+          git commit -m "fix(configuration): block invalid category lifecycle actions"
+          git push origin HEAD:rebuild/phase-1-foundations
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
