@@ -45,39 +45,53 @@ jobs:
     env:
       VERCEL_PREVIEW_URL: https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_API_TOKEN: ${{ secrets.VERCEL_TOKEN }}
     steps:
-      - name: Detect automation bypass secret
-        id: bypass
+      - name: Detect protected-preview credentials
+        id: credentials
         shell: bash
         run: |
           if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "bypass_available=true" >> "$GITHUB_OUTPUT"
+            echo "automation_bypass_available=true"
           else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview live checks remain pending."
+            echo "bypass_available=false" >> "$GITHUB_OUTPUT"
+            echo "automation_bypass_available=false"
+          fi
+
+          if [ -n "$VERCEL_API_TOKEN" ]; then
+            echo "api_token_available=true" >> "$GITHUB_OUTPUT"
+            echo "vercel_api_token_available=true"
+          else
+            echo "api_token_available=false" >> "$GITHUB_OUTPUT"
+            echo "vercel_api_token_available=false"
+          fi
+
+          if [ -z "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "Protected preview live checks remain pending until an authorized bypass is available."
           fi
 
       - name: Checkout branch commit
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Node.js 24
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Chromium
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Wait for matching Vercel preview
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         shell: bash
         run: |
           for attempt in $(seq 1 36); do
@@ -96,11 +110,11 @@ jobs:
           exit 1
 
       - name: Run protected preview live E2E
-        if: steps.bypass.outputs.available == 'true'
+        if: steps.credentials.outputs.bypass_available == 'true'
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
-        if: failure() && steps.bypass.outputs.available == 'true'
+        if: failure() && steps.credentials.outputs.bypass_available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-protected-preview-report
