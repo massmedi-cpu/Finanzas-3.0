@@ -28,6 +28,7 @@ function category(
   kind: Category["kind"],
   parentCategoryId: string | null,
   sortOrder: number,
+  lifecycle: Category["lifecycle"] = "active",
 ): Category {
   return {
     id,
@@ -36,7 +37,7 @@ function category(
     parentCategoryId,
     iconKey: "wallet",
     colorToken: "category.blue",
-    lifecycle: "active",
+    lifecycle,
     sortOrder,
     createdAt: TIMESTAMP,
     updatedAt: TIMESTAMP,
@@ -57,6 +58,28 @@ export function runConfigurationIntegrityChecks(): FoundationCheck[] {
   const expenseChild = category("category-expense-child", "expense", expenseRootA.id, 0);
   const incomeRoot = category("category-income", "income", null, 0);
   const categories = [expenseRootA, expenseRootB, expenseChild, incomeRoot];
+
+  const lifecycleParent = category("category-lifecycle-parent", "expense", null, 0);
+  const lifecycleActiveChild = category(
+    "category-lifecycle-active-child",
+    "expense",
+    lifecycleParent.id,
+    0,
+  );
+  const lifecycleArchivedParent = category(
+    "category-lifecycle-archived-parent",
+    "expense",
+    null,
+    0,
+    "archived",
+  );
+  const lifecycleArchivedChild = category(
+    "category-lifecycle-archived-child",
+    "expense",
+    lifecycleParent.id,
+    1,
+    "archived",
+  );
 
   return [
     {
@@ -99,6 +122,30 @@ export function runConfigurationIntegrityChecks(): FoundationCheck[] {
       passed: validateCategoryReorder(
         categories,
         [expenseRootB.id, expenseRootA.id, expenseChild.id, incomeRoot.id],
+      ).length === 0,
+    },
+    {
+      name: "category-archive-rejects-active-child",
+      passed: validateCategoryHierarchy(
+        { ...lifecycleParent, lifecycle: "archived" },
+        [lifecycleParent, lifecycleActiveChild],
+      ).some((issue) => issue.code === "active_child_requires_active_parent"),
+    },
+    {
+      name: "active-category-rejects-archived-parent",
+      passed: validateCategoryHierarchy(
+        {
+          ...lifecycleActiveChild,
+          parentCategoryId: lifecycleArchivedParent.id,
+        },
+        [lifecycleArchivedParent, lifecycleActiveChild],
+      ).some((issue) => issue.code === "parent_archived"),
+    },
+    {
+      name: "archived-category-allows-active-parent",
+      passed: validateCategoryHierarchy(
+        lifecycleArchivedChild,
+        [lifecycleParent, lifecycleArchivedChild],
       ).length === 0,
     },
   ];
