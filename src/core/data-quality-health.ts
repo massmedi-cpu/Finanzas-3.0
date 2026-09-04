@@ -11,6 +11,11 @@ import {
   validateOfficialSourceHeaders,
   type SourceCellValue,
 } from "../domain/official-bank-source";
+import {
+  GOOGLE_SOURCE_READONLY_SCOPES,
+  GoogleOfficialSourceReadError,
+  normalizeGoogleOfficialSourcePayload,
+} from "../infrastructure/google/official-bank-source-reader";
 
 export type DataQualityCheck = { name: string; passed: boolean };
 export type DataQualityHealth = {
@@ -116,12 +121,70 @@ function createWorkbookSnapshot(): OfficialSourceWorkbookSnapshot {
   };
 }
 
+function createGooglePayload() {
+  const spreadsheetId = "official-google-source-test";
+  return {
+    spreadsheetId,
+    driveFile: {
+      id: spreadsheetId,
+      name: "Movimientos bancarios - fuente",
+      mimeType: "application/vnd.google-apps.spreadsheet",
+      modifiedTime: "2026-09-03T04:18:58.338Z",
+      version: 27,
+    },
+    spreadsheet: {
+      spreadsheetId,
+      properties: {
+        title: "Movimientos bancarios - fuente",
+        locale: "es_ES",
+        timeZone: "Europe/Madrid",
+      },
+      sheets: [
+        {
+          properties: {
+            sheetId: 725351515,
+            title: "Cuenta corriente · 3967",
+            index: 0,
+            sheetType: "GRID",
+            gridProperties: { rowCount: 2, columnCount: 22 },
+          },
+        },
+        {
+          properties: {
+            sheetId: 2504001,
+            title: "Cuenta ahorro · 2504",
+            index: 1,
+            sheetType: "GRID",
+            gridProperties: { rowCount: 2, columnCount: 22 },
+          },
+        },
+      ],
+    },
+    values: {
+      valueRanges: [
+        {
+          range: "'Cuenta corriente · 3967'!A1:V2",
+          majorDimension: "ROWS",
+          values: [OFFICIAL_BANK_SOURCE_HEADERS, workbookCurrentRow],
+        },
+        {
+          range: "'Cuenta ahorro · 2504'!A1:V2",
+          majorDimension: "ROWS",
+          values: [OFFICIAL_BANK_SOURCE_HEADERS, workbookSavingsRow],
+        },
+      ],
+    },
+  };
+}
+
 function errorCode(callback: () => unknown) {
   try {
     callback();
     return null;
   } catch (error) {
-    return error instanceof OfficialSourceContractError || error instanceof SourceWorkbookContractError
+    return error instanceof OfficialSourceContractError ||
+      error instanceof SourceWorkbookContractError ||
+      error instanceof GoogleOfficialSourceReadError
       ? error.code
       : "unexpected";
   }
@@ -190,6 +253,32 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
       },
       workbook.sheets[1],
     ],
+  };
+
+  const googlePayload = createGooglePayload();
+  const normalizedGoogleWorkbook = normalizeGoogleOfficialSourcePayload(googlePayload);
+  const wrongLocaleGooglePayload = {
+    ...googlePayload,
+    spreadsheet: {
+      ...googlePayload.spreadsheet,
+      properties: { ...googlePayload.spreadsheet.properties, locale: "en_US" },
+    },
+  };
+  const wrongColumnGooglePayload = {
+    ...googlePayload,
+    spreadsheet: {
+      ...googlePayload.spreadsheet,
+      sheets: googlePayload.spreadsheet.sheets.map((sheet, index) =>
+        index === 0
+          ? {
+              properties: {
+                ...sheet.properties,
+                gridProperties: { ...sheet.properties.gridProperties, columnCount: 23 },
+              },
+            }
+          : sheet,
+      ),
+    },
   };
 
   const checks: DataQualityCheck[] = [
@@ -303,6 +392,33 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
       passed:
         errorCode(() => prepareOfficialSourceSyncBatch(duplicateIdentityWorkbook)) ===
         "duplicate_source_row_identity",
+    },
+    {
+      name: "google-source-oauth-scopes-are-read-only",
+      passed:
+        GOOGLE_SOURCE_READONLY_SCOPES.length === 2 &&
+        GOOGLE_SOURCE_READONLY_SCOPES.every((scope) => scope.endsWith(".readonly")),
+    },
+    {
+      name: "google-reader-normalizes-verified-workbook-and-revision",
+      passed:
+        normalizedGoogleWorkbook.sourceRevision === "drive-version:27" &&
+        normalizedGoogleWorkbook.sheets.length === 2 &&
+        normalizedGoogleWorkbook.sheets[0].sourceSheetId === "725351515" &&
+        normalizedGoogleWorkbook.sheets[1].sourceSheetId === "2504001" &&
+        normalizedGoogleWorkbook.sheets[0].rows[0][2] === null,
+    },
+    {
+      name: "google-reader-rejects-workbook-metadata-drift",
+      passed:
+        errorCode(() => normalizeGoogleOfficialSourcePayload(wrongLocaleGooglePayload)) ===
+        "source_metadata_mismatch",
+    },
+    {
+      name: "google-reader-rejects-sheet-structure-drift",
+      passed:
+        errorCode(() => normalizeGoogleOfficialSourcePayload(wrongColumnGooglePayload)) ===
+        "source_sheet_metadata_mismatch",
     },
   ];
 
