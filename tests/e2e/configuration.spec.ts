@@ -93,9 +93,12 @@ test.describe("Configuración interactiva sin residuos", () => {
     await expect(page.locator(".config-message.error")).toContainText("formato español");
   });
 
-  test("no ofrece jerarquías ni fusiones imposibles", async ({ page }) => {
+  test("no ofrece jerarquías, fusiones ni ciclos de vida imposibles", async ({ page }) => {
     await page.goto("/configuration");
     await page.getByRole("button", { name: /Categorías/ }).click();
+
+    const homeCard = page.locator("article.entity-card").filter({ hasText: "Hogar" });
+    await expect(homeCard.getByRole("button", { name: "Archivar" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Editar Hogar" }).click();
 
@@ -137,7 +140,7 @@ test.describe("Preview protegido real", () => {
     const payload = await response.json();
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
-    expect(payload.total).toBeGreaterThanOrEqual(26);
+    expect(payload.total).toBeGreaterThanOrEqual(34);
   });
 
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {
