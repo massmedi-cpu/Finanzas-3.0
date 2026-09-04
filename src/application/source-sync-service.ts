@@ -278,8 +278,6 @@ export function prepareOfficialSourceSyncBatch(
         values,
       }),
     );
-    validateNewestFirstSourceOrder(sheet.sourceSheetId, sheet.title, rows);
-
     return { sourceSheetId: sheet.sourceSheetId, title: sheet.title, rows };
   });
 
@@ -290,6 +288,15 @@ export function prepareOfficialSourceSyncBatch(
   for (const contract of Object.values(OFFICIAL_SOURCE_ACCOUNT_CONTRACTS)) {
     const authoritativeRows = selectAuthoritativeRowsForProduct(contract, parsedSheets);
     if (!authoritativeRows.length) continue;
+
+    if (contract.openingBalanceMode === "oldest_balance") {
+      const firstAuthoritative = authoritativeRows[0];
+      validateNewestFirstSourceOrder(
+        firstAuthoritative.observation.sourceSheetId ?? "",
+        firstAuthoritative.physicalSheetTitle,
+        authoritativeRows,
+      );
+    }
 
     const preparedProduct = prepareProductObservations(authoritativeRows);
     for (const observation of preparedProduct) {

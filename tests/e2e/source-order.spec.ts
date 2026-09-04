@@ -106,6 +106,31 @@ const savingsRow: SourceCellValue[] = [
   "Documento de prueba",
 ];
 
+const staleSavingsCopyOutOfPhysicalOrder: SourceCellValue[] = [
+  "AH-ORDER-1",
+  46267,
+  null,
+  "Cuenta ahorro Openbank · 2504",
+  "Openbank",
+  "****2504",
+  "Cuenta bancaria",
+  "Ingreso",
+  "Ingresos financieros",
+  "Intereses cuenta ahorro",
+  "LIQUIDACION CUENTA COPIA HISTORICA",
+  "LIQUIDACION CUENTA PRUEBA",
+  "Openbank",
+  2,
+  2,
+  "Abono de intereses",
+  null,
+  null,
+  "No aplica",
+  "No",
+  null,
+  "Copia histórica incrustada fuera del orden cronológico global de la pestaña física",
+];
+
 function workbook(currentRows: SourceCellValue[][]): OfficialSourceWorkbookSnapshot {
   return {
     sourceFileId: "official-order-test",
@@ -153,6 +178,24 @@ test("mixed logical products keep the original physical sheet order for per-shee
   expect(currentSheetRows.at(-1)).toBe("CC-ORDER-OLD");
   expect(prepaid?.lifecycle).toBe("archived");
   expect(prepaid?.openingBalanceCents).toBe(0);
+});
+
+test("historical copies from another product do not impose a false global date order", () => {
+  const prepared = prepareOfficialSourceSyncBatch(
+    workbook([currentNewest, currentOldest, staleSavingsCopyOutOfPhysicalOrder]),
+  );
+  const currentSheetRows = prepared.observations
+    .filter((row) => row.sourceSheetId === "725351515")
+    .map((row) => row.sourceRowKey);
+  const savings = prepared.observations.filter(
+    (row) => row.accountExternalKey === "Cuenta ahorro Openbank · 2504",
+  );
+
+  expect(currentSheetRows).toEqual(["CC-ORDER-NEW", "CC-ORDER-OLD"]);
+  expect(currentSheetRows.at(-1)).toBe("CC-ORDER-OLD");
+  expect(savings).toHaveLength(1);
+  expect(savings[0].sourceSheetId).toBe("2504001");
+  expect(savings[0].conceptOriginal).toBe("LIQUIDACION CUENTA PRUEBA");
 });
 
 test("official source rejects chronological reordering instead of guessing", () => {
