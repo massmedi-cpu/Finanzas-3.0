@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { getBuildInfo } from "../src/core/build-info";
-import { runFoundationHealthChecks } from "../src/core/foundation-health";
+import { runCompleteFoundationHealthChecks } from "../src/core/foundation-gate";
 
 export default function Home() {
   const build = getBuildInfo();
-  const health = runFoundationHealthChecks();
+  const health = runCompleteFoundationHealthChecks();
 
   if (health.status !== "ok") {
     const failedChecks = health.checks
