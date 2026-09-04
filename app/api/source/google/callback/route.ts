@@ -54,7 +54,10 @@ export async function GET(request: Request) {
 
   try {
     const configuration = getGoogleSourceServerConfiguration();
-    const expectedState = readCookie(request, GOOGLE_OAUTH_STATE_COOKIE) ?? "";
+    const expectedState = readCookie(request, GOOGLE_OAUTH_STATE_COOKIE);
+    if (!expectedState) {
+      return callbackRedirect(request, "error", "google_oauth_state_missing");
+    }
     validateGoogleOauthState(expectedState, url.searchParams.get("state"));
 
     const code = url.searchParams.get("code")?.trim() ?? "";
@@ -97,7 +100,11 @@ export async function GET(request: Request) {
       return callbackRedirect(request, "error", "google_oauth_not_configured");
     }
     if (error instanceof GoogleOauthError) {
-      return callbackRedirect(request, "error", error.code);
+      return callbackRedirect(
+        request,
+        "error",
+        error.code === "invalid_oauth_state" ? "invalid_google_oauth_state" : error.code,
+      );
     }
     console.error("google-oauth-callback", error instanceof Error ? error.name : "unknown_error");
     return callbackRedirect(request, "error", "google_oauth_callback_failed");
