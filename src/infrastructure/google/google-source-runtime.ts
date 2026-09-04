@@ -19,6 +19,7 @@ export type GoogleSourceServerConfiguration = {
   clientSecret: string;
   redirectUri: string;
   spreadsheetId: string;
+  allowedEmail: string;
 };
 
 export function getGoogleSourceServerConfiguration(): GoogleSourceServerConfiguration {
@@ -27,6 +28,7 @@ export function getGoogleSourceServerConfiguration(): GoogleSourceServerConfigur
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "",
     redirectUri: process.env.GOOGLE_OAUTH_REDIRECT_URI?.trim() ?? "",
     spreadsheetId: process.env.GOOGLE_BANK_SOURCE_SPREADSHEET_ID?.trim() ?? "",
+    allowedEmail: process.env.GOOGLE_OAUTH_ALLOWED_EMAIL?.trim().toLowerCase() ?? "",
   };
   const missing = Object.entries(values)
     .filter(([, value]) => !value)
@@ -36,6 +38,9 @@ export function getGoogleSourceServerConfiguration(): GoogleSourceServerConfigur
   const redirect = new URL(values.redirectUri);
   if (redirect.protocol !== "https:") {
     throw new GoogleSourceRuntimeConfigurationError(["redirectUri_https"]);
+  }
+  if (!values.allowedEmail.includes("@")) {
+    throw new GoogleSourceRuntimeConfigurationError(["allowedEmail"]);
   }
   return values;
 }
