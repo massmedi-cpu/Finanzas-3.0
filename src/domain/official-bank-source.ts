@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import type { AccountType, TransactionKind, TransactionReviewState } from "./models";
+import type { AccountType, EntityLifecycle, TransactionKind, TransactionReviewState } from "./models";
 import { buildSourceFingerprint, buildSourceRowIdentity, type BankSourceIdentityInput } from "./source-identity";
 
 export const OFFICIAL_BANK_SOURCE_HEADERS = [
@@ -27,39 +27,71 @@ export const OFFICIAL_BANK_SOURCE_HEADERS = [
   "Fuente",
 ] as const;
 
+export const OFFICIAL_SOURCE_SHEET_TITLES = [
+  "Cuenta corriente · 3967",
+  "Cuenta ahorro · 2504",
+] as const;
+
 export type OfficialBankSourceHeader = (typeof OFFICIAL_BANK_SOURCE_HEADERS)[number];
+export type OfficialSourceSheetTitle = (typeof OFFICIAL_SOURCE_SHEET_TITLES)[number];
 export type SourceCellValue = string | number | boolean | null;
+export type OfficialSourceOpeningBalanceMode = "oldest_balance" | "closed_technical_ledger";
 
 export type OfficialSourceAccountContract = {
-  sheetTitle: string;
+  sheetTitle: OfficialSourceSheetTitle;
+  canonicalSheetTitle: OfficialSourceSheetTitle;
+  allowedSheetTitles: readonly OfficialSourceSheetTitle[];
   accountName: string;
   institution: string;
   identifier: string;
   productType: string;
   accountType: AccountType;
+  lifecycle: EntityLifecycle;
+  openingBalanceMode: OfficialSourceOpeningBalanceMode;
 };
 
 /**
- * Contrato observado y verificado contra la fuente oficial el 04/09/2026.
- * Una pestaña o cuenta nueva no se interpreta por heurística: debe añadirse al
- * contrato después de verificarla.
+ * Contratos observados y verificados contra la fuente oficial completa el 04/09/2026.
+ * El histórico mezcla productos dentro de la pestaña de cuenta corriente, por lo que
+ * la identidad del producto se valida por el contenido de la fila y nunca se infiere
+ * únicamente por la pestaña física.
  */
 export const OFFICIAL_SOURCE_ACCOUNT_CONTRACTS: Readonly<Record<string, OfficialSourceAccountContract>> = {
-  "Cuenta corriente · 3967": {
+  "Cuenta corriente Openbank · 3967": {
     sheetTitle: "Cuenta corriente · 3967",
+    canonicalSheetTitle: "Cuenta corriente · 3967",
+    allowedSheetTitles: ["Cuenta corriente · 3967"],
     accountName: "Cuenta corriente Openbank · 3967",
     institution: "Openbank",
     identifier: "****3967",
     productType: "Cuenta bancaria",
     accountType: "checking",
+    lifecycle: "active",
+    openingBalanceMode: "oldest_balance",
   },
-  "Cuenta ahorro · 2504": {
+  "Cuenta ahorro Openbank · 2504": {
     sheetTitle: "Cuenta ahorro · 2504",
+    canonicalSheetTitle: "Cuenta ahorro · 2504",
+    allowedSheetTitles: ["Cuenta corriente · 3967", "Cuenta ahorro · 2504"],
     accountName: "Cuenta ahorro Openbank · 2504",
     institution: "Openbank",
     identifier: "****2504",
     productType: "Cuenta bancaria",
     accountType: "savings",
+    lifecycle: "active",
+    openingBalanceMode: "oldest_balance",
+  },
+  "Tarjeta prepago Openbank · 8403": {
+    sheetTitle: "Cuenta corriente · 3967",
+    canonicalSheetTitle: "Cuenta corriente · 3967",
+    allowedSheetTitles: ["Cuenta corriente · 3967"],
+    accountName: "Tarjeta prepago Openbank · 8403",
+    institution: "Openbank",
+    identifier: "****8403",
+    productType: "Tarjeta",
+    accountType: "other",
+    lifecycle: "archived",
+    openingBalanceMode: "closed_technical_ledger",
   },
 };
 
@@ -74,7 +106,9 @@ export class OfficialSourceContractError extends Error {
       | "unknown_movement_type"
       | "invalid_review_value"
       | "unknown_account_sheet"
-      | "account_contract_mismatch",
+      | "unknown_account_product"
+      | "account_contract_mismatch"
+      | "account_sheet_mismatch",
     message: string,
     public readonly field: OfficialBankSourceHeader | null = null,
   ) {
@@ -135,6 +169,19 @@ function requireText(value: SourceCellValue, field: OfficialBankSourceHeader) {
   return value.trim().replace(/\s+/g, " ").normalize("NFC");
 }
 
+function validatedIsoDate(year: number, month: number, day: number) {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null;
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+  return date.toISOString().slice(0, 10);
+}
+
 function parseDateCell(value: SourceCellValue): string {
   if (typeof value === "number") {
     if (!Number.isInteger(value) || value < 1 || value > 100_000) {
@@ -144,14 +191,23 @@ function parseDateCell(value: SourceCellValue): string {
     return new Date(milliseconds).toISOString().slice(0, 10);
   }
 
-  if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    const date = new Date(`${value}T00:00:00.000Z`);
-    if (!Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value) return value;
+  if (typeof value === "string") {
+    const isoMatch = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (isoMatch) {
+      const iso = validatedIsoDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+      if (iso === value) return iso;
+    }
+
+    const spanishMatch = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (spanishMatch) {
+      const iso = validatedIsoDate(Number(spanishMatch[3]), Number(spanishMatch[2]), Number(spanishMatch[1]));
+      if (iso) return iso;
+    }
   }
 
   throw new OfficialSourceContractError(
     "invalid_date",
-    "La fecha no coincide con el formato sin interpretar solicitado al adaptador de Google Sheets.",
+    "La fecha debe ser una fecha serial de Google Sheets, ISO YYYY-MM-DD o española DD/MM/YYYY válida.",
     "Fecha",
   );
 }
@@ -208,17 +264,32 @@ function parseReviewState(value: SourceCellValue): TransactionReviewState {
   );
 }
 
-function verifyAccountContract(sheetTitle: string, payload: Readonly<Record<OfficialBankSourceHeader, SourceCellValue>>) {
-  const contract = OFFICIAL_SOURCE_ACCOUNT_CONTRACTS[sheetTitle];
-  if (!contract) {
+function assertKnownSheetTitle(sheetTitle: string): asserts sheetTitle is OfficialSourceSheetTitle {
+  if (!(OFFICIAL_SOURCE_SHEET_TITLES as readonly string[]).includes(sheetTitle)) {
     throw new OfficialSourceContractError(
       "unknown_account_sheet",
-      `La pestaña “${sheetTitle}” no está registrada en el contrato de cuentas. No se inferirá automáticamente.`,
+      `La pestaña “${sheetTitle}” no está registrada en el contrato físico de la fuente.`,
+    );
+  }
+}
+
+function verifyAccountContract(
+  sheetTitle: string,
+  payload: Readonly<Record<OfficialBankSourceHeader, SourceCellValue>>,
+) {
+  assertKnownSheetTitle(sheetTitle);
+  const accountName = requireText(payload["Producto o cuenta"], "Producto o cuenta");
+  const contract = OFFICIAL_SOURCE_ACCOUNT_CONTRACTS[accountName];
+  if (!contract) {
+    throw new OfficialSourceContractError(
+      "unknown_account_product",
+      `El producto “${accountName}” no está registrado en el contrato verificado de la fuente. No se inferirá automáticamente.`,
+      "Producto o cuenta",
     );
   }
 
   const actual = {
-    accountName: requireText(payload["Producto o cuenta"], "Producto o cuenta"),
+    accountName,
     institution: requireText(payload.Entidad, "Entidad"),
     identifier: requireText(payload.Identificador, "Identificador"),
     productType: requireText(payload["Tipo de producto"], "Tipo de producto"),
@@ -232,7 +303,15 @@ function verifyAccountContract(sheetTitle: string, payload: Readonly<Record<Offi
   ) {
     throw new OfficialSourceContractError(
       "account_contract_mismatch",
-      `La cuenta observada en “${sheetTitle}” ha cambiado respecto al contrato verificado.`,
+      `El producto observado “${accountName}” ha cambiado respecto al contrato verificado.`,
+      "Producto o cuenta",
+    );
+  }
+
+  if (!(contract.allowedSheetTitles as readonly string[]).includes(sheetTitle)) {
+    throw new OfficialSourceContractError(
+      "account_sheet_mismatch",
+      `El producto “${accountName}” aparece en una pestaña no permitida: “${sheetTitle}”.`,
       "Producto o cuenta",
     );
   }
@@ -242,6 +321,7 @@ function verifyAccountContract(sheetTitle: string, payload: Readonly<Record<Offi
 
 export type ParsedOfficialSourceRow = {
   accountContract: OfficialSourceAccountContract;
+  physicalSheetTitle: OfficialSourceSheetTitle;
   sourcePayload: Readonly<Record<OfficialBankSourceHeader, SourceCellValue>>;
   observation: BankSourceIdentityInput;
   sourceRowIdentity: string;
@@ -261,6 +341,7 @@ export function parseOfficialSourceRow(input: {
     throw new OfficialSourceContractError("missing_required_value", "Falta la identidad técnica de la fuente o pestaña.");
   }
 
+  assertKnownSheetTitle(input.sheetTitle);
   const row = normalizedRow(input.values);
   const sourcePayload = Object.fromEntries(
     OFFICIAL_BANK_SOURCE_HEADERS.map((header, index) => [header, row[index]]),
@@ -273,7 +354,7 @@ export function parseOfficialSourceRow(input: {
   const conceptNormalized = requireText(sourcePayload["Concepto normalizado"], "Concepto normalizado");
   const amountCents = parseMoneyCell(sourcePayload["Importe (€)"], "Importe (€)");
   const balanceAfterCents = parseMoneyCell(sourcePayload["Saldo (€)"], "Saldo (€)", true);
-  const accountExternalKey = requireText(sourcePayload["Producto o cuenta"], "Producto o cuenta");
+  const accountExternalKey = accountContract.accountName;
 
   const observation: BankSourceIdentityInput = {
     sourceFileId: input.sourceFileId.trim(),
@@ -289,6 +370,7 @@ export function parseOfficialSourceRow(input: {
 
   return {
     accountContract,
+    physicalSheetTitle: input.sheetTitle,
     sourcePayload,
     observation,
     sourceRowIdentity: buildSourceRowIdentity(observation),
