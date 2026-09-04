@@ -76,13 +76,39 @@ type SyncResult = {
   sourceRevision: string | null;
 };
 
+type PreflightAccount = {
+  accountExternalKey: string;
+  accountName: string;
+  accountType: string;
+  lifecycle: string;
+  authoritativeRows: number;
+  openingBalanceCents: number;
+  newestBankDate: string | null;
+  oldestBankDate: string | null;
+  latestBalanceAfterCents: number | null;
+};
+
+type PreflightCursor = {
+  sourceSheetId: string;
+  sheetTitle: string;
+  authoritativeRows: number;
+  lastSourceRowKey: string;
+};
+
+type PreflightSummary = {
+  sourceFileId: string;
+  sourceRevision: string | null;
+  schemaFingerprint: string;
+  totalAuthoritativeRows: number;
+  accounts: PreflightAccount[];
+  cursors: PreflightCursor[];
+};
+
 const EMPTY_SYNC_STATUS: SyncStatus = { run: null, cursors: [] };
 
 const CONFIG_LABELS: Record<string, string> = {
   clientId: "Cliente OAuth de Google",
   clientSecret: "Secreto OAuth de Google",
-  redirectUri: "URL de retorno OAuth",
-  spreadsheetId: "ID del Google Sheet oficial",
   allowedEmail: "Cuenta Google autorizada",
   redirectUri_https: "URL de retorno OAuth con HTTPS",
   allowedEmail_invalid: "Cuenta Google autorizada válida",
@@ -110,6 +136,32 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
+function formatMoneyCents(value: number | null) {
+  if (value === null) return "Sin saldo";
+  return new Intl.NumberFormat("es-ES", {
+    style: "currency",
+    currency: "EUR",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value / 100);
+}
+
+function sourceActionErrorMessage(code: string | undefined) {
+  if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
+  if (code === "source_runtime_incompatible") return "El runtime de sincronización no cumple el contrato seguro requerido.";
+  if (code === "google_connection_contract_mismatch") return "La conexión Google no coincide con la cuenta autorizada.";
+  if (code === "google_oauth_refresh_unavailable") {
+    return "Google no ha podido renovar temporalmente la autorización. Vuelve a intentarlo; si el problema persiste, reconecta la fuente.";
+  }
+  if (code === "google_source_changed_during_read") {
+    return "La fuente bancaria cambió mientras se estaba leyendo. No se ha aceptado una fotografía mezclada. Vuelve a intentarlo.";
+  }
+  if (code === "google_source_contract_invalid") {
+    return "La fuente bancaria no cumple el contrato validado. No se ha importado ningún movimiento.";
+  }
+  return "La operación no se ha completado. No se mostrará como correcta sin confirmación real.";
+}
+
 async function jsonOrEmpty<T>(response: Response): Promise<T> {
   return (await response.json().catch(() => ({}))) as T;
 }
@@ -119,6 +171,7 @@ export default function SourceClient() {
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
   const [syncResult, setSyncResult] = useState<SyncResult | null>(null);
+  const [preflight, setPreflight] = useState<PreflightSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -182,11 +235,37 @@ export default function SourceClient() {
 
   const connected = Boolean(google?.configured && google.connection?.connected);
   const runtimeReady = runtime?.compatible === true;
-  const readyToSync = connected && runtimeReady && !busy;
+  const hasSuccessfulSync = syncStatus.cursors.length > 0;
+  const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
+  const readyToPreflight = connected && runtimeReady && !busy;
+  const readyToSync = connected && runtimeReady && !busy && (!firstImportNeedsPreflight || preflight !== null);
   const missingLabels = useMemo(
     () => (google?.missing ?? []).map((item) => CONFIG_LABELS[item] ?? item),
     [google?.missing],
   );
+
+  async function preflightSource() {
+    if (!readyToPreflight) return;
+    setBusy(true);
+    setError(null);
+    setNotice(null);
+
+    try {
+      const response = await fetch("/api/source/google/preflight", { method: "POST" });
+      const payload = await jsonOrEmpty<PreflightSummary & { error?: string }>(response);
+      if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
+
+      setPreflight(payload);
+      setNotice(
+        `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`,
+      );
+    } catch (cause) {
+      setPreflight(null);
+      setError(cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function synchronize() {
     if (!readyToSync) return;
@@ -197,21 +276,7 @@ export default function SourceClient() {
     try {
       const response = await fetch("/api/source/google/sync", { method: "POST" });
       const payload = await jsonOrEmpty<SyncResult & { error?: string }>(response);
-      if (!response.ok) {
-        const message =
-          payload.error === "google_oauth_not_connected"
-            ? "Google ya no está conectado. Vuelve a autorizar la fuente."
-            : payload.error === "source_runtime_incompatible"
-              ? "El runtime de sincronización no cumple el contrato seguro requerido."
-              : payload.error === "google_connection_contract_mismatch"
-                ? "La conexión Google no coincide con la fuente o cuenta autorizada."
-                : payload.error === "google_oauth_refresh_unavailable"
-                  ? "Google no ha podido renovar temporalmente la autorización. Vuelve a intentarlo; si el problema persiste, reconecta la fuente."
-                  : payload.error === "google_source_changed_during_read"
-                    ? "La fuente bancaria cambió mientras se estaba leyendo. No se ha guardado una fotografía mezclada. Vuelve a intentarlo."
-                    : "La actualización no se ha completado. No se mostrará como correcta sin confirmación real.";
-        throw new Error(message);
-      }
+      if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
 
       setSyncResult(payload);
       setNotice(
@@ -235,6 +300,7 @@ export default function SourceClient() {
       const response = await fetch("/api/source/google/status", { method: "DELETE" });
       if (!response.ok) throw new Error("No se ha podido desconectar Google.");
       setSyncResult(null);
+      setPreflight(null);
       setNotice("Conexión Google eliminada. Los movimientos ya importados permanecen intactos.");
       await load();
     } catch (cause) {
@@ -305,12 +371,28 @@ export default function SourceClient() {
               </div>
             )}
 
+            {firstImportNeedsPreflight && !preflight && (
+              <div className={styles.missingBox}>
+                <strong>Primera importación protegida</strong>
+                <p>Antes de escribir el primer movimiento se exige una lectura completa de control. La prevalidación no persiste movimientos ni modifica el Google Sheet.</p>
+              </div>
+            )}
+
             <div className={styles.actions}>
               {google?.configured && runtimeReady && !connected ? (
                 <a className={`primary-button ${styles.buttonLink}`} href="/api/source/google/connect">Conectar Google</a>
+              ) : firstImportNeedsPreflight && !preflight ? (
+                <button className="primary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
+                  {busy ? "Validando…" : "Validar fuente antes de importar"}
+                </button>
               ) : (
                 <button className="primary-button" type="button" disabled={!readyToSync} onClick={() => void synchronize()}>
                   {busy ? "Actualizando…" : "Actualizar desde Google"}
+                </button>
+              )}
+              {connected && (!firstImportNeedsPreflight || preflight) && (
+                <button className="secondary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
+                  {preflight ? "Volver a validar fuente" : "Validar fuente"}
                 </button>
               )}
               {connected && (
@@ -322,6 +404,39 @@ export default function SourceClient() {
                 Comprobar estado
               </button>
             </div>
+
+            {preflight && (
+              <div className={styles.preflightBlock} aria-label="Prevalidación de la fuente bancaria">
+                <div className="panel-heading">
+                  <div><p className="panel-kicker">PREVALIDACIÓN READ-ONLY</p><h3>Fotografía autoritativa antes de importar</h3></div>
+                  <span className="status-chip">Validada</span>
+                </div>
+                <dl className={styles.metrics}>
+                  <div><dt>Movimientos</dt><dd>{preflight.totalAuthoritativeRows}</dd></div>
+                  <div><dt>Productos</dt><dd>{preflight.accounts.length}</dd></div>
+                  <div><dt>Pestañas</dt><dd>{preflight.cursors.length}</dd></div>
+                </dl>
+                <div className={styles.preflightProducts}>
+                  {preflight.accounts.map((account) => (
+                    <article key={account.accountExternalKey}>
+                      <span>{account.lifecycle === "archived" ? "Archivada" : "Activa"} · {account.accountType}</span>
+                      <strong>{account.accountName}</strong>
+                      <small>{account.authoritativeRows} movimientos · saldo inicial {formatMoneyCents(account.openingBalanceCents)}</small>
+                      <small>Último saldo observado: {formatMoneyCents(account.latestBalanceAfterCents)}</small>
+                    </article>
+                  ))}
+                </div>
+                <div className={styles.metaRows}>
+                  {preflight.cursors.map((cursor) => (
+                    <p key={cursor.sourceSheetId}>
+                      <span>{cursor.sheetTitle} · {cursor.authoritativeRows} filas</span>
+                      <strong>Cursor previsto: {cursor.lastSourceRowKey}</strong>
+                    </p>
+                  ))}
+                  <p><span>Revisión fuente</span><strong>{preflight.sourceRevision ?? "Sin revisión"}</strong></p>
+                </div>
+              </div>
+            )}
           </section>
 
           <aside className={`config-panel ${styles.sidePanel}`}>
@@ -332,7 +447,8 @@ export default function SourceClient() {
               <li>Scopes de Google estrictamente de solo lectura.</li>
               <li>La fuente bancaria original no recibe escrituras.</li>
               <li>La identidad de cuenta autorizada se valida antes de sincronizar.</li>
-              <li>El libro completo se valida antes de persistir datos.</li>
+              <li>La primera importación exige prevalidación completa sin persistencia.</li>
+              <li>El libro completo se vuelve a validar antes de persistir datos.</li>
               <li>Runtime v2 obligatorio antes de cualquier escritura en PostgreSQL.</li>
             </ul>
           </aside>
