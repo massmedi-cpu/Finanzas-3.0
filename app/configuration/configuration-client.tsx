@@ -70,6 +70,10 @@ function labelForCategoryKind(kind: CategoryKind) {
   return CATEGORY_KINDS.find((item) => item.value === kind)?.label ?? kind;
 }
 
+function sameCategoryGroup(left: Category, right: Category) {
+  return left.kind === right.kind && left.parentCategoryId === right.parentCategoryId;
+}
+
 function Icon({ name }: { name: string }) {
   const common = { width: 18, height: 18, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 1.8, strokeLinecap: "round" as const, strokeLinejoin: "round" as const, "aria-hidden": true };
   if (name === "plus") return <svg {...common}><path d="M12 5v14M5 12h14" /></svg>;
@@ -151,6 +155,12 @@ export default function ConfigurationClient() {
     document.getElementById("category-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function canMoveCategory(index: number, delta: number) {
+    const current = data.categories[index];
+    const next = data.categories[index + delta];
+    return Boolean(current && next && sameCategoryGroup(current, next));
+  }
+
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
     setError(null);
@@ -220,7 +230,7 @@ export default function ConfigurationClient() {
 
   async function reorderCategories(index: number, delta: number) {
     const nextIndex = index + delta;
-    if (nextIndex < 0 || nextIndex >= data.categories.length) return;
+    if (!canMoveCategory(index, delta)) return;
     const ordered = data.categories.map((item) => item.id);
     [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
     await run(() => requestConfiguration("category.reorder", { orderedIds: ordered }).then(() => undefined), "Orden de categorías actualizado.");
@@ -290,8 +300,8 @@ export default function ConfigurationClient() {
                   <div className="entity-main"><div className={`entity-icon category-swatch ${category.colorToken.replace(".", "-")}`}><Icon name="more" /></div><div><div className="entity-title-row"><h3>{category.name}</h3><span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{labelForCategoryKind(category.kind)}{category.parentCategoryId ? " · Subcategoría" : " · Principal"}</p><strong>{category.iconKey}</strong></div></div>
                   <div className="entity-actions">
                     <button type="button" className="icon-button" onClick={() => beginCategoryEdit(category)} aria-label={`Editar ${category.name}`}><Icon name="edit" /></button>
-                    <button type="button" className="icon-button" disabled={index === 0 || busy} onClick={() => void reorderCategories(index, -1)} aria-label="Subir"><Icon name="up" /></button>
-                    <button type="button" className="icon-button" disabled={index === data.categories.length - 1 || busy} onClick={() => void reorderCategories(index, 1)} aria-label="Bajar"><Icon name="down" /></button>
+                    <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, -1)} onClick={() => void reorderCategories(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
+                    <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, 1)} onClick={() => void reorderCategories(index, 1)} aria-label="Bajar dentro de su grupo"><Icon name="down" /></button>
                     <button type="button" className="icon-button" disabled={busy} onClick={() => void run(() => requestConfiguration("category.archive", { id: category.id, archived: category.lifecycle === "active" }).then(() => undefined), category.lifecycle === "active" ? "Categoría archivada." : "Categoría reactivada.")} aria-label={category.lifecycle === "active" ? "Archivar" : "Reactivar"}><Icon name="archive" /></button>
                   </div>
                 </article>)}
