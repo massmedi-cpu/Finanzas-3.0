@@ -1,4 +1,9 @@
 import {
+  OfficialSourceHistoricalBaselineError,
+  assertOfficialSourceHistoricalBaseline,
+  buildOfficialSourcePreflightSummary,
+} from "../../../../../src/application/source-preflight";
+import {
   SourceSyncRuntimeCompatibilityError,
   assertSourceSyncRuntimeCapabilities,
   type SourceSyncRuntimeCapabilities,
@@ -149,6 +154,7 @@ export async function POST() {
 
     const runtime = createGoogleSourceRuntime(connection.source_file_id);
     const snapshot = await runtime.reader.read();
+    assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
     const result = await runtime.synchronization.synchronize(snapshot);
     await runtime.oauth.markVerified();
 
@@ -200,6 +206,12 @@ export async function POST() {
       return Response.json(
         { error: "google_source_changed_during_read" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (error instanceof OfficialSourceHistoricalBaselineError) {
+      return Response.json(
+        { error: "google_source_historical_regression", code: error.code },
+        { status: 422, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
     console.error("google-source-sync", error instanceof Error ? error.name : "unknown_error");
