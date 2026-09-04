@@ -45,6 +45,7 @@ export function runFoundationHealthChecks(): FoundationHealth {
   const transaction: Transaction = {
     id: "tx-validation",
     sourceRecordId: "source-validation",
+    sourceRowIdentity: "bank-sheet::movements::row-42",
     accountId: "account-validation",
     bankDate: "2026-09-03",
     conceptNormalized: "Concepto original procesado",
