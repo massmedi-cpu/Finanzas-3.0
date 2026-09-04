@@ -121,6 +121,14 @@ Deno.serve(async (req) => {
     const action = body?.action;
     const payload = body?.payload ?? {};
 
+    if (action === "source.capabilities") {
+      return json({
+        contractVersion: 2,
+        sourceAccountLifecycle: true,
+        canonicalProductSelection: true,
+      });
+    }
+
     if (action === "test.cleanup") {
       if (identity.environment !== "preview") return json({ error: "test_cleanup_preview_only" }, 403);
       await sql.begin(async (tx) => {
