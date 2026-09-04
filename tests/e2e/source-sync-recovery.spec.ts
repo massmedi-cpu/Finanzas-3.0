@@ -16,9 +16,8 @@ function routeRuntime(page: Page) {
   );
 }
 
-test("un cambio concurrente de la fuente se presenta como conflicto recuperable sin falso éxito", async ({ page }) => {
-  await routeRuntime(page);
-  await page.route("**/api/source/google/status", (route) =>
+function routeConnectedStatus(page: Page) {
+  return page.route("**/api/source/google/status", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -35,12 +34,15 @@ test("un cambio concurrente de la fuente se presenta como conflicto recuperable 
       }),
     }),
   );
+}
+
+async function routeEmptySyncStatus(page: Page, postError: string) {
   await page.route("**/api/source/google/sync", async (route) => {
     if (route.request().method() === "POST") {
       await route.fulfill({
         status: 409,
         contentType: "application/json",
-        body: JSON.stringify({ error: "google_source_changed_during_read" }),
+        body: JSON.stringify({ error: postError }),
       });
       return;
     }
@@ -51,13 +53,35 @@ test("un cambio concurrente de la fuente se presenta como conflicto recuperable 
       body: JSON.stringify({ run: null, cursors: [] }),
     });
   });
+}
+
+test("un cambio concurrente de la fuente se presenta como conflicto recuperable sin falso éxito", async ({ page }) => {
+  await routeRuntime(page);
+  await routeConnectedStatus(page);
+  await routeEmptySyncStatus(page, "google_source_changed_during_read");
 
   await page.goto("/configuration/source");
   await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
-  const appError = page.locator(".config-message.error");
-  await expect(appError).toContainText("La fuente bancaria cambió mientras se estaba leyendo");
-  await expect(appError).toContainText("Vuelve a intentarlo");
-  await expect(page.locator(".config-message.success")).toHaveCount(0);
+  const alert = page.locator(".config-message.error");
+  await expect(alert).toContainText("La fuente bancaria cambió mientras se estaba leyendo");
+  await expect(alert).toContainText("Vuelve a intentarlo");
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
+});
+
+test("si la conexión desaparece durante la sincronización exige reconectar y no muestra éxito", async ({ page }) => {
+  await routeRuntime(page);
+  await routeConnectedStatus(page);
+  await routeEmptySyncStatus(page, "google_oauth_not_connected");
+
+  await page.goto("/configuration/source");
+  await expect(page.getByText("alberto@example.test")).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+
+  await expect(page.locator(".config-message.error")).toContainText(
+    "Google ya no está conectado. Vuelve a autorizar la fuente.",
+  );
+  await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
 });
