@@ -205,9 +205,11 @@ export default function SourceClient() {
               ? "El runtime de sincronización no cumple el contrato seguro requerido."
               : payload.error === "google_connection_contract_mismatch"
                 ? "La conexión Google no coincide con la fuente o cuenta autorizada."
-                : payload.error === "google_source_changed_during_read"
-                  ? "La fuente bancaria cambió mientras se estaba leyendo. No se ha guardado una fotografía mezclada. Vuelve a intentarlo."
-                  : "La actualización no se ha completado. No se mostrará como correcta sin confirmación real.";
+                : payload.error === "google_oauth_refresh_unavailable"
+                  ? "Google no ha podido renovar temporalmente la autorización. Vuelve a intentarlo; si el problema persiste, reconecta la fuente."
+                  : payload.error === "google_source_changed_during_read"
+                    ? "La fuente bancaria cambió mientras se estaba leyendo. No se ha guardado una fotografía mezclada. Vuelve a intentarlo."
+                    : "La actualización no se ha completado. No se mostrará como correcta sin confirmación real.";
         throw new Error(message);
       }
 
