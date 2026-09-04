@@ -53,6 +53,22 @@ export function validateCategoryHierarchy(
   candidate: Pick<Category, "id" | "kind" | "parentCategoryId">,
   categories: ReadonlyArray<Pick<Category, "id" | "kind" | "parentCategoryId">>,
 ): ValidationIssue[] {
+  const incompatibleChild = categories.some(
+    (category) =>
+      category.parentCategoryId === candidate.id &&
+      category.kind !== candidate.kind,
+  );
+
+  if (incompatibleChild) {
+    return [
+      {
+        field: "kind",
+        code: "child_kind_mismatch",
+        message: "El tipo de una categoría debe coincidir con el de sus subcategorías.",
+      },
+    ];
+  }
+
   if (!candidate.parentCategoryId) {
     return [];
   }
