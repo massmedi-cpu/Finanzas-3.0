@@ -9,8 +9,8 @@ Este documento es un checkpoint técnico acumulativo. No sustituye el Prompt Mae
 ## Estado porcentual oficial
 
 - Fase 1 — Fundamentos: 100% completada; peso 8%; aporte global 8,0%.
-- Fase 2 — Lectura e importación de datos: 76% validado; peso 10%; aporte global 7,6%.
-- Progreso global validado: 15,6%.
+- Fase 2 — Lectura e importación de datos: 80% validado; peso 10%; aporte global 8,0%.
+- Progreso global validado: 16,0%.
 - OCR permanece previsto para Fase 11, tramo global 93%–97%.
 
 El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta por trabajo real validado.
@@ -20,11 +20,12 @@ El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta
 - Base cerrada: `main` con Fase 1 validada al 100%.
 - Rama activa: `rebuild/phase-2-data-quality`.
 - Pull request de continuidad: #287, Draft, sin fusionar mientras Fase 2 siga abierta.
-- Base funcional de este checkpoint: `8158d0349d7f232f6305b24884e0a160da8f6c53`.
-- CI Preview E2E run `33901929196`: `success`.
-- Build Next.js + Playwright desktop/móvil: 32 pruebas pasadas; 12 live omitidas por no existir URL de preview exacta para ese HEAD.
-- Configuración → Fuente bancaria está implementada y validada en CI: estado OAuth/runtime, garantía read-only, actualización solo tras POST confirmado, último sync persistido, cursores y retorno OAuth comprensible.
-- El preview exacto de `8158d03…` no pudo crearse por límite externo de Vercel: `Deployment rate limited — retry in 24 hours`. No se contabiliza como validación live.
+- HEAD funcional validado antes de este checkpoint documental: `cf13109fe36e1c91c509d3460487f3deda839482`.
+- CI Preview E2E run `33916117682`: `success`.
+- Build Next.js + Playwright desktop/móvil: **60 pruebas pasadas; 12 live omitidas; 0 fallos**.
+- Configuración → Fuente bancaria está implementada y validada en CI: estado OAuth/runtime, garantía read-only, actualización solo tras POST confirmado, último sync persistido, cursores, retorno OAuth comprensible y recuperación explícita ante pérdida/revocación/fallo temporal de OAuth.
+- Vercel ha vuelto a generar previews. El último READY comprobado corresponde al commit inmediatamente anterior `1a13ea90210d0e7d3514abbc5d9b3de89ca25618`; el HEAD `cf13109f…` todavía no dispone de deployment exacto, por lo que los gates live protegidos del HEAD no se contabilizan.
+- `/api/source/google/status` se comprobó en vivo sobre ese preview READY y respondió `200`, confirmando que siguen ausentes exactamente `clientId`, `clientSecret`, `redirectUri`, `spreadsheetId` y `allowedEmail`.
 
 ## Supabase / runtime real
 
@@ -143,9 +144,15 @@ El flujo implementado mantiene:
 - correo Google verificado y allowlist explícita;
 - lectura y validación completa del Sheet antes de almacenar refresh token;
 - refresh token en Supabase Vault, nunca en navegador ni Git;
-- rotación/desconexión sin residuos.
+- rotación/desconexión sin residuos;
+- pérdida concurrente de la conexión convertida en `409 google_oauth_not_connected`, sin falso éxito;
+- refresh token revocado diferenciado de una indisponibilidad temporal de Google;
+- indisponibilidad temporal de refresh preserva la conexión y obliga a reintentar, sin fingir desconexión;
+- desconexión confirmada conserva movimientos e histórico previamente persistidos.
 
 La regresión de Vault con `BEGIN/ROLLBACK` terminó previamente con `connection_residue=0` y `vault_residue=0`; `anon` y `authenticated` no tienen permiso para leer el refresh token.
+
+La función PostgreSQL `financial_app.disconnect_google_oauth_connection()` fue inspeccionada directamente: solo elimina la fila de `google_oauth_connections` y su secreto de Vault. No toca `transactions` ni `transaction_source_records`. Las cinco funciones OAuth sensibles comprobadas no conceden `EXECUTE` a `anon`, `authenticated` ni `PUBLIC`.
 
 ### Configuración Fuente bancaria
 
@@ -160,17 +167,24 @@ Implementada y validada en CI para escritorio y móvil:
 - relectura del estado persistido tras sincronizar;
 - último sync y cursores visibles;
 - errores de retorno OAuth convertidos en mensajes comprensibles;
-- query de retorno OAuth limpiada de la URL.
+- query de retorno OAuth limpiada de la URL;
+- desconexión segura que conserva el histórico;
+- conexión perdida durante sync presentada como necesidad de reautorizar;
+- caída temporal durante refresh presentada como error recuperable de reintento sin ocultar la conexión.
 
 ## Diagnóstico OAuth real pendiente
 
-La última comprobación del entorno preview mostró ausentes estas cinco piezas reales:
+Comprobación live más reciente del entorno preview READY:
 
-- `GOOGLE_OAUTH_CLIENT_ID`;
-- `GOOGLE_OAUTH_CLIENT_SECRET`;
-- `GOOGLE_OAUTH_REDIRECT_URI`;
-- `GOOGLE_BANK_SOURCE_SPREADSHEET_ID`;
-- `GOOGLE_OAUTH_ALLOWED_EMAIL`.
+- endpoint: `/api/source/google/status`;
+- respuesta HTTP: `200`;
+- `configured=false`;
+- ausentes exactamente:
+  - `GOOGLE_OAUTH_CLIENT_ID`;
+  - `GOOGLE_OAUTH_CLIENT_SECRET`;
+  - `GOOGLE_OAUTH_REDIRECT_URI`;
+  - `GOOGLE_BANK_SOURCE_SPREADSHEET_ID`;
+  - `GOOGLE_OAUTH_ALLOWED_EMAIL`.
 
 No se inventarán ni sustituirán por valores ficticios. Hasta configurar credenciales reales no puede ejecutarse desde la propia aplicación la primera importación Google controlada.
 
@@ -182,7 +196,7 @@ No se inventarán ni sustituirán por valores ficticios. Hasta configurar creden
 - Repetir sincronización y demostrar idempotencia real sin duplicados.
 - Verificar trazabilidad y ausencia de pérdida de modificaciones manuales tras una repetición real.
 - Confirmar en persistencia real que la prepago queda archivada y no aparece como cuenta activa ordinaria.
-- Ejecutar los gates live de preview en cuanto Vercel vuelva a permitir crear el deployment exacto del HEAD.
+- Ejecutar los gates live de preview sobre el deployment exacto del HEAD.
 - Reejecutar gates de Fase 1 para demostrar ausencia de regresión.
 - Actualizar Gantt final de Fase 2 y cerrar PR #287 solo con todas las evidencias verdes.
 
