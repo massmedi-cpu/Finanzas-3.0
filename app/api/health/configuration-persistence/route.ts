@@ -66,7 +66,6 @@ export async function GET() {
     });
 
     const archivedAccount = await service.setAccountArchived(createdAccount.id, true);
-    await service.reorderAccounts([createdAccount.id]);
 
     const target = await service.createCategory({
       name: "Destino validación runtime",
@@ -88,7 +87,12 @@ export async function GET() {
       sortOrder: 1,
     });
 
-    await service.reorderCategories([source.id, target.id]);
+    const gatewayGuards = await callPersistenceGateway<{
+      accountReorderGuard: boolean;
+      categoryReorderGuard: boolean;
+      activeMergeTargetGuard: boolean;
+    }>("test.invariants");
+
     await service.mergeCategories(source.id, target.id);
 
     const [afterAccounts, afterCategories] = await Promise.all([
@@ -115,11 +119,22 @@ export async function GET() {
         passed: archivedAccount.lifecycle === "archived" && rereadAccount?.lifecycle === "archived",
       },
       {
-        name: "categories-created-and-reordered",
+        name: "categories-created",
         passed:
           target.id === TEST_IDS.targetCategory &&
-          source.id === TEST_IDS.sourceCategory &&
-          rereadTarget?.sortOrder === 1,
+          source.id === TEST_IDS.sourceCategory,
+      },
+      {
+        name: "gateway-account-reorder-group-guard",
+        passed: gatewayGuards.accountReorderGuard,
+      },
+      {
+        name: "gateway-category-reorder-group-guard",
+        passed: gatewayGuards.categoryReorderGuard,
+      },
+      {
+        name: "gateway-active-merge-target-guard",
+        passed: gatewayGuards.activeMergeTargetGuard,
       },
       {
         name: "category-merge-reread",

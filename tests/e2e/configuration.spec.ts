@@ -140,7 +140,7 @@ test.describe("Preview protegido real", () => {
     const payload = await response.json();
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
-    expect(payload.total).toBeGreaterThanOrEqual(34);
+    expect(payload.total).toBeGreaterThanOrEqual(36);
   });
 
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {
@@ -149,6 +149,6 @@ test.describe("Preview protegido real", () => {
     const payload = await response.json();
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
-    expect(payload.total).toBe(7);
+    expect(payload.total).toBe(10);
   });
 });

@@ -78,6 +78,44 @@ function sameIdSet(current: string[], ordered: string[]) {
   const set = new Set(current);
   return ordered.every((id) => set.has(id));
 }
+function assertAccountReorderGroups(current: any[], ordered: string[]) {
+  if (!sameIdSet(current.map((row) => String(row.id)), ordered)) {
+    throw new Error("invalid_reorder_set");
+  }
+  const byId = new Map(current.map((row) => [String(row.id), row]));
+  const crosses = ordered.some(
+    (id, index) => current[index]?.lifecycle !== byId.get(id)?.lifecycle,
+  );
+  if (crosses) throw new Error("account_reorder_group_mismatch");
+}
+function assertCategoryReorderGroups(current: any[], ordered: string[]) {
+  if (!sameIdSet(current.map((row) => String(row.id)), ordered)) {
+    throw new Error("invalid_reorder_set");
+  }
+  const byId = new Map(current.map((row) => [String(row.id), row]));
+  const crosses = ordered.some((id, index) => {
+    const atPosition = current[index];
+    const incoming = byId.get(id);
+    return (
+      !atPosition ||
+      !incoming ||
+      atPosition.kind !== incoming.kind ||
+      String(atPosition.parent_category_id ?? "") !== String(incoming.parent_category_id ?? "")
+    );
+  });
+  if (crosses) throw new Error("category_reorder_group_mismatch");
+}
+function assertActiveMergeTarget(target: any) {
+  if (target?.lifecycle !== "active") throw new Error("target_category_archived");
+}
+function rejectedWith(action: () => void, code: string) {
+  try {
+    action();
+    return false;
+  } catch (error) {
+    return error instanceof Error && error.message === code;
+  }
+}
 async function applyOrdinalOrder(tx: any, table: "accounts" | "categories", ids: string[]) {
   for (let sortOrder = 0; sortOrder < ids.length; sortOrder += 1) {
     const id = ids[sortOrder];
@@ -148,6 +186,32 @@ Deno.serve(async (req) => {
       return json({ status: "ok", database: rows[0]?.ok === 1, environment: identity.environment });
     }
 
+    if (action === "test.invariants") {
+      if (identity.environment !== "preview") return json({ error: "test_invariants_preview_only" }, 403);
+      const accountRows = [
+        { id: TEST_ACCOUNT_ID, lifecycle: "active" },
+        { id: "10000000-0000-4000-8000-000000000009", lifecycle: "archived" },
+      ];
+      const categoryRows = [
+        { id: TEST_CATEGORY_IDS[0], kind: "expense", parent_category_id: null },
+        { id: TEST_CATEGORY_IDS[1], kind: "income", parent_category_id: null },
+      ];
+      return json({
+        accountReorderGuard: rejectedWith(
+          () => assertAccountReorderGroups(accountRows, [accountRows[1].id, accountRows[0].id]),
+          "account_reorder_group_mismatch",
+        ),
+        categoryReorderGuard: rejectedWith(
+          () => assertCategoryReorderGroups(categoryRows, [categoryRows[1].id, categoryRows[0].id]),
+          "category_reorder_group_mismatch",
+        ),
+        activeMergeTargetGuard: rejectedWith(
+          () => assertActiveMergeTarget({ lifecycle: "archived" }),
+          "target_category_archived",
+        ),
+      });
+    }
+
     if (action === "account.list") {
       return json({ rows: await sql`select id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id` });
     }
@@ -163,10 +227,8 @@ Deno.serve(async (req) => {
     if (action === "account.reorder") {
       orderedIds(payload.orderedIds);
       await sql.begin(async (tx) => {
-        const current = await tx`select id from financial_app.accounts order by id for update`;
-        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) {
-          throw new Error("invalid_reorder_set");
-        }
+        const current = await tx`select id,lifecycle from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id for update`;
+        assertAccountReorderGroups(current, payload.orderedIds);
         await applyOrdinalOrder(tx, "accounts", payload.orderedIds);
       });
       return json({ ok: true });
@@ -187,10 +249,8 @@ Deno.serve(async (req) => {
     if (action === "category.reorder") {
       orderedIds(payload.orderedIds);
       await sql.begin(async (tx) => {
-        const current = await tx`select id from financial_app.categories order by id for update`;
-        if (!sameIdSet(current.map((row: any) => String(row.id)), payload.orderedIds)) {
-          throw new Error("invalid_reorder_set");
-        }
+        const current = await tx`select id,kind,parent_category_id from financial_app.categories order by kind,parent_category_id nulls first,sort_order,name,id for update`;
+        assertCategoryReorderGroups(current, payload.orderedIds);
         await applyOrdinalOrder(tx, "categories", payload.orderedIds);
       });
       return json({ ok: true });
@@ -201,11 +261,12 @@ Deno.serve(async (req) => {
       uuid(payload.targetCategoryId, "target_category_id");
       if (payload.sourceCategoryId === payload.targetCategoryId) throw new Error("same_category");
       await sql.begin(async (tx) => {
-        const categories = await tx`select id,name,kind from financial_app.categories where id in (${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid) order by id for update`;
+        const categories = await tx`select id,name,kind,lifecycle from financial_app.categories where id in (${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid) order by id for update`;
         const source = categories.find((row: any) => String(row.id) === payload.sourceCategoryId);
         const target = categories.find((row: any) => String(row.id) === payload.targetCategoryId);
         if (!source || !target) throw new Error("category_not_found");
         if (source.kind !== target.kind) throw new Error("category_kind_mismatch");
+        assertActiveMergeTarget(target);
 
         const descendant = await tx`with recursive d as (select id from financial_app.categories where parent_category_id=${payload.sourceCategoryId}::uuid union all select c.id from financial_app.categories c join d on c.parent_category_id=d.id) select exists(select 1 from d where id=${payload.targetCategoryId}::uuid) exists`;
         if (descendant[0]?.exists) throw new Error("target_is_descendant");
