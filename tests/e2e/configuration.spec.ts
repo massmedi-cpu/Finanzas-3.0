@@ -135,7 +135,7 @@ test.describe("Fase 2 · Calidad del dato", () => {
     const payload = await response.json();
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
-    expect(payload.total).toBeGreaterThanOrEqual(16);
+    expect(payload.total).toBeGreaterThanOrEqual(20);
   });
 });
 
@@ -160,7 +160,7 @@ test.describe("Preview protegido real", () => {
     const payload = await response.json();
     expect(payload.status).toBe("ok");
     expect(payload.passed).toBe(payload.total);
-    expect(payload.total).toBeGreaterThanOrEqual(16);
+    expect(payload.total).toBeGreaterThanOrEqual(20);
   });
 
   test("ingesta sintética roundtrip termina sin residuos", async ({ request }) => {
