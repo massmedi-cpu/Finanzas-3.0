@@ -137,6 +137,15 @@ test.describe("Fase 2 · Calidad del dato", () => {
     expect(payload.passed).toBe(payload.total);
     expect(payload.total).toBeGreaterThanOrEqual(20);
   });
+
+  test("el contrato OAuth Google permanece limitado y verificable", async ({ request }) => {
+    const response = await request.get("/api/health/google-oauth");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.passed).toBe(payload.total);
+    expect(payload.total).toBeGreaterThanOrEqual(8);
+  });
 });
 
 test.describe("Preview protegido real", () => {
@@ -163,6 +172,15 @@ test.describe("Preview protegido real", () => {
     expect(payload.total).toBeGreaterThanOrEqual(20);
   });
 
+  test("OAuth Google permanece verde", async ({ request }) => {
+    const response = await request.get("/api/health/google-oauth");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.passed).toBe(payload.total);
+    expect(payload.total).toBeGreaterThanOrEqual(8);
+  });
+
   test("ingesta sintética roundtrip termina sin residuos", async ({ request }) => {
     const response = await request.get("/api/health/source-ingestion");
     expect(response.ok()).toBeTruthy();
@@ -171,6 +189,15 @@ test.describe("Preview protegido real", () => {
     expect(payload.verified).toBe(true);
     expect(payload.clean).toBe(true);
     expect(payload.residue).toEqual({ accounts: 0, mappings: 0, sources: 0, transactions: 0, cursors: 0 });
+  });
+
+  test("Vault OAuth roundtrip termina sin residuos", async ({ request }) => {
+    const response = await request.get("/api/health/google-oauth-vault");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.verified).toBe(true);
+    expect(payload.clean).toBe(true);
   });
 
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {
