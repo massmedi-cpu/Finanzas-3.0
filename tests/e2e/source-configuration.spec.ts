@@ -52,7 +52,7 @@ test.describe("Configuración · Fuente bancaria", () => {
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
   });
 
-  test("solo confirma una actualización después de un POST real y relee el estado persistido", async ({ page }) => {
+  test("prevalida la primera importación sin persistir y solo después permite sincronizar", async ({ page }) => {
     let synchronized = false;
     await routeRuntime(page);
     await page.route("**/api/source/google/status", (route) =>
@@ -69,6 +69,67 @@ test.describe("Configuración · Fuente bancaria", () => {
             lastVerifiedAt: synchronized ? "2026-09-04T17:30:00.000Z" : null,
             readonly: true,
           },
+        }),
+      }),
+    );
+    await page.route("**/api/source/google/preflight", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          sourceFileId: "sheet-test",
+          sourceRevision: "drive-version:99",
+          schemaFingerprint: "a".repeat(64),
+          totalAuthoritativeRows: 3172,
+          accounts: [
+            {
+              accountExternalKey: "Cuenta corriente Openbank · 3967",
+              accountName: "Cuenta corriente Openbank · 3967",
+              accountType: "checking",
+              lifecycle: "active",
+              authoritativeRows: 3024,
+              openingBalanceCents: 0,
+              newestBankDate: "2026-09-04",
+              oldestBankDate: "2024-01-01",
+              latestBalanceAfterCents: 188827,
+            },
+            {
+              accountExternalKey: "Cuenta ahorro Openbank · 2504",
+              accountName: "Cuenta ahorro Openbank · 2504",
+              accountType: "savings",
+              lifecycle: "active",
+              authoritativeRows: 15,
+              openingBalanceCents: 0,
+              newestBankDate: "2026-09-04",
+              oldestBankDate: "2026-01-01",
+              latestBalanceAfterCents: 18695772,
+            },
+            {
+              accountExternalKey: "Tarjeta prepago Openbank · 8403",
+              accountName: "Tarjeta prepago Openbank · 8403",
+              accountType: "other",
+              lifecycle: "archived",
+              authoritativeRows: 133,
+              openingBalanceCents: 0,
+              newestBankDate: "2026-08-21",
+              oldestBankDate: "2024-01-01",
+              latestBalanceAfterCents: null,
+            },
+          ],
+          cursors: [
+            {
+              sourceSheetId: "725351515",
+              sheetTitle: "Cuenta corriente · 3967",
+              authoritativeRows: 3157,
+              lastSourceRowKey: "CC-02963",
+            },
+            {
+              sourceSheetId: "2504001",
+              sheetTitle: "Cuenta ahorro · 2504",
+              authoritativeRows: 15,
+              lastSourceRowKey: "AH-00010",
+            },
+          ],
         }),
       }),
     );
@@ -145,6 +206,18 @@ test.describe("Configuración · Fuente bancaria", () => {
     await page.goto("/configuration/source");
     await expect(page.getByText("alberto@example.test")).toBeVisible();
     await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toHaveCount(0);
+    await expect(page.getByText("Primera importación protegida")).toBeVisible();
+
+    await page.getByRole("button", { name: "Validar fuente antes de importar" }).click();
+
+    await expect(page.getByRole("status")).toContainText("3172 movimientos autoritativos y 3 productos");
+    await expect(page.getByRole("heading", { name: "Fotografía autoritativa antes de importar" })).toBeVisible();
+    await expect(page.getByText("Cuenta corriente Openbank · 3967")).toBeVisible();
+    await expect(page.getByText("1.888,27 €")).toBeVisible();
+    await expect(page.getByText("Cursor previsto: CC-02963")).toBeVisible();
+    await expect(page.getByText("Cursor previsto: AH-00010")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeEnabled();
 
     await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
