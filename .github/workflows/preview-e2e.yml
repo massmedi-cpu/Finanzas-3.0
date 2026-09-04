@@ -39,15 +39,18 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  protected-preview-live:
+  protected-preview-access:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
     permissions:
       contents: read
       id-token: write
     env:
       VERCEL_PREVIEW_URL: https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    outputs:
+      available: ${{ steps.access.outputs.available }}
+      method: ${{ steps.access.outputs.method }}
     steps:
       - name: Generate ephemeral GitHub OIDC token
         id: oidc
@@ -84,33 +87,49 @@ jobs:
           else
             echo "available=false" >> "$GITHUB_OUTPUT"
             echo "method=none" >> "$GITHUB_OUTPUT"
-            echo "Protected preview live checks remain pending: configure VERCEL_AUTOMATION_BYPASS_SECRET or authorize GitHub Actions as a Vercel Trusted Source."
+            echo "Protected preview access is not authorized yet. The Live E2E job will remain skipped until VERCEL_AUTOMATION_BYPASS_SECRET exists or GitHub Actions is authorized as a Vercel Trusted Source."
           fi
 
+  protected-preview-live:
+    needs: protected-preview-access
+    if: needs.protected-preview-access.outputs.available == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERCEL_PREVIEW_URL: https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+      VERCEL_ACCESS_METHOD: ${{ needs.protected-preview-access.outputs.method }}
+    steps:
+      - name: Generate ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
       - name: Checkout branch commit
-        if: steps.access.outputs.available == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Node.js 24
-        if: steps.access.outputs.available == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
-        if: steps.access.outputs.available == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Chromium
-        if: steps.access.outputs.available == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Wait for matching Vercel preview
-        if: steps.access.outputs.available == 'true'
         env:
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
-          VERCEL_ACCESS_METHOD: ${{ steps.access.outputs.method }}
         shell: bash
         run: |
           for attempt in $(seq 1 36); do
@@ -137,13 +156,12 @@ jobs:
           exit 1
 
       - name: Run protected preview live E2E
-        if: steps.access.outputs.available == 'true'
         env:
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
-        if: failure() && steps.access.outputs.available == 'true'
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-protected-preview-report
