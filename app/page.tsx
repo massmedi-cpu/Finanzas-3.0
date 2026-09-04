@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getBuildInfo } from "../src/core/build-info";
 import { runFoundationHealthChecks } from "../src/core/foundation-health";
 
@@ -34,6 +35,10 @@ export default function Home() {
             Fundamentos · {health.passed}/{health.total} OK
           </span>
         </div>
+
+        <Link className="foundation-cta" href="/configuration">
+          Abrir Configuración persistente
+        </Link>
 
         <dl className="build-meta">
           <div>
