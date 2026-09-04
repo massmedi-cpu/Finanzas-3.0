@@ -32,23 +32,25 @@ function clearStateCookie() {
   return `${GOOGLE_OAUTH_STATE_COOKIE}=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
 }
 
-function callbackError(code: string, status = 400) {
-  return Response.json(
-    { error: code },
-    {
-      status,
-      headers: {
-        "cache-control": "no-store",
-        "x-robots-tag": "noindex",
-        "set-cookie": clearStateCookie(),
-      },
+function callbackRedirect(request: Request, state: "connected" | "error", code?: string) {
+  const redirect = new URL("/configuration/source", request.url);
+  redirect.searchParams.set("google", state);
+  if (code) redirect.searchParams.set("code", code);
+
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: redirect.toString(),
+      "cache-control": "no-store",
+      "x-robots-tag": "noindex",
+      "set-cookie": clearStateCookie(),
     },
-  );
+  });
 }
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  if (url.searchParams.has("error")) return callbackError("google_oauth_denied");
+  if (url.searchParams.has("error")) return callbackRedirect(request, "error", "google_oauth_denied");
 
   try {
     const configuration = getGoogleSourceServerConfiguration();
@@ -56,7 +58,7 @@ export async function GET(request: Request) {
     validateGoogleOauthState(expectedState, url.searchParams.get("state"));
 
     const code = url.searchParams.get("code")?.trim() ?? "";
-    if (!code) return callbackError("google_oauth_code_missing");
+    if (!code) return callbackRedirect(request, "error", "google_oauth_code_missing");
 
     const tokens = await exchangeGoogleAuthorizationCode({
       code,
@@ -66,7 +68,7 @@ export async function GET(request: Request) {
     });
     const identity = await fetchGoogleUserInfo(tokens.accessToken);
     if (identity.email !== configuration.allowedEmail) {
-      return callbackError("google_account_not_allowed", 403);
+      return callbackRedirect(request, "error", "google_account_not_allowed");
     }
 
     const reader = new GoogleOfficialBankSourceReader(
@@ -85,27 +87,19 @@ export async function GET(request: Request) {
       sourceFileId: configuration.spreadsheetId,
       sourceFileName: OFFICIAL_GOOGLE_SOURCE_NAME,
     });
-    if (stored.connected !== true) return callbackError("google_oauth_store_failed", 500);
+    if (stored.connected !== true) {
+      return callbackRedirect(request, "error", "google_oauth_store_failed");
+    }
 
-    const redirect = new URL("/configuration", request.url);
-    redirect.searchParams.set("google", "connected");
-    return new Response(null, {
-      status: 302,
-      headers: {
-        location: redirect.toString(),
-        "cache-control": "no-store",
-        "x-robots-tag": "noindex",
-        "set-cookie": clearStateCookie(),
-      },
-    });
+    return callbackRedirect(request, "connected");
   } catch (error) {
     if (error instanceof GoogleSourceRuntimeConfigurationError) {
-      return callbackError("google_oauth_not_configured", 503);
+      return callbackRedirect(request, "error", "google_oauth_not_configured");
     }
     if (error instanceof GoogleOauthError) {
-      return callbackError(error.code);
+      return callbackRedirect(request, "error", error.code);
     }
     console.error("google-oauth-callback", error instanceof Error ? error.name : "unknown_error");
-    return callbackError("google_oauth_callback_failed", 500);
+    return callbackRedirect(request, "error", "google_oauth_callback_failed");
   }
 }
