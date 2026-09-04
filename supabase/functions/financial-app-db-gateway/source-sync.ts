@@ -194,19 +194,25 @@ export async function handleSourceSyncAction(input: {
           where id=${syncRunId}::uuid
         `;
 
-        const lastSourceRowKey = batch.observations[0]?.sourceRowKey ?? null;
-        await tx`
-          insert into financial_app.sync_cursors (
-            source_file_id,source_revision,last_source_row_key,last_successful_run_id,updated_at
-          ) values (
-            ${batch.sourceFileId},${batch.sourceRevision},${lastSourceRowKey},${syncRunId}::uuid,now()
-          )
-          on conflict (source_file_id) do update set
-            source_revision=excluded.source_revision,
-            last_source_row_key=excluded.last_source_row_key,
-            last_successful_run_id=excluded.last_successful_run_id,
-            updated_at=now()
-        `;
+        const lastRowBySheet = new Map<string, string>();
+        for (const observation of batch.observations) {
+          lastRowBySheet.set(observation.sourceSheetId, observation.sourceRowKey);
+        }
+
+        for (const [sourceSheetId, lastSourceRowKey] of lastRowBySheet) {
+          await tx`
+            insert into financial_app.sync_cursors (
+              source_file_id,source_sheet_id,source_revision,last_source_row_key,last_successful_run_id,updated_at
+            ) values (
+              ${batch.sourceFileId},${sourceSheetId},${batch.sourceRevision},${lastSourceRowKey},${syncRunId}::uuid,now()
+            )
+            on conflict (source_file_id,source_sheet_id) do update set
+              source_revision=excluded.source_revision,
+              last_source_row_key=excluded.last_source_row_key,
+              last_successful_run_id=excluded.last_successful_run_id,
+              updated_at=now()
+          `;
+        }
 
         result = {
           syncRunId,
@@ -216,6 +222,7 @@ export async function handleSourceSyncAction(input: {
           rowsRevised,
           rowsSkipped,
           duplicatesDetected,
+          cursorsAdvanced: lastRowBySheet.size,
         };
       });
     } catch (error) {
@@ -255,7 +262,13 @@ export async function handleSourceSyncAction(input: {
       order by started_at desc,id desc
       limit 1
     `;
-    return json({ run: rows[0] ?? null });
+    const cursors = await sql`
+      select source_file_id,source_sheet_id,source_revision,last_source_row_key,last_successful_run_id,updated_at
+      from financial_app.sync_cursors
+      where source_file_id=${payload.sourceFileId}
+      order by source_sheet_id
+    `;
+    return json({ run: rows[0] ?? null, cursors });
   }
 
   if (action === "test.source_ingestion") {
@@ -287,6 +300,21 @@ export async function handleSourceSyncAction(input: {
         if (first[0]?.action !== 'insert' || repeated[0]?.action !== 'skip') {
           throw new Error("test_source_idempotency_failed");
         }
+
+        await tx`
+          insert into financial_app.sync_cursors (
+            source_file_id,source_sheet_id,source_revision,last_source_row_key,updated_at
+          ) values
+            ('__phase2_gateway_test__','sheet-1','rev-test','ROW-1',now()),
+            ('__phase2_gateway_test__','sheet-2','rev-test','ROW-9',now())
+        `;
+        const cursorRows = await tx`
+          select count(*)::int as count
+          from financial_app.sync_cursors
+          where source_file_id='__phase2_gateway_test__'
+        `;
+        if (cursorRows[0]?.count !== 2) throw new Error("test_sheet_cursor_isolation_failed");
+
         verified = true;
         throw new Error("__ROLLBACK_SOURCE_TEST__");
       });
@@ -298,13 +326,18 @@ export async function handleSourceSyncAction(input: {
         (select count(*)::int from financial_app.accounts where name='Cuenta prueba gateway') as accounts,
         (select count(*)::int from financial_app.account_source_mappings where source_file_id='__phase2_gateway_test__') as mappings,
         (select count(*)::int from financial_app.transaction_source_records where source_file_id='__phase2_gateway_test__') as sources,
-        (select count(*)::int from financial_app.transactions where source_row_identity like '__phase2_gateway_test__::%') as transactions
+        (select count(*)::int from financial_app.transactions where source_row_identity like '__phase2_gateway_test__::%') as transactions,
+        (select count(*)::int from financial_app.sync_cursors where source_file_id='__phase2_gateway_test__') as cursors
     `;
     const residue = residueRows[0];
     return json({
       verified,
       clean:
-        residue?.accounts === 0 && residue?.mappings === 0 && residue?.sources === 0 && residue?.transactions === 0,
+        residue?.accounts === 0 &&
+        residue?.mappings === 0 &&
+        residue?.sources === 0 &&
+        residue?.transactions === 0 &&
+        residue?.cursors === 0,
       residue,
     });
   }
