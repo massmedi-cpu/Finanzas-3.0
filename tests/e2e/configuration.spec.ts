@@ -87,6 +87,7 @@ test.describe("Configuración interactiva sin residuos", () => {
     await expect(page.getByText("Cuenta principal")).toBeVisible();
     await expect(page.getByText(/1\.234,56/)).toBeVisible();
 
+    await page.getByLabel("Nombre").fill("Cuenta inválida de prueba");
     await page.getByLabel(/Saldo inicial/).fill("1,234.56");
     await page.getByRole("button", { name: "Crear cuenta" }).click();
     await expect(page.getByRole("alert")).toContainText("formato español");
@@ -99,8 +100,10 @@ test.describe("Configuración interactiva sin residuos", () => {
     await page.getByRole("button", { name: "Editar Hogar" }).click();
 
     const typeSelect = page.locator("#category-form select").nth(0);
-    await expect(typeSelect.locator('option[value="income"]')).toBeDisabled();
-    await expect(typeSelect.locator('option[value="transfer"]')).toBeDisabled();
+    const incomeOption = typeSelect.locator('option[value="income"]');
+    const transferOption = typeSelect.locator('option[value="transfer"]');
+    expect(await incomeOption.evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
+    expect(await transferOption.evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
 
     const parentSelect = page.locator("#category-form select").nth(1);
     await expect(parentSelect.locator(`option[value="${UTILITIES_ID}"]`)).toHaveCount(0);
