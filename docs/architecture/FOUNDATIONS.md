@@ -35,6 +35,7 @@
 20. Las claves foráneas relevantes disponen de índices de cobertura.
 21. La API de Configuración valida entrada desconocida antes del dominio: operación, forma exacta, UUID, booleanos exactos, enums, enteros seguros y listas sin duplicados.
 22. El endpoint no usa coerciones ambiguas como `Boolean("false")`; una petición con tipo incorrecto se rechaza antes de persistir.
+23. El tipo de una categoría no puede cambiar si dejaría subcategorías de un tipo distinto; esta invariante se aplica tanto en dominio como en PostgreSQL.
 
 ## Fuente lógica de verdad
 
@@ -72,6 +73,7 @@ Historial oficial remoto y archivos en `supabase/migrations/`:
 2. `20260903200023_source_snapshot_history.sql`
 3. `20260903200134_harden_function_search_paths.sql`
 4. `20260903200201_index_foreign_keys.sql`
+5. `20260904034944_enforce_category_child_kind.sql`
 
 La estructura física incluye 17 tablas en el esquema privado `financial_app`, metadata `0.0.1 → 10.0.0`, `es-ES`, `EUR`, `Europe/Madrid`, claves, constraints, auditoría, cursores, índices y protección bancaria.
 
@@ -92,7 +94,9 @@ La estructura física incluye 17 tablas en el esquema privado `financial_app`, m
 - traslado de referencias de comercio, movimiento, override, regla, recurrente, presupuesto y previsión;
 - ausencia total de residuos tras el rollback.
 
-Tras la última revalidación, `accounts`, `categories`, `transaction_source_records`, `transactions` y `transaction_overrides` permanecen con `0` filas.
+Además se reprodujo explícitamente el caso padre `expense` + hijo `expense`: antes de la corrección PostgreSQL permitía cambiar solo el padre a `income`. Tras `20260904034944_enforce_category_child_kind.sql`, la misma operación queda bloqueada y la prueba con rollback conserva ambos tipos en `expense`.
+
+Tras la última revalidación, las pruebas temporales no dejan datos ficticios persistidos.
 
 ### Privilegios
 
@@ -105,7 +109,7 @@ Comprobación PostgreSQL real:
 
 ## Seguridad
 
-El Security Advisor queda en **0 lints**.
+El Security Advisor queda en **0 lints** después del endurecimiento jerárquico.
 
 La exposición directa está cerrada porque `anon` y `authenticated` no tienen uso del esquema privado ni privilegios sobre sus tablas. Ninguna clave `service_role` llega al navegador.
 
@@ -113,7 +117,7 @@ El acceso Vercel → Supabase está materializado como canal server-only mediant
 
 ## Rendimiento
 
-El Performance Advisor detectó inicialmente claves foráneas sin índice. Se corrigieron mediante `index_foreign_keys`. La repetición del advisor ya no muestra FKs sin cubrir; solo informa de índices todavía no usados, normal en una base recién creada y sin datos reales.
+El Performance Advisor detectó inicialmente claves foráneas sin índice. Se corrigieron mediante `index_foreign_keys`. La repetición del advisor ya no muestra FKs sin cubrir; solo informa de índices todavía no usados, normal en una base recién creada y sin datos reales. No se eliminan prematuramente esos índices solo por no haber acumulado uso todavía.
 
 ## Cuentas y categorías
 
@@ -128,18 +132,21 @@ Implementado:
 - API `/api/configuration` con contrato estricto de entrada;
 - interfaz `/configuration` para alta, edición, archivo/reactivación, orden y fusión;
 - orden de categorías limitado en UI a categorías hermanas del mismo tipo y padre;
+- orden de cuentas limitado visualmente al mismo grupo de ciclo de vida para evitar movimientos sin efecto entre activas y archivadas;
+- la UI reutiliza las políticas del dominio para no ofrecer una descendiente como padre ni como destino de fusión;
+- los cambios de tipo incompatibles con subcategorías quedan deshabilitados en la UI y rechazados igualmente por dominio y PostgreSQL;
 - UUID y reloj desacoplados para testabilidad.
 
 ## Validación de aplicación
 
-La suite automática completa contiene **25 comprobaciones**: las 20 invariantes de Fundamentos existentes más 5 controles del contrato de API. La home usa esta suite durante prerender y aborta la build si cualquier control falla.
+La suite automática completa contiene **26 comprobaciones**: 20 invariantes base de Fundamentos, 5 controles del contrato de API y 1 regresión específica que impide separar el tipo de una categoría del tipo de sus subcategorías. La home usa esta suite durante prerender y aborta la build si cualquier control falla.
 
-Último bloque validado:
+Último bloque funcional validado:
 
-- commit: `92769212f3df1bd335d5614b286f2f0814c11239`;
-- deployment preview: `dpl_5u4VCc3bYkDuShmXZVR8y95gr7ch`;
+- commit: `87e808f8fffa5cb5fc0b813c4939995569ed973c`;
+- deployment preview: `dpl_eEJCLRUrgNdeyDuomPMRJb8zxJKa`;
 - estado Vercel: `READY`;
-- Next.js: compilación correcta;
+- Next.js 16.3.1: compilación correcta;
 - TypeScript: correcto;
 - generación estática: 4/4 correcta;
 - rutas incluidas: `/`, `/configuration`, `/api/configuration`, `/api/health/foundations`, `/api/health/persistence`, `/api/health/configuration-persistence`.
