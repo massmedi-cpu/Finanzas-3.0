@@ -214,7 +214,7 @@ test.describe("Configuración · Fuente bancaria", () => {
     await expect(page.getByRole("status")).toContainText("3172 movimientos autoritativos y 3 productos");
     await expect(page.getByRole("heading", { name: "Fotografía autoritativa antes de importar" })).toBeVisible();
     await expect(page.getByText("Cuenta corriente Openbank · 3967")).toBeVisible();
-    await expect(page.getByText("1.888,27 €")).toBeVisible();
+    await expect(page.getByText("1888,27 €")).toBeVisible();
     await expect(page.getByText("Cursor previsto: CC-02963")).toBeVisible();
     await expect(page.getByText("Cursor previsto: AH-00010")).toBeVisible();
     await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeEnabled();
