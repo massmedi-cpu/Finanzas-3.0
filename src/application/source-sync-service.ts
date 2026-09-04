@@ -1,10 +1,19 @@
 import { createHash } from "node:crypto";
-import type { AccountType, SyncIssueSeverity, TransactionKind, TransactionReviewState } from "../domain/models";
+import type {
+  AccountType,
+  EntityLifecycle,
+  SyncIssueSeverity,
+  TransactionKind,
+  TransactionReviewState,
+} from "../domain/models";
 import {
   OFFICIAL_SOURCE_ACCOUNT_CONTRACTS,
+  OFFICIAL_SOURCE_SHEET_TITLES,
   OfficialSourceContractError,
   parseOfficialSourceRow,
   validateOfficialSourceHeaders,
+  type OfficialSourceAccountContract,
+  type ParsedOfficialSourceRow,
   type SourceCellValue,
 } from "../domain/official-bank-source";
 
@@ -27,6 +36,7 @@ export type PreparedSourceAccount = {
   accountName: string;
   institution: string;
   accountType: AccountType;
+  lifecycle: EntityLifecycle;
   openingBalanceCents: number;
   sourceIdentifier: string;
 };
@@ -93,6 +103,7 @@ export class SourceWorkbookContractError extends Error {
       | "empty_source_sheet"
       | "source_order_mismatch"
       | "duplicate_source_row_identity"
+      | "ambiguous_product_fallback"
       | "opening_balance_unavailable",
     message: string,
     public readonly sourceSheetId: string | null = null,
@@ -110,7 +121,7 @@ function sha256(value: string) {
 function validateNewestFirstSourceOrder(
   sourceSheetId: string,
   sheetTitle: string,
-  rows: readonly ReturnType<typeof parseOfficialSourceRow>[],
+  rows: readonly ParsedOfficialSourceRow[],
 ) {
   for (let index = 1; index < rows.length; index += 1) {
     const previous = rows[index - 1];
@@ -149,6 +160,81 @@ function deriveOpeningBalanceCents(observations: readonly PreparedSourceObservat
   return opening;
 }
 
+type ParsedSheet = {
+  sourceSheetId: string;
+  title: string;
+  rows: ParsedOfficialSourceRow[];
+};
+
+function selectAuthoritativeRowsForProduct(
+  contract: OfficialSourceAccountContract,
+  parsedSheets: readonly ParsedSheet[],
+) {
+  const matchingSheets = parsedSheets
+    .map((sheet) => ({
+      ...sheet,
+      rows: sheet.rows.filter((row) => row.accountContract.accountName === contract.accountName),
+    }))
+    .filter((sheet) => sheet.rows.length > 0);
+
+  if (!matchingSheets.length) return [];
+
+  const canonical = matchingSheets.find((sheet) => sheet.title === contract.canonicalSheetTitle);
+  if (canonical) {
+    return canonical.rows;
+  }
+
+  if (matchingSheets.length !== 1) {
+    throw new SourceWorkbookContractError(
+      "ambiguous_product_fallback",
+      `El producto “${contract.accountName}” no aparece en su pestaña canónica y existe en varias pestañas alternativas. Se detiene la importación en lugar de elegir una copia por heurística.`,
+    );
+  }
+
+  return matchingSheets[0].rows;
+}
+
+function prepareProductObservations(rows: readonly ParsedOfficialSourceRow[]) {
+  const seenSourceRowKeys = new Set<string>();
+
+  return rows.map((parsed) => {
+    const sourceRowKey = parsed.observation.sourceRowKey;
+    if (seenSourceRowKeys.has(sourceRowKey)) {
+      throw new SourceWorkbookContractError(
+        "duplicate_source_row_identity",
+        `El ID origen “${sourceRowKey}” aparece más de una vez en la copia autoritativa del producto “${parsed.accountContract.accountName}”.`,
+        parsed.observation.sourceSheetId,
+        sourceRowKey,
+      );
+    }
+    seenSourceRowKeys.add(sourceRowKey);
+
+    return {
+      sourceSheetId: parsed.observation.sourceSheetId ?? "",
+      sourceRowKey,
+      sourceRowIdentity: parsed.sourceRowIdentity,
+      sourceFingerprint: parsed.sourceFingerprint,
+      sourcePayload: parsed.sourcePayload,
+      bankDate: parsed.observation.bankDate,
+      conceptOriginal: parsed.observation.conceptOriginal,
+      conceptNormalized: parsed.conceptNormalized,
+      amountCents: parsed.observation.amountCents,
+      balanceAfterCents: parsed.observation.balanceAfterCents,
+      accountExternalKey: parsed.observation.accountExternalKey,
+      transactionKind: parsed.transactionKind,
+      reviewState: parsed.reviewState,
+    } satisfies PreparedSourceObservation;
+  });
+}
+
+function openingBalanceForContract(
+  contract: OfficialSourceAccountContract,
+  observations: readonly PreparedSourceObservation[],
+) {
+  if (contract.openingBalanceMode === "closed_technical_ledger") return 0;
+  return deriveOpeningBalanceCents(observations);
+}
+
 export function prepareOfficialSourceSyncBatch(
   snapshot: OfficialSourceWorkbookSnapshot,
 ): PreparedSourceSyncBatch {
@@ -159,7 +245,7 @@ export function prepareOfficialSourceSyncBatch(
     );
   }
 
-  const expectedTitles = Object.keys(OFFICIAL_SOURCE_ACCOUNT_CONTRACTS).sort();
+  const expectedTitles = [...OFFICIAL_SOURCE_SHEET_TITLES].sort();
   const actualTitles = snapshot.sheets.map((sheet) => sheet.title).sort();
   if (
     actualTitles.length !== expectedTitles.length ||
@@ -167,16 +253,12 @@ export function prepareOfficialSourceSyncBatch(
   ) {
     throw new SourceWorkbookContractError(
       "sheet_set_mismatch",
-      `El libro oficial debe contener exactamente estas pestañas: ${expectedTitles.join(", ")}.`,
+      `El libro oficial debe contener exactamente estas pestañas físicas: ${expectedTitles.join(", ")}.`,
     );
   }
 
-  const seenIdentities = new Set<string>();
-  const accounts: PreparedSourceAccount[] = [];
-  const observations: PreparedSourceObservation[] = [];
   const schemaParts: string[] = [];
-
-  for (const sheet of snapshot.sheets) {
+  const parsedSheets: ParsedSheet[] = snapshot.sheets.map((sheet) => {
     const headerFingerprint = validateOfficialSourceHeaders(sheet.headers);
     schemaParts.push(`${sheet.sourceSheetId}:${sheet.title}:${headerFingerprint}`);
 
@@ -188,7 +270,7 @@ export function prepareOfficialSourceSyncBatch(
       );
     }
 
-    const parsedSheet = sheet.rows.map((values) =>
+    const rows = sheet.rows.map((values) =>
       parseOfficialSourceRow({
         sourceFileId: snapshot.sourceFileId,
         sourceSheetId: sheet.sourceSheetId,
@@ -196,47 +278,50 @@ export function prepareOfficialSourceSyncBatch(
         values,
       }),
     );
-    validateNewestFirstSourceOrder(sheet.sourceSheetId, sheet.title, parsedSheet);
+    validateNewestFirstSourceOrder(sheet.sourceSheetId, sheet.title, rows);
 
-    const preparedSheet: PreparedSourceObservation[] = parsedSheet.map((parsed) => {
-      if (seenIdentities.has(parsed.sourceRowIdentity)) {
+    return { sourceSheetId: sheet.sourceSheetId, title: sheet.title, rows };
+  });
+
+  const accounts: PreparedSourceAccount[] = [];
+  const observations: PreparedSourceObservation[] = [];
+  const seenIdentities = new Set<string>();
+
+  for (const contract of Object.values(OFFICIAL_SOURCE_ACCOUNT_CONTRACTS)) {
+    const authoritativeRows = selectAuthoritativeRowsForProduct(contract, parsedSheets);
+    if (!authoritativeRows.length) continue;
+
+    const preparedProduct = prepareProductObservations(authoritativeRows);
+    for (const observation of preparedProduct) {
+      if (seenIdentities.has(observation.sourceRowIdentity)) {
         throw new SourceWorkbookContractError(
           "duplicate_source_row_identity",
-          `La identidad “${parsed.sourceRowIdentity}” aparece más de una vez en el libro.`,
-          sheet.sourceSheetId,
-          parsed.observation.sourceRowKey,
+          `La identidad “${observation.sourceRowIdentity}” aparece más de una vez en el libro autoritativo.`,
+          observation.sourceSheetId,
+          observation.sourceRowKey,
         );
       }
-      seenIdentities.add(parsed.sourceRowIdentity);
+      seenIdentities.add(observation.sourceRowIdentity);
+    }
 
-      return {
-        sourceSheetId: sheet.sourceSheetId,
-        sourceRowKey: parsed.observation.sourceRowKey,
-        sourceRowIdentity: parsed.sourceRowIdentity,
-        sourceFingerprint: parsed.sourceFingerprint,
-        sourcePayload: parsed.sourcePayload,
-        bankDate: parsed.observation.bankDate,
-        conceptOriginal: parsed.observation.conceptOriginal,
-        conceptNormalized: parsed.conceptNormalized,
-        amountCents: parsed.observation.amountCents,
-        balanceAfterCents: parsed.observation.balanceAfterCents,
-        accountExternalKey: parsed.observation.accountExternalKey,
-        transactionKind: parsed.transactionKind,
-        reviewState: parsed.reviewState,
-      };
-    });
-
-    const contract = parsedSheet[0].accountContract;
     accounts.push({
       sourceFileId: snapshot.sourceFileId.trim(),
       accountExternalKey: contract.accountName,
       accountName: contract.accountName,
       institution: contract.institution,
       accountType: contract.accountType,
-      openingBalanceCents: deriveOpeningBalanceCents(preparedSheet),
+      lifecycle: contract.lifecycle,
+      openingBalanceCents: openingBalanceForContract(contract, preparedProduct),
       sourceIdentifier: contract.identifier,
     });
-    observations.push(...preparedSheet);
+    observations.push(...preparedProduct);
+  }
+
+  if (!accounts.length || !observations.length) {
+    throw new SourceWorkbookContractError(
+      "opening_balance_unavailable",
+      "La fuente oficial no contiene productos con movimientos autoritativos utilizables.",
+    );
   }
 
   return {
