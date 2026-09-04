@@ -2,38 +2,57 @@
 
 Fecha de actualización: 2026-09-04
 
-Este documento es acumulativo y complementa `FOUNDATIONS.md`. No sustituye el historial técnico anterior; registra la evidencia de cierre más reciente de la Fase 1.
+Este documento es acumulativo y complementa `FOUNDATIONS.md`. Registra la evidencia verificada de Fase 1 y no declara como ejecutadas comprobaciones que siguen bloqueadas por configuración externa.
+
+## Progreso oficial
+
+- Fase actual: **Fase 1 — Fundamentos**.
+- Peso oficial de Fase 1 en el roadmap completo: **8%**.
+- Avance interno verificado de Fase 1: **98%**.
+- Avance ponderado del proyecto completo: **7,84%**.
+- Fases 2–13: no iniciadas; no se contabiliza progreso adelantado.
+
+El 2% restante de Fase 1 se reserva exclusivamente para ejecutar y registrar el Live E2E contra el preview protegido de Vercel. No se redondea artificialmente a 100%.
 
 ## Estado actual
 
 - Versión base: `0.0.1`.
+- Objetivo reservado: `10.0.0` únicamente al finalizar todo el roadmap.
 - Rama de trabajo: `rebuild/phase-1-foundations`.
 - `main`: permanece sin modificar en `17aada72aa1b1bf1802f3ae160007d707c95905f`.
-- Producción: no modificar hasta completar el último gate de Fase 1.
-- OCR: permanece fuera del camino crítico y reservado para su fase oficial.
-- PR de cierre: `#286`, todavía en Draft y sin merge.
-- Último commit funcional validado antes de esta actualización documental: `08d85f2786f78e8c2ebceaf3c3f40f0aaeb0e1ec`.
+- Producción: no modificar antes del cierre de Fase 1.
+- OCR: permanece aislado y reservado para la Fase 11.
+- PR de cierre: `#286`, todavía Draft y sin merge.
+- Último árbol funcional validado: `d3555f2394b7bdd5ac5558500ce3243e90363a5c`.
+- Commit de estabilización posterior al experimento OIDC: `d0a76d46bb2b26c479e2ea445adc3c07a292ef22`; restaura exactamente el mismo árbol funcional de `d3555f...`.
 
-## Evidencia validada
+## Arquitectura y dominio verificados
 
-### Aplicación y dominio
-
-- **34 comprobaciones automáticas de Fundamentos verdes**.
+- Modelo privado `financial_app` con 17 tablas para cuentas, movimientos, categorías, comercios, presupuestos, recurrentes, previsiones, documentos, asociaciones, sincronización y auditoría.
+- Fuente bancaria original inmutable y estrictamente de solo lectura; correcciones manuales aisladas en overrides.
 - Formato regional único: `es-ES`, `EUR`, `Europe/Madrid`.
-- Importes monetarios con dos decimales y agrupación de miles explícita, incluida la regresión `1.234,56 €`.
-- Fuente bancaria inmutable y de solo lectura.
-- Configuración de cuentas y categorías con validaciones de dominio, API y PostgreSQL.
-- Categorías protegidas frente a ciclos, fusiones imposibles y cambios de tipo incompatibles con subcategorías.
-- Reordenación de cuentas limitada de extremo a extremo al mismo ciclo de vida: una cuenta activa no puede intercambiar posición con una archivada mediante UI, dominio ni repositorio.
-- Reordenación de categorías limitada de extremo a extremo a categorías hermanas del mismo tipo y padre.
-- El repositorio PostgreSQL vuelve a validar las fronteras de reordenación después de bloquear las filas con `FOR UPDATE`, evitando bypass internos y carreras entre lectura y escritura.
-- Una categoría activa no puede depender de un padre archivado.
-- Una categoría con subcategorías activas no puede archivarse hasta que esas subcategorías se archiven o se muevan.
-- La UI no ofrece el archivado/reactivación cuando el cambio produciría una jerarquía de ciclo de vida inválida.
+- Importes monetarios con dos decimales y formato español, incluida regresión `1.234,56 €`.
+- Configuración de cuentas y categorías implementada con dominio, API, persistencia y UI.
+- Jerarquías protegidas frente a ciclos, cambios de tipo incompatibles y ciclos de vida imposibles.
+- Reordenación de cuentas limitada a su mismo grupo de ciclo de vida.
+- Reordenación de categorías limitada al mismo tipo y padre.
+- Fusión de categorías exige destino activo, mismo tipo, ausencia de descendencia incompatible y ausencia de colisiones de subcategorías/presupuestos.
 
-### PostgreSQL / Supabase
+## Motores PostgreSQL canónicos
 
-Proyecto dedicado `financial-app` (`btzukbfesxdratqnxuoj`), esquema privado `financial_app`.
+Las mutaciones globales de Configuración ya no se implementan por separado en cada adaptador. PostgreSQL es la fuente canónica para:
+
+- `financial_app.reorder_accounts(uuid[])`;
+- `financial_app.reorder_categories(uuid[])`;
+- `financial_app.merge_categories(uuid, uuid)`.
+
+Tanto `PostgresAccountRepository` / `PostgresCategoryRepository` como el Edge Gateway delegan en esas funciones.
+
+La fusión canónica bloquea durante la operación las tablas que pueden referenciar categorías (`categories`, `merchants`, `transactions`, `transaction_overrides`, `categorization_rules`, `recurrences`, `budgets`, `forecast_items`) para impedir carreras de escritura durante una fusión.
+
+## PostgreSQL / Supabase
+
+Proyecto dedicado: `financial-app` (`btzukbfesxdratqnxuoj`).
 
 Migraciones oficiales aplicadas:
 
@@ -43,25 +62,21 @@ Migraciones oficiales aplicadas:
 4. `20260903200201_index_foreign_keys`
 5. `20260904034944_enforce_category_child_kind`
 6. `20260904050506_enforce_category_lifecycle_hierarchy`
+7. `20260904062132_centralize_configuration_mutations`
+8. `20260904072029_harden_category_merge_concurrency`
 
-La sexta migración amplía `financial_app.validate_category_parent()` y el trigger `categories_validate_parent` para vigilar también `lifecycle`.
+Regresión permanente añadida: `supabase/tests/configuration_mutation_functions.sql`.
 
-Regresiones PostgreSQL permanentes:
+La regresión se ejecutó contra las funciones instaladas con `BEGIN`/`ROLLBACK` y confirmó:
 
-- `supabase/tests/foundation_integrity.sql`;
-- `supabase/tests/configuration_persistence.sql`;
-- `supabase/tests/category_lifecycle_integrity.sql`.
+- reordenaciones válidas;
+- rechazo de cruce activo/archivado en cuentas;
+- rechazo de cruce de grupos en categorías;
+- rechazo de fusión hacia destino archivado;
+- fusión válida y archivado del origen;
+- disponibilidad de los tres motores canónicos tras rollback.
 
-La nueva regresión de ciclo de vida verifica con `BEGIN`/`ROLLBACK` que:
-
-- archivar un padre con hijo activo se rechaza;
-- crear/reactivar un hijo activo bajo un padre archivado se rechaza;
-- un hijo archivado bajo un padre activo sigue siendo válido;
-- no quedan residuos al finalizar.
-
-La reproducción previa a la migración demostró que PostgreSQL permitía `padre=archived` + `hijo=active` todavía enlazado. Tras `20260904050506_enforce_category_lifecycle_hierarchy`, ese estado queda bloqueado.
-
-Última comprobación de residuos tras las pruebas temporales:
+Última comprobación de residuos:
 
 - `accounts = 0`;
 - `categories = 0`;
@@ -71,86 +86,67 @@ La reproducción previa a la migración demostró que PostgreSQL permitía `padr
 
 Security Advisor tras el último DDL: **0 lints**.
 
-### E2E interactivo de Configuración
+### Edge Gateway
 
-Última ejecución completa validada:
+`financial-app-db-gateway` desplegado en Supabase como **versión 6 ACTIVE**. La versión viva fue releída y coincide con la centralización: `account.reorder`, `category.reorder` y `category.merge` llaman exclusivamente a las funciones PostgreSQL canónicas.
 
-- GitHub Actions run: `33839646808` (#28).
-- Commit: `08d85f2786f78e8c2ebceaf3c3f40f0aaeb0e1ec`.
-- Job `browser-interaction-e2e`: **success**.
-- Node.js: 24.x.
-- Instalación: `npm ci --ignore-scripts --no-audit --no-fund` con caché npm.
-- Proyectos: `chromium-desktop` y `chromium-mobile`.
+La función mantiene `verify_jwt=false` porque realiza validación OIDC personalizada de Vercel dentro del propio gateway; no se ha eliminado la autenticación.
 
-La ejecución interactiva confirma:
+## GitHub Actions / Playwright
 
-- carga e hidratación real de `/configuration`;
-- formato monetario español `1.234,56 €`;
-- rechazo de entrada monetaria anglosajona;
-- protección de jerarquías y fusiones imposibles;
-- el botón de archivar un padre con subcategorías activas aparece deshabilitado;
-- ausencia de scroll horizontal en escritorio y móvil.
+Ejecución del árbol funcional `d3555f...`:
 
-Las respuestas de `/api/configuration` de esta suite se interceptan con fixtures controlados para no introducir datos ficticios en PostgreSQL. La persistencia real se comprueba por los health checks y las suites PostgreSQL independientes.
+- run `33848585479`;
+- `browser-interaction-e2e`: **success**;
+- escritorio y móvil con Chromium;
+- instalación reproducible mediante `npm ci` y Node 24.
 
-### Vercel
+El E2E local/interceptado valida carga e hidratación de `/configuration`, formato español, rechazo de entrada monetaria anglosajona, restricciones de jerarquía/fusión/ciclo de vida y ausencia de scroll horizontal.
 
-Deployment del mismo commit funcional validado:
+## Vercel
 
-- deployment: `dpl_9oXzCFxkHaNKbgeHkrWAHJpXjsx5`;
-- commit: `08d85f2786f78e8c2ebceaf3c3f40f0aaeb0e1ec`;
+Deployment funcional verificado para `d3555f...`:
+
+- `dpl_FzSk29oxGeKoWnJ8AENFQFRutpnQ`;
 - estado: **READY**;
-- alias: sin error;
-- branch alias protegido mediante Vercel Authentication.
+- compilación Next.js: correcta;
+- TypeScript: correcto;
+- generación estática: 4/4;
+- `/api/build` confirmó el SHA exacto, rama y entorno `preview`.
 
-No se ha desactivado la protección del preview.
+Posteriormente el experimento OIDC produjo el commit `ccc59f709324487c74033e709af9d0eb500128b6`, también desplegado correctamente por Vercel. Su alias devolvió el SHA exacto esperado.
 
-## CI reproducible
+## Diagnóstico del Live E2E protegido
 
-El repositorio contiene `package-lock.json` real y verificado, `lockfileVersion: 3`, generado por GitHub Actions con Node 24 y materializado en el commit `8cf8978191a931290c5946ec5ddfde5f08972784`.
+Se probaron dos mecanismos oficiales sin desactivar Vercel Authentication:
 
-Git blob SHA del lockfile verificado: `904ccc06b9f0896280678037a9edb7dd645a3db0`.
+1. **Protection Bypass for Automation**: el workflow está preparado, pero `VERCEL_AUTOMATION_BYPASS_SECRET` no está configurado.
+2. **Trusted Sources con GitHub Actions OIDC**: run `33849255574`.
+   - GitHub generó correctamente el token OIDC efímero.
+   - checkout, Node, dependencias y Chromium se completaron.
+   - el paso de acceso al preview protegido no pudo atravesar Vercel Authentication y terminó en failure tras comprobar 36 veces.
+   - el alias ya estaba desplegado en el SHA correcto, por lo que el fallo no era un retraso de deployment.
+   - Vercel requiere configurar la fuente/regla correspondiente en Deployment Protection > Trusted Sources para aceptar ese emisor.
 
-El workflow definitivo usa:
-
-- `permissions: contents: read`;
-- `cache: npm`;
-- `npm ci --ignore-scripts --no-audit --no-fund`.
-
-Los permisos temporales de escritura utilizados exclusivamente para materializar el lockfile y, posteriormente, el parche controlado de UX de ciclo de vida fueron retirados inmediatamente después de cada operación. El workflow actual vuelve a ser de solo lectura.
-
-## Credenciales de Vercel comprobadas sin exposición
-
-Se ejecutó una sonda temporal no destructiva en GitHub Actions para comprobar únicamente la existencia, no el valor, de credenciales reutilizables.
-
-Resultado:
-
-- `VERCEL_AUTOMATION_BYPASS_SECRET`: **no configurado**;
-- `VERCEL_TOKEN`: **no configurado**.
-
-La sonda fue retirada del workflow después de obtener el resultado. No se imprimió, almacenó ni inventó ningún secreto.
+El experimento OIDC fue retirado y el workflow estable se restauró en `d0a76d46...`; no se deja CI rojo permanente ni se rebaja la protección.
 
 ## Único gate pendiente
 
-Permanece pendiente exclusivamente el **Live E2E contra el preview protegido de Vercel**.
+Para cerrar Fase 1 falta ejecutar realmente el Live E2E sobre el preview protegido y confirmar:
 
-El workflow contiene `protected-preview-live`, pero los pasos live solo se ejecutan cuando existe `VERCEL_AUTOMATION_BYPASS_SECRET` como secreto de GitHub Actions. Cuando exista, el job debe:
+1. SHA exacto del preview;
+2. `/api/health/foundations` con todos sus controles verdes;
+3. `/api/health/configuration-persistence` con sus 10 controles verdes;
+4. Playwright desktop + mobile sobre ese preview;
+5. limpieza final sin residuos.
 
-1. atravesar Vercel Authentication mediante el bypass oficial;
-2. esperar a que `/api/build` devuelva exactamente el SHA del commit probado;
-3. comprobar `/api/health/foundations`, ahora con al menos 34 controles;
-4. ejecutar `/api/health/configuration-persistence` y verificar su roundtrip y limpieza;
-5. ejecutar Playwright contra el preview protegido.
+Vías válidas para habilitarlo:
 
-No se debe resolver este gate desactivando Vercel Authentication, exponiendo secretos, contando un redirect SSO 302 como éxito ni fusionando el PR antes de ejecutar realmente el Live E2E.
+- configurar `VERCEL_AUTOMATION_BYPASS_SECRET` de forma segura; o
+- autorizar GitHub Actions como Trusted Source en Vercel con la regla apropiada.
 
-## Regla de cierre
+No son vías válidas desactivar SSO, publicar secretos, aceptar un redirect 302 como éxito ni fusionar el PR antes de ejecutar el gate.
 
-Fase 1 solo se considera cerrada cuando:
+## Continuidad
 
-1. todas las suites actuales permanecen verdes;
-2. el Live E2E protegido se ejecuta contra el SHA exacto del preview;
-3. `/api/health/foundations` responde `status: ok` en ese preview;
-4. `/api/health/configuration-persistence` completa el roundtrip real y su limpieza;
-5. no quedan residuos de prueba;
-6. solo entonces el PR #286 puede dejar Draft, fusionarse y habilitar el inicio de Fase 2.
+Siguiente acción exacta: habilitar uno de los dos mecanismos oficiales de acceso automatizado al preview protegido, relanzar `protected-preview-live` y, solo si sus pasos sustantivos quedan verdes y no hay residuos, marcar Fase 1 al 100%, actualizar el avance total a 8,00% y habilitar el comienzo de Fase 2.
