@@ -205,6 +205,7 @@ export function runFoundationHealthChecks(): FoundationHealth {
       name: "format-money-two-decimals",
       passed:
         normalizeSpaces(formatMoneyCents(123456789)) === "1.234.567,89 €" &&
+        normalizeSpaces(formatMoneyCents(123456)) === "1.234,56 €" &&
         normalizeSpaces(formatMoneyCents(100)) === "1,00 €" &&
         normalizeSpaces(formatMoneyCents(-9)) === "-0,09 €",
     },
