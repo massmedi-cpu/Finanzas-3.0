@@ -3,18 +3,19 @@ import {
   GOOGLE_OAUTH_STATE_COOKIE,
   GoogleSourceRuntimeConfigurationError,
   createGoogleOauthState,
+  getGoogleOauthRedirectUri,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const configuration = getGoogleSourceServerConfiguration();
     const state = createGoogleOauthState();
     const authorizationUrl = buildGoogleAuthorizationUrl({
       clientId: configuration.clientId,
-      redirectUri: configuration.redirectUri,
+      redirectUri: getGoogleOauthRedirectUri(request.url),
       state,
     });
 
