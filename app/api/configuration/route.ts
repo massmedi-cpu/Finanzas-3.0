@@ -1,13 +1,22 @@
 import { ConfigurationValidationError } from "../../../src/application/configuration-commands";
+import {
+  ConfigurationRequestError,
+  parseConfigurationApiCommand,
+} from "../../../src/application/configuration-api-contract";
 import { ConfigurationNotFoundError } from "../../../src/application/configuration-service";
-import type { AccountDraft, CategoryDraft } from "../../../src/domain/configuration";
-import type { EntityId } from "../../../src/domain/models";
 import { PersistenceGatewayError } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 import { createEdgeConfigurationService } from "../../../src/infrastructure/persistence/edge-configuration-runtime";
 
 export const dynamic = "force-dynamic";
 
 function apiError(error: unknown) {
+  if (error instanceof ConfigurationRequestError) {
+    return Response.json(
+      { error: "invalid_request", code: error.code, message: error.message },
+      { status: 400 },
+    );
+  }
+
   if (error instanceof ConfigurationValidationError) {
     return Response.json(
       { error: "validation_failed", issues: error.issues },
@@ -49,60 +58,53 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const operation = body.operation;
+    const command = parseConfigurationApiCommand(await request.json());
     const service = createEdgeConfigurationService();
 
-    switch (operation) {
+    switch (command.operation) {
       case "account.create":
         return Response.json(
-          { account: await service.createAccount(body.draft as AccountDraft) },
+          { account: await service.createAccount(command.draft) },
           { status: 201 },
         );
 
       case "account.update":
         return Response.json({
-          account: await service.updateAccount(body.id as EntityId, body.draft as AccountDraft),
+          account: await service.updateAccount(command.id, command.draft),
         });
 
       case "account.archive":
         return Response.json({
-          account: await service.setAccountArchived(body.id as EntityId, Boolean(body.archived)),
+          account: await service.setAccountArchived(command.id, command.archived),
         });
 
       case "account.reorder":
-        await service.reorderAccounts(body.orderedIds as EntityId[]);
+        await service.reorderAccounts(command.orderedIds);
         return Response.json({ ok: true });
 
       case "category.create":
         return Response.json(
-          { category: await service.createCategory(body.draft as CategoryDraft) },
+          { category: await service.createCategory(command.draft) },
           { status: 201 },
         );
 
       case "category.update":
         return Response.json({
-          category: await service.updateCategory(body.id as EntityId, body.draft as CategoryDraft),
+          category: await service.updateCategory(command.id, command.draft),
         });
 
       case "category.archive":
         return Response.json({
-          category: await service.setCategoryArchived(body.id as EntityId, Boolean(body.archived)),
+          category: await service.setCategoryArchived(command.id, command.archived),
         });
 
       case "category.reorder":
-        await service.reorderCategories(body.orderedIds as EntityId[]);
+        await service.reorderCategories(command.orderedIds);
         return Response.json({ ok: true });
 
       case "category.merge":
-        await service.mergeCategories(
-          body.sourceCategoryId as EntityId,
-          body.targetCategoryId as EntityId,
-        );
+        await service.mergeCategories(command.sourceCategoryId, command.targetCategoryId);
         return Response.json({ ok: true });
-
-      default:
-        return Response.json({ error: "unsupported_operation" }, { status: 400 });
     }
   } catch (error) {
     return apiError(error);
