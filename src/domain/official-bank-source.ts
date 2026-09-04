@@ -122,7 +122,7 @@ function normalizedRow(values: readonly unknown[]): SourceCellValue[] {
 
   return OFFICIAL_BANK_SOURCE_HEADERS.map((_, index) => {
     const value = values[index];
-    if (value === undefined || value === "") return null;
+    if (value === undefined || value === null || value === "") return null;
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
     throw new OfficialSourceContractError("invalid_row_width", `Tipo de celda no admitido en la columna ${index + 1}.`);
   });
