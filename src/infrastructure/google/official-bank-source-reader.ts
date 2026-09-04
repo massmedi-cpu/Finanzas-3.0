@@ -25,7 +25,9 @@ export class GoogleOfficialSourceReadError extends Error {
       | "google_api_error"
       | "source_metadata_mismatch"
       | "source_sheet_metadata_mismatch"
-      | "source_values_mismatch",
+      | "source_values_mismatch"
+      | "source_revision_unavailable"
+      | "source_changed_during_read",
     message: string,
   ) {
     super(message);
@@ -302,6 +304,14 @@ export class GoogleOfficialBankSourceReader {
       readJson(this.fetcher, spreadsheetUrl, accessToken),
     ]);
 
+    const initialRevision = sourceRevision(driveFile as DriveFileMetadata);
+    if (!initialRevision) {
+      throw new GoogleOfficialSourceReadError(
+        "source_revision_unavailable",
+        "Google Drive no ha devuelto una revisión estable para construir la fotografía oficial.",
+      );
+    }
+
     const metadata = normalizeSheetMetadata(spreadsheet as SpreadsheetMetadata);
     const params = new URLSearchParams({
       majorDimension: "ROWS",
@@ -318,9 +328,24 @@ export class GoogleOfficialBankSourceReader {
       accessToken,
     );
 
+    const finalDriveFile = await readJson(this.fetcher, driveUrl, accessToken);
+    const finalRevision = sourceRevision(finalDriveFile as DriveFileMetadata);
+    if (!finalRevision) {
+      throw new GoogleOfficialSourceReadError(
+        "source_revision_unavailable",
+        "Google Drive no ha devuelto una revisión estable al finalizar la lectura oficial.",
+      );
+    }
+    if (finalRevision !== initialRevision) {
+      throw new GoogleOfficialSourceReadError(
+        "source_changed_during_read",
+        "La fuente oficial cambió durante la lectura. Se descarta la fotografía completa y debe reintentarse.",
+      );
+    }
+
     return normalizeGoogleOfficialSourcePayload({
       spreadsheetId,
-      driveFile: driveFile as DriveFileMetadata,
+      driveFile: finalDriveFile as DriveFileMetadata,
       spreadsheet: spreadsheet as SpreadsheetMetadata,
       values: values as BatchValuesResponse,
     });
