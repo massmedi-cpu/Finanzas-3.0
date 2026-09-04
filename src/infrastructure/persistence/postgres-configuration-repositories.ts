@@ -330,6 +330,9 @@ export class PostgresCategoryRepository implements CategoryRepository {
       if (!source || !target) {
         throw new PersistenceInvariantError("La categoría origen o destino no existe.");
       }
+      if (target.lifecycle !== "active") {
+        throw new PersistenceInvariantError("La categoría de destino de una fusión debe estar activa.");
+      }
       if (source.kind !== target.kind) {
         throw new PersistenceInvariantError("Solo pueden fusionarse categorías del mismo tipo.");
       }
