@@ -148,6 +148,12 @@ export async function POST() {
         { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
+    if (error instanceof PersistenceGatewayError && error.code === "google_oauth_not_connected") {
+      return Response.json(
+        { error: "google_oauth_not_connected" },
+        { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
     if (error instanceof GoogleOfficialSourceReadError && error.code === "source_changed_during_read") {
       return Response.json(
         { error: "google_source_changed_during_read" },
