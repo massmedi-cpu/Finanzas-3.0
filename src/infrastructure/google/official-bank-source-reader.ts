@@ -2,7 +2,7 @@ import type {
   OfficialSourceSheetSnapshot,
   OfficialSourceWorkbookSnapshot,
 } from "../../application/source-sync-service";
-import { OFFICIAL_BANK_SOURCE_HEADERS, OFFICIAL_SOURCE_ACCOUNT_CONTRACTS } from "../../domain/official-bank-source";
+import { OFFICIAL_BANK_SOURCE_HEADERS, OFFICIAL_SOURCE_SHEET_TITLES } from "../../domain/official-bank-source";
 
 export const GOOGLE_SOURCE_READONLY_SCOPES = [
   "https://www.googleapis.com/auth/spreadsheets.readonly",
@@ -111,7 +111,7 @@ function assertWorkbookMetadata(input: GoogleOfficialSourcePayload) {
 }
 
 function expectedSheetTitles() {
-  return Object.keys(OFFICIAL_SOURCE_ACCOUNT_CONTRACTS).sort();
+  return [...OFFICIAL_SOURCE_SHEET_TITLES].sort();
 }
 
 function normalizeSheetMetadata(spreadsheet: SpreadsheetMetadata) {
