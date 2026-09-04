@@ -10,8 +10,13 @@ import {
   GOOGLE_OAUTH_STATE_COOKIE,
   OFFICIAL_GOOGLE_SOURCE_NAME,
   GoogleSourceRuntimeConfigurationError,
+  getGoogleOauthRedirectUri,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
+import {
+  GoogleOfficialSourceDiscoveryError,
+  discoverOfficialBankSpreadsheetId,
+} from "../../../../../src/infrastructure/google/official-bank-source-discovery";
 import {
   GOOGLE_SOURCE_READONLY_SCOPES,
   GoogleOfficialBankSourceReader,
@@ -67,15 +72,16 @@ export async function GET(request: Request) {
       code,
       clientId: configuration.clientId,
       clientSecret: configuration.clientSecret,
-      redirectUri: configuration.redirectUri,
+      redirectUri: getGoogleOauthRedirectUri(request.url),
     });
     const identity = await fetchGoogleUserInfo(tokens.accessToken);
     if (identity.email !== configuration.allowedEmail) {
       return callbackRedirect(request, "error", "google_account_not_allowed");
     }
 
+    const sourceFileId = await discoverOfficialBankSpreadsheetId(tokens.accessToken);
     const reader = new GoogleOfficialBankSourceReader(
-      configuration.spreadsheetId,
+      sourceFileId,
       { getAccessToken: async () => tokens.accessToken },
     );
     const snapshot = await reader.read();
@@ -87,7 +93,7 @@ export async function GET(request: Request) {
       accountEmail: identity.email,
       refreshToken: tokens.refreshToken,
       scopes: [...GOOGLE_SOURCE_READONLY_SCOPES],
-      sourceFileId: configuration.spreadsheetId,
+      sourceFileId,
       sourceFileName: OFFICIAL_GOOGLE_SOURCE_NAME,
     });
     if (stored.connected !== true) {
@@ -105,6 +111,9 @@ export async function GET(request: Request) {
         "error",
         error.code === "invalid_oauth_state" ? "invalid_google_oauth_state" : error.code,
       );
+    }
+    if (error instanceof GoogleOfficialSourceDiscoveryError) {
+      return callbackRedirect(request, "error", error.code);
     }
     console.error("google-oauth-callback", error instanceof Error ? error.name : "unknown_error");
     return callbackRedirect(request, "error", "google_oauth_callback_failed");
