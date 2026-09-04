@@ -163,6 +163,16 @@ test.describe("Preview protegido real", () => {
     expect(payload.total).toBeGreaterThanOrEqual(12);
   });
 
+  test("ingesta sintética roundtrip termina sin residuos", async ({ request }) => {
+    const response = await request.get("/api/health/source-ingestion");
+    expect(response.ok()).toBeTruthy();
+    const payload = await response.json();
+    expect(payload.status).toBe("ok");
+    expect(payload.verified).toBe(true);
+    expect(payload.clean).toBe(true);
+    expect(payload.residue).toEqual({ accounts: 0, mappings: 0, sources: 0, transactions: 0 });
+  });
+
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {
     const response = await request.get("/api/health/configuration-persistence");
     expect(response.ok()).toBeTruthy();
