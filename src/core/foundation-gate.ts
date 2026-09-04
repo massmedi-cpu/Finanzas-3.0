@@ -1,4 +1,5 @@
 import { runConfigurationContractChecks } from "./configuration-contract-health";
+import { runConfigurationIntegrityChecks } from "./configuration-integrity-health";
 import {
   runFoundationHealthChecks,
   type FoundationHealth,
@@ -7,7 +8,8 @@ import {
 export function runCompleteFoundationHealthChecks(): FoundationHealth {
   const base = runFoundationHealthChecks();
   const contractChecks = runConfigurationContractChecks();
-  const checks = [...base.checks, ...contractChecks];
+  const integrityChecks = runConfigurationIntegrityChecks();
+  const checks = [...base.checks, ...contractChecks, ...integrityChecks];
   const passed = checks.filter((check) => check.passed).length;
 
   return {
