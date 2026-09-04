@@ -73,59 +73,6 @@ function orderedIds(value: unknown): asserts value is string[] {
   }
   if (new Set(value).size !== value.length) throw new Error("duplicate_ordered_ids");
 }
-function sameIdSet(current: string[], ordered: string[]) {
-  if (current.length !== ordered.length) return false;
-  const set = new Set(current);
-  return ordered.every((id) => set.has(id));
-}
-function assertAccountReorderGroups(current: any[], ordered: string[]) {
-  if (!sameIdSet(current.map((row) => String(row.id)), ordered)) {
-    throw new Error("invalid_reorder_set");
-  }
-  const byId = new Map(current.map((row) => [String(row.id), row]));
-  const crosses = ordered.some(
-    (id, index) => current[index]?.lifecycle !== byId.get(id)?.lifecycle,
-  );
-  if (crosses) throw new Error("account_reorder_group_mismatch");
-}
-function assertCategoryReorderGroups(current: any[], ordered: string[]) {
-  if (!sameIdSet(current.map((row) => String(row.id)), ordered)) {
-    throw new Error("invalid_reorder_set");
-  }
-  const byId = new Map(current.map((row) => [String(row.id), row]));
-  const crosses = ordered.some((id, index) => {
-    const atPosition = current[index];
-    const incoming = byId.get(id);
-    return (
-      !atPosition ||
-      !incoming ||
-      atPosition.kind !== incoming.kind ||
-      String(atPosition.parent_category_id ?? "") !== String(incoming.parent_category_id ?? "")
-    );
-  });
-  if (crosses) throw new Error("category_reorder_group_mismatch");
-}
-function assertActiveMergeTarget(target: any) {
-  if (target?.lifecycle !== "active") throw new Error("target_category_archived");
-}
-function rejectedWith(action: () => void, code: string) {
-  try {
-    action();
-    return false;
-  } catch (error) {
-    return error instanceof Error && error.message === code;
-  }
-}
-async function applyOrdinalOrder(tx: any, table: "accounts" | "categories", ids: string[]) {
-  for (let sortOrder = 0; sortOrder < ids.length; sortOrder += 1) {
-    const id = ids[sortOrder];
-    if (table === "accounts") {
-      await tx`update financial_app.accounts set sort_order=${sortOrder},updated_at=now() where id=${id}::uuid`;
-    } else {
-      await tx`update financial_app.categories set sort_order=${sortOrder},updated_at=now() where id=${id}::uuid`;
-    }
-  }
-}
 async function verifyVercel(req: Request) {
   const auth = req.headers.get("authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -188,27 +135,16 @@ Deno.serve(async (req) => {
 
     if (action === "test.invariants") {
       if (identity.environment !== "preview") return json({ error: "test_invariants_preview_only" }, 403);
-      const accountRows = [
-        { id: TEST_ACCOUNT_ID, lifecycle: "active" },
-        { id: "10000000-0000-4000-8000-000000000009", lifecycle: "archived" },
-      ];
-      const categoryRows = [
-        { id: TEST_CATEGORY_IDS[0], kind: "expense", parent_category_id: null },
-        { id: TEST_CATEGORY_IDS[1], kind: "income", parent_category_id: null },
-      ];
+      const rows = await sql`
+        select
+          pg_catalog.to_regprocedure('financial_app.reorder_accounts(uuid[])') is not null as account_reorder_engine,
+          pg_catalog.to_regprocedure('financial_app.reorder_categories(uuid[])') is not null as category_reorder_engine,
+          pg_catalog.to_regprocedure('financial_app.merge_categories(uuid,uuid)') is not null as category_merge_engine
+      `;
       return json({
-        accountReorderGuard: rejectedWith(
-          () => assertAccountReorderGroups(accountRows, [accountRows[1].id, accountRows[0].id]),
-          "account_reorder_group_mismatch",
-        ),
-        categoryReorderGuard: rejectedWith(
-          () => assertCategoryReorderGroups(categoryRows, [categoryRows[1].id, categoryRows[0].id]),
-          "category_reorder_group_mismatch",
-        ),
-        activeMergeTargetGuard: rejectedWith(
-          () => assertActiveMergeTarget({ lifecycle: "archived" }),
-          "target_category_archived",
-        ),
+        accountReorderEngine: rows[0]?.account_reorder_engine === true,
+        categoryReorderEngine: rows[0]?.category_reorder_engine === true,
+        categoryMergeEngine: rows[0]?.category_merge_engine === true,
       });
     }
 
@@ -226,11 +162,7 @@ Deno.serve(async (req) => {
     }
     if (action === "account.reorder") {
       orderedIds(payload.orderedIds);
-      await sql.begin(async (tx) => {
-        const current = await tx`select id,lifecycle from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id for update`;
-        assertAccountReorderGroups(current, payload.orderedIds);
-        await applyOrdinalOrder(tx, "accounts", payload.orderedIds);
-      });
+      await sql`select financial_app.reorder_accounts(${payload.orderedIds}::uuid[])`;
       return json({ ok: true });
     }
 
@@ -248,45 +180,14 @@ Deno.serve(async (req) => {
     }
     if (action === "category.reorder") {
       orderedIds(payload.orderedIds);
-      await sql.begin(async (tx) => {
-        const current = await tx`select id,kind,parent_category_id from financial_app.categories order by kind,parent_category_id nulls first,sort_order,name,id for update`;
-        assertCategoryReorderGroups(current, payload.orderedIds);
-        await applyOrdinalOrder(tx, "categories", payload.orderedIds);
-      });
+      await sql`select financial_app.reorder_categories(${payload.orderedIds}::uuid[])`;
       return json({ ok: true });
     }
 
     if (action === "category.merge") {
       uuid(payload.sourceCategoryId, "source_category_id");
       uuid(payload.targetCategoryId, "target_category_id");
-      if (payload.sourceCategoryId === payload.targetCategoryId) throw new Error("same_category");
-      await sql.begin(async (tx) => {
-        const categories = await tx`select id,name,kind,lifecycle from financial_app.categories where id in (${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid) order by id for update`;
-        const source = categories.find((row: any) => String(row.id) === payload.sourceCategoryId);
-        const target = categories.find((row: any) => String(row.id) === payload.targetCategoryId);
-        if (!source || !target) throw new Error("category_not_found");
-        if (source.kind !== target.kind) throw new Error("category_kind_mismatch");
-        assertActiveMergeTarget(target);
-
-        const descendant = await tx`with recursive d as (select id from financial_app.categories where parent_category_id=${payload.sourceCategoryId}::uuid union all select c.id from financial_app.categories c join d on c.parent_category_id=d.id) select exists(select 1 from d where id=${payload.targetCategoryId}::uuid) exists`;
-        if (descendant[0]?.exists) throw new Error("target_is_descendant");
-
-        const childCollision = await tx`select exists(select 1 from financial_app.categories sc join financial_app.categories tc on tc.parent_category_id=${payload.targetCategoryId}::uuid and tc.kind=sc.kind and financial_app.normalize_label(tc.name)=financial_app.normalize_label(sc.name) where sc.parent_category_id=${payload.sourceCategoryId}::uuid and sc.id<>tc.id) exists`;
-        if (childCollision[0]?.exists) throw new Error("child_category_collision");
-
-        const budgetCollision = await tx`select exists(select 1 from financial_app.budgets sb join financial_app.budgets tb on tb.month=sb.month and tb.category_id=${payload.targetCategoryId}::uuid where sb.category_id=${payload.sourceCategoryId}::uuid) exists`;
-        if (budgetCollision[0]?.exists) throw new Error("budget_collision");
-
-        await tx`update financial_app.categories set parent_category_id=${payload.targetCategoryId}::uuid,updated_at=now() where parent_category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.merchants set default_category_id=${payload.targetCategoryId}::uuid,updated_at=now() where default_category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.transactions set category_id=${payload.targetCategoryId}::uuid,updated_at=now() where category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.transaction_overrides set category_id_override=${payload.targetCategoryId}::uuid,updated_at=now() where category_override_set=true and category_id_override=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.categorization_rules set target_category_id=${payload.targetCategoryId}::uuid,updated_at=now() where target_category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.recurrences set category_id=${payload.targetCategoryId}::uuid,updated_at=now() where category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.budgets set category_id=${payload.targetCategoryId}::uuid,updated_at=now() where category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.forecast_items set category_id=${payload.targetCategoryId}::uuid,updated_at=now() where category_id=${payload.sourceCategoryId}::uuid`;
-        await tx`update financial_app.categories set lifecycle='archived',parent_category_id=null,updated_at=now() where id=${payload.sourceCategoryId}::uuid`;
-      });
+      await sql`select financial_app.merge_categories(${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid)`;
       return json({ ok: true });
     }
 

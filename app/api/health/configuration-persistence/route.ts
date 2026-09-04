@@ -87,10 +87,10 @@ export async function GET() {
       sortOrder: 1,
     });
 
-    const gatewayGuards = await callPersistenceGateway<{
-      accountReorderGuard: boolean;
-      categoryReorderGuard: boolean;
-      activeMergeTargetGuard: boolean;
+    const canonicalEngines = await callPersistenceGateway<{
+      accountReorderEngine: boolean;
+      categoryReorderEngine: boolean;
+      categoryMergeEngine: boolean;
     }>("test.invariants");
 
     await service.mergeCategories(source.id, target.id);
@@ -125,16 +125,16 @@ export async function GET() {
           source.id === TEST_IDS.sourceCategory,
       },
       {
-        name: "gateway-account-reorder-group-guard",
-        passed: gatewayGuards.accountReorderGuard,
+        name: "canonical-account-reorder-engine",
+        passed: canonicalEngines.accountReorderEngine,
       },
       {
-        name: "gateway-category-reorder-group-guard",
-        passed: gatewayGuards.categoryReorderGuard,
+        name: "canonical-category-reorder-engine",
+        passed: canonicalEngines.categoryReorderEngine,
       },
       {
-        name: "gateway-active-merge-target-guard",
-        passed: gatewayGuards.activeMergeTargetGuard,
+        name: "canonical-category-merge-engine",
+        passed: canonicalEngines.categoryMergeEngine,
       },
       {
         name: "category-merge-reread",
