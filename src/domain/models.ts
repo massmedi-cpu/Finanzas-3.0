@@ -277,6 +277,7 @@ export interface SyncRun {
 
 export interface SyncCursor {
   sourceFileId: string;
+  sourceSheetId: string;
   sourceRevision: string | null;
   lastSourceRowKey: string | null;
   lastSuccessfulRunId: EntityId | null;
