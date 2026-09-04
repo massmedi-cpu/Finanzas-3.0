@@ -2,6 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Account, AccountType, Category, CategoryKind, EntityId } from "../../src/domain/models";
+import { validateCategoryHierarchy, validateCategoryMerge } from "../../src/domain/configuration-policies";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "../../src/core/money";
 
 type ConfigPayload = { accounts: Account[]; categories: Category[] };
@@ -70,6 +71,10 @@ function labelForCategoryKind(kind: CategoryKind) {
   return CATEGORY_KINDS.find((item) => item.value === kind)?.label ?? kind;
 }
 
+function sameAccountGroup(left: Account, right: Account) {
+  return left.lifecycle === right.lifecycle;
+}
+
 function sameCategoryGroup(left: Category, right: Category) {
   return left.kind === right.kind && left.parentCategoryId === right.parentCategoryId;
 }
@@ -136,10 +141,26 @@ export default function ConfigurationClient() {
 
   const activeAccounts = useMemo(() => data.accounts.filter((item) => item.lifecycle === "active").length, [data.accounts]);
   const activeCategories = useMemo(() => data.categories.filter((item) => item.lifecycle === "active").length, [data.categories]);
-  const parentOptions = useMemo(() => data.categories.filter((item) => item.lifecycle === "active" && item.kind === categoryForm.kind && item.id !== editingCategoryId), [data.categories, categoryForm.kind, editingCategoryId]);
+  const editingCategory = editingCategoryId ? data.categories.find((item) => item.id === editingCategoryId) ?? null : null;
+  const parentOptions = useMemo(() => data.categories.filter((item) => {
+    if (item.lifecycle !== "active" || item.kind !== categoryForm.kind || item.id === editingCategoryId) {
+      return false;
+    }
+
+    const candidate = editingCategory
+      ? { ...editingCategory, kind: categoryForm.kind, parentCategoryId: item.id }
+      : { id: "__new-category__", kind: categoryForm.kind, parentCategoryId: item.id };
+
+    return validateCategoryHierarchy(candidate, data.categories).length === 0;
+  }), [data.categories, categoryForm.kind, editingCategoryId, editingCategory]);
   const mergeSources = useMemo(() => data.categories.filter((item) => item.lifecycle === "active"), [data.categories]);
   const selectedSource = data.categories.find((item) => item.id === mergeSource);
-  const mergeTargets = useMemo(() => data.categories.filter((item) => item.lifecycle === "active" && item.id !== mergeSource && (!selectedSource || item.kind === selectedSource.kind)), [data.categories, mergeSource, selectedSource]);
+  const mergeTargets = useMemo(() => selectedSource
+    ? data.categories.filter((item) =>
+        item.lifecycle === "active" &&
+        validateCategoryMerge(selectedSource, item, data.categories).length === 0,
+      )
+    : [], [data.categories, selectedSource]);
 
   function beginAccountEdit(account: Account) {
     setEditingAccountId(account.id);
@@ -155,10 +176,24 @@ export default function ConfigurationClient() {
     document.getElementById("category-form")?.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
+  function canMoveAccount(index: number, delta: number) {
+    const current = data.accounts[index];
+    const next = data.accounts[index + delta];
+    return Boolean(current && next && sameAccountGroup(current, next));
+  }
+
   function canMoveCategory(index: number, delta: number) {
     const current = data.categories[index];
     const next = data.categories[index + delta];
     return Boolean(current && next && sameCategoryGroup(current, next));
+  }
+
+  function canUseCategoryKind(kind: CategoryKind) {
+    if (!editingCategory) return true;
+    return validateCategoryHierarchy(
+      { ...editingCategory, kind, parentCategoryId: null },
+      data.categories,
+    ).length === 0;
   }
 
   async function run(action: () => Promise<void>, success: string) {
@@ -222,7 +257,7 @@ export default function ConfigurationClient() {
 
   async function reorderAccounts(index: number, delta: number) {
     const nextIndex = index + delta;
-    if (nextIndex < 0 || nextIndex >= data.accounts.length) return;
+    if (!canMoveAccount(index, delta)) return;
     const ordered = data.accounts.map((item) => item.id);
     [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
     await run(() => requestConfiguration("account.reorder", { orderedIds: ordered }).then(() => undefined), "Orden de cuentas actualizado.");
@@ -270,8 +305,8 @@ export default function ConfigurationClient() {
                   <div className="entity-main"><div className="entity-icon"><Icon name="account" /></div><div><div className="entity-title-row"><h3>{account.name}</h3><span className={`lifecycle ${account.lifecycle}`}>{account.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{account.institution || "Sin entidad"} · {labelForAccountType(account.type)}</p><strong>{formatMoneyCents(account.openingBalanceCents)}</strong></div></div>
                   <div className="entity-actions">
                     <button type="button" className="icon-button" onClick={() => beginAccountEdit(account)} aria-label={`Editar ${account.name}`}><Icon name="edit" /></button>
-                    <button type="button" className="icon-button" disabled={index === 0 || busy} onClick={() => void reorderAccounts(index, -1)} aria-label="Subir"><Icon name="up" /></button>
-                    <button type="button" className="icon-button" disabled={index === data.accounts.length - 1 || busy} onClick={() => void reorderAccounts(index, 1)} aria-label="Bajar"><Icon name="down" /></button>
+                    <button type="button" className="icon-button" disabled={busy || !canMoveAccount(index, -1)} onClick={() => void reorderAccounts(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
+                    <button type="button" className="icon-button" disabled={busy || !canMoveAccount(index, 1)} onClick={() => void reorderAccounts(index, 1)} aria-label="Bajar dentro de su grupo"><Icon name="down" /></button>
                     <button type="button" className="icon-button" disabled={busy} onClick={() => void run(() => requestConfiguration("account.archive", { id: account.id, archived: account.lifecycle === "active" }).then(() => undefined), account.lifecycle === "active" ? "Cuenta archivada." : "Cuenta reactivada.")} aria-label={account.lifecycle === "active" ? "Archivar" : "Reactivar"}><Icon name="archive" /></button>
                   </div>
                 </article>)}
@@ -314,7 +349,7 @@ export default function ConfigurationClient() {
               <div className="panel-heading"><div><p className="panel-kicker">{editingCategoryId ? "EDICIÓN" : "NUEVA CATEGORÍA"}</p><h2>{editingCategoryId ? "Editar categoría" : "Añadir categoría"}</h2></div></div>
               <form className="config-form" onSubmit={submitCategory}>
                 <label>Nombre<input required value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Ej. Supermercado" /></label>
-                <label>Tipo<select value={categoryForm.kind} onChange={(e) => setCategoryForm({ ...categoryForm, kind: e.target.value as CategoryKind, parentCategoryId: "" })}>{CATEGORY_KINDS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label>
+                <label>Tipo<select value={categoryForm.kind} onChange={(e) => setCategoryForm({ ...categoryForm, kind: e.target.value as CategoryKind, parentCategoryId: "" })}>{CATEGORY_KINDS.map((item) => <option value={item.value} key={item.value} disabled={!canUseCategoryKind(item.value)}>{item.label}</option>)}</select></label>
                 <label>Categoría superior<select value={categoryForm.parentCategoryId} onChange={(e) => setCategoryForm({ ...categoryForm, parentCategoryId: e.target.value })}><option value="">Sin categoría superior</option>{parentOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
                 <div className="form-row"><label>Icono<select value={categoryForm.iconKey} onChange={(e) => setCategoryForm({ ...categoryForm, iconKey: e.target.value })}>{ICONS.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Color<select value={categoryForm.colorToken} onChange={(e) => setCategoryForm({ ...categoryForm, colorToken: e.target.value })}>{COLORS.map((item) => <option value={item} key={item}>{item.replace("category.", "")}</option>)}</select></label></div>
                 <div className="form-actions"><button className="primary-button" type="submit" disabled={busy}><Icon name="plus" />{editingCategoryId ? "Guardar cambios" : "Crear categoría"}</button>{editingCategoryId && <button className="secondary-button" type="button" onClick={() => { setEditingCategoryId(null); setCategoryForm(INITIAL_CATEGORY); }}>Cancelar</button>}</div>
