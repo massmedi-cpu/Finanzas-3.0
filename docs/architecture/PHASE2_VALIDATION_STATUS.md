@@ -9,51 +9,112 @@ Este documento es un checkpoint técnico acumulativo. No sustituye el Prompt Mae
 ## Estado porcentual oficial
 
 - Fase 1 — Fundamentos: 100% completada; peso 8%; aporte global 8,0%.
-- Fase 2 — Lectura e importación de datos: 72% validado; peso 10%; aporte global 7,2%.
-- Progreso global validado: 15,2%.
+- Fase 2 — Lectura e importación de datos: 76% validado; peso 10%; aporte global 7,6%.
+- Progreso global validado: 15,6%.
 - OCR permanece previsto para Fase 11, tramo global 93%–97%.
 
 El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta por trabajo real validado.
 
 ## Rama y protección acumulativa
 
-- Base cerrada: `main` en la Fase 1 validada.
+- Base cerrada: `main` con Fase 1 validada al 100%.
 - Rama activa: `rebuild/phase-2-data-quality`.
 - Pull request de continuidad: #287, Draft, sin fusionar mientras Fase 2 siga abierta.
-- HEAD validado de este checkpoint: `40bb5716f486d3e9c5996914f23b728a7c347bf3`.
-- CI Preview E2E run `33897330067`: `success`.
-- Build de producción Next.js y browser/core-health E2E: `success`.
-- Preview Vercel exacto del HEAD: `READY`.
-- `/api/health/data-quality`: 20/20, `status=ok`.
+- Base funcional de este checkpoint: `8158d0349d7f232f6305b24884e0a160da8f6c53`.
+- CI Preview E2E run `33901929196`: `success`.
+- Build Next.js + Playwright desktop/móvil: 32 pruebas pasadas; 12 live omitidas por no existir URL de preview exacta para ese HEAD.
+- Configuración → Fuente bancaria está implementada y validada en CI: estado OAuth/runtime, garantía read-only, actualización solo tras POST confirmado, último sync persistido, cursores y retorno OAuth comprensible.
+- El preview exacto de `8158d03…` no pudo crearse por límite externo de Vercel: `Deployment rate limited — retry in 24 hours`. No se contabiliza como validación live.
+
+## Supabase / runtime real
+
+Comprobado directamente el 04/09/2026:
+
+- proyecto dedicado: `financial-app` (`btzukbfesxdratqnxuoj`);
+- Edge Function `financial-app-db-gateway`: `ACTIVE`;
+- versión desplegada: **11**;
+- contrato runtime: `contractVersion=2`;
+- `sourceAccountLifecycle=true`;
+- `canonicalProductSelection=true`.
+
+La versión 11 propaga `lifecycle` en `source.sync_batch` hasta `financial_app.ensure_source_account_mapping(...)`. PostgreSQL conserva tanto la firma legacy de 7 argumentos como la firma lifecycle de 8 argumentos; por tanto el endpoint sintético antiguo sigue siendo compatible y la sincronización real utiliza explícitamente la firma nueva.
 
 ## Evidencias ya validadas
 
 ### Fuente oficial
 
-- Google Sheet oficial localizado y comprobado exclusivamente en lectura.
-- Título: `Movimientos bancarios - fuente`.
-- Locale: `es_ES`.
-- Zona horaria: `Europe/Madrid`.
-- Contrato físico: exactamente 22 columnas.
-- Pestañas físicas verificadas:
-  - `Cuenta corriente · 3967`
-  - `Cuenta ahorro · 2504`
+Google Sheet oficial comprobado exclusivamente en lectura:
+
+- título: `Movimientos bancarios - fuente`;
+- locale: `es_ES`;
+- zona horaria: `Europe/Madrid`;
+- contrato físico: exactamente 22 columnas;
+- pestañas físicas:
+  - `Cuenta corriente · 3967`;
+  - `Cuenta ahorro · 2504`.
+
+### Reconciliación integral del dataset real
+
+Se exportó una copia temporal solo para análisis, sin modificar el Google Sheet oficial, y se contrastó la fuente completa.
+
+Resultado autoritativo esperado para una primera importación correcta:
+
+- **3.172 movimientos autoritativos**;
+- **3.172 IDs origen únicos**;
+- **3.024** movimientos lógicos de `Cuenta corriente Openbank · 3967`;
+- **15** movimientos canónicos de `Cuenta ahorro Openbank · 2504`;
+- **133** movimientos de `Tarjeta prepago Openbank · 8403` como ledger técnico archivado;
+- **10 copias históricas de ahorro** incrustadas en la pestaña corriente (`AH-00001`…`AH-00010`) que deben descartarse al existir su copia canónica en `Cuenta ahorro · 2504`.
+
+Las diez copias históricas coinciden con las canónicas en fecha, importe y saldo, pero las filas canónicas conservan una evidencia fuente más rica —incluido concepto bancario original y referencia documental—. La selección canónica evita tanto duplicación como degradación de la evidencia.
+
+Todas las filas autoritativas tienen importe numérico válido y fecha admitida por el contrato. No se han encontrado colisiones de `ID origen` entre los 3.172 movimientos autoritativos.
+
+### Valores de aceptación de primera importación
+
+- saldo inicial derivado de cuenta corriente: **0,00 €**;
+- saldo inicial derivado de cuenta ahorro: **0,00 €**;
+- saldo inicial de prepago técnica archivada: **0,00 €**;
+- último saldo observado de cuenta corriente en la fuente comprobada: **1.888,27 €**;
+- último saldo observado de cuenta ahorro en la fuente comprobada: **186.957,72 €**;
+- cursor esperado de la pestaña corriente tras primera importación completa: `CC-02963`;
+- cursor esperado de la pestaña ahorro: `AH-00010`.
+
+Estos valores son criterios de aceptación: la primera sincronización OAuth real no se considerará válida si los recuentos, productos, saldos iniciales o cursores se desvían sin una explicación demostrable de una revisión posterior de la fuente.
+
+### Caso real `TP-00134`: ID físico no equivale a producto lógico
+
+La fuente contiene una excepción de negocio comprobada:
+
+- `ID origen`: `TP-00134`;
+- fecha: `21/08/2026` en formato español;
+- `Producto o cuenta`: `Cuenta corriente Openbank · 3967`;
+- importe: `-21,00 €`;
+- saldo: nulo;
+- tipo: gasto;
+- canal: tarjeta prepago.
+
+La propia fuente indica que es una compra real realizada mediante la prepago, conciliada con la recarga interna `CC-02996`, pero reasignada lógicamente a cuenta corriente para contabilizar el gasto una sola vez. La recarga queda como traspaso interno y la prepago se mantiene solo como ledger técnico.
+
+Conclusión contractual: **el prefijo del ID nunca decide el producto financiero**. La cuenta se determina por el contrato verificado de `Producto o cuenta`, institución, identificador y tipo de producto. Se añade una regresión específica para impedir que una refactorización futura vuelva a clasificar `TP-00134` como cuenta prepago por heurística.
+
+### Orden y saldos
+
+El gate de orden permanece deliberadamente definido como `newest-first` por fecha bancaria. No se añade una regla de continuidad estricta fila-a-fila del saldo porque la fuente no garantiza una secuencia intradía que permita deducir el saldo por simple adyacencia en todos los casos. Imponer esa regla produciría falsos errores. El saldo inicial se deriva únicamente del movimiento autoritativo más antiguo del producto cuando el contrato lo permite.
 
 ### Productos lógicos históricos
 
-La fuente real demuestra que una pestaña física no equivale necesariamente a un único producto financiero. La pestaña de cuenta corriente contiene histórico mezclado.
-
 Contratos lógicos verificados:
 
-- `Cuenta corriente Openbank · 3967` — activa, checking.
-- `Cuenta ahorro Openbank · 2504` — activa, savings.
+- `Cuenta corriente Openbank · 3967` — activa, `checking`;
+- `Cuenta ahorro Openbank · 2504` — activa, `savings`;
 - `Tarjeta prepago Openbank · 8403` — archivada, ledger técnico `other`.
 
-El motor separa pestañas físicas de productos lógicos y prefiere la fila de la pestaña canónica cuando un mismo ID de origen aparece también en una copia histórica incrustada. La regresión específica de productos mixtos está verde.
+El motor separa pestañas físicas de productos lógicos y prefiere la fila de la pestaña canónica cuando un mismo ID aparece también en una copia histórica incrustada.
 
-### Sincronización incremental y lifecycle
+### Sincronización incremental
 
-Validado mediante regresiones ejecutadas realmente contra PostgreSQL con `BEGIN/ROLLBACK`, sin residuos:
+Validado mediante regresiones reales contra PostgreSQL con `BEGIN/ROLLBACK`, sin residuos:
 
 - inserción inicial;
 - idempotencia;
@@ -63,74 +124,68 @@ Validado mediante regresiones ejecutadas realmente contra PostgreSQL con `BEGIN/
 - duplicados reversibles;
 - preservación de duplicados confirmados manualmente;
 - auditoría no destructiva de filas desaparecidas;
-- reaparición de filas sin falsos positivos;
+- reaparición sin falsos positivos;
 - cursores independientes por pestaña;
-- guardia de orden cronológico newest-first;
+- orden físico de cada pestaña preservado al persistir varios productos lógicos;
+- guardia de orden newest-first;
 - fuente original inmutable;
-- creación de la prepago como `archived` + `other` mediante la nueva firma canónica de PostgreSQL.
+- creación de prepago como `archived` + `other` mediante la firma lifecycle.
 
-La regresión específica del lifecycle terminó con `0` mappings y `0` cuentas residuales tras `ROLLBACK`.
+El bloque funcional **Sincronización incremental** del Gantt permanece completado.
 
 ### OAuth / Vault
 
 El flujo implementado mantiene:
 
 - `state` en cookie HttpOnly + Secure + SameSite=Lax;
-- scopes de identidad `openid email` únicamente para verificar identidad;
+- scopes de identidad `openid email` solo para verificar identidad;
 - scopes de recurso estrictamente `spreadsheets.readonly` y `drive.metadata.readonly`;
-- correo de Google verificado y allowlist explícita;
-- lectura y validación completa del Sheet antes de almacenar el refresh token;
-- refresh token almacenado mediante Supabase Vault, no en navegador ni Git;
-- rotación y desconexión sin residuos.
+- correo Google verificado y allowlist explícita;
+- lectura y validación completa del Sheet antes de almacenar refresh token;
+- refresh token en Supabase Vault, nunca en navegador ni Git;
+- rotación/desconexión sin residuos.
 
-La regresión real de Vault con `BEGIN/ROLLBACK` volvió a pasar: `connection_residue=0`, `vault_residue=0`, y `anon`/`authenticated` no tienen permiso de lectura del refresh token.
+La regresión de Vault con `BEGIN/ROLLBACK` terminó previamente con `connection_residue=0` y `vault_residue=0`; `anon` y `authenticated` no tienen permiso para leer el refresh token.
 
-### Diagnóstico de configuración OAuth en preview
+### Configuración Fuente bancaria
 
-El preview del HEAD devuelve `configured=false` y el diagnóstico limitado a preview confirma que faltan las cinco piezas requeridas:
+Implementada y validada en CI para escritorio y móvil:
 
-- `clientId` → `GOOGLE_OAUTH_CLIENT_ID`
-- `clientSecret` → `GOOGLE_OAUTH_CLIENT_SECRET`
-- `redirectUri` → `GOOGLE_OAUTH_REDIRECT_URI`
-- `spreadsheetId` → `GOOGLE_BANK_SOURCE_SPREADSHEET_ID`
-- `allowedEmail` → `GOOGLE_OAUTH_ALLOWED_EMAIL`
+- navegación desde Configuración;
+- estado OAuth/runtime visible;
+- garantía explícita de solo lectura;
+- bloqueo claro mientras falten credenciales;
+- sincronización iniciada únicamente mediante POST real;
+- no muestra éxito hasta recibir confirmación real;
+- relectura del estado persistido tras sincronizar;
+- último sync y cursores visibles;
+- errores de retorno OAuth convertidos en mensajes comprensibles;
+- query de retorno OAuth limpiada de la URL.
 
-El diagnóstico expone únicamente nombres de configuración, nunca valores, y no se muestra en producción.
+## Diagnóstico OAuth real pendiente
 
-## Correcciones realizadas en este tramo
+La última comprobación del entorno preview mostró ausentes estas cinco piezas reales:
 
-1. Corregida la regresión SQL `phase2_incremental_ingestion.sql`, que usaba una referencia ambigua `transaction_id=transaction_id` y por tanto no validaba realmente el motor.
-2. Corregido el lector Google para validar las dos pestañas físicas reales mediante `OFFICIAL_SOURCE_SHEET_TITLES`, en lugar de usar las claves lógicas de producto.
-3. Corregido `SourceSyncService` para separar pestañas físicas de productos lógicos.
-4. Añadida selección autoritativa por pestaña canónica para evitar importar dos veces copias históricas del mismo producto.
-5. Añadida representación de la prepago como ledger técnico archivado con saldo inicial cerrado.
-6. Añadida y aplicada en Supabase la migración `source_account_lifecycle`.
-7. Alineado el nombre/versionado de la migración `sync_cursors_per_sheet` con el historial realmente aplicado en Supabase.
-8. Actualizado el gateway de código para validar y propagar `lifecycle` hasta PostgreSQL.
-9. Añadido diagnóstico seguro, solo en preview, de nombres de configuración OAuth ausentes.
+- `GOOGLE_OAUTH_CLIENT_ID`;
+- `GOOGLE_OAUTH_CLIENT_SECRET`;
+- `GOOGLE_OAUTH_REDIRECT_URI`;
+- `GOOGLE_BANK_SOURCE_SPREADSHEET_ID`;
+- `GOOGLE_OAUTH_ALLOWED_EMAIL`.
 
-## Gates actualmente pendientes
-
-### 1. Runtime Edge Function
-
-La Edge Function activa `financial-app-db-gateway` continúa en la versión 10. El código actualizado del gateway está verde en GitHub, pero el conector de Supabase bloqueó la operación de despliegue antes de aplicarla. No se ha sustituido ni degradado la versión activa.
-
-Por tanto, todavía NO se considera validado que una sincronización real cree la prepago directamente como `archived` a través del runtime desplegado, aunque dominio, CI y PostgreSQL sí están verdes.
-
-### 2. Credenciales OAuth Google reales
-
-No existe en las conexiones disponibles una acción que permita crear credenciales OAuth de Google Cloud ni escribir Environment Variables de Vercel. Las cinco variables anteriores están realmente ausentes en preview y no pueden inventarse ni sustituirse por valores ficticios.
-
-No se debe aumentar Fase 2 por encima del 72% ni fusionar la PR #287 hasta cerrar ambos gates y ejecutar la importación Google real controlada.
+No se inventarán ni sustituirán por valores ficticios. Hasta configurar credenciales reales no puede ejecutarse desde la propia aplicación la primera importación Google controlada.
 
 ## Gates restantes para cerrar Fase 2
 
-- Alinear runtime Edge Function con el contrato `lifecycle` ya validado en código y PostgreSQL.
 - Configurar/verificar las cinco variables OAuth Google reales con scopes estrictamente read-only.
-- Ejecutar lectura real desde la aplicación contra el Google Sheet oficial.
-- Ejecutar primera importación real controlada y contrastar recuentos/productos/saldos.
+- Ejecutar lectura real desde Financial App contra el Google Sheet oficial.
+- Ejecutar primera importación real controlada y exigir los criterios de aceptación de 3.172 filas autoritativas, 3 productos, saldos iniciales y cursores esperados, salvo revisión posterior demostrada del origen.
 - Repetir sincronización y demostrar idempotencia real sin duplicados.
-- Verificar trazabilidad y ausencia de pérdida de modificaciones manuales.
-- Confirmar que la prepago queda archivada y no aparece como cuenta activa ordinaria.
+- Verificar trazabilidad y ausencia de pérdida de modificaciones manuales tras una repetición real.
+- Confirmar en persistencia real que la prepago queda archivada y no aparece como cuenta activa ordinaria.
+- Ejecutar los gates live de preview en cuanto Vercel vuelva a permitir crear el deployment exacto del HEAD.
 - Reejecutar gates de Fase 1 para demostrar ausencia de regresión.
-- Actualizar Gantt final de Fase 2 y cerrar PR solo con todas las evidencias verdes.
+- Actualizar Gantt final de Fase 2 y cerrar PR #287 solo con todas las evidencias verdes.
+
+## Regla de cierre
+
+No se debe fusionar Fase 2 ni declarar 100% mientras falte OAuth/importación real o el gate live del HEAD no haya sido ejecutado. Si un bloqueo externo impide un gate, se continúa avanzando en trabajo verificable independiente, pero el porcentaje permanece congelado hasta obtener evidencia real.

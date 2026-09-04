@@ -3,7 +3,11 @@ import {
   prepareOfficialSourceSyncBatch,
   type OfficialSourceWorkbookSnapshot,
 } from "../../src/application/source-sync-service";
-import { OFFICIAL_BANK_SOURCE_HEADERS, type SourceCellValue } from "../../src/domain/official-bank-source";
+import {
+  OFFICIAL_BANK_SOURCE_HEADERS,
+  parseOfficialSourceRow,
+  type SourceCellValue,
+} from "../../src/domain/official-bank-source";
 
 const currentRow: SourceCellValue[] = [
   "CC-MIXED-1",
@@ -105,6 +109,31 @@ const canonicalSavingsRow: SourceCellValue[] = [
   "Fila canónica de ahorro",
 ];
 
+const reclassifiedPrepaidExpense: SourceCellValue[] = [
+  "TP-00134",
+  "21/08/2026",
+  "12:15",
+  "Cuenta corriente Openbank · 3967",
+  "Openbank",
+  "****3967",
+  "Cuenta bancaria",
+  "Gasto",
+  "Ocio y premios",
+  "Piscina / actividad municipal",
+  "AYUNTAMIENTO DE CORIA",
+  "AYUNTAMIENTO DE CORIA",
+  "Ayuntamiento de Coria",
+  -21,
+  null,
+  "Tarjeta prepago",
+  "Cuenta corriente Openbank · ****3967",
+  null,
+  "Sí",
+  "No",
+  "Compra real efectuada con prepago y reasignada al producto lógico de cuenta corriente.",
+  "Extracto Openbank · tarjeta prepago 8403",
+];
+
 function mixedWorkbook(): OfficialSourceWorkbookSnapshot {
   return {
     sourceFileId: "official-mixed-products-test",
@@ -164,4 +193,21 @@ test("mantiene la prepago como ledger técnico archivado con saldo inicial cerra
     openingBalanceCents: 0,
     sourceIdentifier: "****8403",
   });
+});
+
+test("respeta el producto lógico aunque un ID TP se reasigne a cuenta corriente", () => {
+  const parsed = parseOfficialSourceRow({
+    sourceFileId: "official-reclassified-prepaid-test",
+    sourceSheetId: "725351515",
+    sheetTitle: "Cuenta corriente · 3967",
+    values: reclassifiedPrepaidExpense,
+  });
+
+  expect(parsed.observation.sourceRowKey).toBe("TP-00134");
+  expect(parsed.observation.accountExternalKey).toBe("Cuenta corriente Openbank · 3967");
+  expect(parsed.observation.bankDate).toBe("2026-08-21");
+  expect(parsed.observation.amountCents).toBe(-2100);
+  expect(parsed.observation.balanceAfterCents).toBeNull();
+  expect(parsed.transactionKind).toBe("expense");
+  expect(parsed.physicalSheetTitle).toBe("Cuenta corriente · 3967");
 });
