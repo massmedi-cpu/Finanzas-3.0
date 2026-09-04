@@ -4,6 +4,7 @@ import {
   buildOfficialSourceSchemaFingerprint,
   parseOfficialSourceRow,
   validateOfficialSourceHeaders,
+  type SourceCellValue,
 } from "../domain/official-bank-source";
 
 export type DataQualityCheck = { name: string; passed: boolean };
@@ -14,7 +15,7 @@ export type DataQualityHealth = {
   checks: DataQualityCheck[];
 };
 
-const baseRow = [
+const baseRow: SourceCellValue[] = [
   "CC-TEST-1",
   46267,
   null,
@@ -37,7 +38,7 @@ const baseRow = [
   "No",
   null,
   "Documento de prueba",
-] as const;
+];
 
 function errorCode(callback: () => unknown) {
   try {
@@ -57,7 +58,7 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
     values: baseRow,
   });
 
-  const categoryChanged = [...baseRow];
+  const categoryChanged: SourceCellValue[] = [...baseRow];
   categoryChanged[8] = "Otra categoría";
   const parsedCategoryChanged = parseOfficialSourceRow({
     sourceFileId: "official-source-test",
@@ -66,7 +67,7 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
     values: categoryChanged,
   });
 
-  const reviewRequired = [...baseRow];
+  const reviewRequired: SourceCellValue[] = [...baseRow];
   reviewRequired[19] = "Sí";
   const parsedReviewRequired = parseOfficialSourceRow({
     sourceFileId: "official-source-test",
@@ -75,7 +76,7 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
     values: reviewRequired,
   });
 
-  const transferRow = [...baseRow];
+  const transferRow: SourceCellValue[] = [...baseRow];
   transferRow[7] = "Traspaso interno";
   const parsedTransfer = parseOfficialSourceRow({
     sourceFileId: "official-source-test",
@@ -84,16 +85,16 @@ export function runDataQualityHealthChecks(): DataQualityHealth {
     values: transferRow,
   });
 
-  const badHeaders = [...OFFICIAL_BANK_SOURCE_HEADERS];
+  const badHeaders: unknown[] = [...OFFICIAL_BANK_SOURCE_HEADERS];
   badHeaders[10] = "Concepto";
 
-  const unknownMovement = [...baseRow];
+  const unknownMovement: SourceCellValue[] = [...baseRow];
   unknownMovement[7] = "Tipo nuevo";
 
-  const unsafeMoney = [...baseRow];
+  const unsafeMoney: SourceCellValue[] = [...baseRow];
   unsafeMoney[13] = "1,001";
 
-  const accountMismatch = [...baseRow];
+  const accountMismatch: SourceCellValue[] = [...baseRow];
   accountMismatch[5] = "****9999";
 
   const checks: DataQualityCheck[] = [

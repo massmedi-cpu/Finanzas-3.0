@@ -172,7 +172,9 @@ function decimalStringToCents(value: string, field: OfficialBankSourceHeader) {
   return cents;
 }
 
-function parseMoneyCell(value: SourceCellValue, field: OfficialBankSourceHeader, nullable = false) {
+function parseMoneyCell(value: SourceCellValue, field: OfficialBankSourceHeader): number;
+function parseMoneyCell(value: SourceCellValue, field: OfficialBankSourceHeader, nullable: true): number | null;
+function parseMoneyCell(value: SourceCellValue, field: OfficialBankSourceHeader, nullable = false): number | null {
   if (value === null && nullable) return null;
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
