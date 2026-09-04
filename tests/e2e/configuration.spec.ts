@@ -170,7 +170,7 @@ test.describe("Preview protegido real", () => {
     expect(payload.status).toBe("ok");
     expect(payload.verified).toBe(true);
     expect(payload.clean).toBe(true);
-    expect(payload.residue).toEqual({ accounts: 0, mappings: 0, sources: 0, transactions: 0 });
+    expect(payload.residue).toEqual({ accounts: 0, mappings: 0, sources: 0, transactions: 0, cursors: 0 });
   });
 
   test("persistencia completa y limpieza terminan verdes", async ({ request }) => {
