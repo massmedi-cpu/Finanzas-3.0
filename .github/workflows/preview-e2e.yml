@@ -1,18 +1,19 @@
 name: Preview E2E
 
 on:
-  deployment_status:
+  push:
+    branches:
+      - rebuild/phase-1-foundations
 
 permissions:
   contents: read
 
 jobs:
   protected-preview-e2e:
-    if: github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      VERCEL_PREVIEW_URL: ${{ github.event.deployment_status.target_url }}
+      VERCEL_PREVIEW_URL: https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - name: Detect automation bypass secret
@@ -26,7 +27,7 @@ jobs:
             echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview E2E is pending."
           fi
 
-      - name: Checkout deployment commit
+      - name: Checkout branch commit
         if: steps.bypass.outputs.available == 'true'
         uses: actions/checkout@v6
 
@@ -35,8 +36,6 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: 24
-          cache: npm
-          cache-dependency-path: package.json
 
       - name: Install dependencies
         if: steps.bypass.outputs.available == 'true'
@@ -45,6 +44,25 @@ jobs:
       - name: Install Chromium
         if: steps.bypass.outputs.available == 'true'
         run: npx playwright install --with-deps chromium
+
+      - name: Wait for matching Vercel preview
+        if: steps.bypass.outputs.available == 'true'
+        shell: bash
+        run: |
+          for attempt in $(seq 1 36); do
+            payload=$(curl --silent --show-error --fail \
+              -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+              -H "x-vercel-set-bypass-cookie: true" \
+              "$VERCEL_PREVIEW_URL/api/build" || true)
+            deployed_sha=$(printf '%s' "$payload" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).commit||'')}catch{}})")
+            if [ "$deployed_sha" = "$GITHUB_SHA" ]; then
+              echo "Preview matches commit $GITHUB_SHA"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "The branch preview did not reach commit $GITHUB_SHA."
+          exit 1
 
       - name: Run protected preview E2E
         if: steps.bypass.outputs.available == 'true'
