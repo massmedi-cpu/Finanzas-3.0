@@ -91,6 +91,7 @@ export class SourceWorkbookContractError extends Error {
       | "invalid_workbook_identity"
       | "sheet_set_mismatch"
       | "empty_source_sheet"
+      | "source_order_mismatch"
       | "duplicate_source_row_identity"
       | "opening_balance_unavailable",
     message: string,
@@ -104,6 +105,25 @@ export class SourceWorkbookContractError extends Error {
 
 function sha256(value: string) {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function validateNewestFirstSourceOrder(
+  sourceSheetId: string,
+  sheetTitle: string,
+  rows: readonly ReturnType<typeof parseOfficialSourceRow>[],
+) {
+  for (let index = 1; index < rows.length; index += 1) {
+    const previous = rows[index - 1];
+    const current = rows[index];
+    if (current.observation.bankDate > previous.observation.bankDate) {
+      throw new SourceWorkbookContractError(
+        "source_order_mismatch",
+        `La pestaña “${sheetTitle}” debe conservar el orden de fecha más reciente a más antigua. Se detiene la importación para no calcular un saldo inicial incorrecto.`,
+        sourceSheetId,
+        current.observation.sourceRowKey,
+      );
+    }
+  }
 }
 
 function deriveOpeningBalanceCents(observations: readonly PreparedSourceObservation[]) {
@@ -176,6 +196,7 @@ export function prepareOfficialSourceSyncBatch(
         values,
       }),
     );
+    validateNewestFirstSourceOrder(sheet.sourceSheetId, sheet.title, parsedSheet);
 
     const preparedSheet: PreparedSourceObservation[] = parsedSheet.map((parsed) => {
       if (seenIdentities.has(parsed.sourceRowIdentity)) {
