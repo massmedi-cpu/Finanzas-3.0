@@ -1,3 +1,7 @@
+import {
+  assertSourceSyncRuntimeCapabilities,
+  type SourceSyncRuntimeCapabilities,
+} from "../../../../src/application/source-sync-runtime-contract";
 import { callPersistenceGateway } from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +14,7 @@ type SourceIngestionHealth = {
     mappings: number;
     sources: number;
     transactions: number;
+    cursors: number;
   };
 };
 
@@ -19,6 +24,9 @@ export async function GET() {
   }
 
   try {
+    const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
+    assertSourceSyncRuntimeCapabilities(capabilities);
+
     const result = await callPersistenceGateway<SourceIngestionHealth>("test.source_ingestion");
     const ok =
       result.verified === true &&
@@ -26,10 +34,11 @@ export async function GET() {
       result.residue?.accounts === 0 &&
       result.residue?.mappings === 0 &&
       result.residue?.sources === 0 &&
-      result.residue?.transactions === 0;
+      result.residue?.transactions === 0 &&
+      result.residue?.cursors === 0;
 
     return Response.json(
-      { status: ok ? "ok" : "failed", ...result },
+      { status: ok ? "ok" : "failed", capabilities, ...result },
       {
         status: ok ? 200 : 500,
         headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
