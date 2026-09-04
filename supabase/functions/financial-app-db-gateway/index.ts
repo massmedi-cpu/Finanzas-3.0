@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
+import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleSourceSyncAction } from "./source-sync.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
@@ -191,6 +192,14 @@ Deno.serve(async (req) => {
       await sql`select financial_app.merge_categories(${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid)`;
       return json({ ok: true });
     }
+
+    const googleOauthResponse = await handleGoogleOauthAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (googleOauthResponse) return googleOauthResponse;
 
     const sourceSyncResponse = await handleSourceSyncAction({
       action,
