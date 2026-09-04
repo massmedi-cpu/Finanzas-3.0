@@ -1,24 +1,54 @@
 import { GoogleOauthGateway } from "../../../../../src/infrastructure/google/google-oauth-gateway";
 import {
   GoogleSourceRuntimeConfigurationError,
+  getGoogleAllowedAccountEmail,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
 
 export const dynamic = "force-dynamic";
 
-function configurationStatus() {
+type ConfigurationStatus = {
+  configured: boolean;
+  missing: string[];
+};
+
+async function configurationStatus(): Promise<ConfigurationStatus> {
+  const missing = new Set<string>();
+
   try {
     getGoogleSourceServerConfiguration();
-    return { configured: true as const, missing: [] as string[] };
   } catch (error) {
-    const missing =
-      error instanceof GoogleSourceRuntimeConfigurationError ? error.missing : ["invalid_google_configuration"];
-    return { configured: false as const, missing };
+    if (error instanceof GoogleSourceRuntimeConfigurationError) {
+      for (const item of error.missing) missing.add(item);
+    } else {
+      throw error;
+    }
   }
+
+  try {
+    await getGoogleAllowedAccountEmail();
+  } catch (error) {
+    if (error instanceof GoogleSourceRuntimeConfigurationError) {
+      for (const item of error.missing) missing.add(item);
+    } else {
+      throw error;
+    }
+  }
+
+  return { configured: missing.size === 0, missing: [...missing] };
 }
 
 export async function GET() {
-  const configuration = configurationStatus();
+  let configuration: ConfigurationStatus;
+  try {
+    configuration = await configurationStatus();
+  } catch {
+    return Response.json(
+      { configured: false, connection: null, error: "google_status_unavailable" },
+      { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+    );
+  }
+
   if (!configuration.configured) {
     const previewDiagnostics =
       process.env.VERCEL_ENV === "preview" ? { missing: configuration.missing } : {};

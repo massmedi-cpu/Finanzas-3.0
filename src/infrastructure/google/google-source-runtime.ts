@@ -17,7 +17,6 @@ export class GoogleSourceRuntimeConfigurationError extends Error {
 export type GoogleSourceServerConfiguration = {
   clientId: string;
   clientSecret: string;
-  allowedEmail: string;
 };
 
 export type GoogleOauthRedirectEnvironment = {
@@ -82,17 +81,21 @@ export function getGoogleSourceServerConfiguration(): GoogleSourceServerConfigur
   const values = {
     clientId: process.env.GOOGLE_OAUTH_CLIENT_ID?.trim() ?? "",
     clientSecret: process.env.GOOGLE_OAUTH_CLIENT_SECRET?.trim() ?? "",
-    allowedEmail: process.env.GOOGLE_OAUTH_ALLOWED_EMAIL?.trim().toLowerCase() ?? "",
   };
   const missing = Object.entries(values)
     .filter(([, value]) => !value)
     .map(([key]) => key);
   if (missing.length) throw new GoogleSourceRuntimeConfigurationError(missing);
+  return values;
+}
 
-  if (!values.allowedEmail.includes("@")) {
+export async function getGoogleAllowedAccountEmail(oauth = new GoogleOauthGateway()) {
+  const policy = await oauth.policy();
+  const allowedEmail = policy.allowedEmail?.trim().toLowerCase() ?? "";
+  if (!policy.configured || !allowedEmail || !allowedEmail.includes("@")) {
     throw new GoogleSourceRuntimeConfigurationError(["allowedEmail"]);
   }
-  return values;
+  return allowedEmail;
 }
 
 export function googleSourceServerConfigured() {

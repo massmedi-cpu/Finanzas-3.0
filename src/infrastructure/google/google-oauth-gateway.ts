@@ -25,7 +25,17 @@ export type GoogleConnectionDraft = {
   sourceFileName: string;
 };
 
+export type GoogleSourcePolicy = {
+  configured: boolean;
+  allowedEmail: string | null;
+};
+
 export class GoogleOauthGateway {
+  async policy() {
+    const result = await callPersistenceGateway<{ policy: GoogleSourcePolicy }>("source.google_policy");
+    return result.policy;
+  }
+
   async store(connection: GoogleConnectionDraft) {
     return callPersistenceGateway<{ connected: boolean }>("source.google_connection_store", {
       connection,

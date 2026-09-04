@@ -10,6 +10,7 @@ import {
   GOOGLE_OAUTH_STATE_COOKIE,
   OFFICIAL_GOOGLE_SOURCE_NAME,
   GoogleSourceRuntimeConfigurationError,
+  getGoogleAllowedAccountEmail,
   getGoogleOauthRedirectUri,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
@@ -68,6 +69,8 @@ export async function GET(request: Request) {
     const code = url.searchParams.get("code")?.trim() ?? "";
     if (!code) return callbackRedirect(request, "error", "google_oauth_code_missing");
 
+    const oauth = new GoogleOauthGateway();
+    const allowedEmail = await getGoogleAllowedAccountEmail(oauth);
     const tokens = await exchangeGoogleAuthorizationCode({
       code,
       clientId: configuration.clientId,
@@ -75,7 +78,7 @@ export async function GET(request: Request) {
       redirectUri: getGoogleOauthRedirectUri(request.url),
     });
     const identity = await fetchGoogleUserInfo(tokens.accessToken);
-    if (identity.email !== configuration.allowedEmail) {
+    if (identity.email !== allowedEmail) {
       return callbackRedirect(request, "error", "google_account_not_allowed");
     }
 
@@ -87,7 +90,6 @@ export async function GET(request: Request) {
     const snapshot = await reader.read();
     prepareOfficialSourceSyncBatch(snapshot);
 
-    const oauth = new GoogleOauthGateway();
     const stored = await oauth.store({
       googleSubject: identity.subject,
       accountEmail: identity.email,

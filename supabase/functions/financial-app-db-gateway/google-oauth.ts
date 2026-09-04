@@ -49,6 +49,21 @@ export async function handleGoogleOauthAction(input: {
 }): Promise<Response | null> {
   const { action, payload, sql, environment } = input;
 
+  if (action === "source.google_policy") {
+    const rows = await sql`
+      select allowed_email
+      from financial_app.google_source_policy
+      where id=true
+    `;
+    const allowedEmail = rows[0]?.allowed_email;
+    return json({
+      policy:
+        typeof allowedEmail === "string" && allowedEmail
+          ? { configured: true, allowedEmail }
+          : { configured: false, allowedEmail: null },
+    });
+  }
+
   if (action === "source.google_connection_store") {
     validateConnection(payload.connection);
     const connection = payload.connection;
@@ -105,13 +120,20 @@ export async function handleGoogleOauthAction(input: {
     const baselineRows = await sql`
       select
         (select count(*)::int from financial_app.google_oauth_connections) as connections,
-        (select count(*)::int from vault.secrets where name='financial_app_google_refresh_token') as secrets
+        (select count(*)::int from vault.secrets where name='financial_app_google_refresh_token') as secrets,
+        (select count(*)::int from financial_app.google_source_policy) as policies
     `;
-    const baseline = baselineRows[0] ?? { connections: 0, secrets: 0 };
+    const baseline = baselineRows[0] ?? { connections: 0, secrets: 0, policies: 0 };
     let verified = false;
 
     try {
       await sql.begin(async (tx: any) => {
+        await tx`
+          insert into financial_app.google_source_policy(id,allowed_email)
+          values(true,'phase2-gateway@example.invalid')
+          on conflict(id) do update set allowed_email=excluded.allowed_email,updated_at=now()
+        `;
+
         const stored = await tx`
           select connection_id
           from financial_app.store_google_oauth_connection(
@@ -161,12 +183,14 @@ export async function handleGoogleOauthAction(input: {
       select
         (select count(*)::int from financial_app.google_oauth_connections) as connections,
         (select count(*)::int from vault.secrets where name='financial_app_google_refresh_token') as secrets,
-        (select count(*)::int from financial_app.google_oauth_connections where google_subject='__phase2_gateway_google_subject__') as test_connections
+        (select count(*)::int from financial_app.google_oauth_connections where google_subject='__phase2_gateway_google_subject__') as test_connections,
+        (select count(*)::int from financial_app.google_source_policy) as policies
     `;
     const after = afterRows[0] ?? {};
     const clean =
       after.connections === baseline.connections &&
       after.secrets === baseline.secrets &&
+      after.policies === baseline.policies &&
       after.test_connections === 0;
 
     return json({ verified, clean });
