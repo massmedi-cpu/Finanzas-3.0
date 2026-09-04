@@ -1,4 +1,8 @@
-import { buildOfficialSourcePreflightSummary } from "../../../../../src/application/source-preflight";
+import {
+  OfficialSourceHistoricalBaselineError,
+  assertOfficialSourceHistoricalBaseline,
+  buildOfficialSourcePreflightSummary,
+} from "../../../../../src/application/source-preflight";
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
 import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import { GoogleOauthError } from "../../../../../src/infrastructure/google/google-oauth";
@@ -29,7 +33,7 @@ export async function POST() {
 
     const runtime = createGoogleSourceRuntime(connection.source_file_id);
     const snapshot = await runtime.reader.read();
-    const summary = buildOfficialSourcePreflightSummary(snapshot);
+    const summary = assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
 
     return Response.json(summary, { headers: HEADERS });
   } catch (error) {
@@ -50,6 +54,12 @@ export async function POST() {
     }
     if (error instanceof GoogleOfficialSourceReadError && error.code === "source_changed_during_read") {
       return Response.json({ error: "google_source_changed_during_read" }, { status: 409, headers: HEADERS });
+    }
+    if (error instanceof OfficialSourceHistoricalBaselineError) {
+      return Response.json(
+        { error: "google_source_historical_regression", code: error.code },
+        { status: 422, headers: HEADERS },
+      );
     }
     if (error instanceof SourceWorkbookContractError || error instanceof OfficialSourceContractError) {
       return Response.json(
