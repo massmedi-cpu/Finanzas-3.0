@@ -36,11 +36,11 @@ function routeConnectedStatus(page: Page) {
   );
 }
 
-async function routeEmptySyncStatus(page: Page, postError: string) {
+async function routeEmptySyncStatus(page: Page, postError: string, postStatus = 409) {
   await page.route("**/api/source/google/sync", async (route) => {
     if (route.request().method() === "POST") {
       await route.fulfill({
-        status: 409,
+        status: postStatus,
         contentType: "application/json",
         body: JSON.stringify({ error: postError }),
       });
@@ -82,6 +82,24 @@ test("si la conexión desaparece durante la sincronización exige reconectar y n
   await expect(page.locator(".config-message.error")).toContainText(
     "Google ya no está conectado. Vuelve a autorizar la fuente.",
   );
+  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
+});
+
+test("un fallo temporal al renovar OAuth pide reintentar sin fingir desconexión ni éxito", async ({ page }) => {
+  await routeRuntime(page);
+  await routeConnectedStatus(page);
+  await routeEmptySyncStatus(page, "google_oauth_refresh_unavailable", 503);
+
+  await page.goto("/configuration/source");
+  await expect(page.getByText("alberto@example.test")).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar desde Google" }).click();
+
+  const alert = page.locator(".config-message.error");
+  await expect(alert).toContainText("Google no ha podido renovar temporalmente la autorización");
+  await expect(alert).toContainText("Vuelve a intentarlo");
+  await expect(page.getByText("alberto@example.test")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Desconectar Google" })).toBeVisible();
   await expect(page.getByRole("status")).toHaveCount(0);
   await expect(page.getByText("Todavía no existe una sincronización real persistida para esta fuente.")).toBeVisible();
 });
