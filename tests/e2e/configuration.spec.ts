@@ -90,7 +90,7 @@ test.describe("Configuración interactiva sin residuos", () => {
     await page.getByLabel("Nombre").fill("Cuenta inválida de prueba");
     await page.getByLabel(/Saldo inicial/).fill("1,234.56");
     await page.getByRole("button", { name: "Crear cuenta" }).click();
-    await expect(page.getByRole("alert")).toContainText("formato español");
+    await expect(page.locator(".config-message.error")).toContainText("formato español");
   });
 
   test("no ofrece jerarquías ni fusiones imposibles", async ({ page }) => {
