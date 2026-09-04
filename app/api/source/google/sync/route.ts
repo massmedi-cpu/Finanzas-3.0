@@ -4,7 +4,9 @@ import {
   type SourceSyncRuntimeCapabilities,
 } from "../../../../../src/application/source-sync-runtime-contract";
 import { GoogleOauthError } from "../../../../../src/infrastructure/google/google-oauth";
+import { GoogleOauthGateway } from "../../../../../src/infrastructure/google/google-oauth-gateway";
 import {
+  OFFICIAL_GOOGLE_SOURCE_NAME,
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
   getGoogleSourceServerConfiguration,
@@ -45,11 +47,36 @@ type GatewaySourceStatus = {
   }>;
 };
 
+function connectionMatchesContract(
+  connection: { account_email: string; source_file_name: string },
+  allowedEmail: string,
+) {
+  return (
+    connection.account_email.toLowerCase() === allowedEmail &&
+    connection.source_file_name === OFFICIAL_GOOGLE_SOURCE_NAME
+  );
+}
+
 export async function GET() {
   try {
     const configuration = getGoogleSourceServerConfiguration();
+    const oauth = new GoogleOauthGateway();
+    const connection = await oauth.status();
+    if (!connection) {
+      return Response.json(
+        { run: null, cursors: [] },
+        { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (!connectionMatchesContract(connection, configuration.allowedEmail)) {
+      return Response.json(
+        { error: "google_connection_contract_mismatch" },
+        { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+
     const status = await callPersistenceGateway<GatewaySourceStatus>("source.status", {
-      sourceFileId: configuration.spreadsheetId,
+      sourceFileId: connection.source_file_id,
     });
 
     return Response.json(
@@ -100,28 +127,27 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const runtime = createGoogleSourceRuntime();
+    const configuration = getGoogleSourceServerConfiguration();
+    const oauth = new GoogleOauthGateway();
 
     const capabilities = await callPersistenceGateway<SourceSyncRuntimeCapabilities>("source.capabilities");
     assertSourceSyncRuntimeCapabilities(capabilities);
 
-    const connection = await runtime.oauth.status();
+    const connection = await oauth.status();
     if (!connection) {
       return Response.json(
         { error: "google_oauth_not_connected" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
-    if (
-      connection.source_file_id !== runtime.configuration.spreadsheetId ||
-      connection.account_email.toLowerCase() !== runtime.configuration.allowedEmail
-    ) {
+    if (!connectionMatchesContract(connection, configuration.allowedEmail)) {
       return Response.json(
         { error: "google_connection_contract_mismatch" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
 
+    const runtime = createGoogleSourceRuntime(connection.source_file_id);
     const snapshot = await runtime.reader.read();
     const result = await runtime.synchronization.synchronize(snapshot);
     await runtime.oauth.markVerified();
