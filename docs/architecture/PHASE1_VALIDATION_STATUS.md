@@ -12,7 +12,7 @@ Este documento es acumulativo y complementa `FOUNDATIONS.md`. Registra únicamen
 - Avance ponderado del proyecto completo: **7,84%**.
 - Fases 2–13: no iniciadas y no contabilizadas.
 
-El 2% restante se reserva exclusivamente para ejecutar y registrar el Live E2E sobre el preview protegido real de Vercel.
+El 2% restante se reserva exclusivamente para ejecutar y registrar el roundtrip completo y el Live E2E sobre el preview protegido real de Vercel. Las validaciones parciales del último gate no incrementan artificialmente el porcentaje.
 
 ## Estado protegido del proyecto
 
@@ -91,22 +91,22 @@ Security Advisor tras el último DDL: **0 lints**.
 
 Última ejecución funcional validada antes de esta actualización documental:
 
-- commit: `0134d63db983f1a88c9924159f83dcedca6042da`;
-- run: `33852713990`;
+- commit: `33a4cc88cc96519e4f011314c631a41db8038d5e`;
+- run: `33852899362`;
 - `browser-interaction-e2e`: **success**;
 - Node 24;
 - `npm ci --ignore-scripts --no-audit --no-fund`;
 - Chromium desktop + mobile;
 - `protected-preview-access`: **success** como sonda de disponibilidad;
-- `protected-preview-live`: **skipped**, correctamente, porque todavía no existe un método de acceso autorizado.
+- `protected-preview-live`: **skipped**, correctamente, porque todavía no existe un método de acceso automatizado autorizado.
 
 El E2E interactivo valida `/configuration`, hidratación real, formato monetario español, rechazo de entrada anglosajona, restricciones de jerarquía/fusión/ciclo de vida y ausencia de scroll horizontal.
 
-La suite live exige actualmente al menos **36 controles de Fundamentos** y exactamente **10 controles de persistencia**.
+La suite live exige **36 controles de Fundamentos** y exactamente **10 controles de persistencia completa**.
 
 ## CI de acceso al preview protegido
 
-El workflow ya soporta automáticamente los dos mecanismos oficiales previstos:
+El workflow soporta automáticamente los dos mecanismos oficiales previstos:
 
 1. `VERCEL_AUTOMATION_BYPASS_SECRET` mediante `x-vercel-protection-bypass`.
 2. GitHub Actions OIDC mediante `x-vercel-trusted-oidc-idp-token` cuando GitHub esté autorizado como Trusted Source en Vercel.
@@ -115,18 +115,55 @@ La sonda `protected-preview-access` genera un token OIDC efímero, no lo imprime
 
 En cuanto uno de los métodos sea válido, el workflow continúa automáticamente sin cambios de código: checkout del SHA, Node, dependencias, Chromium, espera del SHA exacto y Playwright live.
 
-## Vercel
+## Vercel — evidencia live verificada
 
-Deployment validado para `0134d63db983f1a88c9924159f83dcedca6042da`:
+Deployment exacto utilizado:
 
-- deployment: `dpl_G1JKjw6xuKBEoqH4D7MtkunfjgEX`;
+- commit: `33a4cc88cc96519e4f011314c631a41db8038d5e`;
+- deployment: `dpl_63vawct2YAi6kXHDvUfTuptwpFvB`;
 - estado: **READY**;
-- branch alias correcto;
+- branch alias correcto.
+
+### Build
+
 - Next.js 16.3.1;
-- compilación: correcta;
-- TypeScript: correcto;
-- generación estática: **4/4**;
+- compilación correcta;
+- TypeScript correcto;
+- generación estática **4/4**;
 - deployment completado sin error.
+
+### `/api/health/foundations`
+
+Ejecutado contra la URL exacta del deployment protegido:
+
+- HTTP **200**;
+- `status = ok`;
+- `passed = 36`;
+- `total = 36`;
+- los 36 controles devolvieron `passed = true`.
+
+Esto valida en vivo el núcleo de Fundamentos sobre el artefacto desplegado, no solo durante build o pruebas locales.
+
+### `/api/health/persistence`
+
+Ejecutado contra la misma URL exacta del deployment protegido:
+
+- HTTP **200**;
+- `status = ok`;
+- `database = true`;
+- `environment = preview`;
+- `connection = vercel-oidc-to-supabase-edge-to-postgres`.
+
+Esto demuestra en vivo el trayecto real **Vercel → OIDC → Supabase Edge Gateway v6 → PostgreSQL**.
+
+### `/api/health/configuration-persistence`
+
+Todavía no se contabiliza como superado:
+
+- la ruta requiere el flujo SSO protegido;
+- el conector actual recibe HTTP **302** hacia Vercel SSO y no conserva la cookie entre redirects para esta ruta;
+- incluso los enlaces temporales generados para la URL exacta siguen requiriendo esa cookie;
+- por tanto no se afirma ni se registra un resultado 10/10 que no haya sido observado realmente.
 
 No se ha desactivado Vercel Authentication.
 
@@ -135,26 +172,25 @@ No se ha desactivado Vercel Authentication.
 - `VERCEL_AUTOMATION_BYPASS_SECRET`: no configurado en GitHub Actions.
 - GitHub genera correctamente un token OIDC efímero.
 - Vercel todavía no acepta ese OIDC para atravesar Deployment Protection porque GitHub Actions no está autorizado como Trusted Source en el proyecto.
-- El conector de Vercel disponible permite consultar proyecto, deployments, logs y enlaces temporales, pero no expone una acción de escritura para crear el bypass ni configurar Trusted Sources.
-- Los enlaces temporales de Vercel no sirven para este E2E automatizado desde el conector actual porque el flujo SSO requiere conservar una cookie de sesión entre redirects.
+- El conector de Vercel permite consultar proyecto, deployments, logs y generar enlaces temporales, pero no expone una acción de escritura para crear el bypass ni configurar Trusted Sources.
+- El entorno Chromium disponible no tiene resolución DNS externa, por lo que no puede sustituir este gate mediante navegador local contra Internet.
 
 ## Único gate pendiente
 
-Para cerrar Fase 1 falta ejecutar realmente `protected-preview-live` y confirmar:
+Para cerrar Fase 1 ya no falta demostrar el build, los 36 Fundamentos ni la conectividad PostgreSQL. Falta ejecutar realmente:
 
-1. SHA exacto del preview protegido;
-2. `/api/health/foundations` con todos sus controles verdes;
-3. `/api/health/configuration-persistence` con sus 10 controles verdes;
-4. Playwright desktop + mobile sobre ese preview;
-5. limpieza final sin residuos.
+1. `/api/health/configuration-persistence` con **10/10** y su limpieza final;
+2. Playwright desktop + mobile contra el preview protegido del SHA exacto.
 
 Vías válidas:
 
 - configurar de forma segura `VERCEL_AUTOMATION_BYPASS_SECRET`; o
 - autorizar GitHub Actions como Trusted Source en Vercel.
 
+El CI detectará automáticamente cualquiera de las dos opciones y continuará el gate sin nuevos cambios de código.
+
 No son válidos: desactivar SSO, publicar secretos, aceptar un 302 como éxito, marcar el Live E2E como verde cuando está omitido ni fusionar el PR antes del gate.
 
 ## Continuidad
 
-Siguiente acción exacta: habilitar uno de los dos mecanismos oficiales de acceso automatizado al preview protegido. El CI ya está preparado para detectarlo y ejecutar automáticamente el Live E2E. Solo si ese job queda realmente verde y no hay residuos se marcará Fase 1 al 100%, el total al 8,00%, se sacará el PR #286 de Draft y se habilitará Fase 2.
+Siguiente acción exacta: habilitar uno de los dos mecanismos oficiales de acceso automatizado al preview protegido. Solo si el roundtrip de persistencia da realmente 10/10, Playwright protegido queda verde y no hay residuos se marcará Fase 1 al 100%, el total al 8,00%, se sacará el PR #286 de Draft y se habilitará Fase 2.
