@@ -162,7 +162,7 @@ export function validateCategoryHierarchy(
 
 export function validateCategoryMerge(
   source: Pick<Category, "id" | "kind">,
-  target: Pick<Category, "id" | "kind" | "parentCategoryId">,
+  target: Pick<Category, "id" | "kind" | "parentCategoryId" | "lifecycle">,
   categories: ReadonlyArray<Pick<Category, "id" | "parentCategoryId">> = [],
 ): ValidationIssue[] {
   if (source.id === target.id) {
@@ -171,6 +171,16 @@ export function validateCategoryMerge(
         field: "targetCategoryId",
         code: "same_category",
         message: "La categoría de destino debe ser distinta de la categoría de origen.",
+      },
+    ];
+  }
+
+  if (target.lifecycle !== "active") {
+    return [
+      {
+        field: "targetCategoryId",
+        code: "merge_target_archived",
+        message: "La categoría de destino de una fusión debe estar activa.",
       },
     ];
   }
