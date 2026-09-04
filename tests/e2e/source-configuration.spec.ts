@@ -27,7 +27,7 @@ test.describe("Configuración · Fuente bancaria", () => {
         body: JSON.stringify({
           configured: false,
           connection: null,
-          missing: ["clientId", "clientSecret", "allowedEmail"],
+          missing: ["clientId", "clientSecret"],
         }),
       }),
     );
@@ -39,7 +39,7 @@ test.describe("Configuración · Fuente bancaria", () => {
     await expect(page.getByText("Compatible · contrato v2")).toBeVisible();
     await expect(page.getByText("Cliente OAuth de Google")).toBeVisible();
     await expect(page.getByText("Secreto OAuth de Google")).toBeVisible();
-    await expect(page.getByText("Cuenta Google autorizada")).toBeVisible();
+    await expect(page.getByText("Cuenta Google autorizada")).toHaveCount(0);
     await expect(page.getByText("URL de retorno OAuth")).toHaveCount(0);
     await expect(page.getByText("ID del Google Sheet oficial")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
