@@ -1,6 +1,7 @@
 import {
   validateAccountReorder,
   validateCategoryHierarchy,
+  validateCategoryMerge,
   validateCategoryReorder,
 } from "../domain/configuration-policies";
 import type { Account, Category } from "../domain/models";
@@ -80,6 +81,15 @@ export function runConfigurationIntegrityChecks(): FoundationCheck[] {
     1,
     "archived",
   );
+  const mergeSource = category("category-merge-source", "expense", null, 0);
+  const mergeActiveTarget = category("category-merge-active-target", "expense", null, 1);
+  const mergeArchivedTarget = category(
+    "category-merge-archived-target",
+    "expense",
+    null,
+    2,
+    "archived",
+  );
 
   return [
     {
@@ -146,6 +156,22 @@ export function runConfigurationIntegrityChecks(): FoundationCheck[] {
       passed: validateCategoryHierarchy(
         lifecycleArchivedChild,
         [lifecycleParent, lifecycleArchivedChild],
+      ).length === 0,
+    },
+    {
+      name: "category-merge-rejects-archived-target",
+      passed: validateCategoryMerge(
+        mergeSource,
+        mergeArchivedTarget,
+        [mergeSource, mergeArchivedTarget],
+      ).some((issue) => issue.code === "merge_target_archived"),
+    },
+    {
+      name: "category-merge-allows-active-target",
+      passed: validateCategoryMerge(
+        mergeSource,
+        mergeActiveTarget,
+        [mergeSource, mergeActiveTarget],
       ).length === 0,
     },
   ];
