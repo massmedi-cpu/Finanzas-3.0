@@ -10,6 +10,7 @@
 - Supabase dedicado: `financial-app` (`btzukbfesxdratqnxuoj`) en `eu-west-3`
 - Persistencia física: creada y validada sobre el proyecto Supabase dedicado
 - Persistencia de Configuración: repositorios PostgreSQL + servicio de aplicación + gateway OIDC + API + UI implementados y compilados
+- E2E protegido: harness Playwright y workflow de rama implementados; ejecución live pendiente exclusivamente del Automation Bypass de Vercel
 
 ## Principios ya materializados en código y base de datos
 
@@ -36,6 +37,9 @@
 21. La API de Configuración valida entrada desconocida antes del dominio: operación, forma exacta, UUID, booleanos exactos, enums, enteros seguros y listas sin duplicados.
 22. El endpoint no usa coerciones ambiguas como `Boolean("false")`; una petición con tipo incorrecto se rechaza antes de persistir.
 23. El tipo de una categoría no puede cambiar si dejaría subcategorías de un tipo distinto; esta invariante se aplica tanto en dominio como en PostgreSQL.
+24. La validación E2E del preview no rebaja SSO: usa el mecanismo oficial `x-vercel-protection-bypass` y solo ejecuta pruebas live cuando existe un secreto de Automation Bypass.
+25. El workflow E2E espera a que `/api/build` devuelva exactamente el mismo SHA que el commit de GitHub antes de probar el preview, evitando validar un despliegue anterior por carrera de CI.
+26. Las pruebas de interacción de Configuración usan respuestas controladas para no ensuciar PostgreSQL; la persistencia real se valida por separado mediante el health check de roundtrip con limpieza automática.
 
 ## Fuente lógica de verdad
 
@@ -115,6 +119,8 @@ La exposición directa está cerrada porque `anon` y `authenticated` no tienen u
 
 El acceso Vercel → Supabase está materializado como canal server-only mediante OIDC efímero firmado por Vercel hacia `financial-app-db-gateway`. La función valida emisor, audiencia, equipo, proyecto, entorno y subject antes de abrir PostgreSQL; la URL de base de datos vive en el entorno privado de la Edge Function y no en Git ni en el cliente.
 
+El E2E de preview tampoco desactiva Vercel Authentication. `playwright.config.ts` exige `VERCEL_AUTOMATION_BYPASS_SECRET` cuando el destino es `*.vercel.app` y envía exclusivamente los headers oficiales de bypass para automatización.
+
 ## Rendimiento
 
 El Performance Advisor detectó inicialmente claves foráneas sin índice. Se corrigieron mediante `index_foreign_keys`. La repetición del advisor ya no muestra FKs sin cubrir; solo informa de índices todavía no usados, normal en una base recién creada y sin datos reales. No se eliminan prematuramente esos índices solo por no haber acumulado uso todavía.
@@ -139,19 +145,31 @@ Implementado:
 
 ## Validación de aplicación
 
-La suite automática completa contiene **26 comprobaciones**: 20 invariantes base de Fundamentos, 5 controles del contrato de API y 1 regresión específica que impide separar el tipo de una categoría del tipo de sus subcategorías. La home usa esta suite durante prerender y aborta la build si cualquier control falla.
+La suite automática de build contiene **26 comprobaciones**: 20 invariantes base de Fundamentos, 5 controles del contrato de API y 1 regresión específica que impide separar el tipo de una categoría del tipo de sus subcategorías. La home usa esta suite durante prerender y aborta la build si cualquier control falla.
 
-Último bloque funcional validado:
+También está implementado el harness `tests/e2e/configuration.spec.ts` con Playwright para:
 
-- commit: `87e808f8fffa5cb5fc0b813c4939995569ed973c`;
-- deployment preview: `dpl_eEJCLRUrgNdeyDuomPMRJb8zxJKa`;
+- verificar navegación y formato monetario español;
+- comprobar que la UI no ofrece jerarquías ni fusiones imposibles;
+- comprobar ausencia de scroll horizontal en escritorio y móvil;
+- consultar `/api/health/foundations` en el preview real;
+- ejecutar `/api/health/configuration-persistence`, que realiza alta, edición, archivo, orden, fusión, relectura y limpieza de los datos temporales.
+
+El workflow `.github/workflows/preview-e2e.yml` se dispara con cada `push` a `rebuild/phase-1-foundations`, espera al SHA exacto mediante `/api/build` y ejecuta los proyectos `chromium-desktop` y `chromium-mobile` cuando el secreto de bypass está disponible.
+
+Último bloque compilado y desplegado:
+
+- commit: `b8bcf8587e663886f2424fb83f2f06bf12e3a628`;
+- deployment preview: `dpl_Dz7tLqG96sFGtuUiKqzXqiEc6Tbf`;
 - estado Vercel: `READY`;
 - Next.js 16.3.1: compilación correcta;
 - TypeScript: correcto;
 - generación estática: 4/4 correcta;
 - rutas incluidas: `/`, `/configuration`, `/api/configuration`, `/api/health/foundations`, `/api/health/persistence`, `/api/health/configuration-persistence`.
 
-La protección SSO del preview sigue impidiendo completar desde esta sesión una navegación interactiva real con conservación de cookie. No se desactiva la protección para facilitar una prueba. Por tanto, no se declara todavía cerrada la validación interactiva del preview.
+GitHub Actions ha confirmado que el workflow de rama sí se dispara. La ejecución `33835088785` detectó que `VERCEL_AUTOMATION_BYPASS_SECRET` todavía no está configurado y, por diseño seguro, dejó los pasos de Playwright en `skipped`. Por tanto, **no se considera todavía ejecutado el E2E live**.
+
+La integración Vercel disponible en esta sesión permite inspección, despliegues y enlaces temporales compartibles, pero no expone una acción autenticada para generar/configurar el Automation Bypass ni para escribir el secreto de GitHub. No se inventa ni se almacena ningún secreto en el repositorio.
 
 ## Responsive base
 
@@ -165,11 +183,12 @@ Breakpoints compartidos:
 - 1440 px escritorio
 - 1728 px pantalla ancha
 
-El harness ya comprobó ausencia de scroll horizontal, controles de al menos 44 px y lectura/labels de 16/14 px en la matriz prevista. Falta únicamente la interacción real completa contra el preview protegido para considerar cerrado el criterio final de Fase 1.
+El harness de Fundamentos ya comprobó ausencia de scroll horizontal, controles de al menos 44 px y lectura/labels de 16/14 px en la matriz prevista. Playwright amplía esta puerta con ejecución real de Chromium desktop y móvil cuando el preview protegido pueda atravesarse mediante Automation Bypass.
 
 ## Siguiente bloque de Fase 1
 
 1. Mantener todas las suites verdes y sin residuos de prueba.
-2. Completar la validación interactiva real de `/configuration` contra el preview protegido cuando exista una sesión de navegador que conserve el SSO de Vercel.
-3. Solo entonces cerrar Fase 1 y pasar a Fase 2.
-4. Seguir sin iniciar Inicio ni OCR antes de sus fases oficiales.
+2. Configurar de forma segura el Automation Bypass de Vercel y disponibilizarlo al workflow como `VERCEL_AUTOMATION_BYPASS_SECRET`, sin escribirlo en Git ni exponerlo al cliente.
+3. Ejecutar el workflow E2E contra el SHA exacto del preview y exigir éxito en desktop + móvil + health checks de persistencia.
+4. Solo entonces cerrar Fase 1 y pasar a Fase 2.
+5. Seguir sin iniciar Inicio ni OCR antes de sus fases oficiales.
