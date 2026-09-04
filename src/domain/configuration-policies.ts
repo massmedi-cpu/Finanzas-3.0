@@ -5,6 +5,11 @@ function normalizedLabel(value: string) {
   return value.trim().replace(/\s+/g, " ").toLocaleLowerCase("es-ES");
 }
 
+type CategoryHierarchyNode = Pick<
+  Category,
+  "id" | "kind" | "parentCategoryId" | "lifecycle"
+>;
+
 export function validateAccountUniqueness(
   candidate: Pick<Account, "id" | "name">,
   accounts: ReadonlyArray<Pick<Account, "id" | "name">>,
@@ -50,9 +55,24 @@ export function validateCategoryUniqueness(
 }
 
 export function validateCategoryHierarchy(
-  candidate: Pick<Category, "id" | "kind" | "parentCategoryId">,
-  categories: ReadonlyArray<Pick<Category, "id" | "kind" | "parentCategoryId">>,
+  candidate: CategoryHierarchyNode,
+  categories: ReadonlyArray<CategoryHierarchyNode>,
 ): ValidationIssue[] {
+  const activeChild = categories.some(
+    (category) =>
+      category.parentCategoryId === candidate.id && category.lifecycle === "active",
+  );
+
+  if (candidate.lifecycle === "archived" && activeChild) {
+    return [
+      {
+        field: "lifecycle",
+        code: "active_child_requires_active_parent",
+        message: "No se puede archivar una categoría mientras tenga subcategorías activas.",
+      },
+    ];
+  }
+
   const incompatibleChild = categories.some(
     (category) =>
       category.parentCategoryId === candidate.id &&
@@ -96,6 +116,16 @@ export function validateCategoryHierarchy(
     ];
   }
 
+  if (candidate.lifecycle === "active" && parent.lifecycle !== "active") {
+    return [
+      {
+        field: "parentCategoryId",
+        code: "parent_archived",
+        message: "Una categoría activa necesita una categoría superior activa.",
+      },
+    ];
+  }
+
   if (parent.kind !== candidate.kind) {
     return [
       {
@@ -107,7 +137,7 @@ export function validateCategoryHierarchy(
   }
 
   const visited = new Set<EntityId>([candidate.id]);
-  let cursor: Pick<Category, "id" | "kind" | "parentCategoryId"> | undefined = parent;
+  let cursor: CategoryHierarchyNode | undefined = parent;
 
   while (cursor) {
     if (visited.has(cursor.id)) {
