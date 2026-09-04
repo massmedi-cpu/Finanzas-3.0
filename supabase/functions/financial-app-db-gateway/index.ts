@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
+import { handleSourceSyncAction } from "./source-sync.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
 const TEAM_ID = "team_xrSskbkRKwQkyYc0vvLVGUnb";
@@ -190,6 +191,14 @@ Deno.serve(async (req) => {
       await sql`select financial_app.merge_categories(${payload.sourceCategoryId}::uuid,${payload.targetCategoryId}::uuid)`;
       return json({ ok: true });
     }
+
+    const sourceSyncResponse = await handleSourceSyncAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (sourceSyncResponse) return sourceSyncResponse;
 
     return json({ error: "unsupported_action" }, 400);
   } catch (error) {
