@@ -6,6 +6,7 @@ const moneyFormatter = new Intl.NumberFormat(REGIONAL_CONFIG.locale, {
   currencyDisplay: "symbol",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const integerFormatter = new Intl.NumberFormat(REGIONAL_CONFIG.locale, {
