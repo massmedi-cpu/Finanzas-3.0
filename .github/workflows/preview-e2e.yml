@@ -42,53 +42,49 @@ jobs:
   protected-preview-live:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
     env:
       VERCEL_PREVIEW_URL: https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
-      - name: Generate trusted GitHub OIDC token
-        id: oidc
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const token = await core.getIDToken();
-            core.setSecret(token);
-            core.setOutput('token', token);
+      - name: Detect automation bypass secret
+        id: bypass
+        shell: bash
+        run: |
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview live checks remain pending."
+          fi
 
       - name: Checkout branch commit
+        if: steps.bypass.outputs.available == 'true'
         uses: actions/checkout@v6
 
       - name: Setup Node.js 24
+        if: steps.bypass.outputs.available == 'true'
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
 
       - name: Install dependencies
+        if: steps.bypass.outputs.available == 'true'
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Chromium
+        if: steps.bypass.outputs.available == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Wait for matching Vercel preview
-        env:
-          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        if: steps.bypass.outputs.available == 'true'
         shell: bash
         run: |
           for attempt in $(seq 1 36); do
-            if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
-              payload=$(curl --silent --show-error --fail \
-                -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
-                -H "x-vercel-set-bypass-cookie: true" \
-                "$VERCEL_PREVIEW_URL/api/build" || true)
-            else
-              payload=$(curl --silent --show-error --fail \
-                -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
-                "$VERCEL_PREVIEW_URL/api/build" || true)
-            fi
+            payload=$(curl --silent --show-error --fail \
+              -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+              -H "x-vercel-set-bypass-cookie: true" \
+              "$VERCEL_PREVIEW_URL/api/build" || true)
             deployed_sha=$(printf '%s' "$payload" | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{try{process.stdout.write(JSON.parse(s).commit||'')}catch{}})")
             if [ "$deployed_sha" = "$GITHUB_SHA" ]; then
               echo "Preview matches commit $GITHUB_SHA"
@@ -100,12 +96,11 @@ jobs:
           exit 1
 
       - name: Run protected preview live E2E
-        env:
-          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        if: steps.bypass.outputs.available == 'true'
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
-        if: failure()
+        if: failure() && steps.bypass.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: playwright-protected-preview-report
