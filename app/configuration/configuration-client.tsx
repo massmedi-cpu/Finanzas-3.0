@@ -196,6 +196,24 @@ export default function ConfigurationClient() {
     ).length === 0;
   }
 
+  function hasActiveCategoryChildren(categoryId: EntityId) {
+  return data.categories.some(
+    (item) => item.parentCategoryId === categoryId && item.lifecycle === "active",
+  );
+}
+
+function canToggleCategoryLifecycle(category: Category) {
+  if (category.lifecycle === "active") {
+    return !hasActiveCategoryChildren(category.id);
+  }
+  if (!category.parentCategoryId) {
+    return true;
+  }
+  return data.categories.some(
+    (item) => item.id === category.parentCategoryId && item.lifecycle === "active",
+  );
+}
+
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
     setError(null);
@@ -337,7 +355,7 @@ export default function ConfigurationClient() {
                     <button type="button" className="icon-button" onClick={() => beginCategoryEdit(category)} aria-label={`Editar ${category.name}`}><Icon name="edit" /></button>
                     <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, -1)} onClick={() => void reorderCategories(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
                     <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, 1)} onClick={() => void reorderCategories(index, 1)} aria-label="Bajar dentro de su grupo"><Icon name="down" /></button>
-                    <button type="button" className="icon-button" disabled={busy} onClick={() => void run(() => requestConfiguration("category.archive", { id: category.id, archived: category.lifecycle === "active" }).then(() => undefined), category.lifecycle === "active" ? "Categoría archivada." : "Categoría reactivada.")} aria-label={category.lifecycle === "active" ? "Archivar" : "Reactivar"}><Icon name="archive" /></button>
+                    <button type="button" className="icon-button" disabled={busy || !canToggleCategoryLifecycle(category)} onClick={() => void run(() => requestConfiguration("category.archive", { id: category.id, archived: category.lifecycle === "active" }).then(() => undefined), category.lifecycle === "active" ? "Categoría archivada." : "Categoría reactivada.")} aria-label={category.lifecycle === "active" ? "Archivar" : "Reactivar"}><Icon name="archive" /></button>
                   </div>
                 </article>)}
               </div>
