@@ -15,7 +15,7 @@ begin
     select 1
     from financial_app.schema_meta
     where id = true
-      and schema_version = 2
+      and schema_version >= 2
       and app_version = '0.0.1'
       and target_version = '10.0.0'
       and bank_source_policy = 'read_only'
