@@ -62,7 +62,10 @@ export type SourceSyncBatchResult = {
   rowsInserted: number;
   rowsRevised: number;
   rowsSkipped: number;
+  rowsMissing: number;
   duplicatesDetected: number;
+  warningsCount: number;
+  cursorsAdvanced: number;
 };
 
 export type SourceSyncFailure = {
