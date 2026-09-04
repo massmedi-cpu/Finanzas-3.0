@@ -9,6 +9,8 @@ type CategoryHierarchyNode = Pick<
   Category,
   "id" | "kind" | "parentCategoryId" | "lifecycle"
 >;
+type CategoryHierarchyCandidate = Pick<Category, "id" | "kind" | "parentCategoryId"> &
+  Partial<Pick<Category, "lifecycle">>;
 
 export function validateAccountUniqueness(
   candidate: Pick<Account, "id" | "name">,
@@ -55,15 +57,16 @@ export function validateCategoryUniqueness(
 }
 
 export function validateCategoryHierarchy(
-  candidate: CategoryHierarchyNode,
+  candidate: CategoryHierarchyCandidate,
   categories: ReadonlyArray<CategoryHierarchyNode>,
 ): ValidationIssue[] {
+  const candidateLifecycle = candidate.lifecycle ?? "active";
   const activeChild = categories.some(
     (category) =>
       category.parentCategoryId === candidate.id && category.lifecycle === "active",
   );
 
-  if (candidate.lifecycle === "archived" && activeChild) {
+  if (candidateLifecycle === "archived" && activeChild) {
     return [
       {
         field: "lifecycle",
@@ -116,7 +119,7 @@ export function validateCategoryHierarchy(
     ];
   }
 
-  if (candidate.lifecycle === "active" && parent.lifecycle !== "active") {
+  if (candidateLifecycle === "active" && parent.lifecycle !== "active") {
     return [
       {
         field: "parentCategoryId",
