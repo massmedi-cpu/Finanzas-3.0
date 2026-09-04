@@ -2,13 +2,23 @@ import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.VERCEL_PREVIEW_URL ?? "http://localhost:3000";
 const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
+const trustedOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
 const isProtectedPreview = /^https:\/\/.*\.vercel\.app\/?$/i.test(baseURL);
 
-if (isProtectedPreview && !bypassSecret) {
+if (isProtectedPreview && !bypassSecret && !trustedOidcToken) {
   throw new Error(
-    "VERCEL_AUTOMATION_BYPASS_SECRET is required for protected Vercel preview E2E tests.",
+    "A Vercel automation bypass secret or trusted OIDC token is required for protected preview E2E tests.",
   );
 }
+
+const protectionHeaders = bypassSecret
+  ? {
+      "x-vercel-protection-bypass": bypassSecret,
+      "x-vercel-set-bypass-cookie": "true",
+    }
+  : trustedOidcToken
+    ? { "x-vercel-trusted-oidc-idp-token": trustedOidcToken }
+    : undefined;
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -22,12 +32,7 @@ export default defineConfig({
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
-    extraHTTPHeaders: bypassSecret
-      ? {
-          "x-vercel-protection-bypass": bypassSecret,
-          "x-vercel-set-bypass-cookie": "true",
-        }
-      : undefined,
+    extraHTTPHeaders: protectionHeaders,
   },
   projects: [
     {
