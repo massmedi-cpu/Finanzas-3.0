@@ -1,11 +1,12 @@
 import type { AccountDraft, CategoryDraft, ValidationIssue } from "../domain/configuration";
 import { validateAccountDraft, validateCategoryDraft } from "../domain/configuration";
 import {
+  validateAccountReorder,
   validateAccountUniqueness,
   validateCategoryHierarchy,
   validateCategoryMerge,
+  validateCategoryReorder,
   validateCategoryUniqueness,
-  validateReorder,
 } from "../domain/configuration-policies";
 import type { Account, Category, EntityId, ISOTimestamp } from "../domain/models";
 
@@ -78,7 +79,7 @@ export function prepareAccountReorder(
   existing: ReadonlyArray<Account>,
   orderedIds: ReadonlyArray<EntityId>,
 ) {
-  requireValid(validateReorder(existing.map((account) => account.id), orderedIds));
+  requireValid(validateAccountReorder(existing, orderedIds));
   return [...orderedIds];
 }
 
@@ -150,6 +151,6 @@ export function prepareCategoryReorder(
   existing: ReadonlyArray<Category>,
   orderedIds: ReadonlyArray<EntityId>,
 ) {
-  requireValid(validateReorder(existing.map((category) => category.id), orderedIds));
+  requireValid(validateCategoryReorder(existing, orderedIds));
   return [...orderedIds];
 }
