@@ -1,0 +1,59 @@
+name: Preview E2E
+
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+
+jobs:
+  protected-preview-e2e:
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      VERCEL_PREVIEW_URL: ${{ github.event.deployment_status.target_url }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Detect automation bypass secret
+        id: bypass
+        shell: bash
+        run: |
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "VERCEL_AUTOMATION_BYPASS_SECRET is not configured; protected preview E2E is pending."
+          fi
+
+      - name: Checkout deployment commit
+        if: steps.bypass.outputs.available == 'true'
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        if: steps.bypass.outputs.available == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        if: steps.bypass.outputs.available == 'true'
+        run: npm install --ignore-scripts
+
+      - name: Install Chromium
+        if: steps.bypass.outputs.available == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Run protected preview E2E
+        if: steps.bypass.outputs.available == 'true'
+        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure() && steps.bypass.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
