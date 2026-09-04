@@ -8,6 +8,7 @@ import {
   createGoogleSourceRuntime,
   getGoogleSourceServerConfiguration,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
+import { GoogleOfficialSourceReadError } from "../../../../../src/infrastructure/google/official-bank-source-reader";
 import {
   PersistenceGatewayError,
   callPersistenceGateway,
@@ -145,6 +146,12 @@ export async function POST() {
       return Response.json(
         { error: "source_runtime_incompatible" },
         { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (error instanceof GoogleOfficialSourceReadError && error.code === "source_changed_during_read") {
+      return Response.json(
+        { error: "google_source_changed_during_read" },
+        { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
     console.error("google-source-sync", error instanceof Error ? error.name : "unknown_error");
