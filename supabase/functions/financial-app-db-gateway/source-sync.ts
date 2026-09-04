@@ -1,4 +1,5 @@
 const ACCOUNT_TYPES = new Set(["checking", "savings", "credit", "cash", "investment", "other"]);
+const ENTITY_LIFECYCLES = new Set(["active", "archived"]);
 const TRANSACTION_KINDS = new Set(["income", "expense", "transfer", "refund", "adjustment"]);
 const REVIEW_STATES = new Set(["confirmed", "pending", "needs_review"]);
 const ISSUE_SEVERITIES = new Set(["warning", "error"]);
@@ -39,6 +40,7 @@ function validateAccount(account: any, sourceFileId: string) {
   text(account.institution, "institution");
   text(account.sourceIdentifier, "source_identifier");
   if (!ACCOUNT_TYPES.has(account.accountType)) throw new Error("invalid_source_account_type");
+  if (!ENTITY_LIFECYCLES.has(account.lifecycle)) throw new Error("invalid_source_account_lifecycle");
   safeInteger(account.openingBalanceCents, "opening_balance");
 }
 
@@ -166,7 +168,7 @@ export async function handleSourceSyncAction(input: {
           await tx`
             select financial_app.ensure_source_account_mapping(
               ${account.sourceFileId},${account.accountExternalKey},${account.accountName},${account.institution},
-              ${account.accountType},${account.openingBalanceCents},${account.sourceIdentifier}
+              ${account.accountType},${account.openingBalanceCents},${account.lifecycle},${account.sourceIdentifier}
             )
           `;
         }
