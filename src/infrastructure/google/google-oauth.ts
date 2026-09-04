@@ -12,6 +12,8 @@ export class GoogleOauthError extends Error {
       | "invalid_oauth_configuration"
       | "invalid_oauth_state"
       | "google_token_exchange_failed"
+      | "google_refresh_failed"
+      | "google_reauthorization_required"
       | "google_token_response_invalid"
       | "google_refresh_token_missing"
       | "google_required_scope_missing"
@@ -87,6 +89,7 @@ type TokenResponse = {
   expires_in?: unknown;
   scope?: unknown;
   token_type?: unknown;
+  error?: unknown;
 };
 
 export type GoogleAuthorizationTokens = {
@@ -116,6 +119,7 @@ function assertRequiredResourceScopes(scopes: readonly string[]) {
 async function postTokenRequest(
   body: URLSearchParams,
   fetcher: typeof fetch,
+  mode: "exchange" | "refresh",
 ): Promise<TokenResponse> {
   const response = await fetcher("https://oauth2.googleapis.com/token", {
     method: "POST",
@@ -128,9 +132,17 @@ async function postTokenRequest(
   });
   const payload = (await response.json().catch(() => null)) as TokenResponse | null;
   if (!response.ok || !payload) {
+    if (mode === "refresh" && payload?.error === "invalid_grant") {
+      throw new GoogleOauthError(
+        "google_reauthorization_required",
+        "Google ha revocado o invalidado la autorización; es necesario conectar de nuevo.",
+      );
+    }
     throw new GoogleOauthError(
-      "google_token_exchange_failed",
-      "Google ha rechazado el intercambio OAuth.",
+      mode === "refresh" ? "google_refresh_failed" : "google_token_exchange_failed",
+      mode === "refresh"
+        ? "Google no ha podido renovar temporalmente la autorización OAuth."
+        : "Google ha rechazado el intercambio OAuth.",
     );
   }
   return payload;
@@ -156,6 +168,7 @@ export async function exchangeGoogleAuthorizationCode(input: {
       grant_type: "authorization_code",
     }),
     input.fetcher ?? fetch,
+    "exchange",
   );
 
   if (
@@ -204,6 +217,7 @@ export async function refreshGoogleAccessToken(input: {
       grant_type: "refresh_token",
     }),
     input.fetcher ?? fetch,
+    "refresh",
   );
 
   if (

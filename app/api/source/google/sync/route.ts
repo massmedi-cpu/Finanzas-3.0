@@ -3,6 +3,7 @@ import {
   assertSourceSyncRuntimeCapabilities,
   type SourceSyncRuntimeCapabilities,
 } from "../../../../../src/application/source-sync-runtime-contract";
+import { GoogleOauthError } from "../../../../../src/infrastructure/google/google-oauth";
 import {
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
@@ -152,6 +153,21 @@ export async function POST() {
       return Response.json(
         { error: "google_oauth_not_connected" },
         { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (error instanceof GoogleOauthError && error.code === "google_reauthorization_required") {
+      return Response.json(
+        { error: "google_oauth_not_connected" },
+        { status: 409, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+      );
+    }
+    if (
+      error instanceof GoogleOauthError &&
+      (error.code === "google_refresh_failed" || error.code === "google_token_response_invalid")
+    ) {
+      return Response.json(
+        { error: "google_oauth_refresh_unavailable" },
+        { status: 503, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
       );
     }
     if (error instanceof GoogleOfficialSourceReadError && error.code === "source_changed_during_read") {
