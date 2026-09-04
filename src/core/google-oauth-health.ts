@@ -7,6 +7,13 @@ import {
   refreshGoogleAccessToken,
   validateGoogleOauthState,
 } from "../infrastructure/google/google-oauth";
+import {
+  GoogleOfficialSourceDiscoveryError,
+  discoverOfficialBankSpreadsheetId,
+} from "../infrastructure/google/official-bank-source-discovery";
+import {
+  buildGoogleOauthRedirectUri,
+} from "../infrastructure/google/google-source-runtime";
 import { GOOGLE_SOURCE_READONLY_SCOPES } from "../infrastructure/google/official-bank-source-reader";
 
 export type GoogleOauthHealthCheck = { name: string; passed: boolean };
@@ -33,6 +40,15 @@ async function errorCode(callback: () => Promise<unknown> | unknown) {
   }
 }
 
+async function discoveryErrorCode(callback: () => Promise<unknown>) {
+  try {
+    await callback();
+    return null;
+  } catch (error) {
+    return error instanceof GoogleOfficialSourceDiscoveryError ? error.code : "unexpected";
+  }
+}
+
 export async function runGoogleOauthHealthChecks(): Promise<GoogleOauthHealth> {
   const state = "0123456789abcdef0123456789abcdef";
   const authorizationUrl = new URL(
@@ -43,6 +59,15 @@ export async function runGoogleOauthHealthChecks(): Promise<GoogleOauthHealth> {
     }),
   );
   const requestedScopes = new Set((authorizationUrl.searchParams.get("scope") ?? "").split(" "));
+
+  const previewRedirect = buildGoogleOauthRedirectUri({
+    vercelEnvironment: "preview",
+    branchUrl: "financial-app-git-phase-2.example.vercel.app",
+  });
+  const productionRedirect = buildGoogleOauthRedirectUri({
+    vercelEnvironment: "production",
+    productionUrl: "financial-app.example.vercel.app",
+  });
 
   let tokenRequestBody = "";
   const validTokenFetcher = (async (_url: RequestInfo | URL, init?: RequestInit) => {
@@ -122,6 +147,56 @@ export async function runGoogleOauthHealthChecks(): Promise<GoogleOauthHealth> {
 
   const stateMismatchCode = await errorCode(() => validateGoogleOauthState(state, `${state.slice(0, -1)}0`));
 
+  let discoveryRequestUrl = "";
+  let discoveryMethod = "";
+  const discoveredSourceId = await discoverOfficialBankSpreadsheetId(
+    "access-token-test",
+    (async (url: RequestInfo | URL, init?: RequestInit) => {
+      discoveryRequestUrl = String(url);
+      discoveryMethod = init?.method ?? "GET";
+      return jsonResponse({
+        files: [
+          {
+            id: "official-sheet-id",
+            name: "Movimientos bancarios - fuente",
+            mimeType: "application/vnd.google-apps.spreadsheet",
+            trashed: false,
+          },
+        ],
+      });
+    }) as typeof fetch,
+  );
+  const discoveryQuery = new URL(discoveryRequestUrl).searchParams.get("q") ?? "";
+
+  const sourceNotFoundCode = await discoveryErrorCode(() =>
+    discoverOfficialBankSpreadsheetId(
+      "access-token-test",
+      (async () => jsonResponse({ files: [] })) as typeof fetch,
+    ),
+  );
+  const sourceAmbiguousCode = await discoveryErrorCode(() =>
+    discoverOfficialBankSpreadsheetId(
+      "access-token-test",
+      (async () =>
+        jsonResponse({
+          files: [
+            {
+              id: "official-sheet-a",
+              name: "Movimientos bancarios - fuente",
+              mimeType: "application/vnd.google-apps.spreadsheet",
+              trashed: false,
+            },
+            {
+              id: "official-sheet-b",
+              name: "Movimientos bancarios - fuente",
+              mimeType: "application/vnd.google-apps.spreadsheet",
+              trashed: false,
+            },
+          ],
+        })) as typeof fetch,
+    ),
+  );
+
   const checks: GoogleOauthHealthCheck[] = [
     {
       name: "oauth-authorization-uses-only-required-scopes",
@@ -137,6 +212,13 @@ export async function runGoogleOauthHealthChecks(): Promise<GoogleOauthHealth> {
         authorizationUrl.searchParams.get("prompt") === "consent" &&
         authorizationUrl.searchParams.get("response_type") === "code" &&
         authorizationUrl.searchParams.get("state") === state,
+    },
+    {
+      name: "oauth-redirect-is-derived-from-stable-vercel-environment",
+      passed:
+        previewRedirect ===
+          "https://financial-app-git-phase-2.example.vercel.app/api/source/google/callback" &&
+        productionRedirect === "https://financial-app.example.vercel.app/api/source/google/callback",
     },
     {
       name: "oauth-state-rejects-mismatch",
@@ -168,6 +250,22 @@ export async function runGoogleOauthHealthChecks(): Promise<GoogleOauthHealth> {
     {
       name: "refresh-token-flow-produces-server-access-token",
       passed: refreshed.accessToken === "refreshed-access-token" && refreshed.expiresInSeconds === 3600,
+    },
+    {
+      name: "official-source-is-discovered-by-exact-readonly-drive-query",
+      passed:
+        discoveredSourceId === "official-sheet-id" &&
+        discoveryMethod === "GET" &&
+        discoveryRequestUrl.startsWith("https://www.googleapis.com/drive/v3/files?") &&
+        discoveryQuery.includes("name = 'Movimientos bancarios - fuente'") &&
+        discoveryQuery.includes("mimeType = 'application/vnd.google-apps.spreadsheet'") &&
+        discoveryQuery.includes("trashed = false"),
+    },
+    {
+      name: "official-source-discovery-rejects-zero-or-many-candidates",
+      passed:
+        sourceNotFoundCode === "google_source_not_found" &&
+        sourceAmbiguousCode === "google_source_ambiguous",
     },
   ];
 
