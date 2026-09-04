@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.VERCEL_PREVIEW_URL ?? "http://127.0.0.1:3000";
+const baseURL = process.env.VERCEL_PREVIEW_URL ?? "http://localhost:3000";
 const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const isProtectedPreview = /^https:\/\/.*\.vercel\.app\/?$/i.test(baseURL);
 
