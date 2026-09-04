@@ -222,8 +222,9 @@ test.describe("Configuración · Fuente bancaria", () => {
     await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
     await expect(page.getByRole("status")).toContainText("2 nuevos, 1 revisados y 7 sin cambios");
+    const persistedSync = page.getByLabel("Última sincronización");
     await expect(page.getByRole("heading", { name: "Última sincronización persistida" })).toBeVisible();
-    await expect(page.getByText("drive-version:99")).toBeVisible();
+    await expect(persistedSync.getByText("drive-version:99")).toBeVisible();
     await expect(page.getByText("CC-00001")).toBeVisible();
     await expect(page.getByText("AH-00001")).toBeVisible();
   });
