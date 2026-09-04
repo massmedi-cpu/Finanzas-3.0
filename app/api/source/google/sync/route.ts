@@ -28,9 +28,8 @@ export async function POST() {
 
     return Response.json(
       {
-        status: "success",
-        sourceRevision: snapshot.sourceRevision,
         ...result,
+        sourceRevision: snapshot.sourceRevision,
       },
       { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
     );
