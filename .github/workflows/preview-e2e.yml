@@ -79,21 +79,28 @@ jobs:
             exit 0
           fi
 
-          status=$(curl --silent --show-error \
-            --output /tmp/vercel-oidc-probe.json \
-            --write-out "%{http_code}" \
-            -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
-            "$VERCEL_PREVIEW_URL/api/build" || true)
+          for attempt in $(seq 1 24); do
+            status=$(curl --silent --show-error \
+              --output /tmp/vercel-oidc-probe.json \
+              --write-out "%{http_code}" \
+              -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
+              "$VERCEL_PREVIEW_URL/api/build" || true)
 
-          if [ "$status" = "200" ]; then
-            echo "available=true" >> "$GITHUB_OUTPUT"
-            echo "method=oidc" >> "$GITHUB_OUTPUT"
-            echo "Protected preview access available through GitHub OIDC Trusted Source."
-          else
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "method=none" >> "$GITHUB_OUTPUT"
-            echo "Protected preview access is not authorized yet."
-          fi
+            if [ "$status" = "200" ]; then
+              echo "available=true" >> "$GITHUB_OUTPUT"
+              echo "method=oidc" >> "$GITHUB_OUTPUT"
+              echo "Protected preview access available through GitHub OIDC Trusted Source on attempt $attempt."
+              exit 0
+            fi
+
+            if [ "$attempt" -lt 24 ]; then
+              sleep 5
+            fi
+          done
+
+          echo "available=false" >> "$GITHUB_OUTPUT"
+          echo "method=none" >> "$GITHUB_OUTPUT"
+          echo "Protected preview access is still not authorized after bounded retries."
 
   protected-preview-live:
     needs: protected-preview-access
