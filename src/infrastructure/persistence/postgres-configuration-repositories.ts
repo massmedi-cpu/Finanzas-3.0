@@ -1,4 +1,5 @@
 import type { AccountRepository, CategoryRepository } from "../../domain/ports";
+import { validateAccountReorder, validateCategoryReorder } from "../../domain/configuration-policies";
 import type {
   Account,
   AccountType,
@@ -108,18 +109,9 @@ function mapCategory(row: CategoryRow): Category {
   };
 }
 
-function assertSameIdSet(expected: ReadonlyArray<EntityId>, received: ReadonlyArray<EntityId>) {
-  if (expected.length !== received.length) {
-    throw new PersistenceInvariantError("La reordenación debe contener exactamente las entidades existentes.");
-  }
-
-  const expectedSet = new Set(expected);
-  if (expectedSet.size !== expected.length || new Set(received).size !== received.length) {
-    throw new PersistenceInvariantError("La reordenación contiene identificadores duplicados.");
-  }
-
-  if (received.some((id) => !expectedSet.has(id))) {
-    throw new PersistenceInvariantError("La reordenación añade o pierde entidades.");
+function requirePersistenceReorder(issues: ReadonlyArray<{ message: string }>) {
+  if (issues.length > 0) {
+    throw new PersistenceInvariantError(issues.map((issue) => issue.message).join(" "));
   }
 }
 
@@ -185,10 +177,22 @@ export class PostgresAccountRepository implements AccountRepository {
 
   async reorder(orderedIds: EntityId[]): Promise<void> {
     await this.sql.transaction(async (transaction) => {
-      const current = await transaction.query<{ id: string } & SqlRow>(
-        `select id from financial_app.accounts order by id for update`,
+      const current = await transaction.query<{
+        id: string;
+        lifecycle: EntityLifecycle;
+      } & SqlRow>(
+        `select id, lifecycle
+         from financial_app.accounts
+         order by case lifecycle when 'active' then 0 else 1 end, sort_order, name, id
+         for update`,
       );
-      assertSameIdSet(current.rows.map((row) => row.id), orderedIds);
+
+      requirePersistenceReorder(
+        validateAccountReorder(
+          current.rows.map((row) => ({ id: row.id, lifecycle: row.lifecycle })),
+          orderedIds,
+        ),
+      );
 
       await transaction.query(
         `with ordered as (
@@ -269,10 +273,27 @@ export class PostgresCategoryRepository implements CategoryRepository {
 
   async reorder(orderedIds: EntityId[]): Promise<void> {
     await this.sql.transaction(async (transaction) => {
-      const current = await transaction.query<{ id: string } & SqlRow>(
-        `select id from financial_app.categories order by id for update`,
+      const current = await transaction.query<{
+        id: string;
+        kind: CategoryKind;
+        parent_category_id: string | null;
+      } & SqlRow>(
+        `select id, kind, parent_category_id
+         from financial_app.categories
+         order by kind, parent_category_id nulls first, sort_order, name, id
+         for update`,
       );
-      assertSameIdSet(current.rows.map((row) => row.id), orderedIds);
+
+      requirePersistenceReorder(
+        validateCategoryReorder(
+          current.rows.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            parentCategoryId: row.parent_category_id,
+          })),
+          orderedIds,
+        ),
+      );
 
       await transaction.query(
         `with ordered as (
