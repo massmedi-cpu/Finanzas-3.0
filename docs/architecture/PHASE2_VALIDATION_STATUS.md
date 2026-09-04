@@ -20,10 +20,9 @@ El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta
 - Base cerrada: `main` en la Fase 1 validada.
 - Rama activa: `rebuild/phase-2-data-quality`.
 - Pull request de continuidad: #287, Draft, sin fusionar mientras Fase 2 siga abierta.
-- HEAD validado de código en este checkpoint: `b7763c76f46a09fc5a41a4291203eefca4d17ffe`.
-- CI Preview E2E run `33896377379`: `success`.
-- Build de producción Next.js: `success`.
-- Browser/core-health E2E: `success`.
+- HEAD validado de este checkpoint: `40bb5716f486d3e9c5996914f23b728a7c347bf3`.
+- CI Preview E2E run `33897330067`: `success`.
+- Build de producción Next.js y browser/core-health E2E: `success`.
 - Preview Vercel exacto del HEAD: `READY`.
 - `/api/health/data-quality`: 20/20, `status=ok`.
 
@@ -50,9 +49,9 @@ Contratos lógicos verificados:
 - `Cuenta ahorro Openbank · 2504` — activa, savings.
 - `Tarjeta prepago Openbank · 8403` — archivada, ledger técnico `other`.
 
-El motor ya separa pestañas físicas de productos lógicos y prefiere la fila de la pestaña canónica cuando un mismo ID de origen aparece también en una copia histórica incrustada. La regresión específica de productos mixtos está verde.
+El motor separa pestañas físicas de productos lógicos y prefiere la fila de la pestaña canónica cuando un mismo ID de origen aparece también en una copia histórica incrustada. La regresión específica de productos mixtos está verde.
 
-### Sincronización incremental
+### Sincronización incremental y lifecycle
 
 Validado mediante regresiones ejecutadas realmente contra PostgreSQL con `BEGIN/ROLLBACK`, sin residuos:
 
@@ -67,9 +66,36 @@ Validado mediante regresiones ejecutadas realmente contra PostgreSQL con `BEGIN/
 - reaparición de filas sin falsos positivos;
 - cursores independientes por pestaña;
 - guardia de orden cronológico newest-first;
-- fuente original inmutable.
+- fuente original inmutable;
+- creación de la prepago como `archived` + `other` mediante la nueva firma canónica de PostgreSQL.
 
-Después de las regresiones se verificaron 0 cuentas, 0 movimientos, 0 registros de fuente y 0 sync runs residuales de prueba.
+La regresión específica del lifecycle terminó con `0` mappings y `0` cuentas residuales tras `ROLLBACK`.
+
+### OAuth / Vault
+
+El flujo implementado mantiene:
+
+- `state` en cookie HttpOnly + Secure + SameSite=Lax;
+- scopes de identidad `openid email` únicamente para verificar identidad;
+- scopes de recurso estrictamente `spreadsheets.readonly` y `drive.metadata.readonly`;
+- correo de Google verificado y allowlist explícita;
+- lectura y validación completa del Sheet antes de almacenar el refresh token;
+- refresh token almacenado mediante Supabase Vault, no en navegador ni Git;
+- rotación y desconexión sin residuos.
+
+La regresión real de Vault con `BEGIN/ROLLBACK` volvió a pasar: `connection_residue=0`, `vault_residue=0`, y `anon`/`authenticated` no tienen permiso de lectura del refresh token.
+
+### Diagnóstico de configuración OAuth en preview
+
+El preview del HEAD devuelve `configured=false` y el diagnóstico limitado a preview confirma que faltan las cinco piezas requeridas:
+
+- `clientId` → `GOOGLE_OAUTH_CLIENT_ID`
+- `clientSecret` → `GOOGLE_OAUTH_CLIENT_SECRET`
+- `redirectUri` → `GOOGLE_OAUTH_REDIRECT_URI`
+- `spreadsheetId` → `GOOGLE_BANK_SOURCE_SPREADSHEET_ID`
+- `allowedEmail` → `GOOGLE_OAUTH_ALLOWED_EMAIL`
+
+El diagnóstico expone únicamente nombres de configuración, nunca valores, y no se muestra en producción.
 
 ## Correcciones realizadas en este tramo
 
@@ -81,19 +107,26 @@ Después de las regresiones se verificaron 0 cuentas, 0 movimientos, 0 registros
 6. Añadida y aplicada en Supabase la migración `source_account_lifecycle`.
 7. Alineado el nombre/versionado de la migración `sync_cursors_per_sheet` con el historial realmente aplicado en Supabase.
 8. Actualizado el gateway de código para validar y propagar `lifecycle` hasta PostgreSQL.
+9. Añadido diagnóstico seguro, solo en preview, de nombres de configuración OAuth ausentes.
 
-## Gate actualmente pendiente
+## Gates actualmente pendientes
+
+### 1. Runtime Edge Function
 
 La Edge Function activa `financial-app-db-gateway` continúa en la versión 10. El código actualizado del gateway está verde en GitHub, pero el conector de Supabase bloqueó la operación de despliegue antes de aplicarla. No se ha sustituido ni degradado la versión activa.
 
-Por tanto, todavía NO se considera validado que una sincronización real cree la prepago directamente como `archived` a través del runtime desplegado.
+Por tanto, todavía NO se considera validado que una sincronización real cree la prepago directamente como `archived` a través del runtime desplegado, aunque dominio, CI y PostgreSQL sí están verdes.
 
-No se debe aumentar Fase 2 por encima del 72% ni fusionar la PR #287 hasta resolver este gate y ejecutar la importación Google real controlada.
+### 2. Credenciales OAuth Google reales
+
+No existe en las conexiones disponibles una acción que permita crear credenciales OAuth de Google Cloud ni escribir Environment Variables de Vercel. Las cinco variables anteriores están realmente ausentes en preview y no pueden inventarse ni sustituirse por valores ficticios.
+
+No se debe aumentar Fase 2 por encima del 72% ni fusionar la PR #287 hasta cerrar ambos gates y ejecutar la importación Google real controlada.
 
 ## Gates restantes para cerrar Fase 2
 
 - Alinear runtime Edge Function con el contrato `lifecycle` ya validado en código y PostgreSQL.
-- Configurar/verificar OAuth Google real de la aplicación con scopes estrictamente read-only.
+- Configurar/verificar las cinco variables OAuth Google reales con scopes estrictamente read-only.
 - Ejecutar lectura real desde la aplicación contra el Google Sheet oficial.
 - Ejecutar primera importación real controlada y contrastar recuentos/productos/saldos.
 - Repetir sincronización y demostrar idempotencia real sin duplicados.
