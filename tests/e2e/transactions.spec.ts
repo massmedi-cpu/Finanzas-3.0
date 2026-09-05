@@ -121,15 +121,17 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   await page.goto("/transactions");
 
   await expect(page.getByRole("heading", { name: "Movimientos", level: 1 })).toBeVisible();
-  await expect(page.getByText("Compra supermercado corregida", { exact: true })).toBeVisible();
-  await expect(page.getByText("-12,34 €", { exact: true })).toBeVisible();
-  await expect(page.getByText("Modificado", { exact: true })).toBeVisible();
-  await expect(page.getByText("Alimentación", { exact: true })).toBeVisible();
+  const firstTransaction = page.locator("tbody tr").first();
+  await expect(firstTransaction.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await expect(firstTransaction.getByText("-12,34 €", { exact: true })).toBeVisible();
+  await expect(firstTransaction.getByText("Modificado", { exact: true })).toBeVisible();
+  await expect(firstTransaction.getByText("Alimentación", { exact: true }).first()).toBeVisible();
 
-  await page.getByText("Detalle y trazabilidad", { exact: true }).click();
-  await expect(page.getByText("TPV SUPERMERCADO ORIGINAL", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("CC-03021", { exact: true })).toBeVisible();
-  await expect(page.getByText("Compra revisada", { exact: true })).toBeVisible();
+  const trace = firstTransaction.locator("details");
+  await trace.locator("summary").click();
+  await expect(trace.getByText("TPV SUPERMERCADO ORIGINAL", { exact: true }).first()).toBeVisible();
+  await expect(trace.getByText("CC-03021", { exact: true })).toBeVisible();
+  await expect(trace.getByText("Compra revisada", { exact: true })).toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
@@ -147,11 +149,13 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await mockTransactionApi(page);
   await page.goto("/transactions");
 
+  const transactionRows = page.locator("tbody tr");
   await expect(page.getByText("1 de 2", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
-  await expect(page.getByText("NOMINA SEPTIEMBRE", { exact: true })).toBeVisible();
+  await expect(transactionRows).toHaveCount(2);
+  await expect(transactionRows.nth(1).getByText("NOMINA SEPTIEMBRE", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Compra supermercado corregida", { exact: true })).toHaveCount(1);
+  await expect(transactionRows.first().locator("strong").filter({ hasText: /^Compra supermercado corregida$/ })).toHaveCount(1);
 
   await page.getByLabel("Cuenta").selectOption(accountId);
   await page.getByLabel("Buscar").fill("supermercado");
@@ -161,8 +165,12 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   });
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await requestPromise;
+  await expect(transactionRows).toHaveCount(1);
   await expect(page.getByText("1 movimientos", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("1", { exact: true }).nth(1)).toBeVisible();
+  const summary = page.getByLabel("Resumen del listado");
+  await expect(summary.locator("div").nth(0).getByText("1", { exact: true })).toBeVisible();
+  await expect(summary.locator("div").nth(1).getByText("2", { exact: true })).toBeVisible();
+  await expect(summary.locator("div").nth(2).getByText("1", { exact: true })).toBeVisible();
 });
 
 test("Preview protegido real expone el histórico persistido de Fase 4", async ({ request }) => {
