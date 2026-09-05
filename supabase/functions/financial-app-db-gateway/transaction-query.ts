@@ -247,7 +247,7 @@ export async function handleTransactionQueryAction(input: {
 
         const uncategorizedRows = await tx`
           select financial_app.query_effective_transactions(
-            null,null,null,null,null,null,null,null,null,null,null,10,true
+            ${token},null,null,null,null,null,null,null,null,null,null,10,true
           ) as result
         `;
         if (uncategorizedRows[0]?.result?.totalCount !== 1 || uncategorizedRows[0]?.result?.rows?.[0]?.id !== txB[0]?.id) {
