@@ -5,6 +5,8 @@ const categoryId = "20000000-0000-4000-8000-000000000111";
 const merchantId = "30000000-0000-4000-8000-000000000111";
 const firstId = "60000000-0000-4000-8000-000000000111";
 const secondId = "60000000-0000-4000-8000-000000000112";
+const duplicatePeerId = "60000000-0000-4000-8000-000000000113";
+const transferCandidateId = "60000000-0000-4000-8000-000000000114";
 
 const firstRow = {
   id: firstId,
@@ -17,7 +19,7 @@ const firstRow = {
   category: { originalId: null, originalName: null, effectiveId: categoryId, effectiveName: "Alimentación" },
   kind: { original: "expense", effective: "expense" },
   reviewState: { original: "pending", effective: "confirmed" },
-  duplicateState: "none",
+  duplicateState: "suspected",
   transferPairId: null,
   excludedFromAnalytics: false,
   userNote: "Compra revisada",
@@ -38,12 +40,15 @@ const secondRow = {
   ...firstRow,
   id: secondId,
   bankDate: "2026-09-04",
-  amountCents: 200000,
-  concept: { original: "NOMINA SEPTIEMBRE", processed: "NOMINA SEPTIEMBRE", effective: "NOMINA SEPTIEMBRE" },
+  amountCents: -25000,
+  balanceAfterCents: 163796,
+  concept: { original: "TRANSFERENCIA INTERNA", processed: "TRANSFERENCIA INTERNA", effective: "TRANSFERENCIA INTERNA" },
   merchant: { originalId: null, originalName: null, effectiveId: null, effectiveName: null },
   category: { originalId: null, originalName: null, effectiveId: null, effectiveName: null },
-  kind: { original: "income", effective: "income" },
+  kind: { original: "transfer", effective: "transfer" },
   reviewState: { original: "pending", effective: "pending" },
+  duplicateState: "none",
+  transferPairId: null,
   hasUserOverride: false,
   overriddenFields: [],
   userNote: null,
@@ -57,8 +62,13 @@ const secondRow = {
 };
 
 type PatchBody = { transactionIds: string[]; patch: Record<string, unknown> };
+type ReviewBody = Record<string, unknown> & { action: string; transactionId: string };
 
-async function mockTransactionApi(page: import("@playwright/test").Page, patchBodies: PatchBody[] = []) {
+async function mockTransactionApi(
+  page: import("@playwright/test").Page,
+  patchBodies: PatchBody[] = [],
+  reviewBodies: ReviewBody[] = [],
+) {
   await page.route("**/api/transactions**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -80,6 +90,17 @@ async function mockTransactionApi(page: import("@playwright/test").Page, patchBo
       return;
     }
 
+    if (request.method() === "POST") {
+      const body = request.postDataJSON() as ReviewBody;
+      reviewBodies.push(body);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ result: { changed: true, transactionId: body.transactionId } }),
+      });
+      return;
+    }
+
     if (url.searchParams.get("mode") === "facets") {
       await route.fulfill({
         status: 200,
@@ -88,6 +109,63 @@ async function mockTransactionApi(page: import("@playwright/test").Page, patchBo
           accounts: [{ id: accountId, name: "Cuenta corriente Openbank · 3967", lifecycle: "active", sort_order: 0 }],
           categories: [{ id: categoryId, name: "Alimentación", kind: "expense", lifecycle: "active", parent_category_id: null, sort_order: 0 }],
           merchants: [{ id: merchantId, name: "Supermercado Demo", lifecycle: "active" }],
+        }),
+      });
+      return;
+    }
+
+    if (url.searchParams.get("mode") === "duplicate-group") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          rows: [
+            {
+              id: firstId,
+              account_id: accountId,
+              account_name: "Cuenta corriente Openbank · 3967",
+              bank_date: "2026-09-05",
+              concept_normalized: "TPV SUPERMERCADO ORIGINAL",
+              amount_cents: -1234,
+              duplicate_state: "suspected",
+              decision: null,
+              review_current: false,
+            },
+            {
+              id: duplicatePeerId,
+              account_id: accountId,
+              account_name: "Cuenta corriente Openbank · 3967",
+              bank_date: "2026-09-05",
+              concept_normalized: "TPV SUPERMERCADO ORIGINAL",
+              amount_cents: -1234,
+              duplicate_state: "suspected",
+              decision: null,
+              review_current: false,
+            },
+          ],
+        }),
+      });
+      return;
+    }
+
+    if (url.searchParams.get("mode") === "transfer-candidates") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          rows: [
+            {
+              id: transferCandidateId,
+              account_id: "10000000-0000-4000-8000-000000000112",
+              account_name: "Cuenta ahorro",
+              bank_date: "2026-09-05",
+              concept_normalized: "TRANSFERENCIA INTERNA",
+              amount_cents: 25000,
+              transfer_pair_id: null,
+              day_gap: 1,
+            },
+          ],
+          dayWindow: 3,
         }),
       });
       return;
@@ -161,11 +239,11 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await mockTransactionApi(page);
   await page.goto("/transactions");
 
-  const transactionRows = page.locator("tbody tr:not([class*='editorRow'])");
+  const transactionRows = page.locator("tbody tr:not([class*='editorRow']):not([class*='reviewRow'])");
   await expect(page.getByText("1 de 2", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await expect(transactionRows).toHaveCount(2);
-  await expect(transactionRows.nth(1).getByText("NOMINA SEPTIEMBRE", { exact: true }).first()).toBeVisible();
+  await expect(transactionRows.nth(1).getByText("TRANSFERENCIA INTERNA", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel("Cuenta").selectOption(accountId);
@@ -195,7 +273,7 @@ test("Movimientos filtra sin categoría por el valor efectivo", async ({ page })
   });
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await requestPromise;
-  await expect(page.getByText("NOMINA SEPTIEMBRE", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("TRANSFERENCIA INTERNA", { exact: true }).first()).toBeVisible();
   await expect(page.locator('td[data-label="Categoría"]').getByText("Sin categoría", { exact: true })).toBeVisible();
 });
 
@@ -242,7 +320,40 @@ test("Selección múltiple aplica categoría y revisión en una sola operación"
   await expect(page.getByText(/Edición masiva completada/)).toBeVisible();
 });
 
-test("Preview protegido real expone el histórico persistido y el filtro efectivo sin escribir datos", async ({ request }) => {
+test("Revisión de duplicado muestra el grupo y guarda una decisión auditable", async ({ page }) => {
+  const reviews: ReviewBody[] = [];
+  await mockTransactionApi(page, [], reviews);
+  await page.goto("/transactions");
+
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.getByTestId("duplicate-group").locator("div").filter({ hasText: "Movimiento actual" }).first()).toBeVisible();
+  await expect(page.getByTestId("duplicate-group").getByText("-12,34 €", { exact: true })).toHaveCount(2);
+  await page.getByTestId("duplicate-confirm").click();
+
+  await expect.poll(() => reviews.length).toBe(1);
+  expect(reviews[0]).toEqual({ action: "duplicate-review", transactionId: firstId, decision: "confirmed" });
+  await expect(page.getByText("Duplicado confirmado y auditado.", { exact: true })).toBeVisible();
+});
+
+test("Transferencia interna solo ofrece contraparte equilibrada y envía el emparejado explícito", async ({ page }) => {
+  const reviews: ReviewBody[] = [];
+  await mockTransactionApi(page, [], reviews);
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+
+  await page.getByTestId(`review-transfer-${secondId}`).click();
+  const candidates = page.getByTestId("transfer-candidates");
+  await expect(candidates.getByText("Cuenta ahorro", { exact: true })).toBeVisible();
+  await expect(candidates.getByText("250,00 €", { exact: true })).toBeVisible();
+  await expect(candidates.getByText("1 día", { exact: true })).toBeVisible();
+  await page.getByTestId(`transfer-pair-${transferCandidateId}`).click();
+
+  await expect.poll(() => reviews.length).toBe(1);
+  expect(reviews[0]).toEqual({ action: "transfer-pair", transactionId: secondId, pairId: transferCandidateId });
+  await expect(page.getByText("Transferencia interna emparejada y auditada.", { exact: true })).toBeVisible();
+});
+
+test("Preview protegido real expone el histórico persistido y revisiones en lectura sin escribir datos", async ({ request }) => {
   test.skip(!process.env.VERCEL_PREVIEW_URL, "Gate live: solo se ejecuta contra el preview protegido.");
 
   const response = await request.get("/api/transactions?limit=1");
@@ -261,5 +372,28 @@ test("Preview protegido real expone el histórico persistido y el filtro efectiv
   expect(Array.isArray(uncategorizedPayload.rows)).toBe(true);
   if (uncategorizedPayload.rows.length === 1) {
     expect(uncategorizedPayload.rows[0]?.category?.effectiveId).toBeNull();
+  }
+
+  const suspected = await request.get("/api/transactions?duplicateState=suspected&limit=1");
+  expect(suspected.ok()).toBe(true);
+  const suspectedPayload = await suspected.json();
+  if (suspectedPayload.rows?.length === 1) {
+    const transactionId = suspectedPayload.rows[0].id;
+    const group = await request.get(`/api/transactions?mode=duplicate-group&transactionId=${transactionId}`);
+    expect(group.ok()).toBe(true);
+    const groupPayload = await group.json();
+    expect(Array.isArray(groupPayload.rows)).toBe(true);
+    expect(groupPayload.rows.length).toBeGreaterThanOrEqual(2);
+  }
+
+  const transfers = await request.get("/api/transactions?kind=transfer&limit=1");
+  expect(transfers.ok()).toBe(true);
+  const transferPayload = await transfers.json();
+  if (transferPayload.rows?.length === 1) {
+    const transactionId = transferPayload.rows[0].id;
+    const candidates = await request.get(`/api/transactions?mode=transfer-candidates&transactionId=${transactionId}&dayWindow=3`);
+    expect(candidates.ok()).toBe(true);
+    const candidatePayload = await candidates.json();
+    expect(Array.isArray(candidatePayload.rows)).toBe(true);
   }
 });
