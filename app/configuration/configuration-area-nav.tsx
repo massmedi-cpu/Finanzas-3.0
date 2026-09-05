@@ -6,6 +6,8 @@ import styles from "./configuration-area.module.css";
 
 const ITEMS = [
   { href: "/configuration", label: "Cuentas y categorías", exact: true },
+  { href: "/configuration/merchants", label: "Comercios y alias", exact: false },
+  { href: "/configuration/rules", label: "Reglas", exact: false },
   { href: "/configuration/source", label: "Fuente bancaria", exact: false },
 ] as const;
 

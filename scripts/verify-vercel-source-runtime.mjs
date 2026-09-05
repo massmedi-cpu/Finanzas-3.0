@@ -104,7 +104,25 @@ if (environment === "preview") {
     throw new Error("gateway_google_oauth_vault_not_clean");
   }
 
-  previewChecks = "invariants+ingestion+vault=ok";
+  const merchantAlias = await callAction(oidcToken, "test.merchant_alias_engine");
+  if (merchantAlias.verified !== true || merchantAlias.clean !== true) {
+    throw new Error("gateway_merchant_alias_engine_not_clean");
+  }
+  const merchantAliasResidue = merchantAlias.residue ?? {};
+  for (const key of ["merchants", "aliases", "categories"]) {
+    if (merchantAliasResidue[key] !== 0) throw new Error(`gateway_merchant_alias_residue_${key}`);
+  }
+
+  const ruleEngine = await callAction(oidcToken, "test.categorization_rule_engine");
+  if (ruleEngine.verified !== true || ruleEngine.clean !== true || !ruleEngine.deterministicRuleId) {
+    throw new Error("gateway_categorization_rule_engine_not_clean");
+  }
+  const ruleResidue = ruleEngine.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "aliases", "rules", "sources", "transactions", "overrides"]) {
+    if (ruleResidue[key] !== 0) throw new Error(`gateway_rule_engine_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules=ok";
 }
 
 console.log(
