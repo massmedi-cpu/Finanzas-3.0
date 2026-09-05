@@ -6,6 +6,7 @@ import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
+import { handleTransactionQueryAction } from "./transaction-query.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
 const TEAM_ID = "team_xrSskbkRKwQkyYc0vvLVGUnb";
@@ -257,6 +258,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (ruleResponse) return ruleResponse;
+
+    const transactionQueryResponse = await handleTransactionQueryAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (transactionQueryResponse) return transactionQueryResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,

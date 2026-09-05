@@ -20,11 +20,11 @@ export default function Home() {
   return (
     <main className="reset-screen">
       <section className="reset-card" aria-labelledby="bootstrap-title">
-        <p className="eyebrow">FINANCIAL APP · NUEVO DESARROLLO</p>
+        <p className="eyebrow">FINANCIAL APP · RECONSTRUCCIÓN ACUMULATIVA</p>
         <h1 id="bootstrap-title">Versión {build.version}</h1>
         <p>
-          Fase {build.phase} — {build.phaseName}. Base limpia en construcción antes de habilitar
-          módulos financieros dependientes.
+          Fase {build.phase} — {build.phaseName}. Fases 1–3 permanecen cerradas y validadas;
+          Movimientos se construye sobre la persistencia y los motores centrales ya aprobados.
         </p>
 
         <div className="foundation-flags" aria-label="Reglas activas del desarrollo">
@@ -36,9 +36,14 @@ export default function Home() {
           </span>
         </div>
 
-        <Link className="foundation-cta" href="/configuration">
-          Abrir Configuración persistente
-        </Link>
+        <div className="foundation-flags" aria-label="Accesos de la fase actual">
+          <Link className="foundation-cta" href="/transactions">
+            Abrir Movimientos
+          </Link>
+          <Link className="foundation-cta" href="/configuration">
+            Abrir Configuración
+          </Link>
+        </div>
 
         <dl className="build-meta">
           <div>

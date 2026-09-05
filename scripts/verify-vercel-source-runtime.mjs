@@ -122,7 +122,16 @@ if (environment === "preview") {
     if (ruleResidue[key] !== 0) throw new Error(`gateway_rule_engine_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules=ok";
+  const transactionQuery = await callAction(oidcToken, "test.transaction_query_engine");
+  if (transactionQuery.verified !== true || transactionQuery.clean !== true) {
+    throw new Error("gateway_transaction_query_engine_not_clean");
+  }
+  const transactionQueryResidue = transactionQuery.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides"]) {
+    if (transactionQueryResidue[key] !== 0) throw new Error(`gateway_transaction_query_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions=ok";
 }
 
 console.log(
