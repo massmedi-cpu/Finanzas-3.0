@@ -149,7 +149,16 @@ if (environment === "preview") {
     if (reviewResidue[key] !== 0) throw new Error(`gateway_transaction_review_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews=ok";
+  const financialLogic = await callAction(oidcToken, "test.financial_logic_engine");
+  if (financialLogic.verified !== true || financialLogic.clean !== true) {
+    throw new Error("gateway_financial_logic_engine_not_clean");
+  }
+  const financialResidue = financialLogic.residue ?? {};
+  for (const key of ["accounts", "sources", "transactions", "audit_changes"]) {
+    if (financialResidue[key] !== 0) throw new Error(`gateway_financial_logic_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial=ok";
 }
 
 console.log(
