@@ -122,7 +122,34 @@ if (environment === "preview") {
     if (ruleResidue[key] !== 0) throw new Error(`gateway_rule_engine_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules=ok";
+  const transactionQuery = await callAction(oidcToken, "test.transaction_query_engine");
+  if (transactionQuery.verified !== true || transactionQuery.clean !== true) {
+    throw new Error("gateway_transaction_query_engine_not_clean");
+  }
+  const transactionQueryResidue = transactionQuery.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides"]) {
+    if (transactionQueryResidue[key] !== 0) throw new Error(`gateway_transaction_query_residue_${key}`);
+  }
+
+  const transactionManagement = await callAction(oidcToken, "test.transaction_management_engine");
+  if (transactionManagement.verified !== true || transactionManagement.clean !== true) {
+    throw new Error("gateway_transaction_management_engine_not_clean");
+  }
+  const managementResidue = transactionManagement.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides", "audit_changes"]) {
+    if (managementResidue[key] !== 0) throw new Error(`gateway_transaction_management_residue_${key}`);
+  }
+
+  const transactionReview = await callAction(oidcToken, "test.transaction_review_engine");
+  if (transactionReview.verified !== true || transactionReview.clean !== true) {
+    throw new Error("gateway_transaction_review_engine_not_clean");
+  }
+  const reviewResidue = transactionReview.residue ?? {};
+  for (const key of ["accounts", "sources", "transactions", "duplicate_reviews", "audit_changes"]) {
+    if (reviewResidue[key] !== 0) throw new Error(`gateway_transaction_review_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews=ok";
 }
 
 console.log(
