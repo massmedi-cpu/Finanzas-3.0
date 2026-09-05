@@ -7,13 +7,15 @@ type GoogleConnection = {
   connected: true;
   accountEmail: string;
   sourceFileName: string;
-  connectedAt: string;
+  connectedAt: string | null;
   lastVerifiedAt: string | null;
   readonly: true;
+  managed?: boolean;
 };
 
 type GoogleStatus = {
   configured: boolean;
+  authMode?: "oauth" | "service-account";
   connection: GoogleConnection | null;
   missing?: string[];
   error?: string;
@@ -112,6 +114,8 @@ const CONFIG_LABELS: Record<string, string> = {
   allowedEmail: "Cuenta Google autorizada",
   redirectUri_https: "URL de retorno OAuth con HTTPS",
   allowedEmail_invalid: "Cuenta Google autorizada válida",
+  serviceAccountJson: "Credencial privada de Financial App Reader",
+  serviceAccountJson_invalid: "Credencial válida de Financial App Reader",
 };
 
 const GOOGLE_CALLBACK_ERRORS: Record<string, string> = {
@@ -149,6 +153,7 @@ function formatMoneyCents(value: number | null) {
 
 function sourceActionErrorMessage(code: string | undefined) {
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
+  if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
   if (code === "source_runtime_incompatible") return "El runtime de sincronización no cumple el contrato seguro requerido.";
   if (code === "google_connection_contract_mismatch") return "La conexión Google no coincide con la cuenta autorizada.";
   if (code === "google_oauth_refresh_unavailable") {
@@ -238,6 +243,8 @@ export default function SourceClient() {
   }, [load]);
 
   const connected = Boolean(google?.configured && google.connection?.connected);
+  const serviceAccountMode = google?.authMode === "service-account";
+  const managedConnection = google?.connection?.managed === true;
   const runtimeReady = runtime?.compatible === true;
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
@@ -299,7 +306,7 @@ export default function SourceClient() {
   }
 
   async function disconnect() {
-    if (!connected || busy) return;
+    if (!connected || busy || managedConnection) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -332,7 +339,7 @@ export default function SourceClient() {
         </div>
         <div className="configuration-summary" aria-label="Estado de la fuente bancaria">
           <div><strong>{google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
-          <div><strong>{connected ? "Sí" : "No"}</strong><span>Google conectado</span></div>
+          <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
           <div><strong>{runtimeReady ? "v2" : "—"}</strong><span>Runtime seguro</span></div>
         </div>
       </header>
@@ -357,7 +364,13 @@ export default function SourceClient() {
               <div>
                 <span>Configuración privada</span>
                 <strong>{google?.configured ? "Preparada" : "Pendiente"}</strong>
-                <p>{google?.configured ? "Las variables privadas necesarias están disponibles en el servidor." : "Faltan parámetros privados; no se intenta conectar ni importar."}</p>
+                <p>
+                  {google?.configured
+                    ? serviceAccountMode
+                      ? "Financial App Reader está configurada como identidad gestionada de solo lectura."
+                      : "Las variables privadas OAuth necesarias están disponibles en el servidor."
+                    : "Faltan parámetros privados; no se intenta conectar ni importar."}
+                </p>
               </div>
               <div>
                 <span>Runtime de persistencia</span>
@@ -365,9 +378,10 @@ export default function SourceClient() {
                 <p>{runtimeReady ? "Lifecycle y selección canónica de productos están exigidos antes de escribir." : "La sincronización permanece bloqueada de forma segura."}</p>
               </div>
               <div>
-                <span>Cuenta Google</span>
+                <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>
                 <strong>{google?.connection?.accountEmail ?? "Sin conectar"}</strong>
                 <p>{google?.connection?.sourceFileName ?? "No se ha autorizado ninguna fuente."}</p>
+                {managedConnection && <p>Conexión gestionada por el servidor; no requiere autorización manual periódica.</p>}
                 {google?.connection?.lastVerifiedAt && <p>Última verificación: {formatDateTime(google.connection.lastVerifiedAt)}</p>}
               </div>
             </div>
@@ -387,7 +401,7 @@ export default function SourceClient() {
             )}
 
             <div className={styles.actions}>
-              {google?.configured && runtimeReady && !connected ? (
+              {google?.configured && runtimeReady && !connected && !serviceAccountMode ? (
                 <a className={`primary-button ${styles.buttonLink}`} href="/api/source/google/connect">Conectar Google</a>
               ) : firstImportNeedsPreflight && !preflight ? (
                 <button className="primary-button" type="button" disabled={!readyToPreflight} onClick={() => void preflightSource()}>
@@ -403,7 +417,7 @@ export default function SourceClient() {
                   {preflight ? "Volver a validar fuente" : "Validar fuente"}
                 </button>
               )}
-              {connected && (
+              {connected && !managedConnection && (
                 <button className="secondary-button" type="button" disabled={busy} onClick={() => void disconnect()}>
                   Desconectar Google
                 </button>
@@ -454,7 +468,7 @@ export default function SourceClient() {
             <ul className={styles.guarantees}>
               <li>Scopes de Google estrictamente de solo lectura.</li>
               <li>La fuente bancaria original no recibe escrituras.</li>
-              <li>La identidad de cuenta autorizada se valida antes de sincronizar.</li>
+              <li>La identidad Google autorizada queda anclada y validada antes de sincronizar.</li>
               <li>La primera importación exige prevalidación completa sin persistencia.</li>
               <li>El libro completo se vuelve a validar antes de persistir datos.</li>
               <li>Runtime v2 obligatorio antes de cualquier escritura en PostgreSQL.</li>
