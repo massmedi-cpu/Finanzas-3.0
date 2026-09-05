@@ -2,6 +2,7 @@ import { getVercelOidcToken } from "@vercel/oidc";
 
 const SUPABASE_GATEWAY_URL =
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
+const SUPABASE_GATEWAY_REGION = "eu-west-3";
 
 export class PersistenceGatewayError extends Error {
   constructor(
@@ -33,6 +34,7 @@ export async function callPersistenceGateway<Result>(
     headers: {
       authorization: `Bearer ${oidcToken}`,
       "content-type": "application/json",
+      "x-region": SUPABASE_GATEWAY_REGION,
     },
     body: JSON.stringify({ action, payload }),
     cache: "no-store",
