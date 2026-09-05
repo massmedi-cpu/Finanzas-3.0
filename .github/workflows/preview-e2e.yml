@@ -5,6 +5,7 @@ on:
     branches:
       - rebuild/phase-1-foundations
       - rebuild/phase-2-data-quality
+      - rebuild/phase-3-rules-categorization
 
 permissions:
   contents: read
@@ -44,14 +45,14 @@ jobs:
           retention-days: 7
 
   protected-preview-access:
-    if: github.ref_name == 'rebuild/phase-1-foundations' || github.ref_name == 'rebuild/phase-2-data-quality'
+    if: github.ref_name == 'rebuild/phase-1-foundations' || github.ref_name == 'rebuild/phase-2-data-quality' || github.ref_name == 'rebuild/phase-3-rules-categorization'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
       contents: read
       id-token: write
     env:
-      VERCEL_PREVIEW_URL: ${{ github.ref_name == 'rebuild/phase-2-data-quality' && 'https://finanzas-3-0-git-rebuild-phase-2-a1ad42-massmedi-9832s-projects.vercel.app' || 'https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app' }}
+      VERCEL_PREVIEW_URL: ${{ github.ref_name == 'rebuild/phase-3-rules-categorization' && 'https://finanzas-3-0-git-rebuild-phase-3-3e3394-massmedi-9832s-projects.vercel.app' || github.ref_name == 'rebuild/phase-2-data-quality' && 'https://finanzas-3-0-git-rebuild-phase-2-a1ad42-massmedi-9832s-projects.vercel.app' || 'https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app' }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     outputs:
       available: ${{ steps.access.outputs.available }}
@@ -142,7 +143,7 @@ jobs:
       contents: read
       id-token: write
     env:
-      VERCEL_PREVIEW_URL: ${{ github.ref_name == 'rebuild/phase-2-data-quality' && 'https://finanzas-3-0-git-rebuild-phase-2-a1ad42-massmedi-9832s-projects.vercel.app' || 'https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app' }}
+      VERCEL_PREVIEW_URL: ${{ github.ref_name == 'rebuild/phase-3-rules-categorization' && 'https://finanzas-3-0-git-rebuild-phase-3-3e3394-massmedi-9832s-projects.vercel.app' || github.ref_name == 'rebuild/phase-2-data-quality' && 'https://finanzas-3-0-git-rebuild-phase-2-a1ad42-massmedi-9832s-projects.vercel.app' || 'https://finanzas-3-0-git-rebuild-phase-1-c9b930-massmedi-9832s-projects.vercel.app' }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
       VERCEL_ACCESS_METHOD: ${{ needs.protected-preview-access.outputs.method }}
     steps:
