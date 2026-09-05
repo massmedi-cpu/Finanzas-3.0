@@ -131,3 +131,45 @@ test("protected preview keeps account scope coherent across every financial view
   expect(balances.accounts[0].id).toBe(selectedAccount.id);
   expect(balances.totalBalanceCents).toBe(balances.accounts[0].balanceCents);
 });
+
+test("protected preview keeps an explicitly selected archived account coherent without broadening the aggregate", async ({ request }) => {
+  test.skip(!isProtectedPreview, "Archived account scoping is a protected-preview gate.");
+
+  const allBalancesResponse = await request.get(
+    `/api/financial?mode=balances&dateTo=${dateTo}&includeArchived=true`,
+  );
+  expect(allBalancesResponse.ok()).toBeTruthy();
+  const allBalances = await allBalancesResponse.json();
+  const archivedAccount = allBalances.accounts.find(
+    (account: any) => account.lifecycle === "archived",
+  );
+  expect(archivedAccount?.id).toBeTruthy();
+
+  const defaultBalancesResponse = await request.get(
+    `/api/financial?mode=balances&dateTo=${dateTo}`,
+  );
+  expect(defaultBalancesResponse.ok()).toBeTruthy();
+  const defaultBalances = await defaultBalancesResponse.json();
+  expect(defaultBalances.accounts.some((account: any) => account.id === archivedAccount.id)).toBeFalsy();
+
+  const scopedResponse = await request.get(
+    `/api/financial?mode=snapshot&dateFrom=${dateFrom}&dateTo=${dateTo}&accountId=${archivedAccount.id}`,
+  );
+  expect(scopedResponse.ok()).toBeTruthy();
+  const scoped = await scopedResponse.json();
+  expect(scoped.period.accountId).toBe(archivedAccount.id);
+  expect(scoped.monthly.accountId).toBe(archivedAccount.id);
+  expect(scoped.balances.accountId).toBe(archivedAccount.id);
+  expect(scoped.balances.accounts).toHaveLength(1);
+  expect(scoped.balances.accounts[0].id).toBe(archivedAccount.id);
+  expect(scoped.balances.accounts[0].lifecycle).toBe("archived");
+
+  const scopedBalancesResponse = await request.get(
+    `/api/financial?mode=balances&dateTo=${dateTo}&accountId=${archivedAccount.id}`,
+  );
+  expect(scopedBalancesResponse.ok()).toBeTruthy();
+  const scopedBalances = await scopedBalancesResponse.json();
+  expect(scopedBalances.accountId).toBe(archivedAccount.id);
+  expect(scopedBalances.accounts).toHaveLength(1);
+  expect(scopedBalances.accounts[0].id).toBe(archivedAccount.id);
+});
