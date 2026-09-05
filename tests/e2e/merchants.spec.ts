@@ -95,7 +95,9 @@ test("Comercios y alias mantiene una UX responsive, accesible y sin escritura ba
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
 
-  const controlsTooSmall = await page.locator("button, input, select").evaluateAll((elements) =>
+  // Solo medimos controles de Financial App. En `next dev`, Next.js inyecta su propio
+  // botón flotante de herramientas fuera de <main>; no forma parte de la interfaz del producto.
+  const controlsTooSmall = await page.locator("main button, main input, main select").evaluateAll((elements) =>
     elements.filter((element) => {
       const rect = element.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.height < 44;
