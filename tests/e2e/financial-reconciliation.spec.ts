@@ -90,3 +90,44 @@ test("protected preview reconciles consolidated balances with every account row"
     }
   }
 });
+
+test("protected preview keeps account scope coherent across every financial view", async ({ request }) => {
+  test.skip(!isProtectedPreview, "Account-scoped financial reconciliation is a protected-preview gate.");
+
+  const fullResponse = await request.get(
+    `/api/financial?mode=snapshot&dateFrom=${dateFrom}&dateTo=${dateTo}`,
+  );
+  expect(fullResponse.ok()).toBeTruthy();
+  const fullSnapshot = await fullResponse.json();
+  const selectedAccount = fullSnapshot.balances.accounts.find(
+    (account: any) => account.lifecycle === "active",
+  );
+  expect(selectedAccount?.id).toBeTruthy();
+
+  const scopedResponse = await request.get(
+    `/api/financial?mode=snapshot&dateFrom=${dateFrom}&dateTo=${dateTo}&accountId=${selectedAccount.id}`,
+  );
+  expect(scopedResponse.ok()).toBeTruthy();
+  const scoped = await scopedResponse.json();
+
+  expect(scoped.period.accountId).toBe(selectedAccount.id);
+  expect(scoped.monthly.accountId).toBe(selectedAccount.id);
+  expect(scoped.balances.accountId).toBe(selectedAccount.id);
+  expect(scoped.balances.accounts).toHaveLength(1);
+  expect(scoped.balances.accounts[0].id).toBe(selectedAccount.id);
+  expect(scoped.balances.totalBalanceCents).toBe(scoped.balances.accounts[0].balanceCents);
+  expect(sum(scoped.monthly.rows, "incomeCents")).toBe(scoped.period.incomeCents);
+  expect(sum(scoped.monthly.rows, "expenseCents")).toBe(scoped.period.expenseCents);
+  expect(sum(scoped.monthly.rows, "operatingNetCents")).toBe(scoped.period.operatingNetCents);
+  expect(sum(scoped.monthly.rows, "transferNetCents")).toBe(scoped.period.transfers.netCents);
+
+  const balancesResponse = await request.get(
+    `/api/financial?mode=balances&dateTo=${dateTo}&accountId=${selectedAccount.id}`,
+  );
+  expect(balancesResponse.ok()).toBeTruthy();
+  const balances = await balancesResponse.json();
+  expect(balances.accountId).toBe(selectedAccount.id);
+  expect(balances.accounts).toHaveLength(1);
+  expect(balances.accounts[0].id).toBe(selectedAccount.id);
+  expect(balances.totalBalanceCents).toBe(balances.accounts[0].balanceCents);
+});

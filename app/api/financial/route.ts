@@ -74,7 +74,7 @@ export async function GET(request: Request) {
           : "financial.snapshot";
 
     const payload = mode === "balances"
-      ? { asOfDate: dateTo, includeArchived }
+      ? { asOfDate: dateTo, accountId, includeArchived }
       : { dateFrom, dateTo, accountId, includeArchived };
 
     const result = await callPersistenceGateway(action, payload);

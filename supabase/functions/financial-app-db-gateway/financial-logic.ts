@@ -63,8 +63,11 @@ export async function handleFinancialLogicAction(input: {
   if (action === "financial.balances") {
     const asOfDate = nullableDate(payload.asOfDate ?? payload.dateTo, "financial_as_of_date");
     const includeArchived = booleanValue(payload.includeArchived, "financial_include_archived");
+    const accountId = nullableUuid(payload.accountId, "financial_account_id");
     const rows = await sql`
-      select financial_app.financial_account_balances(${asOfDate}::date,${includeArchived}) as result
+      select financial_app.financial_account_balances(
+        ${asOfDate}::date,${includeArchived},${accountId}::uuid
+      ) as result
     `;
     return json(rows[0]?.result ?? null);
   }

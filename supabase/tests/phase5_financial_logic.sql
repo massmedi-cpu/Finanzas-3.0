@@ -21,8 +21,10 @@ declare
   v_summary jsonb;
   v_balances jsonb;
   v_balances_all jsonb;
+  v_balances_scoped jsonb;
   v_monthly jsonb;
   v_snapshot jsonb;
+  v_snapshot_scoped jsonb;
   v_invalid_range_rejected boolean := false;
 begin
   insert into financial_app.accounts(name,institution,type,opening_balance_cents,currency,lifecycle,sort_order)
@@ -99,7 +101,7 @@ begin
       and (v_summary->'quality'->>'manuallyExcludedRows')::int=1
   );
 
-  v_balances := financial_app.financial_account_balances('2099-01-31',false);
+  v_balances := financial_app.financial_account_balances('2099-01-31',false,null);
   insert into phase5_financial_logic_result values(
     'explicit-bank-balance-has-priority',
     exists(
@@ -124,7 +126,7 @@ begin
     not exists(select 1 from jsonb_array_elements(v_balances->'accounts') r where r->>'id'=v_account_archived::text)
   );
 
-  v_balances_all := financial_app.financial_account_balances('2099-01-31',true);
+  v_balances_all := financial_app.financial_account_balances('2099-01-31',true,null);
   insert into phase5_financial_logic_result values(
     'archived-balance-is-opt-in',
     exists(
@@ -133,6 +135,16 @@ begin
         and r->>'balanceSource'='reconstructed'
         and (r->>'balanceCents')::bigint=1234
     )
+  );
+
+  v_balances_scoped := financial_app.financial_account_balances('2099-01-31',false,v_account_a);
+  insert into phase5_financial_logic_result values(
+    'account-balance-scope-is-consistent',
+    v_balances_scoped->>'accountId'=v_account_a::text
+      and jsonb_array_length(v_balances_scoped->'accounts')=1
+      and v_balances_scoped->'accounts'->0->>'id'=v_account_a::text
+      and (v_balances_scoped->>'totalBalanceCents')::bigint=48000
+      and (v_balances_scoped->'quality'->>'accounts')::int=1
   );
 
   v_monthly := financial_app.financial_monthly_series('2099-01-01','2099-01-31',null);
@@ -156,6 +168,16 @@ begin
       and (v_snapshot->'principles'->>'explicitBankBalancePreferred')::boolean
   );
 
+  v_snapshot_scoped := financial_app.financial_snapshot('2099-01-01','2099-01-31',v_account_a,false);
+  insert into phase5_financial_logic_result values(
+    'snapshot-scopes-period-monthly-and-balances-together',
+    v_snapshot_scoped->'period'->>'accountId'=v_account_a::text
+      and v_snapshot_scoped->'monthly'->>'accountId'=v_account_a::text
+      and v_snapshot_scoped->'balances'->>'accountId'=v_account_a::text
+      and jsonb_array_length(v_snapshot_scoped->'balances'->'accounts')=1
+      and v_snapshot_scoped->'balances'->'accounts'->0->>'id'=v_account_a::text
+  );
+
   begin
     perform financial_app.financial_period_summary('2099-02-01','2099-01-01',null);
   exception when others then
@@ -170,11 +192,13 @@ insert into phase5_financial_logic_result values(
   and not has_function_privilege('authenticated','financial_app.financial_transaction_facts()','EXECUTE')
   and not has_function_privilege('anon','financial_app.financial_period_summary(date,date,uuid)','EXECUTE')
   and not has_function_privilege('authenticated','financial_app.financial_period_summary(date,date,uuid)','EXECUTE')
-  and not has_function_privilege('anon','financial_app.financial_account_balances(date,boolean)','EXECUTE')
-  and not has_function_privilege('authenticated','financial_app.financial_account_balances(date,boolean)','EXECUTE')
+  and not has_function_privilege('anon','financial_app.financial_account_balances(date,boolean,uuid)','EXECUTE')
+  and not has_function_privilege('authenticated','financial_app.financial_account_balances(date,boolean,uuid)','EXECUTE')
   and not has_function_privilege('anon','financial_app.financial_snapshot(date,date,uuid,boolean)','EXECUTE')
   and not has_function_privilege('authenticated','financial_app.financial_snapshot(date,date,uuid,boolean)','EXECUTE')
+  and has_function_privilege('service_role','financial_app.financial_account_balances(date,boolean,uuid)','EXECUTE')
   and has_function_privilege('service_role','financial_app.financial_snapshot(date,date,uuid,boolean)','EXECUTE')
+  and to_regprocedure('financial_app.financial_account_balances(date,boolean)') is null
 );
 
 do $$
