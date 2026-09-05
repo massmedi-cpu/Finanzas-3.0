@@ -203,6 +203,77 @@ jobs:
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
 
+      - name: Validate real Google source preflight read-only
+        if: github.ref_name == 'rebuild/phase-2-data-quality'
+        env:
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          if [ "$VERCEL_ACCESS_METHOD" = "bypass" ]; then
+            response=$(curl --silent --show-error --fail --request POST \
+              -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+              -H "x-vercel-set-bypass-cookie: true" \
+              "$VERCEL_PREVIEW_URL/api/source/google/preflight")
+          else
+            response=$(curl --silent --show-error --fail --request POST \
+              -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
+              "$VERCEL_PREVIEW_URL/api/source/google/preflight")
+          fi
+
+          RESPONSE_JSON="$response" node <<'NODE'
+          const data = JSON.parse(process.env.RESPONSE_JSON || '{}');
+          const fail = (message) => {
+            console.error(`GOOGLE_SOURCE_PREFLIGHT|status=failed|reason=${message}`);
+            process.exit(1);
+          };
+
+          if (data.sourceFileId !== '1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8') {
+            fail('unexpected_source_file');
+          }
+          if (!Number.isInteger(data.totalAuthoritativeRows) || data.totalAuthoritativeRows < 3172) {
+            fail('historical_total_rows_regressed');
+          }
+
+          const expectedAccounts = [
+            ['Cuenta corriente Openbank · 3967', 'checking', 'active', 3024],
+            ['Cuenta ahorro Openbank · 2504', 'savings', 'active', 15],
+            ['Tarjeta prepago Openbank · 8403', 'other', 'archived', 133],
+          ];
+          if (!Array.isArray(data.accounts) || data.accounts.length !== 3) {
+            fail('unexpected_account_count');
+          }
+          for (const [name, type, lifecycle, minimumRows] of expectedAccounts) {
+            const account = data.accounts.find((candidate) => candidate.accountName === name);
+            if (!account || account.accountType !== type || account.lifecycle !== lifecycle) {
+              fail(`account_contract_mismatch:${name}`);
+            }
+            if (!Number.isInteger(account.authoritativeRows) || account.authoritativeRows < minimumRows) {
+              fail(`account_rows_regressed:${name}`);
+            }
+            if (account.openingBalanceCents !== 0) {
+              fail(`opening_balance_changed:${name}`);
+            }
+          }
+
+          const expectedCursors = [
+            ['Cuenta corriente · 3967', 3157, 'CC-02963'],
+            ['Cuenta ahorro · 2504', 15, 'AH-00010'],
+          ];
+          if (!Array.isArray(data.cursors) || data.cursors.length !== 2) {
+            fail('unexpected_cursor_count');
+          }
+          for (const [sheetTitle, minimumRows, oldestRowKey] of expectedCursors) {
+            const cursor = data.cursors.find((candidate) => candidate.sheetTitle === sheetTitle);
+            if (!cursor || cursor.authoritativeRows < minimumRows || cursor.lastSourceRowKey !== oldestRowKey) {
+              fail(`cursor_contract_mismatch:${sheetTitle}`);
+            }
+          }
+
+          console.log(
+            `GOOGLE_SOURCE_PREFLIGHT|status=ok|revision=${data.sourceRevision ?? 'null'}|rows=${data.totalAuthoritativeRows}|accounts=${data.accounts.length}|cursors=${data.cursors.length}`,
+          );
+          NODE
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
