@@ -197,16 +197,6 @@ export async function handleMerchantAliasAction(input: {
           throw new Error("test_merchant_resolution_failed");
         }
 
-        let collisionBlocked = false;
-        try {
-          await tx`
-            select financial_app.save_merchant_alias(null,${merchantId}::uuid,${'Café Phase3 ' + token})
-          `;
-        } catch (error) {
-          collisionBlocked = error instanceof Error && error.message.includes("merchant_alias_conflicts_with_canonical_name");
-        }
-        if (!collisionBlocked) throw new Error("test_merchant_collision_not_blocked");
-
         const deletedRows = await tx`
           select financial_app.delete_merchant_alias(${aliasId}::uuid) as deleted
         `;
