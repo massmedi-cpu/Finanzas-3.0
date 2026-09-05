@@ -113,11 +113,13 @@ jobs:
           last_status="not-requested"
           for attempt in $(seq 1 24); do
             if [ "$method" = "bypass" ]; then
+              # For this single SHA probe the bypass header is sufficient. Do not
+              # request the optional bypass cookie here because Vercel may answer
+              # that cookie-setting request with a redirect before /api/build.
               payload=$(curl --silent --show-error \
                 --output /tmp/rebuild-build.json \
                 --write-out "%{http_code}" \
                 -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
-                -H "x-vercel-set-bypass-cookie: true" \
                 "$VERCEL_PREVIEW_URL/api/build" || true)
               last_status="$payload"
             else
