@@ -112,6 +112,7 @@ test("Reglas expone aplicación explícita y explicación auditable", async ({ p
 
   await page.getByLabel("ID del movimiento").fill("60000000-0000-4000-8000-000000000001");
   await page.getByRole("button", { name: "Explicar decisión" }).click();
-  await expect(page.getByText(/Supermercado mensual/)).toBeVisible();
-  await expect(page.getByText(/selectedRulePriority/)).toBeVisible();
+  const explanation = page.locator("pre");
+  await expect(explanation).toContainText('"selectedRuleName": "Supermercado mensual"');
+  await expect(explanation).toContainText('"selectedRulePriority": 20');
 });
