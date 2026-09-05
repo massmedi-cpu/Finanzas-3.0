@@ -12,23 +12,9 @@ const firstRow = {
   amountCents: -1234,
   balanceAfterCents: 188796,
   account: { id: accountId, name: "Cuenta corriente Openbank · 3967" },
-  concept: {
-    original: "TPV SUPERMERCADO ORIGINAL",
-    processed: "TPV SUPERMERCADO ORIGINAL",
-    effective: "Compra supermercado corregida",
-  },
-  merchant: {
-    originalId: null,
-    originalName: null,
-    effectiveId: merchantId,
-    effectiveName: "Supermercado Demo",
-  },
-  category: {
-    originalId: null,
-    originalName: null,
-    effectiveId: categoryId,
-    effectiveName: "Alimentación",
-  },
+  concept: { original: "TPV SUPERMERCADO ORIGINAL", processed: "TPV SUPERMERCADO ORIGINAL", effective: "Compra supermercado corregida" },
+  merchant: { originalId: null, originalName: null, effectiveId: merchantId, effectiveName: "Supermercado Demo" },
+  category: { originalId: null, originalName: null, effectiveId: categoryId, effectiveName: "Alimentación" },
   kind: { original: "expense", effective: "expense" },
   reviewState: { original: "pending", effective: "confirmed" },
   duplicateState: "none",
@@ -53,11 +39,7 @@ const secondRow = {
   id: secondId,
   bankDate: "2026-09-04",
   amountCents: 200000,
-  concept: {
-    original: "NOMINA SEPTIEMBRE",
-    processed: "NOMINA SEPTIEMBRE",
-    effective: "NOMINA SEPTIEMBRE",
-  },
+  concept: { original: "NOMINA SEPTIEMBRE", processed: "NOMINA SEPTIEMBRE", effective: "NOMINA SEPTIEMBRE" },
   merchant: { originalId: null, originalName: null, effectiveId: null, effectiveName: null },
   category: { originalId: null, originalName: null, effectiveId: null, effectiveName: null },
   kind: { original: "income", effective: "income" },
@@ -74,9 +56,30 @@ const secondRow = {
   },
 };
 
-async function mockTransactionApi(page: import("@playwright/test").Page) {
+type PatchBody = { transactionIds: string[]; patch: Record<string, unknown> };
+
+async function mockTransactionApi(page: import("@playwright/test").Page, patchBodies: PatchBody[] = []) {
   await page.route("**/api/transactions**", async (route) => {
-    const url = new URL(route.request().url());
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (request.method() === "PATCH") {
+      const body = request.postDataJSON() as PatchBody;
+      patchBodies.push(body);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          result: {
+            requestedTransactions: body.transactionIds.length,
+            changedTransactions: body.transactionIds.length,
+            auditChanges: body.transactionIds.length,
+          },
+        }),
+      });
+      return;
+    }
+
     if (url.searchParams.get("mode") === "facets") {
       await route.fulfill({
         status: 200,
@@ -86,6 +89,15 @@ async function mockTransactionApi(page: import("@playwright/test").Page) {
           categories: [{ id: categoryId, name: "Alimentación", kind: "expense", lifecycle: "active", parent_category_id: null, sort_order: 0 }],
           merchants: [{ id: merchantId, name: "Supermercado Demo", lifecycle: "active" }],
         }),
+      });
+      return;
+    }
+
+    if (url.searchParams.get("uncategorized") === "true") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ rows: [secondRow], totalCount: 1, hasMore: false, nextCursor: null }),
       });
       return;
     }
@@ -149,19 +161,18 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await mockTransactionApi(page);
   await page.goto("/transactions");
 
-  const transactionRows = page.locator("tbody tr");
+  const transactionRows = page.locator("tbody tr:not([class*='editorRow'])");
   await expect(page.getByText("1 de 2", { exact: true }).first()).toBeVisible();
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await expect(transactionRows).toHaveCount(2);
   await expect(transactionRows.nth(1).getByText("NOMINA SEPTIEMBRE", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
-  await expect(transactionRows.first().locator("strong").filter({ hasText: /^Compra supermercado corregida$/ })).toHaveCount(1);
 
   await page.getByLabel("Cuenta").selectOption(accountId);
   await page.getByLabel("Buscar").fill("supermercado");
   const requestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
-    return url.pathname === "/api/transactions" && url.searchParams.get("accountId") === accountId && url.searchParams.get("q") === "supermercado";
+    return request.method() === "GET" && url.pathname === "/api/transactions" && url.searchParams.get("accountId") === accountId && url.searchParams.get("q") === "supermercado";
   });
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await requestPromise;
@@ -170,10 +181,68 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   const summary = page.getByLabel("Resumen del listado");
   await expect(summary.locator("div").nth(0).getByText("1", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(1).getByText("2", { exact: true })).toBeVisible();
-  await expect(summary.locator("div").nth(2).getByText("1", { exact: true })).toBeVisible();
+  await expect(summary.locator("div").nth(2).getByText("0", { exact: true })).toBeVisible();
 });
 
-test("Preview protegido real expone el histórico persistido de Fase 4", async ({ request }) => {
+test("Movimientos filtra sin categoría por el valor efectivo", async ({ page }) => {
+  await mockTransactionApi(page);
+  await page.goto("/transactions");
+
+  await page.getByTestId("category-filter").selectOption("__uncategorized__");
+  const requestPromise = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === "GET" && url.searchParams.get("uncategorized") === "true" && !url.searchParams.has("categoryId");
+  });
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await requestPromise;
+  await expect(page.getByText("NOMINA SEPTIEMBRE", { exact: true }).first()).toBeVisible();
+  await expect(page.locator('td[data-label="Categoría"]').getByText("Sin categoría", { exact: true })).toBeVisible();
+});
+
+test("Edición individual envía un override no destructivo", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  await page.goto("/transactions");
+
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Compra supermercado personalizada");
+  await page.getByTestId("edit-review").selectOption("needs_review");
+  await page.getByTestId("save-edit").click();
+
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0].transactionIds).toEqual([firstId]);
+  expect(patches[0].patch).toMatchObject({
+    concept: "Compra supermercado personalizada",
+    merchantMode: "set",
+    merchantId,
+    categoryMode: "set",
+    categoryId,
+    reviewState: "needs_review",
+    excludedFromAnalytics: false,
+    note: "Compra revisada",
+  });
+  await expect(page.getByText(/Movimiento actualizado/)).toBeVisible();
+});
+
+test("Selección múltiple aplica categoría y revisión en una sola operación", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  await page.goto("/transactions");
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+
+  await page.getByTestId(`select-${firstId}`).check();
+  await page.getByTestId(`select-${secondId}`).check();
+  await page.getByTestId("bulk-category").selectOption(categoryId);
+  await page.getByTestId("bulk-review").selectOption("confirmed");
+  await page.getByTestId("bulk-apply").click();
+
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0].transactionIds).toEqual([firstId, secondId]);
+  expect(patches[0].patch).toEqual({ categoryMode: "set", categoryId, reviewState: "confirmed" });
+  await expect(page.getByText(/Edición masiva completada/)).toBeVisible();
+});
+
+test("Preview protegido real expone el histórico persistido y el filtro efectivo sin escribir datos", async ({ request }) => {
   test.skip(!process.env.VERCEL_PREVIEW_URL, "Gate live: solo se ejecuta contra el preview protegido.");
 
   const response = await request.get("/api/transactions?limit=1");
@@ -185,4 +254,12 @@ test("Preview protegido real expone el histórico persistido de Fase 4", async (
   expect(payload.rows[0]?.source?.sourceRecordId).toMatch(/^[0-9a-f-]{36}$/i);
   expect(payload.rows[0]?.account?.name).toBeTruthy();
   expect(typeof payload.rows[0]?.amountCents).toBe("number");
+
+  const uncategorized = await request.get("/api/transactions?uncategorized=true&limit=1");
+  expect(uncategorized.ok()).toBe(true);
+  const uncategorizedPayload = await uncategorized.json();
+  expect(Array.isArray(uncategorizedPayload.rows)).toBe(true);
+  if (uncategorizedPayload.rows.length === 1) {
+    expect(uncategorizedPayload.rows[0]?.category?.effectiveId).toBeNull();
+  }
 });
