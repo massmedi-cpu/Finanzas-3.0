@@ -274,6 +274,64 @@ jobs:
           );
           NODE
 
+      - name: Validate real Google source sync idempotence
+        if: github.ref_name == 'rebuild/phase-2-data-quality' && contains(github.event.head_commit.message, '[live-sync]')
+        env:
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          call_sync() {
+            if [ "$VERCEL_ACCESS_METHOD" = "bypass" ]; then
+              curl --silent --show-error --fail --request POST \
+                -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+                -H "x-vercel-set-bypass-cookie: true" \
+                "$VERCEL_PREVIEW_URL/api/source/google/sync"
+            else
+              curl --silent --show-error --fail --request POST \
+                -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
+                "$VERCEL_PREVIEW_URL/api/source/google/sync"
+            fi
+          }
+
+          first=$(call_sync)
+          second=$(call_sync)
+
+          FIRST_JSON="$first" SECOND_JSON="$second" node <<'NODE'
+          const first = JSON.parse(process.env.FIRST_JSON || '{}');
+          const second = JSON.parse(process.env.SECOND_JSON || '{}');
+          const fail = (message) => {
+            console.error(`GOOGLE_SOURCE_SYNC|status=failed|reason=${message}`);
+            process.exit(1);
+          };
+          const validateCommon = (label, data) => {
+            if (data.status !== 'success') fail(`${label}_status`);
+            if (!Number.isInteger(data.rowsSeen) || data.rowsSeen < 3172) fail(`${label}_rows_seen`);
+            for (const key of ['rowsInserted','rowsRevised','rowsSkipped','rowsMissing','duplicatesDetected','warningsCount','cursorsAdvanced']) {
+              if (!Number.isInteger(data[key]) || data[key] < 0) fail(`${label}_${key}`);
+            }
+            if (data.rowsInserted + data.rowsRevised + data.rowsSkipped !== data.rowsSeen) {
+              fail(`${label}_row_accounting`);
+            }
+            if (data.rowsMissing !== 0 || data.warningsCount !== 0) fail(`${label}_missing_or_warnings`);
+            if (data.cursorsAdvanced !== 2) fail(`${label}_cursor_count`);
+            if (typeof data.sourceRevision !== 'string' || !data.sourceRevision) fail(`${label}_revision`);
+          };
+
+          validateCommon('first', first);
+          validateCommon('second', second);
+
+          if (first.rowsRevised !== 0) fail('first_unexpected_revisions');
+          if (second.rowsInserted !== 0 || second.rowsRevised !== 0 || second.rowsSkipped !== second.rowsSeen) {
+            fail('second_not_idempotent');
+          }
+          if (second.sourceRevision !== first.sourceRevision) fail('source_changed_between_syncs');
+          if (second.rowsSeen !== first.rowsSeen) fail('row_count_changed_between_syncs');
+
+          console.log(
+            `GOOGLE_SOURCE_SYNC|status=ok|revision=${second.sourceRevision}|rows=${second.rowsSeen}|first_inserted=${first.rowsInserted}|first_skipped=${first.rowsSkipped}|second_inserted=${second.rowsInserted}|second_skipped=${second.rowsSkipped}|duplicates=${second.duplicatesDetected}|cursors=${second.cursorsAdvanced}`,
+          );
+          NODE
+
       - name: Upload Playwright report on failure
         if: failure()
         uses: actions/upload-artifact@v4
