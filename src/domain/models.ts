@@ -30,6 +30,8 @@ export type AssociationMethod = "manual" | "suggested" | "automatic";
 export type ForecastOrigin = "known" | "recurring" | "budget" | "manual" | "inferred";
 export type ForecastConfidence = "high" | "medium" | "low";
 export type SyncRunStatus = "started" | "success" | "partial" | "failed";
+export type SyncIssueSeverity = "warning" | "error";
+export type AuditChangeOrigin = "user" | "source_sync" | "system_rule";
 export type AuditEntityType =
   | "account"
   | "category"
@@ -50,6 +52,16 @@ export interface Account {
   currency: "EUR";
   lifecycle: EntityLifecycle;
   sortOrder: number;
+  createdAt: ISOTimestamp;
+  updatedAt: ISOTimestamp;
+}
+
+export interface AccountSourceMapping {
+  sourceFileId: string;
+  accountExternalKey: string;
+  accountId: EntityId;
+  sourceAccountName: string;
+  sourceIdentifier: string | null;
   createdAt: ISOTimestamp;
   updatedAt: ISOTimestamp;
 }
@@ -109,11 +121,13 @@ export interface TransactionSourceRecord {
 
 /**
  * Capa 2: dato financiero procesado y normalizado por Financial App.
- * Mantiene referencia obligatoria a la instantánea bancaria vigente.
+ * Mantiene la identidad lógica estable de la fila y apunta a la instantánea
+ * bancaria vigente. Una revisión externa no cambia el id del movimiento.
  */
 export interface Transaction {
   id: EntityId;
   sourceRecordId: EntityId;
+  sourceRowIdentity: string;
   accountId: EntityId;
   bankDate: ISODate;
   conceptNormalized: string;
@@ -251,10 +265,36 @@ export interface SyncRun {
   finishedAt: ISOTimestamp | null;
   rowsSeen: number;
   rowsInserted: number;
+  rowsRevised: number;
   rowsSkipped: number;
+  rowsFailed: number;
   duplicatesDetected: number;
+  warningsCount: number;
+  schemaFingerprint: string | null;
   errorCode: string | null;
   errorMessage: string | null;
+}
+
+export interface SyncCursor {
+  sourceFileId: string;
+  sourceSheetId: string;
+  sourceRevision: string | null;
+  lastSourceRowKey: string | null;
+  lastSuccessfulRunId: EntityId | null;
+  updatedAt: ISOTimestamp;
+}
+
+export interface SyncIssue {
+  id: EntityId;
+  syncRunId: EntityId;
+  severity: SyncIssueSeverity;
+  issueCode: string;
+  sourceSheetId: string | null;
+  sourceRowKey: string | null;
+  fieldName: string | null;
+  message: string;
+  details: Readonly<Record<string, unknown>> | null;
+  createdAt: ISOTimestamp;
 }
 
 export interface AuditChange {
@@ -264,5 +304,6 @@ export interface AuditChange {
   fieldName: string;
   originalValue: unknown;
   newValue: unknown;
+  changeOrigin: AuditChangeOrigin;
   changedAt: ISOTimestamp;
 }

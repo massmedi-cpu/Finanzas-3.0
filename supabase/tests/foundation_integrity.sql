@@ -15,7 +15,7 @@ begin
     select 1
     from financial_app.schema_meta
     where id = true
-      and schema_version = 2
+      and schema_version >= 2
       and app_version = '0.0.1'
       and target_version = '10.0.0'
       and bank_source_policy = 'read_only'
@@ -210,7 +210,8 @@ begin
     amount_cents,
     balance_after_cents,
     review_state,
-    duplicate_state
+    duplicate_state,
+    source_row_identity
   ) values (
     second_source_id,
     account_id,
@@ -222,7 +223,8 @@ begin
     -2600,
     145000,
     'pending',
-    'none'
+    'none',
+    'file-1::sheet-1::row-1'
   ) returning id into v_transaction_id;
 
   insert into financial_app.transaction_overrides (

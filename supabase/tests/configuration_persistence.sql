@@ -66,10 +66,10 @@ begin
 
   insert into financial_app.transactions (
     source_record_id, account_id, bank_date, concept_normalized,
-    merchant_id, category_id, kind, amount_cents, balance_after_cents
+    merchant_id, category_id, kind, amount_cents, balance_after_cents, source_row_identity
   ) values (
     v_source_record_id, v_account_id, date '2026-09-03', 'Movimiento merge',
-    v_merchant_id, v_source_category_id, 'expense', -1000, 120000
+    v_merchant_id, v_source_category_id, 'expense', -1000, 120000, 'config-test::movements::row-1'
   ) returning id into v_transaction_id;
 
   insert into financial_app.transaction_overrides (

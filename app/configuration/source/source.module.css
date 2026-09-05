@@ -1,0 +1,281 @@
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.7fr);
+  gap: 1rem;
+  align-items: start;
+}
+
+.mainPanel,
+.sidePanel {
+  padding: clamp(1rem, 2vw, 1.5rem);
+  min-width: 0;
+}
+
+.statusList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.statusList > div {
+  min-width: 0;
+  padding: 0.9rem;
+  border: 1px solid rgba(137, 173, 255, 0.12);
+  border-radius: var(--radius-lg);
+  background: rgba(7, 14, 29, 0.56);
+}
+
+.statusList span,
+.metaRows span {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+}
+
+.statusList strong {
+  display: block;
+  margin-top: 0.25rem;
+  overflow-wrap: anywhere;
+  color: var(--color-text);
+  font-size: var(--font-subtitle);
+}
+
+.statusList p {
+  margin: 0.35rem 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-helper);
+}
+
+.missingBox {
+  margin-top: 0.85rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid rgba(255, 191, 71, 0.24);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 191, 71, 0.07);
+  color: #f3d49b;
+}
+
+.missingBox strong {
+  display: block;
+}
+
+.missingBox p,
+.missingBox ul {
+  margin: 0.5rem 0 0;
+}
+
+.missingBox ul {
+  padding-left: 1.15rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 1rem;
+}
+
+.buttonLink {
+  text-decoration: none;
+}
+
+.preflightBlock {
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid rgba(137, 173, 255, 0.12);
+}
+
+.preflightBlock h3 {
+  margin: 0.15rem 0 0;
+  font-size: var(--font-subtitle);
+}
+
+.preflightProducts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin-top: 0.8rem;
+}
+
+.preflightProducts article {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid rgba(53, 208, 127, 0.14);
+  border-radius: var(--radius-md);
+  background: rgba(53, 208, 127, 0.045);
+}
+
+.preflightProducts span,
+.preflightProducts small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.preflightProducts strong {
+  display: block;
+  margin: 0.2rem 0 0.35rem;
+  overflow-wrap: anywhere;
+}
+
+.preflightProducts small + small {
+  margin-top: 0.2rem;
+}
+
+.guarantees {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.guarantees li {
+  position: relative;
+  padding: 0.75rem 0.8rem 0.75rem 2.2rem;
+  border: 1px solid rgba(53, 208, 127, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(53, 208, 127, 0.05);
+  color: var(--color-text-secondary);
+  font-size: var(--font-body-secondary);
+}
+
+.guarantees li::before {
+  content: "✓";
+  position: absolute;
+  left: 0.8rem;
+  top: 0.72rem;
+  color: var(--color-success);
+  font-weight: 850;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 0.65rem;
+  margin: 0;
+}
+
+.metrics > div {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid rgba(137, 173, 255, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(7, 14, 29, 0.56);
+}
+
+.metrics dt {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+}
+
+.metrics dd {
+  margin: 0.2rem 0 0;
+  color: white;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.metaRows {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.8rem;
+}
+
+.metaRows p {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid rgba(137, 173, 255, 0.1);
+}
+
+.metaRows strong {
+  max-width: 70%;
+  overflow-wrap: anywhere;
+  text-align: right;
+  font-size: var(--font-label);
+}
+
+.cursorList {
+  display: grid;
+  gap: 0.6rem;
+}
+
+.cursorList article {
+  min-width: 0;
+  padding: 0.8rem;
+  border: 1px solid rgba(137, 173, 255, 0.12);
+  border-radius: var(--radius-md);
+  background: rgba(7, 14, 29, 0.56);
+}
+
+.cursorList span,
+.cursorList small {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.75rem;
+}
+
+.cursorList strong {
+  display: block;
+  margin: 0.2rem 0;
+  overflow-wrap: anywhere;
+}
+
+.empty,
+.lastResult {
+  padding: 0.9rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--font-body-secondary);
+}
+
+.empty {
+  border: 1px dashed var(--color-border);
+  background: rgba(7, 14, 29, 0.36);
+}
+
+.lastResult {
+  margin-top: 0.8rem;
+  border: 1px solid rgba(53, 208, 127, 0.16);
+  background: rgba(53, 208, 127, 0.06);
+  color: #a8e9c2;
+}
+
+@media (max-width: 980px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .statusList,
+  .preflightProducts {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .actions > * {
+    width: 100%;
+  }
+
+  .metaRows p {
+    display: grid;
+    gap: 0.25rem;
+  }
+
+  .metaRows strong {
+    max-width: 100%;
+    text-align: left;
+  }
+}
