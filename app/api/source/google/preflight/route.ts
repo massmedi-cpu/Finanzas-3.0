@@ -6,13 +6,13 @@ import {
 import { SourceWorkbookContractError } from "../../../../../src/application/source-sync-service";
 import { OfficialSourceContractError } from "../../../../../src/domain/official-bank-source";
 import { GoogleOauthError } from "../../../../../src/infrastructure/google/google-oauth";
-import { GoogleOauthGateway } from "../../../../../src/infrastructure/google/google-oauth-gateway";
 import {
+  GoogleSourceConnectionContractError,
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
-  getGoogleAllowedAccountEmail,
-  getGoogleSourceServerConfiguration,
+  resolveGoogleSourceConnection,
 } from "../../../../../src/infrastructure/google/google-source-runtime";
+import { GoogleServiceAccountError } from "../../../../../src/infrastructure/google/google-service-account";
 import { GoogleOfficialSourceReadError } from "../../../../../src/infrastructure/google/official-bank-source-reader";
 
 export const dynamic = "force-dynamic";
@@ -21,19 +21,12 @@ const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 export async function POST() {
   try {
-    getGoogleSourceServerConfiguration();
-    const oauth = new GoogleOauthGateway();
-    const allowedEmail = await getGoogleAllowedAccountEmail(oauth);
-    const connection = await oauth.status();
-
+    const connection = await resolveGoogleSourceConnection();
     if (!connection) {
       return Response.json({ error: "google_oauth_not_connected" }, { status: 409, headers: HEADERS });
     }
-    if (connection.account_email.toLowerCase() !== allowedEmail) {
-      return Response.json({ error: "google_connection_contract_mismatch" }, { status: 409, headers: HEADERS });
-    }
 
-    const runtime = createGoogleSourceRuntime(connection.source_file_id);
+    const runtime = createGoogleSourceRuntime(connection.sourceFileId);
     const snapshot = await runtime.reader.read();
     const summary = assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
 
@@ -44,6 +37,12 @@ export async function POST() {
         { error: "google_oauth_not_configured", missing: error.missing },
         { status: 503, headers: HEADERS },
       );
+    }
+    if (error instanceof GoogleSourceConnectionContractError) {
+      return Response.json({ error: "google_connection_contract_mismatch" }, { status: 409, headers: HEADERS });
+    }
+    if (error instanceof GoogleServiceAccountError) {
+      return Response.json({ error: "google_service_account_unavailable" }, { status: 503, headers: HEADERS });
     }
     if (error instanceof GoogleOauthError && error.code === "google_reauthorization_required") {
       return Response.json({ error: "google_oauth_not_connected" }, { status: 409, headers: HEADERS });
