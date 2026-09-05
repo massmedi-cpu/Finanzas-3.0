@@ -121,6 +121,7 @@ const GOOGLE_CALLBACK_ERRORS: Record<string, string> = {
   google_oauth_not_configured: "La conexión Google todavía no está configurada en el servidor.",
   google_oauth_store_failed: "La autorización se completó, pero no se pudo guardar la conexión de forma segura.",
   google_oauth_callback_failed: "No se pudo completar la conexión con Google.",
+  google_source_historical_regression: "La fuente bancaria ha perdido o reclasificado parte del histórico validado. La conexión no se ha guardado.",
   invalid_google_oauth_state: "La respuesta de Google no coincide con la sesión que inició la autorización.",
   google_oauth_state_missing: "La sesión de autorización de Google ha caducado. Iníciala de nuevo.",
 };
@@ -155,6 +156,9 @@ function sourceActionErrorMessage(code: string | undefined) {
   }
   if (code === "google_source_changed_during_read") {
     return "La fuente bancaria cambió mientras se estaba leyendo. No se ha aceptado una fotografía mezclada. Vuelve a intentarlo.";
+  }
+  if (code === "google_source_historical_regression") {
+    return "La fuente bancaria ha perdido o reclasificado parte del histórico validado. La operación se ha bloqueado y no se ha persistido ningún cambio.";
   }
   if (code === "google_source_contract_invalid") {
     return "La fuente bancaria no cumple el contrato validado. No se ha importado ningún movimiento.";
@@ -239,6 +243,7 @@ export default function SourceClient() {
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
   const readyToSync = connected && runtimeReady && !busy && (!firstImportNeedsPreflight || preflight !== null);
+  const latestAttemptFailed = syncStatus.run?.status === "failed";
   const missingLabels = useMemo(
     () => (google?.missing ?? []).map((item) => CONFIG_LABELS[item] ?? item),
     [google?.missing],
@@ -272,6 +277,7 @@ export default function SourceClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    setSyncResult(null);
 
     try {
       const response = await fetch("/api/source/google/sync", { method: "POST" });
@@ -284,7 +290,9 @@ export default function SourceClient() {
       );
       await load();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "La actualización no se ha podido completar.");
+      const message = cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
+      await load();
+      setError(message);
     } finally {
       setBusy(false);
     }
@@ -455,7 +463,12 @@ export default function SourceClient() {
 
           <section className={`config-panel ${styles.mainPanel}`} aria-labelledby="last-sync-heading">
             <div className="panel-heading">
-              <div><p className="panel-kicker">TRAZABILIDAD</p><h2 id="last-sync-heading">Última sincronización persistida</h2></div>
+              <div>
+                <p className="panel-kicker">TRAZABILIDAD</p>
+                <h2 id="last-sync-heading">
+                  {latestAttemptFailed ? "Último intento de sincronización" : "Última sincronización persistida"}
+                </h2>
+              </div>
               <span className={`lifecycle ${syncStatus.run?.status === "success" ? "active" : "archived"}`}>
                 {syncStatus.run?.status ?? "Sin ejecuciones"}
               </span>
@@ -468,6 +481,7 @@ export default function SourceClient() {
                   <div><dt>Nuevos</dt><dd>{syncStatus.run.rowsInserted}</dd></div>
                   <div><dt>Revisados</dt><dd>{syncStatus.run.rowsRevised}</dd></div>
                   <div><dt>Sin cambios</dt><dd>{syncStatus.run.rowsSkipped}</dd></div>
+                  <div><dt>Fallidas</dt><dd>{syncStatus.run.rowsFailed}</dd></div>
                   <div><dt>Duplicados</dt><dd>{syncStatus.run.duplicatesDetected}</dd></div>
                   <div><dt>Avisos</dt><dd>{syncStatus.run.warningsCount}</dd></div>
                 </dl>
@@ -476,6 +490,12 @@ export default function SourceClient() {
                   <p><span>Fin</span><strong>{formatDateTime(syncStatus.run.finishedAt)}</strong></p>
                   <p><span>Revisión fuente</span><strong>{syncStatus.run.sourceRevision ?? "Sin revisión"}</strong></p>
                 </div>
+                {latestAttemptFailed && (
+                  <div className={styles.lastResult}>
+                    Último intento fallido: {syncStatus.run.rowsFailed} filas no persistidas. Los cursores permanecen en la última sincronización válida.
+                    {syncStatus.run.errorCode ? ` Código: ${syncStatus.run.errorCode}.` : ""}
+                  </div>
+                )}
               </>
             ) : (
               <div className={styles.empty}>Todavía no existe una sincronización real persistida para esta fuente.</div>
@@ -492,6 +512,11 @@ export default function SourceClient() {
             <div className="panel-heading">
               <div><p className="panel-kicker">CURSORES</p><h2>Pestañas físicas</h2></div>
             </div>
+            {latestAttemptFailed && syncStatus.cursors.length > 0 && (
+              <div className={styles.lastResult}>
+                Cursores conservados desde la última sincronización válida; el intento fallido no los ha avanzado.
+              </div>
+            )}
             {syncStatus.cursors.length ? (
               <div className={styles.cursorList}>
                 {syncStatus.cursors.map((cursor) => (
