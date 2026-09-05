@@ -8,6 +8,7 @@ type Lifecycle = "active" | "archived";
 type TransactionKind = "income" | "expense" | "transfer" | "refund" | "adjustment";
 type ReviewState = "confirmed" | "pending" | "needs_review";
 type DuplicateState = "none" | "suspected" | "confirmed";
+type ReviewMode = "duplicate" | "transfer";
 
 type TransactionRow = {
   id: string;
@@ -45,6 +46,29 @@ type TransactionRow = {
     sourceFingerprint: string;
     importedAt: string;
   };
+};
+
+type DuplicateGroupRow = {
+  id: string;
+  account_id: string;
+  account_name: string;
+  bank_date: string;
+  concept_normalized: string;
+  amount_cents: number;
+  duplicate_state: DuplicateState;
+  decision: "confirmed" | "dismissed" | null;
+  review_current: boolean;
+};
+
+type TransferCandidate = {
+  id: string;
+  account_id: string;
+  account_name: string;
+  bank_date: string;
+  concept_normalized: string;
+  amount_cents: number;
+  transfer_pair_id: string | null;
+  day_gap: number;
 };
 
 type Cursor = { bankDate: string; id: string };
@@ -195,8 +219,15 @@ function readableError(payload: any) {
   if (code.includes("cursor")) return "La paginación ha quedado desfasada. Actualiza el listado.";
   if (code.includes("page_limit")) return "El tamaño de página solicitado no es válido.";
   if (code.includes("transaction_not_found")) return "Algún movimiento ya no está disponible. Actualiza el listado.";
+  if (code.includes("transaction_not_duplicate_candidate")) return "Este movimiento ya no forma parte de un grupo duplicado.";
   if (code.includes("category_not_found")) return "La categoría seleccionada ya no está disponible.";
   if (code.includes("merchant_not_found")) return "El comercio seleccionado ya no está disponible.";
+  if (code.includes("paired_transfer_kind_locked")) return "Desempareja primero la transferencia antes de cambiar su tipo.";
+  if (code.includes("transfer_kind_required")) return "Solo pueden emparejarse movimientos identificados como transferencia.";
+  if (code.includes("transfer_accounts_must_differ")) return "Una transferencia interna debe conectar dos cuentas diferentes.";
+  if (code.includes("transfer_amounts_must_balance")) return "Los dos movimientos deben tener importes exactamente opuestos.";
+  if (code.includes("transfer_dates_too_far_apart")) return "Los movimientos están demasiado separados en el tiempo para emparejarlos.";
+  if (code.includes("transaction_already_paired")) return "Uno de los movimientos ya está emparejado con otra transferencia.";
   return "No se pudo completar la operación sobre los movimientos.";
 }
 
@@ -248,6 +279,11 @@ export default function TransactionsClient() {
   const [bulkReview, setBulkReview] = useState(UNCHANGED);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [duplicateGroup, setDuplicateGroup] = useState<DuplicateGroupRow[]>([]);
+  const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
     if (append) setLoadingMore(true);
@@ -321,6 +357,13 @@ export default function TransactionsClient() {
     setDraftFilters((current) => ({ ...current, [field]: value }));
   }
 
+  function closeReview() {
+    setReviewingId(null);
+    setReviewMode(null);
+    setDuplicateGroup([]);
+    setTransferCandidates([]);
+  }
+
   function applyFilters(event: FormEvent) {
     event.preventDefault();
     if (draftFilters.dateFrom && draftFilters.dateTo && draftFilters.dateFrom > draftFilters.dateTo) {
@@ -332,6 +375,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    closeReview();
     void fetchPage(next, null, false);
   }
 
@@ -341,6 +385,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    closeReview();
     void fetchPage(EMPTY_FILTERS, null, false);
   }
 
@@ -374,6 +419,7 @@ export default function TransactionsClient() {
       setEditingId(null);
       setEditor(null);
       setSelectedIds([]);
+      closeReview();
       await fetchPage(appliedFilters, null, false);
       return true;
     } catch (cause) {
@@ -384,10 +430,63 @@ export default function TransactionsClient() {
     }
   }
 
+  async function openReview(row: TransactionRow, mode: ReviewMode) {
+    setReviewingId(row.id);
+    setReviewMode(mode);
+    setReviewLoading(true);
+    setDuplicateGroup([]);
+    setTransferCandidates([]);
+    setEditingId(null);
+    setEditor(null);
+    setError(null);
+    setNotice(null);
+    try {
+      const params = new URLSearchParams({
+        mode: mode === "duplicate" ? "duplicate-group" : "transfer-candidates",
+        transactionId: row.id,
+      });
+      if (mode === "transfer") params.set("dayWindow", "3");
+      const response = await fetch(`/api/transactions?${params.toString()}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(readableError(payload));
+      const loadedRows = Array.isArray(payload.rows) ? payload.rows : [];
+      if (mode === "duplicate") setDuplicateGroup(loadedRows as DuplicateGroupRow[]);
+      else setTransferCandidates(loadedRows as TransferCandidate[]);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo abrir la revisión.");
+      closeReview();
+    } finally {
+      setReviewLoading(false);
+    }
+  }
+
+  async function runReview(command: Record<string, unknown>, message: string) {
+    setSaving(true);
+    setError(null);
+    setNotice(null);
+    try {
+      const response = await fetch("/api/transactions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(command),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(readableError(payload));
+      setNotice(message);
+      closeReview();
+      await fetchPage(appliedFilters, null, false);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   function beginEdit(row: TransactionRow) {
     setEditingId(row.id);
     setEditor(editorFor(row));
     setNotice(null);
+    closeReview();
   }
 
   function cancelEdit() {
@@ -550,14 +649,19 @@ export default function TransactionsClient() {
                           <div><dt>Categoría original</dt><dd>{row.category.originalName ?? "—"}</dd></div><div><dt>Categoría efectiva</dt><dd>{row.category.effectiveName ?? "—"}</dd></div>
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
+                          {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
                           {row.overriddenFields.length > 0 && <div><dt>Campos modificados</dt><dd>{row.overriddenFields.map((field) => OVERRIDE_LABELS[field] ?? field).join(", ")}</dd></div>}{row.userNote && <div><dt>Nota</dt><dd>{row.userNote}</dd></div>}
                         </dl></details>
                       </td>
                       <td data-label="Cuenta">{row.account.name}</td>
                       <td data-label="Categoría">{row.category.effectiveName ?? <span className={styles.muted}>Sin categoría</span>}</td>
-                      <td data-label="Estado"><div className={styles.statusStack}><span className={`${styles.stateChip} ${styles[row.reviewState.effective]}`}>{REVIEW_LABELS[row.reviewState.effective]}</span>{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}</div></td>
+                      <td data-label="Estado"><div className={styles.statusStack}><span className={`${styles.stateChip} ${styles[row.reviewState.effective]}`}>{REVIEW_LABELS[row.reviewState.effective]}</span>{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div></td>
                       <td data-label="Importe" className={`${styles.amount} ${row.amountCents >= 0 ? styles.positive : styles.negative}`}>{formatMoney(row.amountCents)}</td>
-                      <td data-label="Gestión"><button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button></td>
+                      <td data-label="Gestión"><div className={styles.rowActions}>
+                        <button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button>
+                        {row.duplicateState !== "none" && <button data-testid={`review-duplicate-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => void openReview(row, "duplicate")} disabled={saving || reviewLoading}>Duplicado</button>}
+                        {row.kind.effective === "transfer" && <button data-testid={`review-transfer-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => void openReview(row, "transfer")} disabled={saving || reviewLoading}>{row.transferPairId ? "Ver pareja" : "Emparejar"}</button>}
+                      </div></td>
                     </tr>
                     {editingId === row.id && editor && (
                       <tr className={styles.editorRow}><td colSpan={8}>
@@ -567,12 +671,50 @@ export default function TransactionsClient() {
                             <label className={styles.editorWide}><span>Concepto</span><input data-testid="edit-concept" value={editor.concept} maxLength={240} onChange={(event) => setEditor({ ...editor, concept: event.target.value })} /></label>
                             <label><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>Automático/original</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
                             <label><span>Categoría</span><select data-testid="edit-category" value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })}><option value={INHERIT}>Automática/original</option><option value={NONE}>Sin categoría</option>{facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
-                            <label><span>Tipo</span><select value={editor.kind} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                            <label><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
                             <label><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewState: event.target.value })}><option value={INHERIT}>Automática/original</option>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                             <label className={styles.editorWide}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
                             <label className={styles.checkboxLabel}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
                           <div className={styles.editorActions}><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
+                        </section>
+                      </td></tr>
+                    )}
+                    {reviewingId === row.id && reviewMode && (
+                      <tr className={styles.reviewRow}><td colSpan={8}>
+                        <section className={styles.reviewPanel} aria-label={reviewMode === "duplicate" ? `Revisar duplicado ${row.concept.effective}` : `Revisar transferencia ${row.concept.effective}`}>
+                          <div className={styles.editorHeading}>
+                            <div><strong>{reviewMode === "duplicate" ? "Revisión de duplicado" : "Emparejado de transferencia interna"}</strong><span>{reviewMode === "duplicate" ? "La decisión queda vinculada a la revisión bancaria actual y nunca borra la fuente." : "Solo se proponen cuentas distintas, importes opuestos exactos y fechas dentro de 3 días."}</span></div>
+                            <button className={styles.secondaryButton} type="button" onClick={closeReview} disabled={saving}>Cerrar</button>
+                          </div>
+                          {reviewLoading ? <div className={styles.loading} role="status">Comprobando candidatos…</div> : reviewMode === "duplicate" ? (
+                            <>
+                              <div className={styles.reviewList} data-testid="duplicate-group">
+                                {duplicateGroup.map((candidate) => <div className={styles.reviewCard} key={candidate.id}>
+                                  <div><strong>{candidate.id === row.id ? "Movimiento actual" : candidate.account_name}</strong><span>{formatDate(candidate.bank_date)} · {candidate.concept_normalized}</span></div>
+                                  <strong className={candidate.amount_cents >= 0 ? styles.positive : styles.negative}>{formatMoney(candidate.amount_cents)}</strong>
+                                  <span>{DUPLICATE_LABELS[candidate.duplicate_state]}</span>
+                                </div>)}
+                              </div>
+                              <div className={styles.reviewActions}>
+                                <button data-testid="duplicate-confirm" className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "confirmed" }, "Duplicado confirmado y auditado.")} disabled={saving || duplicateGroup.length < 2}>Confirmar duplicado</button>
+                                <button data-testid="duplicate-dismiss" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "dismissed" }, "Aviso de duplicado descartado para esta revisión bancaria.")} disabled={saving || duplicateGroup.length < 2}>No es duplicado</button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              {row.transferPairId ? <div className={styles.reviewNotice}>Este movimiento ya está emparejado. Puedes revisar la contraparte o deshacer el vínculo sin alterar ninguno de los movimientos bancarios.</div> : null}
+                              <div className={styles.reviewList} data-testid="transfer-candidates">
+                                {transferCandidates.length === 0 ? <div className={styles.empty}>No hay una contraparte válida dentro de la ventana de 3 días.</div> : transferCandidates.map((candidate) => <div className={styles.reviewCard} key={candidate.id}>
+                                  <div><strong>{candidate.account_name}</strong><span>{formatDate(candidate.bank_date)} · {candidate.concept_normalized}</span></div>
+                                  <strong className={candidate.amount_cents >= 0 ? styles.positive : styles.negative}>{formatMoney(candidate.amount_cents)}</strong>
+                                  <span>{candidate.day_gap === 0 ? "Mismo día" : candidate.day_gap === 1 ? "1 día" : `${candidate.day_gap} días`}</span>
+                                  {!row.transferPairId && <button data-testid={`transfer-pair-${candidate.id}`} className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "transfer-pair", transactionId: row.id, pairId: candidate.id }, "Transferencia interna emparejada y auditada.")} disabled={saving}>Emparejar</button>}
+                                </div>)}
+                              </div>
+                              {row.transferPairId && <div className={styles.reviewActions}><button data-testid="transfer-unpair" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "transfer-unpair", transactionId: row.id }, "Transferencia desemparejada y auditada.")} disabled={saving}>Desemparejar</button></div>}
+                            </>
+                          )}
                         </section>
                       </td></tr>
                     )}
