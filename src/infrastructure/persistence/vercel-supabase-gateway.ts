@@ -1,8 +1,42 @@
+import { gzipSync } from "node:zlib";
 import { getVercelOidcToken } from "@vercel/oidc";
 
 const SUPABASE_GATEWAY_URL =
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
 const SUPABASE_GATEWAY_REGION = "eu-west-3";
+export const PERSISTENCE_GATEWAY_GZIP_THRESHOLD_BYTES = 64 * 1024;
+
+export type EncodedPersistenceGatewayRequest = {
+  body: string | Uint8Array;
+  contentEncoding: "gzip" | null;
+  originalBytes: number;
+  encodedBytes: number;
+};
+
+export function encodePersistenceGatewayRequest(
+  action: string,
+  payload: Record<string, unknown> = {},
+): EncodedPersistenceGatewayRequest {
+  const serialized = JSON.stringify({ action, payload });
+  const originalBytes = Buffer.byteLength(serialized, "utf8");
+
+  if (originalBytes < PERSISTENCE_GATEWAY_GZIP_THRESHOLD_BYTES) {
+    return {
+      body: serialized,
+      contentEncoding: null,
+      originalBytes,
+      encodedBytes: originalBytes,
+    };
+  }
+
+  const compressed = Uint8Array.from(gzipSync(serialized));
+  return {
+    body: compressed,
+    contentEncoding: "gzip",
+    originalBytes,
+    encodedBytes: compressed.byteLength,
+  };
+}
 
 export class PersistenceGatewayError extends Error {
   constructor(
@@ -29,14 +63,20 @@ export async function callPersistenceGateway<Result>(
     throw new PersistenceGatewayError("Vercel no ha proporcionado identidad OIDC.", 503, "oidc_unavailable");
   }
 
+  const encodedRequest = encodePersistenceGatewayRequest(action, payload);
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${oidcToken}`,
+    "content-type": "application/json",
+    "x-region": SUPABASE_GATEWAY_REGION,
+  };
+  if (encodedRequest.contentEncoding) {
+    headers["content-encoding"] = encodedRequest.contentEncoding;
+  }
+
   const response = await fetch(SUPABASE_GATEWAY_URL, {
     method: "POST",
-    headers: {
-      authorization: `Bearer ${oidcToken}`,
-      "content-type": "application/json",
-      "x-region": SUPABASE_GATEWAY_REGION,
-    },
-    body: JSON.stringify({ action, payload }),
+    headers,
+    body: encodedRequest.body as BodyInit,
     cache: "no-store",
   });
 

@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { gunzipSync } from "node:zlib";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
@@ -21,6 +22,8 @@ const TEST_CATEGORY_IDS = [
   "20000000-0000-4000-8000-000000000001",
   "20000000-0000-4000-8000-000000000002",
 ] as const;
+const MAX_COMPRESSED_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_DECOMPRESSED_GATEWAY_BODY_BYTES = 16 * 1024 * 1024;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -31,6 +34,42 @@ function json(body: unknown, status = 200) {
       "x-content-type-options": "nosniff",
     },
   });
+}
+
+function parseGatewayJsonBody(bytes: Uint8Array) {
+  if (bytes.byteLength === 0) return {};
+  try {
+    const value = JSON.parse(new TextDecoder().decode(bytes));
+    if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+    return value as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+async function readGatewayJsonBody(req: Request) {
+  const contentEncoding = (req.headers.get("content-encoding") ?? "").trim().toLowerCase();
+  const bodyBytes = new Uint8Array(await req.arrayBuffer());
+
+  if (!contentEncoding || contentEncoding === "identity") {
+    if (bodyBytes.byteLength > MAX_DECOMPRESSED_GATEWAY_BODY_BYTES) {
+      throw new Error("gateway_body_too_large");
+    }
+    return parseGatewayJsonBody(bodyBytes);
+  }
+
+  if (contentEncoding !== "gzip") {
+    throw new Error("unsupported_content_encoding");
+  }
+  if (bodyBytes.byteLength > MAX_COMPRESSED_GATEWAY_BODY_BYTES) {
+    throw new Error("gateway_compressed_body_too_large");
+  }
+
+  const decompressed = gunzipSync(bodyBytes);
+  if (decompressed.byteLength > MAX_DECOMPRESSED_GATEWAY_BODY_BYTES) {
+    throw new Error("gateway_body_too_large");
+  }
+  return parseGatewayJsonBody(Uint8Array.from(decompressed));
 }
 
 function uuid(value: unknown, field: string): asserts value is string {
@@ -117,7 +156,7 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const body = await req.json().catch(() => ({}));
+    const body = await readGatewayJsonBody(req);
     const action = body?.action;
     const payload = body?.payload ?? {};
 
