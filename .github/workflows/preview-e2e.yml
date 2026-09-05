@@ -129,8 +129,9 @@ jobs:
 
           echo "available=false" >> "$GITHUB_OUTPUT"
           echo "method=none" >> "$GITHUB_OUTPUT"
-          echo "Protected preview access is still not authorized after bounded retries."
+          echo "Protected preview access is not authorized; failing closed so the required live gate cannot be mistaken for success."
           echo "Final protected preview probe HTTP status: $last_status"
+          exit 1
 
   protected-preview-live:
     needs: protected-preview-access
