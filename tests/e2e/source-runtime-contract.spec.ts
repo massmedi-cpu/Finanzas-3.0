@@ -77,3 +77,14 @@ test("el Edge gateway acepta gzip con límites defensivos y conserva JSON sin co
   expect(edgeSource).toContain('contentEncoding === "identity"');
   expect(edgeSource).toContain("await readGatewayJsonBody(req)");
 });
+
+test("el helper live de ingesta usa objetos JSON igual que producción", () => {
+  const sourceSync = readFileSync(
+    "supabase/functions/financial-app-db-gateway/source-sync.ts",
+    "utf8",
+  );
+  const liveHelper = sourceSync.split('if (action === "test.source_ingestion")')[1] ?? "";
+
+  expect(liveHelper).not.toContain("JSON.stringify({ id:");
+  expect(liveHelper.match(/\$\{\{ id:/g)).toHaveLength(5);
+});
