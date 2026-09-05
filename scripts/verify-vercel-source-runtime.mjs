@@ -131,7 +131,16 @@ if (environment === "preview") {
     if (transactionQueryResidue[key] !== 0) throw new Error(`gateway_transaction_query_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions=ok";
+  const transactionManagement = await callAction(oidcToken, "test.transaction_management_engine");
+  if (transactionManagement.verified !== true || transactionManagement.clean !== true) {
+    throw new Error("gateway_transaction_management_engine_not_clean");
+  }
+  const managementResidue = transactionManagement.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides", "audit_changes"]) {
+    if (managementResidue[key] !== 0) throw new Error(`gateway_transaction_management_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management=ok";
 }
 
 console.log(
