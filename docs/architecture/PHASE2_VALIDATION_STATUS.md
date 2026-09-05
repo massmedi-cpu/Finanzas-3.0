@@ -4,264 +4,230 @@ Fecha de actualización: 05/09/2026
 
 ## Regla de continuidad
 
-Este documento es el checkpoint técnico canónico y acumulativo de la Fase 2. No sustituye el Prompt Maestro Axioma Definitivo ni la Fase 1 validada. Ante cualquier corte de chat o sesión, la reanudación debe partir del último estado real de GitHub, Supabase, Vercel y del Gantt oficial, nunca de un resumen incompleto de conversación.
+Este documento es el checkpoint técnico canónico y acumulativo de la Fase 2. No sustituye el **Prompt Maestro Axioma Definitivo** ni la Fase 1 ya validada. Ante cualquier corte de chat o sesión, la reanudación debe partir del último estado comprobado de GitHub, Supabase, Vercel y del Gantt oficial; nunca de una suposición ni de un resumen desactualizado.
 
 ## Estado porcentual oficial
 
 - Fase 1 — Fundamentos: **100% completada**; peso 8%; aporte global 8,0%.
-- Fase 2 — Lectura e importación de datos: **88% validado**; peso 10%; aporte global 8,8%.
-- Progreso global validado: **16,8%**.
-- OCR permanece previsto para Fase 11, tramo global 93%–97%.
+- Fase 2 — Lectura e importación de datos: **100% completada**; peso 10%; aporte global 10,0%.
+- Progreso global validado: **18,0%**.
+- Fases completadas: **2 de 13**.
+- Fase 3 permanece **0% / Pendiente** hasta completar la transición de rama a `main`.
+- OCR permanece deliberadamente en Fase 11, tramo global 93%–97%.
 
-El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta por trabajo real validado. Mientras permanezcan abiertos los gates externos de OAuth/importación real y preview protegido, el 88% queda congelado.
+El porcentaje no aumenta por commits, tiempo ni cantidad de código. El salto de Fase 2 desde 88% a 100% se produce exclusivamente porque se han cerrado con evidencia real los gates que quedaban: lector Google operativo, preflight real, primera importación persistente, doble relectura idempotente, persistencia final, preview protegido y regresiones end-to-end.
 
-## Rama y protección acumulativa
+## Rama y punto de cierre
 
-- Base cerrada: `main` con Fase 1 validada al 100%.
-- Rama activa: `rebuild/phase-2-data-quality`.
-- Pull request de continuidad: #287, Draft, sin fusionar mientras Fase 2 siga abierta.
-- Último checkpoint ejecutable validado: `4fe2c512a861b89705461246c00e1cc066e6041a`.
-- Último SHA con cambio de aplicación/runtime: `7bbe489bf18f68c77f00beb72cccc55f492caa76`; los commits posteriores solo endurecen pruebas, CI y documentación.
-- GitHub Actions Preview E2E run `33931893040`: build de producción + TypeScript + Playwright/core-health **verdes**.
-- Playwright sobre `4fe2c512…`: **94 tests totales · 82 passed · 12 live skipped · 0 failed** en desktop y móvil.
-- Los 12 omitidos corresponden exclusivamente a los 6 gates live de preview protegido ejecutados en ambos perfiles.
-- Vercel generó un deployment exacto y READY de `4fe2c512…`: `dpl_64LpL2pkSqYNXrFijj2WdMc2GB5M`.
-- El branch alias apunta a ese deployment exacto, por lo que ya está descartado que el skip live se deba a ausencia o retraso del preview.
-- Este documento puede vivir en un commit documental posterior; ese hecho no crea un nuevo cambio de runtime ni invalida la evidencia ejecutable de `4fe2c512…`.
+- Repositorio: `massmedi-cpu/Finanzas-3.0`.
+- Base cerrada de Fase 1: `main` en `fedbf83098abbfa9835806fe384f3a0a7c02a0fb`.
+- Rama de Fase 2: `rebuild/phase-2-data-quality`.
+- Pull request: **#287**, todavía sin fusionar en el momento de redactar este checkpoint.
+- Checkpoint funcional exacto de cierre: `519f52eca75deefba57e95be1f9bfaeba4e9a810`.
+- GitHub Actions de cierre funcional: **Preview E2E run `33967849635`**.
+- Este documento es una actualización documental posterior al checkpoint funcional. No modifica el runtime ni sustituye la evidencia ejecutada sobre `519f52e…`.
 
-## Supabase / runtime real
+## Resultado del gate final exacto
 
-Comprobado directamente el 04–05/09/2026:
+El run `33967849635`, ejecutado contra el preview protegido del SHA exacto `519f52eca75deefba57e95be1f9bfaeba4e9a810`, terminó completamente verde:
 
-- proyecto dedicado: `financial-app` (`btzukbfesxdratqnxuoj`);
-- Edge Function `financial-app-db-gateway`: **ACTIVE v12**;
-- contrato runtime: `contractVersion=2`;
-- `sourceAccountLifecycle=true`;
-- `canonicalProductSelection=true`;
-- Security Advisor: **0 lints** tras el último DDL;
-- las regresiones PostgreSQL de la política Google terminan con rollback limpio y sin residuos sintéticos.
+- `browser-interaction-e2e`: **SUCCESS**;
+- `protected-preview-access`: **SUCCESS** mediante Trusted Source GitHub OIDC;
+- `protected-preview-live`: **SUCCESS**;
+- preview Vercel comprobado contra el mismo `GITHUB_SHA` antes de ejecutar el gate;
+- `VERCEL_AUTOMATION_BYPASS_SECRET` vacío: el acceso no depende de desproteger el preview ni de un bypass artificial;
+- Playwright live: **126/126 pruebas superadas** en desktop y móvil;
+- preflight Google real: **SUCCESS**;
+- doble sincronización real consecutiva: **SUCCESS** e idempotente.
 
-La v12 conserva la autenticación personalizada Vercel OIDC dentro del gateway antes de abrir PostgreSQL. `verify_jwt=false` se mantiene deliberadamente porque el gateway no usa el JWT estándar de Supabase: verifica issuer, audience, owner, project, environment y subject de Vercel de forma explícita.
+Evidencia resumida emitida por el workflow:
 
-## Política privada de cuenta Google autorizada
+```text
+GOOGLE_SOURCE_PREFLIGHT|status=ok|revision=drive-version:97|rows=3172|accounts=3|cursors=2
+GOOGLE_SOURCE_SYNC|status=ok|revision=drive-version:97|rows=3172|first_inserted=0|first_skipped=3172|second_inserted=0|second_skipped=3172|duplicates=984|cursors=2
+```
 
-La cuenta Google autorizada ya no es una variable de entorno de Vercel ni un dato que deba viajar por el navegador.
+Los 984 registros marcados como `suspected` son candidatos de duplicidad funcional detectados por el motor; no representan errores de importación ni filas duplicadas añadidas por la segunda lectura.
 
-Se ha centralizado en Supabase mediante:
+## Fuente bancaria oficial
 
-- migración `20260904231301_google_source_private_policy`;
-- tabla privada `financial_app.google_source_policy`;
-- lectura de política mediante gateway server-only;
-- verificación fail-closed en PostgreSQL antes de almacenar la conexión OAuth/refresh token;
-- rechazo de política ausente o cuenta distinta;
-- regresión SQL con rollback y residuos finales `connections=0`, `mappings=0`, `transactions=0`;
-- política RLS restrictiva explícita mediante `20260904233200_google_source_policy_explicit_deny` para `anon` y `authenticated`.
+La única fuente bancaria oficial permanece estrictamente de **solo lectura**:
 
-El Security Advisor volvió a **0 lints** después de instalar la política deny-all explícita.
-
-El contrato de interfaz está blindado por Playwright: cuando falta configuración externa, solo pueden aparecer como pendientes `clientId` y `clientSecret`; `allowedEmail` no puede volver a tratarse como una variable externa.
-
-## Evidencias ya validadas
-
-### Fuente oficial
-
-Google Sheet oficial comprobado exclusivamente en lectura:
-
-- título: `Movimientos bancarios - fuente`;
+- Google Sheet: `Movimientos bancarios - fuente`;
+- ID: `1OT4QFeRDAchLkznnQvmAe3SslDVXDm1JXU_kIGIhtV8`;
+- revisión usada por el gate final: `drive-version:97`;
 - locale: `es_ES`;
 - zona horaria: `Europe/Madrid`;
 - contrato físico: exactamente 22 columnas;
-- pestañas físicas:
+- pestañas GRID:
   - `Cuenta corriente · 3967`;
   - `Cuenta ahorro · 2504`.
 
-### Reconciliación integral del dataset real
+La aplicación no selecciona manualmente otro archivo, no escribe en Drive/Sheets y no utiliza la fuente como almacenamiento de estado de Financial App.
 
-Se exportó una copia temporal solo para análisis, sin modificar el Google Sheet oficial, y se contrastó la fuente completa.
+## Reconciliación real del histórico
 
-Resultado autoritativo esperado para una primera importación correcta:
+Snapshot autoritativo validado:
 
-- **3.172 movimientos autoritativos**;
-- **3.172 IDs origen únicos**;
+- **3.172 movimientos**;
+- **3.172 identidades origen autoritativas**;
 - **3.024** movimientos lógicos de `Cuenta corriente Openbank · 3967`;
 - **15** movimientos canónicos de `Cuenta ahorro Openbank · 2504`;
 - **133** movimientos de `Tarjeta prepago Openbank · 8403` como ledger técnico archivado;
-- **10 copias históricas de ahorro** incrustadas en la pestaña corriente (`AH-00001`…`AH-00010`) que deben descartarse al existir su copia canónica en `Cuenta ahorro · 2504`.
+- **10** copias históricas `AH-00001`…`AH-00010` incrustadas en la pestaña corriente correctamente excluidas al existir su versión canónica en la pestaña de ahorro.
 
-Las diez copias históricas coinciden con las canónicas en fecha, importe y saldo, pero las filas canónicas conservan evidencia fuente más rica. La selección canónica evita duplicación y degradación de evidencia.
+Productos resultantes:
 
-Todas las filas autoritativas tienen importe numérico válido y fecha admitida por el contrato. No se encontraron colisiones de `ID origen` entre los 3.172 movimientos autoritativos.
+- cuenta corriente — `checking`, activa;
+- cuenta ahorro — `savings`, activa;
+- tarjeta prepago — `other`, archivada.
 
-### Valores de aceptación de primera importación
+Saldos iniciales derivados y validados: **0,00 €** para los tres productos. Cursores históricos preservados: `CC-02963` y `AH-00010`.
 
-- saldo inicial derivado de cuenta corriente: **0,00 €**;
-- saldo inicial derivado de cuenta ahorro: **0,00 €**;
-- saldo inicial de prepago técnica archivada: **0,00 €**;
-- último saldo observado de cuenta corriente en la fuente comprobada: **1.888,27 €**;
-- último saldo observado de cuenta ahorro en la fuente comprobada: **186.957,72 €**;
-- cursor esperado de la pestaña corriente tras primera importación completa: `CC-02963`;
-- cursor esperado de la pestaña ahorro: `AH-00010`.
+El contrato mantiene expresamente que el prefijo del ID físico no decide el producto lógico. El caso real `TP-00134` continúa protegido por regresión específica.
 
-Estos valores son criterios de aceptación. Una futura primera sincronización OAuth real no se considerará válida si los recuentos, productos, saldos iniciales o cursores se desvían sin una revisión posterior demostrada de la fuente.
+## Lector Google operativo
 
-### Caso real `TP-00134`: ID físico no equivale a producto lógico
+La ruta operativa de producción para la fuente es la cuenta de servicio de mínimo privilegio **Financial App Reader** dentro del proyecto Google Cloud `financial-app-507709`.
 
-La fuente contiene una excepción de negocio comprobada:
+Se ha validado realmente que:
 
-- `ID origen`: `TP-00134`;
-- fecha: `21/08/2026`;
-- `Producto o cuenta`: `Cuenta corriente Openbank · 3967`;
-- importe: `-21,00 €`;
-- saldo: nulo;
-- tipo: gasto;
-- canal: tarjeta prepago.
+- Google Sheets API y Google Drive API son accesibles desde Financial App;
+- la fuente está compartida con la identidad de servicio únicamente como **Lector**;
+- el runtime reconoce `authMode=service-account`;
+- la credencial está anclada al proyecto esperado y a la identidad esperada;
+- el JWT solicita únicamente `spreadsheets.readonly` y `drive.metadata.readonly`;
+- no existe selección manual del fichero oficial;
+- el secreto `GOOGLE_SERVICE_ACCOUNT_JSON` permanece en Vercel y su contenido no se registra en Git, documentación ni navegador;
+- la UI trata esta conexión como gestionada y no ofrece conectar/desconectar OAuth cuando está activo el modo de cuenta de servicio.
 
-La propia fuente indica que es una compra real realizada mediante prepago y conciliada con la recarga interna `CC-02996`, pero reasignada lógicamente a cuenta corriente para contabilizar el gasto una sola vez. La recarga queda como traspaso interno y la prepago se mantiene solo como ledger técnico.
+La implementación OAuth Web permanece como fallback/histórico y conserva sus protecciones, pero ya no es un requisito operativo para cerrar Fase 2.
 
-Conclusión contractual: **el prefijo del ID nunca decide el producto financiero**. La cuenta se determina por el contrato verificado de `Producto o cuenta`, institución, identificador y tipo de producto. Existe una regresión específica para impedir heurísticas por prefijo.
+## Primera importación persistente real
 
-### Orden y fechas
+La primera sincronización real contra la fuente oficial se completó correctamente con el run persistido:
 
-- Orden autoritativo: `newest-first` por fecha bancaria.
-- No se impone continuidad estricta fila-a-fila del saldo porque la fuente no garantiza una secuencia intradía suficiente para deducirla sin falsos errores.
-- El saldo inicial se deriva únicamente del movimiento autoritativo más antiguo cuando el contrato lo permite.
-- El parser admite fecha serial de Google Sheets, ISO `YYYY-MM-DD` y española `DD/MM/YYYY`.
-- El lector aplica una valla de revisión: si Drive cambia durante la lectura, el snapshot completo se rechaza y no se mezcla evidencia de dos revisiones.
+- `sync_run`: `7e9f7c38-0c79-40d4-a5a9-3d13777fa8e9`;
+- revisión: `drive-version:97`;
+- estado: `success`;
+- filas vistas: **3.172**;
+- insertadas: **3.172**;
+- revisadas: **0**;
+- omitidas: **0**;
+- fallidas: **0**;
+- warnings: **0**;
+- cursores: **2**.
 
-### Productos lógicos históricos
+Después de esta primera importación PostgreSQL contenía exactamente 3.172 movimientos y 3.172 registros fuente, sin crecimiento espurio.
 
-Contratos lógicos verificados:
+## Incidencia 546 y corrección acumulativa
 
-- `Cuenta corriente Openbank · 3967` — activa, `checking`;
-- `Cuenta ahorro Openbank · 2504` — activa, `savings`;
-- `Tarjeta prepago Openbank · 8403` — archivada, ledger técnico `other`.
+La primera tentativa de segunda lectura completa encontró un `WORKER_RESOURCE_LIMIT` de Supabase Edge (HTTP 546) porque la revisión ya persistida se estaba recorriendo nuevamente fila por fila dentro de la Edge Function. La transacción se revirtió atómicamente y no dañó ni duplicó el dataset.
 
-El motor separa pestañas físicas de productos lógicos y prefiere la fila de la pestaña canónica cuando un mismo ID aparece también en una copia histórica incrustada.
+La corrección instalada en `financial-app-db-gateway` **v15** no desactiva validaciones ni convierte la sincronización en un falso éxito. Introduce una ruta set-based para una revisión estrictamente inmutable ya conocida. Solo se acepta como replay estable cuando coinciden simultáneamente:
 
-### Sincronización incremental y persistencia
+- `source_revision`;
+- fingerprint del esquema;
+- todas las identidades de fila;
+- todos los fingerprints de fuente;
+- mappings de productos;
+- cursores por pestaña.
 
-Validado mediante regresiones reales contra PostgreSQL con `BEGIN/ROLLBACK`, sin residuos:
+La comparación se ejecuta dentro de una transacción con advisory lock por fuente. Si cualquiera de esos contratos no coincide, la operación vuelve al motor de ingesta completo. Existe regresión permanente para impedir que esta optimización relaje el contrato.
+
+## Idempotencia end-to-end real
+
+Después de instalar v15, el gate final ejecutó **dos sincronizaciones reales consecutivas** contra la misma revisión `drive-version:97`.
+
+Resultado de ambas:
+
+- filas vistas: **3.172**;
+- insertadas: **0**;
+- revisadas: **0**;
+- omitidas: **3.172**;
+- filas desaparecidas: **0**;
+- warnings: **0**;
+- cursores avanzados/verificados: **2**.
+
+Runs persistidos de comprobación:
+
+- `d82fc8d9-0e02-4396-b95b-02d38a4e784c` — success, 3.172 skips;
+- `dc2effe4-6148-444f-b835-1b48ea914bce` — success, 3.172 skips.
+
+Por tanto queda demostrada la idempotencia completa **Google → Financial App → PostgreSQL** sin depender de una simulación.
+
+## Persistencia final comprobada
+
+Consulta directa posterior al gate final:
+
+- `financial_app.transactions`: **3.172**;
+- `financial_app.transaction_source_records`: **3.172**;
+- `financial_app.account_source_mappings`: **3**;
+- `financial_app.sync_cursors`: **2**;
+- `financial_app.sync_issues`: **0**;
+- `financial_app.transaction_overrides`: **0**;
+- cuentas activas: **2**;
+- cuentas archivadas: **1**.
+
+La doble relectura no creó movimientos, source records ni mappings adicionales. La prepago permanece archivada y las dos cuentas operativas permanecen activas.
+
+## Sincronización incremental y calidad
+
+Quedan validados acumulativamente:
 
 - inserción inicial;
 - idempotencia;
 - revisiones inmutables de fuente;
 - preservación de overrides manuales;
-- auditoría de cambios de fuente;
-- duplicados reversibles y recomputación tras revisiones;
+- auditoría de revisiones de fuente;
+- detección y recomputación de duplicados;
 - preservación de duplicados confirmados manualmente;
 - auditoría no destructiva de filas desaparecidas;
 - reaparición sin falsos positivos;
 - cursores independientes por pestaña;
-- orden físico de cada pestaña preservado al persistir varios productos lógicos;
-- guardia de orden newest-first;
+- orden `newest-first`;
+- valla de revisión cuando Drive cambia durante una lectura;
 - fuente original inmutable;
-- creación de prepago como `archived` + `other` mediante la firma lifecycle;
-- compatibilidad controlada entre la firma legacy de 7 argumentos y la firma lifecycle de 8 argumentos de `ensure_source_account_mapping(...)`.
+- producto prepago `other/archived`;
+- transporte JSON/gzip con límites defensivos;
+- contrato runtime v2 y colocación `eu-west-3`;
+- rollback atómico ante fallos.
 
-La ambigüedad entre ambas firmas fue corregida mediante `20260904222622_disambiguate_source_account_mapping_overloads` y cuenta con regresión específica.
+Los bloques `Lector de fuente bancaria`, `Sincronización incremental` y `Calidad de entrada` están marcados **Completada** en el Plan detallado oficial.
 
-También se ejecutó previamente una simulación equivalente al volumen completo reconciliado:
+## Seguridad y protección
 
-- primera pasada: **3.172 inserciones**;
-- segunda pasada: **3.172 skips**;
-- sin crecimiento espurio;
-- overrides preservados;
-- dos cuentas activas + prepago `other/archived`;
-- final sin residuos.
+Se mantienen las protecciones validadas:
 
-El bloque funcional **Sincronización incremental** del Gantt permanece completado.
+- preview Vercel protegido;
+- Trusted Source independiente para Fase 1 y Fase 2;
+- autenticación GitHub OIDC comprobada en el gate final;
+- Edge Function con autenticación Vercel OIDC propia antes de abrir PostgreSQL;
+- `verify_jwt=false` es deliberado porque el gateway no confía en el JWT estándar de Supabase: verifica issuer, audience, owner, project, environment y subject de Vercel;
+- política Google privada y RLS deny-all para accesos cliente donde corresponde;
+- funciones sensibles de OAuth/Vault sin `EXECUTE` para `PUBLIC`, `anon` o `authenticated`;
+- refresh tokens OAuth, cuando se use el fallback, permanecen en Vault;
+- secretos de Google nunca se registran en este documento.
 
-### Preflight y guardia histórica
+## Regresión de Fase 1
 
-La primera importación Google queda bloqueada hasta superar una prevalidación completa de solo lectura. El preflight:
+El gate protegido final incluye las pruebas de Fundamentos y estas permanecen verdes dentro de las **126/126** pruebas live superadas. La Fase 2 no sustituye ni degrada la base validada de Fase 1.
 
-- lee y valida el workbook completo;
-- no persiste movimientos;
-- no modifica Google Drive ni Google Sheets;
-- resume productos, tipos/lifecycle, recuentos, saldos iniciales y cursores;
-- solo después habilita la primera escritura;
-- las sincronizaciones posteriores vuelven a validar el snapshot completo antes de persistir.
+## Criterios de cierre
 
-`assertOfficialSourceHistoricalBaseline(...)` está centralizado en preflight y sincronización real. Permite crecimiento por movimientos nuevos y bloquea regresiones del histórico conocido: pérdida de filas, desaparición/reclasificación de productos, cambios de lifecycle/tipo/saldo inicial y pérdida de pestañas o extremos históricos verificados.
+Los criterios que mantenían Fase 2 en 88% han quedado satisfechos con evidencia real:
 
-### OAuth / Vault
+1. lector Google real y read-only — **cerrado**;
+2. preflight contra la fuente oficial — **cerrado**;
+3. primera importación persistente — **cerrado**;
+4. segunda lectura idempotente — **cerrado**;
+5. repetición consecutiva de idempotencia — **cerrado**;
+6. trazabilidad y persistencia final exacta — **cerrado**;
+7. Trusted Source y preview protegido — **cerrado**;
+8. regresiones desktop/móvil y Fase 1 — **cerrado**.
 
-El flujo implementado mantiene:
+**Conclusión técnica: Fase 2 = 100% validada. Progreso global = 18,0%.**
 
-- `state` en cookie HttpOnly + Secure + SameSite=Lax;
-- scopes de identidad `openid email` solo para verificar identidad;
-- scopes de recurso estrictamente `spreadsheets.readonly` y `drive.metadata.readonly`;
-- correo Google verificado frente a política privada de Supabase;
-- lectura y validación completa del Sheet antes de almacenar refresh token;
-- refresh token en Supabase Vault, nunca en navegador ni Git;
-- rotación/desconexión sin residuos;
-- pérdida concurrente de la conexión convertida en `409 google_oauth_not_connected`, sin falso éxito;
-- refresh token revocado diferenciado de indisponibilidad temporal;
-- indisponibilidad temporal preserva la conexión y obliga a reintentar;
-- desconexión confirmada conserva movimientos e histórico previamente persistidos.
+## Transición a Fase 3
 
-Las funciones OAuth sensibles comprobadas no conceden `EXECUTE` a `anon`, `authenticated` ni `PUBLIC`.
-
-### Configuración · Fuente bancaria
-
-Implementada y validada en CI para escritorio y móvil:
-
-- navegación desde Configuración;
-- estado OAuth/runtime visible;
-- garantía explícita de solo lectura;
-- bloqueo claro mientras falten credenciales;
-- preflight obligatorio antes de primera importación;
-- sincronización iniciada únicamente mediante POST real;
-- no muestra éxito hasta recibir confirmación real;
-- relectura del estado persistido tras sincronizar;
-- último sync y cursores visibles;
-- errores de retorno OAuth convertidos en mensajes comprensibles;
-- query de retorno OAuth limpiada de la URL;
-- desconexión segura que conserva el histórico;
-- conexión perdida durante sync presentada como necesidad de reautorizar;
-- caída temporal durante refresh presentada como error recuperable;
-- responsive sin scroll horizontal en el viewport móvil validado.
-
-## Diagnóstico OAuth y preview protegido
-
-La configuración manual externa se ha reducido a las credenciales reales del OAuth Client Web de Google:
-
-- `GOOGLE_OAUTH_CLIENT_ID`;
-- `GOOGLE_OAUTH_CLIENT_SECRET`.
-
-La URI de retorno se deriva del entorno de Vercel. El Google Sheet oficial se descubre/verifica mediante Drive y el `source_file_id` se persiste tras la autorización. La cuenta permitida procede de la política privada de Supabase.
-
-No se inventarán ni sustituirán `CLIENT_ID` ni `CLIENT_SECRET` por valores ficticios.
-
-### Evidencia exacta del bloqueo de Deployment Protection
-
-En run `33931893040`, el token efímero generado por GitHub Actions expone, sin mostrar el JWT, estos claims relevantes:
-
-- `iss=https://token.actions.githubusercontent.com`;
-- `aud=https://github.com/massmedi-cpu`;
-- `repository=massmedi-cpu/Finanzas-3.0`;
-- `ref=refs/heads/rebuild/phase-2-data-quality`;
-- `workflow=Preview E2E`;
-- `event_name=push`;
-- `sub=repo:massmedi-cpu@314349444/Finanzas-3.0@1340586543:ref:refs/heads/rebuild/phase-2-data-quality`.
-
-El mismo patrón de workflow, `core.getIDToken()` y header `x-vercel-trusted-oidc-idp-token` fue aceptado por Vercel en la Fase 1. Sobre Fase 2, con preview exacto `4fe2c512…` READY, Vercel responde **HTTP 302 durante los 24 intentos**. `VERCEL_AUTOMATION_BYPASS_SECRET` está vacío.
-
-Por tanto quedan descartadas como causas la ausencia del token, la ausencia del deployment exacto, un fallo de build y un SHA desfasado. La evidencia es consistente con una Trusted Source cuya condición de claims no admite el token actual —la diferencia visible principal es el `ref/sub` de la rama—, pero la condición configurada dentro de Vercel no es visible ni editable mediante las acciones conectadas disponibles, así que no se afirma una regla concreta sin comprobarla.
-
-Vercel documenta que Trusted Sources verifica la firma del OIDC y los claims configurados. La corrección deberá hacerse en Project Settings → Deployment Protection → Trusted Sources, ampliando únicamente la condición necesaria para este repositorio/rama, o mediante un Automation Bypass seguro. No se debe desproteger el preview ni hacer pública la aplicación para superar el gate.
-
-## Gates restantes para cerrar Fase 2
-
-1. Configurar/verificar `GOOGLE_OAUTH_CLIENT_ID` y `GOOGLE_OAUTH_CLIENT_SECRET` reales de un OAuth Client Web de Google Cloud.
-2. Autorizar la cuenta permitida y ejecutar el preflight real desde Financial App contra la fuente oficial.
-3. Ejecutar la primera importación persistente real y contrastarla con los criterios de aceptación de 3.172 movimientos, tres productos, saldos iniciales y cursores, salvo crecimiento posterior demostrado de la fuente.
-4. Ejecutar una segunda sincronización real y demostrar idempotencia end-to-end Google → Financial App → PostgreSQL.
-5. Verificar en persistencia real trazabilidad, revisiones, overrides y prepago archivada tras esa segunda lectura.
-6. Ajustar Trusted Source/Automation Bypass de Vercel sin abrir el preview y ejecutar después todos los gates live sobre un deployment exacto.
-7. Reejecutar las regresiones de Fase 1 sobre el esquema final de Fase 2.
-8. Actualizar Gantt final, sacar PR #287 de Draft y fusionar únicamente cuando toda la Fase 2 quede verde.
-
-## Regla de cierre
-
-No se debe fusionar Fase 2 ni declarar 100% mientras falte OAuth/importación real o el gate live protegido no haya sido ejecutado realmente. Un bloqueo externo se documenta y no se maquilla como éxito. OCR permanece aislado para Fase 11.
+No se considera iniciado ningún trabajo de Fase 3 mientras la rama de Fase 2 no complete su transición controlada a `main`. El siguiente paso es cerrar la evidencia del PR #287, validar el commit documental final sin alterar el runtime y, solo entonces, realizar la fusión de la Fase 2. Fase 3 parte después desde el 18% global, respetando íntegramente los avances validados de Fases 1 y 2.
