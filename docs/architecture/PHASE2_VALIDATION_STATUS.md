@@ -20,15 +20,14 @@ El porcentaje no aumenta por commits, tiempo ni volumen de código. Solo aumenta
 - Base cerrada: `main` con Fase 1 validada al 100%.
 - Rama activa: `rebuild/phase-2-data-quality`.
 - Pull request de continuidad: #287, Draft, sin fusionar mientras Fase 2 siga abierta.
-- HEAD actual validado por CI: `ee68f4ea3f1c00f2e9e96ea0e71a46f9a99f7265`.
-- Último SHA con código de aplicación/runtime: `7bbe489bf18f68c77f00beb72cccc55f492caa76`.
-- GitHub Actions Preview E2E run `33930592739`: build de producción + TypeScript + Playwright/core-health **verdes**.
-- Playwright: **94 tests totales · 82 passed · 12 live skipped · 0 failed** en desktop y móvil.
+- Último checkpoint ejecutable validado: `4fe2c512a861b89705461246c00e1cc066e6041a`.
+- Último SHA con cambio de aplicación/runtime: `7bbe489bf18f68c77f00beb72cccc55f492caa76`; los commits posteriores solo endurecen pruebas, CI y documentación.
+- GitHub Actions Preview E2E run `33931893040`: build de producción + TypeScript + Playwright/core-health **verdes**.
+- Playwright sobre `4fe2c512…`: **94 tests totales · 82 passed · 12 live skipped · 0 failed** en desktop y móvil.
 - Los 12 omitidos corresponden exclusivamente a los 6 gates live de preview protegido ejecutados en ambos perfiles.
-- El commit `ee68f4ea…` solo endurece el test del contrato de configuración; no modifica runtime de la aplicación.
-- Vercel no generó deployment propio para `ee68f4ea…` por límite diario de despliegues. GitHub registra `Deployment rate limited — retry in 24 hours.`
-- El deployment READY más reciente del código ejecutable `7bbe489b…` es `dpl_GJ16p8dGqChS1weBKEeZ1G8fPKFK`.
-- No se contabiliza como gate live del HEAD actual ningún 302, SSO, share URL ni deployment de SHA distinto.
+- Vercel generó un deployment exacto y READY de `4fe2c512…`: `dpl_64LpL2pkSqYNXrFijj2WdMc2GB5M`.
+- El branch alias apunta a ese deployment exacto, por lo que ya está descartado que el skip live se deba a ausencia o retraso del preview.
+- Este documento puede vivir en un commit documental posterior; ese hecho no crea un nuevo cambio de runtime ni invalida la evidencia ejecutable de `4fe2c512…`.
 
 ## Supabase / runtime real
 
@@ -234,14 +233,23 @@ La URI de retorno se deriva del entorno de Vercel. El Google Sheet oficial se de
 
 No se inventarán ni sustituirán `CLIENT_ID` ni `CLIENT_SECRET` por valores ficticios.
 
-El gate protegido continúa bloqueado por Vercel Deployment Protection:
+### Evidencia exacta del bloqueo de Deployment Protection
 
-- GitHub Actions genera correctamente un token OIDC efímero;
-- `VERCEL_AUTOMATION_BYPASS_SECRET` no está configurado;
-- el header documentado `x-vercel-trusted-oidc-idp-token` es rechazado por el branch preview durante 24 intentos;
-- por tanto `protected-preview-live` se omite deliberadamente;
-- los intentos vía SSO/share URL devuelven 302 y no se contabilizan como éxito;
-- el workflow incorpora diagnóstico seguro de claims OIDC y del HTTP final sin imprimir el token, para poder ajustar la Trusted Source con evidencia exacta.
+En run `33931893040`, el token efímero generado por GitHub Actions expone, sin mostrar el JWT, estos claims relevantes:
+
+- `iss=https://token.actions.githubusercontent.com`;
+- `aud=https://github.com/massmedi-cpu`;
+- `repository=massmedi-cpu/Finanzas-3.0`;
+- `ref=refs/heads/rebuild/phase-2-data-quality`;
+- `workflow=Preview E2E`;
+- `event_name=push`;
+- `sub=repo:massmedi-cpu@314349444/Finanzas-3.0@1340586543:ref:refs/heads/rebuild/phase-2-data-quality`.
+
+El mismo patrón de workflow, `core.getIDToken()` y header `x-vercel-trusted-oidc-idp-token` fue aceptado por Vercel en la Fase 1. Sobre Fase 2, con preview exacto `4fe2c512…` READY, Vercel responde **HTTP 302 durante los 24 intentos**. `VERCEL_AUTOMATION_BYPASS_SECRET` está vacío.
+
+Por tanto quedan descartadas como causas la ausencia del token, la ausencia del deployment exacto, un fallo de build y un SHA desfasado. La evidencia es consistente con una Trusted Source cuya condición de claims no admite el token actual —la diferencia visible principal es el `ref/sub` de la rama—, pero la condición configurada dentro de Vercel no es visible ni editable mediante las acciones conectadas disponibles, así que no se afirma una regla concreta sin comprobarla.
+
+Vercel documenta que Trusted Sources verifica la firma del OIDC y los claims configurados. La corrección deberá hacerse en Project Settings → Deployment Protection → Trusted Sources, ampliando únicamente la condición necesaria para este repositorio/rama, o mediante un Automation Bypass seguro. No se debe desproteger el preview ni hacer pública la aplicación para superar el gate.
 
 ## Gates restantes para cerrar Fase 2
 
@@ -250,7 +258,7 @@ El gate protegido continúa bloqueado por Vercel Deployment Protection:
 3. Ejecutar la primera importación persistente real y contrastarla con los criterios de aceptación de 3.172 movimientos, tres productos, saldos iniciales y cursores, salvo crecimiento posterior demostrado de la fuente.
 4. Ejecutar una segunda sincronización real y demostrar idempotencia end-to-end Google → Financial App → PostgreSQL.
 5. Verificar en persistencia real trazabilidad, revisiones, overrides y prepago archivada tras esa segunda lectura.
-6. Autorizar correctamente la Trusted Source OIDC de Vercel para esta rama/repositorio o configurar un Automation Bypass seguro; ejecutar después todos los gates live sobre un deployment cuyo SHA ejecutable coincida exactamente.
+6. Ajustar Trusted Source/Automation Bypass de Vercel sin abrir el preview y ejecutar después todos los gates live sobre un deployment exacto.
 7. Reejecutar las regresiones de Fase 1 sobre el esquema final de Fase 2.
 8. Actualizar Gantt final, sacar PR #287 de Draft y fusionar únicamente cuando toda la Fase 2 quede verde.
 
