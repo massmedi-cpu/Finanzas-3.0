@@ -1,7 +1,7 @@
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 1 as const;
-export const CURRENT_PHASE_NAME = "Fundamentos" as const;
+export const CURRENT_PHASE = 4 as const;
+export const CURRENT_PHASE_NAME = "Movimientos" as const;
 
 export function getBuildInfo() {
   return {
