@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import {
   OfficialSourceHistoricalBaselineError,
@@ -149,4 +150,15 @@ test("bloquea que cambie la fila histórica más antigua conocida", () => {
   const summary = cloneSummary();
   summary.cursors[0].lastSourceRowKey = "CC-02962";
   expectBaselineError(summary, "historical_oldest_row_changed");
+});
+
+test("el callback OAuth aplica la guardia histórica antes de guardar la conexión", () => {
+  const callbackSource = readFileSync("app/api/source/google/callback/route.ts", "utf8");
+  const historicalGuard = callbackSource.indexOf(
+    "assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));",
+  );
+  const storeConnection = callbackSource.indexOf("const stored = await oauth.store");
+
+  expect(historicalGuard).toBeGreaterThan(-1);
+  expect(storeConnection).toBeGreaterThan(historicalGuard);
 });

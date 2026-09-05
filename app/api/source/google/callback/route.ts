@@ -1,5 +1,10 @@
 import { prepareOfficialSourceSyncBatch } from "../../../../../src/application/source-sync-service";
 import {
+  OfficialSourceHistoricalBaselineError,
+  assertOfficialSourceHistoricalBaseline,
+  buildOfficialSourcePreflightSummary,
+} from "../../../../../src/application/source-preflight";
+import {
   GoogleOauthError,
   exchangeGoogleAuthorizationCode,
   fetchGoogleUserInfo,
@@ -88,6 +93,7 @@ export async function GET(request: Request) {
       { getAccessToken: async () => tokens.accessToken },
     );
     const snapshot = await reader.read();
+    assertOfficialSourceHistoricalBaseline(buildOfficialSourcePreflightSummary(snapshot));
     prepareOfficialSourceSyncBatch(snapshot);
 
     const stored = await oauth.store({
@@ -116,6 +122,9 @@ export async function GET(request: Request) {
     }
     if (error instanceof GoogleOfficialSourceDiscoveryError) {
       return callbackRedirect(request, "error", error.code);
+    }
+    if (error instanceof OfficialSourceHistoricalBaselineError) {
+      return callbackRedirect(request, "error", "google_source_historical_regression");
     }
     console.error("google-oauth-callback", error instanceof Error ? error.name : "unknown_error");
     return callbackRedirect(request, "error", "google_oauth_callback_failed");
