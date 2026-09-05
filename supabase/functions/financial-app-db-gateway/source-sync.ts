@@ -328,14 +328,14 @@ export async function handleSourceSyncAction(input: {
         const first = await tx`
           select * from financial_app.ingest_source_observation(
             '__phase2_gateway_test__','sheet-1','ROW-1','__phase2_gateway_test__::sheet-1::ROW-1',${"a".repeat(64)},
-            ${JSON.stringify({ id: "ROW-1" })}::jsonb,'2026-09-01'::date,'TEST','TEST',-100,900,
+            ${{ id: "ROW-1" }},'2026-09-01'::date,'TEST','TEST',-100,900,
             'Cuenta prueba gateway','expense','pending',now()
           )
         `;
         const repeated = await tx`
           select * from financial_app.ingest_source_observation(
             '__phase2_gateway_test__','sheet-1','ROW-1','__phase2_gateway_test__::sheet-1::ROW-1',${"a".repeat(64)},
-            ${JSON.stringify({ id: "ROW-1" })}::jsonb,'2026-09-01'::date,'TEST','TEST',-100,900,
+            ${{ id: "ROW-1" }},'2026-09-01'::date,'TEST','TEST',-100,900,
             'Cuenta prueba gateway','expense','pending',now()
           )
         `;
@@ -346,14 +346,14 @@ export async function handleSourceSyncAction(input: {
         const duplicateA = await tx`
           select * from financial_app.ingest_source_observation(
             '__phase2_gateway_test__','sheet-1','DUP-A','__phase2_gateway_test__::sheet-1::DUP-A',${"b".repeat(64)},
-            ${JSON.stringify({ id: "DUP-A" })}::jsonb,'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,400,
+            ${{ id: "DUP-A" }},'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,400,
             'Cuenta prueba gateway','expense','pending',now()
           )
         `;
         const duplicateB = await tx`
           select * from financial_app.ingest_source_observation(
             '__phase2_gateway_test__','sheet-1','DUP-B','__phase2_gateway_test__::sheet-1::DUP-B',${"c".repeat(64)},
-            ${JSON.stringify({ id: "DUP-B" })}::jsonb,'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,-100,
+            ${{ id: "DUP-B" }},'2026-09-02'::date,'DUPLICADO','DUPLICADO',-500,-100,
             'Cuenta prueba gateway','expense','pending',now()
           )
         `;
@@ -368,7 +368,7 @@ export async function handleSourceSyncAction(input: {
         await tx`
           select * from financial_app.ingest_source_observation(
             '__phase2_gateway_test__','sheet-1','DUP-A','__phase2_gateway_test__::sheet-1::DUP-A',${"d".repeat(64)},
-            ${JSON.stringify({ id: "DUP-A", corrected: true })}::jsonb,'2026-09-02'::date,'CORREGIDO','CORREGIDO',-600,300,
+            ${{ id: "DUP-A", corrected: true }},'2026-09-02'::date,'CORREGIDO','CORREGIDO',-600,300,
             'Cuenta prueba gateway','expense','needs_review',now()
           )
         `;
