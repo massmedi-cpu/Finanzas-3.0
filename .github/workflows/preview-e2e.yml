@@ -66,6 +66,33 @@ jobs:
             core.setSecret(token);
             core.setOutput('token', token);
 
+      - name: Report safe GitHub OIDC claims
+        env:
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          node <<'NODE'
+          const token = process.env.VERCEL_TRUSTED_OIDC_TOKEN || '';
+          const part = token.split('.')[1];
+          if (!part) {
+            console.log('OIDC claims unavailable: token payload missing.');
+            process.exit(0);
+          }
+          try {
+            const normalized = part.replace(/-/g, '+').replace(/_/g, '/');
+            const payload = JSON.parse(Buffer.from(normalized, 'base64').toString('utf8'));
+            const safeKeys = [
+              'iss', 'aud', 'sub', 'repository', 'repository_id', 'repository_owner',
+              'repository_owner_id', 'ref', 'ref_type', 'workflow_ref', 'job_workflow_ref',
+              'workflow', 'event_name', 'actor', 'actor_id'
+            ];
+            const safe = Object.fromEntries(safeKeys.filter((key) => payload[key] !== undefined).map((key) => [key, payload[key]]));
+            console.log(`GitHub OIDC safe claims: ${JSON.stringify(safe)}`);
+          } catch {
+            console.log('OIDC claims unavailable: payload could not be decoded.');
+          }
+          NODE
+
       - name: Detect protected preview access
         id: access
         env:
@@ -79,12 +106,14 @@ jobs:
             exit 0
           fi
 
+          last_status="not-requested"
           for attempt in $(seq 1 24); do
             status=$(curl --silent --show-error \
               --output /tmp/vercel-oidc-probe.json \
               --write-out "%{http_code}" \
               -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
               "$VERCEL_PREVIEW_URL/api/build" || true)
+            last_status="$status"
 
             if [ "$status" = "200" ]; then
               echo "available=true" >> "$GITHUB_OUTPUT"
@@ -101,6 +130,7 @@ jobs:
           echo "available=false" >> "$GITHUB_OUTPUT"
           echo "method=none" >> "$GITHUB_OUTPUT"
           echo "Protected preview access is still not authorized after bounded retries."
+          echo "Final protected preview probe HTTP status: $last_status"
 
   protected-preview-live:
     needs: protected-preview-access
