@@ -113,7 +113,16 @@ if (environment === "preview") {
     if (merchantAliasResidue[key] !== 0) throw new Error(`gateway_merchant_alias_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias=ok";
+  const ruleEngine = await callAction(oidcToken, "test.categorization_rule_engine");
+  if (ruleEngine.verified !== true || ruleEngine.clean !== true || !ruleEngine.deterministicRuleId) {
+    throw new Error("gateway_categorization_rule_engine_not_clean");
+  }
+  const ruleResidue = ruleEngine.residue ?? {};
+  for (const key of ["accounts", "categories", "merchants", "aliases", "rules", "sources", "transactions", "overrides"]) {
+    if (ruleResidue[key] !== 0) throw new Error(`gateway_rule_engine_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules=ok";
 }
 
 console.log(

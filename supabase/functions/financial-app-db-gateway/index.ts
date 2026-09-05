@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { gunzipSync } from "node:zlib";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
+import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
@@ -248,6 +249,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (merchantAliasResponse) return merchantAliasResponse;
+
+    const ruleResponse = await handleCategorizationRuleAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (ruleResponse) return ruleResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,
