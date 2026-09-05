@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -537,8 +537,8 @@ export default function TransactionsClient() {
               <thead><tr><th className={styles.selectHeading}>Sel.</th><th>Fecha</th><th>Concepto y trazabilidad</th><th>Cuenta</th><th>Categoría</th><th>Estado</th><th className={styles.amountHeading}>Importe</th><th>Gestión</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
-                  <>
-                    <tr key={row.id} className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>
+                  <Fragment key={row.id}>
+                    <tr className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>
                       <td data-label="Seleccionar" className={styles.selectCell}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={() => toggleRow(row.id)} /></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
@@ -560,7 +560,7 @@ export default function TransactionsClient() {
                       <td data-label="Gestión"><button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button></td>
                     </tr>
                     {editingId === row.id && editor && (
-                      <tr key={`${row.id}-editor`} className={styles.editorRow}><td colSpan={8}>
+                      <tr className={styles.editorRow}><td colSpan={8}>
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
                           <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>Solo se modifica la capa personal de overrides.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
                           <div className={styles.editorGrid}>
@@ -576,7 +576,7 @@ export default function TransactionsClient() {
                         </section>
                       </td></tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
