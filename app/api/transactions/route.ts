@@ -10,6 +10,7 @@ const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const KINDS = new Set(["income", "expense", "transfer", "refund", "adjustment"]);
 const REVIEW_STATES = new Set(["confirmed", "pending", "needs_review"]);
 const DUPLICATE_STATES = new Set(["none", "suspected", "confirmed"]);
+const DUPLICATE_DECISIONS = new Set(["confirmed", "dismissed"]);
 const PATCH_FIELDS = new Set([
   "concept",
   "merchantMode",
@@ -33,6 +34,12 @@ function optionalUuid(params: URLSearchParams, key: string) {
   const value = optionalText(params, key, 64);
   if (value === null) return null;
   if (!UUID.test(value)) throw new Error(`invalid_${key}`);
+  return value;
+}
+
+function requiredUuid(params: URLSearchParams, key: string) {
+  const value = optionalUuid(params, key);
+  if (!value) throw new Error(`invalid_${key}`);
   return value;
 }
 
@@ -64,6 +71,15 @@ function pageLimit(params: URLSearchParams) {
   if (!/^\d+$/.test(raw)) throw new Error("invalid_limit");
   const value = Number(raw);
   if (!Number.isInteger(value) || value < 1 || value > 100) throw new Error("invalid_limit");
+  return value;
+}
+
+function transferDayWindow(params: URLSearchParams) {
+  const raw = params.get("dayWindow");
+  if (raw === null || raw === "") return 3;
+  if (!/^\d+$/.test(raw)) throw new Error("invalid_transfer_day_window");
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > 7) throw new Error("invalid_transfer_day_window");
   return value;
 }
 
@@ -100,11 +116,53 @@ function validatePatchBody(value: unknown) {
   return { transactionIds: ids as string[], patch: patch as Record<string, unknown> };
 }
 
+function reviewBody(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_review_body");
+  const body = value as Record<string, unknown>;
+  if (typeof body.action !== "string") throw new Error("invalid_review_action");
+  if (typeof body.transactionId !== "string" || !UUID.test(body.transactionId)) throw new Error("invalid_transaction_id");
+
+  if (body.action === "duplicate-review") {
+    if (typeof body.decision !== "string" || !DUPLICATE_DECISIONS.has(body.decision)) {
+      throw new Error("invalid_duplicate_review_decision");
+    }
+    return { action: body.action, transactionId: body.transactionId, decision: body.decision } as const;
+  }
+  if (body.action === "transfer-pair") {
+    if (typeof body.pairId !== "string" || !UUID.test(body.pairId) || body.pairId === body.transactionId) {
+      throw new Error("invalid_pair_id");
+    }
+    return { action: body.action, transactionId: body.transactionId, pairId: body.pairId } as const;
+  }
+  if (body.action === "transfer-unpair") {
+    return { action: body.action, transactionId: body.transactionId } as const;
+  }
+  throw new Error("invalid_review_action");
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    if (searchParams.get("mode") === "facets") {
+    const mode = searchParams.get("mode");
+    if (mode === "facets") {
       const result = await callPersistenceGateway("transaction.facets");
+      return Response.json(result, {
+        headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+      });
+    }
+    if (mode === "duplicate-group") {
+      const result = await callPersistenceGateway("transaction.duplicate_group", {
+        transactionId: requiredUuid(searchParams, "transactionId"),
+      });
+      return Response.json(result, {
+        headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+      });
+    }
+    if (mode === "transfer-candidates") {
+      const result = await callPersistenceGateway("transaction.transfer_candidates", {
+        transactionId: requiredUuid(searchParams, "transactionId"),
+        dayWindow: transferDayWindow(searchParams),
+      });
       return Response.json(result, {
         headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
       });
@@ -151,6 +209,22 @@ export async function PATCH(request: Request) {
     const raw = await request.json().catch(() => null);
     const { transactionIds, patch } = validatePatchBody(raw);
     const result = await callPersistenceGateway("transaction.patch", { transactionIds, patch });
+    return Response.json(result, {
+      headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+export async function POST(request: Request) {
+  try {
+    const command = reviewBody(await request.json().catch(() => null));
+    const result = command.action === "duplicate-review"
+      ? await callPersistenceGateway("transaction.duplicate_review", command)
+      : command.action === "transfer-pair"
+        ? await callPersistenceGateway("transaction.transfer_pair", command)
+        : await callPersistenceGateway("transaction.transfer_unpair", command);
     return Response.json(result, {
       headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
     });
