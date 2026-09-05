@@ -6,6 +6,7 @@ import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
+import { handleTransactionManagementAction } from "./transaction-management.ts";
 import { handleTransactionQueryAction } from "./transaction-query.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
@@ -61,9 +62,7 @@ async function readGatewayJsonBody(req: Request) {
     return parseGatewayJsonBody(bodyBytes);
   }
 
-  if (contentEncoding !== "gzip") {
-    throw new Error("unsupported_content_encoding");
-  }
+  if (contentEncoding !== "gzip") throw new Error("unsupported_content_encoding");
   if (bodyBytes.byteLength > MAX_COMPRESSED_GATEWAY_BODY_BYTES) {
     throw new Error("gateway_compressed_body_too_large");
   }
@@ -164,11 +163,7 @@ Deno.serve(async (req) => {
     const payload = body?.payload ?? {};
 
     if (action === "source.capabilities") {
-      return json({
-        contractVersion: 2,
-        sourceAccountLifecycle: true,
-        canonicalProductSelection: true,
-      });
+      return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
     }
 
     if (action === "test.cleanup") {
@@ -266,6 +261,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (transactionQueryResponse) return transactionQueryResponse;
+
+    const transactionManagementResponse = await handleTransactionManagementAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (transactionManagementResponse) return transactionManagementResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,
