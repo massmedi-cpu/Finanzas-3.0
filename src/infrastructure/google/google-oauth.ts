@@ -16,6 +16,7 @@ export class GoogleOauthError extends Error {
       | "google_reauthorization_required"
       | "google_token_response_invalid"
       | "google_refresh_token_missing"
+      | "google_refresh_token_temporary"
       | "google_required_scope_missing"
       | "google_userinfo_failed"
       | "google_userinfo_invalid",
@@ -86,6 +87,7 @@ export function validateGoogleOauthState(expected: string, received: string | nu
 type TokenResponse = {
   access_token?: unknown;
   refresh_token?: unknown;
+  refresh_token_expires_in?: unknown;
   expires_in?: unknown;
   scope?: unknown;
   token_type?: unknown;
@@ -190,6 +192,23 @@ export async function exchangeGoogleAuthorizationCode(input: {
     throw new GoogleOauthError(
       "google_token_response_invalid",
       "La respuesta OAuth de Google no tiene el formato esperado.",
+    );
+  }
+
+  if (payload.refresh_token_expires_in !== undefined) {
+    if (
+      typeof payload.refresh_token_expires_in !== "number" ||
+      !Number.isFinite(payload.refresh_token_expires_in) ||
+      payload.refresh_token_expires_in <= 0
+    ) {
+      throw new GoogleOauthError(
+        "google_token_response_invalid",
+        "Google ha devuelto una caducidad de refresh token no válida.",
+      );
+    }
+    throw new GoogleOauthError(
+      "google_refresh_token_temporary",
+      "Google ha entregado un refresh token temporal; la conexión no se guardará. Configura la aplicación OAuth como In production y vuelve a autorizar.",
     );
   }
 
