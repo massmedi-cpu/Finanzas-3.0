@@ -52,6 +52,12 @@ function pageLimit(value: unknown) {
   return value;
 }
 
+function booleanValue(value: unknown, field: string) {
+  if (value === undefined || value === null) return false;
+  if (typeof value !== "boolean") throw new Error(`invalid_${field}`);
+  return value;
+}
+
 export async function handleTransactionQueryAction(input: {
   action: unknown;
   payload: any;
@@ -73,6 +79,7 @@ export async function handleTransactionQueryAction(input: {
     const cursorBankDate = nullableDate(payload.cursorBankDate, "transaction_cursor_bank_date");
     const cursorId = nullableUuid(payload.cursorId, "transaction_cursor_id");
     const limit = pageLimit(payload.limit);
+    const uncategorized = booleanValue(payload.uncategorized, "transaction_uncategorized");
 
     if ((cursorBankDate === null) !== (cursorId === null)) throw new Error("invalid_transaction_cursor");
 
@@ -89,7 +96,8 @@ export async function handleTransactionQueryAction(input: {
         ${dateTo}::date,
         ${cursorBankDate}::date,
         ${cursorId}::uuid,
-        ${limit}
+        ${limit},
+        ${uncategorized}
       ) as result
     `;
     return json(rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null });
@@ -196,15 +204,13 @@ export async function handleTransactionQueryAction(input: {
 
         const firstRows = await tx`
           select financial_app.query_effective_transactions(
-            ${token},null,null,null,null,null,null,null,null,null,null,1
+            ${token},null,null,null,null,null,null,null,null,null,null,1,false
           ) as result
         `;
         const first = firstRows[0]?.result;
         const firstItem = first?.rows?.[0];
         if (
-          first?.totalCount !== 2 ||
-          first?.hasMore !== true ||
-          first?.rows?.length !== 1 ||
+          first?.totalCount !== 2 || first?.hasMore !== true || first?.rows?.length !== 1 ||
           firstItem?.id !== transactionAId ||
           firstItem?.concept?.original !== `SUPERMERCADO TEST ${token}` ||
           firstItem?.concept?.effective !== 'Compra mercado personalizada' ||
@@ -222,7 +228,7 @@ export async function handleTransactionQueryAction(input: {
         if (!cursor?.bankDate || !cursor?.id) throw new Error("test_transaction_query_cursor_missing");
         const secondRows = await tx`
           select financial_app.query_effective_transactions(
-            ${token},null,null,null,null,null,null,null,null,${cursor.bankDate}::date,${cursor.id}::uuid,1
+            ${token},null,null,null,null,null,null,null,null,${cursor.bankDate}::date,${cursor.id}::uuid,1,false
           ) as result
         `;
         const second = secondRows[0]?.result;
@@ -232,11 +238,20 @@ export async function handleTransactionQueryAction(input: {
 
         const categoryRowsFiltered = await tx`
           select financial_app.query_effective_transactions(
-            null,null,${categoryId}::uuid,null,null,null,null,null,null,null,null,10
+            null,null,${categoryId}::uuid,null,null,null,null,null,null,null,null,10,false
           ) as result
         `;
         if (categoryRowsFiltered[0]?.result?.totalCount !== 1) {
           throw new Error("test_transaction_query_effective_filter_failed");
+        }
+
+        const uncategorizedRows = await tx`
+          select financial_app.query_effective_transactions(
+            null,null,null,null,null,null,null,null,null,null,null,10,true
+          ) as result
+        `;
+        if (uncategorizedRows[0]?.result?.totalCount !== 1 || uncategorizedRows[0]?.result?.rows?.[0]?.id !== txB[0]?.id) {
+          throw new Error("test_transaction_query_uncategorized_filter_failed");
         }
 
         verified = true;
