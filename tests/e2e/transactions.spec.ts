@@ -125,7 +125,7 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
   await expect(firstTransaction.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
   await expect(firstTransaction.getByText("-12,34 €", { exact: true })).toBeVisible();
   await expect(firstTransaction.getByText("Modificado", { exact: true })).toBeVisible();
-  await expect(firstTransaction.getByText("Alimentación", { exact: true }).first()).toBeVisible();
+  await expect(firstTransaction.locator('td[data-label="Categoría"]').getByText("Alimentación", { exact: true })).toBeVisible();
 
   const trace = firstTransaction.locator("details");
   await trace.locator("summary").click();
