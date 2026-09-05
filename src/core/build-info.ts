@@ -2,8 +2,8 @@ export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 4 as const;
 export const CURRENT_PHASE_NAME = "Movimientos" as const;
-export const CURRENT_PHASE_BLOCK = 12 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Gestión" as const;
+export const CURRENT_PHASE_BLOCK = 13 as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Duplicados y transferencias" as const;
 
 export function getBuildInfo() {
   return {
