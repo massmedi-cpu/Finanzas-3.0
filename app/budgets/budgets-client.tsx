@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./budgets.module.css";
 
 type BudgetStatus = "empty" | "unfunded" | "on_track" | "over";
@@ -48,7 +48,15 @@ type BudgetSnapshot = {
   };
 };
 
-type IconName = "wallet" | "spent" | "remaining" | "progress" | "spark" | "category" | "refresh" | "warning";
+type IconName =
+  | "wallet"
+  | "spent"
+  | "remaining"
+  | "progress"
+  | "spark"
+  | "category"
+  | "refresh"
+  | "warning";
 
 const moneyFormatter = new Intl.NumberFormat("es-ES", {
   style: "currency",
@@ -85,6 +93,10 @@ function formatMonth(value: string) {
   return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
+function shortMonth(value: string) {
+  return formatMonth(value).replace(/ de /g, " ").split(" ")[0];
+}
+
 function formatProgress(bps: number | null) {
   if (bps === null) return "Sin referencia";
   return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 }).format(bps / 100)} %`;
@@ -111,16 +123,53 @@ function euroInputFromCents(cents: number | null) {
 }
 
 function parseEuroInput(value: string) {
-  const normalized = value.trim().replace(/\s/g, "").replace(/\./g, "").replace(",", ".");
-  if (!normalized) return null;
-  if (!/^\d+(?:\.\d{0,2})?$/.test(normalized)) return undefined;
-  const euros = Number(normalized);
+  const compact = value.trim().replace(/\s/g, "");
+  if (!compact) return null;
+  if (!/^\d[\d.,]*$/.test(compact)) return undefined;
+
+  const comma = compact.lastIndexOf(",");
+  const dot = compact.lastIndexOf(".");
+  let integerPart = compact;
+  let decimalPart = "";
+
+  if (comma >= 0 && dot >= 0) {
+    const decimalIndex = Math.max(comma, dot);
+    integerPart = compact.slice(0, decimalIndex).replace(/[.,]/g, "");
+    decimalPart = compact.slice(decimalIndex + 1);
+    if (!/^\d{1,2}$/.test(decimalPart)) return undefined;
+  } else if (comma >= 0 || dot >= 0) {
+    const separator = comma >= 0 ? "," : ".";
+    const pieces = compact.split(separator);
+    if (pieces.length === 2) {
+      const [left, right] = pieces;
+      if (!left || !right || !/^\d+$/.test(left) || !/^\d+$/.test(right)) return undefined;
+      if (right.length <= 2) {
+        integerPart = left;
+        decimalPart = right;
+      } else if (right.length === 3 && left.length <= 3) {
+        integerPart = `${left}${right}`;
+      } else {
+        return undefined;
+      }
+    } else {
+      if (!pieces.every((piece, index) => /^\d+$/.test(piece) && (index === 0 || piece.length === 3))) {
+        return undefined;
+      }
+      integerPart = pieces.join("");
+    }
+  }
+
+  if (!/^\d+$/.test(integerPart) || (decimalPart && !/^\d{1,2}$/.test(decimalPart))) {
+    return undefined;
+  }
+
+  const euros = Number(`${integerPart}.${decimalPart.padEnd(2, "0") || "00"}`);
   const cents = Math.round(euros * 100);
   return Number.isSafeInteger(cents) && cents >= 0 ? cents : undefined;
 }
 
 function Icon({ name }: { name: IconName }) {
-  const paths: Record<IconName, React.ReactNode> = {
+  const paths: Record<IconName, ReactNode> = {
     wallet: <><path d="M4 7.5h15.5v11H4a2 2 0 0 1-2-2v-11a2 2 0 0 1 2-2h13v4"/><path d="M15 11h7v5h-7a2.5 2.5 0 0 1 0-5Z"/></>,
     spent: <><path d="M4 4v16h16"/><path d="m7 15 4-4 3 3 5-6"/><path d="M16 8h3v3"/></>,
     remaining: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
@@ -168,7 +217,6 @@ function BudgetCard({
   onSave: () => void;
   onClearManual: () => void;
 }) {
-  const maxHistory = Math.max(1, ...item.historyMonths.map((row) => row.expenseCents));
   const remainingLabel = item.remainingCents >= 0 ? "Disponible" : "Exceso";
 
   return (
@@ -249,23 +297,10 @@ function BudgetCard({
         </div>
       ) : null}
 
-      <p className={styles.helper}>
-        El gasto real procede del motor financiero central. El presupuesto no altera ningún movimiento bancario.
-      </p>
-
       {total ? (
-        <>
-          <div className={styles.history} style={{ marginTop: "1rem" }} aria-label="Histórico usado para el cálculo automático">
-            {item.historyMonths.map((row) => (
-              <div className={styles.historyRow} key={row.month}>
-                <span>{formatMonth(row.month).replace(/ de /g, " ").split(" ").slice(0, 1).join(" ")}</span>
-                <div className={styles.historyBar}><i style={{ width: `${Math.max(3, (row.expenseCents / maxHistory) * 100)}%` }} /></div>
-                <strong>{formatMoney(row.expenseCents)}</strong>
-              </div>
-            ))}
-          </div>
-          <p className={styles.explanation}>{item.automaticExplanation}</p>
-        </>
+        <p className={styles.helper}>
+          El gasto real procede del motor financiero central. El presupuesto nunca altera movimientos ni datos de la fuente bancaria.
+        </p>
       ) : null}
     </article>
   );
@@ -277,12 +312,14 @@ export default function BudgetsClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
     setLoading(true);
     setError("");
+    setNotice("");
     try {
       const response = await fetch(`/api/budgets?month=${encodeURIComponent(selectedMonth)}`, {
         cache: "no-store",
@@ -303,9 +340,14 @@ export default function BudgetsClient() {
     void fetchSnapshot(month);
   }, [fetchSnapshot, month]);
 
-  const mutate = useCallback(async (method: "POST" | "PATCH", body: Record<string, unknown>) => {
+  const mutate = useCallback(async (
+    method: "POST" | "PATCH",
+    body: Record<string, unknown>,
+    successMessage: string,
+  ) => {
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       const response = await fetch("/api/budgets", {
         method,
@@ -317,6 +359,7 @@ export default function BudgetsClient() {
       setSnapshot(payload as BudgetSnapshot);
       setEditingKey(null);
       setEditValue("");
+      setNotice(successMessage);
       return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "No se pudo actualizar el presupuesto.");
@@ -327,11 +370,13 @@ export default function BudgetsClient() {
   }, []);
 
   const handleRefresh = useCallback(() => {
-    void mutate("POST", { month });
+    void mutate("POST", { month }, `Presupuesto de ${formatMonth(month)} recalculado y guardado.`);
   }, [month, mutate]);
 
   const startEdit = useCallback((item: BudgetItem) => {
     const key = item.categoryId ?? "__total__";
+    setError("");
+    setNotice("");
     setEditingKey(key);
     setEditValue(euroInputFromCents(item.manualAmountCents ?? item.effectiveAmountCents));
   }, []);
@@ -340,21 +385,22 @@ export default function BudgetsClient() {
     const cents = parseEuroInput(editValue);
     if (cents === undefined || cents === null) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
+      setNotice("");
       return;
     }
-    void mutate("PATCH", {
-      month,
-      categoryId: item.categoryId,
-      manualAmountCents: cents,
-    });
+    void mutate(
+      "PATCH",
+      { month, categoryId: item.categoryId, manualAmountCents: cents },
+      "Límite manual guardado.",
+    );
   }, [editValue, month, mutate]);
 
   const clearManual = useCallback((item: BudgetItem) => {
-    void mutate("PATCH", {
-      month,
-      categoryId: item.categoryId,
-      manualAmountCents: null,
-    });
+    void mutate(
+      "PATCH",
+      { month, categoryId: item.categoryId, manualAmountCents: null },
+      "Se ha restaurado el cálculo automático.",
+    );
   }, [month, mutate]);
 
   const categorySummary = useMemo(() => {
@@ -386,7 +432,9 @@ export default function BudgetsClient() {
               type="month"
               min="0001-01"
               value={month}
-              onChange={(event) => setMonth(event.target.value)}
+              onChange={(event) => {
+                if (event.target.value) setMonth(event.target.value);
+              }}
               disabled={busy}
             />
           </label>
@@ -404,6 +452,7 @@ export default function BudgetsClient() {
             <span>{error}</span>
           </div>
         ) : null}
+        {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
         {loading ? (
           <section className={styles.panel}>
@@ -509,7 +558,7 @@ export default function BudgetsClient() {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
                       return (
                         <div className={styles.historyRow} key={row.month}>
-                          <span>{formatMonth(row.month).replace(/ de /g, " ").split(" ")[0]}</span>
+                          <span>{shortMonth(row.month)}</span>
                           <div className={styles.historyBar}><i style={{ width: `${Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
                           <strong>{formatMoney(row.expenseCents)}</strong>
                         </div>

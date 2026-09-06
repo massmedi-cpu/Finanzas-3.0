@@ -131,11 +131,10 @@
 }
 
 .textButton {
-  min-height: 2.5rem;
   border: 0;
   background: transparent;
   color: #8fb5ff;
-  padding-inline: 0.45rem;
+  padding-inline: 0.55rem;
 }
 
 .actionButton:disabled,
@@ -151,16 +150,26 @@
   margin-top: 1rem;
 }
 
-.alert {
+.alert,
+.notice {
   display: flex;
   align-items: flex-start;
   gap: 0.65rem;
   padding: 0.9rem 1rem;
-  border: 1px solid rgba(255, 93, 115, 0.26);
   border-radius: 1rem;
+  font-size: 0.9rem;
+}
+
+.alert {
+  border: 1px solid rgba(255, 93, 115, 0.26);
   background: rgba(255, 93, 115, 0.08);
   color: #ffd1d8;
-  font-size: 0.9rem;
+}
+
+.notice {
+  border: 1px solid rgba(53, 208, 127, 0.24);
+  background: rgba(53, 208, 127, 0.08);
+  color: #9aebba;
 }
 
 .summaryGrid {
@@ -398,7 +407,7 @@
 }
 
 .editor input {
-  min-height: 2.75rem;
+  min-height: 2.9rem;
   width: 100%;
   padding: 0.55rem 0.7rem;
   border: 1px solid rgba(137, 173, 255, 0.2);
@@ -414,7 +423,7 @@
 }
 
 .helper {
-  margin: 0.65rem 0 0;
+  margin: 0.75rem 0 0;
   color: #6f809f;
   font-size: 0.72rem;
 }
