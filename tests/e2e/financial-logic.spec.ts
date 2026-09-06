@@ -2,12 +2,21 @@ import { expect, test } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
-test("financial API rejects unsupported modes and reversed date ranges", async ({ request }) => {
+test("financial API rejects unsupported modes and invalid dates", async ({ request }) => {
   const invalidMode = await request.get("/api/financial?mode=unsupported");
   expect(invalidMode.status()).toBe(400);
   await expect(invalidMode.json()).resolves.toMatchObject({
     error: "invalid_request",
     code: "invalid_mode",
+  });
+
+  const invalidCalendarDate = await request.get(
+    "/api/financial?mode=period&dateFrom=2026-02-30&dateTo=2026-03-01",
+  );
+  expect(invalidCalendarDate.status()).toBe(400);
+  await expect(invalidCalendarDate.json()).resolves.toMatchObject({
+    error: "invalid_request",
+    code: "invalid_dateFrom",
   });
 
   const invalidRange = await request.get(
