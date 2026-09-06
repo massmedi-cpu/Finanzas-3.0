@@ -297,7 +297,9 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
   const input = page.getByLabel("Presupuesto manual de total mensual");
   await input.fill("1,234");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Introduce un importe válido");
+  await expect(
+    page.locator("main").getByRole("alert").filter({ hasText: "Introduce un importe válido" }),
+  ).toBeVisible();
   expect(writes).toHaveLength(0);
 
   await input.fill("1.234,56");
