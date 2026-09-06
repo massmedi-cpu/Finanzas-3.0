@@ -21,7 +21,7 @@ function monthValue(value: unknown) {
 }
 
 function categoryValue(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
+  if (value === null) return null;
   if (typeof value !== "string" || !UUID.test(value)) throw new Error("invalid_budget_category_id");
   return value;
 }
@@ -113,6 +113,9 @@ export async function PATCH(request: Request) {
   try {
     const row = objectBody(await request.json().catch(() => null));
     const month = monthValue(row.month);
+    if (!Object.prototype.hasOwnProperty.call(row, "categoryId")) {
+      throw new Error("invalid_budget_category_id");
+    }
     const categoryId = categoryValue(row.categoryId);
     if (!Object.prototype.hasOwnProperty.call(row, "manualAmountCents")) {
       throw new Error("invalid_budget_manual_amount");

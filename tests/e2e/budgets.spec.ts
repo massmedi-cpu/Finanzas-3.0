@@ -118,7 +118,7 @@ async function mockBudgetApi(
   });
 }
 
-test("budget API rejects invalid months, bodies and manual amounts before persistence", async ({ request }) => {
+test("budget API rejects ambiguous or invalid writes before persistence", async ({ request }) => {
   const invalidMonth = await request.get("/api/budgets?month=2026-13");
   expect(invalidMonth.status()).toBe(400);
   await expect(invalidMonth.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_month" });
@@ -138,6 +138,18 @@ test("budget API rejects invalid months, bodies and manual amounts before persis
   });
   expect(missingManual.status()).toBe(400);
   await expect(missingManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_manual_amount" });
+
+  const missingCategory = await request.patch("/api/budgets", {
+    data: { month: "2026-09", manualAmountCents: 10000 },
+  });
+  expect(missingCategory.status()).toBe(400);
+  await expect(missingCategory.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_category_id" });
+
+  const emptyCategory = await request.patch("/api/budgets", {
+    data: { month: "2026-09", categoryId: "", manualAmountCents: 10000 },
+  });
+  expect(emptyCategory.status()).toBe(400);
+  await expect(emptyCategory.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_category_id" });
 });
 
 test("budget gateway validates payloads before SQL", async () => {
@@ -163,6 +175,20 @@ test("budget gateway validates payloads before SQL", async () => {
     sql,
     environment: "preview",
   })).rejects.toThrow("invalid_budget_category_id");
+
+  await expect(handleBudgetLogicAction({
+    action: "budget.set_manual",
+    payload: { month: "2026-09", manualAmountCents: 100 },
+    sql,
+    environment: "preview",
+  })).rejects.toThrow("invalid_budget_category_id");
+
+  await expect(handleBudgetLogicAction({
+    action: "budget.set_manual",
+    payload: { month: "2026-09", categoryId: null },
+    sql,
+    environment: "preview",
+  })).rejects.toThrow("invalid_budget_manual_amount");
 });
 
 test("budget gateway classifies domain errors and hides unexpected database details", async () => {

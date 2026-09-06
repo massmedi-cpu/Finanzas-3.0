@@ -46,13 +46,13 @@ function monthValue(value: unknown, field = "budget_month") {
 }
 
 function nullableUuid(value: unknown, field: string): string | null {
-  if (value === undefined || value === null || value === "") return null;
+  if (value === null) return null;
   if (typeof value !== "string" || !UUID.test(value)) throw new Error(`invalid_${field}`);
   return value;
 }
 
 function nullableNonNegativeCents(value: unknown, field: string): number | null {
-  if (value === undefined || value === null) return null;
+  if (value === null) return null;
   if (
     typeof value !== "number" ||
     !Number.isSafeInteger(value) ||
@@ -92,7 +92,13 @@ export async function handleBudgetLogicAction(input: {
 
   if (action === "budget.set_manual") {
     const month = monthValue(payload.month);
+    if (!Object.prototype.hasOwnProperty.call(payload, "categoryId")) {
+      throw new Error("invalid_budget_category_id");
+    }
     const categoryId = nullableUuid(payload.categoryId, "budget_category_id");
+    if (!Object.prototype.hasOwnProperty.call(payload, "manualAmountCents")) {
+      throw new Error("invalid_budget_manual_amount");
+    }
     const manualAmountCents = nullableNonNegativeCents(
       payload.manualAmountCents,
       "budget_manual_amount",
