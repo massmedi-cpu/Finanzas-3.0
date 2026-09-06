@@ -252,7 +252,7 @@ test("forecast UI requires exclusion reason and reconciles from real candidates"
   await page.goto("/forecast");
 
   await page.getByRole("button", { name: "Excluir" }).click();
-  await expect(page.getByRole("alert")).toContainText("Indica el motivo");
+  await expect(page.getByText("Indica el motivo antes de excluir un elemento previsto.", { exact: true })).toBeVisible();
 
   await page.getByLabel("Motivo para excluir Seguro mensual").fill("Ya no se espera este cargo");
   await page.getByRole("button", { name: "Excluir" }).click();
