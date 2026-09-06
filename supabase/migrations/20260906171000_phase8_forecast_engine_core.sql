@@ -282,6 +282,12 @@ begin
     from financial_app.financial_transaction_facts()
     where transaction_id=p_transaction_id;
     if not found then raise exception 'forecast_transaction_not_found'; end if;
+    if not coalesce(v_fact.analytics_eligible,false) then
+      raise exception 'forecast_reconciliation_transaction_ineligible';
+    end if;
+    if v_fact.effective_kind = 'transfer' then
+      raise exception 'forecast_reconciliation_transfer_not_allowed';
+    end if;
     if v_item.account_id is not null and v_fact.account_id <> v_item.account_id then
       raise exception 'forecast_reconciliation_account_mismatch';
     end if;
@@ -345,7 +351,7 @@ begin
       fi.*,
       a.name as account_name,
       c.name as category_name,
-      m.canonical_name as merchant_name,
+      m.name as merchant_name,
       f.bank_date as actual_date,
       f.amount_cents as actual_amount_cents,
       f.account_id as actual_account_id,
