@@ -23,7 +23,9 @@ export function isApiPath(pathname: string) {
 export function safeNextPath(value: unknown) {
   if (typeof value !== "string") return "/";
   const trimmed = value.trim();
+  if (trimmed.length < 1 || trimmed.length > 512) return "/";
   if (!trimmed.startsWith("/") || trimmed.startsWith("//")) return "/";
+  if (trimmed.includes("\\") || /[\u0000-\u001f\u007f]/.test(trimmed)) return "/";
   if (trimmed === "/login" || trimmed.startsWith("/login?")) return "/";
-  return trimmed.length <= 512 ? trimmed : "/";
+  return trimmed;
 }
