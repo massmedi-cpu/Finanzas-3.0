@@ -10,6 +10,7 @@ import {
 import {
   clearSessionCookies,
   refreshAuthSession,
+  revokeAuthSession,
   setSessionCookies,
   validateAccessToken,
 } from "./src/infrastructure/auth/supabase-auth";
@@ -79,8 +80,17 @@ export async function proxy(request: NextRequest) {
   if (refreshToken) {
     const refreshed = await refreshAuthSession(refreshToken);
     if (refreshed.status === "ok") {
-      const response = NextResponse.next();
-      setSessionCookies(response, refreshed.session);
+      const authorization = await validateAccessToken(refreshed.session.access_token);
+      if (authorization === "valid") {
+        const response = NextResponse.next();
+        setSessionCookies(response, refreshed.session);
+        return response;
+      }
+      if (authorization === "unavailable") return unavailableResponse(request);
+
+      await revokeAuthSession(refreshed.session.access_token);
+      const response = unauthorizedResponse(request);
+      clearSessionCookies(response);
       return response;
     }
     if (refreshed.status === "unavailable" || refreshed.status === "rate_limited") {

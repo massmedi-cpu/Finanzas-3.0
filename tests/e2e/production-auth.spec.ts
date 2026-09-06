@@ -1,7 +1,11 @@
 import { expect, test } from "@playwright/test";
 import { NextRequest } from "next/server";
 import { proxy } from "../../proxy";
-import { AUTH_ACCESS_COOKIE, safeNextPath } from "../../src/infrastructure/auth/access-control";
+import {
+  AUTH_ACCESS_COOKIE,
+  AUTH_REFRESH_COOKIE,
+  safeNextPath,
+} from "../../src/infrastructure/auth/access-control";
 
 const ORIGINAL_ENFORCED = process.env.FINANCIAL_APP_AUTH_ENFORCED;
 const ORIGINAL_VERCEL_ENV = process.env.VERCEL_ENV;
@@ -82,6 +86,67 @@ test("an allowlisted authenticated user can reach protected routes", async () =>
   }));
   expect(response.status).toBe(200);
   expect(response.headers.get("x-middleware-next")).toBe("1");
+});
+
+test("refreshing a session cannot bypass a revoked allowlist authorization", async () => {
+  process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
+  process.env.VERCEL_ENV = "preview";
+
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/auth/v1/token?grant_type=refresh_token")) {
+      return Response.json({
+        access_token: "refreshed-access",
+        refresh_token: "rotated-refresh",
+        expires_in: 3600,
+      });
+    }
+    if (url.includes("/rest/v1/rpc/financial_app_is_authorized")) {
+      return Response.json(false);
+    }
+    if (url.includes("/auth/v1/logout")) {
+      return new Response(null, { status: 204 });
+    }
+    throw new Error(`unexpected_auth_request:${url}`);
+  };
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/configuration", {
+    headers: { cookie: `${AUTH_REFRESH_COOKIE}=existing-refresh` },
+  }));
+  expect(response.status).toBe(401);
+  const cookies = response.headers.getSetCookie().join(";");
+  expect(cookies).toContain(`${AUTH_ACCESS_COOKIE}=`);
+  expect(cookies).toContain(`${AUTH_REFRESH_COOKIE}=`);
+  expect(cookies).toContain("Max-Age=0");
+});
+
+test("an allowlisted refreshed session can continue and rotates both cookies", async () => {
+  process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
+  process.env.VERCEL_ENV = "preview";
+
+  global.fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("/auth/v1/token?grant_type=refresh_token")) {
+      return Response.json({
+        access_token: "refreshed-access",
+        refresh_token: "rotated-refresh",
+        expires_in: 3600,
+      });
+    }
+    if (url.includes("/rest/v1/rpc/financial_app_is_authorized")) {
+      return Response.json(true);
+    }
+    throw new Error(`unexpected_auth_request:${url}`);
+  };
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/configuration", {
+    headers: { cookie: `${AUTH_REFRESH_COOKIE}=existing-refresh` },
+  }));
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-middleware-next")).toBe("1");
+  const cookies = response.headers.getSetCookie().join(";");
+  expect(cookies).toContain(`${AUTH_ACCESS_COOKIE}=refreshed-access`);
+  expect(cookies).toContain(`${AUTH_REFRESH_COOKIE}=rotated-refresh`);
 });
 
 test("post-login redirects reject protocol-relative and backslash variants", () => {
