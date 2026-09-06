@@ -7,6 +7,7 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const REQUEST_ERROR_CODE = /^invalid_[a-z0-9_]+$/i;
 const MODES = new Set(["snapshot", "period", "balances", "monthly"]);
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
@@ -55,10 +56,18 @@ function apiError(error: unknown) {
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
     );
   }
-  console.error("financial-api", error instanceof Error ? error.message : String(error));
+
+  if (error instanceof Error && REQUEST_ERROR_CODE.test(error.message)) {
+    return Response.json(
+      { error: "invalid_request", code: error.message },
+      { status: 400, headers: HEADERS },
+    );
+  }
+
+  console.error("financial-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json(
-    { error: "invalid_request", code: error instanceof Error ? error.message : null },
-    { status: 400, headers: HEADERS },
+    { error: "internal_error", code: null },
+    { status: 500, headers: HEADERS },
   );
 }
 
