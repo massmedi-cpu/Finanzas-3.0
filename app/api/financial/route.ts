@@ -51,6 +51,12 @@ function optionalBoolean(params: URLSearchParams, key: string) {
 
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
+    if (error.status === 404 && error.code === "financial_account_not_found") {
+      return Response.json(
+        { error: "not_found", code: error.code },
+        { status: 404, headers: HEADERS },
+      );
+    }
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
