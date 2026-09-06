@@ -18,9 +18,18 @@ function nullableUuid(value: unknown, field: string): string | null {
   return value;
 }
 
+function isCalendarDate(value: string) {
+  if (!DATE.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const daysInMonth = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  return day <= daysInMonth[month - 1];
+}
+
 function nullableDate(value: unknown, field: string): string | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || !DATE.test(value)) throw new Error(`invalid_${field}`);
+  if (typeof value !== "string" || !isCalendarDate(value)) throw new Error(`invalid_${field}`);
   return value;
 }
 
