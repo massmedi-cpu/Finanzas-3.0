@@ -1,0 +1,46 @@
+name: Production Auth Hotfix E2E
+
+on:
+  push:
+    branches:
+      - hotfix/production-auth
+
+permissions:
+  contents: read
+
+jobs:
+  local-security-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout hotfix commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run browser and security E2E locally
+        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-auth-hotfix-playwright-report
+          path: playwright-report/
+          retention-days: 7
