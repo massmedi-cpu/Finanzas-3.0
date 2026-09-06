@@ -4,6 +4,8 @@ import { handleRecurrenceLogicAction } from "../../supabase/functions/financial-
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const activeRecurrenceId = "71000000-0000-4000-8000-000000000071";
 const confirmedRecurrenceId = "71000000-0000-4000-8000-000000000072";
+const expenseCandidateKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const incomeCandidateKey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
 const baseSnapshot = {
   contractVersion: 1,
@@ -13,7 +15,7 @@ const baseSnapshot = {
   candidateCount: 2,
   candidates: [
     {
-      candidateKey: "candidate-expense",
+      candidateKey: expenseCandidateKey,
       accountId: "10000000-0000-4000-8000-000000000071",
       merchantId: null,
       categoryId: null,
@@ -37,7 +39,7 @@ const baseSnapshot = {
       explanation: "Patrón detectado sobre movimientos efectivos elegibles. La próxima fecha es posterior al periodo analizado y no implica confirmación automática.",
     },
     {
-      candidateKey: "candidate-income",
+      candidateKey: incomeCandidateKey,
       accountId: "10000000-0000-4000-8000-000000000071",
       merchantId: null,
       categoryId: null,
@@ -97,7 +99,7 @@ async function mockRecurrenceApi(
       current = {
         ...current,
         candidates: current.candidates.map((candidate) =>
-          candidate.conceptPattern === body.conceptPattern
+          candidate.candidateKey === body.candidateKey
             ? {
                 ...candidate,
                 existingRecurrenceId: candidate.existingRecurrenceId ?? confirmedRecurrenceId,
@@ -161,6 +163,15 @@ test("recurrence API rejects invalid filters and writes before persistence", asy
     code: "invalid_recurrence_body",
   });
 
+  const invalidCandidate = await request.post("/api/recurrences", {
+    data: { candidateKey: "not-a-candidate", status: "active" },
+  });
+  expect(invalidCandidate.status()).toBe(400);
+  await expect(invalidCandidate.json()).resolves.toEqual({
+    error: "invalid_request",
+    code: "invalid_recurrence_candidate_key",
+  });
+
   const invalidStatus = await request.patch("/api/recurrences", {
     data: { id: activeRecurrenceId, status: "confirmed" },
   });
@@ -171,7 +182,7 @@ test("recurrence API rejects invalid filters and writes before persistence", asy
   });
 });
 
-test("recurrence gateway validates payloads before SQL", async () => {
+test("recurrence gateway validates candidate decisions before SQL", async () => {
   const sql = () => { throw new Error("sql_should_not_run"); };
 
   await expect(handleRecurrenceLogicAction({
@@ -191,21 +202,24 @@ test("recurrence gateway validates payloads before SQL", async () => {
   await expect(handleRecurrenceLogicAction({
     action: "recurrence.save",
     payload: {
-      id: null,
-      accountId: null,
-      merchantId: null,
-      categoryId: null,
-      conceptPattern: "Patrón",
+      candidateKey: "tampered-client-value",
+      status: "active",
+      dateFrom: null,
+      dateTo: "2026-09-06",
+      minOccurrences: 3,
+    },
+    sql,
+    environment: "preview",
+  })).rejects.toThrow("invalid_recurrence_candidate_key");
+
+  await expect(handleRecurrenceLogicAction({
+    action: "recurrence.save",
+    payload: {
+      candidateKey: expenseCandidateKey,
       status: "confirmed",
-      intervalUnit: "month",
-      intervalCount: 1,
-      usualAmountCents: -1000,
-      amountToleranceCents: 100,
-      dateToleranceDays: 2,
-      nextEstimatedDate: "2026-10-01",
-      confidence: "medium",
-      occurrenceCount: 4,
-      lastObservedDate: "2026-09-01",
+      dateFrom: null,
+      dateTo: "2026-09-06",
+      minOccurrences: 3,
     },
     sql,
     environment: "preview",
@@ -229,6 +243,22 @@ test("recurrence gateway classifies domain errors and hides database details", a
   });
   expect(missing?.status).toBe(404);
   await expect(missing?.json()).resolves.toEqual({ error: "recurrence_not_found" });
+
+  const missingCandidateSql = () => { throw new Error("recurrence_candidate_not_found"); };
+  const missingCandidate = await handleRecurrenceLogicAction({
+    action: "recurrence.save",
+    payload: {
+      candidateKey: expenseCandidateKey,
+      status: "active",
+      dateFrom: null,
+      dateTo: "2026-09-06",
+      minOccurrences: 3,
+    },
+    sql: missingCandidateSql,
+    environment: "preview",
+  });
+  expect(missingCandidate?.status).toBe(404);
+  await expect(missingCandidate?.json()).resolves.toEqual({ error: "recurrence_candidate_not_found" });
 
   const originalConsoleError = console.error;
   const logged: unknown[][] = [];
@@ -275,7 +305,7 @@ test("Recurrentes muestra confianza explícita, vigencia, formato español y con
   expect(writes).toHaveLength(0);
 });
 
-test("Recurrentes confirma, ignora y archiva decisiones explícitas", async ({ page }) => {
+test("Recurrentes persiste solo identidad y decisión; el motor central recalcula los valores derivados", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockRecurrenceApi(page, writes);
   await page.goto("/recurrences");
@@ -283,30 +313,52 @@ test("Recurrentes confirma, ignora y archiva decisiones explícitas", async ({ p
   const expenseCard = page.locator("article").filter({ hasText: "supermercado mensual" });
   await expenseCard.getByRole("button", { name: "Confirmar recurrencia" }).click();
   await expect(page.getByRole("status")).toContainText("Recurrencia confirmada");
-  expect(writes.at(-1)).toMatchObject({
+  expect(writes.at(-1)).toEqual({
     method: "POST",
+    candidateKey: expenseCandidateKey,
     status: "active",
-    conceptPattern: "supermercado mensual",
-    intervalUnit: "month",
-    intervalCount: 1,
-    occurrenceCount: 4,
+    dateFrom: null,
+    dateTo: "2026-09-06",
+    minOccurrences: 3,
   });
 
   await expenseCard.getByRole("button", { name: "Archivar" }).click();
   await expect(page.getByRole("status")).toContainText("Recurrencia archivada");
-  expect(writes.at(-1)).toMatchObject({
+  expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: confirmedRecurrenceId,
     status: "archived",
   });
 
   const incomeCard = page.locator("article").filter({ hasText: "ingreso periódico" });
+  await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
+  await expect(page.getByRole("status")).toContainText("motor central");
+  expect(writes.at(-1)).toEqual({
+    method: "POST",
+    candidateKey: incomeCandidateKey,
+    status: "active",
+    dateFrom: null,
+    dateTo: "2026-09-06",
+    minOccurrences: 3,
+  });
+
   await incomeCard.getByRole("button", { name: "Ignorar" }).click();
   await expect(page.getByRole("status")).toContainText("Recurrencia ignorada");
-  expect(writes.at(-1)).toMatchObject({
+  expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: activeRecurrenceId,
     status: "ignored",
+  });
+
+  await incomeCard.getByRole("button", { name: "Reactivar y recalcular" }).click();
+  await expect(page.getByRole("status")).toContainText("Recurrencia confirmada");
+  expect(writes.at(-1)).toEqual({
+    method: "POST",
+    candidateKey: incomeCandidateKey,
+    status: "active",
+    dateFrom: null,
+    dateTo: "2026-09-06",
+    minOccurrences: 3,
   });
 });
 
@@ -358,6 +410,7 @@ test("protected preview exposes only future recurrence projections without autom
     missedCyclesReduceConfidence: true,
   });
   for (const candidate of snapshot.candidates) {
+    expect(candidate.candidateKey).toMatch(/^[0-9a-f]{32}$/);
     expect(["high", "medium", "low"]).toContain(candidate.confidence);
     expect(["high", "medium", "low"]).toContain(candidate.observedConfidence);
     expect(["week", "month", "quarter", "year"]).toContain(candidate.intervalUnit);

@@ -7,9 +7,8 @@ export const dynamic = "force-dynamic";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const CANDIDATE_KEY = /^[0-9a-f]{32}$/i;
 const STATUSES = new Set(["active", "ignored", "archived"]);
-const INTERVAL_UNITS = new Set(["week", "month", "quarter", "year"]);
-const CONFIDENCES = new Set(["high", "medium", "low"]);
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 function objectBody(value: unknown) {
@@ -48,27 +47,24 @@ function integerValue(value: unknown, code: string, min: number, max: number) {
   return value;
 }
 
-function centsValue(value: unknown, code: string, nonNegative = false) {
-  if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(code);
-  if (nonNegative && value < 0) throw new Error(code);
-  return value;
-}
-
 function enumValue(value: unknown, code: string, allowed: Set<string>) {
   if (typeof value !== "string" || !allowed.has(value)) throw new Error(code);
   return value;
 }
 
-function conceptValue(value: unknown) {
-  if (typeof value !== "string") throw new Error("invalid_recurrence_concept");
-  const normalized = value.trim();
-  if (!normalized || normalized.length > 500) throw new Error("invalid_recurrence_concept");
-  return normalized;
+function candidateKeyValue(value: unknown) {
+  if (typeof value !== "string" || !CANDIDATE_KEY.test(value)) {
+    throw new Error("invalid_recurrence_candidate_key");
+  }
+  return value.toLowerCase();
 }
 
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
-    if (error.status === 404 && error.code === "recurrence_not_found") {
+    if (
+      error.status === 404 &&
+      (error.code === "recurrence_not_found" || error.code === "recurrence_candidate_not_found")
+    ) {
       return Response.json(
         { error: "not_found", code: error.code },
         { status: 404, headers: HEADERS },
@@ -128,38 +124,13 @@ export async function POST(request: Request) {
   try {
     const row = objectBody(await request.json().catch(() => null));
     const payload = {
-      id: nullableUuid(row.id, "invalid_recurrence_id"),
-      accountId: nullableUuid(row.accountId, "invalid_recurrence_account_id"),
-      merchantId: nullableUuid(row.merchantId, "invalid_recurrence_merchant_id"),
-      categoryId: nullableUuid(row.categoryId, "invalid_recurrence_category_id"),
-      conceptPattern: conceptValue(row.conceptPattern),
+      candidateKey: candidateKeyValue(row.candidateKey),
       status: enumValue(row.status, "invalid_recurrence_status", STATUSES),
-      intervalUnit: enumValue(row.intervalUnit, "invalid_recurrence_interval_unit", INTERVAL_UNITS),
-      intervalCount: integerValue(row.intervalCount, "invalid_recurrence_interval_count", 1, 365),
-      usualAmountCents: centsValue(row.usualAmountCents, "invalid_recurrence_usual_amount"),
-      amountToleranceCents: centsValue(
-        row.amountToleranceCents,
-        "invalid_recurrence_amount_tolerance",
-        true,
-      ),
-      dateToleranceDays: integerValue(
-        row.dateToleranceDays,
-        "invalid_recurrence_date_tolerance",
-        0,
-        31,
-      ),
-      nextEstimatedDate: nullableDate(row.nextEstimatedDate, "invalid_recurrence_next_date"),
-      confidence: enumValue(row.confidence, "invalid_recurrence_confidence", CONFIDENCES),
-      occurrenceCount: integerValue(
-        row.occurrenceCount,
-        "invalid_recurrence_occurrence_count",
-        0,
-        1000000,
-      ),
-      lastObservedDate: nullableDate(
-        row.lastObservedDate,
-        "invalid_recurrence_last_observed_date",
-      ),
+      dateFrom: nullableDate(row.dateFrom, "invalid_recurrence_date_from"),
+      dateTo: nullableDate(row.dateTo, "invalid_recurrence_date_to"),
+      minOccurrences: row.minOccurrences === undefined
+        ? 3
+        : integerValue(row.minOccurrences, "invalid_recurrence_min_occurrences", 3, 24),
     };
 
     const result = await callPersistenceGateway("recurrence.save", payload);

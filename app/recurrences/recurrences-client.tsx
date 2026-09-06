@@ -146,25 +146,21 @@ export default function RecurrencesClient() {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          id: candidate.existingRecurrenceId,
-          accountId: candidate.accountId,
-          merchantId: candidate.merchantId,
-          categoryId: candidate.categoryId,
-          conceptPattern: candidate.conceptPattern,
+          candidateKey: candidate.candidateKey,
           status,
-          intervalUnit: candidate.intervalUnit,
-          intervalCount: candidate.intervalCount,
-          usualAmountCents: candidate.usualAmountCents,
-          amountToleranceCents: candidate.amountToleranceCents,
-          dateToleranceDays: candidate.dateToleranceDays,
-          nextEstimatedDate: candidate.nextEstimatedDate,
-          confidence: candidate.confidence,
-          occurrenceCount: candidate.occurrenceCount,
-          lastObservedDate: candidate.lastObservedDate,
+          dateFrom: snapshot?.dateFrom ?? null,
+          dateTo: snapshot?.dateTo ?? null,
+          minOccurrences: snapshot?.minOccurrences ?? 3,
         }),
       });
       await parseResponse(response);
-      setMessage(status === "active" ? "Recurrencia confirmada." : "Patrón ignorado.");
+      setMessage(
+        status === "active"
+          ? candidate.existingStatus === "active"
+            ? "Recurrencia recalculada y actualizada desde el motor central."
+            : "Recurrencia confirmada."
+          : "Patrón ignorado.",
+      );
       await load(false);
     } catch {
       setError("No se ha podido guardar la decisión sobre este patrón.");
@@ -186,11 +182,9 @@ export default function RecurrencesClient() {
       });
       await parseResponse(response);
       setMessage(
-        status === "active"
-          ? "Recurrencia reactivada."
-          : status === "ignored"
-            ? "Recurrencia ignorada."
-            : "Recurrencia archivada.",
+        status === "ignored"
+          ? "Recurrencia ignorada."
+          : "Recurrencia archivada.",
       );
       await load(false);
     } catch {
@@ -325,19 +319,29 @@ export default function RecurrencesClient() {
                               className={styles.primaryButton}
                               type="button"
                               disabled={pending}
-                              onClick={() => void changeStatus(candidate, "active")}
+                              onClick={() => void persistCandidate(candidate, "active")}
                             >
-                              Reactivar
+                              Reactivar y recalcular
                             </button>
                           ) : (
-                            <button
-                              className={styles.secondaryButton}
-                              type="button"
-                              disabled={pending}
-                              onClick={() => void changeStatus(candidate, "ignored")}
-                            >
-                              Ignorar
-                            </button>
+                            <>
+                              <button
+                                className={styles.primaryButton}
+                                type="button"
+                                disabled={pending}
+                                onClick={() => void persistCandidate(candidate, "active")}
+                              >
+                                Actualizar cálculo
+                              </button>
+                              <button
+                                className={styles.secondaryButton}
+                                type="button"
+                                disabled={pending}
+                                onClick={() => void changeStatus(candidate, "ignored")}
+                              >
+                                Ignorar
+                              </button>
+                            </>
                           )}
                           {candidate.existingStatus !== "archived" ? (
                             <button

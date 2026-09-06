@@ -1,9 +1,7 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_SAFE_CENTS = Number.MAX_SAFE_INTEGER;
+const CANDIDATE_KEY = /^[0-9a-f]{32}$/i;
 const STATUSES = new Set(["active", "ignored", "archived"]);
-const INTERVAL_UNITS = new Set(["week", "month", "quarter", "year"]);
-const CONFIDENCES = new Set(["high", "medium", "low"]);
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -18,11 +16,10 @@ function json(body: unknown, status = 200) {
 
 function recurrenceDatabaseError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message === "recurrence_not_found") return json({ error: message }, 404);
-  if (
-    message.startsWith("invalid_recurrence_") ||
-    message === "invalid_recurrence_date_range"
-  ) {
+  if (message === "recurrence_not_found" || message === "recurrence_candidate_not_found") {
+    return json({ error: message }, 404);
+  }
+  if (message.startsWith("invalid_recurrence_") || message === "invalid_recurrence_date_range") {
     return json({ error: message }, 400);
   }
   console.error("recurrence-logic-database", error instanceof Error ? error.name : typeof error);
@@ -60,13 +57,6 @@ function nullableDate(value: unknown, field: string): string | null {
   return value;
 }
 
-function textValue(value: unknown, field: string, maxLength = 500): string {
-  if (typeof value !== "string") throw new Error(`invalid_${field}`);
-  const normalized = value.trim();
-  if (!normalized || normalized.length > maxLength) throw new Error(`invalid_${field}`);
-  return normalized;
-}
-
 function integerValue(value: unknown, field: string, min: number, max: number): number {
   if (typeof value !== "number" || !Number.isInteger(value) || value < min || value > max) {
     throw new Error(`invalid_${field}`);
@@ -74,22 +64,16 @@ function integerValue(value: unknown, field: string, min: number, max: number): 
   return value;
 }
 
-function centsValue(value: unknown, field: string): number {
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || Math.abs(value) > MAX_SAFE_CENTS) {
-    throw new Error(`invalid_${field}`);
-  }
-  return value;
-}
-
-function nonNegativeCents(value: unknown, field: string): number {
-  const result = centsValue(value, field);
-  if (result < 0) throw new Error(`invalid_${field}`);
-  return result;
-}
-
 function enumValue(value: unknown, field: string, allowed: Set<string>): string {
   if (typeof value !== "string" || !allowed.has(value)) throw new Error(`invalid_${field}`);
   return value;
+}
+
+function candidateKeyValue(value: unknown): string {
+  if (typeof value !== "string" || !CANDIDATE_KEY.test(value)) {
+    throw new Error("invalid_recurrence_candidate_key");
+  }
+  return value.toLowerCase();
 }
 
 function fingerprint(token: string, counter: number) {
@@ -118,39 +102,17 @@ export async function handleRecurrenceLogicAction(input: {
   }
 
   if (action === "recurrence.save") {
-    const id = nullableUuid(payload.id, "recurrence_id");
-    const accountId = nullableUuid(payload.accountId, "recurrence_account_id");
-    const merchantId = nullableUuid(payload.merchantId, "recurrence_merchant_id");
-    const categoryId = nullableUuid(payload.categoryId, "recurrence_category_id");
-    const conceptPattern = textValue(payload.conceptPattern, "recurrence_concept");
+    const candidateKey = candidateKeyValue(payload.candidateKey);
     const status = enumValue(payload.status, "recurrence_status", STATUSES);
-    const intervalUnit = enumValue(payload.intervalUnit, "recurrence_interval_unit", INTERVAL_UNITS);
-    const intervalCount = integerValue(payload.intervalCount, "recurrence_interval_count", 1, 365);
-    const usualAmountCents = centsValue(payload.usualAmountCents, "recurrence_usual_amount");
-    const amountToleranceCents = nonNegativeCents(payload.amountToleranceCents, "recurrence_amount_tolerance");
-    const dateToleranceDays = integerValue(payload.dateToleranceDays, "recurrence_date_tolerance", 0, 31);
-    const nextEstimatedDate = nullableDate(payload.nextEstimatedDate, "recurrence_next_date");
-    const confidence = enumValue(payload.confidence, "recurrence_confidence", CONFIDENCES);
-    const occurrenceCount = integerValue(payload.occurrenceCount, "recurrence_occurrence_count", 0, 1000000);
-    const lastObservedDate = nullableDate(payload.lastObservedDate, "recurrence_last_observed_date");
+    const dateFrom = nullableDate(payload.dateFrom, "recurrence_date_from");
+    const dateTo = nullableDate(payload.dateTo, "recurrence_date_to");
+    const minOccurrences = payload.minOccurrences === undefined
+      ? 3
+      : integerValue(payload.minOccurrences, "recurrence_min_occurrences", 3, 24);
 
     return recurrenceQuery(() => sql`
-      select financial_app.save_recurrence(
-        ${id}::uuid,
-        ${accountId}::uuid,
-        ${merchantId}::uuid,
-        ${categoryId}::uuid,
-        ${conceptPattern},
-        ${status},
-        ${intervalUnit},
-        ${intervalCount}::integer,
-        ${usualAmountCents}::bigint,
-        ${amountToleranceCents}::bigint,
-        ${dateToleranceDays}::integer,
-        ${nextEstimatedDate}::date,
-        ${confidence},
-        ${occurrenceCount}::integer,
-        ${lastObservedDate}::date
+      select financial_app.save_recurrence_candidate(
+        ${candidateKey},${status},${dateFrom}::date,${dateTo}::date,${minOccurrences}::integer
       ) as result
     `);
   }
@@ -229,22 +191,8 @@ export async function handleRecurrenceLogicAction(input: {
         if (!candidate) throw new Error("test_recurrence_candidate_missing");
 
         const savedRows = await tx`
-          select financial_app.save_recurrence(
-            null::uuid,
-            ${candidate.accountId}::uuid,
-            ${candidate.merchantId}::uuid,
-            ${candidate.categoryId}::uuid,
-            ${candidate.conceptPattern},
-            'active',
-            ${candidate.intervalUnit},
-            ${candidate.intervalCount}::integer,
-            ${candidate.usualAmountCents}::bigint,
-            ${candidate.amountToleranceCents}::bigint,
-            ${candidate.dateToleranceDays}::integer,
-            ${candidate.nextEstimatedDate}::date,
-            ${candidate.confidence},
-            ${candidate.occurrenceCount}::integer,
-            ${candidate.lastObservedDate}::date
+          select financial_app.save_recurrence_candidate(
+            ${candidate.candidateKey},'active','2098-01-01'::date,'2098-04-30'::date,3
           ) as result
         `;
         const saved = savedRows[0]?.result;
@@ -274,6 +222,9 @@ export async function handleRecurrenceLogicAction(input: {
           candidate.confidence === 'medium' &&
           candidate.nextEstimatedDate === '2098-05-15' &&
           saved.status === 'active' &&
+          saved.concept_pattern === normalizedConcept &&
+          saved.usual_amount_cents === candidate.usualAmountCents &&
+          saved.next_estimated_date === candidate.nextEstimatedDate &&
           ignoredRows[0]?.result?.status === 'ignored' &&
           archivedRows[0]?.result?.status === 'archived' &&
           auditRows[0]?.count === 3;
@@ -296,7 +247,7 @@ export async function handleRecurrenceLogicAction(input: {
     const clean = ["sources", "transactions", "recurrences", "audit_changes"]
       .every((key) => residue[key] === 0);
 
-    return json({ verified, clean, residue });
+    return json({ verified, clean, residue, serverResolvedCandidate: true });
   }
 
   return null;
