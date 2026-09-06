@@ -1,9 +1,9 @@
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 8 as const;
-export const CURRENT_PHASE_NAME = "Previsión" as const;
+export const CURRENT_PHASE = 9 as const;
+export const CURRENT_PHASE_NAME = "Documentos sin OCR" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Calendario y cash flow previsto" as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Gestión documental" as const;
 
 export function getBuildInfo() {
   return {
