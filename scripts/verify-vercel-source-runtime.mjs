@@ -167,7 +167,16 @@ if (environment === "preview") {
     if (budgetResidue[key] !== 0) throw new Error(`gateway_budget_engine_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets=ok";
+  const recurrenceEngine = await callAction(oidcToken, "test.recurrence_engine");
+  if (recurrenceEngine.verified !== true || recurrenceEngine.clean !== true) {
+    throw new Error("gateway_recurrence_engine_not_clean");
+  }
+  const recurrenceResidue = recurrenceEngine.residue ?? {};
+  for (const key of ["sources", "transactions", "recurrences", "audit_changes"]) {
+    if (recurrenceResidue[key] !== 0) throw new Error(`gateway_recurrence_engine_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences=ok";
 }
 
 console.log(
