@@ -184,10 +184,21 @@ export async function handleFinancialLogicAction(input: {
             financial_app.financial_period_summary('2098-01-01'::date,'2098-01-31'::date,${accountA}::uuid) as account_a,
             financial_app.financial_period_summary('2098-01-01'::date,'2098-01-31'::date,${accountB}::uuid) as account_b
         `;
+        const partialRangeRows = await tx`
+          select
+            financial_app.financial_period_summary('2099-01-01'::date,null,${accountA}::uuid) as future_period,
+            financial_app.financial_monthly_series('2099-01-01'::date,null,${accountA}::uuid) as future_monthly,
+            financial_app.financial_period_summary(null,'2097-01-01'::date,${accountA}::uuid) as early_period,
+            financial_app.financial_monthly_series(null,'2097-01-01'::date,${accountA}::uuid) as early_monthly
+        `;
         const snapshot = rows[0]?.result;
         const period = snapshot?.period;
         const accountAPeriod = scopedRows[0]?.account_a;
         const accountBPeriod = scopedRows[0]?.account_b;
+        const futurePeriod = partialRangeRows[0]?.future_period;
+        const futureMonthly = partialRangeRows[0]?.future_monthly;
+        const earlyPeriod = partialRangeRows[0]?.early_period;
+        const earlyMonthly = partialRangeRows[0]?.early_monthly;
         const accountRow = snapshot?.balances?.accounts?.find((row: any) => row.id === accountA);
         verified =
           snapshot?.contractVersion === 1 &&
@@ -202,6 +213,22 @@ export async function handleFinancialLogicAction(input: {
           accountBPeriod?.transfers?.pairedRows === 1 &&
           accountBPeriod?.transfers?.pairedPairs === 1 &&
           accountBPeriod?.transfers?.unpairedRows === 0 &&
+          futurePeriod?.dateFrom === '2099-01-01' &&
+          futurePeriod?.dateTo === '2099-01-01' &&
+          futurePeriod?.quality?.includedRows === 0 &&
+          futureMonthly?.dateFrom === '2099-01-01' &&
+          futureMonthly?.dateTo === '2099-01-01' &&
+          futureMonthly?.rows?.length === 1 &&
+          futureMonthly?.rows?.[0]?.monthStart === '2099-01-01' &&
+          futureMonthly?.rows?.[0]?.rows === 0 &&
+          earlyPeriod?.dateFrom === '2097-01-01' &&
+          earlyPeriod?.dateTo === '2097-01-01' &&
+          earlyPeriod?.quality?.includedRows === 0 &&
+          earlyMonthly?.dateFrom === '2097-01-01' &&
+          earlyMonthly?.dateTo === '2097-01-01' &&
+          earlyMonthly?.rows?.length === 1 &&
+          earlyMonthly?.rows?.[0]?.monthStart === '2097-01-01' &&
+          earlyMonthly?.rows?.[0]?.rows === 0 &&
           period?.quality?.suspectedDuplicateRows === 1 &&
           period?.quality?.confirmedDuplicateRows === 1 &&
           period?.quality?.manuallyExcludedRows === 1 &&
