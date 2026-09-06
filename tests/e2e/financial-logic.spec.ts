@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { handleFinancialLogicAction } from "../../supabase/functions/financial-app-db-gateway/financial-logic";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
@@ -27,6 +28,26 @@ test("financial API rejects unsupported modes and invalid dates", async ({ reque
     error: "invalid_request",
     code: "invalid_financial_date_range",
   });
+});
+
+test("financial gateway rejects impossible calendar dates before SQL", async () => {
+  const sql = () => {
+    throw new Error("sql_should_not_run");
+  };
+
+  await expect(handleFinancialLogicAction({
+    action: "financial.period",
+    payload: { dateFrom: "2026-02-30", dateTo: "2026-03-01" },
+    sql,
+    environment: "preview",
+  })).rejects.toThrow("invalid_financial_date_from");
+
+  await expect(handleFinancialLogicAction({
+    action: "financial.balances",
+    payload: { asOfDate: "2026-13-01" },
+    sql,
+    environment: "preview",
+  })).rejects.toThrow("invalid_financial_as_of_date");
 });
 
 test("protected preview identifies the exact Phase 5 build", async ({ request }) => {
