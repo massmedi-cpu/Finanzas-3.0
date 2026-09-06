@@ -228,7 +228,7 @@ Deno.serve(async (req) => {
     if (action === "category.save") {
       categoryPayload(payload.category);
       const c = payload.category;
-      return json({ rows: await sql`insert into financial_app.categories (id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at) values (${c.id}::uuid,${c.name},${c.institution},${c.type},${c.openingBalanceCents},'EUR',${c.lifecycle},${c.sortOrder},${c.createdAt}::timestamptz,${c.updatedAt}::timestamptz) returning id` });
+      return json({ rows: await sql`insert into financial_app.categories (id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at) values (${c.id}::uuid,${c.name},${c.kind},${c.parentCategoryId}::uuid,${c.iconKey},${c.colorToken},${c.lifecycle},${c.sortOrder},${c.createdAt}::timestamptz,${c.updatedAt}::timestamptz) on conflict (id) do update set name=excluded.name,kind=excluded.kind,parent_category_id=excluded.parent_category_id,icon_key=excluded.icon_key,color_token=excluded.color_token,lifecycle=excluded.lifecycle,sort_order=excluded.sort_order,updated_at=excluded.updated_at returning id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at` });
     }
     if (action === "category.reorder") {
       orderedIds(payload.orderedIds);
@@ -243,92 +243,37 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    const merchantAliasResponse = await handleMerchantAliasAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const merchantAliasResponse = await handleMerchantAliasAction({ action, payload, sql, environment: identity.environment });
     if (merchantAliasResponse) return merchantAliasResponse;
 
-    const ruleResponse = await handleCategorizationRuleAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const ruleResponse = await handleCategorizationRuleAction({ action, payload, sql, environment: identity.environment });
     if (ruleResponse) return ruleResponse;
 
-    const transactionQueryResponse = await handleTransactionQueryAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionQueryResponse = await handleTransactionQueryAction({ action, payload, sql, environment: identity.environment });
     if (transactionQueryResponse) return transactionQueryResponse;
 
-    const transactionManagementResponse = await handleTransactionManagementAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionManagementResponse = await handleTransactionManagementAction({ action, payload, sql, environment: identity.environment });
     if (transactionManagementResponse) return transactionManagementResponse;
 
-    const transactionReviewResponse = await handleTransactionReviewAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionReviewResponse = await handleTransactionReviewAction({ action, payload, sql, environment: identity.environment });
     if (transactionReviewResponse) return transactionReviewResponse;
 
-    const financialLogicResponse = await handleFinancialLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const financialLogicResponse = await handleFinancialLogicAction({ action, payload, sql, environment: identity.environment });
     if (financialLogicResponse) return financialLogicResponse;
 
-    const budgetLogicResponse = await handleBudgetLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const budgetLogicResponse = await handleBudgetLogicAction({ action, payload, sql, environment: identity.environment });
     if (budgetLogicResponse) return budgetLogicResponse;
 
-    const recurrenceLogicResponse = await handleRecurrenceLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const recurrenceLogicResponse = await handleRecurrenceLogicAction({ action, payload, sql, environment: identity.environment });
     if (recurrenceLogicResponse) return recurrenceLogicResponse;
 
-    const forecastLogicResponse = await handleForecastLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const forecastLogicResponse = await handleForecastLogicAction({ action, payload, sql, environment: identity.environment });
     if (forecastLogicResponse) return forecastLogicResponse;
 
-    const googleOauthResponse = await handleGoogleOauthAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const googleOauthResponse = await handleGoogleOauthAction({ action, payload, sql, environment: identity.environment });
     if (googleOauthResponse) return googleOauthResponse;
 
-    const sourceSyncResponse = await handleSourceSyncAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const sourceSyncResponse = await handleSourceSyncAction({ action, payload, sql, environment: identity.environment });
     if (sourceSyncResponse) return sourceSyncResponse;
 
     return json({ error: "unsupported_action" }, 400);
