@@ -40,6 +40,8 @@ export default function LoginForm({ nextPath }: Props) {
         setMessage("Demasiados intentos. Espera un momento antes de volver a intentarlo.");
       } else if (response.status === 503) {
         setMessage("El acceso seguro no está disponible temporalmente.");
+      } else if (response.status === 403) {
+        setMessage("Esta cuenta no tiene acceso autorizado a Financial App.");
       } else {
         setMessage("Correo o contraseña incorrectos.");
       }

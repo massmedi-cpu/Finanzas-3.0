@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeNextPath } from "../../../../src/infrastructure/auth/access-control";
-import { setSessionCookies, signInWithPassword } from "../../../../src/infrastructure/auth/supabase-auth";
+import {
+  revokeAuthSession,
+  setSessionCookies,
+  signInWithPassword,
+  validateAccessToken,
+} from "../../../../src/infrastructure/auth/supabase-auth";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +15,20 @@ function invalidCredentials() {
     {
       status: 401,
       headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+    },
+  );
+}
+
+function unavailable() {
+  return NextResponse.json(
+    { error: "authentication_unavailable", code: null },
+    {
+      status: 503,
+      headers: {
+        "cache-control": "no-store",
+        "retry-after": "30",
+        "x-robots-tag": "noindex",
+      },
     },
   );
 }
@@ -42,16 +61,20 @@ export async function POST(request: NextRequest) {
       },
     );
   }
-  if (result.status !== "ok") {
+  if (result.status !== "ok") return unavailable();
+
+  const authorization = await validateAccessToken(result.session.access_token);
+  if (authorization === "unavailable") {
+    await revokeAuthSession(result.session.access_token);
+    return unavailable();
+  }
+  if (authorization !== "valid") {
+    await revokeAuthSession(result.session.access_token);
     return NextResponse.json(
-      { error: "authentication_unavailable", code: null },
+      { error: "access_not_authorized", code: null },
       {
-        status: 503,
-        headers: {
-          "cache-control": "no-store",
-          "retry-after": "30",
-          "x-robots-tag": "noindex",
-        },
+        status: 403,
+        headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
       },
     );
   }

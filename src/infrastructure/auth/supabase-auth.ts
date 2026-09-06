@@ -40,7 +40,7 @@ function isAuthSession(value: unknown): value is AuthSession {
     && row.expires_in > 0;
 }
 
-async function authFetch(path: string, init: RequestInit) {
+async function supabaseFetch(path: string, init: RequestInit) {
   return fetch(`${SUPABASE_URL}${path}`, {
     ...init,
     cache: "no-store",
@@ -50,13 +50,15 @@ async function authFetch(path: string, init: RequestInit) {
 
 export async function validateAccessToken(accessToken: string): Promise<TokenValidationResult> {
   try {
-    const response = await authFetch("/auth/v1/user", {
-      method: "GET",
+    const response = await supabaseFetch("/rest/v1/rpc/financial_app_is_authorized", {
+      method: "POST",
       headers: authHeaders(accessToken),
+      body: "{}",
     });
-    if (response.ok) return "valid";
     if (response.status === 401 || response.status === 403) return "invalid";
-    return "unavailable";
+    if (!response.ok) return "unavailable";
+    const payload: unknown = await response.json().catch(() => null);
+    return payload === true ? "valid" : "invalid";
   } catch {
     return "unavailable";
   }
@@ -64,7 +66,7 @@ export async function validateAccessToken(accessToken: string): Promise<TokenVal
 
 export async function signInWithPassword(email: string, password: string): Promise<SessionResult> {
   try {
-    const response = await authFetch("/auth/v1/token?grant_type=password", {
+    const response = await supabaseFetch("/auth/v1/token?grant_type=password", {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ email, password }),
@@ -84,7 +86,7 @@ export async function signInWithPassword(email: string, password: string): Promi
 
 export async function refreshAuthSession(refreshToken: string): Promise<SessionResult> {
   try {
-    const response = await authFetch("/auth/v1/token?grant_type=refresh_token", {
+    const response = await supabaseFetch("/auth/v1/token?grant_type=refresh_token", {
       method: "POST",
       headers: authHeaders(),
       body: JSON.stringify({ refresh_token: refreshToken }),
@@ -104,7 +106,7 @@ export async function refreshAuthSession(refreshToken: string): Promise<SessionR
 
 export async function revokeAuthSession(accessToken: string) {
   try {
-    await authFetch("/auth/v1/logout", {
+    await supabaseFetch("/auth/v1/logout", {
       method: "POST",
       headers: authHeaders(accessToken),
     });
