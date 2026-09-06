@@ -176,7 +176,20 @@ if (environment === "preview") {
     if (recurrenceResidue[key] !== 0) throw new Error(`gateway_recurrence_engine_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences=ok";
+  const forecastEngine = await callAction(oidcToken, "test.forecast_engine");
+  if (
+    forecastEngine.verified !== true ||
+    forecastEngine.clean !== true ||
+    forecastEngine.serverReconciliationCandidates !== true
+  ) {
+    throw new Error("gateway_forecast_engine_not_clean");
+  }
+  const forecastResidue = forecastEngine.residue ?? {};
+  for (const key of ["manual_items", "recurring_items", "recurrences", "audit_changes"]) {
+    if (forecastResidue[key] !== 0) throw new Error(`gateway_forecast_engine_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences+forecast=ok";
 }
 
 console.log(
