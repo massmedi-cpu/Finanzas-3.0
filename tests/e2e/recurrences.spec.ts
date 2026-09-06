@@ -25,13 +25,16 @@ const baseSnapshot = {
       amountToleranceCents: 350,
       dateToleranceDays: 3,
       confidence: "medium",
+      observedConfidence: "medium",
       occurrenceCount: 4,
       firstObservedDate: "2026-05-10",
       lastObservedDate: "2026-08-10",
       nextEstimatedDate: "2026-09-10",
+      missedCycles: 0,
+      stale: false,
       existingRecurrenceId: null,
       existingStatus: null,
-      explanation: "Patrón detectado sobre movimientos efectivos elegibles. La confianza es explícita y no implica confirmación automática.",
+      explanation: "Patrón detectado sobre movimientos efectivos elegibles. La próxima fecha es posterior al periodo analizado y no implica confirmación automática.",
     },
     {
       candidateKey: "candidate-income",
@@ -45,14 +48,17 @@ const baseSnapshot = {
       usualAmountCents: 150000,
       amountToleranceCents: 100,
       dateToleranceDays: 1,
-      confidence: "high",
+      confidence: "medium",
+      observedConfidence: "high",
       occurrenceCount: 6,
       firstObservedDate: "2026-03-01",
       lastObservedDate: "2026-08-01",
-      nextEstimatedDate: "2026-09-01",
+      nextEstimatedDate: "2026-10-01",
+      missedCycles: 1,
+      stale: true,
       existingRecurrenceId: activeRecurrenceId,
       existingStatus: "active",
-      explanation: "Patrón detectado sobre movimientos efectivos elegibles. La confianza es explícita y no implica confirmación automática.",
+      explanation: "Patrón detectado sobre movimientos efectivos elegibles. Se ha omitido un vencimiento teórico; la próxima fecha se proyecta después del periodo analizado y la confianza se reduce.",
     },
   ],
   principles: {
@@ -62,6 +68,8 @@ const baseSnapshot = {
     automaticPersistence: false,
     confidenceExplicit: true,
     weakMatchesBecomeFacts: false,
+    nextDateAfterAnalysisPeriod: true,
+    missedCyclesReduceConfidence: true,
   },
 };
 
@@ -241,7 +249,7 @@ test("recurrence gateway classifies domain errors and hides database details", a
   }
 });
 
-test("Recurrentes muestra confianza explícita, formato español y controles accesibles", async ({ page }) => {
+test("Recurrentes muestra confianza explícita, vigencia, formato español y controles accesibles", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockRecurrenceApi(page, writes);
   await page.goto("/recurrences");
@@ -249,7 +257,8 @@ test("Recurrentes muestra confianza explícita, formato español y controles acc
   await expect(page.getByRole("heading", { name: "Patrones que se repiten, sin adivinar", level: 1 })).toBeVisible();
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   await expect(page.getByText(/-42,50\s?€/).first()).toBeVisible();
-  await expect(page.getByText("Confianza Media", { exact: true })).toBeVisible();
+  await expect(page.getByText("Confianza Media", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 ciclo no observado", { exact: true })).toBeVisible();
   await expect(page.getByText("Origen bancario · solo lectura", { exact: true })).toBeVisible();
   await expect(page.getByText(/Ningún patrón se convierte en recurrencia confirmada/i)).toBeVisible();
 
@@ -328,7 +337,7 @@ test("protected preview identifies the exact Phase 7 recurrence build", async ({
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });
 
-test("protected preview exposes recurrence candidates without automatic persistence", async ({ request }) => {
+test("protected preview exposes only future recurrence projections without automatic persistence", async ({ request }) => {
   test.skip(!isProtectedPreview, "Real recurrence detection is validated only against protected preview.");
 
   const response = await request.get("/api/recurrences?minOccurrences=3");
@@ -345,10 +354,20 @@ test("protected preview exposes recurrence candidates without automatic persiste
     automaticPersistence: false,
     confidenceExplicit: true,
     weakMatchesBecomeFacts: false,
+    nextDateAfterAnalysisPeriod: true,
+    missedCyclesReduceConfidence: true,
   });
   for (const candidate of snapshot.candidates) {
     expect(["high", "medium", "low"]).toContain(candidate.confidence);
+    expect(["high", "medium", "low"]).toContain(candidate.observedConfidence);
     expect(["week", "month", "quarter", "year"]).toContain(candidate.intervalUnit);
     expect(candidate.occurrenceCount).toBeGreaterThanOrEqual(3);
+    expect(candidate.missedCycles).toBeGreaterThanOrEqual(0);
+    expect(candidate.stale).toBe(candidate.missedCycles > 0);
+    expect(candidate.nextEstimatedDate > snapshot.dateTo).toBeTruthy();
+    if (candidate.missedCycles >= 2) expect(candidate.confidence).toBe("low");
+    if (candidate.missedCycles === 1 && candidate.observedConfidence === "high") {
+      expect(candidate.confidence).toBe("medium");
+    }
   }
 });
