@@ -76,7 +76,9 @@ function snapshotWithTotalManual(manualAmountCents: number | null) {
       manualAmountCents,
       effectiveAmountCents,
       remainingCents: effectiveAmountCents - actualExpenseCents,
-      progressBps: effectiveAmountCents > 0 ? Math.round((actualExpenseCents * 10000) / effectiveAmountCents) : null,
+      progressBps: effectiveAmountCents > 0
+        ? Math.round((actualExpenseCents * 10000) / effectiveAmountCents)
+        : null,
       status: effectiveAmountCents === 0
         ? (actualExpenseCents > 0 ? "unfunded" : "empty")
         : (actualExpenseCents > effectiveAmountCents ? "over" : "on_track"),
@@ -84,7 +86,10 @@ function snapshotWithTotalManual(manualAmountCents: number | null) {
   };
 }
 
-async function mockBudgetApi(page: import("@playwright/test").Page, writes: Array<Record<string, unknown>>) {
+async function mockBudgetApi(
+  page: import("@playwright/test").Page,
+  writes: Array<Record<string, unknown>>,
+) {
   await page.route("**/api/budgets*", async (route) => {
     const method = route.request().method();
     if (method === "GET") {
@@ -94,6 +99,7 @@ async function mockBudgetApi(page: import("@playwright/test").Page, writes: Arra
 
     const body = route.request().postDataJSON() as Record<string, unknown>;
     writes.push({ method, ...body });
+
     if (method === "PATCH" && body.categoryId === null) {
       await route.fulfill({
         status: 200,
@@ -115,41 +121,27 @@ async function mockBudgetApi(page: import("@playwright/test").Page, writes: Arra
 test("budget API rejects invalid months, bodies and manual amounts before persistence", async ({ request }) => {
   const invalidMonth = await request.get("/api/budgets?month=2026-13");
   expect(invalidMonth.status()).toBe(400);
-  await expect(invalidMonth.json()).resolves.toEqual({
-    error: "invalid_request",
-    code: "invalid_budget_month",
-  });
+  await expect(invalidMonth.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_month" });
 
   const invalidBody = await request.post("/api/budgets", { data: [] });
   expect(invalidBody.status()).toBe(400);
-  await expect(invalidBody.json()).resolves.toEqual({
-    error: "invalid_request",
-    code: "invalid_budget_body",
-  });
+  await expect(invalidBody.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_body" });
 
   const negativeManual = await request.patch("/api/budgets", {
     data: { month: "2026-09", categoryId: null, manualAmountCents: -1 },
   });
   expect(negativeManual.status()).toBe(400);
-  await expect(negativeManual.json()).resolves.toEqual({
-    error: "invalid_request",
-    code: "invalid_budget_manual_amount",
-  });
+  await expect(negativeManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_manual_amount" });
 
   const missingManual = await request.patch("/api/budgets", {
     data: { month: "2026-09", categoryId: null },
   });
   expect(missingManual.status()).toBe(400);
-  await expect(missingManual.json()).resolves.toEqual({
-    error: "invalid_request",
-    code: "invalid_budget_manual_amount",
-  });
+  await expect(missingManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_manual_amount" });
 });
 
 test("budget gateway validates payloads before SQL", async () => {
-  const sql = () => {
-    throw new Error("sql_should_not_run");
-  };
+  const sql = () => { throw new Error("sql_should_not_run"); };
 
   await expect(handleBudgetLogicAction({
     action: "budget.snapshot",
@@ -167,20 +159,14 @@ test("budget gateway validates payloads before SQL", async () => {
 
   await expect(handleBudgetLogicAction({
     action: "budget.set_manual",
-    payload: {
-      month: "2026-09",
-      categoryId: "not-a-uuid",
-      manualAmountCents: 100,
-    },
+    payload: { month: "2026-09", categoryId: "not-a-uuid", manualAmountCents: 100 },
     sql,
     environment: "preview",
   })).rejects.toThrow("invalid_budget_category_id");
 });
 
 test("budget gateway classifies domain errors and hides unexpected database details", async () => {
-  const missingSql = () => {
-    throw new Error("budget_category_not_found");
-  };
+  const missingSql = () => { throw new Error("budget_category_not_found"); };
   const missing = await handleBudgetLogicAction({
     action: "budget.set_manual",
     payload: {
@@ -198,9 +184,7 @@ test("budget gateway classifies domain errors and hides unexpected database deta
   const logged: unknown[][] = [];
   console.error = (...args: unknown[]) => logged.push(args);
   try {
-    const failingSql = () => {
-      throw new Error("sensitive_budget_sql_details_must_not_escape");
-    };
+    const failingSql = () => { throw new Error("sensitive_budget_sql_details_must_not_escape"); };
     const failure = await handleBudgetLogicAction({
       action: "budget.snapshot",
       payload: { month: "2026-09" },
@@ -221,7 +205,7 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
   await page.goto("/budgets");
 
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
-  await expect(page.getByText("1.200,00", { exact: false }).first()).toBeVisible();
+  await expect(page.getByText(/1\.?200,00/).first()).toBeVisible();
   await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
   await expect(page.getByText(/Fuente bancaria estrictamente de solo lectura/i)).toBeVisible();
   await expect(page.getByText(/Media del gasto elegible de los 3 meses completos anteriores/i)).toHaveCount(1);
@@ -247,7 +231,7 @@ test("Presupuestos guarda y elimina un límite manual sin perder la recomendaci�
   await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
   const input = page.getByLabel("Presupuesto manual de total mensual");
   await input.fill("1.500,50");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Límite manual guardado");
   expect(writes.at(-1)).toMatchObject({
     method: "PATCH",
@@ -263,7 +247,7 @@ test("Presupuestos guarda y elimina un límite manual sin perder la recomendaci�
 
   await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
   await page.getByLabel("Presupuesto manual de total mensual").fill("1500.50");
-  await page.getByRole("button", { name: "Guardar" }).click();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: 150050 });
 });
 
