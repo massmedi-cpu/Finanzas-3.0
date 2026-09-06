@@ -12,6 +12,24 @@ function json(body: unknown, status = 200) {
   });
 }
 
+function financialDatabaseError(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  if (message === "financial_account_not_found") {
+    return json({ error: "financial_account_not_found" }, 404);
+  }
+  console.error("financial-logic-database", error instanceof Error ? error.name : typeof error);
+  return json({ error: "financial_internal_error" }, 500);
+}
+
+async function financialQuery(run: () => Promise<any>) {
+  try {
+    const rows = await run();
+    return json(rows[0]?.result ?? null);
+  } catch (error) {
+    return financialDatabaseError(error);
+  }
+}
+
 function nullableUuid(value: unknown, field: string): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string" || !UUID.test(value)) throw new Error(`invalid_${field}`);
@@ -61,44 +79,40 @@ export async function handleFinancialLogicAction(input: {
 
   if (action === "financial.period") {
     const f = financialFilters(payload);
-    const rows = await sql`
+    return financialQuery(() => sql`
       select financial_app.financial_period_summary(
         ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid
       ) as result
-    `;
-    return json(rows[0]?.result ?? null);
+    `);
   }
 
   if (action === "financial.balances") {
     const asOfDate = nullableDate(payload.asOfDate ?? payload.dateTo, "financial_as_of_date");
     const includeArchived = booleanValue(payload.includeArchived, "financial_include_archived");
     const accountId = nullableUuid(payload.accountId, "financial_account_id");
-    const rows = await sql`
+    return financialQuery(() => sql`
       select financial_app.financial_account_balances(
         ${asOfDate}::date,${includeArchived},${accountId}::uuid
       ) as result
-    `;
-    return json(rows[0]?.result ?? null);
+    `);
   }
 
   if (action === "financial.monthly") {
     const f = financialFilters(payload);
-    const rows = await sql`
+    return financialQuery(() => sql`
       select financial_app.financial_monthly_series(
         ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid
       ) as result
-    `;
-    return json(rows[0]?.result ?? null);
+    `);
   }
 
   if (action === "financial.snapshot") {
     const f = financialFilters(payload);
-    const rows = await sql`
+    return financialQuery(() => sql`
       select financial_app.financial_snapshot(
         ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid,${f.includeArchived}
       ) as result
-    `;
-    return json(rows[0]?.result ?? null);
+    `);
   }
 
   if (action === "test.financial_logic_engine") {
