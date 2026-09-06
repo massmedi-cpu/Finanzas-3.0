@@ -7,6 +7,7 @@ import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
+import { handleRecurrenceLogicAction } from "./recurrence-logic.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
 import { handleTransactionManagementAction } from "./transaction-management.ts";
 import { handleTransactionQueryAction } from "./transaction-query.ts";
@@ -226,7 +227,7 @@ Deno.serve(async (req) => {
     if (action === "category.save") {
       categoryPayload(payload.category);
       const c = payload.category;
-      return json({ rows: await sql`insert into financial_app.categories (id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at) values (${c.id}::uuid,${c.name},${c.kind},${c.parentCategoryId}::uuid,${c.iconKey},${c.colorToken},${c.lifecycle},${c.sortOrder},${c.createdAt}::timestamptz,${c.updatedAt}::timestamptz) on conflict (id) do update set name=excluded.name,kind=excluded.kind,parent_category_id=excluded.parent_category_id,icon_key=excluded.icon_key,color_token=excluded.color_token,lifecycle=excluded.lifecycle,sort_order=excluded.sort_order,updated_at=excluded.updated_at returning id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at` });
+      return json({ rows: await sql`insert into financial_app.categories (id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at) values (${c.id}::uuid,${c.name},${c.institution},${c.type},${c.openingBalanceCents},'EUR',${c.lifecycle},${c.sortOrder},${c.createdAt}::timestamptz,${c.updatedAt}::timestamptz) on conflict (id) do update set name=excluded.name,kind=excluded.kind,parent_category_id=excluded.parent_category_id,icon_key=excluded.icon_key,color_token=excluded.color_token,lifecycle=excluded.lifecycle,sort_order=excluded.sort_order,updated_at=excluded.updated_at returning id,name,kind,parent_category_id,icon_key,color_token,lifecycle,sort_order,created_at,updated_at` });
     }
     if (action === "category.reorder") {
       orderedIds(payload.orderedIds);
@@ -296,6 +297,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (budgetLogicResponse) return budgetLogicResponse;
+
+    const recurrenceLogicResponse = await handleRecurrenceLogicAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (recurrenceLogicResponse) return recurrenceLogicResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,
