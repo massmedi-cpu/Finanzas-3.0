@@ -233,7 +233,7 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   await mockForecastApi(page, writes);
   await page.goto("/forecast");
 
-  await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
   await expect(page.getByText("188.845,99 €")).toBeVisible();
   await expect(page.getByText("Seguro mensual")).toBeVisible();
   await expect(page.getByText("Presupuesto · contexto", { exact: false })).toBeVisible();
