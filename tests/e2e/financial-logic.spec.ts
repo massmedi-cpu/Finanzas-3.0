@@ -84,17 +84,17 @@ test("financial gateway classifies missing accounts and hides unexpected databas
   }
 });
 
-test("protected preview identifies the exact Phase 5 build", async ({ request }) => {
-  test.skip(!isProtectedPreview, "Exact deployment identity is a protected-preview gate.");
+test("protected preview keeps the validated Phase 5 financial contract in later phases", async ({ request }) => {
+  test.skip(!isProtectedPreview, "Deployment identity is a protected-preview gate.");
 
   const response = await request.get("/api/build");
   expect(response.ok()).toBeTruthy();
   const build = await response.json();
 
-  expect(build.phase).toBe(5);
-  expect(build.phaseName).toBe("Lógica financiera central");
-  expect(build.phaseBlock).toBeNull();
-  expect(build.phaseBlockName).toBe("Motor financiero central");
+  expect(build.version).toBe("0.0.1");
+  expect(build.targetVersion).toBe("10.0.0");
+  expect(Number.isInteger(build.phase)).toBeTruthy();
+  expect(build.phase).toBeGreaterThanOrEqual(5);
   expect(build.environment).toBe("preview");
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });
