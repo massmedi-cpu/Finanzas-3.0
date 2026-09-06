@@ -179,8 +179,15 @@ export async function handleFinancialLogicAction(input: {
         const rows = await tx`
           select financial_app.financial_snapshot('2098-01-01'::date,'2098-01-31'::date,null,false) as result
         `;
+        const scopedRows = await tx`
+          select
+            financial_app.financial_period_summary('2098-01-01'::date,'2098-01-31'::date,${accountA}::uuid) as account_a,
+            financial_app.financial_period_summary('2098-01-01'::date,'2098-01-31'::date,${accountB}::uuid) as account_b
+        `;
         const snapshot = rows[0]?.result;
         const period = snapshot?.period;
+        const accountAPeriod = scopedRows[0]?.account_a;
+        const accountBPeriod = scopedRows[0]?.account_b;
         const accountRow = snapshot?.balances?.accounts?.find((row: any) => row.id === accountA);
         verified =
           snapshot?.contractVersion === 1 &&
@@ -189,6 +196,12 @@ export async function handleFinancialLogicAction(input: {
           period?.savingsCents === 70000 &&
           period?.transfers?.netCents === 0 &&
           period?.transfers?.pairedPairs === 1 &&
+          accountAPeriod?.transfers?.pairedRows === 1 &&
+          accountAPeriod?.transfers?.pairedPairs === 1 &&
+          accountAPeriod?.transfers?.unpairedRows === 0 &&
+          accountBPeriod?.transfers?.pairedRows === 1 &&
+          accountBPeriod?.transfers?.pairedPairs === 1 &&
+          accountBPeriod?.transfers?.unpairedRows === 0 &&
           period?.quality?.suspectedDuplicateRows === 1 &&
           period?.quality?.confirmedDuplicateRows === 1 &&
           period?.quality?.manuallyExcludedRows === 1 &&
