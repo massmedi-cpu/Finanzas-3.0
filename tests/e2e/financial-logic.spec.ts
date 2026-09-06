@@ -50,6 +50,40 @@ test("financial gateway rejects impossible calendar dates before SQL", async () 
   })).rejects.toThrow("invalid_financial_as_of_date");
 });
 
+test("financial gateway classifies missing accounts and hides unexpected database details", async () => {
+  const missingSql = () => {
+    throw new Error("financial_account_not_found");
+  };
+  const missing = await handleFinancialLogicAction({
+    action: "financial.snapshot",
+    payload: { accountId: "11111111-1111-4111-8111-111111111111" },
+    sql: missingSql,
+    environment: "preview",
+  });
+  expect(missing?.status).toBe(404);
+  await expect(missing?.json()).resolves.toEqual({ error: "financial_account_not_found" });
+
+  const originalConsoleError = console.error;
+  const logged: unknown[][] = [];
+  console.error = (...args: unknown[]) => logged.push(args);
+  try {
+    const failingSql = () => {
+      throw new Error("sensitive_sql_details_must_not_escape");
+    };
+    const failure = await handleFinancialLogicAction({
+      action: "financial.snapshot",
+      payload: {},
+      sql: failingSql,
+      environment: "preview",
+    });
+    expect(failure?.status).toBe(500);
+    await expect(failure?.json()).resolves.toEqual({ error: "financial_internal_error" });
+    expect(JSON.stringify(logged)).not.toContain("sensitive_sql_details_must_not_escape");
+  } finally {
+    console.error = originalConsoleError;
+  }
+});
+
 test("protected preview identifies the exact Phase 5 build", async ({ request }) => {
   test.skip(!isProtectedPreview, "Exact deployment identity is a protected-preview gate.");
 
@@ -63,6 +97,19 @@ test("protected preview identifies the exact Phase 5 build", async ({ request })
   expect(build.phaseBlockName).toBe("Motor financiero central");
   expect(build.environment).toBe("preview");
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
+});
+
+test("protected preview returns not found for a valid unknown financial account", async ({ request }) => {
+  test.skip(!isProtectedPreview, "Persistence error classification is validated against the protected preview.");
+
+  const response = await request.get(
+    "/api/financial?mode=snapshot&accountId=11111111-1111-4111-8111-111111111111",
+  );
+  expect(response.status()).toBe(404);
+  await expect(response.json()).resolves.toEqual({
+    error: "not_found",
+    code: "financial_account_not_found",
+  });
 });
 
 test("protected preview exposes the validated real financial snapshot without mixing transfers", async ({ request }) => {
