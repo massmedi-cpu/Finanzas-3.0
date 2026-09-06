@@ -367,17 +367,14 @@ test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuar
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });
 
-test("protected preview identifies the exact Phase 6 budget build", async ({ request }) => {
+test("protected preview keeps the validated Phase 6 budget contract in later phases", async ({ request }) => {
   test.skip(!isProtectedPreview, "Exact deployment identity is a protected-preview gate.");
 
   const response = await request.get("/api/build");
   expect(response.ok()).toBeTruthy();
   const build = await response.json();
 
-  expect(build.phase).toBe(6);
-  expect(build.phaseName).toBe("Presupuestos");
-  expect(build.phaseBlock).toBe(1);
-  expect(build.phaseBlockName).toBe("Modelo y motor central");
+  expect(build.phase).toBeGreaterThanOrEqual(6);
   expect(build.environment).toBe("preview");
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });
