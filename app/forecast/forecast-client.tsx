@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./forecast.module.css";
 
 type ForecastItem = {
@@ -207,6 +207,12 @@ export function ForecastClient() {
 
   const [dateFrom, setDateFrom] = useState(initialFrom);
   const [dateTo, setDateTo] = useState(initialTo);
+  const dateFromRef = useRef(initialFrom);
+  const dateToRef = useRef(initialTo);
+  const loadSequence = useRef(0);
+  dateFromRef.current = dateFrom;
+  dateToRef.current = dateTo;
+
   const [snapshot, setSnapshot] = useState<ForecastSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -222,22 +228,27 @@ export function ForecastClient() {
   const [candidateData, setCandidateData] = useState<CandidateSnapshot | null>(null);
 
   const loadSnapshot = useCallback(async () => {
+    const sequence = ++loadSequence.current;
+    const requestedFrom = dateFromRef.current;
+    const requestedTo = dateToRef.current;
     setLoading(true);
     setError(null);
     try {
-      const params = new URLSearchParams({ dateFrom, dateTo });
+      const params = new URLSearchParams({ dateFrom: requestedFrom, dateTo: requestedTo });
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
+      if (sequence !== loadSequence.current) return;
       setSnapshot(data as ForecastSnapshot);
     } catch (err) {
+      if (sequence !== loadSequence.current) return;
       setError(err instanceof Error ? err.message : "No se pudo cargar la previsión");
     } finally {
-      setLoading(false);
+      if (sequence === loadSequence.current) setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, []);
 
   useEffect(() => {
     void loadSnapshot();
-  }, [loadSnapshot]);
+  }, [dateFrom, dateTo, loadSnapshot]);
 
   async function runMutation(key: string, task: () => Promise<void>) {
     setBusy(key);
@@ -258,7 +269,12 @@ export function ForecastClient() {
       const result = await readJson(await fetch("/api/forecast", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "refresh", dateFrom, dateTo, accountId: null }),
+        body: JSON.stringify({
+          action: "refresh",
+          dateFrom: dateFromRef.current,
+          dateTo: dateToRef.current,
+          accountId: null,
+        }),
       }));
       setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
     });
