@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { gunzipSync } from "node:zlib";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
+import { handleBudgetLogicAction } from "./budget-logic.ts";
 import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
@@ -287,6 +288,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (financialLogicResponse) return financialLogicResponse;
+
+    const budgetLogicResponse = await handleBudgetLogicAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (budgetLogicResponse) return budgetLogicResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,

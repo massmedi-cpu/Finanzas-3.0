@@ -23,8 +23,8 @@ export default function Home() {
         <p className="eyebrow">FINANCIAL APP · RECONSTRUCCIÓN ACUMULATIVA</p>
         <h1 id="bootstrap-title">Versión {build.version}</h1>
         <p>
-          Fase {build.phase} — {build.phaseName}. Fases 1–3 permanecen cerradas y validadas;
-          Movimientos se construye sobre la persistencia y los motores centrales ya aprobados.
+          Fase {build.phase} — {build.phaseName}. Fases 1–5 permanecen cerradas y validadas;
+          Presupuestos se construye sobre la misma fuente de verdad financiera y la persistencia ya aprobadas.
         </p>
 
         <div className="foundation-flags" aria-label="Reglas activas del desarrollo">
@@ -37,6 +37,9 @@ export default function Home() {
         </div>
 
         <div className="foundation-flags" aria-label="Accesos de la fase actual">
+          <Link className="foundation-cta" href="/budgets">
+            Abrir Presupuestos
+          </Link>
           <Link className="foundation-cta" href="/transactions">
             Abrir Movimientos
           </Link>
