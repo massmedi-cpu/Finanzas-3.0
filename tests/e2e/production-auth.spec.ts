@@ -33,6 +33,15 @@ test("production auth rejects anonymous API requests without contacting persiste
   expect(await response.json()).toEqual({ error: "authentication_required", code: null });
 });
 
+test("Vercel Production enables the auth gate without an extra feature flag", async () => {
+  delete process.env.FINANCIAL_APP_AUTH_ENFORCED;
+  process.env.VERCEL_ENV = "production";
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/configuration"));
+  expect(response.status).toBe(401);
+  expect(await response.json()).toEqual({ error: "authentication_required", code: null });
+});
+
 test("production auth redirects anonymous pages to login and preserves a local next path", async () => {
   process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
   process.env.VERCEL_ENV = "preview";
