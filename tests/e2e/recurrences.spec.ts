@@ -374,17 +374,14 @@ test("Recurrentes recalcula sin persistir hasta una decisión del usuario", asyn
   expect(writes).toHaveLength(0);
 });
 
-test("protected preview identifies the exact Phase 7 recurrence build", async ({ request }) => {
+test("protected preview keeps the validated Phase 7 recurrence contract in later phases", async ({ request }) => {
   test.skip(!isProtectedPreview, "Exact deployment identity is a protected-preview gate.");
 
   const response = await request.get("/api/build");
   expect(response.ok()).toBeTruthy();
   const build = await response.json();
 
-  expect(build.phase).toBe(7);
-  expect(build.phaseName).toBe("Recurrentes");
-  expect(build.phaseBlock).toBe(1);
-  expect(build.phaseBlockName).toBe("Motor de recurrencias");
+  expect(build.phase).toBeGreaterThanOrEqual(7);
   expect(build.environment).toBe("preview");
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });

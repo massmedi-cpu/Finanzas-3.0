@@ -5,6 +5,7 @@ import postgres from "postgres";
 import { handleBudgetLogicAction } from "./budget-logic.ts";
 import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
+import { handleForecastLogicAction } from "./forecast-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
 import { handleRecurrenceLogicAction } from "./recurrence-logic.ts";
@@ -242,84 +243,37 @@ Deno.serve(async (req) => {
       return json({ ok: true });
     }
 
-    const merchantAliasResponse = await handleMerchantAliasAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const merchantAliasResponse = await handleMerchantAliasAction({ action, payload, sql, environment: identity.environment });
     if (merchantAliasResponse) return merchantAliasResponse;
 
-    const ruleResponse = await handleCategorizationRuleAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const ruleResponse = await handleCategorizationRuleAction({ action, payload, sql, environment: identity.environment });
     if (ruleResponse) return ruleResponse;
 
-    const transactionQueryResponse = await handleTransactionQueryAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionQueryResponse = await handleTransactionQueryAction({ action, payload, sql, environment: identity.environment });
     if (transactionQueryResponse) return transactionQueryResponse;
 
-    const transactionManagementResponse = await handleTransactionManagementAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionManagementResponse = await handleTransactionManagementAction({ action, payload, sql, environment: identity.environment });
     if (transactionManagementResponse) return transactionManagementResponse;
 
-    const transactionReviewResponse = await handleTransactionReviewAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const transactionReviewResponse = await handleTransactionReviewAction({ action, payload, sql, environment: identity.environment });
     if (transactionReviewResponse) return transactionReviewResponse;
 
-    const financialLogicResponse = await handleFinancialLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const financialLogicResponse = await handleFinancialLogicAction({ action, payload, sql, environment: identity.environment });
     if (financialLogicResponse) return financialLogicResponse;
 
-    const budgetLogicResponse = await handleBudgetLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const budgetLogicResponse = await handleBudgetLogicAction({ action, payload, sql, environment: identity.environment });
     if (budgetLogicResponse) return budgetLogicResponse;
 
-    const recurrenceLogicResponse = await handleRecurrenceLogicAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const recurrenceLogicResponse = await handleRecurrenceLogicAction({ action, payload, sql, environment: identity.environment });
     if (recurrenceLogicResponse) return recurrenceLogicResponse;
 
-    const googleOauthResponse = await handleGoogleOauthAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const forecastLogicResponse = await handleForecastLogicAction({ action, payload, sql, environment: identity.environment });
+    if (forecastLogicResponse) return forecastLogicResponse;
+
+    const googleOauthResponse = await handleGoogleOauthAction({ action, payload, sql, environment: identity.environment });
     if (googleOauthResponse) return googleOauthResponse;
 
-    const sourceSyncResponse = await handleSourceSyncAction({
-      action,
-      payload,
-      sql,
-      environment: identity.environment,
-    });
+    const sourceSyncResponse = await handleSourceSyncAction({ action, payload, sql, environment: identity.environment });
     if (sourceSyncResponse) return sourceSyncResponse;
 
     return json({ error: "unsupported_action" }, 400);
