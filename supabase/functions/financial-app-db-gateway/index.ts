@@ -4,6 +4,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleBudgetLogicAction } from "./budget-logic.ts";
 import { handleCategorizationRuleAction } from "./categorization-rules.ts";
+import { handleDocumentLogicAction } from "./document-logic.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleForecastLogicAction } from "./forecast-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
@@ -269,6 +270,9 @@ Deno.serve(async (req) => {
 
     const forecastLogicResponse = await handleForecastLogicAction({ action, payload, sql, environment: identity.environment });
     if (forecastLogicResponse) return forecastLogicResponse;
+
+    const documentLogicResponse = await handleDocumentLogicAction({ action, payload, sql, environment: identity.environment });
+    if (documentLogicResponse) return documentLogicResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({ action, payload, sql, environment: identity.environment });
     if (googleOauthResponse) return googleOauthResponse;
