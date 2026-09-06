@@ -191,6 +191,11 @@ export async function handleFinancialLogicAction(input: {
             financial_app.financial_period_summary(null,'2097-01-01'::date,${accountA}::uuid) as early_period,
             financial_app.financial_monthly_series(null,'2097-01-01'::date,${accountA}::uuid) as early_monthly
         `;
+        const snapshotRangeRows = await tx`
+          select
+            financial_app.financial_snapshot('2099-01-01'::date,null,${accountA}::uuid,false) as future_snapshot,
+            financial_app.financial_snapshot(null,'2097-01-01'::date,${accountA}::uuid,false) as early_snapshot
+        `;
         const snapshot = rows[0]?.result;
         const period = snapshot?.period;
         const accountAPeriod = scopedRows[0]?.account_a;
@@ -199,6 +204,8 @@ export async function handleFinancialLogicAction(input: {
         const futureMonthly = partialRangeRows[0]?.future_monthly;
         const earlyPeriod = partialRangeRows[0]?.early_period;
         const earlyMonthly = partialRangeRows[0]?.early_monthly;
+        const futureSnapshot = snapshotRangeRows[0]?.future_snapshot;
+        const earlySnapshot = snapshotRangeRows[0]?.early_snapshot;
         const accountRow = snapshot?.balances?.accounts?.find((row: any) => row.id === accountA);
         verified =
           snapshot?.contractVersion === 1 &&
@@ -229,6 +236,16 @@ export async function handleFinancialLogicAction(input: {
           earlyMonthly?.rows?.length === 1 &&
           earlyMonthly?.rows?.[0]?.monthStart === '2097-01-01' &&
           earlyMonthly?.rows?.[0]?.rows === 0 &&
+          futureSnapshot?.period?.dateFrom === '2099-01-01' &&
+          futureSnapshot?.period?.dateTo === '2099-01-01' &&
+          futureSnapshot?.monthly?.dateFrom === '2099-01-01' &&
+          futureSnapshot?.monthly?.dateTo === '2099-01-01' &&
+          futureSnapshot?.balances?.asOfDate === '2099-01-01' &&
+          earlySnapshot?.period?.dateFrom === '2097-01-01' &&
+          earlySnapshot?.period?.dateTo === '2097-01-01' &&
+          earlySnapshot?.monthly?.dateFrom === '2097-01-01' &&
+          earlySnapshot?.monthly?.dateTo === '2097-01-01' &&
+          earlySnapshot?.balances?.asOfDate === '2097-01-01' &&
           period?.quality?.suspectedDuplicateRows === 1 &&
           period?.quality?.confirmedDuplicateRows === 1 &&
           period?.quality?.manuallyExcludedRows === 1 &&
