@@ -20,10 +20,13 @@ type Candidate = {
   amountToleranceCents: number;
   dateToleranceDays: number;
   confidence: Confidence;
+  observedConfidence: Confidence;
   occurrenceCount: number;
   firstObservedDate: string;
   lastObservedDate: string;
   nextEstimatedDate: string | null;
+  missedCycles: number;
+  stale: boolean;
   existingRecurrenceId: string | null;
   existingStatus: RecurrenceStatus | null;
   explanation: string;
@@ -42,6 +45,8 @@ type Snapshot = {
     automaticPersistence: boolean;
     confidenceExplicit: boolean;
     weakMatchesBecomeFacts: boolean;
+    nextDateAfterAnalysisPeriod: boolean;
+    missedCyclesReduceConfidence: boolean;
   };
 };
 
@@ -128,6 +133,7 @@ export default function RecurrencesClient() {
       high: rows.filter((row) => row.confidence === "high").length,
       medium: rows.filter((row) => row.confidence === "medium").length,
       low: rows.filter((row) => row.confidence === "low").length,
+      stale: rows.filter((row) => row.stale).length,
     };
   }, [snapshot]);
 
@@ -239,7 +245,7 @@ export default function RecurrencesClient() {
           <article className={styles.metric}>
             <span>Confianza baja</span>
             <strong>{counts.low}</strong>
-            <small>Nunca se trata como certeza</small>
+            <small>{counts.stale} con ciclos esperados no observados</small>
           </article>
         </div>
 
@@ -247,7 +253,7 @@ export default function RecurrencesClient() {
           <div className={styles.panelHeading}>
             <div>
               <h2 id="candidate-title">Candidatos encontrados</h2>
-              <p>Ordenados por confianza y número de apariciones.</p>
+              <p>Ordenados por confianza, vigencia y número de apariciones.</p>
             </div>
             <span className={styles.readOnlyBadge}>Origen bancario · solo lectura</span>
           </div>
@@ -265,6 +271,11 @@ export default function RecurrencesClient() {
                         <span className={`${styles.confidence} ${styles[candidate.confidence]}`}>
                           Confianza {confidenceLabel(candidate.confidence)}
                         </span>
+                        {candidate.stale ? (
+                          <span className={styles.statusBadge}>
+                            {candidate.missedCycles} ciclo{candidate.missedCycles === 1 ? "" : "s"} no observado{candidate.missedCycles === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
                         {candidate.existingStatus ? (
                           <span className={styles.statusBadge}>Estado · {candidate.existingStatus}</span>
                         ) : null}
@@ -279,6 +290,7 @@ export default function RecurrencesClient() {
                       <div><dt>Cadencia</dt><dd>{cadenceLabel(candidate.intervalUnit, candidate.intervalCount)}</dd></div>
                       <div><dt>Apariciones</dt><dd>{candidate.occurrenceCount}</dd></div>
                       <div><dt>Próxima fecha</dt><dd>{date(candidate.nextEstimatedDate)}</dd></div>
+                      <div><dt>Ciclos no observados</dt><dd>{candidate.missedCycles}</dd></div>
                       <div><dt>Tolerancia fecha</dt><dd>± {candidate.dateToleranceDays} días</dd></div>
                       <div><dt>Tolerancia importe</dt><dd>± {money(candidate.amountToleranceCents)}</dd></div>
                       <div><dt>Último movimiento</dt><dd>{date(candidate.lastObservedDate)}</dd></div>
