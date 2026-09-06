@@ -189,7 +189,23 @@ if (environment === "preview") {
     if (forecastResidue[key] !== 0) throw new Error(`gateway_forecast_engine_residue_${key}`);
   }
 
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences+forecast=ok";
+  const documentEngine = await callAction(oidcToken, "test.document_engine");
+  if (
+    documentEngine.verified !== true ||
+    documentEngine.clean !== true ||
+    documentEngine.storageVerified !== true ||
+    documentEngine.ocrUsed !== false ||
+    documentEngine.suggestionsPersisted !== false ||
+    documentEngine.bankSource !== "read_only"
+  ) {
+    throw new Error("gateway_document_engine_not_clean");
+  }
+  const documentResidue = documentEngine.residue ?? {};
+  for (const key of ["documents", "associations", "audit_changes", "storage_objects"]) {
+    if (documentResidue[key] !== 0) throw new Error(`gateway_document_engine_residue_${key}`);
+  }
+
+  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences+forecast+documents=ok";
 }
 
 console.log(
