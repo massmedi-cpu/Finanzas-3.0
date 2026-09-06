@@ -1,9 +1,9 @@
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 4 as const;
-export const CURRENT_PHASE_NAME = "Movimientos" as const;
-export const CURRENT_PHASE_BLOCK = 13 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Duplicados y transferencias" as const;
+export const CURRENT_PHASE = 5 as const;
+export const CURRENT_PHASE_NAME = "Lógica financiera central" as const;
+export const CURRENT_PHASE_BLOCK = null;
+export const CURRENT_PHASE_BLOCK_NAME = "Motor financiero central" as const;
 
 export function getBuildInfo() {
   return {

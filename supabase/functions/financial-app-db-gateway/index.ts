@@ -3,6 +3,7 @@ import { gunzipSync } from "node:zlib";
 import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleCategorizationRuleAction } from "./categorization-rules.ts";
+import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
@@ -278,6 +279,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (transactionReviewResponse) return transactionReviewResponse;
+
+    const financialLogicResponse = await handleFinancialLogicAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (financialLogicResponse) return financialLogicResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,
