@@ -86,6 +86,17 @@ function snapshotWithTotalManual(manualAmountCents: number | null) {
   };
 }
 
+function snapshotForMonth(month: string) {
+  const [year, monthNumber] = month.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
+  return {
+    ...baseSnapshot,
+    month,
+    monthStart: `${month}-01`,
+    monthEnd: `${month}-${String(lastDay).padStart(2, "0")}`,
+  };
+}
+
 async function mockBudgetApi(
   page: import("@playwright/test").Page,
   writes: Array<Record<string, unknown>>,
@@ -275,6 +286,70 @@ test("Presupuestos guarda y elimina un límite manual sin perder la recomendaci�
   await page.getByLabel("Presupuesto manual de total mensual").fill("1500.50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: 150050 });
+});
+
+test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.goto("/budgets");
+
+  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
+  const input = page.getByLabel("Presupuesto manual de total mensual");
+  await input.fill("1,234");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("Introduce un importe válido");
+  expect(writes).toHaveLength(0);
+
+  await input.fill("1.234,56");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("status")).toContainText("Límite manual guardado");
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toMatchObject({
+    method: "PATCH",
+    month: "2026-09",
+    categoryId: null,
+    manualAmountCents: 123456,
+  });
+});
+
+test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
+  let markAugustStarted: (() => void) | null = null;
+  const augustStarted = new Promise<void>((resolve) => {
+    markAugustStarted = resolve;
+  });
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+
+    const selectedMonth = new URL(route.request().url()).searchParams.get("month") ?? "2026-09";
+    if (selectedMonth === "2026-08") {
+      markAugustStarted?.();
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    } else if (selectedMonth === "2026-07") {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth(selectedMonth)),
+    });
+  });
+
+  await page.goto("/budgets");
+  await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
+  const monthInput = page.locator('input[type="month"]');
+  await monthInput.fill("2026-08");
+  await augustStarted;
+  await monthInput.fill("2026-07");
+
+  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  await page.waitForTimeout(350);
+  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  await expect(page.getByText("Agosto de 2026", { exact: true })).toHaveCount(0);
 });
 
 test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuario lo pide", async ({ page }) => {

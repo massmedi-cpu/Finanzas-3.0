@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./budgets.module.css";
 
 type BudgetStatus = "empty" | "unfunded" | "on_track" | "over";
@@ -122,47 +122,54 @@ function euroInputFromCents(cents: number | null) {
   return (cents / 100).toFixed(2).replace(".", ",");
 }
 
+function normalizeSpanishInteger(value: string) {
+  if (/^\d+$/.test(value)) return value;
+  const groups = value.split(".");
+  if (
+    groups.length < 2 ||
+    !/^\d{1,3}$/.test(groups[0] ?? "") ||
+    groups.slice(1).some((group) => !/^\d{3}$/.test(group))
+  ) {
+    return null;
+  }
+  return groups.join("");
+}
+
 function parseEuroInput(value: string) {
   const compact = value.trim().replace(/\s/g, "");
   if (!compact) return null;
   if (!/^\d[\d.,]*$/.test(compact)) return undefined;
 
-  const comma = compact.lastIndexOf(",");
-  const dot = compact.lastIndexOf(".");
-  let integerPart = compact;
+  let integerPart = "";
   let decimalPart = "";
 
-  if (comma >= 0 && dot >= 0) {
-    const decimalIndex = Math.max(comma, dot);
-    integerPart = compact.slice(0, decimalIndex).replace(/[.,]/g, "");
-    decimalPart = compact.slice(decimalIndex + 1);
-    if (!/^\d{1,2}$/.test(decimalPart)) return undefined;
-  } else if (comma >= 0 || dot >= 0) {
-    const separator = comma >= 0 ? "," : ".";
-    const pieces = compact.split(separator);
-    if (pieces.length === 2) {
-      const [left, right] = pieces;
-      if (!left || !right || !/^\d+$/.test(left) || !/^\d+$/.test(right)) return undefined;
-      if (right.length <= 2) {
-        integerPart = left;
-        decimalPart = right;
-      } else if (right.length === 3 && left.length <= 3) {
-        integerPart = `${left}${right}`;
-      } else {
-        return undefined;
-      }
+  if (compact.includes(",")) {
+    if ((compact.match(/,/g) ?? []).length !== 1) return undefined;
+    const [integerRaw, decimalRaw] = compact.split(",");
+    if (!integerRaw || !/^\d{1,2}$/.test(decimalRaw ?? "")) return undefined;
+    const normalizedInteger = normalizeSpanishInteger(integerRaw);
+    if (normalizedInteger === null) return undefined;
+    integerPart = normalizedInteger;
+    decimalPart = decimalRaw;
+  } else if (compact.includes(".")) {
+    const pieces = compact.split(".");
+    if (
+      pieces.length === 2 &&
+      /^\d+$/.test(pieces[0] ?? "") &&
+      /^\d{1,2}$/.test(pieces[1] ?? "")
+    ) {
+      integerPart = pieces[0];
+      decimalPart = pieces[1];
     } else {
-      if (!pieces.every((piece, index) => /^\d+$/.test(piece) && (index === 0 || piece.length === 3))) {
-        return undefined;
-      }
-      integerPart = pieces.join("");
+      const normalizedInteger = normalizeSpanishInteger(compact);
+      if (normalizedInteger === null) return undefined;
+      integerPart = normalizedInteger;
     }
+  } else {
+    integerPart = compact;
   }
 
-  if (!/^\d+$/.test(integerPart) || (decimalPart && !/^\d{1,2}$/.test(decimalPart))) {
-    return undefined;
-  }
-
+  if (!/^\d+$/.test(integerPart)) return undefined;
   const euros = Number(`${integerPart}.${decimalPart.padEnd(2, "0") || "00"}`);
   const cents = Math.round(euros * 100);
   return Number.isSafeInteger(cents) && cents >= 0 ? cents : undefined;
@@ -315,8 +322,10 @@ export default function BudgetsClient() {
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const fetchGeneration = useRef(0);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
+    const generation = ++fetchGeneration.current;
     setLoading(true);
     setError("");
     setNotice("");
@@ -325,14 +334,20 @@ export default function BudgetsClient() {
         cache: "no-store",
       });
       const payload = await response.json().catch(() => null);
+      if (generation !== fetchGeneration.current) return;
       if (!response.ok || !payload) throw new Error(readableError(payload));
-      setSnapshot(payload as BudgetSnapshot);
+      const nextSnapshot = payload as BudgetSnapshot;
+      if (nextSnapshot.month !== selectedMonth) {
+        throw new Error("El servidor devolvió un presupuesto de otro mes.");
+      }
+      setSnapshot(nextSnapshot);
       setEditingKey(null);
     } catch (caught) {
+      if (generation !== fetchGeneration.current) return;
       setSnapshot(null);
       setError(caught instanceof Error ? caught.message : "No se pudieron cargar los presupuestos.");
     } finally {
-      setLoading(false);
+      if (generation === fetchGeneration.current) setLoading(false);
     }
   }, []);
 
