@@ -42,6 +42,12 @@ function integerValue(value: unknown, code: string, min?: number, max?: number) 
   return value;
 }
 
+function nonZeroIntegerValue(value: unknown, code: string) {
+  const result = integerValue(value, code);
+  if (result === 0) throw new Error(code);
+  return result;
+}
+
 function stringValue(value: unknown, code: string, max: number, allowEmpty = false) {
   if (typeof value !== "string") throw new Error(code);
   const result = value.trim();
@@ -123,7 +129,7 @@ export async function POST(request: Request) {
       const payload = {
         date: dateValue(row.date, "invalid_forecast_date"),
         concept: stringValue(row.concept, "invalid_forecast_concept", 240),
-        amountCents: integerValue(row.amountCents, "invalid_forecast_amount"),
+        amountCents: nonZeroIntegerValue(row.amountCents, "invalid_forecast_amount"),
         accountId: nullableUuid(row.accountId, "invalid_forecast_account_id"),
         categoryId: nullableUuid(row.categoryId, "invalid_forecast_category_id"),
         merchantId: nullableUuid(row.merchantId, "invalid_forecast_merchant_id"),
