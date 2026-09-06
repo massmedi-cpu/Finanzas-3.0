@@ -1,9 +1,9 @@
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 6 as const;
-export const CURRENT_PHASE_NAME = "Presupuestos" as const;
+export const CURRENT_PHASE = 7 as const;
+export const CURRENT_PHASE_NAME = "Recurrentes" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Modelo y motor central" as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Motor de recurrencias" as const;
 
 export function getBuildInfo() {
   return {

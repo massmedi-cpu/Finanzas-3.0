@@ -7,6 +7,7 @@ import { handleCategorizationRuleAction } from "./categorization-rules.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleGoogleOauthAction } from "./google-oauth.ts";
 import { handleMerchantAliasAction } from "./merchant-alias.ts";
+import { handleRecurrenceLogicAction } from "./recurrence-logic.ts";
 import { handleSourceSyncAction } from "./source-sync-router.ts";
 import { handleTransactionManagementAction } from "./transaction-management.ts";
 import { handleTransactionQueryAction } from "./transaction-query.ts";
@@ -296,6 +297,14 @@ Deno.serve(async (req) => {
       environment: identity.environment,
     });
     if (budgetLogicResponse) return budgetLogicResponse;
+
+    const recurrenceLogicResponse = await handleRecurrenceLogicAction({
+      action,
+      payload,
+      sql,
+      environment: identity.environment,
+    });
+    if (recurrenceLogicResponse) return recurrenceLogicResponse;
 
     const googleOauthResponse = await handleGoogleOauthAction({
       action,
