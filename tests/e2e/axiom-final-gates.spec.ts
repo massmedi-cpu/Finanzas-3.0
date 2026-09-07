@@ -10,10 +10,12 @@ const ROUTES = [
   "/recurrences",
   "/documents",
   "/configuration",
+  "/configuration/source",
 ] as const;
 
 const AXIOM_VIEWPORTS = [
   { name: "móvil pequeño", width: 360, height: 800 },
+  { name: "móvil habitual", width: 430, height: 900 },
   { name: "móvil grande", width: 480, height: 900 },
   { name: "tablet vertical", width: 768, height: 1024 },
   { name: "tablet horizontal", width: 1024, height: 768 },
@@ -69,12 +71,13 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
       "input:not([type='hidden']):not([disabled])",
       "select:not([disabled])",
       "textarea:not([disabled])",
+      "summary",
       "[role='button']",
       "[role='link']",
     ].join(",");
 
-    const unnamed = Array.from(document.querySelectorAll(interactiveSelector))
-      .filter(visible)
+    const interactive = Array.from(document.querySelectorAll(interactiveSelector)).filter(visible);
+    const unnamed = interactive
       .filter((element) => !hasAccessibleName(element))
       .map((element) => `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ""}`);
 
@@ -83,13 +86,26 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
       .filter((element) => !element.hasAttribute("alt"))
       .map((element) => element.getAttribute("src") ?? "img");
 
+    const touchTargetsTooSmall = window.innerWidth <= 480
+      ? interactive
+          .filter((element) => {
+            const box = (element as HTMLElement).getBoundingClientRect();
+            return box.height < 44;
+          })
+          .map((element) => {
+            const node = element as HTMLElement;
+            return `${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ""}:${Math.round(node.getBoundingClientRect().height)}px`;
+          })
+      : [];
+
     const horizontalOverflow = document.documentElement.scrollWidth > window.innerWidth + 1;
 
-    return { unnamed, imagesWithoutAlt, horizontalOverflow };
+    return { unnamed, imagesWithoutAlt, touchTargetsTooSmall, horizontalOverflow };
   });
 
   expect(audit.unnamed, `${route}: todos los controles visibles deben tener nombre accesible`).toEqual([]);
   expect(audit.imagesWithoutAlt, `${route}: todas las imágenes visibles deben definir alt`).toEqual([]);
+  expect(audit.touchTargetsTooSmall, `${route}: los controles táctiles visibles deben medir al menos 44 px de alto`).toEqual([]);
   expect(audit.horizontalOverflow, `${route}: no puede existir overflow horizontal global`).toBe(false);
 
   const focusableCount = await page.locator("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])").count();
@@ -113,7 +129,7 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
 
 test("Axioma: matriz responsive y accesibilidad básica cubren todas las superficies principales", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "la matriz completa se ejecuta una sola vez por run");
-  test.setTimeout(240_000);
+  test.setTimeout(300_000);
 
   for (const viewport of AXIOM_VIEWPORTS) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
