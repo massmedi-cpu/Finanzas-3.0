@@ -36,14 +36,12 @@ jobs:
         with:
           node-version: 24
 
-      - name: Validate and normalize Session pooler URI
+      - name: Validate Session pooler URI without changing password bytes
         shell: bash
         run: |
           node <<'NODE'
-          const fs = require('node:fs');
           const raw = process.env.FINANCIAL_APP_DB_URL ?? '';
           const expectedHost = 'aws-1-eu-west-3.pooler.supabase.com';
-          const expectedUser = 'postgres.btzukbfesxdratqnxuoj';
           let url;
           try {
             url = new URL(raw);
@@ -63,12 +61,8 @@ jobs:
             console.error('FINANCIAL_APP_DB_URL does not contain a real database password.');
             process.exit(1);
           }
-          url.username = expectedUser;
-          const normalized = url.toString();
           process.stdout.write(`::add-mask::${raw}\n`);
-          process.stdout.write(`::add-mask::${normalized}\n`);
-          fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${normalized}\n`);
-          console.log('Session pooler URI validated and normalized without exposing credentials.');
+          console.log('Session pooler URI shape validated without exposing or rewriting password bytes.');
           NODE
 
       - name: Install PostgreSQL 17 client
@@ -85,24 +79,41 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/pg_dump --version
 
-      - name: Resolve usable database route after credential rotation
+      - name: Resolve exact password encoding and usable database route
         shell: bash
         run: |
           node <<'NODE'
           const fs = require('node:fs');
           const { spawnSync } = require('node:child_process');
 
-          const pooler = new URL(process.env.FINANCIAL_APP_DB_URL);
-          const password = decodeURIComponent(pooler.password);
+          const rawUrl = new URL(process.env.FINANCIAL_APP_DB_URL);
+          const serializedPassword = rawUrl.password;
+          const candidates = [];
+          try {
+            const decoded = decodeURIComponent(serializedPassword);
+            if (decoded) candidates.push(decoded);
+          } catch {
+            // A literal percent sequence may be the password itself; test it below.
+          }
+          if (serializedPassword && !candidates.includes(serializedPassword)) {
+            candidates.push(serializedPassword);
+          }
+          if (candidates.length === 0) {
+            console.error('No usable password candidate could be derived from FINANCIAL_APP_DB_URL.');
+            process.exit(1);
+          }
+
           const projectRef = 'btzukbfesxdratqnxuoj';
           const directHost = `db.${projectRef}.supabase.co`;
           const directUser = 'postgres';
           const poolerHost = 'aws-1-eu-west-3.pooler.supabase.com';
           const poolerUser = `postgres.${projectRef}`;
 
-          process.stdout.write(`::add-mask::${password}\n`);
+          for (const candidate of candidates) {
+            process.stdout.write(`::add-mask::${candidate}\n`);
+          }
 
-          function probe(host, user) {
+          function probe(host, user, password) {
             const result = spawnSync(
               'psql',
               [
@@ -119,38 +130,43 @@ jobs:
                 env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' },
               },
             );
-            return {
-              ok: result.status === 0,
-              detail: `${result.stderr || ''}\n${result.stdout || ''}`,
-            };
+            return { ok: result.status === 0, detail: `${result.stderr || ''}\n${result.stdout || ''}` };
           }
 
-          const direct = probe(directHost, directUser);
-          if (direct.ok) {
-            const directUrl = new URL('postgresql://postgres@localhost/postgres');
-            directUrl.hostname = directHost;
-            directUrl.port = '5432';
-            directUrl.username = directUser;
-            directUrl.password = password;
-            directUrl.searchParams.set('sslmode', 'require');
-            const value = directUrl.toString();
+          function publish(host, user, password, routeName) {
+            const canonical = new URL('postgresql://postgres@localhost/postgres');
+            canonical.hostname = host;
+            canonical.port = '5432';
+            canonical.username = user;
+            canonical.password = password;
+            canonical.searchParams.set('sslmode', 'require');
+            const value = canonical.toString();
             process.stdout.write(`::add-mask::${value}\n`);
             fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
-            console.log('Direct PostgreSQL route is available and will be used for pg_dump.');
-            process.exit(0);
+            console.log(`${routeName} authenticated; canonical connection prepared for pg_dump.`);
           }
 
-          console.log('Direct PostgreSQL route is unavailable from this runner; retrying Session pooler authentication.');
-          let last = '';
-          for (let attempt = 1; attempt <= 8; attempt += 1) {
-            const pooled = probe(poolerHost, poolerUser);
-            last = pooled.detail;
-            if (pooled.ok) {
-              console.log(`Session pooler authenticated successfully on attempt ${attempt}.`);
+          for (const password of candidates) {
+            const direct = probe(directHost, directUser, password);
+            if (direct.ok) {
+              publish(directHost, directUser, password, 'Direct PostgreSQL route');
               process.exit(0);
             }
-            if (attempt < 8) {
-              console.log(`Session pooler authentication not ready on attempt ${attempt}; retrying.`);
+          }
+          console.log('Direct PostgreSQL route is unavailable from this runner; testing Session pooler password encodings.');
+
+          let last = '';
+          for (let round = 1; round <= 5; round += 1) {
+            for (const password of candidates) {
+              const pooled = probe(poolerHost, poolerUser, password);
+              last = pooled.detail;
+              if (pooled.ok) {
+                publish(poolerHost, poolerUser, password, 'Session pooler');
+                process.exit(0);
+              }
+            }
+            if (round < 5) {
+              console.log(`Session pooler authentication not ready after round ${round}; retrying.`);
               Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
             }
           }
@@ -158,7 +174,7 @@ jobs:
           const authFailure = /password authentication failed|authentication failed/i.test(last);
           console.error(
             authFailure
-              ? 'Database password authentication still fails after credential-rotation retries.'
+              ? 'All safe password encodings were rejected by the current database credentials.'
               : 'Neither the direct PostgreSQL route nor the Session pooler became usable from the runner.',
           );
           process.exit(1);
