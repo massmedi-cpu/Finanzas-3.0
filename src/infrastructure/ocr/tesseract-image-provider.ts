@@ -104,7 +104,7 @@ function parseTsv(tsv: unknown, width: number, height: number): OcrWord[] {
 function processedImageMetadata(data: RecognitionData, fallback: OcrImageMetadata, rotationRadians: number) {
   const imageColor = data.imageColor;
   if (typeof imageColor === "string") {
-    const match = /^data:image\/(?:png|jpeg|webp);base64,(.+)$/is.exec(imageColor);
+    const match = /^data:image\/(?:png|jpeg|webp);base64,([\s\S]+)$/i.exec(imageColor);
     if (match) {
       try {
         const metadata = readOcrImageMetadata(new Uint8Array(Buffer.from(match[1], "base64")));
