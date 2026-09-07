@@ -1,14 +1,30 @@
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
-import type { OcrWord } from "../../domain/document-ocr";
+import type { OcrSource, OcrWord } from "../../domain/document-ocr";
+import { TesseractImageOcrProvider } from "./tesseract-image-provider";
 
 const MAX_PAGES = 16;
-const EXTRACTOR = "pdfjs-6.2.108-native-text";
+const MAX_RENDER_SIDE = 2800;
+const MAX_RENDER_SCALE = 2.5;
+const EXTRACTOR_NATIVE = "pdfjs-6.2.108-native-text";
+const EXTRACTOR_HYBRID = "pdfjs-6.2.108+tesseract-js-7.0.0-spa";
 
 type PdfTextItem = {
   str?: unknown;
   width?: unknown;
   height?: unknown;
   transform?: unknown;
+};
+
+type PdfCanvasFactory = {
+  create(width: number, height: number): {
+    canvas: { toBuffer(mimeType?: string): Buffer | Uint8Array };
+    context: unknown;
+  };
+  destroy?(target: unknown): void;
+};
+
+type PdfWithCanvas = {
+  canvasFactory?: PdfCanvasFactory;
 };
 
 function unit(value: number) {
@@ -48,7 +64,33 @@ function wordsFromContent(
   return words;
 }
 
+async function renderPagePng(
+  pdf: PdfWithCanvas,
+  page: {
+    getViewport(options: { scale: number }): { width: number; height: number };
+    render(options: Record<string, unknown>): { promise: Promise<unknown> };
+  },
+) {
+  const canvasFactory = pdf.canvasFactory;
+  if (!canvasFactory?.create) throw new Error("ocr_pdf_canvas_unavailable");
+  const base = page.getViewport({ scale: 1 });
+  const longest = Math.max(base.width, base.height, 1);
+  const scale = Math.max(0.75, Math.min(MAX_RENDER_SCALE, MAX_RENDER_SIDE / longest));
+  const viewport = page.getViewport({ scale });
+  const rendered = canvasFactory.create(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
+  try {
+    await page.render({ canvasContext: rendered.context, viewport, canvasFactory }).promise;
+    const png = Buffer.from(rendered.canvas.toBuffer("image/png"));
+    if (!png.byteLength) throw new Error("ocr_pdf_render_empty");
+    return png;
+  } finally {
+    try { canvasFactory.destroy?.(rendered); } catch { /* best effort */ }
+  }
+}
+
 export class PdfTextOcrProvider implements DocumentOcrProvider {
+  private readonly imageOcr = new TesseractImageOcrProvider();
+
   supports(mimeType: string) {
     return mimeType.toLowerCase() === "application/pdf";
   }
@@ -63,6 +105,8 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
     const pageCount = Math.min(pdf.numPages, MAX_PAGES);
     const pages: Array<{ pageNumber: number; words: OcrWord[] }> = [];
     const warnings: string[] = [];
+    let nativePageCount = 0;
+    let visualOcrPageCount = 0;
 
     try {
       for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
@@ -70,21 +114,46 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
         try {
           const viewport = page.getViewport({ scale: 1 });
           const content = await page.getTextContent();
-          const words = wordsFromContent(
+          const nativeWords = wordsFromContent(
             content.items as unknown[],
             { width: viewport.width, height: viewport.height, transform: [...viewport.transform] },
             pdfjs.Util.transform,
           );
-          pages.push({ pageNumber, words });
-          if (!words.length) warnings.push(`pdf_page_requires_visual_ocr:${pageNumber}`);
+
+          if (nativeWords.length) {
+            nativePageCount += 1;
+            pages.push({ pageNumber, words: nativeWords });
+            continue;
+          }
+
+          const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
+          const visual = await this.imageOcr.extract({
+            bytes: new Uint8Array(png),
+            mimeType: "image/png",
+            originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
+          });
+          const visualWords = visual.pages[0]?.words ?? [];
+          if (visualWords.length) {
+            visualOcrPageCount += 1;
+            pages.push({ pageNumber, words: visualWords });
+          } else {
+            pages.push({ pageNumber, words: [] });
+            warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+          }
+          for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
         } finally {
           try { page.cleanup(); } catch { /* best effort */ }
         }
       }
       if (pdf.numPages > MAX_PAGES) warnings.push("pdf_page_limit_reached");
+
+      let source: OcrSource = "pdf_text";
+      if (visualOcrPageCount && nativePageCount) source = "hybrid";
+      else if (visualOcrPageCount) source = "pdf_ocr";
+
       return {
-        source: "pdf_text" as const,
-        extractor: EXTRACTOR,
+        source,
+        extractor: visualOcrPageCount ? EXTRACTOR_HYBRID : EXTRACTOR_NATIVE,
         pages,
         warnings,
       };
