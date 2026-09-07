@@ -141,16 +141,16 @@ test("accounts UI renders central balances, scoped metrics and recent movements"
   await page.goto("/accounts");
 
   await expect(page.getByRole("heading", { name: "Tu dinero, cuenta por cuenta" })).toBeVisible();
-  await expect(page.getByLabel("Disponible total").getByText("300,00 €")).toBeVisible();
+  await expect(page.getByLabel("Disponible total").getByText("300,00 €", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /Cuenta principal/ })).toBeVisible();
-  await expect(page.getByText("1.500,00 €")).toBeVisible();
-  await expect(page.getByText("700,00 €")).toBeVisible();
+  await expect(page.getByText("1.500,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("700,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("Movimiento prueba")).toBeVisible();
 
   await page.getByRole("button", { name: /Ahorro/ }).click();
   await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
-  await expect(page.getByText("500,00 €")).toBeVisible();
-  await expect(page.getByText("50,00 €")).toBeVisible();
+  await expect(page.getByText("500,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("50,00 €", { exact: true })).toBeVisible();
 });
 
 test("accounts UI keeps touch targets usable on narrow mobile screens", async ({ page }) => {
