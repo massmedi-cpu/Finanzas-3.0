@@ -3,15 +3,16 @@ import { runDocumentOcr } from "../../src/application/document-ocr-service";
 import { TesseractImageOcrProvider } from "../../src/infrastructure/ocr/tesseract-image-provider";
 
 const documentId = "93000000-0000-4000-8000-000000000093";
+type ReceiptRotation = 90 | 180 | 270;
 
 function desktopOcrOnly(testInfo: TestInfo) {
   test.skip(testInfo.project.name !== "chromium-desktop", "OCR engine orientation probe runs once per CI matrix");
   test.setTimeout(120_000);
 }
 
-async function renderSidewaysReceipt(page: Page) {
+async function renderRotatedReceipt(page: Page, rotation: ReceiptRotation) {
   await page.setViewportSize({ width: 1000, height: 800 });
-  const dataUrl = await page.evaluate(() => {
+  const dataUrl = await page.evaluate((degrees) => {
     const upright = document.createElement("canvas");
     upright.width = 640;
     upright.height = 900;
@@ -48,41 +49,58 @@ async function renderSidewaysReceipt(page: Page) {
     source.textAlign = "right";
     source.fillText("9,60 EUR", 585, 610);
 
-    const sideways = document.createElement("canvas");
-    sideways.width = upright.height;
-    sideways.height = upright.width;
-    const output = sideways.getContext("2d");
-    if (!output) throw new Error("output_canvas_unavailable");
-    output.fillStyle = "#fff";
-    output.fillRect(0, 0, sideways.width, sideways.height);
-    output.translate(sideways.width, 0);
-    output.rotate(Math.PI / 2);
-    output.drawImage(upright, 0, 0);
-    return sideways.toDataURL("image/png");
-  });
+    const output = document.createElement("canvas");
+    if (degrees === 180) {
+      output.width = upright.width;
+      output.height = upright.height;
+    } else {
+      output.width = upright.height;
+      output.height = upright.width;
+    }
+
+    const context = output.getContext("2d");
+    if (!context) throw new Error("output_canvas_unavailable");
+    context.fillStyle = "#fff";
+    context.fillRect(0, 0, output.width, output.height);
+
+    if (degrees === 90) {
+      context.translate(output.width, 0);
+      context.rotate(Math.PI / 2);
+    } else if (degrees === 180) {
+      context.translate(output.width, output.height);
+      context.rotate(Math.PI);
+    } else {
+      context.translate(0, output.height);
+      context.rotate(-Math.PI / 2);
+    }
+    context.drawImage(upright, 0, 0);
+    return output.toDataURL("image/png");
+  }, rotation);
   return Buffer.from(dataUrl.split(",", 2)[1], "base64");
 }
 
-test("F11 OCR reads a receipt rotated 90 degrees without corrupting layout geometry", async ({ page }, testInfo) => {
-  desktopOcrOnly(testInfo);
-  const image = await renderSidewaysReceipt(page);
+for (const rotation of [90, 180, 270] as const) {
+  test(`F11 OCR reads a receipt rotated ${rotation} degrees without corrupting layout geometry`, async ({ page }, testInfo) => {
+    desktopOcrOnly(testInfo);
+    const image = await renderRotatedReceipt(page, rotation);
 
-  const result = await runDocumentOcr({
-    documentId,
-    bytes: new Uint8Array(image),
-    mimeType: "image/png",
-    originalFileName: "ticket-girado-90.png",
-    provider: new TesseractImageOcrProvider(),
-    now: () => new Date("2026-09-07T07:30:00Z"),
+    const result = await runDocumentOcr({
+      documentId,
+      bytes: new Uint8Array(image),
+      mimeType: "image/png",
+      originalFileName: `ticket-girado-${rotation}.png`,
+      provider: new TesseractImageOcrProvider(),
+      now: () => new Date("2026-09-07T07:30:00Z"),
+    });
+
+    expect(result.plainText.toUpperCase()).toContain("TOTAL");
+    expect(result.pages).toHaveLength(1);
+    expect(result.pages[0].lines.length).toBeGreaterThanOrEqual(4);
+    const totalWord = result.pages[0].lines.flatMap((line) => line.words).find((word) => word.text.toUpperCase() === "TOTAL");
+    expect(totalWord).toBeDefined();
+    expect(totalWord!.box.y).toBeGreaterThan(0.5);
+    expect(result.pages[0].lines.some((line) => line.words.some((word) => /9[,.]60/.test(word.text) && word.box.x > 0.55))).toBe(true);
+    expect(result.principles.financialWrites).toBe(false);
+    expect(result.principles.requiresHumanReview).toBe(true);
   });
-
-  expect(result.plainText.toUpperCase()).toContain("TOTAL");
-  expect(result.pages).toHaveLength(1);
-  expect(result.pages[0].lines.length).toBeGreaterThanOrEqual(4);
-  const totalWord = result.pages[0].lines.flatMap((line) => line.words).find((word) => word.text.toUpperCase() === "TOTAL");
-  expect(totalWord).toBeDefined();
-  expect(totalWord!.box.y).toBeGreaterThan(0.5);
-  expect(result.pages[0].lines.some((line) => line.words.some((word) => /9[,.]60/.test(word.text) && word.box.x > 0.55))).toBe(true);
-  expect(result.principles.financialWrites).toBe(false);
-  expect(result.principles.requiresHumanReview).toBe(true);
-});
+}
