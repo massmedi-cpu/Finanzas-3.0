@@ -14,10 +14,13 @@
     "node": "24.x"
   },
   "dependencies": {
+    "@tesseract.js-data/spa": "1.0.0",
     "@vercel/oidc": "3.8.5",
     "next": "16.3.1",
+    "pdfjs-dist": "6.2.108",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "tesseract.js": "7.0.0"
   },
   "devDependencies": {
     "@playwright/test": "1.62.1",
