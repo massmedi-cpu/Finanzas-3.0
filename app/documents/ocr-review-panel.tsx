@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import styles from "./documents.module.css";
+import ocrStyles from "./ocr-review.module.css";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = "ready" | "needs_review" | "empty";
@@ -125,7 +126,7 @@ export function OcrReviewPanel({
   }
 
   return (
-    <section className={`${styles.subsection} ${styles.ocrSection}`} aria-labelledby="ocr-review-title" data-testid="ocr-review-panel">
+    <section className={`${styles.subsection} ${ocrStyles.section}`} aria-labelledby="ocr-review-title" data-testid="ocr-review-panel">
       <div className={styles.subsectionHeading}>
         <div>
           <p className={styles.sectionEyebrow}>EVIDENCIA OCR · F11</p>
@@ -138,12 +139,12 @@ export function OcrReviewPanel({
       </div>
 
       {!supported ? <p className={styles.muted}>Este formato no admite OCR.</p> : null}
-      {supported && storageProvider === "google_drive" ? <div className={styles.ocrInfo}>OCR de Drive pendiente de descarga autenticada del archivo original. No se usa la vista previa de Google como sustituto.</div> : null}
-      {error ? <div className={styles.ocrError} role="alert">{error}</div> : null}
+      {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>OCR de Drive pendiente de descarga autenticada del archivo original. No se usa la vista previa de Google como sustituto.</div> : null}
+      {error ? <div className={ocrStyles.error} role="alert">{error}</div> : null}
 
       {result ? (
-        <div className={styles.ocrResult} aria-live="polite">
-          <div className={styles.ocrMetrics}>
+        <div className={ocrStyles.result} aria-live="polite">
+          <div className={ocrStyles.metrics}>
             <div><span>Estado</span><strong>{STATUS_LABELS[result.status]}</strong></div>
             <div><span>Confianza</span><strong>{confidenceLabel(result.confidence)}</strong></div>
             <div><span>Origen</span><strong>{result.source === "pdf_text" ? "Texto nativo PDF" : "OCR de imagen"}</strong></div>
@@ -151,25 +152,25 @@ export function OcrReviewPanel({
           </div>
 
           {result.warnings.length ? (
-            <div className={styles.ocrWarnings}>
+            <div className={ocrStyles.warnings}>
               <strong>Revisar antes de usar</strong>
               <ul>{result.warnings.map((warning) => <li key={warning}>{warningLabel(warning)}</li>)}</ul>
             </div>
-          ) : <div className={styles.ocrSuccess}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de guardar datos.</div>}
+          ) : <div className={ocrStyles.success}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de guardar datos.</div>}
 
-          <div className={styles.ocrPages}>
+          <div className={ocrStyles.pages}>
             {result.pages.map((page) => (
-              <article className={styles.ocrPage} key={page.pageNumber}>
-                <div className={styles.ocrPageHeader}>
+              <article className={ocrStyles.page} key={page.pageNumber}>
+                <div className={ocrStyles.pageHeader}>
                   <strong>Página {page.pageNumber}</strong>
                   <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}</span>
                 </div>
-                {page.layoutText ? <pre className={styles.ocrLayout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
+                {page.layoutText ? <pre className={ocrStyles.layout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
               </article>
             ))}
           </div>
 
-          <div className={styles.ocrPrinciples}>
+          <div className={ocrStyles.principles}>
             <span>✓ Sin escrituras financieras</span>
             <span>✓ Geometría preservada</span>
             <span>✓ Revisión humana obligatoria</span>
