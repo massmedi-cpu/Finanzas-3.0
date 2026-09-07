@@ -68,20 +68,21 @@ test("Inicio compone seis bloques desde contratos centrales sin duplicar cálcul
   await mockDashboard(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Tu dinero, claro en segundos." })).toBeVisible();
-  await expect(page.getByLabel("Disponible total").getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Saldo total en cuentas").getByText("300,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("1.500,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("700,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("400,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("280,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("Supermercado")).toBeVisible();
   await expect(page.locator("article")).toHaveCount(6);
+  await expect(page.getByText(/FASE\s+\d/i)).toHaveCount(0);
 });
 
 test("Inicio mantiene navegación táctil y cero overflow horizontal en móvil", async ({ page }) => {
   await mockDashboard(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
-  for (const name of ["Movimientos", "Cuentas", "Presupuestos", "Previsión", "Documentos", "Configuración"]) {
+  for (const name of ["Movimientos", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"]) {
     const link = page.getByRole("link", { name, exact: true });
     await expect(link).toBeVisible();
     const box = await link.boundingBox();
