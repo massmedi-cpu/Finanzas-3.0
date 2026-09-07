@@ -6,7 +6,6 @@ import ocrStyles from "./ocr-review.module.css";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = "ready" | "needs_review" | "empty";
-type OcrSource = "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
 
 type OcrPage = {
   pageNumber: number;
@@ -24,7 +23,7 @@ type OcrResult = {
   contractVersion: 1;
   documentId: string;
   status: OcrStatus;
-  source: OcrSource;
+  source: "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
   extractor: string;
   extractedAt: string;
   confidence: number | null;
@@ -45,13 +44,6 @@ const STATUS_LABELS: Record<OcrStatus, string> = {
   empty: "Sin texto recuperable",
 };
 
-const SOURCE_LABELS: Record<OcrSource, string> = {
-  pdf_text: "Texto nativo PDF",
-  image_ocr: "OCR de imagen",
-  pdf_ocr: "PDF escaneado · OCR visual",
-  hybrid: "PDF híbrido · texto + OCR",
-};
-
 const WARNING_LABELS: Record<string, string> = {
   low_confidence: "La confianza global es baja: revisa el original antes de usar cualquier dato.",
   no_text_detected: "No se ha detectado texto fiable.",
@@ -61,13 +53,9 @@ const WARNING_LABELS: Record<string, string> = {
 
 function warningLabel(warning: string) {
   if (WARNING_LABELS[warning]) return WARNING_LABELS[warning];
-  const emptyMatch = warning.match(/^pdf_page_visual_ocr_empty:(\d+)$/);
-  if (emptyMatch) return `La página ${emptyMatch[1]} se ha analizado visualmente, pero no contiene texto fiable.`;
-  const nestedMatch = warning.match(/^pdf_page_(\d+):(.*)$/);
-  if (nestedMatch) {
-    const [, page, code] = nestedMatch;
-    if (code === "no_text_detected") return `La página ${page} no ha producido texto fiable tras el OCR visual.`;
-    return `Página ${page}: ${code.replaceAll("_", " ")}.`;
+  if (warning.startsWith("pdf_page_requires_visual_ocr:")) {
+    const page = warning.split(":")[1];
+    return `La página ${page} parece escaneada y necesita OCR visual.`;
   }
   return warning.replaceAll("_", " ");
 }
@@ -75,6 +63,13 @@ function warningLabel(warning: string) {
 function confidenceLabel(value: number | null) {
   if (value === null) return "No disponible";
   return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(value * 100)} %`;
+}
+
+function sourceLabel(source: OcrResult["source"]) {
+  if (source === "pdf_text") return "Texto nativo PDF";
+  if (source === "pdf_ocr") return "PDF escaneado · OCR visual";
+  if (source === "hybrid") return "PDF híbrido · texto + OCR";
+  return "OCR de imagen";
 }
 
 async function readJson(response: Response) {
@@ -88,12 +83,21 @@ async function readJson(response: Response) {
 
 function errorLabel(code: string) {
   const labels: Record<string, string> = {
-    ocr_google_drive_download_not_enabled: "El OCR de documentos procedentes de Google Drive todavía no está habilitado porque falta la descarga autenticada del archivo original.",
+    ocr_google_drive_file_id_missing: "Este documento de Drive no conserva un identificador de archivo válido y no puede leerse de forma segura.",
+    google_drive_document_access_denied: "Financial App Reader todavía no tiene acceso de lectura al archivo original. La carpeta Documentos debe compartirse explícitamente en modo lector antes de usar OCR de Drive.",
+    google_drive_document_not_found: "El archivo original ya no existe en Drive o dejó de estar visible para Financial App Reader.",
+    google_drive_document_metadata_invalid: "Drive no ha devuelto metadatos íntegros del archivo original; la lectura se ha detenido.",
+    google_drive_document_mime_mismatch: "El tipo real del archivo de Drive ya no coincide con el documento registrado.",
+    google_drive_document_too_large: "El documento de Drive está vacío o supera el límite seguro de 15 MB para OCR.",
+    google_drive_document_download_failed: "No se ha podido descargar temporalmente el archivo original desde Drive.",
+    service_account_missing: "Falta la credencial gestionada de Financial App Reader en el entorno de ejecución.",
+    service_account_invalid: "La credencial gestionada de Financial App Reader no coincide con la identidad autorizada.",
+    service_account_scope_invalid: "El entorno ha intentado solicitar un permiso de Google no autorizado por el contrato de solo lectura.",
+    service_account_token_request_failed: "Google no ha permitido iniciar la lectura gestionada de este documento.",
+    service_account_token_response_invalid: "Google no ha devuelto un token de lectura válido para este documento.",
     ocr_source_download_failed: "No se ha podido descargar temporalmente el archivo privado para analizarlo.",
     ocr_source_too_large: "El documento supera el límite seguro de 15 MB para OCR.",
     ocr_image_dimensions_too_large: "La imagen tiene unas dimensiones demasiado grandes para procesarla de forma segura.",
-    ocr_pdf_canvas_unavailable: "No se ha podido preparar la página escaneada del PDF para OCR visual.",
-    ocr_pdf_render_empty: "La página del PDF no ha podido convertirse en una imagen válida.",
     ocr_queue_timeout: "El motor OCR está ocupado. Puedes volver a intentarlo.",
     ocr_worker_timeout: "El motor OCR no ha podido iniciarse a tiempo.",
     ocr_recognize_timeout: "La lectura OCR ha superado el tiempo máximo de seguridad.",
@@ -122,10 +126,9 @@ export function OcrReviewPanel({
   }, [documentId]);
 
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
-  const available = supported && storageProvider === "supabase";
 
   async function runOcr() {
-    if (!available || busy) return;
+    if (!supported || busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -147,13 +150,13 @@ export function OcrReviewPanel({
           <h3 id="ocr-review-title">Lectura y reconstrucción</h3>
           <p>El análisis es temporal y de solo lectura. Nunca cambia fecha, emisor, importe ni movimientos automáticamente.</p>
         </div>
-        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!available || busy}>
+        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar con OCR"}
         </button>
       </div>
 
       {!supported ? <p className={styles.muted}>Este formato no admite OCR.</p> : null}
-      {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>OCR de Drive pendiente de descarga autenticada del archivo original. No se usa la vista previa de Google como sustituto.</div> : null}
+      {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>Drive se lee mediante Financial App Reader con permiso de solo lectura sobre el archivo original. Si la carpeta Documentos aún no está compartida con esa identidad, el análisis se detendrá sin usar vistas previas ni ampliar permisos.</div> : null}
       {error ? <div className={ocrStyles.error} role="alert">{error}</div> : null}
 
       {result ? (
@@ -161,7 +164,7 @@ export function OcrReviewPanel({
           <div className={ocrStyles.metrics}>
             <div><span>Estado</span><strong>{STATUS_LABELS[result.status]}</strong></div>
             <div><span>Confianza</span><strong>{confidenceLabel(result.confidence)}</strong></div>
-            <div><span>Origen</span><strong>{SOURCE_LABELS[result.source]}</strong></div>
+            <div><span>Origen</span><strong>{sourceLabel(result.source)}</strong></div>
             <div><span>Páginas</span><strong>{result.pages.length}</strong></div>
           </div>
 
