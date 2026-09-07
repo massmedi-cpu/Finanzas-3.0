@@ -14,8 +14,43 @@ const item = {
   associationCount: 0, originalFileName: "factura-demo.pdf", sourceModifiedAt: "2026-09-06T20:00:00Z", sourceDriveFileId: null,
 };
 
-async function mockDocumentApi(page: import("@playwright/test").Page, writes: Array<Record<string, unknown>>) {
+async function mockDocumentApi(
+  page: import("@playwright/test").Page,
+  writes: Array<Record<string, unknown>>,
+  ocrReads: string[] = [],
+) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
+
+  await page.route("**/api/documents/ocr*", async (route) => {
+    const url = new URL(route.request().url());
+    ocrReads.push(url.searchParams.get("id") ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "pdf_text",
+        extractor: "pdfjs-6.2.108-native-text",
+        extractedAt: "2026-09-07T07:00:00.000Z",
+        confidence: 1,
+        plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{
+          pageNumber: 1,
+          plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
+          layoutText: "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
+          lines: [
+            { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", words: [] },
+            { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", words: [] },
+          ],
+        }],
+      }),
+    });
+  });
+
   await page.route("**/api/documents*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -90,19 +125,38 @@ test("document metadata validation accepts Spanish financial boundaries and reje
   await expect(invalidTotal.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_document_total" });
 });
 
-test("Documentos renders responsive contract and explicit no-OCR semantics", async ({ page }) => {
+test("Documentos renders responsive F11 review semantics without automatic OCR", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
-  await mockDocumentApi(page, writes);
+  const ocrReads: string[] = [];
+  await mockDocumentApi(page, writes, ocrReads);
   await page.goto("/documents");
   await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
   await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
-  await expect(page.getByText(/OCR desactivado/).first()).toBeVisible();
+  await expect(page.getByText(/OCR revisable/).first()).toBeVisible();
+  expect(ocrReads).toHaveLength(0);
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Lectura y reconstrucción" })).toBeVisible();
+  expect(ocrReads).toHaveLength(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
   const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
   expect(undersized).toBe(0);
+});
+
+test("Documentos runs OCR only after explicit action and never writes financial data", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  const ocrReads: string[] = [];
+  await mockDocumentApi(page, writes, ocrReads);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  expect(ocrReads).toHaveLength(0);
+  await page.getByRole("button", { name: "Analizar con OCR" }).click();
+  await expect.poll(() => ocrReads.length).toBe(1);
+  await expect(page.getByText("Texto nativo PDF")).toBeVisible();
+  await expect(page.getByText("FACTURA DEMO")).toBeVisible();
+  await expect(page.getByText(/Sin escrituras financieras/)).toBeVisible();
+  expect(writes).toHaveLength(0);
 });
 
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
@@ -132,7 +186,7 @@ test("Documentos searches real movements for manual association instead of askin
   await expect.poll(() => writes.some((write) => write.action === "associate" && write.method === "manual")).toBe(true);
 });
 
-test("Documentos uploads through private signed storage and finalizes without OCR", async ({ page }) => {
+test("Documentos uploads through private signed storage and leaves OCR for explicit review", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
   await page.goto("/documents");
@@ -140,10 +194,10 @@ test("Documentos uploads through private signed storage and finalizes without OC
   await page.getByRole("button", { name: "Guardar documento" }).click();
   await expect.poll(() => writes.some((write) => write.action === "upload_sign")).toBe(true);
   await expect.poll(() => writes.some((write) => write.action === "upload_finalize")).toBe(true);
-  await expect(page.getByRole("status")).toContainText("OCR no se ha ejecutado");
+  await expect(page.getByRole("status")).toContainText("sólo se ejecutará si lo solicitas");
 });
 
-test("protected preview preserves phase 9 document contract across later phases", async ({ request }) => {
+test("protected preview preserves phase 9 document persistence contract across later phases", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
   const build = await request.get("/api/build");
   expect(build.status()).toBe(200);
