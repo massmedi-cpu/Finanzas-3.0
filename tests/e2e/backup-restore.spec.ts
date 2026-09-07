@@ -122,7 +122,7 @@ function makeFakePgDump(root: string) {
   const executable = join(binDir, "pg_dump");
   writeFileSync(
     executable,
-    `#!/usr/bin/env node\nconst { writeFileSync } = require("node:fs");\nconst args = process.argv.slice(2);\nconst fileIndex = args.indexOf("--file");\nconst file = fileIndex >= 0 ? args[fileIndex + 1] : null;\nconst dataOnly = args.includes("--data-only");\nif (dataOnly && process.env.F13_FAKE_FAIL_DATA === "1") process.exit(9);\nif (!file) process.exit(8);\nwriteFileSync(file, dataOnly ? "COPY financial_app.accounts (id) FROM stdin;\\naccount-1\\n\\\\.\\n" : "CREATE SCHEMA financial_app;\\nCREATE TABLE financial_app.accounts (id text);\\n");\n`,
+    `#!/usr/bin/env node\nconst { appendFileSync, writeFileSync } = require("node:fs");\nconst args = process.argv.slice(2);\nconst fileIndex = args.indexOf("--file");\nconst file = fileIndex >= 0 ? args[fileIndex + 1] : null;\nconst dataOnly = args.includes("--data-only");\nif (process.env.F13_FAKE_CAPTURE) appendFileSync(process.env.F13_FAKE_CAPTURE, JSON.stringify({ args, pgpassword: process.env.PGPASSWORD ?? null, sslmode: process.env.PGSSLMODE ?? null }) + "\\n");\nif (dataOnly && process.env.F13_FAKE_FAIL_DATA === "1") process.exit(9);\nif (!file) process.exit(8);\nwriteFileSync(file, dataOnly ? "COPY financial_app.accounts (id) FROM stdin;\\naccount-1\\n\\\\.\\n" : "CREATE SCHEMA financial_app;\\nCREATE TABLE financial_app.accounts (id text);\\n");\n`,
     "utf8",
   );
   chmodSync(executable, 0o755);
@@ -224,7 +224,7 @@ test("F13 backup creator fails closed before invoking pg_dump when mandatory inp
 test("F13 backup creator blocks a backup when Storage objects exist without an archive", async () => {
   const result = run(creator, [], {
     ...process.env,
-    FINANCIAL_APP_DB_URL: "postgresql://example.invalid/postgres",
+    FINANCIAL_APP_DB_URL: "postgresql://backup-user:backup-password@example.invalid/postgres",
     FINANCIAL_APP_SOURCE_COMMIT: "b".repeat(40),
     FINANCIAL_APP_SCHEMA_VERSION: "14",
     FINANCIAL_APP_STORAGE_BUCKET_COUNT: "1",
@@ -233,6 +233,41 @@ test("F13 backup creator blocks a backup when Storage objects exist without an a
   });
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("FINANCIAL_APP_STORAGE_ARCHIVE");
+});
+
+test("F13 backup creator passes connection components explicitly and keeps password out of pg_dump arguments", async () => {
+  const root = mkdtempSync(join(tmpdir(), "financial-app-explicit-db-auth-"));
+  try {
+    const binDir = makeFakePgDump(root);
+    const capture = join(root, "capture.jsonl");
+    const outputDir = join(root, "backup-final");
+    const result = run(
+      creator,
+      [outputDir],
+      creatorEnv(binDir, {
+        FINANCIAL_APP_DB_URL: "postgresql://postgres.project-ref:p%40ss%3Aword@pooler.example.test:5432/postgres?sslmode=require",
+        F13_FAKE_CAPTURE: capture,
+      }),
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    const calls = readFileSync(capture, "utf8").trim().split("\n").map((line) => JSON.parse(line));
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call.args).toContain("--host");
+      expect(call.args[call.args.indexOf("--host") + 1]).toBe("pooler.example.test");
+      expect(call.args[call.args.indexOf("--port") + 1]).toBe("5432");
+      expect(call.args[call.args.indexOf("--username") + 1]).toBe("postgres.project-ref");
+      expect(call.args[call.args.indexOf("--dbname") + 1]).toBe("postgres");
+      expect(call.args).toContain("--no-password");
+      expect(call.args.join(" ")).not.toContain("p@ss:word");
+      expect(call.args.join(" ")).not.toContain("postgresql://");
+      expect(call.pgpassword).toBe("p@ss:word");
+      expect(call.sslmode).toBe("require");
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("F13 backup creator never publishes a partial package when the second pg_dump fails", async () => {

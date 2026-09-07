@@ -24,29 +24,85 @@ const storageArchivePath = process.env.FINANCIAL_APP_STORAGE_ARCHIVE
   : null;
 
 let stagingDir = null;
+let connection = null;
 
 function fail(message) {
   throw new Error(message);
 }
 
+function decodeUrlComponent(value, label) {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    fail(`FINANCIAL_APP_DB_URL contains an invalid encoded ${label}.`);
+  }
+}
+
+function parseConnection() {
+  let url;
+  try {
+    url = new URL(dbUrl);
+  } catch {
+    fail("FINANCIAL_APP_DB_URL must be a valid PostgreSQL URI.");
+  }
+
+  if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+    fail("FINANCIAL_APP_DB_URL must use the postgres/postgresql protocol.");
+  }
+
+  const host = url.hostname;
+  const port = url.port || "5432";
+  const user = decodeUrlComponent(url.username, "username");
+  const password = decodeUrlComponent(url.password, "password");
+  const database = decodeUrlComponent(url.pathname.replace(/^\/+/, ""), "database name");
+  const sslmode = url.searchParams.get("sslmode") || "";
+
+  if (!host) fail("FINANCIAL_APP_DB_URL must include a database host.");
+  if (!/^\d+$/.test(port)) fail("FINANCIAL_APP_DB_URL must include a valid database port.");
+  if (!user) fail("FINANCIAL_APP_DB_URL must include a database username.");
+  if (!password) fail("FINANCIAL_APP_DB_URL must include a database password.");
+  if (!database) fail("FINANCIAL_APP_DB_URL must include a database name.");
+
+  return { host, port, user, password, database, sslmode };
+}
+
 function sanitize(value) {
   let text = String(value ?? "");
   if (dbUrl) text = text.split(dbUrl).join("[REDACTED_DB_URL]");
+  if (connection?.password) text = text.split(connection.password).join("[REDACTED_DB_PASSWORD]");
   try {
-    const password = new URL(dbUrl).password;
-    if (password) text = text.split(password).join("[REDACTED_DB_PASSWORD]");
+    const encodedPassword = new URL(dbUrl).password;
+    if (encodedPassword) text = text.split(encodedPassword).join("[REDACTED_DB_PASSWORD]");
   } catch {
-    // The mandatory-input validation reports malformed/missing connection data separately.
+    // Connection validation reports malformed input separately.
   }
   return text;
 }
 
 function runPgDump(args) {
-  const result = spawnSync("pg_dump", args, {
-    encoding: "utf8",
-    shell: false,
-    env: process.env,
-  });
+  const env = {
+    ...process.env,
+    PGPASSWORD: connection.password,
+  };
+  if (connection.sslmode) env.PGSSLMODE = connection.sslmode;
+  else delete env.PGSSLMODE;
+
+  const result = spawnSync(
+    "pg_dump",
+    [
+      "--host", connection.host,
+      "--port", connection.port,
+      "--username", connection.user,
+      "--dbname", connection.database,
+      "--no-password",
+      ...args,
+    ],
+    {
+      encoding: "utf8",
+      shell: false,
+      env,
+    },
+  );
   if (result.status !== 0) {
     const detail = sanitize(result.stderr || result.stdout || `exit_${result.status}`);
     fail(`pg_dump failed: ${detail.trim()}`);
@@ -64,6 +120,7 @@ function fileEvidence(path) {
 
 try {
   if (!dbUrl) fail("FINANCIAL_APP_DB_URL is required and must never be committed.");
+  connection = parseConnection();
   if (!/^[0-9a-f]{40}$/i.test(sourceCommit)) fail("FINANCIAL_APP_SOURCE_COMMIT must be an exact 40-character Git SHA.");
   if (!Number.isInteger(schemaVersion) || schemaVersion < 1) fail("FINANCIAL_APP_SCHEMA_VERSION must be a positive integer.");
   if (!Number.isInteger(bucketCount) || bucketCount < 0) fail("FINANCIAL_APP_STORAGE_BUCKET_COUNT must be a non-negative integer.");
@@ -83,7 +140,6 @@ try {
   const dataFile = resolve(stagingDir, "data.sql");
 
   runPgDump([
-    "--dbname", dbUrl,
     "--schema", "financial_app",
     "--schema-only",
     "--no-owner",
@@ -92,7 +148,6 @@ try {
   ]);
 
   runPgDump([
-    "--dbname", dbUrl,
     "--schema", "financial_app",
     "--data-only",
     "--no-owner",
