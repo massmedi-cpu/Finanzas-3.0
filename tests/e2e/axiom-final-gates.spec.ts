@@ -27,7 +27,7 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
   expect(response!.status(), `${route} no debe devolver un 5xx`).toBeLessThan(500);
 
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
-  await page.waitForTimeout(75);
+  await expect(page.locator('main[aria-busy="true"]')).toHaveCount(0, { timeout: 15_000 });
 
   const audit = await page.evaluate(() => {
     const visible = (element: Element) => {
