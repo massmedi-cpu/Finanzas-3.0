@@ -1,0 +1,80 @@
+name: F13 Production Backup
+
+on:
+  push:
+    branches:
+      - rebuild/phase-13-production
+
+permissions:
+  contents: read
+
+jobs:
+  production-backup:
+    if: contains(github.event.head_commit.message, '[production-backup]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FINANCIAL_APP_DB_URL: ${{ secrets.FINANCIAL_APP_DB_URL }}
+      FINANCIAL_APP_SOURCE_COMMIT: ${{ github.sha }}
+      FINANCIAL_APP_SCHEMA_VERSION: "14"
+      FINANCIAL_APP_STORAGE_BUCKET_COUNT: "1"
+      FINANCIAL_APP_STORAGE_OBJECT_COUNT: "0"
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v6
+
+      - name: Verify private database secret exists
+        shell: bash
+        run: |
+          if [ -z "$FINANCIAL_APP_DB_URL" ]; then
+            echo "FINANCIAL_APP_DB_URL is not configured as a GitHub Actions secret."
+            exit 1
+          fi
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          pg_dump --version
+
+      - name: Setup pinned Supabase CLI 2.116.0
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/f13-bin"
+          cat > "$RUNNER_TEMP/f13-bin/supabase" <<'EOF'
+          #!/usr/bin/env bash
+          exec npx --yes supabase@2.116.0 "$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/f13-bin/supabase"
+          echo "$RUNNER_TEMP/f13-bin" >> "$GITHUB_PATH"
+          "$RUNNER_TEMP/f13-bin/supabase" --version
+
+      - name: Create atomic production backup
+        shell: bash
+        run: |
+          output="backups/production-${GITHUB_SHA}"
+          node scripts/create-financial-backup.mjs "$output"
+          node scripts/validate-financial-backup.mjs "$output"
+
+      - name: Package validated backup
+        shell: bash
+        run: |
+          archive="financial-app-production-backup-${GITHUB_SHA}.tgz"
+          tar -czf "$archive" -C backups "production-${GITHUB_SHA}"
+          sha256sum "$archive" | tee "${archive}.sha256"
+
+      - name: Upload validated backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-app-production-backup-${{ github.sha }}
+          path: |
+            financial-app-production-backup-${{ github.sha }}.tgz
+            financial-app-production-backup-${{ github.sha }}.tgz.sha256
+          if-no-files-found: error
+          retention-days: 7
