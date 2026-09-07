@@ -46,6 +46,15 @@ LANGUAGE sql
 STABLE
 AS $$ SELECT '{}'::jsonb $$;
 
+CREATE SCHEMA IF NOT EXISTS storage;
+CREATE TABLE IF NOT EXISTS storage.buckets (
+  id text PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  public boolean NOT NULL DEFAULT false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
+);
+
 CREATE SCHEMA IF NOT EXISTS vault;
 CREATE TABLE IF NOT EXISTS vault.secrets (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
