@@ -85,6 +85,85 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/pg_dump --version
 
+      - name: Resolve usable database route after credential rotation
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+
+          const pooler = new URL(process.env.FINANCIAL_APP_DB_URL);
+          const password = decodeURIComponent(pooler.password);
+          const projectRef = 'btzukbfesxdratqnxuoj';
+          const directHost = `db.${projectRef}.supabase.co`;
+          const directUser = 'postgres';
+          const poolerHost = 'aws-1-eu-west-3.pooler.supabase.com';
+          const poolerUser = `postgres.${projectRef}`;
+
+          process.stdout.write(`::add-mask::${password}\n`);
+
+          function probe(host, user) {
+            const result = spawnSync(
+              'psql',
+              [
+                '--host', host,
+                '--port', '5432',
+                '--username', user,
+                '--dbname', 'postgres',
+                '--no-password',
+                '--tuples-only',
+                '--command', 'SELECT 1;',
+              ],
+              {
+                encoding: 'utf8',
+                env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' },
+              },
+            );
+            return {
+              ok: result.status === 0,
+              detail: `${result.stderr || ''}\n${result.stdout || ''}`,
+            };
+          }
+
+          const direct = probe(directHost, directUser);
+          if (direct.ok) {
+            const directUrl = new URL('postgresql://postgres@localhost/postgres');
+            directUrl.hostname = directHost;
+            directUrl.port = '5432';
+            directUrl.username = directUser;
+            directUrl.password = password;
+            directUrl.searchParams.set('sslmode', 'require');
+            const value = directUrl.toString();
+            process.stdout.write(`::add-mask::${value}\n`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
+            console.log('Direct PostgreSQL route is available and will be used for pg_dump.');
+            process.exit(0);
+          }
+
+          console.log('Direct PostgreSQL route is unavailable from this runner; retrying Session pooler authentication.');
+          let last = '';
+          for (let attempt = 1; attempt <= 8; attempt += 1) {
+            const pooled = probe(poolerHost, poolerUser);
+            last = pooled.detail;
+            if (pooled.ok) {
+              console.log(`Session pooler authenticated successfully on attempt ${attempt}.`);
+              process.exit(0);
+            }
+            if (attempt < 8) {
+              console.log(`Session pooler authentication not ready on attempt ${attempt}; retrying.`);
+              Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+            }
+          }
+
+          const authFailure = /password authentication failed|authentication failed/i.test(last);
+          console.error(
+            authFailure
+              ? 'Database password authentication still fails after credential-rotation retries.'
+              : 'Neither the direct PostgreSQL route nor the Session pooler became usable from the runner.',
+          );
+          process.exit(1);
+          NODE
+
       - name: Create atomic production backup
         shell: bash
         run: |
