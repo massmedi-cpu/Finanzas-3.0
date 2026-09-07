@@ -91,7 +91,7 @@ test("protected preview keeps the validated Phase 5 financial contract in later 
   expect(response.ok()).toBeTruthy();
   const build = await response.json();
 
-  expect(build.version).toBe("0.0.1");
+  expect(build.version).toBe("10.0.0");
   expect(build.targetVersion).toBe("10.0.0");
   expect(Number.isInteger(build.phase)).toBeTruthy();
   expect(build.phase).toBeGreaterThanOrEqual(5);

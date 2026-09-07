@@ -1,12 +1,20 @@
-// F13 starts from the exact F12 merge after the dashboard passed local and protected Preview gates. The final release checkpoint requires the same exact SHA to pass real production backup/restore evidence, browser regression and protected Vercel Preview before publishing 10.0.0.
-export const APP_VERSION = "0.0.1" as const;
+// F13 final Axioma closure: the application release is now 10.0.0 only after the complete reconstruction passed backup/restore, browser regression and protected Preview gates. Further corrections must evolve as 10.0.x without reopening the reset-base identity.
+export const APP_VERSION = "10.0.0" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 13 as const;
 export const CURRENT_PHASE_NAME = "Consolidación, respaldo, restauración y producción 10.0.0" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
 export const CURRENT_PHASE_BLOCK_NAME = "Integración, regresión, limpieza, respaldo, restauración y publicación" as const;
 
+function assertReleaseIdentity() {
+  if (APP_VERSION !== TARGET_VERSION) {
+    throw new Error("release_version_mismatch");
+  }
+}
+
 export function getBuildInfo() {
+  assertReleaseIdentity();
+
   return {
     version: APP_VERSION,
     targetVersion: TARGET_VERSION,
