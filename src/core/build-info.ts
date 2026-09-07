@@ -1,4 +1,4 @@
-// F9 protected Preview checkpoint after document touch-target hardening.
+// F9 protected Preview checkpoint after document touch-target hardening, preserved F8 contracts and RLS baseline optimization.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 9 as const;
