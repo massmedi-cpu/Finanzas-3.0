@@ -22,7 +22,7 @@ El paquete contiene:
 1. `schema.sql`: esquema `financial_app` completo, incluidas funciones, constraints, RLS y objetos versionados por PostgreSQL que exporte Supabase CLI.
 2. `data.sql`: datos del esquema `financial_app`, incluidos `transaction_source_records` y `transactions` para conservar referencias internas.
 3. `manifest.json`: SHA Git exacto, versión de esquema, política bancaria, locale, hashes SHA-256 y estado de Supabase Storage.
-4. Archivo independiente de Supabase Storage **sólo cuando haya objetos**. Un dump de base de datos no contiene los bytes de Storage.
+4. Archivo de Supabase Storage incluido dentro del mismo paquete **sólo cuando haya objetos**. Un dump de base de datos no contiene los bytes de Storage.
 
 El backup de datos excluye deliberadamente:
 
@@ -47,19 +47,21 @@ FINANCIAL_APP_STORAGE_OBJECT_COUNT=<número actual de objetos>
 Si `FINANCIAL_APP_STORAGE_OBJECT_COUNT` es mayor que cero, además:
 
 ```text
-FINANCIAL_APP_STORAGE_ARCHIVE=<ruta a un archivo off-site que contenga los objetos>
+FINANCIAL_APP_STORAGE_ARCHIVE=<ruta al archivo verificado con los objetos>
 ```
 
 Crear y validar:
 
 ```bash
-npm run backup:create -- <directorio-seguro>
-npm run backup:validate -- <directorio-seguro>
+npm run backup:create -- <directorio-seguro-nuevo>
+npm run backup:validate -- <directorio-seguro-nuevo>
 ```
 
-El generador usa `supabase db dump` con `--schema financial_app`, `--use-copy` para los datos y exclusión explícita del contenido de tablas sensibles. El validador falla cerrado si cambian hashes, faltan tablas críticas, desaparecen transacciones/source records, se cuelan filas de tablas sensibles, la política bancaria no es `read_only` o Storage tiene objetos sin archivo independiente.
+El generador usa `supabase db dump` con `--schema financial_app`, `--use-copy` para los datos y exclusión explícita del contenido de tablas sensibles. Genera primero en un directorio temporal situado junto al destino, elimina ese staging si cualquier paso falla y sólo publica el paquete final mediante `rename` cuando schema, datos, manifest y, si procede, el archivo de Storage están completos. No sobrescribe un backup previamente verificado.
 
-## Baseline comprobado al iniciar F13
+El validador falla cerrado si cambian hashes, faltan tablas críticas, desaparecen transacciones/source records, se cuelan filas de tablas sensibles, la política bancaria no es `read_only` o Storage tiene objetos sin su archivo incluido y verificado.
+
+## Baseline comprobado en F13
 
 - `financial_app.schema_meta.schema_version = 14`
 - `bank_source_policy = read_only`
@@ -71,17 +73,28 @@ El generador usa `supabase db dump` con `--schema financial_app`, `--use-copy` p
 - 1 `categories`
 - 3 `sync_runs`
 - 2 `sync_cursors`
-- 1 documento sintético de prueba, sin `total_cents` y sin asociación
-- 1 bucket de Supabase Storage y **0 objetos**
+- 1 documento sintético de prueba
+- 1 bucket de Supabase Storage y **0 objetos** en la última comprobación previa al checkpoint final
 - 0 filas en `google_oauth_connections`
 
 Estas cifras son un checkpoint de F13, no límites rígidos: el validador final debe aceptar crecimiento legítimo y bloquear pérdidas o incoherencias.
 
-## Prueba de restauración
+## Prueba de restauración automatizada
 
 Nunca se borra ni se reinserta la base productiva sólo para demostrar un restore.
 
-La prueba final debe ejecutarse sobre un destino vacío y desechable —proyecto/branch Supabase de prueba o PostgreSQL compatible— y debe:
+El job `phase13-restore-rehearsal` ejecuta el procedimiento sobre PostgreSQL 17 desechable. Aplica las migraciones del repositorio en orden, crea datos relacionales sintéticos que respetan las restricciones productivas, ejecuta el mismo `backup:create`, valida el paquete con `backup:validate`, restaura `schema.sql` + `data.sql` en un segundo destino vacío y comprueba:
+
+1. `schema_version` esperado y manifest anclado al SHA exacto del job.
+2. Conservación de UUID y filas relacionales de cuenta, source record, transacción y override.
+3. Cero referencias huérfanas.
+4. Cero filas sensibles restauradas de allowlist u OAuth.
+5. `bank_source_policy = read_only` después del restore.
+6. Las 46 migraciones actuales aplicables sobre un entorno compatible con los servicios gestionados que usa Supabase.
+
+La última validación previa al checkpoint final dejó verdes a la vez este restore rehearsal y la regresión local completa. El checkpoint `[vercel-preview]` debe repetir ambos gates para el nuevo SHA exacto antes de cualquier merge.
+
+La restauración operativa de un backup real de Producción debe seguir, además, estos pasos:
 
 1. Validar primero el paquete con `npm run backup:validate`.
 2. Restaurar `schema.sql` y `data.sql` en una transacción que falle ante el primer error.
@@ -99,7 +112,7 @@ Un proyecto/branch Supabase adicional puede tener coste. No debe crearse automá
 El orden de cierre es obligatorio:
 
 1. Integración y limpieza verdes.
-2. Backup final creado, validado y copiado fuera de Supabase.
+2. Backup final real creado, validado y copiado fuera de Supabase.
 3. Restauración demostrada en destino desechable.
 4. Checkpoint `[vercel-preview]` del SHA final.
 5. Preview exacto READY + regresión protegida completa.
@@ -107,7 +120,7 @@ El orden de cierre es obligatorio:
 7. Merge a `main`.
 8. Producción debe servir el **SHA exacto del merge final** en `/api/build`.
 9. Runtime de Producción sin errores/fatales y rutas privadas/auth verificadas.
-10. Sólo entonces `APP_VERSION` y el cierre documental pueden afirmar 10.0.0 completada.
+10. Sólo entonces el cierre documental puede afirmar 10.0.0 completada.
 
 ### Vercel build-rate-limit
 
