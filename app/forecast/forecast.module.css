@@ -64,6 +64,10 @@
 .ghostButton,
 .primarySmall,
 .textButton {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 0;
   border-radius: 13px;
   font: inherit;
@@ -432,7 +436,7 @@
 .reasonInput {
   min-width: 180px;
   flex: 1 1 220px;
-  min-height: 38px;
+  min-height: 44px;
   font-size: 0.82rem;
 }
 
