@@ -103,6 +103,44 @@ test("F11 Drive downloader validates metadata before reading bounded original by
   expect(calls[1]).toBe(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`);
 });
 
+test("F11 Drive downloader accepts chunked media when Google omits content-length", async () => {
+  const bytes = Buffer.from("%PDF-1.7\nCHUNKED DRIVE TEST\n%%EOF", "utf8");
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("?fields=")) {
+      return new Response(JSON.stringify({
+        id: fileId,
+        name: "ticket-chunked.pdf",
+        mimeType: "application/pdf",
+        size: String(bytes.byteLength),
+        trashed: false,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("?alt=media")) {
+      const stream = new ReadableStream({
+        start(controller) {
+          controller.enqueue(bytes);
+          controller.close();
+        },
+      });
+      return new Response(stream, {
+        status: 200,
+        headers: { "content-type": "application/pdf" },
+      });
+    }
+    return new Response(null, { status: 500 });
+  }) as typeof fetch;
+
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "drive-read-token" },
+    fetcher,
+  );
+
+  const result = await downloader.download({ fileId, expectedMimeType: "application/pdf" });
+  expect(Buffer.from(result.bytes).equals(bytes)).toBe(true);
+  expect(result.sizeBytes).toBe(bytes.byteLength);
+});
+
 test("F11 Drive downloader fails closed when Financial App Reader lacks access", async () => {
   const downloader = new GoogleDriveDocumentDownloader(
     { getAccessToken: async () => "drive-read-token" },
