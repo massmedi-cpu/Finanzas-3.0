@@ -141,7 +141,9 @@ test("accounts UI renders central balances, scoped metrics and recent movements"
   await page.goto("/accounts");
 
   await expect(page.getByRole("heading", { name: "Tu dinero, cuenta por cuenta" })).toBeVisible();
-  await expect(page.getByLabel("Disponible total").getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Saldo total en cuentas").getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText(/FASE\s+\d/i)).toHaveCount(0);
+  await expect(page.getByText(/PATRIMONIO DISPONIBLE/i)).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Cuenta principal/ })).toBeVisible();
   await expect(page.getByText("1.500,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("700,00 €", { exact: true })).toBeVisible();
