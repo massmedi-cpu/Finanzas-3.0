@@ -1,0 +1,9 @@
+@media (max-width: 480px) {
+  a[href="/"] {
+    min-height: 44px;
+  }
+
+  a[href="/"]:not([class*="quickNav"]) {
+    align-items: center;
+  }
+}
