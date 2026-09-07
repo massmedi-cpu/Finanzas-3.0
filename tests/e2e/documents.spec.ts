@@ -20,39 +20,41 @@ async function mockDocumentApi(
   ocrReads: string[] = [],
 ) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
+
+  await page.route("**/api/documents/ocr*", async (route) => {
+    const url = new URL(route.request().url());
+    ocrReads.push(url.searchParams.get("id") ?? "");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "pdf_text",
+        extractor: "pdfjs-6.2.108-native-text",
+        extractedAt: "2026-09-07T07:00:00.000Z",
+        confidence: 1,
+        plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{
+          pageNumber: 1,
+          plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
+          layoutText: "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
+          lines: [
+            { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", words: [] },
+            { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", words: [] },
+          ],
+        }],
+      }),
+    });
+  });
+
   await page.route("**/api/documents*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
     const method = request.method();
-    if (method === "GET" && url.pathname.endsWith("/api/documents/ocr")) {
-      ocrReads.push(url.searchParams.get("id") ?? "");
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({
-          contractVersion: 1,
-          documentId,
-          status: "ready",
-          source: "pdf_text",
-          extractor: "pdfjs-6.2.108-native-text",
-          extractedAt: "2026-09-07T07:00:00.000Z",
-          confidence: 1,
-          plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
-          warnings: [],
-          principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
-          pages: [{
-            pageNumber: 1,
-            plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
-            layoutText: "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
-            lines: [
-              { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", words: [] },
-              { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", words: [] },
-            ],
-          }],
-        }),
-      });
-      return;
-    }
     if (method === "GET" && url.searchParams.get("mode") === "candidates") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, documentId, ready: true, reason: null, days: 7, amountToleranceCents: 200, principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false }, candidates: [{ transactionId, date: "2026-09-02", concept: "COMUNIDAD BLOQUE", accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente", amountCents: -5404, categoryId: null, merchantId: null, merchantName: null, confidence: 1, dayDifference: 0, amountDifferenceCents: 0, effectiveKind: "expense" }] }) });
       return;
