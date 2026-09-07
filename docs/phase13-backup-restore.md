@@ -137,3 +137,7 @@ El 7 de septiembre de 2026 se lanzó un nuevo reintento explícito del checkpoin
 ## Copia off-site en Google Drive
 
 El paquete final debe guardarse bajo Financial App en una carpeta específica de copias de seguridad, con fecha y SHA en el nombre. Nunca se suben credenciales, `.env`, passwords ni tokens. El Gantt debe registrar el nombre/ID de la copia final y el resultado del restore, no secretos ni contenido financiero detallado.
+
+## Gate final de Producción
+
+La conexión PostgreSQL de Producción se configura únicamente como el secreto de GitHub Actions `FINANCIAL_APP_DB_URL`. El workflow `F13 Production Backup` usa ese secreto sólo en runtime para crear y validar el dump portable; la URI nunca se versiona, se imprime ni forma parte del artefacto. El mismo checkpoint activa el Preview protegido para que backup real y validación live correspondan al mismo SHA exacto antes del merge final.
