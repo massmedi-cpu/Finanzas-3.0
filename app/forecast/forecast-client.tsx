@@ -327,7 +327,7 @@ export function ForecastClient() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "exclude", id: item.id, excluded: nextExcluded, reason }),
       }));
-      setNotice(nextExcluded ? "Elemento excluido del cash flow previsto." : "Elemento restaurado en la previsión.");
+      setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
     });
   }
 
@@ -372,10 +372,10 @@ export function ForecastClient() {
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 8</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · PREVISIÓN</p>
           <h1>Previsión</h1>
           <p className={styles.lead}>
-            Calendario financiero futuro con cash flow estimado, recurrencias confirmadas y conciliación contra movimientos reales.
+            Anticipa ingresos y gastos, revisa recurrencias y comprueba cómo pueden cambiar tus saldos en las próximas semanas.
           </p>
         </div>
         <div className={styles.heroActions}>
@@ -579,9 +579,9 @@ export function ForecastClient() {
                 <h2>Cómo se calcula</h2>
                 <ul className={styles.principles}>
                   <li>Fuente bancaria oficial: <strong>solo lectura</strong>.</li>
-                  <li>Saldo inicial: motor central de saldos financieros.</li>
+                  <li>Saldo inicial: saldos actuales de tus cuentas.</li>
                   <li>Recurrencias: solo las confirmadas como activas.</li>
-                  <li>Excluidos y confirmados no vuelven a impactar el cash flow futuro.</li>
+                  <li>Los elementos excluidos o ya confirmados no vuelven a afectar al saldo previsto.</li>
                   <li>Consultar la previsión no modifica datos.</li>
                 </ul>
                 {snapshot.balanceContext.quality.integrityDeltaAccounts > 0 ? (
