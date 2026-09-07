@@ -39,36 +39,58 @@ test("F11 native PDF extraction reads real text and preserves right-column geome
   expect(result.plainText.toUpperCase()).toContain("FACTURA TEST");
   expect(result.plainText.toUpperCase()).toContain("TOTAL");
   expect(result.plainText).toContain("54,45 EUR");
-  expect(result.warnings).not.toContain("pdf_page_requires_visual_ocr:1");
+  expect(result.warnings).toHaveLength(0);
   expect(result.pages[0].lines.some((line) => line.words.some((word) => word.box.x > 0.55))).toBe(true);
   expect(result.principles.financialWrites).toBe(false);
 });
 
-test("F11 native PDF extraction flags image-only PDF pages instead of inventing text", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium-desktop", "PDF engine smoke test runs once per CI matrix");
-  test.setTimeout(120_000);
+test("F11 scanned PDF fallback rasterizes the page and recovers receipt text with Tesseract", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "PDF OCR smoke test runs once per CI matrix");
+  test.setTimeout(180_000);
 
-  await page.setViewportSize({ width: 700, height: 900 });
+  await page.setViewportSize({ width: 760, height: 980 });
   await page.setContent(`
     <!doctype html>
-    <html><body style="margin:0;background:#fff;"><div style="width:700px;height:900px;background:#fff;"></div></body></html>
+    <html lang="es">
+      <body style="margin:0;background:#fff;color:#000;font-family:Arial,sans-serif;">
+        <main style="width:700px;padding:54px;box-sizing:border-box;background:#fff;">
+          <h1 style="font-size:40px;text-align:center;margin:0 0 44px;">TIENDA ESCANEADA</h1>
+          <div style="font-size:32px;line-height:1.75;">
+            <div style="display:flex;justify-content:space-between;"><span>PRODUCTO UNO</span><span>45,00 EUR</span></div>
+            <div style="display:flex;justify-content:space-between;"><span>IVA</span><span>9,45 EUR</span></div>
+            <div style="border-top:3px solid #000;margin-top:30px;padding-top:24px;display:flex;justify-content:space-between;font-weight:700;"><span>TOTAL</span><span>54,45 EUR</span></div>
+          </div>
+        </main>
+      </body>
+    </html>
   `);
-  const blankPng = await page.screenshot({ type: "png" });
-  const dataUrl = `data:image/png;base64,${Buffer.from(blankPng).toString("base64")}`;
-  await page.setContent(`<html><body style="margin:0"><img src="${dataUrl}" style="width:700px;height:900px" /></body></html>`);
-  const imageOnlyPdf = await page.pdf({ format: "A4", printBackground: true });
+  const receiptPng = await page.locator("main").screenshot({ type: "png" });
+  const dataUrl = `data:image/png;base64,${Buffer.from(receiptPng).toString("base64")}`;
+
+  await page.setContent(`
+    <!doctype html>
+    <html><body style="margin:0;background:#fff;">
+      <img src="${dataUrl}" style="display:block;width:700px;height:auto" />
+    </body></html>
+  `);
+  const scannedPdf = await page.pdf({ format: "A4", printBackground: true });
 
   const result = await runDocumentOcr({
     documentId,
-    bytes: new Uint8Array(imageOnlyPdf),
+    bytes: new Uint8Array(scannedPdf),
     mimeType: "application/pdf",
-    originalFileName: "scan.pdf",
+    originalFileName: "ticket-escaneado.pdf",
     provider: new PdfTextOcrProvider(),
-    now: () => new Date("2026-09-07T07:00:00Z"),
+    now: () => new Date("2026-09-07T07:05:00Z"),
   });
 
-  expect(result.status).toBe("empty");
-  expect(result.warnings).toContain("pdf_page_requires_visual_ocr:1");
-  expect(result.warnings).toContain("no_text_detected");
-  expect(result.plainText).toBe("");
+  expect(result.source).toBe("pdf_ocr");
+  expect(result.extractor).toBe("pdfjs-6.2.108+tesseract-js-7.0.0-spa");
+  expect(result.status).not.toBe("empty");
+  expect(result.plainText.toUpperCase()).toContain("TOTAL");
+  expect(result.plainText).toContain("54,45");
+  expect(result.pages[0].lines.length).toBeGreaterThanOrEqual(3);
+  expect(result.pages[0].lines.some((line) => line.words.some((word) => word.box.x > 0.55))).toBe(true);
+  expect(result.principles.financialWrites).toBe(false);
+  expect(result.principles.requiresHumanReview).toBe(true);
 });
