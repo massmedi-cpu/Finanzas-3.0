@@ -9,10 +9,17 @@ export const FINANCIAL_APP_SERVICE_ACCOUNT_EMAIL =
   "financial-app-reader@financial-app-507709.iam.gserviceaccount.com";
 export const GOOGLE_SERVICE_ACCOUNT_ENV = "GOOGLE_SERVICE_ACCOUNT_JSON";
 export const GOOGLE_SERVICE_ACCOUNT_TOKEN_URI = "https://oauth2.googleapis.com/token";
+export const GOOGLE_DOCUMENT_READONLY_SCOPES = [
+  "https://www.googleapis.com/auth/drive.readonly",
+] as const;
 
 const JWT_GRANT_TYPE = "urn:ietf:params:oauth:grant-type:jwt-bearer";
 const ASSERTION_LIFETIME_SECONDS = 3600;
 const TOKEN_CACHE_SKEW_SECONDS = 60;
+const ALLOWED_READONLY_SCOPES = new Set<string>([
+  ...GOOGLE_SOURCE_READONLY_SCOPES,
+  ...GOOGLE_DOCUMENT_READONLY_SCOPES,
+]);
 
 type RawServiceAccountCredentials = {
   type?: unknown;
@@ -38,6 +45,7 @@ export class GoogleServiceAccountError extends Error {
     public readonly code:
       | "service_account_missing"
       | "service_account_invalid"
+      | "service_account_scope_invalid"
       | "service_account_token_request_failed"
       | "service_account_token_response_invalid",
     message: string,
@@ -107,22 +115,35 @@ export function getGoogleServiceAccountCredentialsFromEnvironment() {
   return parseGoogleServiceAccountCredentials(process.env[GOOGLE_SERVICE_ACCOUNT_ENV] ?? "");
 }
 
+function normalizeReadonlyScopes(scopes: readonly string[]) {
+  const normalized = [...new Set(scopes.map((scope) => scope.trim()).filter(Boolean))];
+  if (!normalized.length || normalized.some((scope) => !ALLOWED_READONLY_SCOPES.has(scope))) {
+    throw new GoogleServiceAccountError(
+      "service_account_scope_invalid",
+      "La cuenta de servicio sólo puede solicitar scopes de lectura explícitamente autorizados por Financial App.",
+    );
+  }
+  return normalized;
+}
+
 function base64Url(value: string | Buffer) {
   const buffer = typeof value === "string" ? Buffer.from(value, "utf8") : value;
   return buffer.toString("base64url");
 }
 
-export function buildGoogleServiceAccountAssertion(
+export function buildGoogleServiceAccountAssertionForScopes(
   credentials: GoogleServiceAccountCredentials,
+  scopes: readonly string[],
   nowSeconds = Math.floor(Date.now() / 1000),
 ) {
+  const readonlyScopes = normalizeReadonlyScopes(scopes);
   const header = base64Url(
     JSON.stringify({ alg: "RS256", typ: "JWT", kid: credentials.privateKeyId }),
   );
   const claims = base64Url(
     JSON.stringify({
       iss: credentials.clientEmail,
-      scope: GOOGLE_SOURCE_READONLY_SCOPES.join(" "),
+      scope: readonlyScopes.join(" "),
       aud: credentials.tokenUri,
       iat: nowSeconds,
       exp: nowSeconds + ASSERTION_LIFETIME_SECONDS,
@@ -136,6 +157,17 @@ export function buildGoogleServiceAccountAssertion(
   return `${unsigned}.${base64Url(signature)}`;
 }
 
+export function buildGoogleServiceAccountAssertion(
+  credentials: GoogleServiceAccountCredentials,
+  nowSeconds = Math.floor(Date.now() / 1000),
+) {
+  return buildGoogleServiceAccountAssertionForScopes(
+    credentials,
+    GOOGLE_SOURCE_READONLY_SCOPES,
+    nowSeconds,
+  );
+}
+
 type GoogleTokenResponse = {
   access_token?: unknown;
   expires_in?: unknown;
@@ -145,12 +177,16 @@ type GoogleTokenResponse = {
 export class GoogleServiceAccountAccessTokenProvider implements GoogleAccessTokenProvider {
   private cachedAccessToken: string | null = null;
   private cachedExpiresAtMs = 0;
+  private readonly scopes: readonly string[];
 
   constructor(
     private readonly credentials: GoogleServiceAccountCredentials,
     private readonly fetcher: typeof fetch = fetch,
     private readonly now: () => number = Date.now,
-  ) {}
+    scopes: readonly string[] = GOOGLE_SOURCE_READONLY_SCOPES,
+  ) {
+    this.scopes = normalizeReadonlyScopes(scopes);
+  }
 
   async getAccessToken(): Promise<string> {
     const nowMs = this.now();
@@ -158,8 +194,9 @@ export class GoogleServiceAccountAccessTokenProvider implements GoogleAccessToke
       return this.cachedAccessToken;
     }
 
-    const assertion = buildGoogleServiceAccountAssertion(
+    const assertion = buildGoogleServiceAccountAssertionForScopes(
       this.credentials,
+      this.scopes,
       Math.floor(nowMs / 1000),
     );
     const body = new URLSearchParams({ grant_type: JWT_GRANT_TYPE, assertion });
