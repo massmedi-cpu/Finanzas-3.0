@@ -1,4 +1,4 @@
-// F10 starts from the exact F9 Production merge and consumes the validated central financial engine.
+// F10 protected Preview checkpoint from the exact F9 Production baseline. Accounts consumes the validated central financial engine without duplicating calculations.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 10 as const;
