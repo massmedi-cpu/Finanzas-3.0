@@ -11,11 +11,15 @@ const ocrRuntimeAssets = [
   "./node_modules/is-url/**/*",
   "./node_modules/node-fetch/**/*",
   "./node_modules/idb-keyval/**/*",
+  "./node_modules/@napi-rs/canvas/**/*",
+  "./node_modules/@napi-rs/canvas-linux-x64-gnu/**/*",
 ];
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["@napi-rs/canvas"],
   outputFileTracingIncludes: {
     "/api/documents": ocrRuntimeAssets,
+    "/api/documents/ocr": ocrRuntimeAssets,
   },
 };
 
