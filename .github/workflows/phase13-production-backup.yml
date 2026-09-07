@@ -1,0 +1,160 @@
+name: F13 Production Backup
+
+on:
+  push:
+    branches:
+      - rebuild/phase-13-production
+
+permissions:
+  contents: read
+
+jobs:
+  production-backup:
+    if: contains(github.event.head_commit.message, '[production-backup]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
+      FINANCIAL_APP_SOURCE_COMMIT: ${{ github.sha }}
+      FINANCIAL_APP_SCHEMA_VERSION: "14"
+      FINANCIAL_APP_STORAGE_BUCKET_COUNT: "1"
+      FINANCIAL_APP_STORAGE_OBJECT_COUNT: "0"
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v6
+
+      - name: Verify raw database password secret exists
+        shell: bash
+        run: |
+          if [ -z "$FINANCIAL_APP_DB_PASSWORD" ]; then
+            echo "FINANCIAL_APP_DB_PASSWORD is not configured as a GitHub Actions secret."
+            exit 1
+          fi
+          echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+          echo "Raw database password secret is configured."
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Resolve usable database route from raw password
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+
+          const password = process.env.FINANCIAL_APP_DB_PASSWORD ?? '';
+          if (!password) {
+            console.error('FINANCIAL_APP_DB_PASSWORD is empty.');
+            process.exit(1);
+          }
+          process.stdout.write(`::add-mask::${password}\n`);
+
+          const projectRef = 'btzukbfesxdratqnxuoj';
+          const directHost = `db.${projectRef}.supabase.co`;
+          const directUser = 'postgres';
+          const poolerHost = 'aws-1-eu-west-3.pooler.supabase.com';
+          const poolerUser = `postgres.${projectRef}`;
+
+          function probe(host, user) {
+            const result = spawnSync(
+              'psql',
+              [
+                '--host', host,
+                '--port', '5432',
+                '--username', user,
+                '--dbname', 'postgres',
+                '--no-password',
+                '--tuples-only',
+                '--command', 'SELECT 1;',
+              ],
+              {
+                encoding: 'utf8',
+                env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' },
+              },
+            );
+            return { ok: result.status === 0, detail: `${result.stderr || ''}\n${result.stdout || ''}` };
+          }
+
+          function publish(host, user, routeName) {
+            const canonical = new URL('postgresql://postgres@localhost/postgres');
+            canonical.hostname = host;
+            canonical.port = '5432';
+            canonical.username = user;
+            canonical.password = password;
+            canonical.searchParams.set('sslmode', 'require');
+            const value = canonical.toString();
+            process.stdout.write(`::add-mask::${value}\n`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
+            console.log(`${routeName} authenticated; canonical connection prepared for pg_dump.`);
+          }
+
+          const direct = probe(directHost, directUser);
+          if (direct.ok) {
+            publish(directHost, directUser, 'Direct PostgreSQL route');
+            process.exit(0);
+          }
+          console.log('Direct PostgreSQL route is unavailable from this runner; testing Session pooler with raw password.');
+
+          let last = '';
+          for (let round = 1; round <= 5; round += 1) {
+            const pooled = probe(poolerHost, poolerUser);
+            last = pooled.detail;
+            if (pooled.ok) {
+              publish(poolerHost, poolerUser, 'Session pooler');
+              process.exit(0);
+            }
+            if (round < 5) {
+              console.log(`Session pooler authentication not ready after round ${round}; retrying.`);
+              Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+            }
+          }
+
+          const authFailure = /password authentication failed|authentication failed/i.test(last);
+          console.error(
+            authFailure
+              ? 'The raw database password was rejected by the current database credentials.'
+              : 'Neither the direct PostgreSQL route nor the Session pooler became usable from the runner.',
+          );
+          process.exit(1);
+          NODE
+
+      - name: Create atomic production backup
+        shell: bash
+        run: |
+          output="backups/production-${GITHUB_SHA}"
+          node scripts/create-financial-backup.mjs "$output"
+          node scripts/validate-financial-backup.mjs "$output"
+
+      - name: Package validated backup
+        shell: bash
+        run: |
+          archive="financial-app-production-backup-${GITHUB_SHA}.tgz"
+          tar -czf "$archive" -C backups "production-${GITHUB_SHA}"
+          sha256sum "$archive" | tee "${archive}.sha256"
+
+      - name: Upload validated backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-app-production-backup-${{ github.sha }}
+          path: |
+            financial-app-production-backup-${{ github.sha }}.tgz
+            financial-app-production-backup-${{ github.sha }}.tgz.sha256
+          if-no-files-found: error
+          retention-days: 7
