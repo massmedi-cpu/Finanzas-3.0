@@ -1,4 +1,14 @@
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
+import {
+  GoogleDriveDocumentDownloader,
+  GoogleDriveDocumentError,
+} from "../../../../src/infrastructure/google/google-drive-document-downloader";
+import {
+  GOOGLE_DOCUMENT_READONLY_SCOPES,
+  GoogleServiceAccountAccessTokenProvider,
+  GoogleServiceAccountError,
+  getGoogleServiceAccountCredentialsFromEnvironment,
+} from "../../../../src/infrastructure/google/google-service-account";
 import { PdfTextOcrProvider } from "../../../../src/infrastructure/ocr/pdf-text-provider";
 import { TesseractImageOcrProvider } from "../../../../src/infrastructure/ocr/tesseract-image-provider";
 import {
@@ -17,6 +27,7 @@ const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
 const imageProvider = new TesseractImageOcrProvider();
 const pdfProvider = new PdfTextOcrProvider();
+let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
 type DocumentDetail = {
   document: {
@@ -24,6 +35,7 @@ type DocumentDetail = {
     mimeType: string;
     originalFileName: string;
     storageProvider: "supabase" | "google_drive";
+    sourceDriveFileId: string | null;
   };
 };
 
@@ -46,6 +58,21 @@ function apiError(error: unknown) {
   }
   if (error instanceof OcrApiError) {
     return Response.json({ error: "ocr_failed", code: error.code }, { status: error.status, headers: HEADERS });
+  }
+  if (error instanceof GoogleDriveDocumentError) {
+    const status: Record<GoogleDriveDocumentError["code"], number> = {
+      google_drive_document_id_invalid: 409,
+      google_drive_document_access_denied: 409,
+      google_drive_document_not_found: 404,
+      google_drive_document_metadata_invalid: 409,
+      google_drive_document_mime_mismatch: 415,
+      google_drive_document_too_large: 413,
+      google_drive_document_download_failed: 503,
+    };
+    return Response.json({ error: "ocr_failed", code: error.code }, { status: status[error.code], headers: HEADERS });
+  }
+  if (error instanceof GoogleServiceAccountError) {
+    return Response.json({ error: "ocr_failed", code: error.code }, { status: 503, headers: HEADERS });
   }
   if (error instanceof Error) {
     const known: Record<string, number> = {
@@ -97,6 +124,35 @@ function providerForMime(mimeType: string): DocumentOcrProvider {
   throw new OcrApiError("unsupported_ocr_mime_type", 415);
 }
 
+function driveDownloader() {
+  if (!googleDriveDownloader) {
+    const credentials = getGoogleServiceAccountCredentialsFromEnvironment();
+    const accessTokens = new GoogleServiceAccountAccessTokenProvider(
+      credentials,
+      fetch,
+      Date.now,
+      GOOGLE_DOCUMENT_READONLY_SCOPES,
+    );
+    googleDriveDownloader = new GoogleDriveDocumentDownloader(accessTokens);
+  }
+  return googleDriveDownloader;
+}
+
+async function documentBytes(detail: DocumentDetail) {
+  if (detail.document.storageProvider === "google_drive") {
+    const fileId = detail.document.sourceDriveFileId?.trim();
+    if (!fileId) throw new OcrApiError("ocr_google_drive_file_id_missing", 409);
+    const downloaded = await driveDownloader().download({
+      fileId,
+      expectedMimeType: detail.document.mimeType.toLowerCase(),
+    });
+    return downloaded.bytes;
+  }
+
+  const opened = await callPersistenceGateway<DocumentOpen>("document.open", { id: detail.document.id });
+  return downloadPrivateDocument(opened.url);
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -105,14 +161,9 @@ export async function GET(request: Request) {
     if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
 
     const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
-    if (detail.document.storageProvider !== "supabase") {
-      throw new OcrApiError("ocr_google_drive_download_not_enabled", 409);
-    }
     const mimeType = detail.document.mimeType.toLowerCase();
     const provider = providerForMime(mimeType);
-
-    const opened = await callPersistenceGateway<DocumentOpen>("document.open", { id });
-    const bytes = await downloadPrivateDocument(opened.url);
+    const bytes = await documentBytes(detail);
     const result = await runDocumentOcr({
       documentId: id,
       bytes,
