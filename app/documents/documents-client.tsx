@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
@@ -324,7 +325,7 @@ export function DocumentsClient() {
       if (input) input.value = "";
       selectDocument(id);
       await loadList();
-      setNotice("Documento guardado de forma privada. OCR no se ha ejecutado.");
+      setNotice("Documento guardado de forma privada. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
     } catch (caught) {
       setError(friendlyError(caught));
     } finally {
@@ -453,11 +454,11 @@ export function DocumentsClient() {
       <section className={styles.hero}>
         <div>
           <Link href="/" className={styles.backLink}>← Inicio</Link>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 9</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · FASE 11</p>
           <h1>Documentos</h1>
           <p className={styles.heroText}>Guarda facturas y tickets, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
           <div className={styles.pills}>
-            <span>Storage privado</span><span>Asociaciones reversibles</span><span>OCR desactivado · F11</span>
+            <span>Storage privado</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
           </div>
         </div>
         <a className={styles.driveLink} href={DRIVE_FOLDER_URL} target="_blank" rel="noreferrer">Abrir carpeta Documentos en Drive ↗</a>
@@ -471,7 +472,7 @@ export function DocumentsClient() {
           <div>
             <p className={styles.sectionEyebrow}>IMPORTACIÓN SEGURA</p>
             <h2 id="upload-title">Añadir documento</h2>
-            <p>PDF o imagen, hasta 15 MB. Se almacena de forma privada y no se ejecuta OCR en esta fase.</p>
+            <p>PDF o imagen, hasta 15 MB. Se almacena de forma privada; el OCR nunca se ejecuta automáticamente al subir.</p>
           </div>
           <form className={styles.uploadForm} onSubmit={uploadDocument}>
             <label>Tipo
@@ -509,11 +510,11 @@ export function DocumentsClient() {
                   </button>
                 ))}
               </div>
-            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Sube el primero arriba. La carga no activa OCR.</p></div>}
+            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Sube el primero arriba; podrás analizarlo después desde su panel OCR.</p></div>}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás editar sus datos y asociarlo a movimientos reales.</p></div> : loadingDetail || !detail ? <div className={styles.loading}>Cargando detalle…</div> : (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || !detail ? <div className={styles.loading}>Cargando detalle…</div> : (
               <>
                 <header className={styles.detailHeader}>
                   <div><p className={styles.sectionEyebrow}>{TYPE_LABELS[detail.document.type].toUpperCase()}</p><h2>{detail.document.originalFileName}</h2><p>{formatBytes(detail.document.sizeBytes)} · {detail.document.storageProvider === "supabase" ? "Storage privado" : "Google Drive"}</p></div>
@@ -527,9 +528,11 @@ export function DocumentsClient() {
                     <label>Emisor<input value={editor.issuerName} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
                     <label>Importe (€)<input inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
-                  <label>Notas<textarea value={editor.notes} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil sin OCR" /></label>
+                  <label>Notas<textarea value={editor.notes} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
+
+                <OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} />
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
@@ -552,7 +555,7 @@ export function DocumentsClient() {
                   {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p><small>{money.format(transaction.amountCents / 100)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
-                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR desactivado hasta F11</span></div>
+                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR temporal y revisable</span></div>
               </>
             )}
           </section>
