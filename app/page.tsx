@@ -11,5 +11,5 @@ export default function Home() {
     throw new Error(`Fundamentos no válidos: ${failedChecks}`);
   }
 
-  return <DashboardClient phaseLabel="Inicio" />;
+  return <DashboardClient />;
 }
