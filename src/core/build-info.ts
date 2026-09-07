@@ -1,4 +1,4 @@
-// F13 starts from the exact F12 merge after the dashboard passed local and protected Preview gates. This phase consolidates the validated system, proves backup/restore with the raw database-password gate and only then publishes the final 10.0.0 release.
+// F13 starts from the exact F12 merge after the dashboard passed local and protected Preview gates. The final release checkpoint requires the same exact SHA to pass real production backup/restore evidence, browser regression and protected Vercel Preview before publishing 10.0.0.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 13 as const;
