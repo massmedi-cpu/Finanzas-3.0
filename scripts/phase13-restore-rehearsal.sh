@@ -134,7 +134,7 @@ INSERT INTO financial_app.transaction_source_records(
   'f13-synthetic-source',
   'sheet-f13',
   'F13-0001',
-  'f13-synthetic-fingerprint-0001',
+  'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
   '{"synthetic":true,"phase":13}'::jsonb,
   DATE '2026-09-07',
   'Ensayo de restauracion F13',
