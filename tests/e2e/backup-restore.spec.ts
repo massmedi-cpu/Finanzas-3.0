@@ -1,8 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { delimiter, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 
 const validator = resolve(process.cwd(), "scripts/validate-financial-backup.mjs");
@@ -107,6 +116,33 @@ function run(script: string, args: string[] = [], env: NodeJS.ProcessEnv = proce
   });
 }
 
+function makeFakeSupabase(root: string) {
+  const binDir = join(root, "bin");
+  mkdirSync(binDir, { recursive: true });
+  const executable = join(binDir, "supabase");
+  writeFileSync(
+    executable,
+    `#!/usr/bin/env node\nconst { writeFileSync } = require("node:fs");\nconst args = process.argv.slice(2);\nconst fileIndex = args.indexOf("-f");\nconst file = fileIndex >= 0 ? args[fileIndex + 1] : null;\nconst dataOnly = args.includes("--data-only");\nif (dataOnly && process.env.F13_FAKE_FAIL_DATA === "1") process.exit(9);\nif (!file) process.exit(8);\nwriteFileSync(file, dataOnly ? "COPY financial_app.accounts (id) FROM stdin;\\naccount-1\\n\\\\.\\n" : "CREATE SCHEMA financial_app;\\nCREATE TABLE financial_app.accounts (id text);\\n");\n`,
+    "utf8",
+  );
+  chmodSync(executable, 0o755);
+  return binDir;
+}
+
+function creatorEnv(binDir: string, overrides: NodeJS.ProcessEnv = {}) {
+  return {
+    ...process.env,
+    PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
+    FINANCIAL_APP_DB_URL: "postgresql://synthetic.invalid/postgres",
+    FINANCIAL_APP_SOURCE_COMMIT: "c".repeat(40),
+    FINANCIAL_APP_SCHEMA_VERSION: "14",
+    FINANCIAL_APP_STORAGE_BUCKET_COUNT: "0",
+    FINANCIAL_APP_STORAGE_OBJECT_COUNT: "0",
+    FINANCIAL_APP_STORAGE_ARCHIVE: "",
+    ...overrides,
+  };
+}
+
 test("F13 backup validator accepts a complete portable package", async () => {
   const dir = makeBackup();
   try {
@@ -197,4 +233,52 @@ test("F13 backup creator blocks a backup when Storage objects exist without an a
   });
   expect(result.status).not.toBe(0);
   expect(result.stderr).toContain("FINANCIAL_APP_STORAGE_ARCHIVE");
+});
+
+test("F13 backup creator never publishes a partial package when the second dump fails", async () => {
+  const root = mkdtempSync(join(tmpdir(), "financial-app-atomic-backup-"));
+  try {
+    const binDir = makeFakeSupabase(root);
+    const outputDir = join(root, "backup-final");
+    const result = run(creator, [outputDir], creatorEnv(binDir, { F13_FAKE_FAIL_DATA: "1" }));
+
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("Supabase CLI dump failed");
+    expect(existsSync(outputDir)).toBe(false);
+    expect(readdirSync(root).some((name) => name.startsWith(".backup-final.staging-"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("F13 backup creator bundles Storage inside the atomically published package", async () => {
+  const root = mkdtempSync(join(tmpdir(), "financial-app-storage-backup-"));
+  try {
+    const binDir = makeFakeSupabase(root);
+    const storageSource = join(root, "storage.tar");
+    const outputDir = join(root, "backup-final");
+    writeFileSync(storageSource, "verified-storage-archive", "utf8");
+
+    const result = run(
+      creator,
+      [outputDir],
+      creatorEnv(binDir, {
+        FINANCIAL_APP_STORAGE_BUCKET_COUNT: "1",
+        FINANCIAL_APP_STORAGE_OBJECT_COUNT: "1",
+        FINANCIAL_APP_STORAGE_ARCHIVE: storageSource,
+      }),
+    );
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(join(outputDir, "schema.sql"))).toBe(true);
+    expect(existsSync(join(outputDir, "data.sql"))).toBe(true);
+    expect(readFileSync(join(outputDir, "storage.tar"), "utf8")).toBe("verified-storage-archive");
+    const manifest = JSON.parse(readFileSync(join(outputDir, "manifest.json"), "utf8"));
+    expect(manifest.storage).toMatchObject({ bucketCount: 1, objectCount: 1 });
+    expect(manifest.storage.archive.file).toBe("storage.tar");
+    expect(manifest.storage.archive.sha256).toBe(sha256("verified-storage-archive"));
+    expect(readdirSync(root).some((name) => name.startsWith(".backup-final.staging-"))).toBe(false);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
