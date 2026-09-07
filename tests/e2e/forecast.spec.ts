@@ -265,14 +265,14 @@ test("forecast UI requires exclusion reason and reconciles from real candidates"
   await expect.poll(() => writes.some((entry) => entry.action === "reconcile" && entry.transactionId === transactionId)).toBe(true);
 });
 
-test("protected preview exposes exact phase 8 build and real forecast contract", async ({ request }) => {
+test("protected preview preserves phase 8 forecast contract across later phases", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
 
   const build = await request.get("/api/build");
   expect(build.status()).toBe(200);
   const buildJson = await build.json();
-  expect(buildJson.phase).toBe(8);
-  expect(buildJson.phaseName).toBe("Previsión");
+  expect(buildJson.phase).toBeGreaterThanOrEqual(8);
+  if (buildJson.phase === 8) expect(buildJson.phaseName).toBe("Previsión");
   if (process.env.GITHUB_SHA) expect(buildJson.commit).toBe(process.env.GITHUB_SHA);
 
   const snapshot = await request.get("/api/forecast?dateFrom=2026-09-07&dateTo=2026-12-31");
