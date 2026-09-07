@@ -80,7 +80,7 @@ test("Documentos keeps Drive OCR manual, fail-closed and write-free when reader 
 
   await analyze.click();
   await expect.poll(() => ocrReads.length).toBe(1);
-  await expect(page.getByRole("alert")).toContainText("todavía no tiene acceso de lectura al archivo original");
+  await expect(page.getByText(/Financial App Reader todavía no tiene acceso de lectura al archivo original/)).toBeVisible();
   expect(ocrReads).toEqual([documentId]);
   expect(writes).toHaveLength(0);
 });
