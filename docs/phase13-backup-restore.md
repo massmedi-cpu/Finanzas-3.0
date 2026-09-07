@@ -132,6 +132,8 @@ vercel promote <deployment-url> --yes
 
 La promoción sólo debe hacerse sobre el **Preview final de F13**, nunca sobre un Preview anterior si ya existe un SHA F13 más nuevo. Después hay que repetir toda la verificación de Producción; una promoción no equivale por sí sola a cierre exitoso.
 
+El 7 de septiembre de 2026 se lanzó un nuevo reintento explícito del checkpoint final, sin cambios funcionales, para comprobar si Vercel había liberado ya la cuota. El resultado de ese SHA debe validarse de forma independiente antes de cualquier merge.
+
 ## Copia off-site en Google Drive
 
 El paquete final debe guardarse bajo Financial App en una carpeta específica de copias de seguridad, con fecha y SHA en el nombre. Nunca se suben credenciales, `.env`, passwords ni tokens. El Gantt debe registrar el nombre/ID de la copia final y el resultado del restore, no secretos ni contenido financiero detallado.
