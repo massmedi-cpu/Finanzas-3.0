@@ -30,7 +30,8 @@ function fail(message) {
 }
 
 function sanitize(value) {
-  return String(value ?? "").split(dbUrl).join("[REDACTED_DB_URL]");
+  const text = String(value ?? "");
+  return dbUrl ? text.split(dbUrl).join("[REDACTED_DB_URL]") : text;
 }
 
 function runSupabase(args) {
