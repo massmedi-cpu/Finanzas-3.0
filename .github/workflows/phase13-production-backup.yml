@@ -36,11 +36,11 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install PostgreSQL 17 client
+      - name: Install PostgreSQL client
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install --yes postgresql-client-17
+          sudo apt-get install --yes postgresql-client
           pg_dump --version
 
       - name: Setup pinned Supabase CLI 2.116.0
