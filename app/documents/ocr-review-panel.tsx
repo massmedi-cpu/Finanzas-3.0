@@ -6,6 +6,7 @@ import ocrStyles from "./ocr-review.module.css";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = "ready" | "needs_review" | "empty";
+type OcrSource = "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
 
 type OcrPage = {
   pageNumber: number;
@@ -23,7 +24,7 @@ type OcrResult = {
   contractVersion: 1;
   documentId: string;
   status: OcrStatus;
-  source: "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
+  source: OcrSource;
   extractor: string;
   extractedAt: string;
   confidence: number | null;
@@ -44,6 +45,13 @@ const STATUS_LABELS: Record<OcrStatus, string> = {
   empty: "Sin texto recuperable",
 };
 
+const SOURCE_LABELS: Record<OcrSource, string> = {
+  pdf_text: "Texto nativo PDF",
+  image_ocr: "OCR de imagen",
+  pdf_ocr: "PDF escaneado · OCR visual",
+  hybrid: "PDF híbrido · texto + OCR",
+};
+
 const WARNING_LABELS: Record<string, string> = {
   low_confidence: "La confianza global es baja: revisa el original antes de usar cualquier dato.",
   no_text_detected: "No se ha detectado texto fiable.",
@@ -53,9 +61,13 @@ const WARNING_LABELS: Record<string, string> = {
 
 function warningLabel(warning: string) {
   if (WARNING_LABELS[warning]) return WARNING_LABELS[warning];
-  if (warning.startsWith("pdf_page_requires_visual_ocr:")) {
-    const page = warning.split(":")[1];
-    return `La página ${page} parece escaneada y necesita OCR visual.`;
+  const emptyMatch = warning.match(/^pdf_page_visual_ocr_empty:(\d+)$/);
+  if (emptyMatch) return `La página ${emptyMatch[1]} se ha analizado visualmente, pero no contiene texto fiable.`;
+  const nestedMatch = warning.match(/^pdf_page_(\d+):(.*)$/);
+  if (nestedMatch) {
+    const [, page, code] = nestedMatch;
+    if (code === "no_text_detected") return `La página ${page} no ha producido texto fiable tras el OCR visual.`;
+    return `Página ${page}: ${code.replaceAll("_", " ")}.`;
   }
   return warning.replaceAll("_", " ");
 }
@@ -80,6 +92,8 @@ function errorLabel(code: string) {
     ocr_source_download_failed: "No se ha podido descargar temporalmente el archivo privado para analizarlo.",
     ocr_source_too_large: "El documento supera el límite seguro de 15 MB para OCR.",
     ocr_image_dimensions_too_large: "La imagen tiene unas dimensiones demasiado grandes para procesarla de forma segura.",
+    ocr_pdf_canvas_unavailable: "No se ha podido preparar la página escaneada del PDF para OCR visual.",
+    ocr_pdf_render_empty: "La página del PDF no ha podido convertirse en una imagen válida.",
     ocr_queue_timeout: "El motor OCR está ocupado. Puedes volver a intentarlo.",
     ocr_worker_timeout: "El motor OCR no ha podido iniciarse a tiempo.",
     ocr_recognize_timeout: "La lectura OCR ha superado el tiempo máximo de seguridad.",
@@ -147,7 +161,7 @@ export function OcrReviewPanel({
           <div className={ocrStyles.metrics}>
             <div><span>Estado</span><strong>{STATUS_LABELS[result.status]}</strong></div>
             <div><span>Confianza</span><strong>{confidenceLabel(result.confidence)}</strong></div>
-            <div><span>Origen</span><strong>{result.source === "pdf_text" ? "Texto nativo PDF" : "OCR de imagen"}</strong></div>
+            <div><span>Origen</span><strong>{SOURCE_LABELS[result.source]}</strong></div>
             <div><span>Páginas</span><strong>{result.pages.length}</strong></div>
           </div>
 
