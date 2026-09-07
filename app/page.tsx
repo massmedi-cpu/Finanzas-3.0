@@ -1,6 +1,8 @@
-import Link from "next/link";
+import DashboardClient from "./dashboard-client";
 import { getBuildInfo } from "../src/core/build-info";
 import { runCompleteFoundationHealthChecks } from "../src/core/foundation-gate";
+
+export const dynamic = "force-dynamic";
 
 export default function Home() {
   const build = getBuildInfo();
@@ -11,42 +13,5 @@ export default function Home() {
     throw new Error(`Fundamentos no válidos: ${failedChecks}`);
   }
 
-  const shortCommit = build.commit === "local" ? "local" : build.commit.slice(0, 8);
-
-  return (
-    <main className="reset-screen">
-      <section className="reset-card" aria-labelledby="bootstrap-title">
-        <p className="eyebrow">FINANCIAL APP · RECONSTRUCCIÓN ACUMULATIVA</p>
-        <h1 id="bootstrap-title">Versión {build.version}</h1>
-        <p>
-          Fase {build.phase} — {build.phaseName}. Fases 1–9 permanecen cerradas y validadas;
-          Cuentas consume el motor financiero central y los movimientos ya aprobados, sin duplicar cálculos ni escribir nunca en la fuente bancaria.
-        </p>
-
-        <div className="foundation-flags" aria-label="Reglas activas del desarrollo">
-          <span>es-ES · EUR</span>
-          <span>Fuente bancaria · solo lectura</span>
-          <span>OCR · Fase 11</span>
-          <span>Fundamentos · {health.passed}/{health.total} OK</span>
-        </div>
-
-        <div className="foundation-flags" aria-label="Accesos de la fase actual">
-          <Link className="foundation-cta" href="/accounts">Abrir Cuentas</Link>
-          <Link className="foundation-cta" href="/documents">Abrir Documentos</Link>
-          <Link className="foundation-cta" href="/forecast">Abrir Previsión</Link>
-          <Link className="foundation-cta" href="/recurrences">Abrir Recurrentes</Link>
-          <Link className="foundation-cta" href="/budgets">Abrir Presupuestos</Link>
-          <Link className="foundation-cta" href="/transactions">Abrir Movimientos</Link>
-          <Link className="foundation-cta" href="/configuration">Abrir Configuración</Link>
-        </div>
-
-        <dl className="build-meta">
-          <div><dt>Objetivo</dt><dd>{build.targetVersion}</dd></div>
-          <div><dt>Entorno</dt><dd>{build.environment}</dd></div>
-          <div><dt>Rama</dt><dd>{build.branch}</dd></div>
-          <div><dt>Commit</dt><dd>{shortCommit}</dd></div>
-        </dl>
-      </section>
-    </main>
-  );
+  return <DashboardClient phaseLabel={`Fase ${build.phase} · ${build.phaseName}`} />;
 }
