@@ -135,3 +135,7 @@ El paquete final debe guardarse bajo `Financial App → Backups`, con fecha y SH
 ## Gate final de Producción
 
 La conexión PostgreSQL de Producción se configura únicamente como el secreto de GitHub Actions `FINANCIAL_APP_DB_URL`. El workflow `F13 Production Backup` valida y normaliza esa URI para el Session pooler, enmascara tanto el valor original como el normalizado y usa `pg_dump` 17 directamente. La URI nunca se versiona, se imprime ni forma parte del artefacto. El mismo checkpoint activa el Preview protegido para que backup real y validación live correspondan al mismo SHA exacto antes del merge final.
+
+### Reintento final tras rotación de credenciales
+
+Si la contraseña de base de datos se rota durante F13, el secreto `FINANCIAL_APP_DB_URL` debe actualizarse fuera del repositorio y el siguiente checkpoint debe volver a ejecutar, sobre **un único SHA exacto**, el backup real y el Preview protegido. La rotación de credenciales no modifica el contrato de backup ni autoriza a omitir ningún gate.
