@@ -1,4 +1,5 @@
-import { runDocumentOcr } from "../../../../src/application/document-ocr-service";
+import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
+import { PdfTextOcrProvider } from "../../../../src/infrastructure/ocr/pdf-text-provider";
 import { TesseractImageOcrProvider } from "../../../../src/infrastructure/ocr/tesseract-image-provider";
 import {
   callPersistenceGateway,
@@ -14,7 +15,8 @@ const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
-const provider = new TesseractImageOcrProvider();
+const imageProvider = new TesseractImageOcrProvider();
+const pdfProvider = new PdfTextOcrProvider();
 
 type DocumentDetail = {
   document: {
@@ -59,9 +61,11 @@ function apiError(error: unknown) {
       ocr_queue_timeout: 503,
       ocr_worker_timeout: 503,
       ocr_recognize_timeout: 503,
+      InvalidPDFException: 422,
+      PasswordException: 422,
     };
-    const status = known[error.message];
-    if (status) return Response.json({ error: "ocr_failed", code: error.message }, { status, headers: HEADERS });
+    const status = known[error.message] ?? known[error.name];
+    if (status) return Response.json({ error: "ocr_failed", code: error.message || error.name }, { status, headers: HEADERS });
   }
   console.error("document-ocr-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
@@ -87,6 +91,12 @@ async function downloadPrivateDocument(rawUrl: string) {
   return bytes;
 }
 
+function providerForMime(mimeType: string): DocumentOcrProvider {
+  if (IMAGE_MIMES.has(mimeType)) return imageProvider;
+  if (mimeType === "application/pdf") return pdfProvider;
+  throw new OcrApiError("unsupported_ocr_mime_type", 415);
+}
+
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
@@ -99,9 +109,7 @@ export async function GET(request: Request) {
       throw new OcrApiError("ocr_google_drive_download_not_enabled", 409);
     }
     const mimeType = detail.document.mimeType.toLowerCase();
-    if (!IMAGE_MIMES.has(mimeType)) {
-      throw new OcrApiError(mimeType === "application/pdf" ? "ocr_pdf_not_enabled_yet" : "unsupported_ocr_mime_type", 415);
-    }
+    const provider = providerForMime(mimeType);
 
     const opened = await callPersistenceGateway<DocumentOpen>("document.open", { id });
     const bytes = await downloadPrivateDocument(opened.url);
