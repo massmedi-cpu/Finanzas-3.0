@@ -1,10 +1,10 @@
-// F12 protected Preview checkpoint from the exact validated F11 Production merge. Inicio/dashboard composes only already validated central engines and contracts; it does not introduce duplicate financial logic or bank-source writes.
+// F13 starts from the exact F12 merge after the dashboard passed local and protected Preview gates. This phase consolidates the validated system, proves backup/restore and only then publishes the final 10.0.0 release.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 12 as const;
-export const CURRENT_PHASE_NAME = "Inicio / dashboard" as const;
+export const CURRENT_PHASE = 13 as const;
+export const CURRENT_PHASE_NAME = "Consolidación, respaldo, restauración y producción 10.0.0" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Resumen de decisión rápida" as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Integración, regresión, limpieza, respaldo, restauración y publicación" as const;
 
 export function getBuildInfo() {
   return {
