@@ -306,7 +306,7 @@ function BudgetCard({
 
       {total ? (
         <p className={styles.helper}>
-          El gasto real procede del motor financiero central. El presupuesto nunca altera movimientos ni datos de la fuente bancaria.
+          El gasto mostrado procede de tus movimientos. El presupuesto nunca modifica la fuente bancaria.
         </p>
       ) : null}
     </article>
@@ -432,11 +432,10 @@ export default function BudgetsClient() {
       <section className={styles.hero} aria-labelledby="budget-title">
         <div className={styles.heroCopy}>
           <Link className={styles.backLink} href="/">← Inicio</Link>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 6</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
-            Control mensual con un único motor central: recomendación automática basada en tus gastos reales,
-            límites manuales auditables y consumo calculado sin modificar nunca la fuente bancaria.
+            Controla cuánto quieres gastar cada mes, compara el límite con tus gastos reales y ajusta las categorías cuando lo necesites.
           </p>
         </div>
 
@@ -548,8 +547,7 @@ export default function BudgetsClient() {
                         <span className={styles.cardIcon} style={{ margin: "0 auto" }}><Icon name="category" /></span>
                         <strong>No hay categorías de gasto activas</strong>
                         <p>
-                          El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí
-                          automáticamente con su recomendación y consumo real, sin duplicar cálculos en el cliente.
+                          El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí con su recomendación y consumo real.
                         </p>
                         <Link href="/configuration">Abrir Configuración</Link>
                       </div>
@@ -563,7 +561,7 @@ export default function BudgetsClient() {
                   <div className={styles.panelHeading}>
                     <div>
                       <h2>Cómo se calcula</h2>
-                      <p>Reglas visibles y auditables del motor.</p>
+                      <p>Reglas visibles para entender el presupuesto.</p>
                     </div>
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
@@ -584,12 +582,12 @@ export default function BudgetsClient() {
                   <p className={styles.explanation}>{snapshot.total.automaticExplanation}</p>
 
                   <div className={styles.principles}>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Fuente bancaria estrictamente de solo lectura.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>El gasto real sale de <code>financial_transaction_facts()</code>, la misma fuente de verdad de F5.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las transferencias no consumen presupuesto.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>La fuente bancaria se mantiene estrictamente en solo lectura.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>El gasto se calcula con los mismos movimientos efectivos que utiliza el resto de Financial App.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las transferencias internas no consumen presupuesto.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>Los duplicados confirmados y las exclusiones manuales no consumen presupuesto.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite manual tiene prioridad sin destruir la recomendación automática.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las categorías padre agregan sus subcategorías para evitar dobles cálculos.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite manual tiene prioridad sin borrar la recomendación automática.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las categorías padre incluyen sus subcategorías para evitar contar el mismo gasto dos veces.</span></div>
                   </div>
                 </div>
               </aside>
