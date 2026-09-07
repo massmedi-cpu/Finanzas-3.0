@@ -2,7 +2,7 @@ import path from "node:path";
 import { createWorker } from "tesseract.js";
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
 import type { OcrWord } from "../../domain/document-ocr";
-import { readOcrImageMetadata } from "./image-metadata";
+import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
 const SUPPORTED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIDE = 12_000;
@@ -10,9 +10,16 @@ const MAX_PIXELS = 60_000_000;
 const OCR_TIMEOUT_MS = 35_000;
 const QUEUE_TIMEOUT_MS = 8_000;
 const EXTRACTOR = "tesseract-js-7.0.0-spa";
+const ROTATION_EPSILON = 0.01;
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type TimeoutKind = "queue" | "worker" | "recognize";
+type RecognitionData = Record<string, unknown>;
+type RecognitionCandidate = {
+  words: OcrWord[];
+  score: number;
+  rotationRadians: number;
+};
 
 class OcrTimeoutError extends Error {
   constructor(readonly kind: TimeoutKind) {
@@ -94,6 +101,72 @@ function parseTsv(tsv: unknown, width: number, height: number): OcrWord[] {
   return words;
 }
 
+function processedImageMetadata(data: RecognitionData, fallback: OcrImageMetadata, rotationRadians: number) {
+  const imageColor = data.imageColor;
+  if (typeof imageColor === "string") {
+    const match = /^data:image\/(?:png|jpeg|webp);base64,(.+)$/is.exec(imageColor);
+    if (match) {
+      try {
+        const metadata = readOcrImageMetadata(new Uint8Array(Buffer.from(match[1], "base64")));
+        if (metadata) return metadata;
+      } catch {
+        // Fall back to the deterministic dimensions below.
+      }
+    }
+  }
+
+  const quarterTurn = Math.abs(Math.abs(rotationRadians) - Math.PI / 2) <= ROTATION_EPSILON;
+  return quarterTurn
+    ? { ...fallback, width: fallback.height, height: fallback.width }
+    : fallback;
+}
+
+function wordStats(words: OcrWord[]) {
+  let chars = 0;
+  let confidenceWeight = 0;
+  let confidenceScore = 0;
+  for (const word of words) {
+    const weight = Math.max(1, word.text.replace(/\s+/g, "").length);
+    chars += weight;
+    confidenceWeight += weight;
+    confidenceScore += word.confidence * weight;
+  }
+  return {
+    chars,
+    averageConfidence: confidenceWeight ? confidenceScore / confidenceWeight : 0,
+  };
+}
+
+function candidateScore(words: OcrWord[]) {
+  const stats = wordStats(words);
+  return stats.averageConfidence * 100 + Math.min(stats.chars, 500) * 0.12 + Math.min(words.length, 80) * 0.35;
+}
+
+function needsOrientationFallback(words: OcrWord[], metadata: OcrImageMetadata) {
+  const stats = wordStats(words);
+  const landscape = metadata.width > metadata.height * 1.12;
+  return landscape || words.length < 5 || stats.chars < 24 || stats.averageConfidence < 0.62;
+}
+
+async function recognizeCandidate(
+  worker: Worker,
+  bytes: Uint8Array,
+  metadata: OcrImageMetadata,
+  rotationRadians: number,
+  autoRotate: boolean,
+): Promise<RecognitionCandidate> {
+  const options = autoRotate ? { rotateAuto: true } : { rotateRadians: rotationRadians };
+  const recognition = await withTimeout(
+    worker.recognize(Buffer.from(bytes), options, { text: true, tsv: true, imageColor: true }),
+    OCR_TIMEOUT_MS,
+    "recognize",
+  );
+  const data = recognition?.data as unknown as RecognitionData;
+  const dimensions = processedImageMetadata(data, metadata, rotationRadians);
+  const words = parseTsv(data?.tsv, dimensions.width, dimensions.height);
+  return { words, score: candidateScore(words), rotationRadians };
+}
+
 export class TesseractImageOcrProvider implements DocumentOcrProvider {
   supports(mimeType: string) {
     return SUPPORTED_MIMES.has(mimeType.toLowerCase());
@@ -107,22 +180,26 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
     }
 
     try {
-      const recognition = await exclusive(async () => {
+      const selected = await exclusive(async () => {
         const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "worker");
-        return withTimeout(
-          worker.recognize(Buffer.from(input.bytes), { rotateAuto: true }, { text: true, tsv: true }),
-          OCR_TIMEOUT_MS,
-          "recognize",
-        );
+        const initial = await recognizeCandidate(worker, input.bytes, metadata, 0, true);
+        if (!needsOrientationFallback(initial.words, metadata)) return initial;
+
+        let best = initial;
+        for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
+          const candidate = await recognizeCandidate(worker, input.bytes, metadata, rotationRadians, false);
+          if (candidate.score > best.score) best = candidate;
+        }
+        return best;
       });
-      const data = recognition?.data as unknown as Record<string, unknown>;
-      const words = parseTsv(data?.tsv, metadata.width, metadata.height);
+
       const warnings: string[] = [];
-      if (!words.length) warnings.push("no_text_detected");
+      if (!selected.words.length) warnings.push("no_text_detected");
+      if (Math.abs(selected.rotationRadians) > ROTATION_EPSILON) warnings.push("orientation_corrected");
       return {
         source: "image_ocr" as const,
         extractor: EXTRACTOR,
-        pages: [{ pageNumber: 1, words }],
+        pages: [{ pageNumber: 1, words: selected.words }],
         warnings,
       };
     } catch (error) {
