@@ -19,8 +19,8 @@ export default function Home() {
         <p className="eyebrow">FINANCIAL APP · RECONSTRUCCIÓN ACUMULATIVA</p>
         <h1 id="bootstrap-title">Versión {build.version}</h1>
         <p>
-          Fase {build.phase} — {build.phaseName}. Fases 1–8 permanecen cerradas y validadas;
-          Documentos se construye sobre movimientos y lógica financiera ya aprobados, sin OCR y sin escribir nunca en la fuente bancaria.
+          Fase {build.phase} — {build.phaseName}. Fases 1–9 permanecen cerradas y validadas;
+          Cuentas consume el motor financiero central y los movimientos ya aprobados, sin duplicar cálculos ni escribir nunca en la fuente bancaria.
         </p>
 
         <div className="foundation-flags" aria-label="Reglas activas del desarrollo">
@@ -31,6 +31,7 @@ export default function Home() {
         </div>
 
         <div className="foundation-flags" aria-label="Accesos de la fase actual">
+          <Link className="foundation-cta" href="/accounts">Abrir Cuentas</Link>
           <Link className="foundation-cta" href="/documents">Abrir Documentos</Link>
           <Link className="foundation-cta" href="/forecast">Abrir Previsión</Link>
           <Link className="foundation-cta" href="/recurrences">Abrir Recurrentes</Link>

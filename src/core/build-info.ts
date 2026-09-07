@@ -1,10 +1,10 @@
-// F9 protected Preview checkpoint after document touch-target hardening, preserved F8 contracts and RLS baseline optimization.
+// F10 protected Preview checkpoint from the exact F9 Production baseline. Accounts consumes the validated central financial engine without duplicating calculations.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 9 as const;
-export const CURRENT_PHASE_NAME = "Documentos sin OCR" as const;
+export const CURRENT_PHASE = 10 as const;
+export const CURRENT_PHASE_NAME = "Cuentas" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Gestión documental" as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Vista de cuentas" as const;
 
 export function getBuildInfo() {
   return {

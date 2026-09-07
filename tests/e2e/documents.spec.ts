@@ -143,15 +143,17 @@ test("Documentos uploads through private signed storage and finalizes without OC
   await expect(page.getByRole("status")).toContainText("OCR no se ha ejecutado");
 });
 
-test("protected preview exposes exact phase 9 build and side-effect-free document contract", async ({ request }) => {
+test("protected preview preserves phase 9 document contract across later phases", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
   const build = await request.get("/api/build");
   expect(build.status()).toBe(200);
   const buildJson = await build.json();
-  expect(buildJson.phase).toBe(9);
-  expect(buildJson.phaseName).toBe("Documentos sin OCR");
-  expect(buildJson.phaseBlock).toBe(1);
-  expect(buildJson.phaseBlockName).toBe("Gestión documental");
+  expect(buildJson.phase).toBeGreaterThanOrEqual(9);
+  if (buildJson.phase === 9) {
+    expect(buildJson.phaseName).toBe("Documentos sin OCR");
+    expect(buildJson.phaseBlock).toBe(1);
+    expect(buildJson.phaseBlockName).toBe("Gestión documental");
+  }
   if (process.env.GITHUB_SHA) expect(buildJson.commit).toBe(process.env.GITHUB_SHA);
   const snapshot = await request.get("/api/documents?limit=50&offset=0");
   expect(snapshot.status()).toBe(200);
