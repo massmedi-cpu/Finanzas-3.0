@@ -1,3 +1,4 @@
+// F9 protected Preview checkpoint after document touch-target hardening.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 9 as const;
