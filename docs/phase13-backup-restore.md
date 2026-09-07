@@ -13,13 +13,13 @@ Cerrar Financial App con un respaldo portable, verificable y sin secretos; demos
 
 ## Por qué existe este backup
 
-Financial App usa actualmente Supabase Free. Según la documentación vigente de Supabase, los proyectos Free no disponen de los backups diarios automáticos de Pro/Team/Enterprise; Supabase recomienda exportar regularmente con `supabase db dump` y guardar copias fuera del proyecto.
+Financial App usa actualmente Supabase Free. El cierre de F13 exige por tanto una copia lógica verificable fuera del propio proyecto, independiente de cualquier política de retención del proveedor.
 
 ## Contenido obligatorio
 
 El paquete contiene:
 
-1. `schema.sql`: esquema `financial_app` completo, incluidas funciones, constraints, RLS y objetos versionados por PostgreSQL que exporte Supabase CLI.
+1. `schema.sql`: esquema `financial_app` completo, incluidas funciones, constraints, RLS y objetos PostgreSQL exportables.
 2. `data.sql`: datos del esquema `financial_app`, incluidos `transaction_source_records` y `transactions` para conservar referencias internas.
 3. `manifest.json`: SHA Git exacto, versión de esquema, política bancaria, locale, hashes SHA-256 y estado de Supabase Storage.
 4. Archivo de Supabase Storage incluido dentro del mismo paquete **sólo cuando haya objetos**. Un dump de base de datos no contiene los bytes de Storage.
@@ -32,7 +32,7 @@ El backup de datos excluye deliberadamente:
 
 ## Crear el backup
 
-Requisitos: Supabase CLI, acceso a una URL de conexión de base de datos y un directorio seguro fuera del repositorio.
+Requisitos: cliente PostgreSQL 17 (`pg_dump`), acceso a una URL de conexión de base de datos y un directorio seguro fuera del repositorio.
 
 Variables obligatorias:
 
@@ -57,7 +57,7 @@ npm run backup:create -- <directorio-seguro-nuevo>
 npm run backup:validate -- <directorio-seguro-nuevo>
 ```
 
-El generador usa `supabase db dump` con `--schema financial_app`, `--use-copy` para los datos y exclusión explícita del contenido de tablas sensibles. Genera primero en un directorio temporal situado junto al destino, elimina ese staging si cualquier paso falla y sólo publica el paquete final mediante `rename` cuando schema, datos, manifest y, si procede, el archivo de Storage están completos. No sobrescribe un backup previamente verificado.
+El generador ejecuta `pg_dump` 17 directamente contra la URI PostgreSQL validada, restringe el dump al esquema `financial_app`, usa formato SQL portable con `COPY` para los datos y excluye explícitamente el contenido de las tablas sensibles. No depende de Docker ni de la reinterpretación de credenciales del CLI de Supabase. Genera primero en un directorio temporal situado junto al destino, elimina ese staging si cualquier paso falla y sólo publica el paquete final mediante `rename` cuando schema, datos, manifest y, si procede, el archivo de Storage están completos. No sobrescribe un backup previamente verificado.
 
 El validador falla cerrado si cambian hashes, faltan tablas críticas, desaparecen transacciones/source records, se cuelan filas de tablas sensibles, la política bancaria no es `read_only` o Storage tiene objetos sin su archivo incluido y verificado.
 
@@ -83,7 +83,7 @@ Estas cifras son un checkpoint de F13, no límites rígidos: el validador final 
 
 Nunca se borra ni se reinserta la base productiva sólo para demostrar un restore.
 
-El job `phase13-restore-rehearsal` ejecuta el procedimiento sobre PostgreSQL 17 desechable. Aplica las migraciones del repositorio en orden, crea datos relacionales sintéticos que respetan las restricciones productivas, ejecuta el mismo `backup:create`, valida el paquete con `backup:validate`, restaura `schema.sql` + `data.sql` en un segundo destino vacío y comprueba:
+El job `phase13-restore-rehearsal` ejecuta el procedimiento sobre PostgreSQL 17 desechable. Aplica las migraciones del repositorio en orden, crea datos relacionales sintéticos que respetan las restricciones productivas, ejecuta el mismo `backup:create` mediante `pg_dump` 17, valida el paquete con `backup:validate`, restaura `schema.sql` + `data.sql` en un segundo destino vacío y comprueba:
 
 1. `schema_version` esperado y manifest anclado al SHA exacto del job.
 2. Conservación de UUID y filas relacionales de cuenta, source record, transacción y override.
@@ -92,7 +92,7 @@ El job `phase13-restore-rehearsal` ejecuta el procedimiento sobre PostgreSQL 17 
 5. `bank_source_policy = read_only` después del restore.
 6. Las 46 migraciones actuales aplicables sobre un entorno compatible con los servicios gestionados que usa Supabase.
 
-La última validación previa al checkpoint final dejó verdes a la vez este restore rehearsal y la regresión local completa. El checkpoint `[vercel-preview]` debe repetir ambos gates para el nuevo SHA exacto antes de cualquier merge.
+La validación previa al checkpoint final dejó verdes a la vez este restore rehearsal y la regresión local completa con `pg_dump` directo. El checkpoint `[vercel-preview]` debe repetir ambos gates para el nuevo SHA exacto antes de cualquier merge.
 
 La restauración operativa de un backup real de Producción debe seguir, además, estos pasos:
 
@@ -124,20 +124,14 @@ El orden de cierre es obligatorio:
 
 ### Vercel build-rate-limit
 
-Durante el cierre de F12, Vercel rechazó el build de `main` con `Deployment rate limited — retry in 24 hours`. Esto es un bloqueo externo de publicación, no un fallo funcional del dashboard. Vercel documenta que un deployment READY puede promocionarse a Producción sin rebuild mediante:
+Durante el cierre de F12, Vercel llegó a rechazar builds de `main` por rate limit. Posteriormente se comprobó que la cuota volvió a aceptar Previews y el gate protegido debe seguir exigiendo el deployment del SHA exacto; nunca se reutiliza un Preview antiguo para aprobar un commit nuevo.
 
-```bash
-vercel promote <deployment-url> --yes
-```
-
-La promoción sólo debe hacerse sobre el **Preview final de F13**, nunca sobre un Preview anterior si ya existe un SHA F13 más nuevo. Después hay que repetir toda la verificación de Producción; una promoción no equivale por sí sola a cierre exitoso.
-
-El 7 de septiembre de 2026 se lanzó un nuevo reintento explícito del checkpoint final, sin cambios funcionales, para comprobar si Vercel había liberado ya la cuota. El resultado de ese SHA debe validarse de forma independiente antes de cualquier merge.
+Si un Preview READY exacto necesitara promoción sin rebuild, Vercel documenta el flujo `vercel promote`, pero una promoción no equivale por sí sola a cierre exitoso: después hay que repetir la verificación de Producción.
 
 ## Copia off-site en Google Drive
 
-El paquete final debe guardarse bajo Financial App en una carpeta específica de copias de seguridad, con fecha y SHA en el nombre. Nunca se suben credenciales, `.env`, passwords ni tokens. El Gantt debe registrar el nombre/ID de la copia final y el resultado del restore, no secretos ni contenido financiero detallado.
+El paquete final debe guardarse bajo `Financial App → Backups`, con fecha y SHA en el nombre. Nunca se suben credenciales, `.env`, passwords ni tokens. El Gantt debe registrar el nombre/ID de la copia final y el resultado del restore, no secretos ni contenido financiero detallado.
 
 ## Gate final de Producción
 
-La conexión PostgreSQL de Producción se configura únicamente como el secreto de GitHub Actions `FINANCIAL_APP_DB_URL`. El workflow `F13 Production Backup` usa ese secreto sólo en runtime para crear y validar el dump portable; la URI nunca se versiona, se imprime ni forma parte del artefacto. El mismo checkpoint activa el Preview protegido para que backup real y validación live correspondan al mismo SHA exacto antes del merge final.
+La conexión PostgreSQL de Producción se configura únicamente como el secreto de GitHub Actions `FINANCIAL_APP_DB_URL`. El workflow `F13 Production Backup` valida y normaliza esa URI para el Session pooler, enmascara tanto el valor original como el normalizado y usa `pg_dump` 17 directamente. La URI nunca se versiona, se imprime ni forma parte del artefacto. El mismo checkpoint activa el Preview protegido para que backup real y validación live correspondan al mismo SHA exacto antes del merge final.
