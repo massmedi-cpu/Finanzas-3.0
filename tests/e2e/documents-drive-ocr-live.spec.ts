@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const documentId = "93000000-0000-4000-8000-000000000094";
 
-test("protected preview reads the synthetic Drive PDF end to end without financial writes", async ({ request }, testInfo) => {
+test("protected preview reads the synthetic Drive image end to end without financial writes", async ({ request }, testInfo) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
   test.skip(testInfo.project.name !== "chromium-desktop", "live Drive OCR runs once per CI matrix");
   test.setTimeout(120_000);
@@ -13,13 +13,13 @@ test("protected preview reads the synthetic Drive PDF end to end without financi
 
   const result = await response.json();
   expect(result.documentId).toBe(documentId);
-  expect(result.source).toBe("pdf_text");
-  expect(result.extractor).toBe("pdfjs-6.2.108-native-text");
+  expect(result.source).toBe("image_ocr");
+  expect(result.extractor).toBe("tesseract-js-7.0.0-spa");
   expect(result.status).not.toBe("empty");
-  expect(result.plainText.toUpperCase()).toContain("FINANCIAL APP");
-  expect(result.plainText.toUpperCase()).toContain("F11 OCR LIVE TEST");
+  expect(result.plainText.toUpperCase()).toContain("FINANCIAL APP TEST");
+  expect(result.plainText.toUpperCase()).toContain("TICKET");
   expect(result.plainText.toUpperCase()).toContain("TOTAL");
-  expect(result.plainText).toContain("8,00 EUR");
+  expect(result.plainText).toContain("19,00");
   expect(result.pages).toHaveLength(1);
   expect(result.pages[0].lines.length).toBeGreaterThanOrEqual(4);
   expect(result.pages[0].lines.some((line: { words: Array<{ box: { x: number } }> }) => line.words.some((word) => word.box.x > 0.55))).toBe(true);
