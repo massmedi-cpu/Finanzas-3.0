@@ -129,6 +129,7 @@ const moneyFormatter = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
