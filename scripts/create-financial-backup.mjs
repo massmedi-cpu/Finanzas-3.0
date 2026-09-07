@@ -30,19 +30,26 @@ function fail(message) {
 }
 
 function sanitize(value) {
-  const text = String(value ?? "");
-  return dbUrl ? text.split(dbUrl).join("[REDACTED_DB_URL]") : text;
+  let text = String(value ?? "");
+  if (dbUrl) text = text.split(dbUrl).join("[REDACTED_DB_URL]");
+  try {
+    const password = new URL(dbUrl).password;
+    if (password) text = text.split(password).join("[REDACTED_DB_PASSWORD]");
+  } catch {
+    // The mandatory-input validation reports malformed/missing connection data separately.
+  }
+  return text;
 }
 
-function runSupabase(args) {
-  const result = spawnSync("supabase", args, {
+function runPgDump(args) {
+  const result = spawnSync("pg_dump", args, {
     encoding: "utf8",
-    shell: process.platform === "win32",
+    shell: false,
     env: process.env,
   });
   if (result.status !== 0) {
     const detail = sanitize(result.stderr || result.stdout || `exit_${result.status}`);
-    fail(`Supabase CLI dump failed: ${detail.trim()}`);
+    fail(`pg_dump failed: ${detail.trim()}`);
   }
 }
 
@@ -75,22 +82,24 @@ try {
   const schemaFile = resolve(stagingDir, "schema.sql");
   const dataFile = resolve(stagingDir, "data.sql");
 
-  runSupabase([
-    "db", "dump",
-    "--db-url", dbUrl,
-    "-f", schemaFile,
+  runPgDump([
+    "--dbname", dbUrl,
     "--schema", "financial_app",
+    "--schema-only",
+    "--no-owner",
+    "--no-privileges",
+    "--file", schemaFile,
   ]);
 
-  runSupabase([
-    "db", "dump",
-    "--db-url", dbUrl,
-    "-f", dataFile,
-    "--use-copy",
-    "--data-only",
+  runPgDump([
+    "--dbname", dbUrl,
     "--schema", "financial_app",
-    "-x", "financial_app.google_oauth_connections",
-    "-x", "financial_app.authorized_users",
+    "--data-only",
+    "--no-owner",
+    "--no-privileges",
+    "--exclude-table-data", "financial_app.google_oauth_connections",
+    "--exclude-table-data", "financial_app.authorized_users",
+    "--file", dataFile,
   ]);
 
   let storageArchive = null;

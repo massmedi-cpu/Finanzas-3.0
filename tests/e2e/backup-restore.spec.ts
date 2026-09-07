@@ -116,13 +116,13 @@ function run(script: string, args: string[] = [], env: NodeJS.ProcessEnv = proce
   });
 }
 
-function makeFakeSupabase(root: string) {
+function makeFakePgDump(root: string) {
   const binDir = join(root, "bin");
   mkdirSync(binDir, { recursive: true });
-  const executable = join(binDir, "supabase");
+  const executable = join(binDir, "pg_dump");
   writeFileSync(
     executable,
-    `#!/usr/bin/env node\nconst { writeFileSync } = require("node:fs");\nconst args = process.argv.slice(2);\nconst fileIndex = args.indexOf("-f");\nconst file = fileIndex >= 0 ? args[fileIndex + 1] : null;\nconst dataOnly = args.includes("--data-only");\nif (dataOnly && process.env.F13_FAKE_FAIL_DATA === "1") process.exit(9);\nif (!file) process.exit(8);\nwriteFileSync(file, dataOnly ? "COPY financial_app.accounts (id) FROM stdin;\\naccount-1\\n\\\\.\\n" : "CREATE SCHEMA financial_app;\\nCREATE TABLE financial_app.accounts (id text);\\n");\n`,
+    `#!/usr/bin/env node\nconst { writeFileSync } = require("node:fs");\nconst args = process.argv.slice(2);\nconst fileIndex = args.indexOf("--file");\nconst file = fileIndex >= 0 ? args[fileIndex + 1] : null;\nconst dataOnly = args.includes("--data-only");\nif (dataOnly && process.env.F13_FAKE_FAIL_DATA === "1") process.exit(9);\nif (!file) process.exit(8);\nwriteFileSync(file, dataOnly ? "COPY financial_app.accounts (id) FROM stdin;\\naccount-1\\n\\\\.\\n" : "CREATE SCHEMA financial_app;\\nCREATE TABLE financial_app.accounts (id text);\\n");\n`,
     "utf8",
   );
   chmodSync(executable, 0o755);
@@ -133,7 +133,7 @@ function creatorEnv(binDir: string, overrides: NodeJS.ProcessEnv = {}) {
   return {
     ...process.env,
     PATH: `${binDir}${delimiter}${process.env.PATH ?? ""}`,
-    FINANCIAL_APP_DB_URL: "postgresql://synthetic.invalid/postgres",
+    FINANCIAL_APP_DB_URL: "postgresql://backup-user:backup-password@synthetic.invalid/postgres",
     FINANCIAL_APP_SOURCE_COMMIT: "c".repeat(40),
     FINANCIAL_APP_SCHEMA_VERSION: "14",
     FINANCIAL_APP_STORAGE_BUCKET_COUNT: "0",
@@ -207,7 +207,7 @@ test("F13 backup validator verifies a declared Storage archive", async () => {
   }
 });
 
-test("F13 backup creator fails closed before invoking Supabase when mandatory inputs are absent", async () => {
+test("F13 backup creator fails closed before invoking pg_dump when mandatory inputs are absent", async () => {
   const result = run(creator, [], {
     ...process.env,
     FINANCIAL_APP_DB_URL: "",
@@ -235,15 +235,15 @@ test("F13 backup creator blocks a backup when Storage objects exist without an a
   expect(result.stderr).toContain("FINANCIAL_APP_STORAGE_ARCHIVE");
 });
 
-test("F13 backup creator never publishes a partial package when the second dump fails", async () => {
+test("F13 backup creator never publishes a partial package when the second pg_dump fails", async () => {
   const root = mkdtempSync(join(tmpdir(), "financial-app-atomic-backup-"));
   try {
-    const binDir = makeFakeSupabase(root);
+    const binDir = makeFakePgDump(root);
     const outputDir = join(root, "backup-final");
     const result = run(creator, [outputDir], creatorEnv(binDir, { F13_FAKE_FAIL_DATA: "1" }));
 
     expect(result.status).not.toBe(0);
-    expect(result.stderr).toContain("Supabase CLI dump failed");
+    expect(result.stderr).toContain("pg_dump failed");
     expect(existsSync(outputDir)).toBe(false);
     expect(readdirSync(root).some((name) => name.startsWith(".backup-final.staging-"))).toBe(false);
   } finally {
@@ -254,7 +254,7 @@ test("F13 backup creator never publishes a partial package when the second dump 
 test("F13 backup creator bundles Storage inside the atomically published package", async () => {
   const root = mkdtempSync(join(tmpdir(), "financial-app-storage-backup-"));
   try {
-    const binDir = makeFakeSupabase(root);
+    const binDir = makeFakePgDump(root);
     const storageSource = join(root, "storage.tar");
     const outputDir = join(root, "backup-final");
     writeFileSync(storageSource, "verified-storage-archive", "utf8");

@@ -67,22 +67,19 @@ jobs:
         with:
           node-version: 24
 
-      - name: Install PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client
-
-      - name: Setup pinned Supabase CLI 2.116.0
+      - name: Install PostgreSQL 17 client
         shell: bash
         run: |
-          mkdir -p "$RUNNER_TEMP/f13-bin"
-          cat > "$RUNNER_TEMP/f13-bin/supabase" <<'EOF'
-          #!/usr/bin/env bash
-          exec npx --yes supabase@2.116.0 "$@"
-          EOF
-          chmod +x "$RUNNER_TEMP/f13-bin/supabase"
-          echo "$RUNNER_TEMP/f13-bin" >> "$GITHUB_PATH"
-          "$RUNNER_TEMP/f13-bin/supabase" --version
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
       - name: Rehearse portable backup and restore on disposable Postgres
         run: bash scripts/phase13-restore-rehearsal.sh
