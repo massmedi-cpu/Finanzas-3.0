@@ -58,7 +58,6 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
     const task = pdfjs.getDocument({
       data: new Uint8Array(input.bytes),
       useSystemFonts: true,
-      isEvalSupported: false,
     });
     const pdf = await task.promise;
     const pageCount = Math.min(pdf.numPages, MAX_PAGES);
