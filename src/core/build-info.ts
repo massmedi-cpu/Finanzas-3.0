@@ -1,4 +1,4 @@
-// F12 starts from the exact validated F11 Production merge. Inicio/dashboard composes only already validated central engines and contracts; it does not introduce duplicate financial logic.
+// F12 protected Preview checkpoint from the exact validated F11 Production merge. Inicio/dashboard composes only already validated central engines and contracts; it does not introduce duplicate financial logic or bank-source writes.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
 export const CURRENT_PHASE = 12 as const;
