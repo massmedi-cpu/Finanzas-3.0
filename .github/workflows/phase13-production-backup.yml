@@ -36,6 +36,41 @@ jobs:
         with:
           node-version: 24
 
+      - name: Validate and normalize Session pooler URI
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const raw = process.env.FINANCIAL_APP_DB_URL ?? '';
+          const expectedHost = 'aws-1-eu-west-3.pooler.supabase.com';
+          const expectedUser = 'postgres.btzukbfesxdratqnxuoj';
+          let url;
+          try {
+            url = new URL(raw);
+          } catch {
+            console.error('FINANCIAL_APP_DB_URL is not a valid PostgreSQL URI.');
+            process.exit(1);
+          }
+          if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
+            console.error('FINANCIAL_APP_DB_URL must use postgres/postgresql.');
+            process.exit(1);
+          }
+          if (url.hostname !== expectedHost || url.port !== '5432' || url.pathname !== '/postgres') {
+            console.error('FINANCIAL_APP_DB_URL must be the Financial App Session pooler URI.');
+            process.exit(1);
+          }
+          if (!url.password || /YOUR-PASSWORD/i.test(url.password)) {
+            console.error('FINANCIAL_APP_DB_URL does not contain a real database password.');
+            process.exit(1);
+          }
+          url.username = expectedUser;
+          const normalized = url.toString();
+          process.stdout.write(`::add-mask::${raw}\n`);
+          process.stdout.write(`::add-mask::${normalized}\n`);
+          fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${normalized}\n`);
+          console.log('Session pooler URI validated and normalized without exposing credentials.');
+          NODE
+
       - name: Install PostgreSQL client
         shell: bash
         run: |
