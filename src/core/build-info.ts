@@ -6,7 +6,15 @@ export const CURRENT_PHASE_NAME = "Consolidación, respaldo, restauración y pro
 export const CURRENT_PHASE_BLOCK = 1 as const;
 export const CURRENT_PHASE_BLOCK_NAME = "Integración, regresión, limpieza, respaldo, restauración y publicación" as const;
 
+function assertReleaseIdentity() {
+  if (APP_VERSION !== TARGET_VERSION) {
+    throw new Error("release_version_mismatch");
+  }
+}
+
 export function getBuildInfo() {
+  assertReleaseIdentity();
+
   return {
     version: APP_VERSION,
     targetVersion: TARGET_VERSION,
