@@ -114,7 +114,7 @@ export default function RecurrencesClient() {
       });
       const payload = await parseResponse(response) as Snapshot;
       setSnapshot(payload);
-      if (announce) setMessage("Patrones recalculados sobre el histórico efectivo actual.");
+      if (announce) setMessage("Patrones recalculados con los movimientos actuales.");
     } catch {
       setError("No se han podido cargar los patrones recurrentes.");
     } finally {
@@ -157,7 +157,7 @@ export default function RecurrencesClient() {
       setMessage(
         status === "active"
           ? candidate.existingStatus === "active"
-            ? "Recurrencia recalculada y actualizada desde el motor central."
+            ? "Recurrencia actualizada con los movimientos actuales."
             : "Recurrencia confirmada."
           : "Patrón ignorado.",
       );
@@ -198,12 +198,12 @@ export default function RecurrencesClient() {
     <main className={styles.shell}>
       <section className={styles.hero} aria-labelledby="recurrences-title">
         <div>
-          <Link href="/" className={styles.backLink}>← Volver a Inicio</Link>
-          <p className={styles.eyebrow}>Fase 7 · Recurrentes</p>
+          <Link href="/" className={styles.backLink}>← Inicio</Link>
+          <p className={styles.eyebrow}>RECURRENTES</p>
           <h1 id="recurrences-title">Patrones que se repiten, sin adivinar</h1>
           <p className={styles.heroText}>
-            Financial App detecta cadencias sobre movimientos efectivos y muestra su confianza.
-            Ningún patrón se convierte en recurrencia confirmada sin una decisión explícita.
+            Financial App detecta movimientos que se repiten y muestra el grado de confianza.
+            Ningún patrón se confirma como recurrencia sin una decisión explícita.
           </p>
         </div>
         <button
@@ -253,7 +253,7 @@ export default function RecurrencesClient() {
           </div>
 
           {loading && !snapshot ? (
-            <div className={styles.empty}>Analizando el histórico efectivo…</div>
+            <div className={styles.empty}>Analizando los movimientos…</div>
           ) : snapshot?.candidates.length ? (
             <div className={styles.candidateList}>
               {snapshot.candidates.map((candidate) => {
