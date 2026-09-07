@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import "./touch-targets.css";
 
 export const metadata: Metadata = {
   title: "Financial App 10.0.0",
