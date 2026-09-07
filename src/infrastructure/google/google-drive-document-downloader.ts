@@ -162,13 +162,17 @@ export class GoogleDriveDocumentDownloader {
     }
     if (!mediaResponse.ok) throw mapGoogleFailure(mediaResponse.status);
 
-    const declared = Number(mediaResponse.headers.get("content-length"));
-    if (Number.isFinite(declared) && (declared <= 0 || declared > GOOGLE_DRIVE_OCR_MAX_BYTES)) {
-      throw new GoogleDriveDocumentError(
-        "google_drive_document_too_large",
-        "La descarga de Drive supera el límite seguro de 15 MB.",
-      );
+    const rawContentLength = mediaResponse.headers.get("content-length");
+    if (rawContentLength !== null) {
+      const declared = parseSize(rawContentLength);
+      if (declared === null || declared <= 0 || declared > GOOGLE_DRIVE_OCR_MAX_BYTES) {
+        throw new GoogleDriveDocumentError(
+          "google_drive_document_too_large",
+          "La descarga de Drive supera el límite seguro de 15 MB.",
+        );
+      }
     }
+
     const bytes = new Uint8Array(await mediaResponse.arrayBuffer());
     if (!bytes.byteLength || bytes.byteLength > GOOGLE_DRIVE_OCR_MAX_BYTES || bytes.byteLength !== size) {
       throw new GoogleDriveDocumentError(
