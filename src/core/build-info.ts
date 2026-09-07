@@ -1,10 +1,10 @@
-// F11 protected Preview checkpoint from the exact validated F10 Production baseline. OCR stays isolated, read-only and human-reviewed; the live gate reads the synthetic Drive fixture without financial writes.
+// F12 starts from the exact validated F11 Production merge. Inicio/dashboard composes only already validated central engines and contracts; it does not introduce duplicate financial logic.
 export const APP_VERSION = "0.0.1" as const;
 export const TARGET_VERSION = "10.0.0" as const;
-export const CURRENT_PHASE = 11 as const;
-export const CURRENT_PHASE_NAME = "OCR" as const;
+export const CURRENT_PHASE = 12 as const;
+export const CURRENT_PHASE_NAME = "Inicio / dashboard" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
-export const CURRENT_PHASE_BLOCK_NAME = "Extracción robusta y maquetación fiel" as const;
+export const CURRENT_PHASE_BLOCK_NAME = "Resumen de decisión rápida" as const;
 
 export function getBuildInfo() {
   return {
