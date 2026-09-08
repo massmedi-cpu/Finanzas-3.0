@@ -95,7 +95,7 @@ test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos
     page.getByText("1 de 2", { exact: true }).first(),
     page.locator('td[data-label="Concepto"]').getByText("Supermercado Demo", { exact: true }).first(),
     page.getByText("Modificado", { exact: true }),
-    page.getByText("Confirmado", { exact: true }).first(),
+    page.locator('td[data-label="Estado"]').getByText("Confirmado", { exact: true }).first(),
   ];
   for (const target of targets) {
     await expect(target).toBeVisible();
