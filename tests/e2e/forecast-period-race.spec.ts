@@ -102,13 +102,13 @@ test("forecast keeps the newest period when an older request finishes later", as
   });
 
   await page.goto("/forecast");
-  await expect(page.getByText("PERIODO INICIAL")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "PERIODO INICIAL", exact: true })).toBeVisible();
 
   await page.getByLabel("Desde").fill("2026-10-01");
   await page.getByLabel("Hasta").fill("2026-10-31");
 
-  await expect(page.getByText("PERIODO MÁS RECIENTE")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();
   await page.waitForTimeout(450);
-  await expect(page.getByText("PERIODO MÁS RECIENTE")).toBeVisible();
-  await expect(page.getByText("RESPUESTA OBSOLETA")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "RESPUESTA OBSOLETA", exact: true })).toHaveCount(0);
 });
