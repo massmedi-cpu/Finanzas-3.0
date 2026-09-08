@@ -1,4 +1,4 @@
-name: Release Lock Candidate
+name: Release Identity Apply
 
 on:
   push:
@@ -6,10 +6,11 @@ on:
       - audit/precommercial-10.0.0
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  emit-lock-candidate:
+  apply-release-identity:
+    if: startsWith(github.event.head_commit.message, 'ci(release): arm deterministic release identity fix')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact branch commit
@@ -17,10 +18,9 @@ jobs:
         with:
           ref: ${{ github.sha }}
 
-      - name: Generate exact 10.0.0 lock candidate
+      - name: Apply deterministic release identity fix
         shell: bash
         run: |
-          mkdir -p release-lock-candidate
           node <<'NODE'
           const { createHash } = require('node:crypto');
           const { readFileSync, writeFileSync } = require('node:fs');
@@ -30,19 +30,13 @@ jobs:
           const original = readFileSync('package-lock.json', 'utf8');
           const first = '"name": "financial-app",\n  "version": "0.0.1",';
           const second = '"": {\n      "name": "financial-app",\n      "version": "0.0.1",';
-
-          if (!original.includes(first) || !original.includes(second)) {
-            throw new Error('expected_lock_version_markers_not_found');
-          }
+          if (!original.includes(first) || !original.includes(second)) throw new Error('expected_lock_version_markers_not_found');
 
           const corrected = original
             .replace(first, `"name": "financial-app",\n  "version": "${packageJson.version}",`)
             .replace(second, `"": {\n      "name": "financial-app",\n      "version": "${packageJson.version}",`);
-
           const parsed = JSON.parse(corrected);
-          if (parsed.version !== packageJson.version || parsed.packages?.['']?.version !== packageJson.version) {
-            throw new Error('lock_version_sync_failed');
-          }
+          if (parsed.version !== packageJson.version || parsed.packages?.['']?.version !== packageJson.version) throw new Error('lock_version_sync_failed');
 
           const normalized = structuredClone(parsed);
           normalized.version = '__RELEASE_VERSION__';
@@ -50,14 +44,124 @@ jobs:
           const fingerprint = createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
           console.log(`LOCK_CANDIDATE_SEMANTIC_FINGERPRINT=${fingerprint}`);
           if (fingerprint !== expected) throw new Error('lock_semantic_fingerprint_changed');
-
-          writeFileSync('release-lock-candidate/package-lock.json', corrected, 'utf8');
+          writeFileSync('package-lock.json', corrected, 'utf8');
           NODE
 
-      - name: Upload exact lock candidate
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-lock-candidate
-          path: release-lock-candidate/package-lock.json
-          retention-days: 1
-          if-no-files-found: error
+          cat > src/core/build-info.ts <<'EOF'
+          import packageJson from "../../package.json";
+
+          // Release identity has one canonical source: package.json.
+          export const APP_VERSION = packageJson.version;
+          export const TARGET_VERSION = APP_VERSION;
+          export const CURRENT_PHASE = 13 as const;
+          export const CURRENT_PHASE_NAME = "Consolidación, respaldo, restauración y producción 10.0.0" as const;
+          export const CURRENT_PHASE_BLOCK = 1 as const;
+          export const CURRENT_PHASE_BLOCK_NAME = "Integración, regresión, limpieza, respaldo, restauración y publicación" as const;
+
+          function assertReleaseIdentity() {
+            if (APP_VERSION !== TARGET_VERSION) {
+              throw new Error("release_version_mismatch");
+            }
+          }
+
+          export function getBuildInfo() {
+            assertReleaseIdentity();
+
+            return {
+              version: APP_VERSION,
+              targetVersion: TARGET_VERSION,
+              phase: CURRENT_PHASE,
+              phaseName: CURRENT_PHASE_NAME,
+              phaseBlock: CURRENT_PHASE_BLOCK,
+              phaseBlockName: CURRENT_PHASE_BLOCK_NAME,
+              commit: process.env.VERCEL_GIT_COMMIT_SHA ?? "local",
+              branch: process.env.VERCEL_GIT_COMMIT_REF ?? "local",
+              deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
+              environment: process.env.VERCEL_ENV ?? "local",
+            } as const;
+          }
+          EOF
+
+          cat > app/layout.tsx <<'EOF'
+          import type { Metadata } from "next";
+          import { APP_VERSION } from "../src/core/build-info";
+          import "./globals.css";
+          import "./touch-targets.css";
+
+          export const metadata: Metadata = {
+            title: `Financial App ${APP_VERSION}`,
+            description: `Financial App ${APP_VERSION} · finanzas personales seguras, acumulativas y verificadas`,
+          };
+
+          export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+            return (
+              <html lang="es">
+                <body>{children}</body>
+              </html>
+            );
+          }
+          EOF
+
+          cat > tests/e2e/release-version.spec.ts <<'EOF'
+          import { createHash } from "node:crypto";
+          import { readFileSync } from "node:fs";
+          import { join } from "node:path";
+          import { expect, test } from "@playwright/test";
+          import { APP_VERSION, TARGET_VERSION, getBuildInfo } from "../../src/core/build-info";
+
+          const EXPECTED_LOCK_SEMANTIC_FINGERPRINT = "69ac752fc4f14d0bacccb4c8fde376a883f549e8c4b7c01cf31a900d392be95e";
+
+          function semanticLockFingerprint(packageLock: { version: string; packages?: Record<string, { version?: string }> }) {
+            const normalized = structuredClone(packageLock);
+            normalized.version = "__RELEASE_VERSION__";
+            if (normalized.packages?.[""]) normalized.packages[""].version = "__RELEASE_VERSION__";
+            return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+          }
+
+          test("release · package, lock, build metadata y UI comparten una única versión", async ({}, testInfo) => {
+            test.skip(testInfo.project.name !== "chromium-desktop", "la identidad de release se valida una vez por run");
+            const root = process.cwd();
+            const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8")) as { version: string };
+            const packageLock = JSON.parse(readFileSync(join(root, "package-lock.json"), "utf8")) as {
+              version: string;
+              packages?: Record<string, { version?: string }>;
+            };
+            const buildSource = readFileSync(join(root, "src/core/build-info.ts"), "utf8");
+            const layoutSource = readFileSync(join(root, "app/layout.tsx"), "utf8");
+            const build = getBuildInfo();
+            const lockFingerprint = semanticLockFingerprint(packageLock);
+
+            expect(lockFingerprint, "la semántica del lock no debe cambiar al sincronizar la versión").toBe(EXPECTED_LOCK_SEMANTIC_FINGERPRINT);
+            expect(packageLock.version, "package-lock.json debe coincidir con package.json").toBe(packageJson.version);
+            expect(packageLock.packages?.[""]?.version, "el paquete raíz del lock debe coincidir con package.json").toBe(packageJson.version);
+            expect(APP_VERSION).toBe(packageJson.version);
+            expect(TARGET_VERSION).toBe(packageJson.version);
+            expect(build.version).toBe(packageJson.version);
+            expect(build.targetVersion).toBe(packageJson.version);
+            expect(buildSource, "APP_VERSION debe derivar de package.json").toContain("packageJson.version");
+            expect(buildSource, "build-info no debe duplicar un semver literal para APP_VERSION").not.toMatch(/APP_VERSION\s*=\s*["']\d+\.\d+\.\d+["']/);
+            expect(buildSource, "TARGET_VERSION debe derivar de la versión canónica").not.toMatch(/TARGET_VERSION\s*=\s*["']\d+\.\d+\.\d+["']/);
+            expect(layoutSource, "la metadata visible debe derivar de APP_VERSION").toContain("APP_VERSION");
+            expect(layoutSource, "layout no debe fijar un número de versión literal").not.toMatch(/Financial App \d+\.\d+\.\d+/);
+          });
+          EOF
+
+          git diff --check
+          node <<'NODE'
+          const { execFileSync } = require('node:child_process');
+          const changed = execFileSync('git', ['diff', '--name-only'], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).sort();
+          const expected = ['app/layout.tsx', 'package-lock.json', 'src/core/build-info.ts', 'tests/e2e/release-version.spec.ts'].sort();
+          if (JSON.stringify(changed) !== JSON.stringify(expected)) {
+            console.error({ changed, expected });
+            throw new Error('unexpected_release_identity_file_change');
+          }
+          NODE
+
+      - name: Commit deterministic fix on audit branch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json src/core/build-info.ts app/layout.tsx tests/e2e/release-version.spec.ts
+          git commit -m "fix(release): centralize 10.0.0 identity [vercel-preview]"
+          git push origin HEAD:audit/precommercial-10.0.0
