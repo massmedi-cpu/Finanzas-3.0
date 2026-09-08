@@ -345,8 +345,18 @@ export default function TransactionsClient() {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los filtros.");
       }
     }
+    const params = new URLSearchParams(window.location.search);
+    const reviewState = params.get("reviewState");
+    const duplicateState = params.get("duplicateState");
+    const initialFilters: Filters = {
+      ...EMPTY_FILTERS,
+      reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
+      duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+    };
+    setDraftFilters(initialFilters);
+    setAppliedFilters(initialFilters);
     void bootstrap();
-    void fetchPage(EMPTY_FILTERS, null, false);
+    void fetchPage(initialFilters, null, false);
     return () => {
       cancelled = true;
       listRequestSequence.current += 1;
