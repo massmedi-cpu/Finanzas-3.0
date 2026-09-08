@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 const firstWaveRoutes = [
   { path: "/", current: "Inicio" },
   { path: "/transactions", current: "Movimientos" },
+  { path: "/analysis", current: "Análisis" },
   { path: "/forecast", current: "Previsión" },
 ] as const;
 
@@ -17,7 +18,7 @@ const secondWaveRoutes = [
   { path: "/configuration/rules", current: "Configuración" },
 ] as const;
 
-const primaryLinks = ["Inicio", "Movimientos", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"] as const;
+const primaryLinks = ["Inicio", "Movimientos", "Análisis", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"] as const;
 
 async function isolateShellFromData(page: Page) {
   await page.route("**/api/**", async (route) => {
@@ -47,7 +48,7 @@ async function expectSharedNavigation(page: Page, current: string) {
   await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
 }
 
-test("D2 · Inicio, Movimientos y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
+test("D2 · Inicio, Movimientos, Análisis y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
   await isolateShellFromData(page);
 
   for (const route of firstWaveRoutes) {

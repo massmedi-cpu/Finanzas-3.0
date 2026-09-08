@@ -9,6 +9,7 @@ const navigation = [
   { href: "/", label: "Inicio" },
   { href: "/review", label: "Para revisar" },
   { href: "/transactions", label: "Movimientos" },
+  { href: "/analysis", label: "Análisis" },
   { href: "/accounts", label: "Cuentas" },
   { href: "/budgets", label: "Presupuestos" },
   { href: "/recurrences", label: "Recurrentes" },

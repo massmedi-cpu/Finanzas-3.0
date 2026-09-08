@@ -1,0 +1,97 @@
+name: E2 deterministic analysis drilldown patch
+
+on:
+  push:
+    branches:
+      - audit/precommercial-10.0.0
+    paths:
+      - .github/workflows/e2-analysis-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply-fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: audit/precommercial-10.0.0
+          fetch-depth: 0
+      - name: Apply exact E2 transformations
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          tx_path = Path('app/transactions/transactions-client.tsx')
+          tx = tx_path.read_text()
+
+          marker = 'const UNCATEGORIZED = "__uncategorized__";\n'
+          constants = 'const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;\nconst DATE = /^\\d{4}-\\d{2}-\\d{2}$/;\n\n' + marker
+          if tx.count(marker) != 1:
+              raise SystemExit(f'Expected UNCATEGORIZED marker exactly once, found {tx.count(marker)}')
+          tx = tx.replace(marker, constants, 1)
+
+          old = '''    const params = new URLSearchParams(window.location.search);
+              const reviewState = params.get("reviewState");
+              const duplicateState = params.get("duplicateState");
+              const initialFilters: Filters = {
+                ...EMPTY_FILTERS,
+                reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
+                duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+              };
+              setDraftFilters(initialFilters);
+              setAppliedFilters(initialFilters);
+          '''
+          old = "\n".join(line[10:] if line.startswith("          ") else line for line in old.splitlines()) + "\n"
+          new = '''    const params = new URLSearchParams(window.location.search);
+              const accountId = params.get("accountId");
+              const categoryId = params.get("categoryId");
+              const merchantId = params.get("merchantId");
+              const kind = params.get("kind");
+              const reviewState = params.get("reviewState");
+              const duplicateState = params.get("duplicateState");
+              const dateFrom = params.get("dateFrom");
+              const dateTo = params.get("dateTo");
+              const safeDateFrom = dateFrom && DATE.test(dateFrom) ? dateFrom : "";
+              const safeDateTo = dateTo && DATE.test(dateTo) ? dateTo : "";
+              const safeDateRange = !safeDateFrom || !safeDateTo || safeDateFrom <= safeDateTo;
+              const initialFilters: Filters = {
+                ...EMPTY_FILTERS,
+                accountId: accountId && UUID.test(accountId) ? accountId : "",
+                categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
+                merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
+                kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
+                reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
+                duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+                dateFrom: safeDateRange ? safeDateFrom : "",
+                dateTo: safeDateRange ? safeDateTo : "",
+              };
+              setDraftFilters(initialFilters);
+              setAppliedFilters(initialFilters);
+          '''
+          new = "\n".join(line[10:] if line.startswith("          ") else line for line in new.splitlines()) + "\n"
+          if tx.count(old) != 1:
+              raise SystemExit(f'Expected current bootstrap filter block exactly once, found {tx.count(old)}')
+          tx_path.write_text(tx.replace(old, new, 1))
+
+          for target in ['tests/e2e/axiom-final-gates.spec.ts', 'tests/e2e/product-copy-gate.spec.ts']:
+              path = Path(target)
+              text = path.read_text()
+              old_routes = '  "/transactions",\n  "/accounts",\n'
+              new_routes = '  "/transactions",\n  "/analysis",\n  "/accounts",\n'
+              if text.count(old_routes) != 1:
+                  raise SystemExit(f'{target}: expected route insertion point once, found {text.count(old_routes)}')
+              path.write_text(text.replace(old_routes, new_routes, 1))
+          PY
+      - name: Remove one-shot workflow and commit atomically
+        shell: bash
+        run: |
+          rm .github/workflows/e2-analysis-patch.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/transactions/transactions-client.tsx tests/e2e/axiom-final-gates.spec.ts tests/e2e/product-copy-gate.spec.ts .github/workflows/e2-analysis-patch.yml
+          git diff --cached --check
+          git commit -m "feat(audit): wire Analysis drill-downs [vercel-preview]"
+          git push origin HEAD:audit/precommercial-10.0.0

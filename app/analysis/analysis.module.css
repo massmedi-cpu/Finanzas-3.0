@@ -1,0 +1,374 @@
+.shell {
+  min-height: 100vh;
+  min-width: 0;
+  padding: clamp(1rem, 2.5vw, 2.5rem);
+  color: var(--color-text);
+  background:
+    radial-gradient(circle at 88% 0%, rgba(43, 217, 247, 0.12), transparent 30rem),
+    radial-gradient(circle at 10% 12%, rgba(69, 116, 255, 0.16), transparent 34rem),
+    linear-gradient(145deg, #07101f 0%, #0b1324 48%, #10182a 100%);
+}
+
+.hero,
+.panel,
+.comparison,
+.metrics article,
+.note,
+.loading,
+.error {
+  border: 1px solid var(--color-border);
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.18);
+}
+
+.hero {
+  width: min(var(--content-max), 100%);
+  margin: 0 auto 1rem;
+  padding: clamp(1.35rem, 3vw, 2.25rem);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 1.5rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, rgba(21, 33, 56, 0.96), rgba(11, 20, 37, 0.9));
+}
+
+.eyebrow,
+.kicker {
+  margin: 0;
+  color: #94b2ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.13em;
+}
+
+.hero h1 {
+  margin: 0.45rem 0 0.75rem;
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.hero > div > p:last-child {
+  max-width: 52rem;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: clamp(1rem, 1.3vw, 1.1rem);
+  line-height: 1.65;
+}
+
+.periodForm {
+  min-width: min(18rem, 100%);
+  display: flex;
+  align-items: end;
+  gap: 0.65rem;
+}
+
+.periodForm label {
+  min-width: 0;
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.periodForm input,
+.periodForm button {
+  min-height: 2.75rem;
+  border-radius: 0.8rem;
+  font: inherit;
+}
+
+.periodForm input {
+  min-width: 0;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--color-border);
+  background: rgba(6, 13, 26, 0.76);
+  color: var(--color-text);
+}
+
+.periodForm button,
+.drilldown {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid rgba(77, 141, 255, 0.42);
+  border-radius: 0.8rem;
+  background: linear-gradient(135deg, rgba(31, 107, 255, 0.36), rgba(43, 217, 247, 0.14));
+  color: var(--color-text);
+  font-size: var(--font-button);
+  font-weight: 750;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.periodForm button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.periodForm button:focus-visible,
+.periodForm input:focus-visible,
+.drilldown:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+
+.metrics,
+.comparison,
+.driverGrid,
+.loading,
+.error,
+.note {
+  width: min(var(--content-max), 100%);
+  margin-inline: auto;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.8rem;
+  margin-bottom: 1rem;
+}
+
+.metrics article {
+  min-width: 0;
+  padding: 1rem;
+  display: grid;
+  gap: 0.4rem;
+  border-radius: 1rem;
+  background: linear-gradient(145deg, rgba(20, 32, 55, 0.94), rgba(10, 18, 34, 0.9));
+}
+
+.metrics span,
+.comparisonGrid span {
+  color: var(--color-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.metrics strong {
+  font-size: clamp(1.35rem, 2.5vw, 2rem);
+  letter-spacing: -0.03em;
+}
+
+.metrics small,
+.comparisonGrid small,
+.driverTop span,
+.noDrilldown {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.comparison,
+.panel {
+  min-width: 0;
+  padding: 1rem;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, rgba(18, 30, 51, 0.94), rgba(10, 18, 34, 0.9));
+}
+
+.comparison {
+  margin: 0 auto 1rem;
+}
+
+.panelHeading {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.9rem;
+}
+
+.panelHeading h2 {
+  margin: 0.2rem 0 0;
+  font-size: clamp(1.1rem, 2vw, 1.45rem);
+}
+
+.panelHeading > span {
+  flex: 0 0 auto;
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.comparisonGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.comparisonGrid > div {
+  min-width: 0;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.35rem;
+  border: 1px solid rgba(112, 139, 193, 0.18);
+  border-radius: 0.9rem;
+  background: rgba(5, 12, 25, 0.42);
+}
+
+.comparisonGrid strong {
+  font-size: 1.15rem;
+}
+
+.driverGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.driverList {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.driver {
+  min-width: 0;
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+  border: 1px solid rgba(112, 139, 193, 0.18);
+  border-radius: 0.9rem;
+  background: rgba(5, 12, 25, 0.42);
+}
+
+.driverTop {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.driverTop > div:first-child,
+.driverAmount {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+
+.driverTop strong {
+  overflow-wrap: anywhere;
+}
+
+.driverAmount {
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+.driver progress {
+  width: 100%;
+  height: 0.45rem;
+  accent-color: var(--color-primary-bright);
+}
+
+.drilldown {
+  justify-self: start;
+  min-width: 9rem;
+}
+
+.noDrilldown {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.loading,
+.error,
+.note {
+  padding: 0.9rem 1rem;
+  border-radius: 1rem;
+  background: rgba(10, 17, 34, 0.82);
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+.loading,
+.error {
+  margin-bottom: 1rem;
+}
+
+.error {
+  border-color: rgba(255, 110, 120, 0.38);
+  color: #ffd3d6;
+}
+
+.note {
+  margin-top: 1rem;
+  font-size: 0.82rem;
+}
+
+.empty {
+  margin: 0;
+  color: var(--color-text-secondary);
+  line-height: 1.5;
+}
+
+@media (max-width: 62rem) {
+  .hero {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .periodForm {
+    width: 100%;
+  }
+
+  .periodForm label {
+    flex: 1 1 auto;
+  }
+
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 44rem) {
+  .driverGrid,
+  .comparisonGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 30rem) {
+  .shell {
+    padding: 0.75rem;
+  }
+
+  .hero,
+  .panel,
+  .comparison {
+    border-radius: 1rem;
+  }
+
+  .periodForm {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .periodForm button,
+  .periodForm input,
+  .drilldown {
+    width: 100%;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .panelHeading,
+  .driverTop {
+    align-items: stretch;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .periodForm button,
+  .drilldown {
+    transition: none;
+  }
+}
