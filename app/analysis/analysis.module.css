@@ -277,6 +277,16 @@
   align-items: center;
 }
 
+.shell [aria-label="Comparativa financiera visual"] button {
+  min-height: 2.75rem !important;
+  height: 2.75rem !important;
+}
+
+.shell [aria-label="Comparativa financiera visual"] button:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+
 .loading,
 .error,
 .note {
