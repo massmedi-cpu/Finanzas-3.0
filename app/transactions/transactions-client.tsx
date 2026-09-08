@@ -545,7 +545,7 @@ export default function TransactionsClient() {
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <Link className={styles.backLink} href="/">← Financial App</Link>
-          <p className={styles.eyebrow}>FASE 4 · MOVIMIENTOS</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · MOVIMIENTOS</p>
           <h1>Movimientos</h1>
           <p>
             Consulta y gestiona el histórico persistido sin alterar el origen bancario. Cada cambio manual se

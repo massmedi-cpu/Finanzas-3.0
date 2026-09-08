@@ -454,7 +454,7 @@ export function DocumentsClient() {
       <section className={styles.hero}>
         <div>
           <Link href="/" className={styles.backLink}>← Inicio</Link>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 11</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
           <p className={styles.heroText}>Guarda facturas y tickets, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
           <div className={styles.pills}>
