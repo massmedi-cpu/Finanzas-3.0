@@ -1,3 +1,4 @@
+import AppShell from "./app-shell";
 import DashboardClient from "./dashboard-client";
 import { runCompleteFoundationHealthChecks } from "../src/core/foundation-gate";
 
@@ -11,5 +12,9 @@ export default function Home() {
     throw new Error(`Fundamentos no válidos: ${failedChecks}`);
   }
 
-  return <DashboardClient />;
+  return (
+    <AppShell>
+      <DashboardClient />
+    </AppShell>
+  );
 }
