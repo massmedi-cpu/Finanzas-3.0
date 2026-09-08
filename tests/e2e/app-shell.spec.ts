@@ -33,7 +33,7 @@ async function expectSharedNavigation(page: Page, current: string) {
 
   const active = nav.getByRole("link", { name: current, exact: true });
   await expect(active).toHaveAttribute("aria-current", "page");
-  await expect(nav.getByRole("link").filter({ has: page.locator('[aria-current="page"]') })).toHaveCount(1);
+  await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
 }
 
 test("D2 · Inicio, Movimientos y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
