@@ -3,6 +3,7 @@ import { expect, test } from "@playwright/test";
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const accountA = "91000000-0000-4000-8000-000000000091";
 const accountB = "92000000-0000-4000-8000-000000000092";
+type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
 
 const financial = {
   contractVersion: 1,
@@ -54,14 +55,20 @@ const forecast = {
 
 const transactions = { totalCount: 1, hasMore: false, nextCursor: null, rows: [{ id: "t1", bankDate: "2026-09-06", amountCents: -1234, balanceAfterCents: 20000, account: { id: accountA, name: "Cuenta principal" }, concept: { original: "Supermercado", processed: "Supermercado", effective: "Supermercado" }, category: { originalId: null, originalName: null, effectiveId: null, effectiveName: "Alimentación" }, kind: { original: "expense", effective: "expense" }, duplicateState: "none", excludedFromAnalytics: false }] };
 
-async function mockDashboard(page: import("@playwright/test").Page) {
+async function mockDashboard(page: import("@playwright/test").Page, failures: DashboardSource[] = []) {
+  const failed = new Set(failures);
   await page.route("**/api/financial?*", async (route) => {
     const url = new URL(route.request().url());
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(url.searchParams.get("mode") === "monthly" ? monthly : financial) });
+    const source: DashboardSource = url.searchParams.get("mode") === "monthly" ? "monthly" : "financial";
+    if (failed.has(source)) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(source === "monthly" ? monthly : financial) });
   });
-  await page.route("**/api/budgets?*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(budgets) }));
-  await page.route("**/api/forecast?*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(forecast) }));
-  await page.route("**/api/transactions?*", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(transactions) }));
+  await page.route("**/api/budgets?*", (route) => route.fulfill(failed.has("budgets") ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) } : { status: 200, contentType: "application/json", body: JSON.stringify(budgets) }));
+  await page.route("**/api/forecast?*", (route) => route.fulfill(failed.has("forecast") ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) } : { status: 200, contentType: "application/json", body: JSON.stringify(forecast) }));
+  await page.route("**/api/transactions?*", (route) => route.fulfill(failed.has("transactions") ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) } : { status: 200, contentType: "application/json", body: JSON.stringify(transactions) }));
 }
 
 test("Inicio compone seis bloques desde contratos centrales sin duplicar cálculos", async ({ page }) => {
@@ -90,6 +97,54 @@ test("Inicio mantiene navegación táctil y cero overflow horizontal en móvil",
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
+test("Inicio conserva saldo, presupuesto y actividad cuando falla Previsión", async ({ page }) => {
+  await mockDashboard(page, ["forecast"]);
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Tu dinero, claro en segundos." })).toBeVisible();
+  await expect(page.getByLabel("Saldo total en cuentas").getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("Cuenta principal", { exact: true })).toBeVisible();
+  await expect(page.getByText("400,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("dashboard-forecast-unavailable")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toHaveCount(0);
+  await expect(page.locator("article")).toHaveCount(6);
+});
+
+test("Inicio conserva el balance mensual cuando falla únicamente la evolución anual", async ({ page }) => {
+  await mockDashboard(page, ["monthly"]);
+  await page.goto("/");
+
+  await expect(page.getByText("1.500,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("700,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("dashboard-monthly-unavailable")).toBeVisible();
+  await expect(page.getByTestId("dashboard-period-unavailable")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toHaveCount(0);
+});
+
+test("Inicio conserva módulos independientes si falla el motor financiero principal", async ({ page }) => {
+  await mockDashboard(page, ["financial"]);
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Tu dinero, claro en segundos." })).toBeVisible();
+  await expect(page.getByTestId("dashboard-balance-unavailable")).toHaveText("No disponible");
+  await expect(page.getByTestId("dashboard-accounts-unavailable")).toBeVisible();
+  await expect(page.getByTestId("dashboard-period-unavailable")).toBeVisible();
+  await expect(page.getByText("400,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("280,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toHaveCount(0);
+});
+
+test("Inicio reserva el error global para una indisponibilidad total", async ({ page }) => {
+  await mockDashboard(page, ["financial", "monthly", "budgets", "forecast", "transactions"]);
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Tu dinero, claro en segundos." })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Abrir Cuentas" })).toBeVisible();
 });
 
 test("protected preview exposes F12 dashboard using validated engines", async ({ request, page }) => {
