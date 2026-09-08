@@ -102,7 +102,7 @@ test("D1 · Previsión abandona la paleta paralela y consume el contrato visual 
   await mockForecast(page);
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto("/forecast");
-  await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
 
   const visual = await page.locator("main").evaluate((main) => {
     const root = getComputedStyle(document.documentElement);
@@ -140,7 +140,7 @@ test("D1 · la migración visual no degrada reflow ni touch de Previsión", asyn
   for (const width of [360, 430, 480]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/forecast");
-    await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
 
     const metrics = await page.locator("main").evaluate((main) => {
       const undersized = Array.from(main.querySelectorAll<HTMLElement>("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled])"))
