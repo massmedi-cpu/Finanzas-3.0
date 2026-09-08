@@ -1,7 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { expect, test } from "@playwright/test";
 import { APP_VERSION, TARGET_VERSION, getBuildInfo } from "../../src/core/build-info";
+
+function semanticLockFingerprint(packageLock: { version: string; packages?: Record<string, { version?: string }> }) {
+  const normalized = structuredClone(packageLock);
+  normalized.version = "__RELEASE_VERSION__";
+  if (normalized.packages?.[""]) {
+    normalized.packages[""].version = "__RELEASE_VERSION__";
+  }
+  return createHash("sha256").update(JSON.stringify(normalized)).digest("hex");
+}
 
 test("release · package, lock, build metadata y UI comparten una única versión", async ({}, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "la identidad de release se valida una vez por run");
@@ -15,6 +25,8 @@ test("release · package, lock, build metadata y UI comparten una única versió
   const buildSource = readFileSync(join(root, "src/core/build-info.ts"), "utf8");
   const layoutSource = readFileSync(join(root, "app/layout.tsx"), "utf8");
   const build = getBuildInfo();
+
+  console.log(`LOCK_SEMANTIC_FINGERPRINT=${semanticLockFingerprint(packageLock)}`);
 
   expect(packageLock.version, "package-lock.json debe coincidir con package.json").toBe(packageJson.version);
   expect(packageLock.packages?.[""]?.version, "el paquete raíz del lock debe coincidir con package.json").toBe(packageJson.version);
