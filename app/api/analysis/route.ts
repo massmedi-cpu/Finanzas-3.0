@@ -49,7 +49,7 @@ async function readExpenseRows(dateFrom: string, dateTo: string) {
   let cursor: { bankDate: string; id: string } | null = null;
 
   for (let page = 0; page < MAX_DRIVER_PAGES; page += 1) {
-    const result = await callPersistenceGateway<TransactionPage>("transaction.query", {
+    const result: TransactionPage = await callPersistenceGateway<TransactionPage>("transaction.query", {
       kind: "expense",
       dateFrom,
       dateTo,
