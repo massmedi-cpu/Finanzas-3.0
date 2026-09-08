@@ -93,7 +93,7 @@ test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos
     page.getByText("Filtros activos", { exact: true }),
     page.getByText("Seleccionados", { exact: true }),
     page.getByText("1 de 2", { exact: true }).first(),
-    page.getByText("Supermercado Demo", { exact: true }).first(),
+    page.locator('td[data-label="Concepto"]').getByText("Supermercado Demo", { exact: true }).first(),
     page.getByText("Modificado", { exact: true }),
     page.getByText("Confirmado", { exact: true }).first(),
   ];
