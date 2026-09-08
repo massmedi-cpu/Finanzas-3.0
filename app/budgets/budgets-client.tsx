@@ -71,6 +71,11 @@ const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
+const exactPercentFormatter = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 function currentMonthMadrid() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -204,6 +209,8 @@ function statusLabel(status: BudgetStatus) {
 function BudgetCard({
   item,
   total = false,
+  monthStart,
+  monthEnd,
   busy,
   editing,
   editValue,
@@ -216,6 +223,8 @@ function BudgetCard({
 }: {
   item: BudgetItem;
   total?: boolean;
+  monthStart: string;
+  monthEnd: string;
   busy: boolean;
   editing: boolean;
   editValue: string;
@@ -229,6 +238,11 @@ function BudgetCard({
   const remainingLabel = item.remainingCents >= 0 ? "Disponible" : "Exceso";
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
+  const excessCents = Math.max(0, -item.remainingCents);
+  const excessPercent = item.effectiveAmountCents > 0 ? (excessCents / item.effectiveAmountCents) * 100 : null;
+  const causalHref = item.categoryId
+    ? `/transactions?dateFrom=${monthStart}&dateTo=${monthEnd}&kind=expense&categoryId=${encodeURIComponent(item.categoryId)}`
+    : null;
 
   useEffect(() => {
     if (fieldError) inputRef.current?.focus();
@@ -277,6 +291,48 @@ function BudgetCard({
           style={{ width: `${progressWidth(item)}%` }}
         />
       </div>
+
+      {!total && item.status === "over" && causalHref ? (
+        <div
+          role="group"
+          aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
+          data-budget-state={item.status}
+          style={{
+            marginTop: ".9rem",
+            padding: ".85rem .95rem",
+            borderRadius: ".9rem",
+            border: "1px solid rgba(255,118,139,.28)",
+            background: "linear-gradient(135deg, rgba(255,91,118,.10), rgba(255,255,255,.025))",
+            display: "grid",
+            gap: ".55rem",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
+            <strong>Exceso {formatMoney(excessCents)}</strong>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              {excessPercent === null ? "Sin base de comparación" : `${exactPercentFormatter.format(excessPercent)} % sobre el límite`}
+            </span>
+          </div>
+          <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
+            <div
+              style={{
+                width: `${Math.min(100, excessPercent ?? 0)}%`,
+                minWidth: excessCents > 0 ? ".45rem" : 0,
+                height: "100%",
+                borderRadius: "inherit",
+                background: "linear-gradient(90deg, rgba(255,103,130,.78), rgba(255,171,111,.82))",
+              }}
+            />
+          </div>
+          <Link
+            href={causalHref}
+            aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
+            style={{ width: "fit-content", fontWeight: 700, textDecoration: "none" }}
+          >
+            Ver movimientos que explican el gasto
+          </Link>
+        </div>
+      ) : null}
 
       <div className={styles.cardActions}>
         <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editing}>
@@ -553,6 +609,8 @@ export default function BudgetsClient() {
                     <BudgetCard
                       item={snapshot.total}
                       total
+                      monthStart={snapshot.monthStart}
+                      monthEnd={snapshot.monthEnd}
                       busy={busy}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
@@ -568,6 +626,8 @@ export default function BudgetsClient() {
                       <BudgetCard
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
+                        monthStart={snapshot.monthStart}
+                        monthEnd={snapshot.monthEnd}
                         busy={busy}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
