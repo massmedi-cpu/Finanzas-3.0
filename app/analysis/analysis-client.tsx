@@ -84,6 +84,138 @@ function DriverList({ title, items }: { title: string; items: AnalysisDriver[] }
   );
 }
 
+function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot }) {
+  const [activePoint, setActivePoint] = useState<string | null>(null);
+  const currentMonth = monthLabel(snapshot.month);
+  const previousMonth = monthLabel(snapshot.previous.dateFrom.slice(0, 7));
+  const rows = [
+    { key: "income", label: "Ingresos", current: snapshot.current.incomeCents, previous: snapshot.previous.incomeCents },
+    { key: "expense", label: "Gastos", current: snapshot.current.expenseCents, previous: snapshot.previous.expenseCents },
+    { key: "net", label: "Neto", current: snapshot.current.operatingNetCents, previous: snapshot.previous.operatingNetCents },
+  ];
+  const maximum = Math.max(1, ...rows.flatMap((row) => [Math.abs(row.current), Math.abs(row.previous)]));
+
+  function pointLabel(label: string, period: string, cents: number) {
+    const state = cents < 0 ? "déficit" : cents > 0 ? "superávit" : "equilibrio";
+    return `${label} ${period}: ${formatMoney(cents)} · ${state}`;
+  }
+
+  return (
+    <section
+      aria-label="Comparativa financiera visual"
+      style={{
+        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
+        borderRadius: "24px",
+        padding: "clamp(1rem, 2.2vw, 1.5rem)",
+        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
+        display: "grid",
+        gap: "1.25rem",
+      }}
+    >
+      <div className={styles.panelHeading}>
+        <div>
+          <p className={styles.kicker}>LECTURA VISUAL</p>
+          <h2>Comparativa financiera</h2>
+        </div>
+        <Link
+          className={styles.drilldown}
+          href={`/transactions?dateFrom=${snapshot.current.dateFrom}&dateTo=${snapshot.current.dateTo}`}
+          aria-label="Ver movimientos del periodo"
+        >
+          Ver movimientos del periodo
+        </Link>
+      </div>
+
+      <div style={{ display: "grid", gap: ".9rem" }}>
+        {rows.map((row) => (
+          <div key={row.key} style={{ display: "grid", gridTemplateColumns: "minmax(5.5rem, .35fr) 1fr", gap: ".75rem", alignItems: "center" }}>
+            <strong style={{ fontSize: ".92rem" }}>{row.label}</strong>
+            <div style={{ display: "grid", gap: ".45rem" }}>
+              {([
+                ["current", currentMonth, row.current],
+                ["previous", previousMonth, row.previous],
+              ] as const).map(([periodKey, period, cents]) => {
+                const id = `${row.key}-${periodKey}`;
+                const label = pointLabel(row.label, period, cents);
+                const width = Math.max(8, (Math.abs(cents) / maximum) * 100);
+                return (
+                  <div key={id} style={{ display: "grid", gridTemplateColumns: "minmax(5.4rem, auto) 1fr", gap: ".6rem", alignItems: "center" }}>
+                    <span style={{ color: "var(--text-muted, #aeb6c6)", fontSize: ".78rem" }}>{periodKey === "current" ? "Actual" : "Anterior"}</span>
+                    <div style={{ position: "relative", minHeight: "2.1rem", display: "flex", alignItems: "center" }}>
+                      <button
+                        type="button"
+                        aria-label={label}
+                        onFocus={() => setActivePoint(id)}
+                        onBlur={() => setActivePoint((current) => current === id ? null : current)}
+                        onMouseEnter={() => setActivePoint(id)}
+                        onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
+                        style={{
+                          width: `${width}%`,
+                          minWidth: "3rem",
+                          height: "1.65rem",
+                          border: cents < 0 ? "1px solid rgba(255,124,145,.5)" : "1px solid rgba(99,219,180,.42)",
+                          borderRadius: "999px",
+                          background: cents < 0
+                            ? "linear-gradient(90deg, rgba(255,104,132,.30), rgba(255,104,132,.12))"
+                            : "linear-gradient(90deg, rgba(72,211,170,.28), rgba(72,211,170,.10))",
+                          cursor: "default",
+                          position: "relative",
+                        }}
+                      />
+                      <span style={{ marginLeft: ".55rem", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontSize: ".82rem" }}>{formatMoney(cents)}</span>
+                      {activePoint === id ? (
+                        <div
+                          role="tooltip"
+                          style={{
+                            position: "absolute",
+                            zIndex: 5,
+                            left: "0",
+                            top: "calc(100% + .35rem)",
+                            padding: ".5rem .65rem",
+                            borderRadius: ".65rem",
+                            background: "var(--surface-elevated, #151922)",
+                            border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
+                            boxShadow: "0 10px 30px rgba(0,0,0,.25)",
+                            fontSize: ".78rem",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </div>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", borderCollapse: "collapse", minWidth: "30rem" }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
+              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{currentMonth}</th>
+              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{previousMonth}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.key}>
+                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{row.label}</th>
+                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.current)}</td>
+                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.previous)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export default function AnalysisClient() {
   const [month, setMonth] = useState(madridMonth);
   const [appliedMonth, setAppliedMonth] = useState(madridMonth);
@@ -151,6 +283,8 @@ export default function AnalysisClient() {
             <article><span>Balance neto</span><strong>{formatMoney(snapshot.current.operatingNetCents)}</strong><small>{formatMoney(snapshot.comparison.netDeltaCents)} de diferencia</small></article>
             <article><span>Tasa de ahorro</span><strong>{snapshot.current.savingsRateBps === null ? "—" : `${percentFormatter.format(snapshot.current.savingsRateBps / 100)} %`}</strong><small>{monthLabel(snapshot.month)}</small></article>
           </section>
+
+          <FinancialComparisonVisual snapshot={snapshot} />
 
           <section className={styles.comparison} aria-labelledby="comparison-heading">
             <div className={styles.panelHeading}>
