@@ -116,6 +116,7 @@ const money = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -283,12 +284,13 @@ function ForecastBalanceCurve({ snapshot }: { snapshot: ForecastSnapshot }) {
                 onMouseEnter={() => setActivePoint(id)}
                 onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
                 style={{
-                  width: "1rem",
-                  height: "1rem",
+                  width: "44px",
+                  height: "44px",
                   borderRadius: "999px",
-                  border: "2px solid rgba(255,255,255,.88)",
-                  background: "currentColor",
-                  boxShadow: "0 0 0 5px rgba(255,255,255,.08)",
+                  border: 0,
+                  padding: 0,
+                  background: "radial-gradient(circle, currentColor 0 7px, transparent 8px)",
+                  boxShadow: "none",
                   cursor: "default",
                 }}
               />
