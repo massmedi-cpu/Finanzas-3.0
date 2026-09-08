@@ -207,6 +207,7 @@ function BudgetCard({
   busy,
   editing,
   editValue,
+  fieldError,
   onStartEdit,
   onChangeEdit,
   onCancelEdit,
@@ -218,6 +219,7 @@ function BudgetCard({
   busy: boolean;
   editing: boolean;
   editValue: string;
+  fieldError: string;
   onStartEdit: () => void;
   onChangeEdit: (value: string) => void;
   onCancelEdit: () => void;
@@ -225,6 +227,12 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const remainingLabel = item.remainingCents >= 0 ? "Disponible" : "Exceso";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
+
+  useEffect(() => {
+    if (fieldError) inputRef.current?.focus();
+  }, [fieldError]);
 
   return (
     <article className={`${styles.budgetCard} ${total ? styles.budgetCardPrimary : ""}`}>
@@ -290,12 +298,24 @@ function BudgetCard({
             Importe mensual (€)
             <input
               autoFocus
+              ref={inputRef}
               inputMode="decimal"
               value={editValue}
               onChange={(event) => onChangeEdit(event.target.value)}
               placeholder={euroInputFromCents(item.effectiveAmountCents)}
               aria-label={`Presupuesto manual de ${total ? "total mensual" : item.categoryName ?? "categoría"}`}
+              aria-invalid={fieldError ? "true" : "false"}
+              aria-describedby={fieldError ? fieldErrorId : undefined}
             />
+            {fieldError ? (
+              <span
+                id={fieldErrorId}
+                role="alert"
+                style={{ color: "#ff9aaa", fontSize: "0.875rem", lineHeight: 1.35 }}
+              >
+                {fieldError}
+              </span>
+            ) : null}
           </label>
           <div className={styles.editorButtons}>
             <button className={styles.secondaryButton} type="button" onClick={onCancelEdit} disabled={busy}>Cancelar</button>
@@ -322,6 +342,7 @@ export default function BudgetsClient() {
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [fieldError, setFieldError] = useState("");
   const fetchGeneration = useRef(0);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
@@ -329,6 +350,7 @@ export default function BudgetsClient() {
     setLoading(true);
     setError("");
     setNotice("");
+    setFieldError("");
     try {
       const response = await fetch(`/api/budgets?month=${encodeURIComponent(selectedMonth)}`, {
         cache: "no-store",
@@ -363,6 +385,7 @@ export default function BudgetsClient() {
     setBusy(true);
     setError("");
     setNotice("");
+    setFieldError("");
     try {
       const response = await fetch("/api/budgets", {
         method,
@@ -392,17 +415,30 @@ export default function BudgetsClient() {
     const key = item.categoryId ?? "__total__";
     setError("");
     setNotice("");
+    setFieldError("");
     setEditingKey(key);
     setEditValue(euroInputFromCents(item.manualAmountCents ?? item.effectiveAmountCents));
+  }, []);
+
+  const changeEditValue = useCallback((value: string) => {
+    setEditValue(value);
+    setFieldError("");
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingKey(null);
+    setFieldError("");
   }, []);
 
   const saveManual = useCallback((item: BudgetItem) => {
     const cents = parseEuroInput(editValue);
     if (cents === undefined || cents === null) {
-      setError("Introduce un importe válido con un máximo de dos decimales.");
+      setError("");
+      setFieldError("Introduce un importe válido con un máximo de dos decimales.");
       setNotice("");
       return;
     }
+    setFieldError("");
     void mutate(
       "PATCH",
       { month, categoryId: item.categoryId, manualAmountCents: cents },
@@ -520,9 +556,10 @@ export default function BudgetsClient() {
                       busy={busy}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
+                      fieldError={editingKey === "__total__" ? fieldError : ""}
                       onStartEdit={() => startEdit(snapshot.total)}
-                      onChangeEdit={setEditValue}
-                      onCancelEdit={() => setEditingKey(null)}
+                      onChangeEdit={changeEditValue}
+                      onCancelEdit={cancelEdit}
                       onSave={() => saveManual(snapshot.total)}
                       onClearManual={() => clearManual(snapshot.total)}
                     />
@@ -534,9 +571,10 @@ export default function BudgetsClient() {
                         busy={busy}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
+                        fieldError={editingKey === item.categoryId ? fieldError : ""}
                         onStartEdit={() => startEdit(item)}
-                        onChangeEdit={setEditValue}
-                        onCancelEdit={() => setEditingKey(null)}
+                        onChangeEdit={changeEditValue}
+                        onCancelEdit={cancelEdit}
                         onSave={() => saveManual(item)}
                         onClearManual={() => clearManual(item)}
                       />
