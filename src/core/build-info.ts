@@ -1,6 +1,8 @@
-// F13 final Axioma closure: the application release is now 10.0.0 only after the complete reconstruction passed backup/restore, browser regression and protected Preview gates. Further corrections must evolve as 10.0.x without reopening the reset-base identity.
-export const APP_VERSION = "10.0.0" as const;
-export const TARGET_VERSION = "10.0.0" as const;
+import packageJson from "../../package.json";
+
+// Release identity has one canonical source: package.json.
+export const APP_VERSION = packageJson.version;
+export const TARGET_VERSION = APP_VERSION;
 export const CURRENT_PHASE = 13 as const;
 export const CURRENT_PHASE_NAME = "Consolidación, respaldo, restauración y producción 10.0.0" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
