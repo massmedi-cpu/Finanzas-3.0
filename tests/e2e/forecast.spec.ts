@@ -236,7 +236,7 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
   const summary = page.getByRole("region", { name: "Resumen de previsión" });
   await expect(summary.getByText("188.845,99 €", { exact: true })).toBeVisible();
-  await expect(page.getByText("Seguro mensual")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Seguro mensual", exact: true })).toBeVisible();
   await expect(page.getByText("Presupuesto · contexto", { exact: false })).toBeVisible();
 
   await page.getByLabel("Concepto").fill("Seguro anual");
@@ -244,7 +244,7 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   await page.getByRole("button", { name: "Añadir al calendario" }).click();
 
   await expect.poll(() => writes.find((entry) => entry.action === "manual")?.amountCents).toBe(-1234);
-  await expect(page.getByText("Seguro anual")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
 });
 
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {
