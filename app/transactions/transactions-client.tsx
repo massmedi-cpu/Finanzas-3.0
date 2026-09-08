@@ -118,6 +118,7 @@ const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
 const NONE = "__none__";
 const UNCHANGED = "__unchanged__";
+const CONCEPT_ERROR_ID = "transaction-concept-error";
 
 const EMPTY_FILTERS: Filters = {
   q: "",
@@ -279,12 +280,14 @@ export default function TransactionsClient() {
   const [bulkReview, setBulkReview] = useState(UNCHANGED);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [conceptError, setConceptError] = useState("");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [duplicateGroup, setDuplicateGroup] = useState<DuplicateGroupRow[]>([]);
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   const listRequestSequence = useRef(0);
+  const conceptInputRef = useRef<HTMLInputElement>(null);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
     const requestSequence = ++listRequestSequence.current;
@@ -387,6 +390,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     closeReview();
     void fetchPage(next, null, false);
   }
@@ -397,6 +401,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     closeReview();
     void fetchPage(EMPTY_FILTERS, null, false);
   }
@@ -450,6 +455,7 @@ export default function TransactionsClient() {
     setTransferCandidates([]);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     setError(null);
     setNotice(null);
     try {
@@ -497,6 +503,8 @@ export default function TransactionsClient() {
   function beginEdit(row: TransactionRow) {
     setEditingId(row.id);
     setEditor(editorFor(row));
+    setConceptError("");
+    setError(null);
     setNotice(null);
     closeReview();
   }
@@ -504,14 +512,18 @@ export default function TransactionsClient() {
   function cancelEdit() {
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
   }
 
   async function saveEdit(row: TransactionRow) {
     if (!editor || editingId !== row.id) return;
     if (!editor.concept.trim()) {
-      setError("El concepto no puede quedar vacío.");
+      setError(null);
+      setConceptError("El concepto no puede quedar vacío.");
+      conceptInputRef.current?.focus();
       return;
     }
+    setConceptError("");
     await patchTransactions([row.id], individualPatch(row, editor), "Movimiento actualizado");
   }
 
@@ -680,7 +692,22 @@ export default function TransactionsClient() {
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
                           <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>Solo se modifica la capa personal de overrides.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
                           <div className={styles.editorGrid}>
-                            <label className={styles.editorWide}><span>Concepto</span><input data-testid="edit-concept" value={editor.concept} maxLength={240} onChange={(event) => setEditor({ ...editor, concept: event.target.value })} /></label>
+                            <label className={styles.editorWide}>
+                              <span>Concepto</span>
+                              <input
+                                ref={conceptInputRef}
+                                data-testid="edit-concept"
+                                value={editor.concept}
+                                maxLength={240}
+                                aria-invalid={conceptError ? "true" : "false"}
+                                aria-describedby={conceptError ? CONCEPT_ERROR_ID : undefined}
+                                onChange={(event) => {
+                                  setEditor({ ...editor, concept: event.target.value });
+                                  if (conceptError) setConceptError("");
+                                }}
+                              />
+                              {conceptError ? <small id={CONCEPT_ERROR_ID} className={styles.fieldError} role="alert">{conceptError}</small> : null}
+                            </label>
                             <label><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>Automático/original</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
                             <label><span>Categoría</span><select data-testid="edit-category" value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })}><option value={INHERIT}>Automática/original</option><option value={NONE}>Sin categoría</option>{facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
                             <label><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
