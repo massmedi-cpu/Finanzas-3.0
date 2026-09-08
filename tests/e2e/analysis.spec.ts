@@ -88,7 +88,7 @@ test("E2 · Análisis representa comparación, drivers y drill-down sin recalcul
   await expect(summary.getByText("2.100,00 €", { exact: true })).toBeVisible();
   await expect(summary.getByText("550,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText(/Reconciliado al céntimo/i)).toBeVisible();
-  const categoryLink = page.getByRole("link", { name: "Ver movimientos" }).first();
+  const categoryLink = page.getByRole("link", { name: "Ver movimientos", exact: true }).first();
   await expect(categoryLink).toHaveAttribute("href", /categoryId=11111111-1111-4111-8111-111111111111/);
 
   if (testInfo.project.name === "chromium-mobile") {
