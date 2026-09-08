@@ -1,0 +1,63 @@
+name: Release Lock Candidate
+
+on:
+  push:
+    branches:
+      - audit/precommercial-10.0.0
+
+permissions:
+  contents: read
+
+jobs:
+  emit-lock-candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Generate exact 10.0.0 lock candidate
+        shell: bash
+        run: |
+          mkdir -p release-lock-candidate
+          node <<'NODE'
+          const { createHash } = require('node:crypto');
+          const { readFileSync, writeFileSync } = require('node:fs');
+
+          const expected = '69ac752fc4f14d0bacccb4c8fde376a883f549e8c4b7c01cf31a900d392be95e';
+          const packageJson = JSON.parse(readFileSync('package.json', 'utf8'));
+          const original = readFileSync('package-lock.json', 'utf8');
+          const first = '"name": "financial-app",\n  "version": "0.0.1",';
+          const second = '"": {\n      "name": "financial-app",\n      "version": "0.0.1",';
+
+          if (!original.includes(first) || !original.includes(second)) {
+            throw new Error('expected_lock_version_markers_not_found');
+          }
+
+          const corrected = original
+            .replace(first, `"name": "financial-app",\n  "version": "${packageJson.version}",`)
+            .replace(second, `"": {\n      "name": "financial-app",\n      "version": "${packageJson.version}",`);
+
+          const parsed = JSON.parse(corrected);
+          if (parsed.version !== packageJson.version || parsed.packages?.['']?.version !== packageJson.version) {
+            throw new Error('lock_version_sync_failed');
+          }
+
+          const normalized = structuredClone(parsed);
+          normalized.version = '__RELEASE_VERSION__';
+          normalized.packages[''].version = '__RELEASE_VERSION__';
+          const fingerprint = createHash('sha256').update(JSON.stringify(normalized)).digest('hex');
+          console.log(`LOCK_CANDIDATE_SEMANTIC_FINGERPRINT=${fingerprint}`);
+          if (fingerprint !== expected) throw new Error('lock_semantic_fingerprint_changed');
+
+          writeFileSync('release-lock-candidate/package-lock.json', corrected, 'utf8');
+          NODE
+
+      - name: Upload exact lock candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-lock-candidate
+          path: release-lock-candidate/package-lock.json
+          retention-days: 1
+          if-no-files-found: error
