@@ -142,7 +142,7 @@
   display: grid;
   gap: 7px;
   color: #66625a;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -157,6 +157,7 @@
   background: #fff;
   color: #20201d;
   font: inherit;
+  font-size: 1rem;
   outline: none;
 }
 
@@ -166,6 +167,20 @@
 .reasonInput:focus {
   border-color: #9a7634;
   box-shadow: 0 0 0 3px rgba(154, 118, 52, 0.12);
+}
+
+.manualForm input[aria-invalid="true"],
+.reasonInput[aria-invalid="true"] {
+  border-color: #b34a3c;
+  box-shadow: 0 0 0 3px rgba(179, 74, 60, 0.12);
+}
+
+.fieldError {
+  flex: 1 1 100%;
+  color: #8f2f24;
+  font-size: 0.875rem;
+  font-weight: 700;
+  line-height: 1.4;
 }
 
 .error,
@@ -217,7 +232,7 @@
 .kpis span,
 .kpis small {
   color: #77736a;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   font-weight: 700;
 }
 
@@ -291,7 +306,7 @@
   border-radius: 999px;
   background: #f0eee8;
   color: #706b61;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 750;
 }
 
@@ -365,7 +380,7 @@
 .budgetRow small,
 .contextNote {
   color: #7a766d;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
 }
 
 .itemMain {
@@ -437,7 +452,6 @@
   min-width: 180px;
   flex: 1 1 220px;
   min-height: 44px;
-  font-size: 0.82rem;
 }
 
 .candidates {
@@ -487,7 +501,7 @@
   margin: 0;
   padding: 8px 0;
   color: #747066;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
 }
 
 .manualForm {
@@ -530,7 +544,7 @@
   margin: 14px 0 0;
   padding-left: 18px;
   color: #615e57;
-  font-size: 0.84rem;
+  font-size: 0.875rem;
   line-height: 1.65;
 }
 
@@ -540,7 +554,7 @@
   border-radius: 12px;
   background: #fff8e9;
   color: #765a23;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 

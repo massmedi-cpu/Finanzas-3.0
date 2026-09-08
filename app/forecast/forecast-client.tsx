@@ -106,6 +106,11 @@ type CandidateSnapshot = {
   candidates: Candidate[];
 };
 
+type ManualErrors = {
+  concept?: string;
+  amount?: string;
+};
+
 const money = new Intl.NumberFormat("es-ES", {
   style: "currency",
   currency: "EUR",
@@ -223,9 +228,15 @@ export function ForecastClient() {
   const [manualAmount, setManualAmount] = useState("");
   const [manualKind, setManualKind] = useState<"expense" | "income">("expense");
   const [manualConfidence, setManualConfidence] = useState<"high" | "medium" | "low">("high");
+  const [manualErrors, setManualErrors] = useState<ManualErrors>({});
   const [excludeReasons, setExcludeReasons] = useState<Record<string, string>>({});
+  const [excludeErrorFor, setExcludeErrorFor] = useState<string | null>(null);
   const [candidateFor, setCandidateFor] = useState<string | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateSnapshot | null>(null);
+  const manualConceptRef = useRef<HTMLInputElement | null>(null);
+  const manualAmountRef = useRef<HTMLInputElement | null>(null);
+  const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
+  const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const loadSnapshot = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -283,15 +294,26 @@ export function ForecastClient() {
   async function createManual(event: FormEvent) {
     event.preventDefault();
     const absoluteCents = parseEuroToCents(manualAmount);
-    if (absoluteCents === null || absoluteCents <= 0) {
-      setError("Introduce un importe válido con hasta dos decimales.");
-      return;
-    }
-    if (!manualConcept.trim()) {
-      setError("Escribe un concepto para la previsión manual.");
-      return;
-    }
+    const amountError = absoluteCents === null || absoluteCents <= 0
+      ? "Introduce un importe válido con hasta dos decimales."
+      : undefined;
+    const conceptError = !manualConcept.trim()
+      ? "Escribe un concepto para la previsión manual."
+      : undefined;
 
+    setManualErrors({ concept: conceptError, amount: amountError });
+    if (amountError || conceptError) {
+      setError(null);
+      setNotice(null);
+      window.requestAnimationFrame(() => {
+        if (conceptError) manualConceptRef.current?.focus();
+        else manualAmountRef.current?.focus();
+      });
+      return;
+    }
+    if (absoluteCents === null || absoluteCents <= 0) return;
+
+    setManualErrors({});
     await runMutation("manual", async () => {
       await readJson(await fetch("/api/forecast", {
         method: "POST",
@@ -317,10 +339,14 @@ export function ForecastClient() {
     const nextExcluded = !item.excluded;
     const reason = nextExcluded ? (excludeReasons[item.id] ?? "").trim() : "";
     if (nextExcluded && !reason) {
-      setError("Indica el motivo antes de excluir un elemento previsto.");
+      setError(null);
+      setNotice(null);
+      setExcludeErrorFor(item.id);
+      window.requestAnimationFrame(() => document.getElementById(`exclude-reason-${item.id}`)?.focus());
       return;
     }
 
+    setExcludeErrorFor((current) => current === item.id ? null : current);
     await runMutation(`exclude:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
@@ -340,12 +366,20 @@ export function ForecastClient() {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
       setCandidateData(data as CandidateSnapshot);
+      window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");
       setCandidateFor(null);
+      window.requestAnimationFrame(() => candidateTriggerRefs.current[item.id]?.focus());
     } finally {
       setBusy(null);
     }
+  }
+
+  function closeCandidates(itemId: string) {
+    setCandidateFor(null);
+    setCandidateData(null);
+    window.requestAnimationFrame(() => candidateTriggerRefs.current[itemId]?.focus());
   }
 
   async function reconcile(item: ForecastItem, transactionId: string | null) {
@@ -439,7 +473,10 @@ export function ForecastClient() {
                 </div>
               ) : (
                 <div className={styles.timeline}>
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const excludeErrorId = `exclude-reason-error-${item.id}`;
+                    const candidatesId = `forecast-candidates-${item.id}`;
+                    return (
                     <article key={item.id} className={`${styles.itemCard} ${styles[item.status]}`}>
                       <div className={styles.itemDate}>
                         <span>{formatDate(item.date)}</span>
@@ -472,13 +509,27 @@ export function ForecastClient() {
                           {item.status !== "confirmed" ? (
                             <>
                               {!item.excluded ? (
-                                <input
-                                  className={styles.reasonInput}
-                                  placeholder="Motivo para excluir"
-                                  value={excludeReasons[item.id] ?? ""}
-                                  onChange={(event) => setExcludeReasons((current) => ({ ...current, [item.id]: event.target.value }))}
-                                  aria-label={`Motivo para excluir ${item.concept}`}
-                                />
+                                <>
+                                  <input
+                                    id={`exclude-reason-${item.id}`}
+                                    className={styles.reasonInput}
+                                    placeholder="Motivo para excluir"
+                                    value={excludeReasons[item.id] ?? ""}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setExcludeReasons((current) => ({ ...current, [item.id]: value }));
+                                      if (excludeErrorFor === item.id && value.trim()) setExcludeErrorFor(null);
+                                    }}
+                                    aria-label={`Motivo para excluir ${item.concept}`}
+                                    aria-invalid={excludeErrorFor === item.id || undefined}
+                                    aria-describedby={excludeErrorFor === item.id ? excludeErrorId : undefined}
+                                  />
+                                  {excludeErrorFor === item.id ? (
+                                    <span id={excludeErrorId} className={styles.fieldError} role="alert">
+                                      Indica el motivo antes de excluir un elemento previsto.
+                                    </span>
+                                  ) : null}
+                                </>
                               ) : null}
                               <button
                                 className={styles.ghostButton}
@@ -492,9 +543,12 @@ export function ForecastClient() {
 
                           {item.status === "planned" ? (
                             <button
+                              ref={(node) => { candidateTriggerRefs.current[item.id] = node; }}
                               className={styles.ghostButton}
                               onClick={() => void loadCandidates(item)}
                               disabled={busy !== null}
+                              aria-expanded={candidateFor === item.id}
+                              aria-controls={candidatesId}
                             >
                               {busy === `candidates:${item.id}` ? "Buscando…" : "Buscar movimiento real"}
                             </button>
@@ -512,10 +566,10 @@ export function ForecastClient() {
                         </div>
 
                         {candidateFor === item.id ? (
-                          <div className={styles.candidates}>
+                          <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
                             <div className={styles.candidateHeader}>
                               <strong>Candidatos reales ±7 días</strong>
-                              <button className={styles.textButton} onClick={() => { setCandidateFor(null); setCandidateData(null); }}>Cerrar</button>
+                              <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
                             </div>
                             {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
                               <div key={candidate.transactionId} className={styles.candidateRow}>
@@ -535,7 +589,7 @@ export function ForecastClient() {
                         ) : null}
                       </div>
                     </article>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
@@ -548,12 +602,44 @@ export function ForecastClient() {
                     <h2>Añadir previsión</h2>
                   </div>
                 </div>
-                <form className={styles.manualForm} onSubmit={(event) => void createManual(event)}>
+                <form className={styles.manualForm} onSubmit={(event) => void createManual(event)} noValidate>
                   <label>Fecha<input type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} required /></label>
-                  <label>Concepto<input value={manualConcept} maxLength={240} onChange={(event) => setManualConcept(event.target.value)} placeholder="Ej. Seguro anual" required /></label>
+                  <label>
+                    Concepto
+                    <input
+                      id="forecast-manual-concept"
+                      ref={manualConceptRef}
+                      value={manualConcept}
+                      maxLength={240}
+                      onChange={(event) => {
+                        setManualConcept(event.target.value);
+                        if (manualErrors.concept) setManualErrors((current) => ({ ...current, concept: undefined }));
+                      }}
+                      placeholder="Ej. Seguro anual"
+                      aria-invalid={Boolean(manualErrors.concept) || undefined}
+                      aria-describedby={manualErrors.concept ? "forecast-manual-concept-error" : undefined}
+                    />
+                    {manualErrors.concept ? <span id="forecast-manual-concept-error" className={styles.fieldError} role="alert">{manualErrors.concept}</span> : null}
+                  </label>
                   <div className={styles.formSplit}>
                     <label>Tipo<select value={manualKind} onChange={(event) => setManualKind(event.target.value as "expense" | "income")}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label>
-                    <label>Importe<input inputMode="decimal" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} placeholder="0,00" required /></label>
+                    <label>
+                      Importe
+                      <input
+                        id="forecast-manual-amount"
+                        ref={manualAmountRef}
+                        inputMode="decimal"
+                        value={manualAmount}
+                        onChange={(event) => {
+                          setManualAmount(event.target.value);
+                          if (manualErrors.amount) setManualErrors((current) => ({ ...current, amount: undefined }));
+                        }}
+                        placeholder="0,00"
+                        aria-invalid={Boolean(manualErrors.amount) || undefined}
+                        aria-describedby={manualErrors.amount ? "forecast-manual-amount-error" : undefined}
+                      />
+                      {manualErrors.amount ? <span id="forecast-manual-amount-error" className={styles.fieldError} role="alert">{manualErrors.amount}</span> : null}
+                    </label>
                   </div>
                   <label>Confianza<select value={manualConfidence} onChange={(event) => setManualConfidence(event.target.value as "high" | "medium" | "low")}><option value="high">Alta</option><option value="medium">Media</option><option value="low">Baja</option></select></label>
                   <button className={styles.primaryButton} type="submit" disabled={busy !== null}>{busy === "manual" ? "Guardando…" : "Añadir al calendario"}</button>
