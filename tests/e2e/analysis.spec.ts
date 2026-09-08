@@ -84,8 +84,9 @@ test("E2 · Análisis representa comparación, drivers y drill-down sin recalcul
   await page.goto("/analysis");
 
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
-  await expect(page.getByText("2.100,00 €", { exact: true })).toBeVisible();
-  await expect(page.getByText("550,00 €", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Resumen financiero del periodo" });
+  await expect(summary.getByText("2.100,00 €", { exact: true })).toBeVisible();
+  await expect(summary.getByText("550,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText(/Reconciliado al céntimo/i)).toBeVisible();
   const categoryLink = page.getByRole("link", { name: "Ver movimientos" }).first();
   await expect(categoryLink).toHaveAttribute("href", /categoryId=11111111-1111-4111-8111-111111111111/);
