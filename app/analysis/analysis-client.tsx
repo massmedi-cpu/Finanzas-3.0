@@ -10,6 +10,7 @@ const moneyFormatter = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const percentFormatter = new Intl.NumberFormat("es-ES", {

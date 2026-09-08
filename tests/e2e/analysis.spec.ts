@@ -75,7 +75,12 @@ test("E2 · el motor falla cerrado si drivers y financial.period no reconcilian"
 
 test("E2 · Análisis representa comparación, drivers y drill-down sin recalcular en React", async ({ page }, testInfo) => {
   test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido se valida con el contrato real en otra prueba");
-  await page.route("**/api/analysis?month=2026-09", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_SNAPSHOT) }));
+  await page.route("**/api/analysis**", async (route) => {
+    const url = new URL(route.request().url());
+    expect(url.pathname).toBe("/api/analysis");
+    expect(url.searchParams.get("month")).toBe("2026-09");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(MOCK_SNAPSHOT) });
+  });
   await page.goto("/analysis");
 
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
