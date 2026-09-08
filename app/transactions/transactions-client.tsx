@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -284,14 +284,21 @@ export default function TransactionsClient() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [duplicateGroup, setDuplicateGroup] = useState<DuplicateGroupRow[]>([]);
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
+  const listRequestSequence = useRef(0);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
-    if (append) setLoadingMore(true);
-    else setLoading(true);
+    const requestSequence = ++listRequestSequence.current;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setLoadingMore(false);
+    }
     setError(null);
     try {
       const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
+      if (requestSequence !== listRequestSequence.current) return;
       if (!response.ok) throw new Error(readableError(payload));
       const result = payload as QueryResponse;
       const incoming = Array.isArray(result.rows) ? result.rows : [];
@@ -301,6 +308,7 @@ export default function TransactionsClient() {
       setNextCursor(result.nextCursor ?? null);
       if (!append) setSelectedIds([]);
     } catch (cause) {
+      if (requestSequence !== listRequestSequence.current) return;
       setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
         setRows([]);
@@ -310,6 +318,7 @@ export default function TransactionsClient() {
         setSelectedIds([]);
       }
     } finally {
+      if (requestSequence !== listRequestSequence.current) return;
       if (append) setLoadingMore(false);
       else setLoading(false);
     }
@@ -335,7 +344,10 @@ export default function TransactionsClient() {
     }
     void bootstrap();
     void fetchPage(EMPTY_FILTERS, null, false);
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      listRequestSequence.current += 1;
+    };
   }, [fetchPage]);
 
   const activeFilterCount = useMemo(
@@ -598,8 +610,8 @@ export default function TransactionsClient() {
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
         <div className={styles.filterActions}>
-          <button className={styles.primaryButton} type="submit" disabled={loading || saving}>Aplicar filtros</button>
-          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={loading || saving}>Limpiar</button>
+          <button className={styles.primaryButton} type="submit" disabled={saving}>Aplicar filtros</button>
+          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={saving}>Limpiar</button>
         </div>
       </form>
 
