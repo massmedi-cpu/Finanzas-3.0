@@ -79,6 +79,11 @@
   text-decoration: none;
 }
 
+:global(.back-link) {
+  min-height: 2.75rem;
+  align-items: center;
+}
+
 .preflightBlock {
   margin-top: 1rem;
   padding-top: 1rem;
