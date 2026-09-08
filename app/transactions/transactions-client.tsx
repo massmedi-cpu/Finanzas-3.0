@@ -114,6 +114,9 @@ type EditorState = {
   note: string;
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
 const NONE = "__none__";
@@ -346,12 +349,27 @@ export default function TransactionsClient() {
       }
     }
     const params = new URLSearchParams(window.location.search);
+    const accountId = params.get("accountId");
+    const categoryId = params.get("categoryId");
+    const merchantId = params.get("merchantId");
+    const kind = params.get("kind");
     const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
+    const dateFrom = params.get("dateFrom");
+    const dateTo = params.get("dateTo");
+    const safeDateFrom = dateFrom && DATE.test(dateFrom) ? dateFrom : "";
+    const safeDateTo = dateTo && DATE.test(dateTo) ? dateTo : "";
+    const safeDateRange = !safeDateFrom || !safeDateTo || safeDateFrom <= safeDateTo;
     const initialFilters: Filters = {
       ...EMPTY_FILTERS,
+      accountId: accountId && UUID.test(accountId) ? accountId : "",
+      categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
+      merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
+      kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
       reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+      dateFrom: safeDateRange ? safeDateFrom : "",
+      dateTo: safeDateRange ? safeDateTo : "",
     };
     setDraftFilters(initialFilters);
     setAppliedFilters(initialFilters);

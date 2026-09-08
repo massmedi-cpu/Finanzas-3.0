@@ -4,6 +4,7 @@ const ROUTES = [
   "/login",
   "/",
   "/transactions",
+  "/analysis",
   "/accounts",
   "/budgets",
   "/forecast",
