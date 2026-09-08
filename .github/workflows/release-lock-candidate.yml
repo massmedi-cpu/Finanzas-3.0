@@ -10,7 +10,6 @@ permissions:
 
 jobs:
   apply-release-identity:
-    if: startsWith(github.event.head_commit.message, 'ci(release): arm deterministic release identity fix')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact branch commit
