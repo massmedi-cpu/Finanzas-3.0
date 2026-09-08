@@ -205,6 +205,143 @@ async function readJson(response: Response) {
   return body;
 }
 
+function ForecastBalanceCurve({ snapshot }: { snapshot: ForecastSnapshot }) {
+  const [activePoint, setActivePoint] = useState<string | null>(null);
+  const points = [
+    {
+      id: "opening",
+      label: "Saldo inicial",
+      date: snapshot.period.dateFrom,
+      balanceCents: snapshot.summary.openingBalanceCents,
+    },
+    ...snapshot.items.map((item) => ({
+      id: item.id,
+      label: item.concept,
+      date: item.date,
+      balanceCents: item.projectedBalanceAfterCents,
+    })),
+  ];
+  const balances = points.map((point) => point.balanceCents);
+  const minimum = Math.min(...balances);
+  const maximum = Math.max(...balances);
+  const range = Math.max(1, maximum - minimum);
+  const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
+  const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
+  const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
+
+  return (
+    <section
+      aria-label="Curva de saldo prevista"
+      style={{
+        marginTop: "1.25rem",
+        padding: "clamp(1rem, 2.2vw, 1.5rem)",
+        borderRadius: "24px",
+        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
+        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
+        display: "grid",
+        gap: "1rem",
+      }}
+    >
+      <div className={styles.sectionHeader}>
+        <div>
+          <p className={styles.eyebrow}>SALDO PROYECTADO</p>
+          <h2>Curva de saldo prevista</h2>
+        </div>
+        <span style={{ fontSize: ".82rem", opacity: .75 }}>Valores del motor de previsión · sin recálculo visual</span>
+      </div>
+
+      <div style={{ position: "relative", height: "15rem", borderRadius: "1rem", overflow: "visible", background: "rgba(255,255,255,.018)" }}>
+        <svg viewBox="0 0 1000 240" preserveAspectRatio="none" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+          <defs>
+            <linearGradient id="forecast-curve-gradient" x1="0" x2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity=".45" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity=".95" />
+            </linearGradient>
+          </defs>
+          <line x1="0" x2="1000" y1="120" y2="120" stroke="currentColor" strokeOpacity=".08" strokeDasharray="8 12" />
+          <polyline points={polyline} fill="none" stroke="url(#forecast-curve-gradient)" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+
+        {points.map((point, index) => {
+          const id = `forecast-balance-${point.id}`;
+          const label = `${point.label} · ${formatDate(point.date)} · ${money.format(point.balanceCents / 100)}`;
+          return (
+            <div
+              key={point.id}
+              style={{
+                position: "absolute",
+                left: `${xFor(index)}%`,
+                top: `${coordinateFor(point.balanceCents)}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <button
+                type="button"
+                aria-label={label}
+                onFocus={() => setActivePoint(id)}
+                onBlur={() => setActivePoint((current) => current === id ? null : current)}
+                onMouseEnter={() => setActivePoint(id)}
+                onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
+                style={{
+                  width: "1rem",
+                  height: "1rem",
+                  borderRadius: "999px",
+                  border: "2px solid rgba(255,255,255,.88)",
+                  background: "currentColor",
+                  boxShadow: "0 0 0 5px rgba(255,255,255,.08)",
+                  cursor: "default",
+                }}
+              />
+              {activePoint === id ? (
+                <div
+                  role="tooltip"
+                  style={{
+                    position: "absolute",
+                    zIndex: 6,
+                    left: "50%",
+                    bottom: "calc(100% + .7rem)",
+                    transform: "translateX(-50%)",
+                    padding: ".5rem .65rem",
+                    borderRadius: ".65rem",
+                    background: "var(--surface-elevated, #151922)",
+                    border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
+                    boxShadow: "0 10px 30px rgba(0,0,0,.28)",
+                    whiteSpace: "nowrap",
+                    fontSize: ".78rem",
+                  }}
+                >
+                  {point.label} · {money.format(point.balanceCents / 100)}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table aria-label="Datos de la curva de saldo" style={{ width: "100%", borderCollapse: "collapse", minWidth: "34rem" }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Hito</th>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Fecha</th>
+              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>Saldo previsto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point) => (
+              <tr key={point.id}>
+                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{point.label}</th>
+                <td style={{ padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{formatDate(point.date)}</td>
+                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{money.format(point.balanceCents / 100)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function ForecastClient() {
   const today = useMemo(() => madridToday(), []);
   const initialFrom = useMemo(() => addDays(today, 1), [today]);
@@ -451,6 +588,8 @@ export function ForecastClient() {
               <small>Neto {money.format(snapshot.summary.projectedNetCents / 100)}</small>
             </article>
           </section>
+
+          <ForecastBalanceCurve snapshot={snapshot} />
 
           <section className={styles.mainGrid}>
             <div className={styles.timelinePanel}>
