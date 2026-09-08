@@ -7,6 +7,7 @@ import styles from "./app-shell.module.css";
 
 const navigation = [
   { href: "/", label: "Inicio" },
+  { href: "/review", label: "Para revisar" },
   { href: "/transactions", label: "Movimientos" },
   { href: "/accounts", label: "Cuentas" },
   { href: "/budgets", label: "Presupuestos" },
