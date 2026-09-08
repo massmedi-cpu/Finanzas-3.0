@@ -1,9 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
-const routes = [
+const firstWaveRoutes = [
   { path: "/", current: "Inicio" },
   { path: "/transactions", current: "Movimientos" },
   { path: "/forecast", current: "Previsión" },
+] as const;
+
+const secondWaveRoutes = [
+  { path: "/accounts", current: "Cuentas" },
+  { path: "/budgets", current: "Presupuestos" },
+  { path: "/recurrences", current: "Recurrentes" },
+  { path: "/documents", current: "Documentos" },
+  { path: "/configuration", current: "Configuración" },
+  { path: "/configuration/source", current: "Configuración" },
+  { path: "/configuration/merchants", current: "Configuración" },
+  { path: "/configuration/rules", current: "Configuración" },
 ] as const;
 
 const primaryLinks = ["Inicio", "Movimientos", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"] as const;
@@ -39,7 +50,7 @@ async function expectSharedNavigation(page: Page, current: string) {
 test("D2 · Inicio, Movimientos y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
   await isolateShellFromData(page);
 
-  for (const route of routes) {
+  for (const route of firstWaveRoutes) {
     await page.goto(route.path);
     await expectSharedNavigation(page, route.current);
   }
@@ -51,7 +62,7 @@ test("D2 · el AppShell móvil conserva Recurrentes, targets táctiles y cero ov
   for (const width of [360, 430, 480]) {
     await page.setViewportSize({ width, height: 844 });
 
-    for (const route of routes) {
+    for (const route of firstWaveRoutes) {
       await page.goto(route.path);
       const nav = page.getByRole("navigation", { name: "Navegación principal" });
       await expect(nav).toBeVisible();
@@ -71,4 +82,45 @@ test("D2 · el AppShell móvil conserva Recurrentes, targets táctiles y cero ov
       ).toBe(true);
     }
   }
+});
+
+test("D2 · Cuentas, Presupuestos, Recurrentes, Documentos y Configuración comparten el mismo AppShell", async ({ page }) => {
+  await isolateShellFromData(page);
+
+  for (const route of secondWaveRoutes) {
+    await page.goto(route.path);
+    await expectSharedNavigation(page, route.current);
+  }
+});
+
+test("D2 · la segunda ola mantiene navegación móvil usable en 360, 430 y 480", async ({ page }) => {
+  test.setTimeout(60_000);
+  await isolateShellFromData(page);
+
+  for (const width of [360, 430, 480]) {
+    await page.setViewportSize({ width, height: 844 });
+
+    for (const route of secondWaveRoutes) {
+      await page.goto(route.path);
+      const nav = page.getByRole("navigation", { name: "Navegación principal" });
+      await expect(nav).toBeVisible();
+      await expect(nav.getByRole("link", { name: route.current, exact: true })).toHaveAttribute("aria-current", "page");
+
+      for (const name of primaryLinks) {
+        const box = await nav.getByRole("link", { name, exact: true }).boundingBox();
+        expect(box, `${name} debe conservar un target táctil medible en ${width}px`).not.toBeNull();
+        expect(box!.height, `${name} debe medir al menos 44px de alto en ${width}px`).toBeGreaterThanOrEqual(44);
+      }
+
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
+        `${route.path} no debe introducir overflow horizontal a ${width}px`,
+      ).toBe(true);
+    }
+  }
+});
+
+test("D2 · Login permanece fuera del AppShell de la aplicación autenticada", async ({ page }) => {
+  await page.goto("/login");
+  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(0);
 });
