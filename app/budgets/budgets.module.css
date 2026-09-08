@@ -87,7 +87,7 @@
   display: grid;
   gap: 0.3rem;
   color: #aebbd4;
-  font-size: 0.76rem;
+  font-size: 0.875rem;
   font-weight: 750;
 }
 
@@ -192,7 +192,7 @@
   align-items: center;
   gap: 0.45rem;
   color: #7f90af;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
   font-weight: 750;
 }
 
@@ -209,7 +209,7 @@
   display: block;
   margin-top: 0.45rem;
   color: #7483a1;
-  font-size: 0.73rem;
+  font-size: 0.875rem;
 }
 
 .mainGrid {
@@ -245,7 +245,7 @@
 .panelHeading p {
   margin: 0.3rem 0 0;
   color: #7f90af;
-  font-size: 0.82rem;
+  font-size: 0.875rem;
 }
 
 .budgetList { display: grid; gap: 0.75rem; }
@@ -297,7 +297,7 @@
 .cardTitle p {
   margin: 0.18rem 0 0;
   color: #7483a1;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
 }
 
 .status {
@@ -307,7 +307,7 @@
   padding: 0.25rem 0.58rem;
   border-radius: 999px;
   white-space: nowrap;
-  font-size: 0.72rem;
+  font-size: 0.875rem;
   font-weight: 850;
 }
 
@@ -333,7 +333,7 @@
 .amounts span {
   display: block;
   color: #7483a1;
-  font-size: 0.7rem;
+  font-size: 0.875rem;
 }
 
 .amounts strong {
@@ -349,7 +349,7 @@
   gap: 1rem;
   margin-top: 0.85rem;
   color: #8c9bb7;
-  font-size: 0.73rem;
+  font-size: 0.875rem;
 }
 
 .progressTrack {
@@ -385,7 +385,7 @@
   border-radius: 999px;
   background: rgba(43, 217, 247, 0.08);
   color: #8ee9fa;
-  font-size: 0.7rem;
+  font-size: 0.875rem;
   font-weight: 800;
 }
 
@@ -402,7 +402,7 @@
   display: grid;
   gap: 0.35rem;
   color: #aebbd4;
-  font-size: 0.74rem;
+  font-size: 0.875rem;
   font-weight: 750;
 }
 
@@ -425,7 +425,7 @@
 .helper {
   margin: 0.75rem 0 0;
   color: #6f809f;
-  font-size: 0.72rem;
+  font-size: 0.875rem;
 }
 
 .history {
@@ -438,11 +438,11 @@
   grid-template-columns: 4.5rem minmax(0, 1fr) auto;
   gap: 0.65rem;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: 0.875rem;
 }
 
 .historyRow span:first-child { color: #8c9bb7; }
-.historyRow strong { font-size: 0.8rem; }
+.historyRow strong { font-size: 0.875rem; }
 
 .historyBar {
   height: 0.45rem;
@@ -463,7 +463,7 @@
   padding-top: 1rem;
   border-top: 1px solid rgba(137, 173, 255, 0.11);
   color: #92a2bd;
-  font-size: 0.79rem;
+  font-size: 0.875rem;
   line-height: 1.55;
 }
 
@@ -478,7 +478,7 @@
   gap: 0.55rem;
   align-items: flex-start;
   color: #98a8c2;
-  font-size: 0.77rem;
+  font-size: 0.875rem;
 }
 
 .check {
@@ -503,8 +503,21 @@
 }
 
 .emptyState strong { display: block; font-size: 1rem; }
-.emptyState p { max-width: 34rem; margin: 0.55rem auto 1rem; color: #7f90af; font-size: 0.82rem; }
-.emptyState a { color: #8fb5ff; font-size: 0.82rem; font-weight: 800; text-decoration: none; }
+.emptyState p { max-width: 34rem; margin: 0.55rem auto 1rem; color: #7f90af; font-size: 0.875rem; }
+.emptyState a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.55rem 0.8rem;
+  border-radius: 0.75rem;
+  color: #8fb5ff;
+  font-size: 0.875rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.emptyState a:hover { background: rgba(137, 173, 255, 0.08); }
 
 .loading {
   min-height: 16rem;
