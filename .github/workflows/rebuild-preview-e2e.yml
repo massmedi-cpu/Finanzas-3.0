@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'rebuild/phase-*'
+      - 'audit/precommercial-*'
 
 permissions:
   contents: read
