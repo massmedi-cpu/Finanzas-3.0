@@ -290,7 +290,7 @@ test("Recurrentes muestra confianza explícita, vigencia, formato español y con
   await expect(page.getByText("Confianza Media", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("1 ciclo no observado", { exact: true })).toBeVisible();
   await expect(page.getByText("Origen bancario · solo lectura", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Ningún patrón se convierte en recurrencia confirmada/i)).toBeVisible();
+  await expect(page.getByText(/Ningún patrón se confirma como recurrencia sin una decisión explícita/i)).toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
@@ -332,7 +332,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
 
   const incomeCard = page.locator("article").filter({ hasText: "ingreso periódico" });
   await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
-  await expect(page.getByRole("status")).toContainText("motor central");
+  await expect(page.getByRole("status")).toContainText("Recurrencia actualizada con los movimientos actuales.");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: incomeCandidateKey,

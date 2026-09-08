@@ -244,7 +244,7 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   await expect(page.getByText(/1\.?200,00/).first()).toBeVisible();
   await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Fuente bancaria estrictamente de solo lectura/i)).toBeVisible();
+  await expect(page.getByText(/La fuente bancaria se mantiene estrictamente en solo lectura/i)).toBeVisible();
   await expect(page.getByText(/Media del gasto elegible de los 3 meses completos anteriores/i)).toHaveCount(1);
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);

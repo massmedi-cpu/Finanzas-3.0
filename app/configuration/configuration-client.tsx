@@ -127,7 +127,7 @@ export default function ConfigurationClient() {
     setError(null);
     try {
       const response = await fetch("/api/configuration", { cache: "no-store" });
-      if (!response.ok) throw new Error("No se pudo leer la configuración persistente.");
+      if (!response.ok) throw new Error("No se pudo cargar la configuración.");
       const payload = (await response.json()) as ConfigPayload;
       setData(payload);
     } catch (cause) {
@@ -251,7 +251,7 @@ function canToggleCategoryLifecycle(category: Category) {
       await requestConfiguration(editingAccountId ? "account.update" : "account.create", editingAccountId ? { id: editingAccountId, draft } : { draft });
       setAccountForm(INITIAL_ACCOUNT);
       setEditingAccountId(null);
-    }, editingAccountId ? "Cuenta actualizada." : "Cuenta creada y persistida.");
+    }, editingAccountId ? "Cuenta actualizada." : "Cuenta creada.");
   }
 
   async function submitCategory(event: FormEvent) {
@@ -270,7 +270,7 @@ function canToggleCategoryLifecycle(category: Category) {
       await requestConfiguration(editingCategoryId ? "category.update" : "category.create", editingCategoryId ? { id: editingCategoryId, draft } : { draft });
       setCategoryForm(INITIAL_CATEGORY);
       setEditingCategoryId(null);
-    }, editingCategoryId ? "Categoría actualizada." : "Categoría creada y persistida.");
+    }, editingCategoryId ? "Categoría actualizada." : "Categoría creada.");
   }
 
   async function reorderAccounts(index: number, delta: number) {
@@ -293,10 +293,10 @@ function canToggleCategoryLifecycle(category: Category) {
     <main className="configuration-shell">
       <header className="configuration-hero">
         <div>
-          <a className="back-link" href="/">← Fundamentos</a>
-          <p className="eyebrow">FASE 1 · CONFIGURACIÓN PERSISTENTE</p>
+          <a className="back-link" href="/">← Inicio</a>
+          <p className="eyebrow">FINANCIAL APP · CONFIGURACIÓN</p>
           <h1>Cuentas y categorías</h1>
-          <p className="hero-copy">Primera interfaz funcional conectada a PostgreSQL real mediante el canal server-only autenticado. Nada de esta pantalla escribe en la fuente bancaria.</p>
+          <p className="hero-copy">Gestiona tus cuentas y categorías. Los cambios se guardan en Financial App y nunca modifican la fuente bancaria.</p>
         </div>
         <div className="configuration-summary" aria-label="Resumen de configuración">
           <div><strong>{activeAccounts}</strong><span>Cuentas activas</span></div>
@@ -313,11 +313,11 @@ function canToggleCategoryLifecycle(category: Category) {
       {error && <div className="config-message error" role="alert">{error}</div>}
       {notice && <div className="config-message success" role="status">{notice}</div>}
 
-      {loading ? <section className="config-panel loading-state">Leyendo configuración persistente…</section> : tab === "accounts" ? (
+      {loading ? <section className="config-panel loading-state">Cargando configuración…</section> : tab === "accounts" ? (
         <div className="config-layout">
           <section className="config-panel list-panel" aria-labelledby="accounts-heading">
-            <div className="panel-heading"><div><p className="panel-kicker">ORIGEN DEL DINERO</p><h2 id="accounts-heading">Cuentas</h2></div><span className="status-chip">PostgreSQL</span></div>
-            {data.accounts.length === 0 ? <div className="empty-state"><Icon name="account" /><h3>Aún no hay cuentas</h3><p>Crea la primera cuenta. El registro se guardará en el nuevo Supabase exclusivo de Financial App.</p></div> : (
+            <div className="panel-heading"><div><p className="panel-kicker">ORIGEN DEL DINERO</p><h2 id="accounts-heading">Cuentas</h2></div><span className="status-chip">Datos guardados</span></div>
+            {data.accounts.length === 0 ? <div className="empty-state"><Icon name="account" /><h3>Aún no hay cuentas</h3><p>Crea la primera cuenta para empezar a organizar tu dinero. La fuente bancaria seguirá intacta.</p></div> : (
               <div className="entity-list">
                 {data.accounts.map((account, index) => <article className={`entity-card ${account.lifecycle === "archived" ? "archived" : ""}`} key={account.id}>
                   <div className="entity-main"><div className="entity-icon"><Icon name="account" /></div><div><div className="entity-title-row"><h3>{account.name}</h3><span className={`lifecycle ${account.lifecycle}`}>{account.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{account.institution || "Sin entidad"} · {labelForAccountType(account.type)}</p><strong>{formatMoneyCents(account.openingBalanceCents)}</strong></div></div>
@@ -346,8 +346,8 @@ function canToggleCategoryLifecycle(category: Category) {
       ) : (
         <div className="config-layout">
           <section className="config-panel list-panel" aria-labelledby="categories-heading">
-            <div className="panel-heading"><div><p className="panel-kicker">CLASIFICACIÓN</p><h2 id="categories-heading">Categorías</h2></div><span className="status-chip">Persistentes</span></div>
-            {data.categories.length === 0 ? <div className="empty-state"><Icon name="more" /><h3>Aún no hay categorías</h3><p>Crea una categoría de gasto, ingreso o transferencia. La jerarquía y la unicidad se validan en dominio y base de datos.</p></div> : (
+            <div className="panel-heading"><div><p className="panel-kicker">CLASIFICACIÓN</p><h2 id="categories-heading">Categorías</h2></div><span className="status-chip">Guardadas</span></div>
+            {data.categories.length === 0 ? <div className="empty-state"><Icon name="more" /><h3>Aún no hay categorías</h3><p>Crea una categoría de gasto, ingreso o transferencia para organizar tus movimientos.</p></div> : (
               <div className="entity-list">
                 {data.categories.map((category, index) => <article className={`entity-card ${category.lifecycle === "archived" ? "archived" : ""}`} key={category.id}>
                   <div className="entity-main"><div className={`entity-icon category-swatch ${category.colorToken.replace(".", "-")}`}><Icon name="more" /></div><div><div className="entity-title-row"><h3>{category.name}</h3><span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{labelForCategoryKind(category.kind)}{category.parentCategoryId ? " · Subcategoría" : " · Principal"}</p><strong>{category.iconKey}</strong></div></div>
