@@ -44,6 +44,20 @@ test("PRE-004 · el release comercial tiene una procedencia inmutable verificabl
     expect(build.artifactScope).toBe("deployment-provenance-v1");
     expect(build.artifactDigest).toMatch(SHA256);
 
+    const sameBuild = getBuildInfo();
+    expect(sameBuild.artifactDigest).toBe(build.artifactDigest);
+    expect(sameBuild.releaseId).toBe(build.releaseId);
+
+    process.env.VERCEL_DEPLOYMENT_ID = "dpl_PRE004SecondDeployment";
+    const secondDeployment = getBuildInfo();
+    expect(secondDeployment.artifactDigest).not.toBe(build.artifactDigest);
+    expect(secondDeployment.releaseId).not.toBe(build.releaseId);
+    process.env.VERCEL_DEPLOYMENT_ID = deploymentId;
+
+    process.env.VERCEL_ENV = "staging";
+    expect(getBuildInfo().releaseDeployable).toBe(false);
+    process.env.VERCEL_ENV = "preview";
+
     const buildPath = join(directory, "build-info.json");
     const manifestPath = join(directory, "release-manifest.json");
     writeFileSync(buildPath, `${JSON.stringify(build)}\n`, "utf8");
@@ -70,6 +84,7 @@ test("PRE-004 · el release comercial tiene una procedencia inmutable verificabl
 
     const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       schemaVersion: number;
+      app: string;
       version: string;
       tag: string;
       commit: string;
