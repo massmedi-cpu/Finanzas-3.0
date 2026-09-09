@@ -29,9 +29,10 @@ test("G · CSP aplica una política estricta con nonce a las respuestas HTML", a
   expect(scriptSrc).not.toContain("'unsafe-inline'");
 
   const connectSrc = directive(csp, "connect-src");
-  expect(connectSrc.split(/\s+/)).toEqual(["connect-src", "'self'", SUPABASE_ORIGIN]);
-  expect(connectSrc).not.toContain("*.supabase.co");
-  expect(connectSrc).not.toContain("https:");
+  const connectSources = connectSrc.split(/\s+/);
+  expect(connectSources).toEqual(["connect-src", "'self'", SUPABASE_ORIGIN]);
+  expect(connectSources).not.toContain("*.supabase.co");
+  expect(connectSources).not.toContain("https:");
 
   const nonce = nonceFrom(csp);
   expect(nonce).not.toBeNull();
