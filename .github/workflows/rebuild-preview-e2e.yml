@@ -31,7 +31,15 @@ jobs:
         run: npm run build
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
 
       - name: Run browser E2E locally
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
@@ -219,7 +227,15 @@ jobs:
           retention-days: 30
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
 
       - name: Run protected preview live E2E
         env:
