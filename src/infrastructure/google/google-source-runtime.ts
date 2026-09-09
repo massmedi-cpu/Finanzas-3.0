@@ -230,7 +230,10 @@ export function createGoogleSourceRuntime(sourceFileId?: string) {
 
   const sourceProfile = OPENBANK_PERSONAL_SOURCE_PROFILE;
   const reader = sourceProfile.createReader(verifiedSourceFileId, accessTokens);
-  const synchronization = new SourceSyncService(new EdgeSourceSyncPersistence());
+  const synchronization = new SourceSyncService(
+    new EdgeSourceSyncPersistence(),
+    sourceProfile.prepareSyncBatch,
+  );
   return {
     authMode,
     configuration,
