@@ -8,6 +8,7 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   const root = process.cwd();
   const hardeningPath = join(root, "supabase/migrations/20260909193000_pre001_workspace_isolation.sql");
   const fkSemanticsPath = join(root, "supabase/migrations/20260909194500_pre001_workspace_fk_semantics.sql");
+  const functionSurfacePath = join(root, "supabase/migrations/20260909200000_pre001_function_surface_lockdown.sql");
   const edgeGatewayPath = join(root, "supabase/functions/financial-app-db-gateway/index.ts");
   const edgeWorkspacePath = join(root, "supabase/functions/financial-app-db-gateway/workspace-context.ts");
   const sourceSyncPath = join(root, "supabase/functions/financial-app-db-gateway/source-sync.ts");
@@ -16,10 +17,12 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
 
   expect(existsSync(hardeningPath), "PRE-001 exige una migración separada de hardening cross-tenant").toBe(true);
   expect(existsSync(fkSemanticsPath), "PRE-001 exige preservar la semántica de las FK legacy").toBe(true);
+  expect(existsSync(functionSurfacePath), "PRE-001 exige cerrar la superficie ejecutable del esquema").toBe(true);
   expect(existsSync(edgeWorkspacePath), "PRE-001 exige una frontera Edge explícita de workspace").toBe(true);
 
   const migration = readFileSync(hardeningPath, "utf8").toLowerCase();
   const fkSemantics = readFileSync(fkSemanticsPath, "utf8").toLowerCase();
+  const functionSurface = readFileSync(functionSurfacePath, "utf8").toLowerCase();
   const edgeGateway = readFileSync(edgeGatewayPath, "utf8").toLowerCase();
   const edgeWorkspace = readFileSync(edgeWorkspacePath, "utf8").toLowerCase();
   const sourceSync = readFileSync(sourceSyncPath, "utf8").toLowerCase();
@@ -45,6 +48,12 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
 
   expect(migration, "Documentos no debe conservar SECURITY DEFINER cuando no necesita Vault").toContain("security invoker");
   expect(migration, "Google OAuth debe seguir usando Vault pero quedar acotado por workspace").toContain("financial_app_google_refresh_token_");
+
+  expect(functionSurface).toContain("revoke execute on all functions in schema financial_app from public");
+  expect(functionSurface).toContain("revoke execute on all functions in schema financial_app from anon");
+  expect(functionSurface).toContain("revoke execute on all functions in schema financial_app from authenticated");
+  expect(functionSurface).toContain("pre001_unexpected_security_definer");
+  expect(functionSurface).toContain("revoke all on table financial_app.workspace_memberships from financial_app_gateway");
 
   expect(migration).toContain("forecast_items_workspace_projection_key_unique");
   expect(migration).toContain("forecast_items_workspace_idempotency_key_unique");
