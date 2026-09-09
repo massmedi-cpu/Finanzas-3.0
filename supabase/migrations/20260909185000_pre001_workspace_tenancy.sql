@@ -141,11 +141,35 @@ begin
       'transaction_source_records',
       'transactions'
     ] loop
+      -- La fuente bancaria sigue siendo inmutable para runtime. La única excepción es este
+      -- backfill administrativo de ownership; PostgreSQL revierte el DISABLE si el bloque falla.
+      if v_table = 'transaction_source_records' then
+        execute 'alter table financial_app.transaction_source_records disable trigger transaction_source_records_no_update';
+      end if;
+
       execute format(
         'update financial_app.%I set workspace_id = $1 where workspace_id is null',
         v_table
       ) using v_personal_workspace;
+
+      if v_table = 'transaction_source_records' then
+        execute 'alter table financial_app.transaction_source_records enable trigger transaction_source_records_no_update';
+      end if;
     end loop;
+
+    if not exists (
+      select 1
+      from pg_trigger t
+      join pg_class c on c.oid = t.tgrelid
+      join pg_namespace n on n.oid = c.relnamespace
+      where n.nspname = 'financial_app'
+        and c.relname = 'transaction_source_records'
+        and t.tgname = 'transaction_source_records_no_update'
+        and t.tgenabled = 'O'
+        and not t.tgisinternal
+    ) then
+      raise exception 'pre001_bank_source_update_trigger_not_enabled';
+    end if;
   end if;
 end
 $$;
