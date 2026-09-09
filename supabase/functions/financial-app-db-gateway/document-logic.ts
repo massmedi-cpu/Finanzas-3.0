@@ -1,4 +1,5 @@
 import { createClient } from "supabase-js";
+import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -95,6 +96,11 @@ function storageClient() {
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) throw new Error("document_storage_unavailable");
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
+}
+
+async function removeRejectedUpload(supabase: ReturnType<typeof storageClient>, path: string) {
+  const removed = await supabase.storage.from(BUCKET).remove([path]);
+  if (removed.error) console.error("document-storage-rejected-cleanup", removed.error.name ?? "unknown");
 }
 
 function databaseError(error: unknown) {
@@ -251,12 +257,34 @@ export async function handleDocumentLogicAction(input: {
     if (!rows[0]) return json({ error: "document_upload_not_found" }, 404);
     const metadata = rows[0]?.metadata ?? {};
     const storedSize = typeof metadata?.size === "number" ? metadata.size : null;
-    const storedMime = typeof metadata?.mimetype === "string" ? metadata.mimetype : null;
+    const storedMime = typeof metadata?.mimetype === "string" ? metadata.mimetype.toLowerCase() : null;
     if (storedMime && storedMime !== mime) return json({ error: "document_upload_mime_mismatch" }, 409);
+
+    const supabase = storageClient();
+    const downloaded = await supabase.storage.from(BUCKET).download(path);
+    if (downloaded.error || !downloaded.data) {
+      console.error("document-storage-verify", downloaded.error?.name ?? "unknown");
+      return json({ error: "document_upload_content_unavailable" }, 503);
+    }
+    const bytes = new Uint8Array(await downloaded.data.arrayBuffer());
+    const actualSize = bytes.byteLength;
+    if (actualSize <= 0 || actualSize > MAX_FILE_BYTES) {
+      await removeRejectedUpload(supabase, path);
+      return json({ error: "document_upload_size_mismatch" }, 409);
+    }
+    if (storedSize !== null && storedSize !== actualSize) {
+      await removeRejectedUpload(supabase, path);
+      return json({ error: "document_upload_size_mismatch" }, 409);
+    }
+    if (!documentBytesMatchMimeType(bytes, mime)) {
+      await removeRejectedUpload(supabase, path);
+      return json({ error: "document_upload_content_mismatch" }, 409);
+    }
+
     return documentQuery(() => sql`
       select financial_app.register_document(
         ${type},${originalFileName},${mime},'supabase',${path},null,
-        ${storedSize}::bigint,${rows[0]?.updated_at}::timestamptz
+        ${actualSize}::bigint,${rows[0]?.updated_at}::timestamptz
       ) as result
     `);
   }
