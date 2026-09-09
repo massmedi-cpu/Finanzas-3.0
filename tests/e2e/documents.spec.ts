@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
+import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const unknownDocumentId = "91000000-0000-4000-8000-000000000091";
 const unknownTransactionId = "92000000-0000-4000-8000-000000000092";
 const documentId = "93000000-0000-4000-8000-000000000093";
 const transactionId = "94000000-0000-4000-8000-000000000094";
+const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/test-upload`;
 
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
 const item = {
@@ -60,7 +62,7 @@ async function mockDocumentApi(
       return;
     }
     if (method === "GET" && url.searchParams.get("mode") === "open") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: "https://storage.mock/open", expiresInSeconds: 300 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/open`, expiresInSeconds: 300 }) }); return;
     }
     if (method === "GET" && url.searchParams.has("id")) {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
@@ -87,14 +89,14 @@ async function mockDocumentApi(
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     if (method === "POST" && body.action === "upload_sign") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: "uploads/97000000-0000-4000-8000-000000000097.pdf", token: "token", signedUrl: "https://storage.mock/upload", maxFileBytes: 15728640 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: "uploads/97000000-0000-4000-8000-000000000097.pdf", token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "unsupported" }) });
   });
-  await page.route("https://storage.mock/upload", async (route) => route.fulfill({ status: 200, body: "ok" }));
+  await page.route(signedUploadUrl, async (route) => route.fulfill({ status: 200, body: "ok" }));
   await page.route("**/api/transactions*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [{ id: transactionId, bankDate: "2026-09-02", amountCents: -5404, account: { id: "95000000-0000-4000-8000-000000000095", name: "Cuenta corriente" }, concept: { original: "COMUNIDAD BLOQUE", processed: "COMUNIDAD BLOQUE", effective: "COMUNIDAD BLOQUE" }, merchant: { effectiveName: null }, category: { effectiveName: null }, kind: { effective: "expense" } }], totalCount: 1, hasMore: false, nextCursor: null }) }));
 }
 

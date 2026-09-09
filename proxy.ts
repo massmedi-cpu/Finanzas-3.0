@@ -13,6 +13,7 @@ import {
   refreshAuthSession,
   revokeAuthSession,
   setSessionCookies,
+  SUPABASE_ORIGIN,
   validateAccessToken,
 } from "./src/infrastructure/auth/supabase-auth";
 
@@ -37,7 +38,7 @@ function createContentSecurityPolicy(nonce: string) {
     `style-src ${styleSources.join(" ")}`,
     "img-src 'self' blob: data:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    `connect-src 'self' ${SUPABASE_ORIGIN}`,
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
     "object-src 'none'",

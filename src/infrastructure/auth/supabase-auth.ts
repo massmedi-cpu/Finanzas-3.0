@@ -1,7 +1,8 @@
 import type { NextResponse } from "next/server";
 import { AUTH_ACCESS_COOKIE, AUTH_REFRESH_COOKIE } from "./access-control";
 
-const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://btzukbfesxdratqnxuoj.supabase.co").replace(/\/+$/, "");
+export const SUPABASE_URL = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "https://btzukbfesxdratqnxuoj.supabase.co").replace(/\/+$/, "");
+export const SUPABASE_ORIGIN = new URL(SUPABASE_URL).origin;
 const SUPABASE_PUBLISHABLE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? "sb_publishable_1lp5YHmItK1HHayW8mcchg_xwuUrgo2";
 const AUTH_TIMEOUT_MS = 5_000;
 const REFRESH_COOKIE_MAX_AGE = 60 * 60 * 24 * 30;
