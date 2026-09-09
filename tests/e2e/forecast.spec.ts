@@ -199,7 +199,7 @@ test("forecast API rejects invalid inputs before persistence", async ({ request 
     data: { action: "manual", date: "2026-09-10", concept: "", amountCents: -100, confidence: "high" },
   });
   expect(invalidManual.status()).toBe(400);
-  await expect(invalidManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_idempotency_key" });
+  await expect(invalidManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_concept" });
 
   const missingIdempotency = await request.post("/api/forecast", {
     data: { action: "manual", date: "2026-09-10", concept: "Seguro", amountCents: -100, confidence: "high" },
