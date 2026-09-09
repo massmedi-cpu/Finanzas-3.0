@@ -22,6 +22,24 @@ function authClient() {
   });
 }
 
+async function clearWorkspaceScope(sql: any, failClosed: boolean) {
+  try {
+    // Un backend físico puede ser reciclado por un pooler. Antes de consultar siquiera
+    // memberships se restaura el session_user y se eliminan GUC de una petición anterior.
+    await sql.unsafe("reset role");
+    await sql`
+      select
+        pg_catalog.set_config('financial_app.workspace_id', '', false),
+        pg_catalog.set_config('financial_app.user_id', '', false)
+    `;
+  } catch (error) {
+    if (failClosed) {
+      throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
+    }
+    console.error("financial-app-workspace-reset", error instanceof Error ? error.message : String(error));
+  }
+}
+
 async function activateWorkspaceScope(sql: any, context: WorkspaceContext) {
   try {
     // PRE-001: la conexión llega como postgres únicamente para validar la membership.
@@ -38,24 +56,17 @@ async function activateWorkspaceScope(sql: any, context: WorkspaceContext) {
 }
 
 export async function resetWorkspaceScope(sql: any) {
-  try {
-    // Fail-safe para conexiones recicladas por poolers: no confiar únicamente en sql.end().
-    // RESET ROLE vuelve al session_user de infraestructura y luego limpia las GUC de tenant.
-    await sql.unsafe("reset role");
-    await sql`
-      select
-        pg_catalog.set_config('financial_app.workspace_id', '', false),
-        pg_catalog.set_config('financial_app.user_id', '', false)
-    `;
-  } catch (error) {
-    console.error("financial-app-workspace-reset", error instanceof Error ? error.message : String(error));
-  }
+  await clearWorkspaceScope(sql, false);
 }
 
 export async function resolveWorkspaceContext(
   request: Request,
   sql: any,
 ): Promise<WorkspaceContext> {
+  // Debe ser la primera operación SQL de la petición. Esto elimina contaminación de
+  // sesión incluso cuando el proveedor reutiliza un backend físico entre conexiones.
+  await clearWorkspaceScope(sql, true);
+
   const userToken = request.headers.get("x-financial-app-user-token")?.trim() ?? "";
   if (!userToken) {
     throw new WorkspaceContextError("workspace_context_required", 403);
