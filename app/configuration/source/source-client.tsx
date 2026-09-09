@@ -329,8 +329,8 @@ export default function SourceClient() {
     <main className="configuration-shell">
       <header className="configuration-hero">
         <div>
-          <a className="back-link" href="/">← Fundamentos</a>
-          <p className="eyebrow">FASE 2 · FUENTE OFICIAL</p>
+          <a className="back-link" href="/configuration">← Configuración</a>
+          <p className="eyebrow">FINANCIAL APP · FUENTE BANCARIA</p>
           <h1>Fuente bancaria</h1>
           <p className="hero-copy">
             Google Drive y Google Sheets se usan exclusivamente en lectura. La fuente original nunca se modifica;

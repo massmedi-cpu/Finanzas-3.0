@@ -1,7 +1,12 @@
+import AppShell from "../app-shell";
 import AccountsClient from "./accounts-client";
 
 export const dynamic = "force-dynamic";
 
 export default function AccountsPage() {
-  return <AccountsClient />;
+  return (
+    <AppShell>
+      <AccountsClient />
+    </AppShell>
+  );
 }

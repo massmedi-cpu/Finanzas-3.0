@@ -29,7 +29,9 @@ function databaseError(error: unknown) {
     message === "forecast_reconciliation_transaction_ineligible" ||
     message === "forecast_reconciliation_transfer_not_allowed" ||
     message === "forecast_reconciliation_account_mismatch" ||
-    message === "forecast_reconciliation_sign_mismatch"
+    message === "forecast_reconciliation_sign_mismatch" ||
+    message === "forecast_write_conflict" ||
+    message === "forecast_idempotency_conflict"
   ) {
     return json({ error: message }, 409);
   }
@@ -72,6 +74,18 @@ function requiredDate(value: unknown, field: string): string {
     throw new Error(`invalid_${field}`);
   }
   return value;
+}
+
+function timestampValue(value: unknown, field: string): string {
+  if (typeof value !== "string" || value.length > 64 || !value.trim()) throw new Error(`invalid_${field}`);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`invalid_${field}`);
+  return value;
+}
+
+function optionalTimestampValue(value: unknown, field: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  return timestampValue(value, field);
 }
 
 function safeInteger(value: unknown, field: string): number {
@@ -137,10 +151,19 @@ export async function handleForecastLogicAction(input: {
     const categoryId = nullableUuid(payload.categoryId, "forecast_category_id");
     const merchantId = nullableUuid(payload.merchantId, "forecast_merchant_id");
     const confidence = confidenceValue(payload.confidence ?? "high");
+    const idempotencyKey = nullableUuid(payload.idempotencyKey, "forecast_idempotency_key");
+    if (!idempotencyKey) {
+      return forecastQuery(() => sql`
+        select financial_app.save_manual_forecast_item(
+          ${date}::date,${concept},${amountCents}::bigint,
+          ${accountId}::uuid,${categoryId}::uuid,${merchantId}::uuid,${confidence}
+        ) as result
+      `);
+    }
     return forecastQuery(() => sql`
       select financial_app.save_manual_forecast_item(
         ${date}::date,${concept},${amountCents}::bigint,
-        ${accountId}::uuid,${categoryId}::uuid,${merchantId}::uuid,${confidence}
+        ${accountId}::uuid,${categoryId}::uuid,${merchantId}::uuid,${confidence},${idempotencyKey}::uuid
       ) as result
     `);
   }
@@ -149,9 +172,17 @@ export async function handleForecastLogicAction(input: {
     const id = requiredUuid(payload.id, "forecast_item_id");
     if (typeof payload.excluded !== "boolean") throw new Error("invalid_forecast_excluded");
     const reason = textValue(payload.reason ?? "", "forecast_excluded_reason", 500, !payload.excluded);
+    const expectedUpdatedAt = optionalTimestampValue(payload.expectedUpdatedAt, "forecast_expected_updated_at");
+    if (!expectedUpdatedAt) {
+      return forecastQuery(() => sql`
+        select financial_app.set_forecast_item_excluded(
+          ${id}::uuid,${payload.excluded}::boolean,${reason}
+        ) as result
+      `);
+    }
     return forecastQuery(() => sql`
       select financial_app.set_forecast_item_excluded(
-        ${id}::uuid,${payload.excluded}::boolean,${reason}
+        ${id}::uuid,${payload.excluded}::boolean,${reason},${expectedUpdatedAt}::timestamptz
       ) as result
     `);
   }
@@ -171,9 +202,17 @@ export async function handleForecastLogicAction(input: {
     const id = requiredUuid(payload.id, "forecast_item_id");
     const transactionId = nullableUuid(payload.transactionId, "forecast_transaction_id");
     const note = textValue(payload.note ?? "", "forecast_reconciliation_note", 500, true);
+    const expectedUpdatedAt = optionalTimestampValue(payload.expectedUpdatedAt, "forecast_expected_updated_at");
+    if (!expectedUpdatedAt) {
+      return forecastQuery(() => sql`
+        select financial_app.reconcile_forecast_item(
+          ${id}::uuid,${transactionId}::uuid,${note}
+        ) as result
+      `);
+    }
     return forecastQuery(() => sql`
       select financial_app.reconcile_forecast_item(
-        ${id}::uuid,${transactionId}::uuid,${note}
+        ${id}::uuid,${transactionId}::uuid,${note},${expectedUpdatedAt}::timestamptz
       ) as result
     `);
   }

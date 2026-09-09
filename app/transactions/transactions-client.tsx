@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -114,10 +114,14 @@ type EditorState = {
   note: string;
 };
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
 const NONE = "__none__";
 const UNCHANGED = "__unchanged__";
+const CONCEPT_ERROR_ID = "transaction-concept-error";
 
 const EMPTY_FILTERS: Filters = {
   q: "",
@@ -279,19 +283,28 @@ export default function TransactionsClient() {
   const [bulkReview, setBulkReview] = useState(UNCHANGED);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [conceptError, setConceptError] = useState("");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
   const [duplicateGroup, setDuplicateGroup] = useState<DuplicateGroupRow[]>([]);
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
+  const listRequestSequence = useRef(0);
+  const conceptInputRef = useRef<HTMLInputElement>(null);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
-    if (append) setLoadingMore(true);
-    else setLoading(true);
+    const requestSequence = ++listRequestSequence.current;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setLoadingMore(false);
+    }
     setError(null);
     try {
       const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, { cache: "no-store" });
       const payload = await response.json().catch(() => ({}));
+      if (requestSequence !== listRequestSequence.current) return;
       if (!response.ok) throw new Error(readableError(payload));
       const result = payload as QueryResponse;
       const incoming = Array.isArray(result.rows) ? result.rows : [];
@@ -301,6 +314,7 @@ export default function TransactionsClient() {
       setNextCursor(result.nextCursor ?? null);
       if (!append) setSelectedIds([]);
     } catch (cause) {
+      if (requestSequence !== listRequestSequence.current) return;
       setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
         setRows([]);
@@ -310,6 +324,7 @@ export default function TransactionsClient() {
         setSelectedIds([]);
       }
     } finally {
+      if (requestSequence !== listRequestSequence.current) return;
       if (append) setLoadingMore(false);
       else setLoading(false);
     }
@@ -333,9 +348,37 @@ export default function TransactionsClient() {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los filtros.");
       }
     }
+    const params = new URLSearchParams(window.location.search);
+    const accountId = params.get("accountId");
+    const categoryId = params.get("categoryId");
+    const merchantId = params.get("merchantId");
+    const kind = params.get("kind");
+    const reviewState = params.get("reviewState");
+    const duplicateState = params.get("duplicateState");
+    const dateFrom = params.get("dateFrom");
+    const dateTo = params.get("dateTo");
+    const safeDateFrom = dateFrom && DATE.test(dateFrom) ? dateFrom : "";
+    const safeDateTo = dateTo && DATE.test(dateTo) ? dateTo : "";
+    const safeDateRange = !safeDateFrom || !safeDateTo || safeDateFrom <= safeDateTo;
+    const initialFilters: Filters = {
+      ...EMPTY_FILTERS,
+      accountId: accountId && UUID.test(accountId) ? accountId : "",
+      categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
+      merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
+      kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
+      reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
+      duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+      dateFrom: safeDateRange ? safeDateFrom : "",
+      dateTo: safeDateRange ? safeDateTo : "",
+    };
+    setDraftFilters(initialFilters);
+    setAppliedFilters(initialFilters);
     void bootstrap();
-    void fetchPage(EMPTY_FILTERS, null, false);
-    return () => { cancelled = true; };
+    void fetchPage(initialFilters, null, false);
+    return () => {
+      cancelled = true;
+      listRequestSequence.current += 1;
+    };
   }, [fetchPage]);
 
   const activeFilterCount = useMemo(
@@ -375,6 +418,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     closeReview();
     void fetchPage(next, null, false);
   }
@@ -385,6 +429,7 @@ export default function TransactionsClient() {
     setNotice(null);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     closeReview();
     void fetchPage(EMPTY_FILTERS, null, false);
   }
@@ -438,6 +483,7 @@ export default function TransactionsClient() {
     setTransferCandidates([]);
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
     setError(null);
     setNotice(null);
     try {
@@ -485,6 +531,8 @@ export default function TransactionsClient() {
   function beginEdit(row: TransactionRow) {
     setEditingId(row.id);
     setEditor(editorFor(row));
+    setConceptError("");
+    setError(null);
     setNotice(null);
     closeReview();
   }
@@ -492,14 +540,18 @@ export default function TransactionsClient() {
   function cancelEdit() {
     setEditingId(null);
     setEditor(null);
+    setConceptError("");
   }
 
   async function saveEdit(row: TransactionRow) {
     if (!editor || editingId !== row.id) return;
     if (!editor.concept.trim()) {
-      setError("El concepto no puede quedar vacío.");
+      setError(null);
+      setConceptError("El concepto no puede quedar vacío.");
+      conceptInputRef.current?.focus();
       return;
     }
+    setConceptError("");
     await patchTransactions([row.id], individualPatch(row, editor), "Movimiento actualizado");
   }
 
@@ -533,7 +585,7 @@ export default function TransactionsClient() {
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
           <Link className={styles.backLink} href="/">← Financial App</Link>
-          <p className={styles.eyebrow}>FASE 4 · MOVIMIENTOS</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · MOVIMIENTOS</p>
           <h1>Movimientos</h1>
           <p>
             Consulta y gestiona el histórico persistido sin alterar el origen bancario. Cada cambio manual se
@@ -598,8 +650,8 @@ export default function TransactionsClient() {
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
         <div className={styles.filterActions}>
-          <button className={styles.primaryButton} type="submit" disabled={loading || saving}>Aplicar filtros</button>
-          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={loading || saving}>Limpiar</button>
+          <button className={styles.primaryButton} type="submit" disabled={saving}>Aplicar filtros</button>
+          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={saving}>Limpiar</button>
         </div>
       </form>
 
@@ -668,7 +720,22 @@ export default function TransactionsClient() {
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
                           <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>Solo se modifica la capa personal de overrides.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
                           <div className={styles.editorGrid}>
-                            <label className={styles.editorWide}><span>Concepto</span><input data-testid="edit-concept" value={editor.concept} maxLength={240} onChange={(event) => setEditor({ ...editor, concept: event.target.value })} /></label>
+                            <label className={styles.editorWide}>
+                              <span>Concepto</span>
+                              <input
+                                ref={conceptInputRef}
+                                data-testid="edit-concept"
+                                value={editor.concept}
+                                maxLength={240}
+                                aria-invalid={conceptError ? "true" : "false"}
+                                aria-describedby={conceptError ? CONCEPT_ERROR_ID : undefined}
+                                onChange={(event) => {
+                                  setEditor({ ...editor, concept: event.target.value });
+                                  if (conceptError) setConceptError("");
+                                }}
+                              />
+                              {conceptError ? <small id={CONCEPT_ERROR_ID} className={styles.fieldError} role="alert">{conceptError}</small> : null}
+                            </label>
                             <label><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>Automático/original</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
                             <label><span>Categoría</span><select data-testid="edit-category" value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })}><option value={INHERIT}>Automática/original</option><option value={NONE}>Sin categoría</option>{facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
                             <label><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>

@@ -1,5 +1,10 @@
+import AppShell from "../app-shell";
 import BudgetsClient from "./budgets-client";
 
 export default function BudgetsPage() {
-  return <BudgetsClient />;
+  return (
+    <AppShell>
+      <BudgetsClient />
+    </AppShell>
+  );
 }

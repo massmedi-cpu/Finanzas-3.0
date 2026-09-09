@@ -1,5 +1,10 @@
+import AppShell from "../app-shell";
 import TransactionsClient from "./transactions-client";
 
 export default function TransactionsPage() {
-  return <TransactionsClient />;
+  return (
+    <AppShell>
+      <TransactionsClient />
+    </AppShell>
+  );
 }

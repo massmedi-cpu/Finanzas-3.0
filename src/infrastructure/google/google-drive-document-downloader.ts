@@ -1,3 +1,4 @@
+import { documentBytesMatchMimeType } from "../../domain/document-content-signature";
 import type { GoogleAccessTokenProvider } from "./official-bank-source-reader";
 
 export const GOOGLE_DRIVE_OCR_MAX_BYTES = 15 * 1024 * 1024;
@@ -26,6 +27,7 @@ export class GoogleDriveDocumentError extends Error {
       | "google_drive_document_not_found"
       | "google_drive_document_metadata_invalid"
       | "google_drive_document_mime_mismatch"
+      | "google_drive_document_content_mismatch"
       | "google_drive_document_too_large"
       | "google_drive_document_download_failed",
     message: string,
@@ -180,6 +182,12 @@ export class GoogleDriveDocumentDownloader {
           ? "google_drive_document_too_large"
           : "google_drive_document_download_failed",
         "La descarga de Drive no coincide con el tamaño validado del archivo original.",
+      );
+    }
+    if (!documentBytesMatchMimeType(bytes, mimeType)) {
+      throw new GoogleDriveDocumentError(
+        "google_drive_document_content_mismatch",
+        "El contenido real del archivo de Drive no coincide con el tipo documental declarado.",
       );
     }
 

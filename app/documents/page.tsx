@@ -1,5 +1,10 @@
+import AppShell from "../app-shell";
 import { DocumentsClient } from "./documents-client";
 
 export default function DocumentsPage() {
-  return <DocumentsClient />;
+  return (
+    <AppShell>
+      <DocumentsClient />
+    </AppShell>
+  );
 }

@@ -24,6 +24,7 @@ type ForecastItem = {
   excludedReason: string;
   reconciliationNote: string;
   projectionKey: string | null;
+  updatedAt: string;
   status: "planned" | "excluded" | "confirmed";
   affectsProjection: boolean;
   projectionEffectCents: number;
@@ -106,11 +107,17 @@ type CandidateSnapshot = {
   candidates: Candidate[];
 };
 
+type ManualErrors = {
+  concept?: string;
+  amount?: string;
+};
+
 const money = new Intl.NumberFormat("es-ES", {
   style: "currency",
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -200,6 +207,144 @@ async function readJson(response: Response) {
   return body;
 }
 
+function ForecastBalanceCurve({ snapshot }: { snapshot: ForecastSnapshot }) {
+  const [activePoint, setActivePoint] = useState<string | null>(null);
+  const points = [
+    {
+      id: "opening",
+      label: "Saldo inicial",
+      date: snapshot.period.dateFrom,
+      balanceCents: snapshot.summary.openingBalanceCents,
+    },
+    ...snapshot.items.map((item) => ({
+      id: item.id,
+      label: item.concept,
+      date: item.date,
+      balanceCents: item.projectedBalanceAfterCents,
+    })),
+  ];
+  const balances = points.map((point) => point.balanceCents);
+  const minimum = Math.min(...balances);
+  const maximum = Math.max(...balances);
+  const range = Math.max(1, maximum - minimum);
+  const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
+  const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
+  const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
+
+  return (
+    <section
+      aria-label="Curva de saldo prevista"
+      style={{
+        marginTop: "1.25rem",
+        padding: "clamp(1rem, 2.2vw, 1.5rem)",
+        borderRadius: "24px",
+        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
+        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
+        display: "grid",
+        gap: "1rem",
+      }}
+    >
+      <div className={styles.sectionHeader}>
+        <div>
+          <p className={styles.eyebrow}>SALDO PROYECTADO</p>
+          <h2>Curva de saldo prevista</h2>
+        </div>
+        <span style={{ fontSize: ".82rem", opacity: .75 }}>Valores del motor de previsión · sin recálculo visual</span>
+      </div>
+
+      <div style={{ position: "relative", height: "15rem", borderRadius: "1rem", overflow: "visible", background: "rgba(255,255,255,.018)" }}>
+        <svg viewBox="0 0 1000 240" preserveAspectRatio="none" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
+          <defs>
+            <linearGradient id="forecast-curve-gradient" x1="0" x2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity=".45" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity=".95" />
+            </linearGradient>
+          </defs>
+          <line x1="0" x2="1000" y1="120" y2="120" stroke="currentColor" strokeOpacity=".08" strokeDasharray="8 12" />
+          <polyline points={polyline} fill="none" stroke="url(#forecast-curve-gradient)" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" />
+        </svg>
+
+        {points.map((point, index) => {
+          const id = `forecast-balance-${point.id}`;
+          const label = `${point.label} · ${formatDate(point.date)} · ${money.format(point.balanceCents / 100)}`;
+          return (
+            <div
+              key={point.id}
+              style={{
+                position: "absolute",
+                left: `${xFor(index)}%`,
+                top: `${coordinateFor(point.balanceCents)}%`,
+                transform: "translate(-50%, -50%)",
+              }}
+            >
+              <button
+                type="button"
+                aria-label={label}
+                onFocus={() => setActivePoint(id)}
+                onBlur={() => setActivePoint((current) => current === id ? null : current)}
+                onMouseEnter={() => setActivePoint(id)}
+                onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  borderRadius: "999px",
+                  border: 0,
+                  padding: 0,
+                  background: "radial-gradient(circle, currentColor 0 7px, transparent 8px)",
+                  boxShadow: "none",
+                  cursor: "default",
+                }}
+              />
+              {activePoint === id ? (
+                <div
+                  role="tooltip"
+                  style={{
+                    position: "absolute",
+                    zIndex: 6,
+                    left: "50%",
+                    bottom: "calc(100% + .7rem)",
+                    transform: "translateX(-50%)",
+                    padding: ".5rem .65rem",
+                    borderRadius: ".65rem",
+                    background: "var(--surface-elevated, #151922)",
+                    border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
+                    boxShadow: "0 10px 30px rgba(0,0,0,.28)",
+                    whiteSpace: "nowrap",
+                    fontSize: ".78rem",
+                  }}
+                >
+                  {point.label} · {money.format(point.balanceCents / 100)}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ overflowX: "auto" }}>
+        <table aria-label="Datos de la curva de saldo" style={{ width: "100%", borderCollapse: "collapse", minWidth: "34rem" }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Hito</th>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Fecha</th>
+              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>Saldo previsto</th>
+            </tr>
+          </thead>
+          <tbody>
+            {points.map((point) => (
+              <tr key={point.id}>
+                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{point.label}</th>
+                <td style={{ padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{formatDate(point.date)}</td>
+                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{money.format(point.balanceCents / 100)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
+}
+
 export function ForecastClient() {
   const today = useMemo(() => madridToday(), []);
   const initialFrom = useMemo(() => addDays(today, 1), [today]);
@@ -223,9 +368,16 @@ export function ForecastClient() {
   const [manualAmount, setManualAmount] = useState("");
   const [manualKind, setManualKind] = useState<"expense" | "income">("expense");
   const [manualConfidence, setManualConfidence] = useState<"high" | "medium" | "low">("high");
+  const [manualErrors, setManualErrors] = useState<ManualErrors>({});
   const [excludeReasons, setExcludeReasons] = useState<Record<string, string>>({});
+  const [excludeErrorFor, setExcludeErrorFor] = useState<string | null>(null);
   const [candidateFor, setCandidateFor] = useState<string | null>(null);
   const [candidateData, setCandidateData] = useState<CandidateSnapshot | null>(null);
+  const manualConceptRef = useRef<HTMLInputElement | null>(null);
+  const manualAmountRef = useRef<HTMLInputElement | null>(null);
+  const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
+  const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
+  const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const loadSnapshot = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -258,7 +410,13 @@ export function ForecastClient() {
       await task();
       await loadSnapshot();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "La operación no se ha podido completar");
+      const message = err instanceof Error ? err.message : "La operación no se ha podido completar";
+      if (message === "forecast_write_conflict") {
+        setError("La previsión cambió en otro lugar. He cargado la versión más reciente; revísala y vuelve a intentarlo.");
+        await loadSnapshot();
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(null);
     }
@@ -283,30 +441,50 @@ export function ForecastClient() {
   async function createManual(event: FormEvent) {
     event.preventDefault();
     const absoluteCents = parseEuroToCents(manualAmount);
-    if (absoluteCents === null || absoluteCents <= 0) {
-      setError("Introduce un importe válido con hasta dos decimales.");
-      return;
-    }
-    if (!manualConcept.trim()) {
-      setError("Escribe un concepto para la previsión manual.");
-      return;
-    }
+    const amountError = absoluteCents === null || absoluteCents <= 0
+      ? "Introduce un importe válido con hasta dos decimales."
+      : undefined;
+    const conceptError = !manualConcept.trim()
+      ? "Escribe un concepto para la previsión manual."
+      : undefined;
 
+    setManualErrors({ concept: conceptError, amount: amountError });
+    if (amountError || conceptError) {
+      setError(null);
+      setNotice(null);
+      window.requestAnimationFrame(() => {
+        if (conceptError) manualConceptRef.current?.focus();
+        else manualAmountRef.current?.focus();
+      });
+      return;
+    }
+    if (absoluteCents === null || absoluteCents <= 0) return;
+
+    const payload = {
+      action: "manual",
+      date: manualDate,
+      concept: manualConcept.trim(),
+      amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
+      accountId: null,
+      categoryId: null,
+      merchantId: null,
+      confidence: manualConfidence,
+    };
+    const fingerprint = JSON.stringify(payload);
+    const previousRequest = manualRequestRef.current;
+    const idempotencyKey = previousRequest?.fingerprint === fingerprint
+      ? previousRequest.key
+      : crypto.randomUUID();
+    manualRequestRef.current = { fingerprint, key: idempotencyKey };
+
+    setManualErrors({});
     await runMutation("manual", async () => {
       await readJson(await fetch("/api/forecast", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "manual",
-          date: manualDate,
-          concept: manualConcept.trim(),
-          amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
-          accountId: null,
-          categoryId: null,
-          merchantId: null,
-          confidence: manualConfidence,
-        }),
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify(payload),
       }));
+      manualRequestRef.current = null;
       setManualConcept("");
       setManualAmount("");
       setNotice("Previsión manual añadida.");
@@ -317,17 +495,27 @@ export function ForecastClient() {
     const nextExcluded = !item.excluded;
     const reason = nextExcluded ? (excludeReasons[item.id] ?? "").trim() : "";
     if (nextExcluded && !reason) {
-      setError("Indica el motivo antes de excluir un elemento previsto.");
+      setError(null);
+      setNotice(null);
+      setExcludeErrorFor(item.id);
+      window.requestAnimationFrame(() => document.getElementById(`exclude-reason-${item.id}`)?.focus());
       return;
     }
 
+    setExcludeErrorFor((current) => current === item.id ? null : current);
     await runMutation(`exclude:${item.id}`, async () => {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "exclude", id: item.id, excluded: nextExcluded, reason }),
+        body: JSON.stringify({
+          action: "exclude",
+          id: item.id,
+          excluded: nextExcluded,
+          reason,
+          expectedUpdatedAt: item.updatedAt,
+        }),
       }));
-      setNotice(nextExcluded ? "Elemento excluido del cash flow previsto." : "Elemento restaurado en la previsión.");
+      setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
     });
   }
 
@@ -340,12 +528,20 @@ export function ForecastClient() {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
       setCandidateData(data as CandidateSnapshot);
+      window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");
       setCandidateFor(null);
+      window.requestAnimationFrame(() => candidateTriggerRefs.current[item.id]?.focus());
     } finally {
       setBusy(null);
     }
+  }
+
+  function closeCandidates(itemId: string) {
+    setCandidateFor(null);
+    setCandidateData(null);
+    window.requestAnimationFrame(() => candidateTriggerRefs.current[itemId]?.focus());
   }
 
   async function reconcile(item: ForecastItem, transactionId: string | null) {
@@ -358,6 +554,7 @@ export function ForecastClient() {
           id: item.id,
           transactionId,
           note: transactionId ? "Conciliado desde Previsión" : "",
+          expectedUpdatedAt: item.updatedAt,
         }),
       }));
       setCandidateFor(null);
@@ -372,10 +569,10 @@ export function ForecastClient() {
     <main className={styles.page}>
       <header className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 8</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · PREVISIÓN</p>
           <h1>Previsión</h1>
           <p className={styles.lead}>
-            Calendario financiero futuro con cash flow estimado, recurrencias confirmadas y conciliación contra movimientos reales.
+            Anticipa ingresos y gastos, revisa recurrencias y comprueba cómo pueden cambiar tus saldos en las próximas semanas.
           </p>
         </div>
         <div className={styles.heroActions}>
@@ -418,6 +615,8 @@ export function ForecastClient() {
             </article>
           </section>
 
+          <ForecastBalanceCurve snapshot={snapshot} />
+
           <section className={styles.mainGrid}>
             <div className={styles.timelinePanel}>
               <div className={styles.sectionHeader}>
@@ -439,7 +638,10 @@ export function ForecastClient() {
                 </div>
               ) : (
                 <div className={styles.timeline}>
-                  {items.map((item) => (
+                  {items.map((item) => {
+                    const excludeErrorId = `exclude-reason-error-${item.id}`;
+                    const candidatesId = `forecast-candidates-${item.id}`;
+                    return (
                     <article key={item.id} className={`${styles.itemCard} ${styles[item.status]}`}>
                       <div className={styles.itemDate}>
                         <span>{formatDate(item.date)}</span>
@@ -472,13 +674,27 @@ export function ForecastClient() {
                           {item.status !== "confirmed" ? (
                             <>
                               {!item.excluded ? (
-                                <input
-                                  className={styles.reasonInput}
-                                  placeholder="Motivo para excluir"
-                                  value={excludeReasons[item.id] ?? ""}
-                                  onChange={(event) => setExcludeReasons((current) => ({ ...current, [item.id]: event.target.value }))}
-                                  aria-label={`Motivo para excluir ${item.concept}`}
-                                />
+                                <>
+                                  <input
+                                    id={`exclude-reason-${item.id}`}
+                                    className={styles.reasonInput}
+                                    placeholder="Motivo para excluir"
+                                    value={excludeReasons[item.id] ?? ""}
+                                    onChange={(event) => {
+                                      const value = event.target.value;
+                                      setExcludeReasons((current) => ({ ...current, [item.id]: value }));
+                                      if (excludeErrorFor === item.id && value.trim()) setExcludeErrorFor(null);
+                                    }}
+                                    aria-label={`Motivo para excluir ${item.concept}`}
+                                    aria-invalid={excludeErrorFor === item.id || undefined}
+                                    aria-describedby={excludeErrorFor === item.id ? excludeErrorId : undefined}
+                                  />
+                                  {excludeErrorFor === item.id ? (
+                                    <span id={excludeErrorId} className={styles.fieldError} role="alert">
+                                      Indica el motivo antes de excluir un elemento previsto.
+                                    </span>
+                                  ) : null}
+                                </>
                               ) : null}
                               <button
                                 className={styles.ghostButton}
@@ -492,9 +708,12 @@ export function ForecastClient() {
 
                           {item.status === "planned" ? (
                             <button
+                              ref={(node) => { candidateTriggerRefs.current[item.id] = node; }}
                               className={styles.ghostButton}
                               onClick={() => void loadCandidates(item)}
                               disabled={busy !== null}
+                              aria-expanded={candidateFor === item.id}
+                              aria-controls={candidatesId}
                             >
                               {busy === `candidates:${item.id}` ? "Buscando…" : "Buscar movimiento real"}
                             </button>
@@ -512,10 +731,10 @@ export function ForecastClient() {
                         </div>
 
                         {candidateFor === item.id ? (
-                          <div className={styles.candidates}>
+                          <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
                             <div className={styles.candidateHeader}>
                               <strong>Candidatos reales ±7 días</strong>
-                              <button className={styles.textButton} onClick={() => { setCandidateFor(null); setCandidateData(null); }}>Cerrar</button>
+                              <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
                             </div>
                             {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
                               <div key={candidate.transactionId} className={styles.candidateRow}>
@@ -535,7 +754,7 @@ export function ForecastClient() {
                         ) : null}
                       </div>
                     </article>
-                  ))}
+                  );})}
                 </div>
               )}
             </div>
@@ -548,12 +767,44 @@ export function ForecastClient() {
                     <h2>Añadir previsión</h2>
                   </div>
                 </div>
-                <form className={styles.manualForm} onSubmit={(event) => void createManual(event)}>
+                <form className={styles.manualForm} onSubmit={(event) => void createManual(event)} noValidate>
                   <label>Fecha<input type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} required /></label>
-                  <label>Concepto<input value={manualConcept} maxLength={240} onChange={(event) => setManualConcept(event.target.value)} placeholder="Ej. Seguro anual" required /></label>
+                  <label>
+                    Concepto
+                    <input
+                      id="forecast-manual-concept"
+                      ref={manualConceptRef}
+                      value={manualConcept}
+                      maxLength={240}
+                      onChange={(event) => {
+                        setManualConcept(event.target.value);
+                        if (manualErrors.concept) setManualErrors((current) => ({ ...current, concept: undefined }));
+                      }}
+                      placeholder="Ej. Seguro anual"
+                      aria-invalid={Boolean(manualErrors.concept) || undefined}
+                      aria-describedby={manualErrors.concept ? "forecast-manual-concept-error" : undefined}
+                    />
+                    {manualErrors.concept ? <span id="forecast-manual-concept-error" className={styles.fieldError} role="alert">{manualErrors.concept}</span> : null}
+                  </label>
                   <div className={styles.formSplit}>
                     <label>Tipo<select value={manualKind} onChange={(event) => setManualKind(event.target.value as "expense" | "income")}><option value="expense">Gasto</option><option value="income">Ingreso</option></select></label>
-                    <label>Importe<input inputMode="decimal" value={manualAmount} onChange={(event) => setManualAmount(event.target.value)} placeholder="0,00" required /></label>
+                    <label>
+                      Importe
+                      <input
+                        id="forecast-manual-amount"
+                        ref={manualAmountRef}
+                        inputMode="decimal"
+                        value={manualAmount}
+                        onChange={(event) => {
+                          setManualAmount(event.target.value);
+                          if (manualErrors.amount) setManualErrors((current) => ({ ...current, amount: undefined }));
+                        }}
+                        placeholder="0,00"
+                        aria-invalid={Boolean(manualErrors.amount) || undefined}
+                        aria-describedby={manualErrors.amount ? "forecast-manual-amount-error" : undefined}
+                      />
+                      {manualErrors.amount ? <span id="forecast-manual-amount-error" className={styles.fieldError} role="alert">{manualErrors.amount}</span> : null}
+                    </label>
                   </div>
                   <label>Confianza<select value={manualConfidence} onChange={(event) => setManualConfidence(event.target.value as "high" | "medium" | "low")}><option value="high">Alta</option><option value="medium">Media</option><option value="low">Baja</option></select></label>
                   <button className={styles.primaryButton} type="submit" disabled={busy !== null}>{busy === "manual" ? "Guardando…" : "Añadir al calendario"}</button>
@@ -579,9 +830,9 @@ export function ForecastClient() {
                 <h2>Cómo se calcula</h2>
                 <ul className={styles.principles}>
                   <li>Fuente bancaria oficial: <strong>solo lectura</strong>.</li>
-                  <li>Saldo inicial: motor central de saldos financieros.</li>
+                  <li>Saldo inicial: saldos actuales de tus cuentas.</li>
                   <li>Recurrencias: solo las confirmadas como activas.</li>
-                  <li>Excluidos y confirmados no vuelven a impactar el cash flow futuro.</li>
+                  <li>Los elementos excluidos o ya confirmados no vuelven a afectar al saldo previsto.</li>
                   <li>Consultar la previsión no modifica datos.</li>
                 </ul>
                 {snapshot.balanceContext.quality.integrityDeltaAccounts > 0 ? (

@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { APP_VERSION, TARGET_VERSION } from "../../src/core/build-info";
 import { handleFinancialLogicAction } from "../../supabase/functions/financial-app-db-gateway/financial-logic";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
@@ -91,8 +92,8 @@ test("protected preview keeps the validated Phase 5 financial contract in later 
   expect(response.ok()).toBeTruthy();
   const build = await response.json();
 
-  expect(build.version).toBe("10.0.0");
-  expect(build.targetVersion).toBe("10.0.0");
+  expect(build.version).toBe(APP_VERSION);
+  expect(build.targetVersion).toBe(TARGET_VERSION);
   expect(Number.isInteger(build.phase)).toBeTruthy();
   expect(build.phase).toBeGreaterThanOrEqual(5);
   expect(build.environment).toBe("preview");

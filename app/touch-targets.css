@@ -1,0 +1,7 @@
+@media (max-width: 480px) {
+  a[href="/"] {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}

@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
+import { APP_VERSION } from "../src/core/build-info";
 import "./globals.css";
+import "./touch-targets.css";
 
 export const metadata: Metadata = {
-  title: "Financial App 10.0.0",
-  description: "Financial App 10.0.0 · finanzas personales seguras, acumulativas y verificadas",
+  title: `Financial App ${APP_VERSION}`,
+  description: `Financial App ${APP_VERSION} · finanzas personales seguras, acumulativas y verificadas`,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

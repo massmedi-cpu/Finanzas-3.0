@@ -36,6 +36,13 @@ function dateValue(value: unknown, code: string) {
   return value;
 }
 
+function timestampValue(value: unknown, code: string) {
+  if (typeof value !== "string" || !value.trim() || value.length > 64) throw new Error(code);
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) throw new Error(code);
+  return value;
+}
+
 function integerValue(value: unknown, code: string, min?: number, max?: number) {
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(code);
   if ((min !== undefined && value < min) || (max !== undefined && value > max)) throw new Error(code);
@@ -135,7 +142,11 @@ export async function POST(request: Request) {
         merchantId: nullableUuid(row.merchantId, "invalid_forecast_merchant_id"),
         confidence: confidenceValue(row.confidence ?? "high"),
       };
-      const result = await callPersistenceGateway("forecast.manual", payload);
+      const idempotencyKey = requiredUuid(
+        request.headers.get("idempotency-key") ?? row.idempotencyKey,
+        "invalid_forecast_idempotency_key",
+      );
+      const result = await callPersistenceGateway("forecast.manual", { ...payload, idempotencyKey });
       return Response.json(result, { headers: HEADERS });
     }
 
@@ -154,14 +165,16 @@ export async function PATCH(request: Request) {
     if (action === "exclude") {
       if (typeof row.excluded !== "boolean") throw new Error("invalid_forecast_excluded");
       const reason = stringValue(row.reason ?? "", "invalid_forecast_excluded_reason", 500, !row.excluded);
-      const result = await callPersistenceGateway("forecast.exclude", { id, excluded: row.excluded, reason });
+      const expectedUpdatedAt = timestampValue(row.expectedUpdatedAt, "invalid_forecast_expected_updated_at");
+      const result = await callPersistenceGateway("forecast.exclude", { id, excluded: row.excluded, reason, expectedUpdatedAt });
       return Response.json(result, { headers: HEADERS });
     }
 
     if (action === "reconcile") {
       const transactionId = nullableUuid(row.transactionId, "invalid_forecast_transaction_id");
       const note = stringValue(row.note ?? "", "invalid_forecast_reconciliation_note", 500, true);
-      const result = await callPersistenceGateway("forecast.reconcile", { id, transactionId, note });
+      const expectedUpdatedAt = timestampValue(row.expectedUpdatedAt, "invalid_forecast_expected_updated_at");
+      const result = await callPersistenceGateway("forecast.reconcile", { id, transactionId, note, expectedUpdatedAt });
       return Response.json(result, { headers: HEADERS });
     }
 

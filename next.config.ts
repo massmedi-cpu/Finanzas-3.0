@@ -16,10 +16,24 @@ const ocrRuntimeAssets = [
 ];
 
 const nextConfig: NextConfig = {
+  poweredByHeader: false,
   serverExternalPackages: ["@napi-rs/canvas"],
   outputFileTracingIncludes: {
     "/api/documents": ocrRuntimeAssets,
     "/api/documents/ocr": ocrRuntimeAssets,
+  },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Permissions-Policy", value: "geolocation=(), microphone=(), payment=(), usb=()" },
+        ],
+      },
+    ];
   },
 };
 

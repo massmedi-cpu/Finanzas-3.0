@@ -277,11 +277,11 @@ export default function AccountsClient() {
     <main className={styles.shell}>
       <header className={styles.hero}>
         <div>
-          <Link className={styles.backLink} href="/">← Financial App</Link>
-          <p className={styles.eyebrow}>FASE 10 · CUENTAS</p>
+          <Link className={styles.backLink} href="/">← Inicio</Link>
+          <p className={styles.eyebrow}>CUENTAS</p>
           <h1>Tu dinero, cuenta por cuenta</h1>
           <p className={styles.heroText}>
-            Una vista financiera construida sobre el motor central: saldo bancario, actividad mensual y movimientos sin recalcular ni alterar la fuente original.
+            Consulta el saldo de cada cuenta, su actividad mensual y sus últimos movimientos sin modificar la fuente bancaria.
           </p>
           <div className={styles.principles} aria-label="Principios de la vista de cuentas">
             <span>Fuente bancaria · solo lectura</span>
@@ -289,8 +289,8 @@ export default function AccountsClient() {
             <span>EUR · es-ES</span>
           </div>
         </div>
-        <div className={styles.totalCard} aria-label="Disponible total">
-          <span>Disponible total</span>
+        <div className={styles.totalCard} aria-label="Saldo total en cuentas">
+          <span>Saldo total en cuentas</span>
           <strong>{balances ? formatMoney(balances.activeBalanceCents) : "—"}</strong>
           <small>{activeCount} {activeCount === 1 ? "cuenta activa" : "cuentas activas"} · datos hasta {formatDate(balanceDate)}</small>
         </div>
@@ -302,7 +302,7 @@ export default function AccountsClient() {
         <aside className={styles.accountsPanel}>
           <div className={styles.panelHeader}>
             <div>
-              <p className={styles.sectionEyebrow}>PATRIMONIO DISPONIBLE</p>
+              <p className={styles.sectionEyebrow}>SALDOS EN CUENTAS</p>
               <h2>Cuentas</h2>
             </div>
             <button
@@ -356,7 +356,7 @@ export default function AccountsClient() {
             <div className={styles.emptyDetail}>
               <span aria-hidden="true">◎</span>
               <h2>Selecciona una cuenta</h2>
-              <p>El detalle utiliza exactamente el mismo motor financiero que el resto de Financial App.</p>
+              <p>Elige una cuenta para ver su saldo, evolución y movimientos recientes.</p>
             </div>
           ) : (
             <>
@@ -367,7 +367,7 @@ export default function AccountsClient() {
                   <p>
                     {selectedAccount.balanceSource === "bank_explicit"
                       ? `Saldo confirmado por el banco el ${formatDate(selectedAccount.explicitBalanceDate)}`
-                      : "Saldo reconstruido por el motor financiero"}
+                      : "Saldo reconstruido a partir de los movimientos"}
                   </p>
                 </div>
                 <div className={styles.currentBalance}>

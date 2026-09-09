@@ -71,6 +71,11 @@ const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
+const exactPercentFormatter = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
 function currentMonthMadrid() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     year: "numeric",
@@ -204,9 +209,12 @@ function statusLabel(status: BudgetStatus) {
 function BudgetCard({
   item,
   total = false,
+  monthStart,
+  monthEnd,
   busy,
   editing,
   editValue,
+  fieldError,
   onStartEdit,
   onChangeEdit,
   onCancelEdit,
@@ -215,9 +223,12 @@ function BudgetCard({
 }: {
   item: BudgetItem;
   total?: boolean;
+  monthStart: string;
+  monthEnd: string;
   busy: boolean;
   editing: boolean;
   editValue: string;
+  fieldError: string;
   onStartEdit: () => void;
   onChangeEdit: (value: string) => void;
   onCancelEdit: () => void;
@@ -225,6 +236,17 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const remainingLabel = item.remainingCents >= 0 ? "Disponible" : "Exceso";
+  const inputRef = useRef<HTMLInputElement>(null);
+  const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
+  const excessCents = Math.max(0, -item.remainingCents);
+  const excessPercent = item.effectiveAmountCents > 0 ? (excessCents / item.effectiveAmountCents) * 100 : null;
+  const causalHref = item.categoryId
+    ? `/transactions?dateFrom=${monthStart}&dateTo=${monthEnd}&kind=expense&categoryId=${encodeURIComponent(item.categoryId)}`
+    : null;
+
+  useEffect(() => {
+    if (fieldError) inputRef.current?.focus();
+  }, [fieldError]);
 
   return (
     <article className={`${styles.budgetCard} ${total ? styles.budgetCardPrimary : ""}`}>
@@ -270,6 +292,48 @@ function BudgetCard({
         />
       </div>
 
+      {!total && item.status === "over" && causalHref ? (
+        <div
+          role="group"
+          aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
+          data-budget-state={item.status}
+          style={{
+            marginTop: ".9rem",
+            padding: ".85rem .95rem",
+            borderRadius: ".9rem",
+            border: "1px solid rgba(255,118,139,.28)",
+            background: "linear-gradient(135deg, rgba(255,91,118,.10), rgba(255,255,255,.025))",
+            display: "grid",
+            gap: ".55rem",
+          }}
+        >
+          <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
+            <strong>Exceso {formatMoney(excessCents)}</strong>
+            <span style={{ fontVariantNumeric: "tabular-nums" }}>
+              {excessPercent === null ? "Sin base de comparación" : `${exactPercentFormatter.format(excessPercent)} % sobre el límite`}
+            </span>
+          </div>
+          <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
+            <div
+              style={{
+                width: `${Math.min(100, excessPercent ?? 0)}%`,
+                minWidth: excessCents > 0 ? ".45rem" : 0,
+                height: "100%",
+                borderRadius: "inherit",
+                background: "linear-gradient(90deg, rgba(255,103,130,.78), rgba(255,171,111,.82))",
+              }}
+            />
+          </div>
+          <Link
+            href={causalHref}
+            aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
+            style={{ width: "fit-content", fontWeight: 700, textDecoration: "none" }}
+          >
+            Ver movimientos que explican el gasto
+          </Link>
+        </div>
+      ) : null}
+
       <div className={styles.cardActions}>
         <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editing}>
           {item.manualAmountCents === null ? "Fijar límite manual" : "Editar límite manual"}
@@ -290,12 +354,24 @@ function BudgetCard({
             Importe mensual (€)
             <input
               autoFocus
+              ref={inputRef}
               inputMode="decimal"
               value={editValue}
               onChange={(event) => onChangeEdit(event.target.value)}
               placeholder={euroInputFromCents(item.effectiveAmountCents)}
               aria-label={`Presupuesto manual de ${total ? "total mensual" : item.categoryName ?? "categoría"}`}
+              aria-invalid={fieldError ? "true" : "false"}
+              aria-describedby={fieldError ? fieldErrorId : undefined}
             />
+            {fieldError ? (
+              <span
+                id={fieldErrorId}
+                role="alert"
+                style={{ color: "#ff9aaa", fontSize: "0.875rem", lineHeight: 1.35 }}
+              >
+                {fieldError}
+              </span>
+            ) : null}
           </label>
           <div className={styles.editorButtons}>
             <button className={styles.secondaryButton} type="button" onClick={onCancelEdit} disabled={busy}>Cancelar</button>
@@ -306,7 +382,7 @@ function BudgetCard({
 
       {total ? (
         <p className={styles.helper}>
-          El gasto real procede del motor financiero central. El presupuesto nunca altera movimientos ni datos de la fuente bancaria.
+          El gasto mostrado procede de tus movimientos. El presupuesto nunca modifica la fuente bancaria.
         </p>
       ) : null}
     </article>
@@ -322,6 +398,7 @@ export default function BudgetsClient() {
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
+  const [fieldError, setFieldError] = useState("");
   const fetchGeneration = useRef(0);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
@@ -329,6 +406,7 @@ export default function BudgetsClient() {
     setLoading(true);
     setError("");
     setNotice("");
+    setFieldError("");
     try {
       const response = await fetch(`/api/budgets?month=${encodeURIComponent(selectedMonth)}`, {
         cache: "no-store",
@@ -363,6 +441,7 @@ export default function BudgetsClient() {
     setBusy(true);
     setError("");
     setNotice("");
+    setFieldError("");
     try {
       const response = await fetch("/api/budgets", {
         method,
@@ -392,17 +471,30 @@ export default function BudgetsClient() {
     const key = item.categoryId ?? "__total__";
     setError("");
     setNotice("");
+    setFieldError("");
     setEditingKey(key);
     setEditValue(euroInputFromCents(item.manualAmountCents ?? item.effectiveAmountCents));
+  }, []);
+
+  const changeEditValue = useCallback((value: string) => {
+    setEditValue(value);
+    setFieldError("");
+  }, []);
+
+  const cancelEdit = useCallback(() => {
+    setEditingKey(null);
+    setFieldError("");
   }, []);
 
   const saveManual = useCallback((item: BudgetItem) => {
     const cents = parseEuroInput(editValue);
     if (cents === undefined || cents === null) {
-      setError("Introduce un importe válido con un máximo de dos decimales.");
+      setError("");
+      setFieldError("Introduce un importe válido con un máximo de dos decimales.");
       setNotice("");
       return;
     }
+    setFieldError("");
     void mutate(
       "PATCH",
       { month, categoryId: item.categoryId, manualAmountCents: cents },
@@ -432,11 +524,10 @@ export default function BudgetsClient() {
       <section className={styles.hero} aria-labelledby="budget-title">
         <div className={styles.heroCopy}>
           <Link className={styles.backLink} href="/">← Inicio</Link>
-          <p className={styles.eyebrow}>FINANCIAL APP · FASE 6</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
-            Control mensual con un único motor central: recomendación automática basada en tus gastos reales,
-            límites manuales auditables y consumo calculado sin modificar nunca la fuente bancaria.
+            Controla cuánto quieres gastar cada mes, compara el límite con tus gastos reales y ajusta las categorías cuando lo necesites.
           </p>
         </div>
 
@@ -518,12 +609,15 @@ export default function BudgetsClient() {
                     <BudgetCard
                       item={snapshot.total}
                       total
+                      monthStart={snapshot.monthStart}
+                      monthEnd={snapshot.monthEnd}
                       busy={busy}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
+                      fieldError={editingKey === "__total__" ? fieldError : ""}
                       onStartEdit={() => startEdit(snapshot.total)}
-                      onChangeEdit={setEditValue}
-                      onCancelEdit={() => setEditingKey(null)}
+                      onChangeEdit={changeEditValue}
+                      onCancelEdit={cancelEdit}
                       onSave={() => saveManual(snapshot.total)}
                       onClearManual={() => clearManual(snapshot.total)}
                     />
@@ -532,12 +626,15 @@ export default function BudgetsClient() {
                       <BudgetCard
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
+                        monthStart={snapshot.monthStart}
+                        monthEnd={snapshot.monthEnd}
                         busy={busy}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
+                        fieldError={editingKey === item.categoryId ? fieldError : ""}
                         onStartEdit={() => startEdit(item)}
-                        onChangeEdit={setEditValue}
-                        onCancelEdit={() => setEditingKey(null)}
+                        onChangeEdit={changeEditValue}
+                        onCancelEdit={cancelEdit}
                         onSave={() => saveManual(item)}
                         onClearManual={() => clearManual(item)}
                       />
@@ -548,8 +645,7 @@ export default function BudgetsClient() {
                         <span className={styles.cardIcon} style={{ margin: "0 auto" }}><Icon name="category" /></span>
                         <strong>No hay categorías de gasto activas</strong>
                         <p>
-                          El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí
-                          automáticamente con su recomendación y consumo real, sin duplicar cálculos en el cliente.
+                          El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí con su recomendación y consumo real.
                         </p>
                         <Link href="/configuration">Abrir Configuración</Link>
                       </div>
@@ -563,7 +659,7 @@ export default function BudgetsClient() {
                   <div className={styles.panelHeading}>
                     <div>
                       <h2>Cómo se calcula</h2>
-                      <p>Reglas visibles y auditables del motor.</p>
+                      <p>Reglas visibles para entender el presupuesto.</p>
                     </div>
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
@@ -584,12 +680,12 @@ export default function BudgetsClient() {
                   <p className={styles.explanation}>{snapshot.total.automaticExplanation}</p>
 
                   <div className={styles.principles}>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Fuente bancaria estrictamente de solo lectura.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>El gasto real sale de <code>financial_transaction_facts()</code>, la misma fuente de verdad de F5.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las transferencias no consumen presupuesto.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>La fuente bancaria se mantiene estrictamente en solo lectura.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>El gasto se calcula con los mismos movimientos efectivos que utiliza el resto de Financial App.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las transferencias internas no consumen presupuesto.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>Los duplicados confirmados y las exclusiones manuales no consumen presupuesto.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite manual tiene prioridad sin destruir la recomendación automática.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las categorías padre agregan sus subcategorías para evitar dobles cálculos.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite manual tiene prioridad sin borrar la recomendación automática.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Las categorías padre incluyen sus subcategorías para evitar contar el mismo gasto dos veces.</span></div>
                   </div>
                 </div>
               </aside>

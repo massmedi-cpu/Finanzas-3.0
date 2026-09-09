@@ -1,9 +1,20 @@
 import {
+  GoogleDriveDocumentDownloader,
+  GoogleDriveDocumentError,
+} from "../../../src/infrastructure/google/google-drive-document-downloader";
+import {
+  GOOGLE_DOCUMENT_READONLY_SCOPES,
+  GoogleServiceAccountAccessTokenProvider,
+  GoogleServiceAccountError,
+  getGoogleServiceAccountCredentialsFromEnvironment,
+} from "../../../src/infrastructure/google/google-service-account";
+import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -12,6 +23,7 @@ const TYPES = new Set(["ticket", "invoice", "other"]);
 const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
 const METHODS = new Set(["manual", "suggested"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
 function objectBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_document_body");
@@ -71,7 +83,37 @@ function mimeValue(value: unknown) {
   return value.toLowerCase();
 }
 
+function driveDownloader() {
+  if (!googleDriveDownloader) {
+    const credentials = getGoogleServiceAccountCredentialsFromEnvironment();
+    const accessTokens = new GoogleServiceAccountAccessTokenProvider(
+      credentials,
+      fetch,
+      Date.now,
+      GOOGLE_DOCUMENT_READONLY_SCOPES,
+    );
+    googleDriveDownloader = new GoogleDriveDocumentDownloader(accessTokens);
+  }
+  return googleDriveDownloader;
+}
+
 function apiError(error: unknown) {
+  if (error instanceof GoogleDriveDocumentError) {
+    const status: Record<GoogleDriveDocumentError["code"], number> = {
+      google_drive_document_id_invalid: 400,
+      google_drive_document_access_denied: 409,
+      google_drive_document_not_found: 404,
+      google_drive_document_metadata_invalid: 409,
+      google_drive_document_mime_mismatch: 415,
+      google_drive_document_content_mismatch: 415,
+      google_drive_document_too_large: 413,
+      google_drive_document_download_failed: 503,
+    };
+    return Response.json({ error: "invalid_drive_document", code: error.code }, { status: status[error.code], headers: HEADERS });
+  }
+  if (error instanceof GoogleServiceAccountError) {
+    return Response.json({ error: "drive_reader_unavailable", code: error.code }, { status: 503, headers: HEADERS });
+  }
   if (error instanceof PersistenceGatewayError) {
     if (error.status === 404) return Response.json({ error: "not_found", code: error.code ?? null }, { status: 404, headers: HEADERS });
     if (error.status === 409) return Response.json({ error: "conflict", code: error.code ?? null }, { status: 409, headers: HEADERS });
@@ -167,7 +209,20 @@ export async function POST(request: Request) {
           modifiedTime: nullableText(item.modifiedTime, "invalid_document_source_modified_at", 80),
         };
       });
-      const result = await callPersistenceGateway("document.drive_batch", { files });
+
+      const verifiedFiles = [];
+      const downloader = driveDownloader();
+      for (const file of files) {
+        const downloaded = await downloader.download({ fileId: file.fileId, expectedMimeType: file.mimeType });
+        verifiedFiles.push({
+          ...file,
+          name: downloaded.fileName ?? file.name,
+          mimeType: downloaded.mimeType,
+          sizeBytes: downloaded.sizeBytes,
+        });
+      }
+
+      const result = await callPersistenceGateway("document.drive_batch", { files: verifiedFiles });
       return Response.json(result, { headers: HEADERS });
     }
 

@@ -1,11 +1,10 @@
+import AppShell from "./app-shell";
 import DashboardClient from "./dashboard-client";
-import { getBuildInfo } from "../src/core/build-info";
 import { runCompleteFoundationHealthChecks } from "../src/core/foundation-gate";
 
 export const dynamic = "force-dynamic";
 
 export default function Home() {
-  const build = getBuildInfo();
   const health = runCompleteFoundationHealthChecks();
 
   if (health.status !== "ok") {
@@ -13,5 +12,9 @@ export default function Home() {
     throw new Error(`Fundamentos no válidos: ${failedChecks}`);
   }
 
-  return <DashboardClient phaseLabel={`Fase ${build.phase} · ${build.phaseName}`} />;
+  return (
+    <AppShell>
+      <DashboardClient />
+    </AppShell>
+  );
 }
