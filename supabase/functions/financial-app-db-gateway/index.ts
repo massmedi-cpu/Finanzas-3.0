@@ -35,6 +35,54 @@ const TEST_CATEGORY_IDS = [
 const MAX_COMPRESSED_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_DECOMPRESSED_GATEWAY_BODY_BYTES = 16 * 1024 * 1024;
 
+const PREVIEW_READ_ONLY_ACTIONS = new Set([
+  "source.capabilities",
+  "health",
+  "test.invariants",
+  "account.list",
+  "account.get",
+  "category.list",
+  "category.get",
+  "merchant.list",
+  "merchant_alias.list",
+  "merchant.resolve",
+  "rule.list",
+  "rule.evaluate",
+  "transaction.query",
+  "transaction.facets",
+  "transaction.duplicate_group",
+  "transaction.transfer_candidates",
+  "financial.period",
+  "financial.monthly",
+  "financial.accounts",
+  "financial.account",
+  "budget.snapshot",
+  "recurrence.snapshot",
+  "forecast.snapshot",
+  "forecast.candidates",
+  "document.list",
+  "document.detail",
+  "document.candidates",
+  "document.open",
+  "source.google_policy",
+  "source.google_connection_status",
+  "source.status",
+  "test.merchant_alias_engine",
+  "test.categorization_rule_engine",
+  "test.transaction_query_engine",
+  "test.transaction_management_engine",
+  "test.transaction_review_engine",
+  "test.financial_engine",
+  "test.budget_engine",
+  "test.recurrence_engine",
+  "test.forecast_engine",
+  "test.source_ingestion",
+]);
+
+function isPreviewProductionAccessAllowed(action: unknown) {
+  return typeof action === "string" && PREVIEW_READ_ONLY_ACTIONS.has(action);
+}
+
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -153,6 +201,20 @@ Deno.serve(async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
 
+  let body: Record<string, unknown>;
+  try {
+    body = await readGatewayJsonBody(req);
+  } catch (error) {
+    console.error("financial-app-db-gateway-body", error instanceof Error ? error.message : String(error));
+    return json({ error: error instanceof Error ? error.message : "invalid_gateway_body" }, 400);
+  }
+  const action = body?.action;
+  const payload = body?.payload ?? {};
+
+  if (identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)) {
+    return json({ error: "preview_production_write_forbidden" }, 403);
+  }
+
   const databaseUrl = Deno.env.get("SUPABASE_DB_URL");
   if (!databaseUrl) return json({ error: "database_url_unavailable" }, 500);
   const sql = postgres(databaseUrl, {
@@ -164,10 +226,6 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const body = await readGatewayJsonBody(req);
-    const action = body?.action;
-    const payload = body?.payload ?? {};
-
     if (action === "source.capabilities") {
       return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
     }
