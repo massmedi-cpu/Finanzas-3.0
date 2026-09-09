@@ -87,42 +87,54 @@ Las pruebas verifican que siguen funcionando:
 
 No se modifica la fuente bancaria, que permanece estrictamente read-only.
 
-## Gate local previo al sello
+## Gate live protegido ya demostrado
 
-SHA probado: `33c460faaab01ffe529662cf475dfb6013b55911`
+SHA live previo: `5bef282956b116b7234b4f19f27e913b596e12f9`
 
-Run: `34322919944`
+Run: `34325795510`
 
-Resultado:
+El job `protected-preview-live` terminó **SUCCESS** sobre un Preview cuyo SHA desplegado coincidía exactamente con ese commit.
+
+Resultado live:
+
+- **436 passed / 30 skipped / 0 failed**;
+- las pruebas PRE-005 de rechazo cross-site y conservación same-origin pasan en desktop y móvil;
+- `/api/build` y el gate de identidad confirmaron el SHA exacto;
+- no se observaron fallos 5xx atribuibles a PRE-005.
+
+El job local de ese mismo run quedó rojo por una carrera previa e independiente del test `Movimientos filtra sin categoría por el valor efectivo`. El fallo no afectó a la aplicación ni a PRE-005, pero se mantuvo el paquete abierto hasta eliminar ese falso rojo de forma determinista.
+
+## Estabilización determinista del gate de Movimientos
+
+SHA de estabilización: `b6c4737d776e23c914280f893d3c1709eb1cc596`
+
+Run: `34326798798`
+
+La única modificación fue en la prueba E2E: antes de seleccionar `__uncategorized__`, el test espera ahora a que el listado inicial muestre `1 de 2`, evitando que el efecto de inicialización de React pueda restaurar el filtro durante la interacción.
+
+No se modificó lógica funcional de Movimientos, endpoints, motores financieros ni persistencia.
+
+Resultado definitivo local:
 
 - build: OK;
 - TypeScript: OK;
 - Playwright desktop + móvil: **383 passed / 83 skipped / 0 failed**;
+- el test de Movimientos problemático pasa en desktop y móvil;
 - los cuatro contratos PRE-005 pasan en desktop y móvil;
-- Movimientos, incluido el caso que flakeó en el run rojo, vuelve a verde;
 - PRE-006 y PRE-007 permanecen verdes;
-- OCR y OAuth mantienen sus contratos existentes.
+- OCR, OAuth y fuente bancaria read-only mantienen sus contratos.
 
-## Prueba viva protegida
+## Sello final único
 
-`tests/e2e/mutation-origin-live.spec.ts` se ejecuta sólo sobre Preview protegido y comprueba:
+Este commit se crea con `[vercel-preview]` sobre el contenido funcional ya validado y la estabilización determinista del test.
 
-1. `POST /api/auth/login` con Origin externo + `cross-site` devuelve 403 con el contrato PRE-005 exacto;
-2. el mismo endpoint con Origin exacto del Preview + `same-origin` atraviesa el middleware y alcanza la ruta real, que con credenciales vacías devuelve 401 `invalid_credentials`.
-
-Esto diferencia un rechazo real de middleware de un falso positivo producido por la propia ruta.
-
-## Criterio de cierre final
-
-Este documento se sella con `[vercel-preview]` para producir un SHA inmutable.
-
-PRE-005 sólo se marcará cerrado cuando, sobre ese SHA exacto:
+PRE-005 sólo se marcará cerrado cuando, sobre el SHA producido por este mismo sello:
 
 - Vercel Preview esté READY;
-- `/api/build` confirme el mismo SHA;
+- `/api/build` confirme exactamente ese SHA;
 - `browser-interaction-e2e` termine verde;
 - `protected-preview-live` termine verde;
 - las dos pruebas live PRE-005 terminen verdes;
 - no aparezcan 5xx atribuibles al cambio.
 
-Hasta entonces el bloque G permanece formalmente al 50%.
+Hasta ese momento el bloque G permanece formalmente al 50%. Si ambos jobs cierran en verde sobre este mismo SHA, PRE-005 se considera completado al 100% y G pasa al 75%, quedando CSP como único paquete pendiente del bloque G.
