@@ -37,6 +37,21 @@ async function activateWorkspaceScope(sql: any, context: WorkspaceContext) {
   }
 }
 
+export async function resetWorkspaceScope(sql: any) {
+  try {
+    // Fail-safe para conexiones recicladas por poolers: no confiar únicamente en sql.end().
+    // RESET ROLE vuelve al session_user de infraestructura y luego limpia las GUC de tenant.
+    await sql.unsafe("reset role");
+    await sql`
+      select
+        pg_catalog.set_config('financial_app.workspace_id', '', false),
+        pg_catalog.set_config('financial_app.user_id', '', false)
+    `;
+  } catch (error) {
+    console.error("financial-app-workspace-reset", error instanceof Error ? error.message : String(error));
+  }
+}
+
 export async function resolveWorkspaceContext(
   request: Request,
   sql: any,
