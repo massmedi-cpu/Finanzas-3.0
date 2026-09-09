@@ -60,6 +60,9 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   expect(functionSurface).toContain("revoke execute on all functions in schema financial_app from authenticated");
   expect(functionSurface).toContain("pre001_unexpected_security_definer");
   expect(functionSurface).toContain("revoke all on table financial_app.workspace_memberships from financial_app_gateway");
+  expect(functionSurface, "la fuente bancaria debe conservar mínimo privilegio además de triggers de inmutabilidad").toContain(
+    "revoke update, delete on table financial_app.transaction_source_records from financial_app_gateway",
+  );
 
   expect(migration).toContain("forecast_items_workspace_projection_key_unique");
   expect(migration).toContain("forecast_items_workspace_idempotency_key_unique");
@@ -84,6 +87,7 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
 
   expect(smoke).toContain("set role financial_app_gateway");
   expect(smoke).toContain("pre001_rls_not_forced");
+  expect(smoke).toContain("pre001_bank_source_mutation_privilege");
   expect(smoke).toContain("pre001_cross_tenant_read_leak");
   expect(smoke).toContain("pre001_cross_tenant_update_leak");
   expect(smoke).toContain("pre001_cross_tenant_reference_accepted");
