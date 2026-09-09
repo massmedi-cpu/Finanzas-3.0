@@ -15,6 +15,7 @@ test("PRE-002 · la fuente bancaria personal queda detrás de un BankSourceContr
   const contract = readFileSync(contractPath, "utf8");
   const profile = readFileSync(profilePath, "utf8");
   const runtime = readFileSync(join(root, "src/infrastructure/google/google-source-runtime.ts"), "utf8");
+  const syncService = readFileSync(join(root, "src/application/source-sync-service.ts"), "utf8");
   const reader = readFileSync(join(root, "src/infrastructure/google/official-bank-source-reader.ts"), "utf8");
 
   expect(contract).toContain("BankSourceContract");
@@ -29,6 +30,9 @@ test("PRE-002 · la fuente bancaria personal queda detrás de un BankSourceContr
     "OPENBANK_PERSONAL_SOURCE_PROFILE",
   );
   expect(runtime).toContain("sourceProfile");
+  expect(runtime).toContain("sourceProfile.prepareSyncBatch");
+  expect(syncService).toContain("SourceSyncBatchPreparer");
+  expect(syncService).toContain("this.prepareBatch(snapshot)");
 
   expect(reader).toContain("https://www.googleapis.com/auth/spreadsheets.readonly");
   expect(reader).toContain("https://www.googleapis.com/auth/drive.metadata.readonly");
