@@ -67,16 +67,6 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "source.google_policy",
   "source.google_connection_status",
   "source.status",
-  "test.merchant_alias_engine",
-  "test.categorization_rule_engine",
-  "test.transaction_query_engine",
-  "test.transaction_management_engine",
-  "test.transaction_review_engine",
-  "test.financial_engine",
-  "test.budget_engine",
-  "test.recurrence_engine",
-  "test.forecast_engine",
-  "test.source_ingestion",
 ]);
 
 function isPreviewProductionAccessAllowed(action: unknown) {
