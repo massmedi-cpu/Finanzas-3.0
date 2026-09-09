@@ -6,6 +6,8 @@ export const RELEASE_ARTIFACT_ALGORITHM = "sha256" as const;
 export const RELEASE_ARTIFACT_SCOPE = "deployment-provenance-v1" as const;
 
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
+const VERCEL_DEPLOYMENT_ID = /^dpl_[A-Za-z0-9]+$/;
+const DEPLOYABLE_ENVIRONMENTS = new Set(["preview", "production"]);
 
 export type ReleaseProvenanceInput = {
   commit: string;
@@ -38,7 +40,8 @@ export function getReleaseProvenance(input: ReleaseProvenanceInput) {
     artifactDigest,
     releaseDeployable:
       COMMIT_SHA.test(input.commit) &&
-      Boolean(input.deploymentId) &&
-      input.environment !== "local",
+      typeof input.deploymentId === "string" &&
+      VERCEL_DEPLOYMENT_ID.test(input.deploymentId) &&
+      DEPLOYABLE_ENVIRONMENTS.has(input.environment),
   } as const;
 }
