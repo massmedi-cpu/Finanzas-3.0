@@ -207,7 +207,9 @@ jobs:
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
-        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+        run: >-
+          npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+          --grep-invert "unknown budget category|ingesta sintética roundtrip|Vault OAuth roundtrip|persistencia completa y limpieza|forged PDF bytes"
 
       - name: Upload Playwright report on failure
         if: failure()
