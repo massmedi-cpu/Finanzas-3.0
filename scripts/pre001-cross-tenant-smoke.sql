@@ -174,7 +174,8 @@ begin
 end
 $$;
 
--- No direct client role may execute the financial schema surface.
+-- No direct client role may execute the financial schema surface. If PUBLIC had EXECUTE,
+-- anon/authenticated would inherit it, so these two effective checks also catch PUBLIC leaks.
 reset role;
 do $$
 declare
@@ -188,7 +189,6 @@ begin
     and (
       pg_catalog.has_function_privilege('anon',p.oid,'EXECUTE')
       or pg_catalog.has_function_privilege('authenticated',p.oid,'EXECUTE')
-      or pg_catalog.has_function_privilege('public',p.oid,'EXECUTE')
     );
   if v_leak is not null then raise exception 'PRE001_DIRECT_FUNCTION_EXECUTE_LEAK:%',v_leak; end if;
 end
