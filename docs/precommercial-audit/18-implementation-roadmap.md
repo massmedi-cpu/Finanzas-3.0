@@ -178,6 +178,8 @@ Conectar/validar fuente → cuentas → primer resumen → pendientes. Diagnóst
 - PRE-005 validación same-origin/fetch metadata para mutaciones.
 - CSP sólo tras inventario y E2E OCR/OAuth.
 
+**Sello PRE-005:** la regresión completa del HEAD `32005a3ce3a79f708b4d29fca6d185822a9eb941` ha cerrado en verde en el run `34325217129`. El falso fallo de Movimientos fue aislado y estabilizado sin modificar la lógica funcional. Este commit dispara de nuevo el gate protegido sobre SHA exacto mediante `[vercel-preview]`; PRE-005 no se considera cerrado hasta que ese gate live termine verde.
+
 ---
 
 ## BLOQUE H · Productización estructural
