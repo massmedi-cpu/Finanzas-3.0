@@ -13,12 +13,15 @@ values
   ('91000000-0000-4000-8000-000000000001'::uuid,'PRE001 tenant A'),
   ('92000000-0000-4000-8000-000000000002'::uuid,'PRE001 tenant B');
 
--- Structural prerequisites: RLS must be both enabled and forced and the gateway must not bypass it.
+-- Structural prerequisites: RLS must be both enabled and forced, the gateway must not
+-- bypass it, and the immutable bank-source table must reject UPDATE/DELETE by privilege.
 do $$
 declare
   v_bad_tables text;
   v_super boolean;
   v_bypass boolean;
+  v_source_update boolean;
+  v_source_delete boolean;
 begin
   select pg_catalog.string_agg(c.relname, ', ' order by c.relname)
     into v_bad_tables
@@ -40,6 +43,16 @@ begin
 
   if not found then raise exception 'PRE001_GATEWAY_ROLE_MISSING'; end if;
   if v_super or v_bypass then raise exception 'PRE001_GATEWAY_ROLE_BYPASSES_RLS'; end if;
+
+  v_source_update := pg_catalog.has_table_privilege(
+    'financial_app_gateway','financial_app.transaction_source_records','UPDATE'
+  );
+  v_source_delete := pg_catalog.has_table_privilege(
+    'financial_app_gateway','financial_app.transaction_source_records','DELETE'
+  );
+  if v_source_update or v_source_delete then
+    raise exception 'PRE001_BANK_SOURCE_MUTATION_PRIVILEGE update=% delete=%',v_source_update,v_source_delete;
+  end if;
 end
 $$;
 
