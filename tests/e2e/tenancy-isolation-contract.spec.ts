@@ -9,6 +9,7 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   const hardeningPath = join(root, "supabase/migrations/20260909193000_pre001_workspace_isolation.sql");
   const fkSemanticsPath = join(root, "supabase/migrations/20260909194500_pre001_workspace_fk_semantics.sql");
   const functionSurfacePath = join(root, "supabase/migrations/20260909200000_pre001_function_surface_lockdown.sql");
+  const smokePath = join(root, "scripts/pre001-cross-tenant-smoke.sql");
   const edgeGatewayPath = join(root, "supabase/functions/financial-app-db-gateway/index.ts");
   const edgeWorkspacePath = join(root, "supabase/functions/financial-app-db-gateway/workspace-context.ts");
   const sourceSyncPath = join(root, "supabase/functions/financial-app-db-gateway/source-sync.ts");
@@ -18,11 +19,13 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   expect(existsSync(hardeningPath), "PRE-001 exige una migración separada de hardening cross-tenant").toBe(true);
   expect(existsSync(fkSemanticsPath), "PRE-001 exige preservar la semántica de las FK legacy").toBe(true);
   expect(existsSync(functionSurfacePath), "PRE-001 exige cerrar la superficie ejecutable del esquema").toBe(true);
+  expect(existsSync(smokePath), "PRE-001 exige una prueba DB ejecutable de dos tenants").toBe(true);
   expect(existsSync(edgeWorkspacePath), "PRE-001 exige una frontera Edge explícita de workspace").toBe(true);
 
   const migration = readFileSync(hardeningPath, "utf8").toLowerCase();
   const fkSemantics = readFileSync(fkSemanticsPath, "utf8").toLowerCase();
   const functionSurface = readFileSync(functionSurfacePath, "utf8").toLowerCase();
+  const smoke = readFileSync(smokePath, "utf8").toLowerCase();
   const edgeGateway = readFileSync(edgeGatewayPath, "utf8").toLowerCase();
   const edgeWorkspace = readFileSync(edgeWorkspacePath, "utf8").toLowerCase();
   const sourceSync = readFileSync(sourceSyncPath, "utf8").toLowerCase();
@@ -78,6 +81,15 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   expect(fkSemantics).toContain("on delete set null (");
   expect(fkSemantics).toContain("on delete cascade");
   expect(fkSemantics).toContain("on delete restrict");
+
+  expect(smoke).toContain("set role financial_app_gateway");
+  expect(smoke).toContain("pre001_rls_not_forced");
+  expect(smoke).toContain("pre001_cross_tenant_read_leak");
+  expect(smoke).toContain("pre001_cross_tenant_update_leak");
+  expect(smoke).toContain("pre001_cross_tenant_reference_accepted");
+  expect(smoke).toContain("pre001_direct_function_execute_leak");
+  expect(smoke).toContain("rollback;");
+  expect(smoke).toContain("pre001_cross_tenant_smoke_ok");
 
   expect(migration, "PRE-001 debe retirar las unicidades globales que impedirían tenants independientes").toContain("drop index if exists financial_app.accounts_unique_normalized_name");
   expect(migration).toContain("drop index if exists financial_app.transactions_source_row_identity_key");
