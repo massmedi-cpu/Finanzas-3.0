@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
     "backup:validate": "node scripts/validate-financial-backup.mjs"
   },
