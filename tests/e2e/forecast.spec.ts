@@ -4,6 +4,7 @@ import { handleForecastLogicAction } from "../../supabase/functions/financial-ap
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const forecastItemId = "81000000-0000-4000-8000-000000000081";
 const transactionId = "82000000-0000-4000-8000-000000000082";
+const forecastUpdatedAt = "2026-09-09T04:00:00.000Z";
 
 const baseSnapshot = {
   contractVersion: 1,
@@ -39,6 +40,7 @@ const baseSnapshot = {
       excludedReason: "",
       reconciliationNote: "",
       projectionKey: null,
+      updatedAt: forecastUpdatedAt,
       status: "planned",
       affectsProjection: true,
       projectionEffectCents: -7250,
@@ -84,6 +86,10 @@ const candidates = {
   ],
 };
 
+function nextUpdatedAt(value: string) {
+  return new Date(Date.parse(value) + 60_000).toISOString();
+}
+
 async function mockForecastApi(
   page: import("@playwright/test").Page,
   writes: Array<Record<string, unknown>>,
@@ -106,7 +112,11 @@ async function mockForecastApi(
     }
 
     const body = request.postDataJSON() as Record<string, unknown>;
-    writes.push({ method, ...body });
+    writes.push({
+      method,
+      ...body,
+      idempotencyKey: request.headers()["idempotency-key"] ?? null,
+    });
 
     if (method === "POST" && body.action === "refresh") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ generated: 0, superseded: 0 }) });
@@ -140,6 +150,7 @@ async function mockForecastApi(
           ...item,
           excluded: body.excluded as boolean,
           excludedReason: body.reason as string,
+          updatedAt: nextUpdatedAt(item.updatedAt),
           status: body.excluded ? "excluded" : "planned",
           affectsProjection: !body.excluded,
         } : item),
@@ -154,6 +165,7 @@ async function mockForecastApi(
         items: current.items.map((item) => item.id === body.id ? {
           ...item,
           confirmedTransactionId: body.transactionId as string | null,
+          updatedAt: nextUpdatedAt(item.updatedAt),
           status: body.transactionId ? "confirmed" : "planned",
           affectsProjection: body.transactionId ? false : true,
           actual: body.transactionId ? {
@@ -187,13 +199,25 @@ test("forecast API rejects invalid inputs before persistence", async ({ request 
     data: { action: "manual", date: "2026-09-10", concept: "", amountCents: -100, confidence: "high" },
   });
   expect(invalidManual.status()).toBe(400);
-  await expect(invalidManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_concept" });
+  await expect(invalidManual.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_idempotency_key" });
+
+  const missingIdempotency = await request.post("/api/forecast", {
+    data: { action: "manual", date: "2026-09-10", concept: "Seguro", amountCents: -100, confidence: "high" },
+  });
+  expect(missingIdempotency.status()).toBe(400);
+  await expect(missingIdempotency.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_idempotency_key" });
 
   const missingReason = await request.patch("/api/forecast", {
     data: { action: "exclude", id: forecastItemId, excluded: true, reason: "" },
   });
   expect(missingReason.status()).toBe(400);
   await expect(missingReason.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_excluded_reason" });
+
+  const missingVersion = await request.patch("/api/forecast", {
+    data: { action: "exclude", id: forecastItemId, excluded: true, reason: "Ya no se espera" },
+  });
+  expect(missingVersion.status()).toBe(400);
+  await expect(missingVersion.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_forecast_expected_updated_at" });
 });
 
 test("forecast gateway validates payloads before SQL", async () => {
@@ -244,6 +268,8 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   await page.getByRole("button", { name: "Añadir al calendario" }).click();
 
   await expect.poll(() => writes.find((entry) => entry.action === "manual")?.amountCents).toBe(-1234);
+  const manualWrite = writes.find((entry) => entry.action === "manual");
+  expect(manualWrite?.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
 });
 
@@ -258,12 +284,15 @@ test("forecast UI requires exclusion reason and reconciles from real candidates"
   await page.getByLabel("Motivo para excluir Seguro mensual").fill("Ya no se espera este cargo");
   await page.getByRole("button", { name: "Excluir" }).click();
   await expect.poll(() => writes.some((entry) => entry.action === "exclude" && entry.reason === "Ya no se espera este cargo")).toBe(true);
+  expect(writes.find((entry) => entry.action === "exclude")?.expectedUpdatedAt).toBe(forecastUpdatedAt);
 
   await page.getByRole("button", { name: "Restaurar" }).click();
   await page.getByRole("button", { name: "Buscar movimiento real" }).click();
   await expect(page.getByText("SEGURO REAL")).toBeVisible();
   await page.getByRole("button", { name: "Conciliar" }).click();
   await expect.poll(() => writes.some((entry) => entry.action === "reconcile" && entry.transactionId === transactionId)).toBe(true);
+  expect(writes.find((entry) => entry.action === "reconcile" && entry.transactionId === transactionId)?.expectedUpdatedAt)
+    .toBe("2026-09-09T04:02:00.000Z");
 });
 
 test("protected preview preserves phase 8 forecast contract across later phases", async ({ request }) => {
