@@ -22,12 +22,29 @@ function authClient() {
   });
 }
 
+async function activateWorkspaceScope(sql: any, context: WorkspaceContext) {
+  try {
+    // PRE-001: la conexión llega como postgres únicamente para validar la membership.
+    // Antes de cualquier consulta de negocio cambia a un rol NOLOGIN/NOBYPASSRLS.
+    await sql.unsafe("set role financial_app_gateway");
+    await sql`
+      select
+        pg_catalog.set_config('financial_app.workspace_id', ${context.workspaceId}, false),
+        pg_catalog.set_config('financial_app.user_id', ${context.userId}, false)
+    `;
+  } catch {
+    throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
+  }
+}
+
 export async function resolveWorkspaceContext(
   request: Request,
   sql: any,
-): Promise<WorkspaceContext | null> {
+): Promise<WorkspaceContext> {
   const userToken = request.headers.get("x-financial-app-user-token")?.trim() ?? "";
-  if (!userToken) return null;
+  if (!userToken) {
+    throw new WorkspaceContextError("workspace_context_required", 403);
+  }
 
   const supabase = authClient();
   const { data, error } = await supabase.auth.getUser(userToken);
@@ -65,9 +82,12 @@ export async function resolveWorkspaceContext(
     throw new WorkspaceContextError("workspace_membership_invalid", 500);
   }
 
-  return {
+  const context: WorkspaceContext = {
     userId: data.user.id,
     workspaceId: membership.workspace_id,
     role: membership.role,
   };
+
+  await activateWorkspaceScope(sql, context);
+  return context;
 }
