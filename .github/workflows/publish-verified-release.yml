@@ -1,0 +1,99 @@
+name: Publish Verified Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      production_url:
+        description: 'HTTPS URL of the exact Production deployment to verify'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: financial-app-production-release
+  cancel-in-progress: false
+
+jobs:
+  verify-and-publish:
+    if: github.ref_name == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout exact main commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Validate Production URL
+        env:
+          PRODUCTION_URL: ${{ inputs.production_url }}
+        shell: bash
+        run: |
+          node -e "const u=new URL(process.env.PRODUCTION_URL);if(u.protocol!=='https:'||u.username||u.password||u.search||u.hash)throw new Error('invalid_production_url')"
+
+      - name: Read exact Production build identity
+        env:
+          PRODUCTION_URL: ${{ inputs.production_url }}
+        shell: bash
+        run: |
+          base="${PRODUCTION_URL%/}"
+          curl --fail --silent --show-error \
+            --output /tmp/financial-app-production-build.json \
+            "$base/api/build"
+
+      - name: Generate verified immutable manifest
+        shell: bash
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          npm run release:manifest -- \
+            --build-info /tmp/financial-app-production-build.json \
+            --output /tmp/release-manifest.production.json \
+            --expected-sha "$GITHUB_SHA" \
+            --tag "$tag" \
+            --expected-environment production
+          echo "release_tag=$tag" >> "$GITHUB_ENV"
+
+      - name: Refuse an existing tag
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$release_tag" >/dev/null 2>&1; then
+            echo "Release tag $release_tag already exists; refusing to move or replace immutable provenance."
+            exit 1
+          fi
+
+      - name: Publish GitHub release and attach manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          gh release create "$release_tag" \
+            /tmp/release-manifest.production.json#release-manifest.json \
+            --target "$GITHUB_SHA" \
+            --title "Financial App $version" \
+            --notes "Verified release. The attached manifest binds version, tag, commit, deployment and SHA-256 deployment provenance."
+
+      - name: Verify published tag target
+        shell: bash
+        run: |
+          git fetch --force --tags origin "$release_tag"
+          published_sha="$(git rev-list -n 1 "$release_tag")"
+          test "$published_sha" = "$GITHUB_SHA"
+
+      - name: Preserve release manifest as workflow evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-${{ github.sha }}
+          path: /tmp/release-manifest.production.json
+          retention-days: 90
