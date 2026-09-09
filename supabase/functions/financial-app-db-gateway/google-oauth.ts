@@ -120,7 +120,7 @@ export async function handleGoogleOauthAction(input: {
     const baselineRows = await sql`
       select
         (select count(*)::int from financial_app.google_oauth_connections) as connections,
-        (select count(*)::int from vault.secrets where name='financial_app_google_refresh_token') as secrets,
+        (select count(*)::int from vault.secrets where name like 'financial_app_google_refresh_token%') as secrets,
         (select count(*)::int from financial_app.google_source_policy) as policies
     `;
     const baseline = baselineRows[0] ?? { connections: 0, secrets: 0, policies: 0 };
@@ -131,7 +131,7 @@ export async function handleGoogleOauthAction(input: {
         await tx`
           insert into financial_app.google_source_policy(id,allowed_email)
           values(true,'phase2-gateway@example.invalid')
-          on conflict(id) do update set allowed_email=excluded.allowed_email,updated_at=now()
+          on conflict(workspace_id,id) do update set allowed_email=excluded.allowed_email,updated_at=now()
         `;
 
         const stored = await tx`
@@ -182,7 +182,7 @@ export async function handleGoogleOauthAction(input: {
     const afterRows = await sql`
       select
         (select count(*)::int from financial_app.google_oauth_connections) as connections,
-        (select count(*)::int from vault.secrets where name='financial_app_google_refresh_token') as secrets,
+        (select count(*)::int from vault.secrets where name like 'financial_app_google_refresh_token%') as secrets,
         (select count(*)::int from financial_app.google_oauth_connections where google_subject='__phase2_gateway_google_subject__') as test_connections,
         (select count(*)::int from financial_app.google_source_policy) as policies
     `;
