@@ -8,16 +8,21 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   const root = process.cwd();
   const hardeningPath = join(root, "supabase/migrations/20260909193000_pre001_workspace_isolation.sql");
   const edgeGatewayPath = join(root, "supabase/functions/financial-app-db-gateway/index.ts");
+  const edgeWorkspacePath = join(root, "supabase/functions/financial-app-db-gateway/workspace-context.ts");
 
   expect(existsSync(hardeningPath), "PRE-001 exige una migración separada de hardening cross-tenant").toBe(true);
+  expect(existsSync(edgeWorkspacePath), "PRE-001 exige una frontera Edge explícita de workspace").toBe(true);
 
   const migration = readFileSync(hardeningPath, "utf8").toLowerCase();
   const edgeGateway = readFileSync(edgeGatewayPath, "utf8").toLowerCase();
+  const edgeWorkspace = readFileSync(edgeWorkspacePath, "utf8").toLowerCase();
+  const edge = `${edgeGateway}\n${edgeWorkspace}`;
 
-  expect(edgeGateway).toContain("financial_app_gateway");
-  expect(edgeGateway).toContain("set role financial_app_gateway");
-  expect(edgeGateway).toContain("financial_app.workspace_id");
-  expect(edgeGateway).toContain("workspace_context_required");
+  expect(edgeGateway).toContain("resolveworkspacecontext");
+  expect(edge).toContain("financial_app_gateway");
+  expect(edge).toContain("set role financial_app_gateway");
+  expect(edge).toContain("financial_app.workspace_id");
+  expect(edge).toContain("workspace_context_required");
 
   expect(migration).toContain("current_workspace_id");
   expect(migration).toContain("require_current_workspace_id");
