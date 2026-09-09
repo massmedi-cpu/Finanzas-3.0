@@ -24,6 +24,7 @@ type ForecastItem = {
   excludedReason: string;
   reconciliationNote: string;
   projectionKey: string | null;
+  updatedAt: string;
   status: "planned" | "excluded" | "confirmed";
   affectsProjection: boolean;
   projectionEffectCents: number;
@@ -374,6 +375,7 @@ export function ForecastClient() {
   const [candidateData, setCandidateData] = useState<CandidateSnapshot | null>(null);
   const manualConceptRef = useRef<HTMLInputElement | null>(null);
   const manualAmountRef = useRef<HTMLInputElement | null>(null);
+  const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
   const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -408,7 +410,13 @@ export function ForecastClient() {
       await task();
       await loadSnapshot();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "La operación no se ha podido completar");
+      const message = err instanceof Error ? err.message : "La operación no se ha podido completar";
+      if (message === "forecast_write_conflict") {
+        setError("La previsión cambió en otro lugar. He cargado la versión más reciente; revísala y vuelve a intentarlo.");
+        await loadSnapshot();
+      } else {
+        setError(message);
+      }
     } finally {
       setBusy(null);
     }
@@ -452,22 +460,31 @@ export function ForecastClient() {
     }
     if (absoluteCents === null || absoluteCents <= 0) return;
 
+    const payload = {
+      action: "manual",
+      date: manualDate,
+      concept: manualConcept.trim(),
+      amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
+      accountId: null,
+      categoryId: null,
+      merchantId: null,
+      confidence: manualConfidence,
+    };
+    const fingerprint = JSON.stringify(payload);
+    const previousRequest = manualRequestRef.current;
+    const idempotencyKey = previousRequest?.fingerprint === fingerprint
+      ? previousRequest.key
+      : crypto.randomUUID();
+    manualRequestRef.current = { fingerprint, key: idempotencyKey };
+
     setManualErrors({});
     await runMutation("manual", async () => {
       await readJson(await fetch("/api/forecast", {
         method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          action: "manual",
-          date: manualDate,
-          concept: manualConcept.trim(),
-          amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
-          accountId: null,
-          categoryId: null,
-          merchantId: null,
-          confidence: manualConfidence,
-        }),
+        headers: { "content-type": "application/json", "idempotency-key": idempotencyKey },
+        body: JSON.stringify(payload),
       }));
+      manualRequestRef.current = null;
       setManualConcept("");
       setManualAmount("");
       setNotice("Previsión manual añadida.");
@@ -490,7 +507,13 @@ export function ForecastClient() {
       await readJson(await fetch("/api/forecast", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "exclude", id: item.id, excluded: nextExcluded, reason }),
+        body: JSON.stringify({
+          action: "exclude",
+          id: item.id,
+          excluded: nextExcluded,
+          reason,
+          expectedUpdatedAt: item.updatedAt,
+        }),
       }));
       setNotice(nextExcluded ? "Elemento excluido del saldo previsto." : "Elemento restaurado en la previsión.");
     });
@@ -531,6 +554,7 @@ export function ForecastClient() {
           id: item.id,
           transactionId,
           note: transactionId ? "Conciliado desde Previsión" : "",
+          expectedUpdatedAt: item.updatedAt,
         }),
       }));
       setCandidateFor(null);
