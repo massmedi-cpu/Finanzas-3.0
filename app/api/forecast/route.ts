@@ -133,10 +133,6 @@ export async function POST(request: Request) {
     }
 
     if (action === "manual") {
-      const idempotencyKey = requiredUuid(
-        request.headers.get("idempotency-key") ?? row.idempotencyKey,
-        "invalid_forecast_idempotency_key",
-      );
       const payload = {
         date: dateValue(row.date, "invalid_forecast_date"),
         concept: stringValue(row.concept, "invalid_forecast_concept", 240),
@@ -145,9 +141,12 @@ export async function POST(request: Request) {
         categoryId: nullableUuid(row.categoryId, "invalid_forecast_category_id"),
         merchantId: nullableUuid(row.merchantId, "invalid_forecast_merchant_id"),
         confidence: confidenceValue(row.confidence ?? "high"),
-        idempotencyKey,
       };
-      const result = await callPersistenceGateway("forecast.manual", payload);
+      const idempotencyKey = requiredUuid(
+        request.headers.get("idempotency-key") ?? row.idempotencyKey,
+        "invalid_forecast_idempotency_key",
+      );
+      const result = await callPersistenceGateway("forecast.manual", { ...payload, idempotencyKey });
       return Response.json(result, { headers: HEADERS });
     }
 
