@@ -14,6 +14,7 @@ import { handleSourceSyncAction } from "./source-sync-router.ts";
 import { handleTransactionManagementAction } from "./transaction-management.ts";
 import { handleTransactionQueryAction } from "./transaction-query.ts";
 import { handleTransactionReviewAction } from "./transaction-review.ts";
+import { WorkspaceContextError, resolveWorkspaceContext } from "./workspace-context.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
 const TEAM_ID = "team_xrSskbkRKwQkyYc0vvLVGUnb";
@@ -216,6 +217,11 @@ Deno.serve(async (req) => {
   });
 
   try {
+    const workspaceContext = await resolveWorkspaceContext(req, sql);
+    // PRE-001 fase 1: la identidad ya se resuelve en la frontera Edge, pero el scoping
+    // estricto se activa sólo después de validar la migración y los gates cross-tenant.
+    void workspaceContext;
+
     if (action === "source.capabilities") {
       return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
     }
@@ -330,6 +336,9 @@ Deno.serve(async (req) => {
 
     return json({ error: "unsupported_action" }, 400);
   } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return json({ error: error.code }, error.status);
+    }
     console.error("financial-app-db-gateway", error instanceof Error ? error.message : String(error));
     return json({ error: error instanceof Error ? error.message : "gateway_error" }, 400);
   } finally {
