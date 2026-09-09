@@ -35,6 +35,9 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   expect(edge).toContain("set role financial_app_gateway");
   expect(edge).toContain("financial_app.workspace_id");
   expect(edge).toContain("workspace_context_required");
+  expect(edgeWorkspace, "una conexión reciclada debe limpiar el rol anterior antes de consultar memberships").toContain("reset role");
+  expect(edgeWorkspace).toContain("await clearworkspacescope(sql, true)");
+  expect(edgeWorkspace.indexOf("await clearworkspacescope(sql, true)")).toBeLessThan(edgeWorkspace.indexOf("const usertoken"));
 
   expect(migration).toContain("current_workspace_id");
   expect(migration).toContain("require_current_workspace_id");
