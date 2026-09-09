@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const canonicalSupabaseOrigin = "https://btzukbfesxdratqnxuoj.supabase.co";
+
 function directive(csp: string, name: string) {
   return csp
     .split(";")
@@ -26,6 +28,12 @@ test("G · CSP aplica una política estricta con nonce a las respuestas HTML", a
   expect(scriptSrc).toContain("'self'");
   expect(scriptSrc).toContain("'strict-dynamic'");
   expect(scriptSrc).not.toContain("'unsafe-inline'");
+
+  const connectSrc = directive(csp, "connect-src");
+  expect(connectSrc).toContain("'self'");
+  expect(connectSrc).toContain(canonicalSupabaseOrigin);
+  expect(connectSrc).not.toContain("*");
+  expect(connectSrc).not.toContain("http:");
 
   const nonce = nonceFrom(csp);
   expect(nonce).not.toBeNull();
