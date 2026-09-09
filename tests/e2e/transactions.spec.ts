@@ -266,7 +266,9 @@ test("Movimientos filtra sin categoría por el valor efectivo", async ({ page })
   await mockTransactionApi(page);
   await page.goto("/transactions");
 
-  await page.getByTestId("category-filter").selectOption("__uncategorized__");
+  const categoryFilter = page.getByTestId("category-filter");
+  await categoryFilter.selectOption("__uncategorized__");
+  await expect(categoryFilter).toHaveValue("__uncategorized__");
   const requestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return request.method() === "GET" && url.searchParams.get("uncategorized") === "true" && !url.searchParams.has("categoryId");
