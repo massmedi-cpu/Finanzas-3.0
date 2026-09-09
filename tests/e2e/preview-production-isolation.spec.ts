@@ -23,9 +23,16 @@ test("PRE-003 Preview sólo puede alcanzar acciones read-only conocidas de Produ
   expect(policy).toContain('"account.list"');
   expect(policy).toContain('"account.get"');
   expect(policy).toContain('"test.invariants"');
+  expect(policy).toContain('"financial.period"');
+  expect(policy).toContain('"financial.monthly"');
+  expect(policy).toContain('"financial.balances"');
+  expect(policy).toContain('"financial.snapshot"');
+  expect(policy).not.toContain('"financial.accounts"');
+  expect(policy).not.toContain('"financial.account"');
   expect(policy).not.toContain('"account.save"');
   expect(policy).not.toContain('"test.cleanup"');
   expect(policy).not.toContain('"test.source_ingestion"');
+  expect(policy).not.toContain('"test.financial_logic_engine"');
   expect(policy).not.toContain('"test.forecast_engine"');
   expect(policy).not.toContain('"document.upload_sign"');
   expect(policy).not.toContain('"source.sync_batch"');
