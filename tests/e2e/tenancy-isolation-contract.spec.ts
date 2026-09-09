@@ -2,20 +2,29 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
-test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constraints y funciones privilegiadas", async ({}, testInfo) => {
+test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constraints, Storage y funciones privilegiadas", async ({}, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "el contrato de aislamiento se valida una vez por run");
 
   const root = process.cwd();
   const hardeningPath = join(root, "supabase/migrations/20260909193000_pre001_workspace_isolation.sql");
+  const fkSemanticsPath = join(root, "supabase/migrations/20260909194500_pre001_workspace_fk_semantics.sql");
   const edgeGatewayPath = join(root, "supabase/functions/financial-app-db-gateway/index.ts");
   const edgeWorkspacePath = join(root, "supabase/functions/financial-app-db-gateway/workspace-context.ts");
+  const sourceSyncPath = join(root, "supabase/functions/financial-app-db-gateway/source-sync.ts");
+  const documentLogicPath = join(root, "supabase/functions/financial-app-db-gateway/document-logic.ts");
+  const googleOauthPath = join(root, "supabase/functions/financial-app-db-gateway/google-oauth.ts");
 
   expect(existsSync(hardeningPath), "PRE-001 exige una migración separada de hardening cross-tenant").toBe(true);
+  expect(existsSync(fkSemanticsPath), "PRE-001 exige preservar la semántica de las FK legacy").toBe(true);
   expect(existsSync(edgeWorkspacePath), "PRE-001 exige una frontera Edge explícita de workspace").toBe(true);
 
   const migration = readFileSync(hardeningPath, "utf8").toLowerCase();
+  const fkSemantics = readFileSync(fkSemanticsPath, "utf8").toLowerCase();
   const edgeGateway = readFileSync(edgeGatewayPath, "utf8").toLowerCase();
   const edgeWorkspace = readFileSync(edgeWorkspacePath, "utf8").toLowerCase();
+  const sourceSync = readFileSync(sourceSyncPath, "utf8").toLowerCase();
+  const documentLogic = readFileSync(documentLogicPath, "utf8").toLowerCase();
+  const googleOauth = readFileSync(googleOauthPath, "utf8").toLowerCase();
   const edge = `${edgeGateway}\n${edgeWorkspace}`;
 
   expect(edgeGateway).toContain("resolveworkspacecontext");
@@ -48,6 +57,15 @@ test("PRE-001 · el aislamiento cross-tenant es efectivo en gateway, RLS, constr
   expect(migration, "las proyecciones deben hacer upsert dentro del workspace").toContain("on conflict (workspace_id, projection_key)");
   expect(migration, "la idempotencia manual debe ser por workspace").toContain("on conflict (workspace_id, idempotency_key)");
   expect(migration, "los documentos no pueden colisionar globalmente entre tenants").toContain("on conflict (workspace_id, storage_provider, storage_key)");
+  expect(sourceSync, "los cursores de la fuente deben hacer upsert por workspace").toContain("on conflict (workspace_id,source_file_id,source_sheet_id)");
+  expect(googleOauth, "el singleton OAuth debe ser singleton sólo dentro del workspace").toContain("on conflict(workspace_id,id)");
+
+  expect(documentLogic, "Storage debe estar físicamente namespaced por workspace").toContain("uploads/${workspaceid}/");
+  expect(documentLogic).toContain("pathmatch[1].tolowercase() !== workspaceid.tolowercase()");
+
+  expect(fkSemantics).toContain("on delete set null (");
+  expect(fkSemantics).toContain("on delete cascade");
+  expect(fkSemantics).toContain("on delete restrict");
 
   expect(migration, "PRE-001 debe retirar las unicidades globales que impedirían tenants independientes").toContain("drop index if exists financial_app.accounts_unique_normalized_name");
   expect(migration).toContain("drop index if exists financial_app.transactions_source_row_identity_key");
