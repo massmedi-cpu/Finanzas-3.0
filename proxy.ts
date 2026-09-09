@@ -7,6 +7,7 @@ import {
   safeNextPath,
   shouldEnforceAppAuth,
 } from "./src/infrastructure/auth/access-control";
+import { shouldRejectCrossSiteMutation } from "./src/infrastructure/auth/mutation-origin";
 import {
   clearSessionCookies,
   refreshAuthSession,
@@ -63,7 +64,33 @@ function unavailableResponse(request: NextRequest) {
   });
 }
 
+function crossSiteMutationResponse() {
+  return NextResponse.json(
+    { error: "cross_site_mutation_rejected", code: null },
+    {
+      status: 403,
+      headers: {
+        "cache-control": "no-store",
+        "x-content-type-options": "nosniff",
+        "x-robots-tag": "noindex",
+      },
+    },
+  );
+}
+
 export async function proxy(request: NextRequest) {
+  if (
+    isApiPath(request.nextUrl.pathname) &&
+    shouldRejectCrossSiteMutation({
+      method: request.method,
+      requestUrl: request.url,
+      origin: request.headers.get("origin"),
+      secFetchSite: request.headers.get("sec-fetch-site"),
+    })
+  ) {
+    return crossSiteMutationResponse();
+  }
+
   if (!shouldEnforceAppAuth() || isPublicAuthPath(request.nextUrl.pathname)) {
     return NextResponse.next();
   }
