@@ -13,6 +13,7 @@ import {
   refreshAuthSession,
   revokeAuthSession,
   setSessionCookies,
+  SUPABASE_URL,
   validateAccessToken,
 } from "./src/infrastructure/auth/supabase-auth";
 
@@ -21,14 +22,29 @@ type ContentSecurityPolicyContext = {
   requestHeaders: Headers;
 };
 
+function configuredSupabaseOrigin() {
+  try {
+    const url = new URL(SUPABASE_URL);
+    if (url.protocol !== "https:" && process.env.NODE_ENV !== "development") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 function createContentSecurityPolicy(nonce: string) {
   const isDev = process.env.NODE_ENV === "development";
   const scriptSources = ["'self'", `'nonce-${nonce}'`, "'strict-dynamic'"];
   const styleSources = ["'self'", `'nonce-${nonce}'`];
+  const connectSources = ["'self'"];
+  const supabaseOrigin = configuredSupabaseOrigin();
+
+  if (supabaseOrigin) connectSources.push(supabaseOrigin);
 
   if (isDev) {
     scriptSources.push("'unsafe-eval'");
     styleSources.push("'unsafe-inline'");
+    connectSources.push("https://storage.mock");
   }
 
   return [
@@ -37,7 +53,7 @@ function createContentSecurityPolicy(nonce: string) {
     `style-src ${styleSources.join(" ")}`,
     "img-src 'self' blob: data:",
     "font-src 'self' data:",
-    "connect-src 'self'",
+    `connect-src ${connectSources.join(" ")}`,
     "worker-src 'self' blob:",
     "media-src 'self' blob:",
     "object-src 'none'",
