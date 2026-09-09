@@ -5,6 +5,7 @@ on:
     branches:
       - 'rebuild/phase-*'
       - 'audit/precommercial-*'
+      - 'release/*'
 
 permissions:
   contents: read
