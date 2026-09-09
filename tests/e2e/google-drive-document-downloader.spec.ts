@@ -172,3 +172,36 @@ test("F11 Drive downloader rejects MIME drift before downloading file content", 
   });
   expect(calls).toBe(1);
 });
+
+test("PRE-006 Drive downloader rejects forged PDF metadata when the real bytes are not a PDF", async () => {
+  const bytes = Buffer.from("MZ this is executable-like content, not a PDF", "utf8");
+  const fetcher = (async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("?fields=")) {
+      return new Response(JSON.stringify({
+        id: fileId,
+        name: "factura-falsa.pdf",
+        mimeType: "application/pdf",
+        size: String(bytes.byteLength),
+        trashed: false,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    }
+    if (url.includes("?alt=media")) {
+      return new Response(bytes, {
+        status: 200,
+        headers: { "content-type": "application/pdf", "content-length": String(bytes.byteLength) },
+      });
+    }
+    return new Response(null, { status: 500 });
+  }) as typeof fetch;
+
+  const downloader = new GoogleDriveDocumentDownloader(
+    { getAccessToken: async () => "drive-read-token" },
+    fetcher,
+  );
+
+  await expect(downloader.download({ fileId, expectedMimeType: "application/pdf" })).rejects.toMatchObject({
+    name: "GoogleDriveDocumentError",
+    code: "google_drive_document_content_mismatch",
+  });
+});
