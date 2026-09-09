@@ -21,8 +21,13 @@ test("PRE-003 Preview sólo puede alcanzar acciones read-only conocidas de Produ
   expect(policy).toContain('"source.capabilities"');
   expect(policy).toContain('"account.list"');
   expect(policy).toContain('"account.get"');
+  expect(policy).toContain('"test.invariants"');
   expect(policy).not.toContain('"account.save"');
   expect(policy).not.toContain('"test.cleanup"');
+  expect(policy).not.toContain('"test.source_ingestion"');
+  expect(policy).not.toContain('"test.forecast_engine"');
+  expect(policy).not.toContain('"document.upload_sign"');
+  expect(policy).not.toContain('"source.sync_batch"');
 });
 
 test("PRE-003 aplica el aislamiento antes de abrir PostgreSQL", () => {
