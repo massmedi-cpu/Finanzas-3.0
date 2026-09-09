@@ -163,3 +163,78 @@ test("post-login redirects reject protocol-relative and backslash variants", () 
   expect(safeNextPath("/\\example.com/private")).toBe("/");
   expect(safeNextPath("/transactions?review=pending")).toBe("/transactions?review=pending");
 });
+
+test("PRE-005 rejects a cross-site authenticated mutation before auth or persistence work", async () => {
+  process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
+  process.env.VERCEL_ENV = "preview";
+  let authCalls = 0;
+  global.fetch = async () => {
+    authCalls += 1;
+    return Response.json(true);
+  };
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/forecast", {
+    method: "POST",
+    headers: {
+      cookie: `${AUTH_ACCESS_COOKIE}=authorized-token`,
+      origin: "https://evil.example",
+      "sec-fetch-site": "cross-site",
+    },
+  }));
+
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "cross_site_mutation_rejected", code: null });
+  expect(authCalls).toBe(0);
+});
+
+test("PRE-005 preserves authenticated same-origin mutations", async () => {
+  process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
+  process.env.VERCEL_ENV = "preview";
+  global.fetch = async () => Response.json(true);
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/forecast", {
+    method: "POST",
+    headers: {
+      cookie: `${AUTH_ACCESS_COOKIE}=authorized-token`,
+      origin: "https://financialapp.test",
+      "sec-fetch-site": "same-origin",
+    },
+  }));
+
+  expect(response.status).toBe(200);
+  expect(response.headers.get("x-middleware-next")).toBe("1");
+});
+
+test("PRE-005 also protects public auth mutations such as login from cross-site requests", async () => {
+  process.env.FINANCIAL_APP_AUTH_ENFORCED = "true";
+  process.env.VERCEL_ENV = "preview";
+
+  const response = await proxy(new NextRequest("https://financialapp.test/api/auth/login", {
+    method: "POST",
+    headers: {
+      origin: "https://evil.example",
+      "sec-fetch-site": "cross-site",
+    },
+  }));
+
+  expect(response.status).toBe(403);
+  expect(await response.json()).toEqual({ error: "cross_site_mutation_rejected", code: null });
+});
+
+test("PRE-005 does not block GET callbacks or server-to-server requests without browser origin headers", async () => {
+  delete process.env.FINANCIAL_APP_AUTH_ENFORCED;
+  process.env.VERCEL_ENV = "preview";
+
+  const callback = await proxy(new NextRequest("https://financialapp.test/api/source/google/callback?code=x&state=y", {
+    method: "GET",
+    headers: { "sec-fetch-site": "cross-site" },
+  }));
+  expect(callback.status).toBe(200);
+  expect(callback.headers.get("x-middleware-next")).toBe("1");
+
+  const serverMutation = await proxy(new NextRequest("https://financialapp.test/api/forecast", {
+    method: "POST",
+  }));
+  expect(serverMutation.status).toBe(200);
+  expect(serverMutation.headers.get("x-middleware-next")).toBe("1");
+});
