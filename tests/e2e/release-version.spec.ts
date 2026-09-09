@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 import { APP_VERSION, TARGET_VERSION, getBuildInfo } from "../../src/core/build-info";
 
-const EXPECTED_LOCK_SEMANTIC_FINGERPRINT = "69ac752fc4f14d0bacccb4c8fde376a883f549e8c4b7c01cf31a900d392be95e";
+const EXPECTED_LOCK_SEMANTIC_FINGERPRINT = "d73f925c45cd37a0413f5b309e155d708a17f0075b84a2800e06cd9e66778cf1";
 
 function semanticLockFingerprint(packageLock: { version: string; packages?: Record<string, { version?: string }> }) {
   const normalized = structuredClone(packageLock);
