@@ -11,6 +11,11 @@ revoke execute on all functions in schema financial_app from authenticated;
 revoke all on table financial_app.workspaces from financial_app_gateway;
 revoke all on table financial_app.workspace_memberships from financial_app_gateway;
 
+-- Axioma bancario: el gateway puede leer e insertar observaciones oficiales, pero nunca
+-- modificar ni borrar el registro fuente inmutable. Los triggers siguen siendo defensa
+-- adicional; esta revocación impone también mínimo privilegio en el rol DB.
+revoke update, delete on table financial_app.transaction_source_records from financial_app_gateway;
+
 -- Mantener acceso funcional del dispatcher interno y de las funciones auxiliares que
 -- encadenan otras funciones dentro del esquema.
 grant execute on all functions in schema financial_app to financial_app_gateway;
