@@ -8,22 +8,12 @@ const PROJECT_ID = "prj_SbZ64E02YhCK4ds24Yi7qf5CeQjo";
 const TEAM_ID = "team_xrSskbkRKwQkyYc0vvLVGUnb";
 const GZIP_THRESHOLD_BYTES = 64 * 1024;
 
-function assertCapabilities(value, label) {
-  if (
-    !value ||
-    value.contractVersion !== 2 ||
-    value.sourceAccountLifecycle !== true ||
-    value.canonicalProductSelection !== true
-  ) {
-    throw new Error(`${label}_capabilities_invalid`);
-  }
-}
-
-async function requestGateway(token, body, contentEncoding = null) {
+async function requestGateway(token, body, contentEncoding = null, extraHeaders = {}) {
   const headers = {
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
     "x-region": SUPABASE_GATEWAY_REGION,
+    ...extraHeaders,
   };
   if (contentEncoding) headers["content-encoding"] = contentEncoding;
 
@@ -37,16 +27,27 @@ async function requestGateway(token, body, contentEncoding = null) {
   return { response, payload };
 }
 
-async function callGateway(token, body, contentEncoding = null) {
+async function assertWorkspaceBoundary(token, body, label, contentEncoding = null) {
   const { response, payload } = await requestGateway(token, body, contentEncoding);
-  if (!response.ok || !payload || payload.error) {
-    throw new Error(`gateway_${response.status}_${payload?.error ?? "invalid_response"}`);
+  if (response.status !== 403 || payload?.error !== "workspace_context_required") {
+    throw new Error(
+      `${label}_workspace_boundary_invalid_${response.status}_${payload?.error ?? "invalid_response"}`,
+    );
   }
-  return payload;
 }
 
-async function callAction(token, action, payload = {}) {
-  return callGateway(token, JSON.stringify({ action, payload }));
+async function assertInvalidUserRejected(token) {
+  const { response, payload } = await requestGateway(
+    token,
+    JSON.stringify({ action: "health", payload: {} }),
+    null,
+    { "x-financial-app-user-token": "invalid-build-probe-token" },
+  );
+  if (response.status !== 401 || payload?.error !== "workspace_user_invalid") {
+    throw new Error(
+      `gateway_invalid_user_not_rejected_${response.status}_${payload?.error ?? "invalid_response"}`,
+    );
+  }
 }
 
 async function assertPreviewWriteBlocked(token) {
@@ -78,8 +79,14 @@ const oidcToken = await getVercelOidcToken({
 });
 if (!oidcToken) throw new Error("vercel_oidc_token_unavailable");
 
-const plainPayload = await callAction(oidcToken, "source.capabilities");
-assertCapabilities(plainPayload, "plain");
+// PRE-001+ security boundary: Vercel OIDC authenticates the calling deployment, but it
+// must never be sufficient to read workspace-scoped data. Build-time probes therefore
+// verify the fail-closed user/workspace boundary instead of bypassing it with a user token.
+await assertWorkspaceBoundary(
+  oidcToken,
+  JSON.stringify({ action: "source.capabilities", payload: {} }),
+  "plain",
+);
 
 const gzipSource = JSON.stringify({
   action: "source.capabilities",
@@ -88,29 +95,26 @@ const gzipSource = JSON.stringify({
 const originalBytes = Buffer.byteLength(gzipSource, "utf8");
 if (originalBytes < GZIP_THRESHOLD_BYTES) throw new Error("gzip_probe_below_threshold");
 const gzipBody = gzipSync(gzipSource);
-const gzipPayload = await callGateway(oidcToken, gzipBody, "gzip");
-assertCapabilities(gzipPayload, "gzip");
+await assertWorkspaceBoundary(oidcToken, gzipBody, "gzip", "gzip");
 
-const health = await callAction(oidcToken, "health");
-if (health.status !== "ok" || health.database !== true || health.environment !== environment) {
-  throw new Error("gateway_health_invalid");
-}
+await assertWorkspaceBoundary(
+  oidcToken,
+  JSON.stringify({ action: "health", payload: {} }),
+  "health",
+);
+await assertInvalidUserRejected(oidcToken);
 
 let previewChecks = "not-applicable";
 if (environment === "preview") {
-  const invariants = await callAction(oidcToken, "test.invariants");
-  if (
-    invariants.accountReorderEngine !== true ||
-    invariants.categoryReorderEngine !== true ||
-    invariants.categoryMergeEngine !== true
-  ) {
-    throw new Error("gateway_invariants_invalid");
-  }
-
+  await assertWorkspaceBoundary(
+    oidcToken,
+    JSON.stringify({ action: "test.invariants", payload: {} }),
+    "invariants",
+  );
   await assertPreviewWriteBlocked(oidcToken);
-  previewChecks = "invariants=ok|normal_write=blocked";
+  previewChecks = "invariants_boundary=ok|normal_write=blocked";
 }
 
 console.log(
-  `VERCEL_SOURCE_RUNTIME_GATE|environment=${environment}|plain=ok|gzip=ok|health=ok|${previewChecks}|contract=2|original_bytes=${originalBytes}|gzip_bytes=${gzipBody.byteLength}|region=${SUPABASE_GATEWAY_REGION}`,
+  `VERCEL_SOURCE_RUNTIME_GATE|environment=${environment}|oidc=ok|workspace_boundary=ok|gzip_boundary=ok|health_boundary=ok|invalid_user=blocked|${previewChecks}|original_bytes=${originalBytes}|gzip_bytes=${gzipBody.byteLength}|region=${SUPABASE_GATEWAY_REGION}`,
 );
