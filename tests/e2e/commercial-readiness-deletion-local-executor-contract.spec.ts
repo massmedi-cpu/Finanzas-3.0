@@ -2,8 +2,8 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
-test("CR-001A · el executor local existe pero permanece fail-closed y sin DELETE bancario para el gateway", async ({}, testInfo) => {
-  test.skip(testInfo.project.name !== "chromium-desktop", "el contrato CR-001A se valida una vez por run");
+test("CR-001A/B · el executor local y el orquestador existen pero permanecen fail-closed", async ({}, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "el contrato CR-001A/B se valida una vez por run");
 
   const root = process.cwd();
   const migrationPath = join(root, "supabase/migrations/20260910123000_cr001_workspace_deletion_local_executor.sql");
@@ -48,11 +48,14 @@ test("CR-001A · el executor local existe pero permanece fail-closed y sin DELET
   expect(smoke).toContain("cr001_workspace_deletion_local_executor_smoke_ok");
 
   expect(protocol).toContain("localexecutorimplemented: true");
+  expect(protocol).toContain("runtimeorchestratorimplemented: true");
   expect(protocol).toContain("runtimeexecutoravailable: false");
   expect(protocol).toContain("post_deletion_receipt_retention_policy_not_defined");
   expect(protocol).toContain("production_activation_not_approved");
 
-  expect(handler).not.toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toContain("begin_workspace_deletion_execution");
+  expect(handler).toContain("workspace_deletion_execution_policy_not_approved");
   expect(router).not.toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
   expect(trust).toContain('id: "workspace-deletion"');
   expect(trust).toContain('state: "not_available"');

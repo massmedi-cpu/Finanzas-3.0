@@ -6,6 +6,7 @@ on:
       - 'rebuild/phase-*'
       - 'audit/precommercial-*'
       - 'release/*'
+      - 'commercial-readiness/**'
 
 permissions:
   contents: read

@@ -1,6 +1,6 @@
 export const WORKSPACE_DELETION_PROTOCOL = {
   contractVersion: 1,
-  state: "local_executor_foundation_fail_closed",
+  state: "runtime_orchestrator_implemented_fail_closed",
   preparedIntentTtlSeconds: 600,
   intentFoundation: {
     state: "foundation_non_destructive",
@@ -19,18 +19,20 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     "discover_supabase_storage_objects",
     "remove_supabase_storage_objects_idempotently",
     "remove_oauth_refresh_token_from_vault_idempotently",
+    "verify_external_cleanup_server_side",
     "delete_workspace_local_rows_in_controlled_transaction",
     "delete_workspace_memberships_and_root",
     "verify_zero_managed_residue",
   ],
   runtimeFoundation: {
     localExecutorImplemented: true,
-    runtimeOrchestratorImplemented: false,
+    runtimeOrchestratorImplemented: true,
     commercialPolicyConfigured: false,
     productionActivated: false,
     directGatewayDeleteOnBankSourceAllowed: false,
     requiresExecutionNonce: true,
     requiresExternalCleanupVerification: true,
+    acceptsClientCleanupProof: false,
     requiresApprovedReceiptRetention: true,
   },
   executionRehearsal: {
@@ -50,7 +52,7 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     externalGoogleDriveMutationAllowed: false,
   },
   executionBlockers: [
-    "destructive_executor_not_implemented",
+    "runtime_orchestrator_not_deployed_to_production",
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ],

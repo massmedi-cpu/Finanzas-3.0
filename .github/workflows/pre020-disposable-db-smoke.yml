@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - 'audit/precommercial-10.0.1-pre020'
+      - 'commercial-readiness/**'
 
 permissions:
   contents: read
