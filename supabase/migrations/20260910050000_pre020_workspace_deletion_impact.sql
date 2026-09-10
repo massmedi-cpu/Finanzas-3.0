@@ -11,7 +11,7 @@ set search_path = ''
 as $$
 declare
   v_workspace_id uuid := financial_app.require_current_workspace_id();
-  v_user_setting text := pg_catalog.nullif(pg_catalog.current_setting('financial_app.user_id', true), '');
+  v_user_setting text := nullif(pg_catalog.current_setting('financial_app.user_id', true), '');
   v_user_id uuid;
   v_table text;
   v_count bigint;
