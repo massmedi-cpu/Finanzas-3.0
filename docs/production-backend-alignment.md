@@ -19,7 +19,7 @@ Este runbook existe porque la release web 10.0.2 quedó por delante del backend 
 
 - Supabase Production tiene 47 migraciones registradas hasta `pre007_forecast_write_integrity`.
 - 30 coinciden también por timestamp con el repositorio.
-- 17 coinciden por nombre/efecto pero no por timestamp. Véase `ops/backend-alignment/production-migration-reconciliation.json`.
+- 17 coinciden por nombre pero no por timestamp; su SQL remoto queda además congelado por huella MD5 en `production-backend-alignment-history-fingerprint.sql`.
 - PRE-001, PRE-020 y CR-001 no están aplicadas todavía en la base real.
 - La Edge Function activa `financial-app-db-gateway` es anterior a PRE-001/PRE-020.
 - Las precondiciones de tenancy, integridad bancaria y unicidad se comprobaron en modo de solo lectura y no presentan conflictos conocidos.
@@ -54,13 +54,17 @@ El puente es un artefacto operativo temporal; no debe convertirse en el `workspa
 - Exigir `pg_dump` correcto, validación del archivo y SHA-256 del artefacto.
 - No continuar si el backup no puede recuperarse o identificarse inequívocamente.
 
-### Gate 2 · preflight de solo lectura
+### Gate 2 · comprobaciones de solo lectura
 
-Ejecutar `scripts/production-backend-alignment-preflight.sql` contra Production. Debe finalizar con:
+Primero ejecutar `scripts/production-backend-alignment-history-fingerprint.sql`. Debe finalizar con:
+
+`FINANCIAL_APP_BACKEND_HISTORY_FINGERPRINT_OK`
+
+Después ejecutar `scripts/production-backend-alignment-preflight.sql`. Debe finalizar con:
 
 `FINANCIAL_APP_BACKEND_PREFLIGHT_OK`
 
-Si falla cualquier aserción, detener el corte. No corregir datos automáticamente.
+Ambas son de solo lectura. Si falla cualquiera, detener el corte. No corregir datos automáticamente.
 
 ### Gate 3 · tenancy aditiva
 

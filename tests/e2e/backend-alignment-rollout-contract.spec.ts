@@ -5,6 +5,7 @@ const bridge = readFileSync("ops/backend-alignment/workspace-context-rollout-bri
 const strict = readFileSync("supabase/functions/financial-app-db-gateway/workspace-context.ts", "utf8");
 const runbook = readFileSync("docs/production-backend-alignment.md", "utf8");
 const reconciliation = JSON.parse(readFileSync("ops/backend-alignment/production-migration-reconciliation.json", "utf8"));
+const historyFingerprint = readFileSync("scripts/production-backend-alignment-history-fingerprint.sql", "utf8").toLowerCase();
 const preflight = readFileSync("scripts/production-backend-alignment-preflight.sql", "utf8").toLowerCase();
 const postflight = readFileSync("scripts/production-backend-alignment-postflight.sql", "utf8").toLowerCase();
 
@@ -33,6 +34,16 @@ test("backend alignment · la reconciliación prohíbe timestamp-only y enumera 
   expect(reconciliation.pendingInOrder.at(-1).name).toBe("cr001_workspace_deletion_local_executor");
 });
 
+test("backend alignment · las 17 migraciones con timestamp distinto quedan congeladas por huella", () => {
+  expect(historyFingerprint).toContain("begin transaction read only");
+  expect(historyFingerprint).toContain("financial_app_backend_history_fingerprint_ok");
+  expect(historyFingerprint).toContain("backend_history_fingerprint_mismatch");
+  expect(historyFingerprint).toContain("phase3_merchant_alias_engine");
+  expect(historyFingerprint).toContain("pre007_forecast_write_integrity");
+  expect(historyFingerprint).toContain("ddc0be92727a8210eeed3c434cb5acab");
+  expect(historyFingerprint).toContain("dcef1afd150274f6769a198432d69d48");
+});
+
 test("backend alignment · preflight congela la frontera exacta de Production", () => {
   expect(preflight).toContain("v_total <> 47 or v_distinct <> 47");
   expect(preflight).toContain("backend_preflight_migration_boundary_changed");
@@ -41,8 +52,8 @@ test("backend alignment · preflight congela la frontera exacta de Production", 
   expect(preflight).toContain("('pre007_forecast_write_integrity')");
 });
 
-test("backend alignment · preflight y postflight son transacciones de solo lectura con fail-closed", () => {
-  for (const sql of [preflight, postflight]) {
+test("backend alignment · las comprobaciones de borde son de solo lectura y fail-closed", () => {
+  for (const sql of [historyFingerprint, preflight, postflight]) {
     expect(sql).toContain("begin transaction read only");
     expect(sql).toContain("rollback;");
     expect(sql).not.toMatch(/\binsert\s+into\b/);
