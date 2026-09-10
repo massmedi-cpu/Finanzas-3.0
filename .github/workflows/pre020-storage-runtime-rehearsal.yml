@@ -68,8 +68,19 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if grep -Eq 'secrets\.|supabase[[:space:]]+link|--project-ref|db[[:space:]]+push' .github/workflows/pre020-storage-runtime-rehearsal.yml; then
-            echo 'PRE020_STORAGE_RUNTIME|status=failed|reason=remote_or_secret_reference_detected'
-            exit 1
-          fi
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const workflow = readFileSync('.github/workflows/pre020-storage-runtime-rehearsal.yml', 'utf8');
+          const forbidden = [
+            'secrets' + '.',
+            'supabase ' + 'link',
+            '--project' + '-ref',
+            'db ' + 'push',
+          ];
+          const found = forbidden.filter((token) => workflow.includes(token));
+          if (found.length) {
+            console.error('PRE020_STORAGE_RUNTIME|status=failed|reason=remote_or_secret_reference_detected');
+            process.exit(1);
+          }
+          NODE
           echo "PRE020_STORAGE_RUNTIME|status=ok|target=local_only|sha=${GITHUB_SHA}"
