@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
-test("PRE-003 protected preview fails closed without workspace session and blocks writes", async ({ request }) => {
+test("PRE-003 protected preview fails closed without workspace session for reads and writes", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
 
   const before = await request.get("/api/configuration");
@@ -29,7 +29,7 @@ test("PRE-003 protected preview fails closed without workspace session and block
   expect(blocked.status()).toBe(403);
   await expect(blocked.json()).resolves.toEqual({
     error: "persistence_failed",
-    code: "preview_production_write_forbidden",
+    code: "workspace_context_required",
   });
 
   const after = await request.get("/api/configuration");
