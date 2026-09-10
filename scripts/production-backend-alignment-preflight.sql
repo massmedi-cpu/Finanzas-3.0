@@ -4,8 +4,71 @@ begin transaction read only;
 do $$
 declare
   v_count bigint;
-  v_table text;
+  v_total bigint;
+  v_distinct bigint;
 begin
+  select count(*), count(distinct name)
+    into v_total, v_distinct
+  from supabase_migrations.schema_migrations;
+  if v_total <> 47 or v_distinct <> 47 then
+    raise exception 'backend_preflight_migration_boundary_changed:%/%', v_total, v_distinct;
+  end if;
+
+  select count(*) into v_count
+  from (values
+    ('financial_app_foundations'),
+    ('source_snapshot_history'),
+    ('harden_function_search_paths'),
+    ('index_foreign_keys'),
+    ('enforce_category_child_kind'),
+    ('enforce_category_lifecycle_hierarchy'),
+    ('centralize_configuration_mutations'),
+    ('harden_category_merge_concurrency'),
+    ('phase2_incremental_source_ingestion'),
+    ('sync_cursors_per_sheet'),
+    ('google_oauth_vault_connection'),
+    ('fix_google_oauth_vault_connection_shadowing'),
+    ('recompute_duplicate_candidates_after_source_revision'),
+    ('source_account_lifecycle'),
+    ('disambiguate_source_account_mapping_overloads'),
+    ('google_source_private_policy'),
+    ('google_source_policy_explicit_deny'),
+    ('phase3_merchant_alias_engine'),
+    ('phase3_categorization_rule_engine'),
+    ('phase4_effective_transaction_query_engine'),
+    ('phase4_transaction_override_management'),
+    ('phase4_duplicate_transfer_engine'),
+    ('phase4_duplicate_transfer_hardening'),
+    ('phase4_transfer_effective_kind_consistency'),
+    ('phase5_financial_logic_core'),
+    ('phase5_scope_balances_by_account'),
+    ('phase5_explicit_archived_account_scope'),
+    ('phase5_financial_facts_pushdown'),
+    ('phase5_transfer_pair_count_consistency'),
+    ('phase5_partial_date_range_consistency'),
+    ('phase5_snapshot_range_consistency'),
+    ('phase4_production_auth_allowlist'),
+    ('phase4_production_auth_allowlist_rls'),
+    ('phase4_production_auth_schema_execute_hardening'),
+    ('phase6_budget_engine_core'),
+    ('phase7_recurrence_engine_core'),
+    ('phase7_recurrence_freshness'),
+    ('phase7_server_resolved_candidate_persistence'),
+    ('phase8_forecast_engine_core'),
+    ('phase8_forecast_audit_contract'),
+    ('phase8_reconciliation_candidates'),
+    ('phase8_reactivate_system_superseded_forecasts'),
+    ('phase8_nonzero_manual_forecasts'),
+    ('phase9_document_engine_core'),
+    ('phase9_document_candidate_order_fix'),
+    ('optimize_authorized_users_rls_initplan'),
+    ('pre007_forecast_write_integrity')
+  ) expected(name)
+  where not exists (
+    select 1 from supabase_migrations.schema_migrations m where m.name=expected.name
+  );
+  if v_count <> 0 then raise exception 'backend_preflight_expected_migration_name_missing:%', v_count; end if;
+
   select count(*) into v_count from financial_app.authorized_users where active=true;
   if v_count <> 1 then raise exception 'backend_preflight_requires_exactly_one_active_authorized_user'; end if;
 
@@ -25,11 +88,6 @@ begin
      or pg_catalog.to_regprocedure('financial_app.require_current_workspace_id()') is not null then
     raise exception 'backend_preflight_partial_workspace_alignment_detected';
   end if;
-
-  if not exists (
-    select 1 from supabase_migrations.schema_migrations
-    where name='pre007_forecast_write_integrity'
-  ) then raise exception 'backend_preflight_pre007_boundary_missing'; end if;
 
   if pg_catalog.to_regprocedure('financial_app.normalize_label(text)') is null
      or pg_catalog.to_regprocedure('financial_app.save_manual_forecast_item(date,text,bigint,uuid,uuid,uuid,text,uuid)') is null

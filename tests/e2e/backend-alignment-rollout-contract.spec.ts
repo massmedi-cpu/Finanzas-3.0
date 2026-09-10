@@ -33,6 +33,14 @@ test("backend alignment · la reconciliación prohíbe timestamp-only y enumera 
   expect(reconciliation.pendingInOrder.at(-1).name).toBe("cr001_workspace_deletion_local_executor");
 });
 
+test("backend alignment · preflight congela la frontera exacta de Production", () => {
+  expect(preflight).toContain("v_total <> 47 or v_distinct <> 47");
+  expect(preflight).toContain("backend_preflight_migration_boundary_changed");
+  expect(preflight).toContain("backend_preflight_expected_migration_name_missing");
+  expect(preflight).toContain("('financial_app_foundations')");
+  expect(preflight).toContain("('pre007_forecast_write_integrity')");
+});
+
 test("backend alignment · preflight y postflight son transacciones de solo lectura con fail-closed", () => {
   for (const sql of [preflight, postflight]) {
     expect(sql).toContain("begin transaction read only");
