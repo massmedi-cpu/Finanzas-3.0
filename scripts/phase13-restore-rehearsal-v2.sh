@@ -23,33 +23,40 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN CREATE ROLE anon NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'financial_app_gateway') THEN
-    CREATE ROLE financial_app_gateway NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
-  END IF;
 END
 $roles$;
+
 CREATE SCHEMA IF NOT EXISTS auth;
 CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY);
 CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
 CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
+
 CREATE SCHEMA IF NOT EXISTS storage;
 CREATE TABLE IF NOT EXISTS storage.buckets (
-  id text PRIMARY KEY,name text NOT NULL UNIQUE,public boolean NOT NULL DEFAULT false,
-  file_size_limit bigint,allowed_mime_types text[]
+  id text PRIMARY KEY,
+  name text NOT NULL UNIQUE,
+  public boolean NOT NULL DEFAULT false,
+  file_size_limit bigint,
+  allowed_mime_types text[]
 );
 CREATE TABLE IF NOT EXISTS storage.objects (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),bucket_id text NOT NULL REFERENCES storage.buckets(id),
-  name text NOT NULL,created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now(),metadata jsonb
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  bucket_id text NOT NULL REFERENCES storage.buckets(id),
+  name text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  metadata jsonb
 );
+
 CREATE SCHEMA IF NOT EXISTS vault;
 CREATE TABLE IF NOT EXISTS vault.secrets (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),secret text NOT NULL,name text,description text,
-  created_at timestamptz NOT NULL DEFAULT now(),updated_at timestamptz NOT NULL DEFAULT now()
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), secret text NOT NULL, name text,
+  description text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE OR REPLACE VIEW vault.decrypted_secrets AS
-SELECT id,secret AS decrypted_secret,name,description,created_at,updated_at FROM vault.secrets;
+SELECT id, secret AS decrypted_secret, name, description, created_at, updated_at FROM vault.secrets;
 CREATE OR REPLACE FUNCTION vault.create_secret(
-  new_secret text,new_name text DEFAULT NULL,new_description text DEFAULT NULL,new_key_id uuid DEFAULT NULL
+  new_secret text, new_name text DEFAULT NULL, new_description text DEFAULT NULL, new_key_id uuid DEFAULT NULL
 ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path = '' AS $$
 DECLARE created_id uuid;
 BEGIN
@@ -57,6 +64,20 @@ BEGIN
   RETURN created_id;
 END;
 $$;
+SQL
+}
+
+prepare_restore_target_stubs() {
+  local url="$1"
+  prepare_managed_stubs "$url"
+  psql_db "$url" <<'SQL'
+DO $role$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'financial_app_gateway') THEN
+    CREATE ROLE financial_app_gateway NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+  END IF;
+END
+$role$;
 SQL
 }
 
@@ -110,15 +131,17 @@ INSERT INTO financial_app.accounts(
 );
 INSERT INTO financial_app.transaction_source_records(
   id,workspace_id,source_file_id,source_sheet_id,source_row_key,source_fingerprint,
-  source_payload,bank_date,concept_original,amount_cents,balance_after_cents,account_external_key,source_row_identity
+  source_payload,bank_date,concept_original,amount_cents,balance_after_cents,
+  account_external_key,source_row_identity
 ) VALUES (
   '11000000-0000-4000-8000-000000000013',:'ws'::uuid,'f13-v2-synthetic-source','sheet-f13-v2','F13V2-0001',
   'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','{"synthetic":true,"phase":"13-v2"}'::jsonb,
   DATE '2026-09-10','Ensayo de restauracion F13 v2',-12345,987655,'synthetic-f13-v2','f13-v2-row-0001'
 );
 INSERT INTO financial_app.transactions(
-  id,workspace_id,source_record_id,account_id,bank_date,concept_normalized,merchant_id,category_id,kind,
-  amount_cents,balance_after_cents,review_state,duplicate_state,transfer_pair_id,source_row_identity
+  id,workspace_id,source_record_id,account_id,bank_date,concept_normalized,
+  merchant_id,category_id,kind,amount_cents,balance_after_cents,
+  review_state,duplicate_state,transfer_pair_id,source_row_identity
 ) VALUES (
   '12000000-0000-4000-8000-000000000013',:'ws'::uuid,'11000000-0000-4000-8000-000000000013',
   '10000000-0000-4000-8000-000000000013',DATE '2026-09-10','ensayo de restauracion f13 v2',
@@ -136,10 +159,11 @@ schema_version="$(psql_db "$SOURCE_URL" -Atc "select schema_version from financi
 export FINANCIAL_APP_DB_URL="$SOURCE_URL"
 export FINANCIAL_APP_SOURCE_COMMIT="$GITHUB_SHA"
 unset FINANCIAL_APP_STORAGE_ARCHIVE || true
+
 node scripts/create-financial-backup-v2.mjs "$BACKUP_DIR"
 node scripts/validate-financial-backup-v2.mjs "$BACKUP_DIR"
 
-prepare_managed_stubs "$TARGET_URL"
+prepare_restore_target_stubs "$TARGET_URL"
 psql_db "$TARGET_URL" --single-transaction -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null
 
 restored="$(psql_db "$TARGET_URL" -At <<SQL
@@ -178,11 +202,13 @@ if [[ "$orphan_sources" != "0" || "$orphan_accounts" != "0" || "$bank_policy" !=
   exit 1
 fi
 
+# Reaprovisionar acceso es una acción separada del restore y no reactiva borrado.
 seed_user_before_tenancy "$TARGET_URL"
 psql_db "$TARGET_URL" -v ws="$PERSONAL_WORKSPACE" -v synthetic_user="$SYNTHETIC_USER" <<'SQL'
 INSERT INTO financial_app.workspace_memberships(workspace_id,user_id,role,active,is_default)
 VALUES (:'ws'::uuid,:'synthetic_user'::uuid,'owner',true,true)
-ON CONFLICT (workspace_id,user_id) DO UPDATE SET role='owner',active=true,is_default=true,updated_at=now();
+ON CONFLICT (workspace_id,user_id) DO UPDATE
+SET role='owner',active=true,is_default=true,updated_at=now();
 SQL
 
 post_membership="$(psql_db "$TARGET_URL" -Atc "select count(*) from financial_app.workspace_memberships where workspace_id='${PERSONAL_WORKSPACE}'::uuid and user_id='${SYNTHETIC_USER}'::uuid and role='owner' and active=true and is_default=true")"
