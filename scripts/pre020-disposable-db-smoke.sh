@@ -9,6 +9,7 @@ PRE020_MIGRATIONS=(
   "supabase/migrations/20260910050000_pre020_workspace_deletion_impact.sql"
   "supabase/migrations/20260910060000_pre020_workspace_deletion_intent.sql"
   "supabase/migrations/20260910070000_pre020_workspace_deletion_readiness.sql"
+  "supabase/migrations/20260910080000_pre020_storage_cleanup_validated.sql"
 )
 for migration in "${PRE020_MIGRATIONS[@]}"; do
   if [ ! -f "$migration" ]; then echo "PRE020_DB|status=failed|reason=missing_pre020_migration|file=${migration}"; exit 1; fi
@@ -102,4 +103,4 @@ SQL
 )"
 [ "$runtime_executor_evidence" = "0" ] || { echo "PRE020_DB|status=failed|reason=unexpected_runtime_deletion_executor|count=${runtime_executor_evidence}"; exit 1; }
 
-echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent+admin_only_deletion_execution_rehearsal+owner_only_fail_closed_deletion_readiness|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_readiness_function=${delete_readiness_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|runtime_executor=${runtime_executor_evidence}|sha=${GITHUB_SHA}"
+echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent+admin_only_deletion_execution_rehearsal+owner_only_fail_closed_deletion_readiness+storage_cleanup_validated|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_readiness_function=${delete_readiness_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|runtime_executor=${runtime_executor_evidence}|sha=${GITHUB_SHA}"

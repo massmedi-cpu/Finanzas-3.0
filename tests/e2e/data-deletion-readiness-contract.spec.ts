@@ -4,46 +4,60 @@ import { expect, test } from "@playwright/test";
 const gatewayIndex = readFileSync("supabase/functions/financial-app-db-gateway/index.ts", "utf8");
 const sourceRouter = readFileSync("supabase/functions/financial-app-db-gateway/source-sync-router.ts", "utf8");
 const handler = readFileSync("supabase/functions/financial-app-db-gateway/workspace-deletion-readiness.ts", "utf8");
-const migration = readFileSync("supabase/migrations/20260910070000_pre020_workspace_deletion_readiness.sql", "utf8");
+const baselineMigration = readFileSync("supabase/migrations/20260910070000_pre020_workspace_deletion_readiness.sql", "utf8");
+const currentMigration = readFileSync("supabase/migrations/20260910080000_pre020_storage_cleanup_validated.sql", "utf8");
 const protocol = readFileSync("src/domain/workspace-deletion-protocol.ts", "utf8");
+const storageRehearsal = readFileSync("scripts/pre020-storage-runtime-rehearsal.mjs", "utf8");
+const storageWorkflow = readFileSync(".github/workflows/pre020-storage-runtime-rehearsal.yml", "utf8");
 const dataTrustPage = readFileSync("app/configuration/data/page.tsx", "utf8");
 const dataTrustContract = readFileSync("src/domain/data-trust-contract.ts", "utf8");
 
 const ACTION = "data.deletion_readiness_v1";
 
-test("PRE-020F · readiness no entra en Preview→Production", () => {
+test("PRE-020F/G · readiness no entra en Preview→Production", () => {
   const start = gatewayIndex.indexOf("const PREVIEW_READ_ONLY_ACTIONS");
   const end = gatewayIndex.indexOf("]);", start);
   expect(gatewayIndex.slice(start, end + 3)).not.toContain(ACTION);
 });
 
-test("PRE-020F · readiness es invoker, owner/RLS heredado y siempre fail-closed", () => {
-  expect(migration).toContain("financial_app.workspace_deletion_impact()");
-  expect(migration).toContain("security invoker");
-  expect(migration).toContain("stable");
-  expect(migration).toContain("'canExecute', false");
-  expect(migration).toContain("'destructiveOperationExecuted', false");
-  expect(migration.toLowerCase()).not.toMatch(/\bdelete\s+from\b/);
-  expect(migration.toLowerCase()).not.toMatch(/\bupdate\s+financial_app\b/);
-  expect(migration.toLowerCase()).not.toMatch(/\binsert\s+into\s+financial_app\b/);
+test("PRE-020F/G · readiness sigue invoker, owner/RLS heredado y fail-closed", () => {
+  for (const migration of [baselineMigration, currentMigration]) {
+    expect(migration).toContain("financial_app.workspace_deletion_impact()");
+    expect(migration).toContain("security invoker");
+    expect(migration).toContain("stable");
+    expect(migration).toContain("'canExecute', false");
+    expect(migration).toContain("'destructiveOperationExecuted', false");
+    expect(migration.toLowerCase()).not.toMatch(/\bdelete\s+from\b/);
+    expect(migration.toLowerCase()).not.toMatch(/\bupdate\s+financial_app\b/);
+    expect(migration.toLowerCase()).not.toMatch(/\binsert\s+into\s+financial_app\b/);
+  }
 });
 
-test("PRE-020F · los bloqueos de readiness son los mismos del contrato de ejecución", () => {
+test("PRE-020G · Storage sale de blockers sólo tras rehearsal aislado verificable", () => {
+  expect(baselineMigration).toContain("supabase_storage_runtime_cleanup_not_validated");
+  expect(currentMigration).not.toContain("supabase_storage_runtime_cleanup_not_validated");
+  expect(protocol).not.toContain("supabase_storage_runtime_cleanup_not_validated");
+  expect(protocol).toContain("validatesSupabaseStorageRuntimeCleanup: true");
+  expect(currentMigration).toContain("supabase_storage_runtime_cleanup_validated");
+  expect(currentMigration).toContain("'scope', 'isolated_local_storage_api'");
+  expect(storageRehearsal).toContain("127.0.0.1");
+  expect(storageRehearsal).toContain("localhost");
+  expect(storageWorkflow).toContain("supabase start");
+  expect(storageWorkflow).toContain("version: 2.117.0");
   for (const blocker of [
     "destructive_executor_not_implemented",
-    "supabase_storage_runtime_cleanup_not_validated",
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ]) {
-    expect(migration).toContain(blocker);
+    expect(currentMigration).toContain(blocker);
     expect(protocol).toContain(blocker);
   }
-  expect(migration).toContain("workspace_deletion_intent_not_confirmed");
-  expect(migration).toContain("'officialBankSource', 'untouched'");
-  expect(migration).toContain("'googleDriveFiles', 'untouched'");
+  expect(currentMigration).toContain("workspace_deletion_intent_not_confirmed");
+  expect(currentMigration).toContain("'officialBankSource', 'untouched'");
+  expect(currentMigration).toContain("'googleDriveFiles', 'untouched'");
 });
 
-test("PRE-020F · Edge y API sólo diagnostican en Production y rechazan payload no fail-closed", () => {
+test("PRE-020F/G · Edge y API sólo diagnostican en Production y rechazan payload no fail-closed", () => {
   expect(sourceRouter).toContain('import { handleWorkspaceDeletionReadinessAction } from "./workspace-deletion-readiness.ts"');
   expect(sourceRouter).toContain("await handleWorkspaceDeletionReadinessAction(input)");
   expect(handler).toContain(ACTION);
@@ -52,7 +66,7 @@ test("PRE-020F · Edge y API sólo diagnostican en Production y rechazan payload
   expect(handler).not.toContain("data.deletion_execute_v1");
 });
 
-test("PRE-020F · Preview/Local devuelven 403 real con headers seguros", async ({ request }) => {
+test("PRE-020F/G · Preview/Local devuelven 403 real con headers seguros", async ({ request }) => {
   const response = await request.get("/api/data/deletion-readiness");
   expect(response.status()).toBe(403);
   expect(response.headers()["cache-control"]).toBe("no-store");
@@ -63,7 +77,7 @@ test("PRE-020F · Preview/Local devuelven 403 real con headers seguros", async (
   });
 });
 
-test("PRE-020F · no activa executor, UI ni contrato comercial", () => {
+test("PRE-020G · Storage validado no activa executor, UI ni contrato comercial", () => {
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
   expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
   expect(dataTrustPage).not.toContain(ACTION);
