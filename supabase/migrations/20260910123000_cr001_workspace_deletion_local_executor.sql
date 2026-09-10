@@ -72,10 +72,6 @@ alter table financial_app.workspace_deletion_intents
   add column storage_cleanup_verified_at timestamptz null,
   add column vault_cleanup_verified_at timestamptz null;
 
--- El trigger sigue bloqueando UPDATE siempre. DELETE sólo se permite durante la función
--- privilegiada de finalización, cuando existe un intent executing del mismo workspace,
--- nonce coincidente y ambas limpiezas externas han quedado registradas. El gateway no
--- recibe DELETE directo, por lo que establecer GUC por sí solo nunca concede capacidad.
 create or replace function financial_app.protect_bank_source_record()
 returns trigger
 language plpgsql
@@ -305,9 +301,6 @@ begin
 end;
 $$;
 
--- ÚNICA ampliación privilegiada de CR-001A. No concede DELETE al gateway. La función
--- sólo finaliza un intent owner-only ya puesto en executing y con las dos limpiezas
--- externas registradas. La política comercial debe seguir activa en el momento final.
 create or replace function financial_app.finalize_workspace_deletion_local(
   p_intent_id uuid,
   p_execution_nonce uuid
@@ -399,7 +392,7 @@ begin
       )
   ) t;
 
-  while pg_catalog.coalesce(pg_catalog.cardinality(v_pending),0) > 0 loop
+  while coalesce(pg_catalog.cardinality(v_pending),0) > 0 loop
     v_table := null;
     select p.table_name into v_table
     from pg_catalog.unnest(v_pending) as p(table_name)
@@ -527,5 +520,4 @@ grant execute on function financial_app.begin_workspace_deletion_execution(uuid)
 grant execute on function financial_app.record_workspace_deletion_external_cleanup(uuid,uuid,boolean,boolean) to financial_app_gateway;
 grant execute on function financial_app.finalize_workspace_deletion_local(uuid,uuid) to financial_app_gateway;
 
--- Defensa final: la excepción privilegiada no recupera permisos DELETE directos.
 revoke update,delete on table financial_app.transaction_source_records from financial_app_gateway;

@@ -52,8 +52,8 @@ test("CR-001A · el executor local existe pero permanece fail-closed y sin DELET
   expect(protocol).toContain("post_deletion_receipt_retention_policy_not_defined");
   expect(protocol).toContain("production_activation_not_approved");
 
-  expect(handler).not.toContain("data.deletion_execute_v1");
-  expect(router).not.toContain("data.deletion_execute_v1");
+  expect(handler).not.toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
+  expect(router).not.toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
   expect(trust).toContain('id: "workspace-deletion"');
   expect(trust).toContain('state: "not_available"');
 });

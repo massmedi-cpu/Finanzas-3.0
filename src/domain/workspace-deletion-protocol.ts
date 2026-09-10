@@ -2,6 +2,10 @@ export const WORKSPACE_DELETION_PROTOCOL = {
   contractVersion: 1,
   state: "local_executor_foundation_fail_closed",
   preparedIntentTtlSeconds: 600,
+  intentFoundation: {
+    state: "foundation_non_destructive",
+    confirmationExecutesDeletion: false,
+  },
   confirmation: {
     requiresOwner: true,
     requiresStableRequestKey: true,
