@@ -1,3 +1,4 @@
+import { handleDataExportAction } from "./data-export.ts";
 import { handleSourceSyncAction as handleLegacySourceSyncAction } from "./source-sync.ts";
 
 function json(body: unknown, status = 200) {
@@ -194,6 +195,9 @@ export async function handleSourceSyncAction(input: {
   sql: any;
   environment: unknown;
 }): Promise<Response | null> {
+  const dataExportResponse = await handleDataExportAction(input);
+  if (dataExportResponse) return dataExportResponse;
+
   if (input.action === "source.sync_batch") {
     const replay = await tryStableRevisionReplay(input.payload, input.sql);
     if (replay) return replay;
