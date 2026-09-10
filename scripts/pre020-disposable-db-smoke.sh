@@ -10,6 +10,7 @@ PRE020_MIGRATIONS=(
   "supabase/migrations/20260910060000_pre020_workspace_deletion_intent.sql"
   "supabase/migrations/20260910070000_pre020_workspace_deletion_readiness.sql"
   "supabase/migrations/20260910080000_pre020_storage_cleanup_validated.sql"
+  "supabase/migrations/20260910123000_cr001_workspace_deletion_local_executor.sql"
 )
 for migration in "${PRE020_MIGRATIONS[@]}"; do
   if [ ! -f "$migration" ]; then echo "PRE020_DB|status=failed|reason=missing_pre020_migration|file=${migration}"; exit 1; fi
@@ -28,6 +29,7 @@ run_smoke scripts/pre020-deletion-impact-cross-tenant-smoke.sql PRE020_DELETION_
 run_smoke scripts/pre020-deletion-intent-smoke.sql PRE020_DELETION_INTENT_SMOKE_OK deletion_intent_smoke_marker_missing
 run_smoke scripts/pre020-workspace-deletion-execution-rehearsal.sql PRE020_DELETION_EXECUTION_REHEARSAL_OK deletion_execution_rehearsal_marker_missing
 run_smoke scripts/pre020-deletion-readiness-smoke.sql PRE020_DELETION_READINESS_SMOKE_OK deletion_readiness_smoke_marker_missing
+run_smoke scripts/cr001-workspace-deletion-local-executor-smoke.sql CR001_WORKSPACE_DELETION_LOCAL_EXECUTOR_SMOKE_OK cr001_local_executor_smoke_marker_missing
 
 export_function_evidence="$(psql_db -At <<'SQL'
 select concat_ws('|',p.prosecdef,p.provolatile,
@@ -96,6 +98,44 @@ SQL
 expected_intent_functions="cancel_workspace_deletion_intent:f:v:t:f:f:f,confirm_workspace_deletion_intent:f:v:t:f:f:f,prepare_workspace_deletion_intent:f:v:t:f:f:f"
 [ "$delete_intent_functions_evidence" = "$expected_intent_functions" ] || { echo "PRE020_DB|status=failed|reason=deletion_intent_function_privilege_contract|evidence=${delete_intent_functions_evidence}"; exit 1; }
 
+cr001_policy_evidence="$(psql_db -At <<'SQL'
+select concat_ws('|',
+ p.execution_enabled,p.policy_version is null,p.deletion_receipt_retention_days is null,
+ pg_catalog.has_table_privilege('financial_app_gateway','financial_app.workspace_deletion_runtime_policy','SELECT'),
+ pg_catalog.has_table_privilege('financial_app_gateway','financial_app.workspace_deletion_runtime_policy','UPDATE'),
+ pg_catalog.has_table_privilege('financial_app_gateway','financial_app.workspace_deletion_runtime_policy','DELETE'),
+ pg_catalog.has_table_privilege('financial_app_gateway','financial_app.workspace_deletion_receipts','SELECT'))
+from financial_app.workspace_deletion_runtime_policy p where p.id=true;
+SQL
+)"
+[ "$cr001_policy_evidence" = "f|t|t|t|f|f|f" ] || { echo "PRE020_DB|status=failed|reason=cr001_policy_fail_closed_contract|evidence=${cr001_policy_evidence}"; exit 1; }
+
+cr001_executor_evidence="$(psql_db -At <<'SQL'
+select concat_ws('|',p.prosecdef,p.provolatile,
+ pg_catalog.has_function_privilege('financial_app_gateway','financial_app.finalize_workspace_deletion_local(uuid,uuid)','EXECUTE'),
+ pg_catalog.has_function_privilege('anon','financial_app.finalize_workspace_deletion_local(uuid,uuid)','EXECUTE'),
+ pg_catalog.has_function_privilege('authenticated','financial_app.finalize_workspace_deletion_local(uuid,uuid)','EXECUTE'),
+ pg_catalog.has_function_privilege('service_role','financial_app.finalize_workspace_deletion_local(uuid,uuid)','EXECUTE'),
+ pg_catalog.has_table_privilege('financial_app_gateway','financial_app.transaction_source_records','DELETE'),
+ (select count(*) from pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl where acl.grantee=0 and acl.privilege_type='EXECUTE'))
+from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+where n.nspname='financial_app' and p.proname='finalize_workspace_deletion_local';
+SQL
+)"
+[ "$cr001_executor_evidence" = "t|v|t|f|f|f|f|0" ] || { echo "PRE020_DB|status=failed|reason=cr001_local_executor_privilege_contract|evidence=${cr001_executor_evidence}"; exit 1; }
+
+cr001_unexpected_definers="$(psql_db -At <<'SQL'
+select count(*)
+from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+where n.nspname='financial_app' and p.prosecdef=true
+  and p.proname not in (
+    'store_google_oauth_connection','get_google_oauth_connection_status','get_google_oauth_refresh_token',
+    'mark_google_oauth_verified','disconnect_google_oauth_connection','finalize_workspace_deletion_local'
+  );
+SQL
+)"
+[ "$cr001_unexpected_definers" = "0" ] || { echo "PRE020_DB|status=failed|reason=cr001_unexpected_security_definer|count=${cr001_unexpected_definers}"; exit 1; }
+
 runtime_executor_evidence="$(psql_db -At <<'SQL'
 select count(*) from pg_catalog.pg_proc p join pg_catalog.pg_namespace n on n.oid=p.pronamespace
 where n.nspname='financial_app' and p.proname in ('execute_workspace_deletion','workspace_deletion_execute');
@@ -103,4 +143,4 @@ SQL
 )"
 [ "$runtime_executor_evidence" = "0" ] || { echo "PRE020_DB|status=failed|reason=unexpected_runtime_deletion_executor|count=${runtime_executor_evidence}"; exit 1; }
 
-echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent+admin_only_deletion_execution_rehearsal+owner_only_fail_closed_deletion_readiness+storage_cleanup_validated|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_readiness_function=${delete_readiness_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|runtime_executor=${runtime_executor_evidence}|sha=${GITHUB_SHA}"
+echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent+admin_only_deletion_execution_rehearsal+owner_only_fail_closed_deletion_readiness+storage_cleanup_validated+cr001_local_executor_rollback|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_readiness_function=${delete_readiness_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|cr001_policy=${cr001_policy_evidence}|cr001_local_executor=${cr001_executor_evidence}|cr001_unexpected_definers=${cr001_unexpected_definers}|runtime_executor=${runtime_executor_evidence}|sha=${GITHUB_SHA}"

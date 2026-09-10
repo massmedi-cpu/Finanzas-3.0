@@ -1,6 +1,6 @@
 export const WORKSPACE_DELETION_PROTOCOL = {
   contractVersion: 1,
-  state: "foundation_non_destructive",
+  state: "local_executor_foundation_fail_closed",
   preparedIntentTtlSeconds: 600,
   confirmation: {
     requiresOwner: true,
@@ -19,6 +19,16 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     "delete_workspace_memberships_and_root",
     "verify_zero_managed_residue",
   ],
+  runtimeFoundation: {
+    localExecutorImplemented: true,
+    runtimeOrchestratorImplemented: false,
+    commercialPolicyConfigured: false,
+    productionActivated: false,
+    directGatewayDeleteOnBankSourceAllowed: false,
+    requiresExecutionNonce: true,
+    requiresExternalCleanupVerification: true,
+    requiresApprovedReceiptRetention: true,
+  },
   executionRehearsal: {
     state: "rehearsal_admin_only",
     disposableDatabaseOnly: true,
