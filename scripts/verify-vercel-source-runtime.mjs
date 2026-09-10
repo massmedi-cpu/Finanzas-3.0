@@ -19,7 +19,7 @@ function assertCapabilities(value, label) {
   }
 }
 
-async function callGateway(token, body, contentEncoding = null) {
+async function requestGateway(token, body, contentEncoding = null) {
   const headers = {
     authorization: `Bearer ${token}`,
     "content-type": "application/json",
@@ -34,6 +34,11 @@ async function callGateway(token, body, contentEncoding = null) {
     cache: "no-store",
   });
   const payload = await response.json().catch(() => null);
+  return { response, payload };
+}
+
+async function callGateway(token, body, contentEncoding = null) {
+  const { response, payload } = await requestGateway(token, body, contentEncoding);
   if (!response.ok || !payload || payload.error) {
     throw new Error(`gateway_${response.status}_${payload?.error ?? "invalid_response"}`);
   }
@@ -42,6 +47,18 @@ async function callGateway(token, body, contentEncoding = null) {
 
 async function callAction(token, action, payload = {}) {
   return callGateway(token, JSON.stringify({ action, payload }));
+}
+
+async function assertPreviewWriteBlocked(token) {
+  const { response, payload } = await requestGateway(
+    token,
+    JSON.stringify({ action: "account.save", payload: {} }),
+  );
+  if (response.status !== 403 || payload?.error !== "preview_production_write_forbidden") {
+    throw new Error(
+      `gateway_preview_write_not_blocked_${response.status}_${payload?.error ?? "invalid_response"}`,
+    );
+  }
 }
 
 if (process.env.VERCEL !== "1") {
@@ -90,122 +107,8 @@ if (environment === "preview") {
     throw new Error("gateway_invariants_invalid");
   }
 
-  const ingestion = await callAction(oidcToken, "test.source_ingestion");
-  if (ingestion.verified !== true || ingestion.clean !== true) {
-    throw new Error("gateway_source_ingestion_not_clean");
-  }
-  const ingestionResidue = ingestion.residue ?? {};
-  for (const key of ["accounts", "mappings", "sources", "transactions", "cursors"]) {
-    if (ingestionResidue[key] !== 0) throw new Error(`gateway_source_ingestion_residue_${key}`);
-  }
-
-  const oauthVault = await callAction(oidcToken, "test.google_oauth_vault");
-  if (oauthVault.verified !== true || oauthVault.clean !== true) {
-    throw new Error("gateway_google_oauth_vault_not_clean");
-  }
-
-  const merchantAlias = await callAction(oidcToken, "test.merchant_alias_engine");
-  if (merchantAlias.verified !== true || merchantAlias.clean !== true) {
-    throw new Error("gateway_merchant_alias_engine_not_clean");
-  }
-  const merchantAliasResidue = merchantAlias.residue ?? {};
-  for (const key of ["merchants", "aliases", "categories"]) {
-    if (merchantAliasResidue[key] !== 0) throw new Error(`gateway_merchant_alias_residue_${key}`);
-  }
-
-  const ruleEngine = await callAction(oidcToken, "test.categorization_rule_engine");
-  if (ruleEngine.verified !== true || ruleEngine.clean !== true || !ruleEngine.deterministicRuleId) {
-    throw new Error("gateway_categorization_rule_engine_not_clean");
-  }
-  const ruleResidue = ruleEngine.residue ?? {};
-  for (const key of ["accounts", "categories", "merchants", "aliases", "rules", "sources", "transactions", "overrides"]) {
-    if (ruleResidue[key] !== 0) throw new Error(`gateway_rule_engine_residue_${key}`);
-  }
-
-  const transactionQuery = await callAction(oidcToken, "test.transaction_query_engine");
-  if (transactionQuery.verified !== true || transactionQuery.clean !== true) {
-    throw new Error("gateway_transaction_query_engine_not_clean");
-  }
-  const transactionQueryResidue = transactionQuery.residue ?? {};
-  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides"]) {
-    if (transactionQueryResidue[key] !== 0) throw new Error(`gateway_transaction_query_residue_${key}`);
-  }
-
-  const transactionManagement = await callAction(oidcToken, "test.transaction_management_engine");
-  if (transactionManagement.verified !== true || transactionManagement.clean !== true) {
-    throw new Error("gateway_transaction_management_engine_not_clean");
-  }
-  const managementResidue = transactionManagement.residue ?? {};
-  for (const key of ["accounts", "categories", "merchants", "sources", "transactions", "overrides", "audit_changes"]) {
-    if (managementResidue[key] !== 0) throw new Error(`gateway_transaction_management_residue_${key}`);
-  }
-
-  const transactionReview = await callAction(oidcToken, "test.transaction_review_engine");
-  if (transactionReview.verified !== true || transactionReview.clean !== true) {
-    throw new Error("gateway_transaction_review_engine_not_clean");
-  }
-  const reviewResidue = transactionReview.residue ?? {};
-  for (const key of ["accounts", "sources", "transactions", "duplicate_reviews", "audit_changes"]) {
-    if (reviewResidue[key] !== 0) throw new Error(`gateway_transaction_review_residue_${key}`);
-  }
-
-  const financialLogic = await callAction(oidcToken, "test.financial_logic_engine");
-  if (financialLogic.verified !== true || financialLogic.clean !== true) {
-    throw new Error("gateway_financial_logic_engine_not_clean");
-  }
-  const financialResidue = financialLogic.residue ?? {};
-  for (const key of ["accounts", "sources", "transactions", "audit_changes"]) {
-    if (financialResidue[key] !== 0) throw new Error(`gateway_financial_logic_residue_${key}`);
-  }
-
-  const budgetEngine = await callAction(oidcToken, "test.budget_engine");
-  if (budgetEngine.verified !== true || budgetEngine.clean !== true) {
-    throw new Error("gateway_budget_engine_not_clean");
-  }
-  const budgetResidue = budgetEngine.residue ?? {};
-  for (const key of ["categories", "sources", "transactions", "budgets", "audit_changes"]) {
-    if (budgetResidue[key] !== 0) throw new Error(`gateway_budget_engine_residue_${key}`);
-  }
-
-  const recurrenceEngine = await callAction(oidcToken, "test.recurrence_engine");
-  if (recurrenceEngine.verified !== true || recurrenceEngine.clean !== true) {
-    throw new Error("gateway_recurrence_engine_not_clean");
-  }
-  const recurrenceResidue = recurrenceEngine.residue ?? {};
-  for (const key of ["sources", "transactions", "recurrences", "audit_changes"]) {
-    if (recurrenceResidue[key] !== 0) throw new Error(`gateway_recurrence_engine_residue_${key}`);
-  }
-
-  const forecastEngine = await callAction(oidcToken, "test.forecast_engine");
-  if (
-    forecastEngine.verified !== true ||
-    forecastEngine.clean !== true ||
-    forecastEngine.serverReconciliationCandidates !== true
-  ) {
-    throw new Error("gateway_forecast_engine_not_clean");
-  }
-  const forecastResidue = forecastEngine.residue ?? {};
-  for (const key of ["manual_items", "recurring_items", "recurrences", "audit_changes"]) {
-    if (forecastResidue[key] !== 0) throw new Error(`gateway_forecast_engine_residue_${key}`);
-  }
-
-  const documentEngine = await callAction(oidcToken, "test.document_engine");
-  if (
-    documentEngine.verified !== true ||
-    documentEngine.clean !== true ||
-    documentEngine.storageVerified !== true ||
-    documentEngine.ocrUsed !== false ||
-    documentEngine.suggestionsPersisted !== false ||
-    documentEngine.bankSource !== "read_only"
-  ) {
-    throw new Error("gateway_document_engine_not_clean");
-  }
-  const documentResidue = documentEngine.residue ?? {};
-  for (const key of ["documents", "associations", "audit_changes", "storage_objects"]) {
-    if (documentResidue[key] !== 0) throw new Error(`gateway_document_engine_residue_${key}`);
-  }
-
-  previewChecks = "invariants+ingestion+vault+merchant-alias+rules+transactions+management+reviews+financial+budgets+recurrences+forecast+documents=ok";
+  await assertPreviewWriteBlocked(oidcToken);
+  previewChecks = "invariants=ok|normal_write=blocked";
 }
 
 console.log(

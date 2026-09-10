@@ -9,6 +9,7 @@ const ITEMS = [
   { href: "/configuration/merchants", label: "Comercios y alias", exact: false },
   { href: "/configuration/rules", label: "Reglas", exact: false },
   { href: "/configuration/source", label: "Fuente bancaria", exact: false },
+  { href: "/configuration/data", label: "Datos y privacidad", exact: false },
 ] as const;
 
 export default function ConfigurationAreaNav() {

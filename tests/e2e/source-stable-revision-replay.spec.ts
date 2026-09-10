@@ -27,8 +27,8 @@ test("el replay estable falla de vuelta al motor completo si no coincide toda la
     "utf8",
   );
 
-  expect(router).toContain("if (snapshotRows[0]?.matched !== batch.observations.length) return;");
-  expect(router).toContain("if (mappingRows.length !== accountExternalKeys.length) return;");
-  expect(router).toContain("if (cursorRows.length !== lastRowBySheet.size) return;");
+  expect(router).toContain("if (snapshotRows[0]?.matched !== batch.observations.length) return null;");
+  expect(router).toContain("if (mappingRows.length !== accountExternalKeys.length) return null;");
+  expect(router).toContain("if (cursorRows.length !== lastRowBySheet.size) return null;");
   expect(router).toContain("return handleLegacySourceSyncAction(input);");
 });

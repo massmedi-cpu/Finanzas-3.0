@@ -246,7 +246,7 @@ export async function handleSourceSyncAction(input: {
             ) values (
               ${batch.sourceFileId},${sourceSheetId},${batch.sourceRevision},${lastSourceRowKey},${syncRunId}::uuid,now()
             )
-            on conflict (source_file_id,source_sheet_id) do update set
+            on conflict (workspace_id,source_file_id,source_sheet_id) do update set
               source_revision=excluded.source_revision,
               last_source_row_key=excluded.last_source_row_key,
               last_successful_run_id=excluded.last_successful_run_id,

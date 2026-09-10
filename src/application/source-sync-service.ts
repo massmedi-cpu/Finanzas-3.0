@@ -95,6 +95,10 @@ export interface SourceSyncPersistence {
   recordFailure(failure: SourceSyncFailure): Promise<{ syncRunId: string }>;
 }
 
+export type SourceSyncBatchPreparer = (
+  snapshot: OfficialSourceWorkbookSnapshot,
+) => PreparedSourceSyncBatch;
+
 export class SourceWorkbookContractError extends Error {
   constructor(
     public readonly code:
@@ -395,12 +399,15 @@ function failureFromError(
 }
 
 export class SourceSyncService {
-  constructor(private readonly persistence: SourceSyncPersistence) {}
+  constructor(
+    private readonly persistence: SourceSyncPersistence,
+    private readonly prepareBatch: SourceSyncBatchPreparer = prepareOfficialSourceSyncBatch,
+  ) {}
 
   async synchronize(snapshot: OfficialSourceWorkbookSnapshot) {
     let batch: PreparedSourceSyncBatch;
     try {
-      batch = prepareOfficialSourceSyncBatch(snapshot);
+      batch = this.prepareBatch(snapshot);
     } catch (error) {
       await this.persistence.recordFailure(failureFromError(snapshot, error));
       throw error;

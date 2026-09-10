@@ -1,5 +1,6 @@
 import { gzipSync } from "node:zlib";
 import { getVercelOidcToken } from "@vercel/oidc";
+import { resolveWorkspaceSession } from "../auth/workspace-session";
 
 const SUPABASE_GATEWAY_URL =
   "https://btzukbfesxdratqnxuoj.supabase.co/functions/v1/financial-app-db-gateway";
@@ -63,12 +64,16 @@ export async function callPersistenceGateway<Result>(
     throw new PersistenceGatewayError("Vercel no ha proporcionado identidad OIDC.", 503, "oidc_unavailable");
   }
 
+  const workspaceSession = await resolveWorkspaceSession();
   const encodedRequest = encodePersistenceGatewayRequest(action, payload);
   const headers: Record<string, string> = {
     authorization: `Bearer ${oidcToken}`,
     "content-type": "application/json",
     "x-region": SUPABASE_GATEWAY_REGION,
   };
+  if (workspaceSession?.accessToken) {
+    headers["x-financial-app-user-token"] = workspaceSession.accessToken;
+  }
   if (encodedRequest.contentEncoding) {
     headers["content-encoding"] = encodedRequest.contentEncoding;
   }

@@ -10,7 +10,7 @@ import {
   getGoogleServiceAccountCredentialsFromEnvironment,
   type GoogleServiceAccountCredentials,
 } from "./google-service-account";
-import { GoogleOfficialBankSourceReader } from "./official-bank-source-reader";
+import { OPENBANK_PERSONAL_SOURCE_PROFILE } from "./openbank-source-profile";
 
 export const GOOGLE_OAUTH_STATE_COOKIE = "financial_app_google_oauth_state";
 export const OFFICIAL_GOOGLE_SOURCE_NAME = "Movimientos bancarios - fuente";
@@ -228,8 +228,12 @@ export function createGoogleSourceRuntime(sourceFileId?: string) {
     );
   }
 
-  const reader = new GoogleOfficialBankSourceReader(verifiedSourceFileId, accessTokens);
-  const synchronization = new SourceSyncService(new EdgeSourceSyncPersistence());
+  const sourceProfile = OPENBANK_PERSONAL_SOURCE_PROFILE;
+  const reader = sourceProfile.createReader(verifiedSourceFileId, accessTokens);
+  const synchronization = new SourceSyncService(
+    new EdgeSourceSyncPersistence(),
+    sourceProfile.prepareSyncBatch,
+  );
   return {
     authMode,
     configuration,
@@ -238,5 +242,6 @@ export function createGoogleSourceRuntime(sourceFileId?: string) {
     reader,
     synchronization,
     sourceFileId: verifiedSourceFileId,
+    sourceProfile,
   };
 }

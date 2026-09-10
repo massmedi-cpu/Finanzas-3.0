@@ -1,4 +1,5 @@
 import packageJson from "../../package.json";
+import { getReleaseProvenance } from "./release-provenance";
 
 // Release identity has one canonical source: package.json.
 export const APP_VERSION = packageJson.version;
@@ -17,6 +18,10 @@ function assertReleaseIdentity() {
 export function getBuildInfo() {
   assertReleaseIdentity();
 
+  const commit = process.env.VERCEL_GIT_COMMIT_SHA ?? "local";
+  const deploymentId = process.env.VERCEL_DEPLOYMENT_ID ?? null;
+  const environment = process.env.VERCEL_ENV ?? "local";
+
   return {
     version: APP_VERSION,
     targetVersion: TARGET_VERSION,
@@ -24,9 +29,10 @@ export function getBuildInfo() {
     phaseName: CURRENT_PHASE_NAME,
     phaseBlock: CURRENT_PHASE_BLOCK,
     phaseBlockName: CURRENT_PHASE_BLOCK_NAME,
-    commit: process.env.VERCEL_GIT_COMMIT_SHA ?? "local",
+    commit,
     branch: process.env.VERCEL_GIT_COMMIT_REF ?? "local",
-    deploymentId: process.env.VERCEL_DEPLOYMENT_ID ?? null,
-    environment: process.env.VERCEL_ENV ?? "local",
+    deploymentId,
+    environment,
+    ...getReleaseProvenance({ commit, deploymentId, environment }),
   } as const;
 }

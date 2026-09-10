@@ -3,7 +3,7 @@ import { documentBytesMatchMimeType } from "../../../src/domain/document-content
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const STORAGE_PATH = /^uploads\/[0-9a-f-]{36}\.(pdf|jpg|png|webp)$/i;
+const STORAGE_PATH = /^uploads\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.(pdf|jpg|png|webp)$/i;
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
 const DOCUMENT_STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
 const DOCUMENT_METHODS = new Set(["manual", "suggested"]);
@@ -98,9 +98,31 @@ function storageClient() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+async function currentWorkspaceId(sql: any): Promise<string> {
+  const rows = await sql`select financial_app.require_current_workspace_id() as workspace_id`;
+  const workspaceId = rows[0]?.workspace_id;
+  if (typeof workspaceId !== "string" || !UUID.test(workspaceId)) {
+    throw new Error("workspace_context_required");
+  }
+  return workspaceId;
+}
+
 async function removeRejectedUpload(supabase: ReturnType<typeof storageClient>, path: string) {
   const removed = await supabase.storage.from(BUCKET).remove([path]);
   if (removed.error) console.error("document-storage-rejected-cleanup", removed.error.name ?? "unknown");
+}
+
+async function storageObjectMetadata(
+  supabase: ReturnType<typeof storageClient>,
+  workspaceId: string,
+  path: string,
+) {
+  const fileName = path.split("/").pop() ?? "";
+  const listed = await supabase.storage
+    .from(BUCKET)
+    .list(`uploads/${workspaceId}`, { limit: 2, search: fileName });
+  if (listed.error) throw new Error("document_upload_content_unavailable");
+  return listed.data?.find((item: any) => item?.name === fileName) ?? null;
 }
 
 function databaseError(error: unknown) {
@@ -223,7 +245,8 @@ export async function handleDocumentLogicAction(input: {
     const sizeBytes = safeInteger(payload.sizeBytes, "document_size") as number;
     if (sizeBytes <= 0 || sizeBytes > MAX_FILE_BYTES) throw new Error("invalid_document_size");
     const extension = MIME_EXTENSIONS.get(mime)!;
-    const path = `uploads/${crypto.randomUUID()}.${extension}`;
+    const workspaceId = await currentWorkspaceId(sql);
+    const path = `uploads/${workspaceId}/${crypto.randomUUID()}.${extension}`;
     const supabase = storageClient();
     const { data, error } = await supabase.storage.from(BUCKET).createSignedUploadUrl(path, { upsert: false });
     if (error || !data?.signedUrl || !data?.token) {
@@ -247,20 +270,26 @@ export async function handleDocumentLogicAction(input: {
     const originalFileName = text(payload.originalFileName, "document_file_name", 500);
     const mime = mimeType(payload.mimeType);
     const path = text(payload.path, "document_storage_key", 1000);
-    if (!STORAGE_PATH.test(path)) throw new Error("invalid_document_storage_key");
-    const rows = await sql`
-      select metadata,updated_at
-      from storage.objects
-      where bucket_id=${BUCKET} and name=${path}
-      limit 1
-    `;
-    if (!rows[0]) return json({ error: "document_upload_not_found" }, 404);
-    const metadata = rows[0]?.metadata ?? {};
+    const workspaceId = await currentWorkspaceId(sql);
+    const pathMatch = path.match(STORAGE_PATH);
+    if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) {
+      throw new Error("invalid_document_storage_key");
+    }
+
+    const supabase = storageClient();
+    let stored: any;
+    try {
+      stored = await storageObjectMetadata(supabase, workspaceId, path);
+    } catch {
+      return json({ error: "document_upload_content_unavailable" }, 503);
+    }
+    if (!stored) return json({ error: "document_upload_not_found" }, 404);
+
+    const metadata = stored.metadata ?? {};
     const storedSize = typeof metadata?.size === "number" ? metadata.size : null;
     const storedMime = typeof metadata?.mimetype === "string" ? metadata.mimetype.toLowerCase() : null;
     if (storedMime && storedMime !== mime) return json({ error: "document_upload_mime_mismatch" }, 409);
 
-    const supabase = storageClient();
     const downloaded = await supabase.storage.from(BUCKET).download(path);
     if (downloaded.error || !downloaded.data) {
       console.error("document-storage-verify", downloaded.error?.name ?? "unknown");
@@ -284,7 +313,7 @@ export async function handleDocumentLogicAction(input: {
     return documentQuery(() => sql`
       select financial_app.register_document(
         ${type},${originalFileName},${mime},'supabase',${path},null,
-        ${actualSize}::bigint,${rows[0]?.updated_at}::timestamptz
+        ${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz
       ) as result
     `);
   }
@@ -406,7 +435,9 @@ export async function handleDocumentLogicAction(input: {
       if (!(error instanceof Error) || error.message !== "__ROLLBACK_DOCUMENT_TEST__") throw error;
     }
 
-    const testPath = `uploads/${crypto.randomUUID()}.png`;
+    const workspaceId = await currentWorkspaceId(sql);
+    const testFileName = `${crypto.randomUUID()}.png`;
+    const testPath = `uploads/${workspaceId}/${testFileName}`;
     const supabase = storageClient();
     const png = Uint8Array.from(atob("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="), (c) => c.charCodeAt(0));
     const upload = await supabase.storage.from(BUCKET).upload(testPath, png, { contentType: "image/png", upsert: false });
@@ -415,15 +446,17 @@ export async function handleDocumentLogicAction(input: {
     const storageVerified = !signed.error && Boolean(signed.data?.signedUrl);
     const removed = await supabase.storage.from(BUCKET).remove([testPath]);
     if (removed.error) throw new Error("test_document_storage_cleanup_failed");
+    const storageAfter = await supabase.storage.from(BUCKET).list(`uploads/${workspaceId}`, { limit: 2, search: testFileName });
+    if (storageAfter.error) throw new Error("test_document_storage_residue_check_failed");
+    const storageObjects = storageAfter.data?.some((item: any) => item?.name === testFileName) ? 1 : 0;
 
     const residueRows = await sql`
       select
         (select count(*)::int from financial_app.documents where id=${documentId}::uuid) as documents,
         (select count(*)::int from financial_app.document_transaction_associations where document_id=${documentId}::uuid) as associations,
-        (select count(*)::int from financial_app.audit_changes where entity_type='document' and entity_id=${documentId}::uuid) as audit_changes,
-        (select count(*)::int from storage.objects where bucket_id=${BUCKET} and name=${testPath}) as storage_objects
+        (select count(*)::int from financial_app.audit_changes where entity_type='document' and entity_id=${documentId}::uuid) as audit_changes
     `;
-    const residue = residueRows[0] ?? {};
+    const residue = { ...(residueRows[0] ?? {}), storage_objects: storageObjects };
     const clean = ["documents", "associations", "audit_changes", "storage_objects"].every((key) => residue[key] === 0);
 
     return json({ verified, clean, storageVerified, residue, ocrUsed: false, suggestionsPersisted: false, bankSource: "read_only" });

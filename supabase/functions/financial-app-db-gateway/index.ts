@@ -14,6 +14,7 @@ import { handleSourceSyncAction } from "./source-sync-router.ts";
 import { handleTransactionManagementAction } from "./transaction-management.ts";
 import { handleTransactionQueryAction } from "./transaction-query.ts";
 import { handleTransactionReviewAction } from "./transaction-review.ts";
+import { WorkspaceContextError, resolveWorkspaceContext } from "./workspace-context.ts";
 
 const TEAM_SLUG = "massmedi-9832s-projects";
 const TEAM_ID = "team_xrSskbkRKwQkyYc0vvLVGUnb";
@@ -34,6 +35,44 @@ const TEST_CATEGORY_IDS = [
 ] as const;
 const MAX_COMPRESSED_GATEWAY_BODY_BYTES = 2 * 1024 * 1024;
 const MAX_DECOMPRESSED_GATEWAY_BODY_BYTES = 16 * 1024 * 1024;
+
+const PREVIEW_READ_ONLY_ACTIONS = new Set([
+  "source.capabilities",
+  "health",
+  "test.invariants",
+  "account.list",
+  "account.get",
+  "category.list",
+  "category.get",
+  "merchant.list",
+  "merchant_alias.list",
+  "merchant.resolve",
+  "rule.list",
+  "rule.evaluate",
+  "transaction.query",
+  "transaction.facets",
+  "transaction.duplicate_group",
+  "transaction.transfer_candidates",
+  "financial.period",
+  "financial.monthly",
+  "financial.balances",
+  "financial.snapshot",
+  "budget.snapshot",
+  "recurrence.snapshot",
+  "forecast.snapshot",
+  "forecast.candidates",
+  "document.list",
+  "document.detail",
+  "document.candidates",
+  "document.open",
+  "source.google_policy",
+  "source.google_connection_status",
+  "source.status",
+]);
+
+function isPreviewProductionAccessAllowed(action: unknown) {
+  return typeof action === "string" && PREVIEW_READ_ONLY_ACTIONS.has(action);
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -153,6 +192,20 @@ Deno.serve(async (req) => {
     return json({ error: "unauthorized" }, 401);
   }
 
+  let body: Record<string, unknown>;
+  try {
+    body = await readGatewayJsonBody(req);
+  } catch (error) {
+    console.error("financial-app-db-gateway-body", error instanceof Error ? error.message : String(error));
+    return json({ error: error instanceof Error ? error.message : "invalid_gateway_body" }, 400);
+  }
+  const action = body?.action;
+  const payload = body?.payload ?? {};
+
+  if (identity.environment === "preview" && !isPreviewProductionAccessAllowed(action)) {
+    return json({ error: "preview_production_write_forbidden" }, 403);
+  }
+
   const databaseUrl = Deno.env.get("SUPABASE_DB_URL");
   if (!databaseUrl) return json({ error: "database_url_unavailable" }, 500);
   const sql = postgres(databaseUrl, {
@@ -164,9 +217,10 @@ Deno.serve(async (req) => {
   });
 
   try {
-    const body = await readGatewayJsonBody(req);
-    const action = body?.action;
-    const payload = body?.payload ?? {};
+    const workspaceContext = await resolveWorkspaceContext(req, sql);
+    // PRE-001 fase 1: la identidad ya se resuelve en la frontera Edge, pero el scoping
+    // estricto se activa sólo después de validar la migración y los gates cross-tenant.
+    void workspaceContext;
 
     if (action === "source.capabilities") {
       return json({ contractVersion: 2, sourceAccountLifecycle: true, canonicalProductSelection: true });
@@ -282,6 +336,9 @@ Deno.serve(async (req) => {
 
     return json({ error: "unsupported_action" }, 400);
   } catch (error) {
+    if (error instanceof WorkspaceContextError) {
+      return json({ error: error.code }, error.status);
+    }
     console.error("financial-app-db-gateway", error instanceof Error ? error.message : String(error));
     return json({ error: error instanceof Error ? error.message : "gateway_error" }, 400);
   } finally {

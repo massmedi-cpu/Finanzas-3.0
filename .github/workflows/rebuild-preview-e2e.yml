@@ -31,7 +31,15 @@ jobs:
         run: npm run build
 
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
 
       - name: Run browser E2E locally
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
@@ -200,14 +208,42 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Verify PRE-004 immutable release provenance
+        shell: bash
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          npm run release:manifest -- \
+            --build-info /tmp/rebuild-build.json \
+            --output /tmp/release-manifest.preview.json \
+            --expected-sha "$GITHUB_SHA" \
+            --tag "$tag" \
+            --expected-environment preview
+
+      - name: Upload PRE-004 release manifest evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-manifest-preview-${{ github.sha }}
+          path: /tmp/release-manifest.preview.json
+          retention-days: 30
+
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
 
       - name: Run protected preview live E2E
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
-        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+        run: >-
+          npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+          --grep-invert "unknown budget category|ingesta sintética roundtrip|Vault OAuth roundtrip|persistencia completa y limpieza|forged PDF bytes"
 
       - name: Upload Playwright report on failure
         if: failure()

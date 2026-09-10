@@ -3,6 +3,8 @@ import { APP_VERSION } from "../src/core/build-info";
 import "./globals.css";
 import "./touch-targets.css";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: `Financial App ${APP_VERSION}`,
   description: `Financial App ${APP_VERSION} · finanzas personales seguras, acumulativas y verificadas`,

@@ -1,0 +1,86 @@
+name: PRE-020 Storage Runtime Rehearsal
+
+on:
+  push:
+    branches:
+      - 'audit/precommercial-10.0.1-pre020'
+
+permissions:
+  contents: read
+
+env:
+  SUPABASE_TELEMETRY_DISABLED: '1'
+  DO_NOT_TRACK: '1'
+
+jobs:
+  isolated-storage-api-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v6
+
+      - name: Setup Supabase CLI 2.117.0 from immutable action commit
+        uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520
+        with:
+          version: 2.117.0
+
+      - name: Discover pinned CLI command contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version
+          supabase init --help >/dev/null
+          supabase start --help >/dev/null
+          supabase status --help >/dev/null
+          supabase stop --help >/dev/null
+
+      - name: Run isolated Supabase Storage API cleanup rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          WORKDIR="${RUNNER_TEMP}/pre020g-storage-${GITHUB_SHA}"
+          mkdir -p "$WORKDIR"
+          cleanup() {
+            cd "$WORKDIR" || true
+            supabase stop --no-backup >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          cd "$WORKDIR"
+          supabase init
+          supabase start
+
+          ENV_FILE="${RUNNER_TEMP}/pre020g-storage.env"
+          supabase status -o env \
+            --override-name api.url=SUPABASE_URL \
+            --override-name auth.service_role_key=SUPABASE_SERVICE_ROLE_KEY \
+            > "$ENV_FILE"
+
+          set -a
+          source "$ENV_FILE"
+          set +a
+
+          node "${GITHUB_WORKSPACE}/scripts/pre020-storage-runtime-rehearsal.mjs"
+
+      - name: Prove workflow is local-only and secret-free
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const { readFileSync } = require('node:fs');
+          const workflow = readFileSync('.github/workflows/pre020-storage-runtime-rehearsal.yml', 'utf8');
+          const forbidden = [
+            'secrets' + '.',
+            'supabase ' + 'link',
+            '--project' + '-ref',
+            'db ' + 'push',
+          ];
+          const found = forbidden.filter((token) => workflow.includes(token));
+          if (found.length) {
+            console.error('PRE020_STORAGE_RUNTIME|status=failed|reason=remote_or_secret_reference_detected');
+            process.exit(1);
+          }
+          NODE
+          echo "PRE020_STORAGE_RUNTIME|status=ok|target=local_only|sha=${GITHUB_SHA}"
