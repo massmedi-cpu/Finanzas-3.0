@@ -13,6 +13,7 @@ const ROUTES = [
   "/documents",
   "/configuration",
   "/configuration/source",
+  "/configuration/data",
 ] as const;
 
 test("las superficies principales no muestran lenguaje de fases ni navegación de desarrollo", async ({ page }, testInfo) => {

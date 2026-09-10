@@ -12,8 +12,8 @@ test("PRE-020 · toda afirmación verificada tiene evidencia técnica versionada
   }
 });
 
-test("PRE-020 · las capacidades de ciclo de datos inexistentes siguen declaradas como no disponibles", () => {
-  expect(byId("user-data-export")?.state).toBe("not_available");
+test("PRE-020 · las capacidades pendientes siguen declaradas como no disponibles", () => {
+  expect(byId("user-data-export")?.state).toBe("verified");
   expect(byId("workspace-deletion")?.state).toBe("not_available");
   expect(byId("commercial-retention")?.state).toBe("not_available");
   expect(byId("privacy-and-terms")?.state).toBe("not_available");
@@ -21,15 +21,15 @@ test("PRE-020 · las capacidades de ciclo de datos inexistentes siguen declarada
   expect(byId("operator-backup")?.state).toBe("operator_only");
 });
 
-test("PRE-020 · Datos y privacidad comunica estado real sin convertir pendientes en acciones", async ({ page }) => {
+test("PRE-020 · Datos y privacidad comunica estado real y expone sólo acciones verificadas", async ({ page }) => {
   await page.goto("/configuration/data");
 
   await expect(page.getByRole("heading", { name: "Datos y privacidad" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Datos y privacidad" })).toHaveAttribute("aria-current", "page");
-  await expect(page.getByText("Verificado", { exact: true })).toHaveCount(3);
+  await expect(page.getByText("Verificado", { exact: true })).toHaveCount(4);
   await expect(page.getByText("Operación técnica", { exact: true })).toHaveCount(1);
-  await expect(page.getByText("No disponible todavía", { exact: true })).toHaveCount(5);
-  await expect(page.getByRole("button", { name: /exportar mis datos/i })).toHaveCount(0);
+  await expect(page.getByText("No disponible todavía", { exact: true })).toHaveCount(4);
+  await expect(page.getByRole("link", { name: "Descargar mis datos" })).toHaveAttribute("href", "/api/data/export");
   await expect(page.getByRole("button", { name: /borrado completo/i })).toHaveCount(0);
   await expect(page.getByText(/no sustituye una política de privacidad/i)).toBeVisible();
 

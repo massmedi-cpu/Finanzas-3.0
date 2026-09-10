@@ -79,7 +79,17 @@ export default function DataTrustPage() {
                       </span>
                     </div>
                     <p>{capability.summary}</p>
-                    {capability.state === "verified" ? (
+                    {capability.id === "user-data-export" ? (
+                      <div className={styles.actionBlock}>
+                        <a className={styles.action} href="/api/data/export">
+                          Descargar mis datos
+                        </a>
+                        <small>
+                          Se descarga un archivo JSON estructurado. Los documentos se incluyen como metadatos y relaciones; sus binarios no forman parte del archivo.
+                        </small>
+                      </div>
+                    ) : null}
+                    {capability.state === "verified" && capability.id !== "user-data-export" ? (
                       <small>Respaldado por {capability.evidence.length} controles o pruebas versionadas.</small>
                     ) : null}
                     {capability.state === "operator_only" ? (

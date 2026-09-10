@@ -64,10 +64,14 @@ export const DATA_TRUST_CAPABILITIES = [
     id: "user-data-export",
     section: "data_lifecycle",
     title: "Exportar mis datos",
-    state: "not_available",
+    state: "verified",
     summary:
-      "Financial App todavía no ofrece una exportación completa y autoservicio de los datos del workspace.",
-    evidence: [],
+      "Puedes descargar una exportación JSON estructurada de los datos de negocio del workspace. No incluye credenciales, secretos de plataforma ni binarios de documentos.",
+    evidence: [
+      "supabase/migrations/20260909213000_pre020_workspace_structured_export.sql",
+      "app/api/data/export/route.ts",
+      "tests/e2e/data-export-delivery-contract.spec.ts",
+    ],
   },
   {
     id: "workspace-deletion",
@@ -109,6 +113,6 @@ export const DATA_TRUST_CAPABILITIES = [
 
 export const DATA_TRUST_REVIEW = {
   contractVersion: 1,
-  reviewedOn: "2026-09-09",
-  scope: "Financial App 10.0.1 · preparación comercial",
+  reviewedOn: "2026-09-10",
+  scope: "Financial App · preparación comercial",
 } as const;

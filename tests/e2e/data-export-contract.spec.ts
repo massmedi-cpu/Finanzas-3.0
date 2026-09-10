@@ -36,8 +36,8 @@ test("PRE-020B · la función SQL hereda RLS y no consulta tablas sensibles", ()
   expect(migration).not.toContain("from vault.");
 });
 
-test("PRE-020B · la UI no anuncia aún la exportación como disponible", () => {
+test("PRE-020B · el contrato comercial declara la exportación como autoservicio verificado", () => {
   const exportCapability = DATA_TRUST_CAPABILITIES.find((capability) => capability.id === "user-data-export");
-  expect(exportCapability?.state).toBe("not_available");
-  expect(exportCapability?.evidence).toHaveLength(0);
+  expect(exportCapability?.state).toBe("verified");
+  expect(exportCapability?.evidence.length).toBeGreaterThan(0);
 });

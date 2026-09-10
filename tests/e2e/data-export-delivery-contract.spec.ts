@@ -55,7 +55,8 @@ test("PRE-020B · el endpoint ejecutado rechaza cualquier entorno no Production"
   });
 });
 
-test("PRE-020B · la superficie comercial no expone aún un botón de descarga", () => {
-  expect(dataTrustPage).not.toContain("/api/data/export");
+test("PRE-020B · la superficie de datos expone la descarga sin exponer acciones internas", () => {
+  expect(dataTrustPage).toContain('href="/api/data/export"');
+  expect(dataTrustPage).toContain("Descargar mis datos");
   expect(dataTrustPage).not.toContain("data.export_v1");
 });
