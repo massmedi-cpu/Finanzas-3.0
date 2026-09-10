@@ -1,6 +1,7 @@
 import { handleDataExportAction } from "./data-export.ts";
 import { handleWorkspaceDeletionImpactAction } from "./workspace-deletion-impact.ts";
 import { handleWorkspaceDeletionIntentAction } from "./workspace-deletion-intent.ts";
+import { handleWorkspaceDeletionReadinessAction } from "./workspace-deletion-readiness.ts";
 import { handleSourceSyncAction as handleLegacySourceSyncAction } from "./source-sync.ts";
 
 function json(body: unknown, status = 200) {
@@ -202,6 +203,9 @@ export async function handleSourceSyncAction(input: {
 
   const deletionImpactResponse = await handleWorkspaceDeletionImpactAction(input);
   if (deletionImpactResponse) return deletionImpactResponse;
+
+  const deletionReadinessResponse = await handleWorkspaceDeletionReadinessAction(input);
+  if (deletionReadinessResponse) return deletionReadinessResponse;
 
   const deletionIntentResponse = await handleWorkspaceDeletionIntentAction(input);
   if (deletionIntentResponse) return deletionIntentResponse;
