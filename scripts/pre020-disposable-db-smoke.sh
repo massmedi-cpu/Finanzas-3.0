@@ -44,6 +44,13 @@ if ! grep -q "PRE020_DELETION_INTENT_SMOKE_OK" <<<"$delete_intent_smoke_output";
   exit 1
 fi
 
+delete_rehearsal_output="$(psql_db -f scripts/pre020-workspace-deletion-execution-rehearsal.sql)"
+printf '%s\n' "$delete_rehearsal_output"
+if ! grep -q "PRE020_DELETION_EXECUTION_REHEARSAL_OK" <<<"$delete_rehearsal_output"; then
+  echo "PRE020_DB|status=failed|reason=deletion_execution_rehearsal_marker_missing"
+  exit 1
+fi
+
 export_function_evidence="$(psql_db -At <<'SQL'
 select concat_ws('|',
   p.prosecdef,
@@ -143,4 +150,17 @@ if [ "$delete_intent_functions_evidence" != "$expected_intent_functions" ]; then
   exit 1
 fi
 
-echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|sha=${GITHUB_SHA}"
+runtime_executor_evidence="$(psql_db -At <<'SQL'
+select count(*)
+from pg_catalog.pg_proc p
+join pg_catalog.pg_namespace n on n.oid=p.pronamespace
+where n.nspname='financial_app'
+  and p.proname in ('execute_workspace_deletion','workspace_deletion_execute');
+SQL
+)"
+if [ "$runtime_executor_evidence" != "0" ]; then
+  echo "PRE020_DB|status=failed|reason=unexpected_runtime_deletion_executor|count=${runtime_executor_evidence}"
+  exit 1
+fi
+
+echo "PRE020_DB|status=ok|smoke=cross_tenant_export+owner_only_deletion_impact+idempotent_deletion_intent+admin_only_deletion_execution_rehearsal|export_function=${export_function_evidence}|deletion_impact_function=${delete_impact_function_evidence}|deletion_intent_table=${delete_intent_table_evidence}|deletion_intent_functions=${delete_intent_functions_evidence}|runtime_executor=${runtime_executor_evidence}|sha=${GITHUB_SHA}"
