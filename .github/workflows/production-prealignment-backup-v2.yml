@@ -1,0 +1,283 @@
+name: Production Prealignment Backup v2
+
+on:
+  push:
+    branches:
+      - 'backup/prealignment-v2-10.0.2'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-prealignment-backup-v2
+  cancel-in-progress: false
+
+jobs:
+  backup-and-restore-production-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      FINANCIAL_APP_DB_URL: ${{ secrets.FINANCIAL_APP_DB_URL }}
+      PRODUCTION_SOURCE_COMMIT: d608926a51d8f0a33d4a1b557558991538727595
+      BACKUP_DIR: ${{ runner.temp }}/financial-app-production-prealignment-v2
+      RESTORE_DB: financial_app_production_v2_restore
+      LOCAL_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
+      LOCAL_RESTORE_URL: postgresql://postgres:postgres@127.0.0.1:5432/financial_app_production_v2_restore
+
+    steps:
+      - name: Checkout isolated backup branch
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Fail closed unless Production still matches the frozen pre-alignment boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+          : "${FINANCIAL_APP_DB_URL:?FINANCIAL_APP_DB_URL secret is required}"
+          psql "$FINANCIAL_APP_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
+            select json_build_object(
+              'schemaVersion',(select schema_version from financial_app.schema_meta where id=true),
+              'migrationCount',(select count(*)::int from supabase_migrations.schema_migrations),
+              'latestMigration',(select max(version) from supabase_migrations.schema_migrations),
+              'workspaces',to_regclass('financial_app.workspaces'),
+              'deletionRuntime',to_regclass('financial_app.workspace_deletion_runtime_policy'),
+              'deletionIntents',to_regclass('financial_app.workspace_deletion_intents'),
+              'storageBuckets',(select count(*)::int from storage.buckets),
+              'storageObjects',(select count(*)::int from storage.objects),
+              'bankSourcePolicy',(select bank_source_policy from financial_app.schema_meta where id=true)
+            )::text;
+          " > /tmp/production-preflight.json
+          node <<'NODE'
+          const fs = require('fs');
+          const actual = JSON.parse(fs.readFileSync('/tmp/production-preflight.json','utf8').trim());
+          const expected = {
+            schemaVersion: 14,
+            migrationCount: 47,
+            latestMigration: '20260909044954',
+            workspaces: null,
+            deletionRuntime: null,
+            deletionIntents: null,
+            storageBuckets: 1,
+            storageObjects: 0,
+            bankSourcePolicy: 'read_only',
+          };
+          for (const [key, value] of Object.entries(expected)) {
+            if (actual[key] !== value) throw new Error(`production_boundary_mismatch:${key}`);
+          }
+          console.log('PRODUCTION_PREFLIGHT_OK|schema=14|migrations=47|storage=1/0|bank=read_only|tenancy=false|deletion=false');
+          NODE
+
+      - name: Capture non-sensitive source row-count evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$FINANCIAL_APP_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
+            select json_build_object(
+              'accounts',(select count(*)::int from financial_app.accounts),
+              'account_source_mappings',(select count(*)::int from financial_app.account_source_mappings),
+              'categories',(select count(*)::int from financial_app.categories),
+              'merchants',(select count(*)::int from financial_app.merchants),
+              'merchant_aliases',(select count(*)::int from financial_app.merchant_aliases),
+              'categorization_rules',(select count(*)::int from financial_app.categorization_rules),
+              'transaction_source_records',(select count(*)::int from financial_app.transaction_source_records),
+              'transactions',(select count(*)::int from financial_app.transactions),
+              'transaction_overrides',(select count(*)::int from financial_app.transaction_overrides),
+              'transaction_duplicate_reviews',(select count(*)::int from financial_app.transaction_duplicate_reviews),
+              'budgets',(select count(*)::int from financial_app.budgets),
+              'recurrences',(select count(*)::int from financial_app.recurrences),
+              'forecast_items',(select count(*)::int from financial_app.forecast_items),
+              'documents',(select count(*)::int from financial_app.documents),
+              'document_transaction_associations',(select count(*)::int from financial_app.document_transaction_associations),
+              'sync_runs',(select count(*)::int from financial_app.sync_runs),
+              'sync_issues',(select count(*)::int from financial_app.sync_issues),
+              'sync_cursors',(select count(*)::int from financial_app.sync_cursors),
+              'audit_changes',(select count(*)::int from financial_app.audit_changes),
+              'google_source_policy',(select count(*)::int from financial_app.google_source_policy)
+            )::text;
+          " > /tmp/source-counts.json
+          node -e "JSON.parse(require('fs').readFileSync('/tmp/source-counts.json','utf8').trim()); console.log('SOURCE_COUNTS_CAPTURED_OK')"
+
+      - name: Create and validate real Production backup v2
+        shell: bash
+        env:
+          FINANCIAL_APP_SOURCE_COMMIT: ${{ env.PRODUCTION_SOURCE_COMMIT }}
+        run: |
+          set -euo pipefail
+          rm -rf "$BACKUP_DIR"
+          npm run backup:create:v2 -- "$BACKUP_DIR"
+          npm run backup:validate:v2 -- "$BACKUP_DIR"
+          cp /tmp/production-preflight.json "$BACKUP_DIR/production-preflight.json"
+          cp /tmp/source-counts.json "$BACKUP_DIR/source-counts.json"
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const dir = process.env.BACKUP_DIR;
+          const m = JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));
+          const expectedSha = process.env.PRODUCTION_SOURCE_COMMIT;
+          if (m.sourceCommit !== expectedSha) throw new Error('manifest_source_commit_mismatch');
+          if (m.appVersion !== '10.0.2') throw new Error('manifest_app_version_mismatch');
+          if (m.schemaVersion !== 14) throw new Error('manifest_schema_version_mismatch');
+          if (m.capabilities.workspaceTenancy || m.capabilities.deletionRuntime || m.capabilities.deletionIntent) throw new Error('unexpected_new_capability_in_production_backup');
+          if (m.storage.bucketCount !== 1 || m.storage.objectCount !== 0) throw new Error('manifest_storage_boundary_mismatch');
+          if (m.bankSourcePolicy !== 'read_only') throw new Error('manifest_bank_policy_mismatch');
+          console.log(`PRODUCTION_BACKUP_V2_CREATED_OK|source=${m.sourceCommit}|schema=${m.schemaVersion}|storage=${m.storage.bucketCount}/${m.storage.objectCount}`);
+          NODE
+
+      - name: Prepare disposable managed-service stubs
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$LOCAL_ADMIN_URL" -X -v ON_ERROR_STOP=1 -c "DROP DATABASE IF EXISTS ${RESTORE_DB};"
+          psql "$LOCAL_ADMIN_URL" -X -v ON_ERROR_STOP=1 -c "CREATE DATABASE ${RESTORE_DB};"
+          psql "$LOCAL_RESTORE_URL" -X -v ON_ERROR_STOP=1 <<'SQL'
+          DO $roles$
+          BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN CREATE ROLE anon NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN CREATE ROLE authenticated NOLOGIN; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='service_role') THEN CREATE ROLE service_role NOLOGIN BYPASSRLS; END IF;
+            IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='financial_app_gateway') THEN
+              CREATE ROLE financial_app_gateway NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+            END IF;
+          END
+          $roles$;
+          CREATE SCHEMA IF NOT EXISTS auth;
+          CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY);
+          CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+          CREATE OR REPLACE FUNCTION auth.jwt() RETURNS jsonb LANGUAGE sql STABLE AS $$ SELECT '{}'::jsonb $$;
+          CREATE SCHEMA IF NOT EXISTS storage;
+          CREATE TABLE IF NOT EXISTS storage.buckets (
+            id text PRIMARY KEY, name text NOT NULL UNIQUE, public boolean NOT NULL DEFAULT false,
+            file_size_limit bigint, allowed_mime_types text[]
+          );
+          CREATE TABLE IF NOT EXISTS storage.objects (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(), bucket_id text NOT NULL REFERENCES storage.buckets(id),
+            name text NOT NULL, created_at timestamptz NOT NULL DEFAULT now(),
+            updated_at timestamptz NOT NULL DEFAULT now(), metadata jsonb
+          );
+          CREATE SCHEMA IF NOT EXISTS vault;
+          CREATE TABLE IF NOT EXISTS vault.secrets (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(), secret text NOT NULL, name text,
+            description text, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+          );
+          CREATE OR REPLACE VIEW vault.decrypted_secrets AS
+          SELECT id, secret AS decrypted_secret, name, description, created_at, updated_at FROM vault.secrets;
+          CREATE OR REPLACE FUNCTION vault.create_secret(
+            new_secret text, new_name text DEFAULT NULL, new_description text DEFAULT NULL, new_key_id uuid DEFAULT NULL
+          ) RETURNS uuid LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+          DECLARE created_id uuid;
+          BEGIN
+            INSERT INTO vault.secrets(secret,name,description) VALUES (new_secret,new_name,new_description) RETURNING id INTO created_id;
+            RETURN created_id;
+          END;
+          $$;
+          SQL
+
+      - name: Restore the actual Production backup into disposable PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "$LOCAL_RESTORE_URL" -X -v ON_ERROR_STOP=1 --single-transaction \
+            -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null
+          psql "$LOCAL_RESTORE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
+            select json_build_object(
+              'accounts',(select count(*)::int from financial_app.accounts),
+              'account_source_mappings',(select count(*)::int from financial_app.account_source_mappings),
+              'categories',(select count(*)::int from financial_app.categories),
+              'merchants',(select count(*)::int from financial_app.merchants),
+              'merchant_aliases',(select count(*)::int from financial_app.merchant_aliases),
+              'categorization_rules',(select count(*)::int from financial_app.categorization_rules),
+              'transaction_source_records',(select count(*)::int from financial_app.transaction_source_records),
+              'transactions',(select count(*)::int from financial_app.transactions),
+              'transaction_overrides',(select count(*)::int from financial_app.transaction_overrides),
+              'transaction_duplicate_reviews',(select count(*)::int from financial_app.transaction_duplicate_reviews),
+              'budgets',(select count(*)::int from financial_app.budgets),
+              'recurrences',(select count(*)::int from financial_app.recurrences),
+              'forecast_items',(select count(*)::int from financial_app.forecast_items),
+              'documents',(select count(*)::int from financial_app.documents),
+              'document_transaction_associations',(select count(*)::int from financial_app.document_transaction_associations),
+              'sync_runs',(select count(*)::int from financial_app.sync_runs),
+              'sync_issues',(select count(*)::int from financial_app.sync_issues),
+              'sync_cursors',(select count(*)::int from financial_app.sync_cursors),
+              'audit_changes',(select count(*)::int from financial_app.audit_changes),
+              'google_source_policy',(select count(*)::int from financial_app.google_source_policy)
+            )::text;
+          " > /tmp/restored-counts.json
+          psql "$LOCAL_RESTORE_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
+            select json_build_object(
+              'schemaVersion',(select schema_version from financial_app.schema_meta where id=true),
+              'bankSourcePolicy',(select bank_source_policy from financial_app.schema_meta where id=true),
+              'authorizedUsers',(select count(*)::int from financial_app.authorized_users),
+              'oauthConnections',(select count(*)::int from financial_app.google_oauth_connections)
+            )::text;
+          " > /tmp/restore-safety.json
+          node <<'NODE'
+          const fs = require('fs');
+          const source = JSON.parse(fs.readFileSync('/tmp/source-counts.json','utf8').trim());
+          const restored = JSON.parse(fs.readFileSync('/tmp/restored-counts.json','utf8').trim());
+          const safety = JSON.parse(fs.readFileSync('/tmp/restore-safety.json','utf8').trim());
+          if (JSON.stringify(source) !== JSON.stringify(restored)) throw new Error('restored_business_row_counts_mismatch');
+          if (safety.schemaVersion !== 14 || safety.bankSourcePolicy !== 'read_only') throw new Error('restored_schema_or_bank_policy_mismatch');
+          if (safety.authorizedUsers !== 0 || safety.oauthConnections !== 0) throw new Error('sensitive_runtime_rows_restored');
+          const evidence = {
+            status: 'ok',
+            sourceCommit: process.env.PRODUCTION_SOURCE_COMMIT,
+            schemaVersion: safety.schemaVersion,
+            bankSourcePolicy: safety.bankSourcePolicy,
+            businessRowCountsMatch: true,
+            sensitiveRuntimeRowsRestored: false,
+            sourceCounts: source,
+            restoredCounts: restored,
+          };
+          fs.writeFileSync(process.env.BACKUP_DIR + '/restore-evidence.json', JSON.stringify(evidence,null,2) + '\n');
+          console.log('PRODUCTION_BACKUP_V2_RESTORE_OK|counts_match=true|runtime_rows=0|bank=read_only');
+          NODE
+
+      - name: Revalidate package and write checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run backup:validate:v2 -- "$BACKUP_DIR"
+          (
+            cd "$BACKUP_DIR"
+            sha256sum schema.sql data.sql manifest.json storage-inventory.json production-preflight.json source-counts.json restore-evidence.json > SHA256SUMS
+          )
+          cat "$BACKUP_DIR/restore-evidence.json" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload immutable pre-alignment Production backup v2
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-app-production-prealignment-v2-${{ env.PRODUCTION_SOURCE_COMMIT }}
+          path: ${{ env.BACKUP_DIR }}/
+          if-no-files-found: error
+          retention-days: 30
