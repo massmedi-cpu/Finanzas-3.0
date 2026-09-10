@@ -25,12 +25,14 @@ function authClient() {
 async function clearWorkspaceScope(sql: any, failClosed: boolean) {
   try {
     // Un backend físico puede ser reciclado por un pooler. Antes de consultar siquiera
-    // memberships se restaura el session_user y se eliminan GUC de una petición anterior.
+    // memberships se restaura el session_user y se elimina todo contexto de una petición anterior.
     await sql.unsafe("reset role");
     await sql`
       select
         pg_catalog.set_config('financial_app.workspace_id', '', false),
-        pg_catalog.set_config('financial_app.user_id', '', false)
+        pg_catalog.set_config('financial_app.user_id', '', false),
+        pg_catalog.set_config('financial_app.workspace_role', '', false),
+        pg_catalog.set_config('financial_app.workspace_membership_count', '', false)
     `;
   } catch (error) {
     if (failClosed) {
@@ -40,15 +42,22 @@ async function clearWorkspaceScope(sql: any, failClosed: boolean) {
   }
 }
 
-async function activateWorkspaceScope(sql: any, context: WorkspaceContext) {
+async function activateWorkspaceScope(
+  sql: any,
+  context: WorkspaceContext,
+  activeMembershipCount: number,
+) {
   try {
-    // PRE-001: la conexión llega como postgres únicamente para validar la membership.
-    // Antes de cualquier consulta de negocio cambia a un rol NOLOGIN/NOBYPASSRLS.
+    // PRE-001/PRE-020C: la conexión llega como postgres únicamente para validar membership.
+    // El rol y el recuento se resuelven ANTES de SET ROLE. Después, el rol de negocio
+    // consume esos GUC sin recuperar SELECT sobre workspace_memberships.
     await sql.unsafe("set role financial_app_gateway");
     await sql`
       select
         pg_catalog.set_config('financial_app.workspace_id', ${context.workspaceId}, false),
-        pg_catalog.set_config('financial_app.user_id', ${context.userId}, false)
+        pg_catalog.set_config('financial_app.user_id', ${context.userId}, false),
+        pg_catalog.set_config('financial_app.workspace_role', ${context.role}, false),
+        pg_catalog.set_config('financial_app.workspace_membership_count', ${String(activeMembershipCount)}, false)
     `;
   } catch {
     throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
@@ -81,12 +90,20 @@ export async function resolveWorkspaceContext(
   let memberships: any[];
   try {
     memberships = await sql`
-      select workspace_id, role
-      from financial_app.workspace_memberships
-      where user_id=${data.user.id}::uuid
-        and active=true
-        and is_default=true
-      order by workspace_id
+      select
+        m.workspace_id,
+        m.role,
+        (
+          select count(*)::int
+          from financial_app.workspace_memberships active_member
+          where active_member.workspace_id = m.workspace_id
+            and active_member.active = true
+        ) as active_membership_count
+      from financial_app.workspace_memberships m
+      where m.user_id=${data.user.id}::uuid
+        and m.active=true
+        and m.is_default=true
+      order by m.workspace_id
       limit 2
     `;
   } catch {
@@ -103,7 +120,9 @@ export async function resolveWorkspaceContext(
   const membership = memberships[0];
   if (
     typeof membership.workspace_id !== "string" ||
-    (membership.role !== "owner" && membership.role !== "member")
+    (membership.role !== "owner" && membership.role !== "member") ||
+    !Number.isInteger(membership.active_membership_count) ||
+    membership.active_membership_count < 1
   ) {
     throw new WorkspaceContextError("workspace_membership_invalid", 500);
   }
@@ -114,6 +133,6 @@ export async function resolveWorkspaceContext(
     role: membership.role,
   };
 
-  await activateWorkspaceScope(sql, context);
+  await activateWorkspaceScope(sql, context, membership.active_membership_count);
   return context;
 }

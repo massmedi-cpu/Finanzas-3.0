@@ -29,8 +29,11 @@ insert into financial_app.accounts(
   ('c2100000-0000-4000-8000-000000000021'::uuid,'c2000000-0000-4000-8000-000000000002'::uuid,'PRE020C account B','Synthetic B','checking',20202,'EUR','active',0);
 
 set role financial_app_gateway;
-select pg_catalog.set_config('financial_app.workspace_id','c1000000-0000-4000-8000-000000000001',false);
-select pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000001',false);
+select
+  pg_catalog.set_config('financial_app.workspace_id','c1000000-0000-4000-8000-000000000001',false),
+  pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000001',false),
+  pg_catalog.set_config('financial_app.workspace_role','owner',false),
+  pg_catalog.set_config('financial_app.workspace_membership_count','2',false);
 
 do $$
 declare
@@ -59,8 +62,11 @@ begin
 end
 $$;
 
--- Un miembro activo del mismo workspace no puede obtener un manifiesto de borrado.
-select pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000002',false);
+-- Simula el contexto resuelto por Edge para un miembro activo: el manifiesto debe fallar cerrado.
+select
+  pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000002',false),
+  pg_catalog.set_config('financial_app.workspace_role','member',false),
+  pg_catalog.set_config('financial_app.workspace_membership_count','2',false);
 do $$
 declare
   v_blocked boolean := false;
@@ -79,8 +85,11 @@ end
 $$;
 
 -- Cambiar a B debe ocultar por RLS cualquier fila de A.
-select pg_catalog.set_config('financial_app.workspace_id','c2000000-0000-4000-8000-000000000002',false);
-select pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000003',false);
+select
+  pg_catalog.set_config('financial_app.workspace_id','c2000000-0000-4000-8000-000000000002',false),
+  pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000003',false),
+  pg_catalog.set_config('financial_app.workspace_role','owner',false),
+  pg_catalog.set_config('financial_app.workspace_membership_count','1',false);
 do $$
 declare
   v_impact jsonb := financial_app.workspace_deletion_impact();
@@ -94,6 +103,27 @@ begin
   if (v_impact#>>'{summary,workspaceMemberships}')::bigint <> 1 then
     raise exception 'PRE020C_B_MEMBERSHIP_COUNT:%',v_impact#>>'{summary,workspaceMemberships}';
   end if;
+end
+$$;
+
+-- Sin contexto de membership el manifiesto debe fallar, incluso si existe workspace_id.
+select
+  pg_catalog.set_config('financial_app.workspace_role','',false),
+  pg_catalog.set_config('financial_app.workspace_membership_count','',false);
+do $$
+declare
+  v_blocked boolean := false;
+begin
+  begin
+    perform financial_app.workspace_deletion_impact();
+  exception when others then
+    if sqlerrm = 'workspace_membership_context_required' then
+      v_blocked := true;
+    else
+      raise;
+    end if;
+  end;
+  if not v_blocked then raise exception 'PRE020C_WITHOUT_MEMBERSHIP_CONTEXT_ACCEPTED'; end if;
 end
 $$;
 

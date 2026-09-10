@@ -1,6 +1,8 @@
 -- Financial App · PRE-020C · manifiesto no destructivo del impacto de borrado
 -- Esta migración NO borra datos, NO elimina ficheros y NO modifica la fuente bancaria oficial.
 -- Expone únicamente un inventario owner-only del workspace activo, bajo RLS.
+-- El rol/membership count vienen de la frontera Edge resuelta antes de SET ROLE; esta función
+-- no recupera acceso directo a workspace_memberships y permanece SECURITY INVOKER.
 
 create or replace function financial_app.workspace_deletion_impact()
 returns jsonb
@@ -11,37 +13,33 @@ set search_path = ''
 as $$
 declare
   v_workspace_id uuid := financial_app.require_current_workspace_id();
-  v_user_setting text := nullif(pg_catalog.current_setting('financial_app.user_id', true), '');
-  v_user_id uuid;
+  v_role text := nullif(pg_catalog.current_setting('financial_app.workspace_role', true), '');
+  v_membership_count_setting text := nullif(pg_catalog.current_setting('financial_app.workspace_membership_count', true), '');
   v_table text;
   v_count bigint;
   v_total_rows bigint := 0;
   v_row_counts jsonb := '{}'::jsonb;
-  v_memberships bigint := 0;
+  v_memberships bigint;
   v_supabase_documents bigint := 0;
   v_supabase_document_bytes bigint := 0;
   v_google_drive_references bigint := 0;
   v_oauth_connections bigint := 0;
 begin
-  if v_user_setting is null then
-    raise exception using errcode = '42501', message = 'workspace_user_context_required';
+  if v_role is null or v_membership_count_setting is null then
+    raise exception using errcode = '42501', message = 'workspace_membership_context_required';
+  end if;
+
+  if v_role <> 'owner' then
+    raise exception using errcode = '42501', message = 'workspace_owner_required';
   end if;
 
   begin
-    v_user_id := v_user_setting::uuid;
-  exception when invalid_text_representation then
-    raise exception using errcode = '42501', message = 'workspace_user_context_invalid';
+    v_memberships := v_membership_count_setting::bigint;
+  exception when invalid_text_representation or numeric_value_out_of_range then
+    raise exception using errcode = '42501', message = 'workspace_membership_context_invalid';
   end;
-
-  if not exists (
-    select 1
-    from financial_app.workspace_memberships m
-    where m.workspace_id = v_workspace_id
-      and m.user_id = v_user_id
-      and m.role = 'owner'
-      and m.active = true
-  ) then
-    raise exception using errcode = '42501', message = 'workspace_owner_required';
+  if v_memberships < 1 then
+    raise exception using errcode = '42501', message = 'workspace_membership_context_invalid';
   end if;
 
   foreach v_table in array array[
@@ -75,11 +73,6 @@ begin
     v_row_counts := v_row_counts || pg_catalog.jsonb_build_object(v_table, v_count);
     v_total_rows := v_total_rows + v_count;
   end loop;
-
-  select count(*)::bigint
-    into v_memberships
-  from financial_app.workspace_memberships m
-  where m.workspace_id = v_workspace_id;
 
   select
     count(*)::bigint,
@@ -134,7 +127,7 @@ end;
 $$;
 
 comment on function financial_app.workspace_deletion_impact() is
-  'PRE-020C read-only, owner-only deletion impact manifest. Executes no destructive operation and never mutates the official bank source or external Google Drive files.';
+  'PRE-020C read-only, owner-only deletion impact manifest. Role is resolved at the trusted Edge boundary; function stays SECURITY INVOKER and never mutates bank source or external Drive files.';
 
 revoke all on function financial_app.workspace_deletion_impact() from public;
 revoke all on function financial_app.workspace_deletion_impact() from anon;

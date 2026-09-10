@@ -68,6 +68,7 @@ select concat_ws('|',
   pg_catalog.has_function_privilege('anon','financial_app.workspace_deletion_impact()','EXECUTE'),
   pg_catalog.has_function_privilege('authenticated','financial_app.workspace_deletion_impact()','EXECUTE'),
   pg_catalog.has_function_privilege('service_role','financial_app.workspace_deletion_impact()','EXECUTE'),
+  pg_catalog.has_table_privilege('financial_app_gateway','financial_app.workspace_memberships','SELECT'),
   (
     select count(*)
     from pg_catalog.aclexplode(coalesce(p.proacl,pg_catalog.acldefault('f',p.proowner))) acl
@@ -80,7 +81,7 @@ where n.nspname='financial_app' and p.proname='workspace_deletion_impact';
 SQL
 )"
 
-if [ "$delete_impact_function_evidence" != "f|s|t|f|f|f|0" ]; then
+if [ "$delete_impact_function_evidence" != "f|s|t|f|f|f|f|0" ]; then
   echo "PRE020_DB|status=failed|reason=deletion_impact_function_privilege_contract|evidence=${delete_impact_function_evidence}"
   exit 1
 fi

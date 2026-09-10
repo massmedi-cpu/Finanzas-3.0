@@ -5,6 +5,10 @@ const gatewayIndex = readFileSync(
   "supabase/functions/financial-app-db-gateway/index.ts",
   "utf8",
 );
+const workspaceContext = readFileSync(
+  "supabase/functions/financial-app-db-gateway/workspace-context.ts",
+  "utf8",
+);
 const sourceRouter = readFileSync(
   "supabase/functions/financial-app-db-gateway/source-sync-router.ts",
   "utf8",
@@ -30,10 +34,27 @@ test("PRE-020C · deletion impact queda fuera de la allowlist Preview→Producti
   expect(previewAllowlist).not.toContain("data.deletion_impact_v1");
 });
 
-test("PRE-020C · el manifiesto es owner-only, RLS e inequívocamente no destructivo", () => {
+test("PRE-020C · Edge resuelve role/count antes de SET ROLE y limpia el contexto reciclado", () => {
+  expect(workspaceContext).toContain("active_membership_count");
+  expect(workspaceContext).toContain("financial_app.workspace_role");
+  expect(workspaceContext).toContain("financial_app.workspace_membership_count");
+  expect(workspaceContext).toContain("await sql.unsafe(\"set role financial_app_gateway\")");
+  const membershipQuery = workspaceContext.indexOf("from financial_app.workspace_memberships m");
+  const setRole = workspaceContext.indexOf('await sql.unsafe("set role financial_app_gateway")');
+  expect(membershipQuery).toBeGreaterThanOrEqual(0);
+  expect(setRole).toBeGreaterThanOrEqual(0);
+  expect(membershipQuery).toBeGreaterThan(setRole);
+  expect(workspaceContext.match(/set_config\('financial_app\.workspace_role'/g)?.length).toBe(2);
+  expect(workspaceContext.match(/set_config\('financial_app\.workspace_membership_count'/g)?.length).toBe(2);
+});
+
+test("PRE-020C · el manifiesto sigue SECURITY INVOKER y no recupera lectura de memberships", () => {
   expect(impactMigration).toContain("financial_app.require_current_workspace_id()");
+  expect(impactMigration).toContain("financial_app.workspace_role");
   expect(impactMigration).toContain("workspace_owner_required");
   expect(impactMigration).toContain("security invoker");
+  expect(impactMigration).not.toContain("security definer");
+  expect(impactMigration).not.toContain("from financial_app.workspace_memberships");
   expect(impactMigration).toContain("'destructiveOperationExecuted', false");
   expect(impactMigration).toContain("'officialBankSource', 'untouched'");
   expect(impactMigration).toContain("'googleDriveFiles', 'untouched'");
