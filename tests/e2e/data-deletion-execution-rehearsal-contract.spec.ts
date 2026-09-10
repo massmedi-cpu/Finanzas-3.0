@@ -19,7 +19,6 @@ test("PRE-020E · el ensayo destructivo sigue siendo admin-only, desechable y re
   expect(protocol).toContain("disposableDatabaseOnly: true");
   expect(protocol).toContain("transactionalRollbackRequired: true");
   expect(protocol).toContain("runtimeExecutorAvailable: false");
-  expect(protocol).toContain("validatesSupabaseStorageRuntimeCleanup: false");
   expect(rehearsal).toContain("begin;");
   expect(rehearsal).toContain("rollback;");
   expect(rehearsal).toContain("PRE020_DELETION_EXECUTION_REHEARSAL_OK");
@@ -43,9 +42,11 @@ test("PRE-020E · el rehearsal prueba orden RESTRICT, aislamiento y OAuth/Vault 
   expect(protocol).toContain("externalGoogleDriveMutationAllowed: false");
 });
 
-test("PRE-020E · Storage real y recibo post-borrado continúan como bloqueos honestos", () => {
+test("PRE-020E/G · la limitación Storage del rehearsal DB queda superada sólo por el rehearsal Storage aislado", () => {
   expect(rehearsal).toContain("pg_catalog.to_regclass('storage.objects')");
-  expect(protocol).toContain('"supabase_storage_runtime_cleanup_not_validated"');
+  expect(protocol).toContain("validatesSupabaseStorageRuntimeCleanup: true");
+  expect(protocol).toContain('supabaseStorageValidationScope: "isolated_local_storage_api"');
+  expect(protocol).not.toContain('"supabase_storage_runtime_cleanup_not_validated"');
   expect(protocol).toContain('"post_deletion_receipt_retention_policy_not_defined"');
   expect(protocol).toContain('"production_activation_not_approved"');
 });
