@@ -32,10 +32,10 @@ El gateway final validado sí exige `SET ROLE financial_app_gateway`; por tanto 
 
 El artefacto `ops/backend-alignment/workspace-context-rollout-bridge.ts.template` resuelve esa transición. Se carga como `workspace-context.ts` únicamente durante el despliegue temporal:
 
-1. Después de tenancy, resuelve membership y fija GUCs, pero conserva temporalmente el principal legacy si todavía no existe el marcador de aislamiento.
-2. En cuanto aparece `financial_app.require_current_workspace_id()` y existe `financial_app_gateway`, cambia automáticamente a `SET ROLE financial_app_gateway`.
-3. Si aparece el marcador de aislamiento pero falta el rol, falla cerrado.
-4. Si el rol aparece parcialmente y no tiene permisos suficientes, la petición falla cerrada; nunca se inventa un fallback posterior al aislamiento.
+1. Después de tenancy, resuelve membership y fija GUCs, pero conserva temporalmente el principal legacy mientras **no existan ni el rol nuevo ni el marcador de aislamiento**.
+2. Cuando existen conjuntamente `financial_app.require_current_workspace_id()` y `financial_app_gateway`, cambia a `SET ROLE financial_app_gateway`.
+3. Cualquier estado parcial —rol sin marcador o marcador sin rol— falla cerrado con `workspace_isolation_state_inconsistent`.
+4. Si el rol existe pero no tiene permisos suficientes, la petición falla cerrada; nunca se inventa un fallback posterior al aislamiento.
 5. Tras completar las migraciones se sustituye el puente por el gateway final estricto del SHA validado.
 
 El puente es un artefacto operativo temporal; no debe convertirse en el `workspace-context.ts` permanente.
@@ -84,7 +84,7 @@ Aplicar, en orden:
 3. `20260909194500_pre001_workspace_fk_semantics.sql`
 4. `20260909200000_pre001_function_surface_lockdown.sql`
 
-Después de la migración 2 el gateway puente debe pasar automáticamente a modo `financial_app_gateway`. Si no puede hacerlo, debe fallar cerrado.
+Después de la migración 2 el gateway puente debe pasar automáticamente a modo `financial_app_gateway`. Si detecta cualquier estado parcial, debe fallar cerrado.
 
 No continuar con PRE-020 si las lecturas/escrituras normales, RLS o los gates cross-tenant no están verdes.
 

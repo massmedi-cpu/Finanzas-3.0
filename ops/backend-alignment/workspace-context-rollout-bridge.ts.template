@@ -66,16 +66,16 @@ async function activateWorkspaceScope(
 ) {
   const state = await detectIsolationState(sql);
 
-  // Once the isolation marker exists, legacy principal fallback is permanently forbidden.
-  if (state.isolationMarkerExists && !state.gatewayRoleExists) {
-    throw new WorkspaceContextError("workspace_isolation_role_missing", 503);
+  // Only two complete states are valid during rollout:
+  // legacy = no role + no isolation marker; strict = role + isolation marker.
+  // Any mixed/partial state must fail closed instead of guessing which mode to use.
+  if (state.gatewayRoleExists !== state.isolationMarkerExists) {
+    throw new WorkspaceContextError("workspace_isolation_state_inconsistent", 503);
   }
 
   try {
-    if (state.gatewayRoleExists) {
+    if (state.gatewayRoleExists && state.isolationMarkerExists) {
       await sql.unsafe("set role financial_app_gateway");
-    } else if (state.isolationMarkerExists) {
-      throw new WorkspaceContextError("workspace_isolation_role_missing", 503);
     }
 
     await sql`

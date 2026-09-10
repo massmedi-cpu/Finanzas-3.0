@@ -8,11 +8,12 @@ const reconciliation = JSON.parse(readFileSync("ops/backend-alignment/production
 const preflight = readFileSync("scripts/production-backend-alignment-preflight.sql", "utf8").toLowerCase();
 const postflight = readFileSync("scripts/production-backend-alignment-postflight.sql", "utf8").toLowerCase();
 
-test("backend alignment · el bridge sólo permite legacy antes del marcador de aislamiento", () => {
+test("backend alignment · el bridge sólo acepta estados completos de rollout", () => {
   expect(bridge).toContain("to_regrole('financial_app_gateway')");
   expect(bridge).toContain("to_regprocedure('financial_app.require_current_workspace_id()')");
-  expect(bridge).toContain("state.isolationMarkerExists && !state.gatewayRoleExists");
-  expect(bridge).toContain('"workspace_isolation_role_missing"');
+  expect(bridge).toContain("state.gatewayRoleExists !== state.isolationMarkerExists");
+  expect(bridge).toContain('"workspace_isolation_state_inconsistent"');
+  expect(bridge).toContain("state.gatewayRoleExists && state.isolationMarkerExists");
   expect(bridge).toContain('set role financial_app_gateway');
   expect(bridge).toContain("workspace_memberships");
 });
@@ -20,7 +21,7 @@ test("backend alignment · el bridge sólo permite legacy antes del marcador de 
 test("backend alignment · el gateway permanente sigue siendo estricto y no contiene fallback bridge", () => {
   expect(strict).toContain('await sql.unsafe("set role financial_app_gateway")');
   expect(strict).not.toContain("detectIsolationState");
-  expect(strict).not.toContain("workspace_isolation_role_missing");
+  expect(strict).not.toContain("workspace_isolation_state_inconsistent");
 });
 
 test("backend alignment · la reconciliación prohíbe timestamp-only y enumera exactamente 10 pendientes", () => {
