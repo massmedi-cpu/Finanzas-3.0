@@ -29,7 +29,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
     env:
-      FINANCIAL_APP_DB_URL: ${{ secrets.FINANCIAL_APP_DB_URL }}
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
       PRODUCTION_SOURCE_COMMIT: d608926a51d8f0a33d4a1b557558991538727595
       BACKUP_DIR: /tmp/financial-app-production-prealignment-v2
       RESTORE_DB: financial_app_production_v2_restore
@@ -60,11 +60,54 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/pg_dump --version
 
+      - name: Resolve read-only backup route from raw Production password
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+          const password = process.env.FINANCIAL_APP_DB_PASSWORD ?? '';
+          if (!password) throw new Error('FINANCIAL_APP_DB_PASSWORD is not configured');
+          process.stdout.write(`::add-mask::${password}\n`);
+          const projectRef = 'btzukbfesxdratqnxuoj';
+          const routes = [
+            { name: 'direct', host: `db.${projectRef}.supabase.co`, user: 'postgres' },
+            { name: 'session-pooler', host: 'aws-1-eu-west-3.pooler.supabase.com', user: `postgres.${projectRef}` },
+          ];
+          function probe(route) {
+            return spawnSync('psql', [
+              '--host', route.host, '--port', '5432', '--username', route.user,
+              '--dbname', 'postgres', '--no-password', '--tuples-only', '--command', 'SELECT 1;'
+            ], { encoding: 'utf8', env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' } });
+          }
+          for (const route of routes) {
+            for (let attempt = 1; attempt <= (route.name === 'session-pooler' ? 5 : 1); attempt += 1) {
+              const result = probe(route);
+              if (result.status === 0) {
+                const u = new URL('postgresql://postgres@localhost/postgres');
+                u.hostname = route.host;
+                u.port = '5432';
+                u.username = route.user;
+                u.password = password;
+                u.searchParams.set('sslmode', 'require');
+                const value = u.toString();
+                process.stdout.write(`::add-mask::${value}\n`);
+                fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
+                console.log(`PRODUCTION_DB_ROUTE_OK|route=${route.name}`);
+                process.exit(0);
+              }
+              if (route.name === 'session-pooler' && attempt < 5) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+            }
+          }
+          throw new Error('no_usable_production_database_route');
+          NODE
+
       - name: Fail closed unless Production still matches the frozen pre-alignment boundary
         shell: bash
         run: |
           set -euo pipefail
-          : "${FINANCIAL_APP_DB_URL:?FINANCIAL_APP_DB_URL secret is required}"
+          : "${FINANCIAL_APP_DB_URL:?FINANCIAL_APP_DB_URL was not resolved}"
           psql "$FINANCIAL_APP_DB_URL" -X -A -t -v ON_ERROR_STOP=1 -c "
             select json_build_object(
               'schemaVersion',(select schema_version from financial_app.schema_meta where id=true),
@@ -144,8 +187,7 @@ jobs:
           const path = require('path');
           const dir = process.env.BACKUP_DIR;
           const m = JSON.parse(fs.readFileSync(path.join(dir,'manifest.json'),'utf8'));
-          const expectedSha = process.env.PRODUCTION_SOURCE_COMMIT;
-          if (m.sourceCommit !== expectedSha) throw new Error('manifest_source_commit_mismatch');
+          if (m.sourceCommit !== process.env.PRODUCTION_SOURCE_COMMIT) throw new Error('manifest_source_commit_mismatch');
           if (m.appVersion !== '10.0.2') throw new Error('manifest_app_version_mismatch');
           if (m.schemaVersion !== 14) throw new Error('manifest_schema_version_mismatch');
           if (m.capabilities.workspaceTenancy || m.capabilities.deletionRuntime || m.capabilities.deletionIntent) throw new Error('unexpected_new_capability_in_production_backup');
