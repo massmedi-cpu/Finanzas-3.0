@@ -1,5 +1,6 @@
 import { handleDataExportAction } from "./data-export.ts";
 import { handleWorkspaceDeletionImpactAction } from "./workspace-deletion-impact.ts";
+import { handleWorkspaceDeletionIntentAction } from "./workspace-deletion-intent.ts";
 import { handleSourceSyncAction as handleLegacySourceSyncAction } from "./source-sync.ts";
 
 function json(body: unknown, status = 200) {
@@ -112,7 +113,7 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
        and sr.source_row_identity=expected.source_row_identity
        and sr.source_fingerprint=expected.source_fingerprint
     `;
-    if (snapshotRows[0]?.matched !== batch.observations.length) return;
+    if (snapshotRows[0]?.matched !== batch.observations.length) return null;
 
     const mappingRows = await tx`
       select account_external_key
@@ -120,9 +121,9 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
       where source_file_id=${batch.sourceFileId}
       order by account_external_key
     `;
-    if (mappingRows.length !== accountExternalKeys.length) return;
+    if (mappingRows.length !== accountExternalKeys.length) return null;
     const mappedKeys = new Set(mappingRows.map((row: any) => row.account_external_key));
-    if (accountExternalKeys.some((key: string) => !mappedKeys.has(key))) return;
+    if (accountExternalKeys.some((key: string) => !mappedKeys.has(key))) return null;
 
     const cursorRows = await tx`
       select source_sheet_id,source_revision,last_source_row_key
@@ -130,13 +131,13 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
       where source_file_id=${batch.sourceFileId}
       order by source_sheet_id
     `;
-    if (cursorRows.length !== lastRowBySheet.size) return;
+    if (cursorRows.length !== lastRowBySheet.size) return null;
     for (const cursor of cursorRows) {
       if (
         cursor.source_revision !== batch.sourceRevision ||
         lastRowBySheet.get(cursor.source_sheet_id) !== cursor.last_source_row_key
       ) {
-        return;
+        return null;
       }
     }
 
@@ -201,6 +202,9 @@ export async function handleSourceSyncAction(input: {
 
   const deletionImpactResponse = await handleWorkspaceDeletionImpactAction(input);
   if (deletionImpactResponse) return deletionImpactResponse;
+
+  const deletionIntentResponse = await handleWorkspaceDeletionIntentAction(input);
+  if (deletionIntentResponse) return deletionIntentResponse;
 
   if (input.action === "source.sync_batch") {
     const replay = await tryStableRevisionReplay(input.payload, input.sql);

@@ -1,0 +1,27 @@
+export const WORKSPACE_DELETION_PROTOCOL = {
+  contractVersion: 1,
+  state: "foundation_non_destructive",
+  preparedIntentTtlSeconds: 600,
+  confirmation: {
+    requiresOwner: true,
+    requiresStableRequestKey: true,
+    requiresServerIssuedNonce: true,
+    requiresFreshImpactSnapshot: true,
+    confirmationExecutesDeletion: false,
+  },
+  preservedExternalSources: ["official_bank_source", "google_drive_files"],
+  executionPhases: [
+    "lock_and_revalidate_confirmed_intent",
+    "discover_supabase_storage_objects",
+    "remove_supabase_storage_objects_idempotently",
+    "remove_oauth_refresh_token_from_vault_idempotently",
+    "delete_workspace_local_rows_in_controlled_transaction",
+    "delete_workspace_memberships_and_root",
+    "verify_zero_managed_residue",
+  ],
+  executionBlockers: [
+    "destructive_executor_not_implemented",
+    "post_deletion_receipt_retention_policy_not_defined",
+    "production_activation_not_approved",
+  ],
+} as const;
