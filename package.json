@@ -11,7 +11,9 @@
     "test:e2e": "playwright test",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
-    "backup:validate": "node scripts/validate-financial-backup.mjs"
+    "backup:validate": "node scripts/validate-financial-backup.mjs",
+    "backup:create:v2": "node scripts/create-financial-backup-v2.mjs",
+    "backup:validate:v2": "node scripts/validate-financial-backup-v2.mjs"
   },
   "engines": {
     "node": "24.x"
