@@ -1,0 +1,41 @@
+name: Remove Sensitive Backup Artifact
+
+on:
+  push:
+    branches:
+      - 'cleanup/remove-sensitive-artifact-10166536175'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  remove-exact-artifact:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete exact sensitive backup artifact
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const artifactId = 10166536175;
+            await github.rest.actions.deleteArtifact({ owner, repo, artifact_id: artifactId });
+            core.info(`Deleted Actions artifact ${artifactId}.`);
+
+      - name: Verify artifact is gone
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const artifactId = 10166536175;
+            try {
+              await github.rest.actions.getArtifact({ owner, repo, artifact_id: artifactId });
+              core.setFailed(`Artifact ${artifactId} still exists.`);
+            } catch (error) {
+              if (error.status === 404) {
+                core.info(`Artifact ${artifactId} is no longer available.`);
+                return;
+              }
+              throw error;
+            }
