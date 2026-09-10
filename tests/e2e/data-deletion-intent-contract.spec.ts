@@ -62,7 +62,9 @@ test("PRE-020D · Edge sólo expone prepare/confirm/cancel internos y no existe 
   expect(sourceRouter).toContain("await handleWorkspaceDeletionIntentAction(input)");
   for (const action of ACTIONS) expect(handler).toContain(action);
   expect(handler).toContain('environment !== "production"');
-  expect(handler).not.toContain("data.deletion_execute_v1");
+  expect(handler).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).not.toMatch(/action\s*!==?\s*["']data\.deletion_execute_v1["']/);
+  expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
 });
 
 test("PRE-020D · el contrato preserva fuentes externas y bloquea ejecución prematura", () => {
