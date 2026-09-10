@@ -8,7 +8,8 @@ insert into auth.users(id)
 values
   ('c9000000-0000-4000-8000-000000000001'::uuid),
   ('c9000000-0000-4000-8000-000000000002'::uuid),
-  ('c9000000-0000-4000-8000-000000000003'::uuid);
+  ('c9000000-0000-4000-8000-000000000003'::uuid),
+  ('c9000000-0000-4000-8000-000000000004'::uuid);
 
 insert into financial_app.workspaces(id,name)
 values
@@ -20,6 +21,7 @@ insert into financial_app.workspace_memberships(
 ) values
   ('c1000000-0000-4000-8000-000000000001'::uuid,'c9000000-0000-4000-8000-000000000001'::uuid,'owner',true,false),
   ('c1000000-0000-4000-8000-000000000001'::uuid,'c9000000-0000-4000-8000-000000000002'::uuid,'member',true,false),
+  ('c1000000-0000-4000-8000-000000000001'::uuid,'c9000000-0000-4000-8000-000000000004'::uuid,'member',false,false),
   ('c2000000-0000-4000-8000-000000000002'::uuid,'c9000000-0000-4000-8000-000000000003'::uuid,'owner',true,false);
 
 insert into financial_app.accounts(
@@ -33,7 +35,7 @@ select
   pg_catalog.set_config('financial_app.workspace_id','c1000000-0000-4000-8000-000000000001',false),
   pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000001',false),
   pg_catalog.set_config('financial_app.workspace_role','owner',false),
-  pg_catalog.set_config('financial_app.workspace_membership_count','2',false);
+  pg_catalog.set_config('financial_app.workspace_membership_count','3',false);
 
 do $$
 declare
@@ -45,7 +47,7 @@ begin
   if (v_impact#>>'{rowCounts,accounts}')::bigint <> 1 then
     raise exception 'PRE020C_A_ACCOUNT_COUNT:%',v_impact#>>'{rowCounts,accounts}';
   end if;
-  if (v_impact#>>'{summary,workspaceMemberships}')::bigint <> 2 then
+  if (v_impact#>>'{summary,workspaceMemberships}')::bigint <> 3 then
     raise exception 'PRE020C_A_MEMBERSHIP_COUNT:%',v_impact#>>'{summary,workspaceMemberships}';
   end if;
   if (v_impact->>'destructiveOperationExecuted')::boolean then
@@ -66,7 +68,7 @@ $$;
 select
   pg_catalog.set_config('financial_app.user_id','c9000000-0000-4000-8000-000000000002',false),
   pg_catalog.set_config('financial_app.workspace_role','member',false),
-  pg_catalog.set_config('financial_app.workspace_membership_count','2',false);
+  pg_catalog.set_config('financial_app.workspace_membership_count','3',false);
 do $$
 declare
   v_blocked boolean := false;

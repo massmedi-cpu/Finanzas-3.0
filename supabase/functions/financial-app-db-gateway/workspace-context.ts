@@ -45,19 +45,19 @@ async function clearWorkspaceScope(sql: any, failClosed: boolean) {
 async function activateWorkspaceScope(
   sql: any,
   context: WorkspaceContext,
-  activeMembershipCount: number,
+  workspaceMembershipCount: number,
 ) {
   try {
     // PRE-001/PRE-020C: la conexión llega como postgres únicamente para validar membership.
-    // El rol y el recuento se resuelven ANTES de SET ROLE. Después, el rol de negocio
-    // consume esos GUC sin recuperar SELECT sobre workspace_memberships.
+    // El rol y el recuento TOTAL de memberships del workspace se resuelven ANTES de SET ROLE.
+    // Después, el rol de negocio consume esos GUC sin recuperar SELECT sobre workspace_memberships.
     await sql.unsafe("set role financial_app_gateway");
     await sql`
       select
         pg_catalog.set_config('financial_app.workspace_id', ${context.workspaceId}, false),
         pg_catalog.set_config('financial_app.user_id', ${context.userId}, false),
         pg_catalog.set_config('financial_app.workspace_role', ${context.role}, false),
-        pg_catalog.set_config('financial_app.workspace_membership_count', ${String(activeMembershipCount)}, false)
+        pg_catalog.set_config('financial_app.workspace_membership_count', ${String(workspaceMembershipCount)}, false)
     `;
   } catch {
     throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
@@ -95,10 +95,9 @@ export async function resolveWorkspaceContext(
         m.role,
         (
           select count(*)::int
-          from financial_app.workspace_memberships active_member
-          where active_member.workspace_id = m.workspace_id
-            and active_member.active = true
-        ) as active_membership_count
+          from financial_app.workspace_memberships workspace_member
+          where workspace_member.workspace_id = m.workspace_id
+        ) as workspace_membership_count
       from financial_app.workspace_memberships m
       where m.user_id=${data.user.id}::uuid
         and m.active=true
@@ -121,8 +120,8 @@ export async function resolveWorkspaceContext(
   if (
     typeof membership.workspace_id !== "string" ||
     (membership.role !== "owner" && membership.role !== "member") ||
-    !Number.isInteger(membership.active_membership_count) ||
-    membership.active_membership_count < 1
+    !Number.isInteger(membership.workspace_membership_count) ||
+    membership.workspace_membership_count < 1
   ) {
     throw new WorkspaceContextError("workspace_membership_invalid", 500);
   }
@@ -133,6 +132,6 @@ export async function resolveWorkspaceContext(
     role: membership.role,
   };
 
-  await activateWorkspaceScope(sql, context, membership.active_membership_count);
+  await activateWorkspaceScope(sql, context, membership.workspace_membership_count);
   return context;
 }

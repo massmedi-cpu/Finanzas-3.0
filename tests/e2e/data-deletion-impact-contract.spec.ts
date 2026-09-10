@@ -34,10 +34,13 @@ test("PRE-020C · deletion impact queda fuera de la allowlist Preview→Producti
   expect(previewAllowlist).not.toContain("data.deletion_impact_v1");
 });
 
-test("PRE-020C · Edge resuelve role/count antes de SET ROLE y limpia el contexto reciclado", () => {
-  expect(workspaceContext).toContain("active_membership_count");
+test("PRE-020C · Edge resuelve role/count total antes de SET ROLE y limpia contexto reciclado", () => {
+  expect(workspaceContext).toContain("workspace_membership_count");
+  expect(workspaceContext).not.toContain("active_membership_count");
   expect(workspaceContext).toContain("financial_app.workspace_role");
   expect(workspaceContext).toContain("financial_app.workspace_membership_count");
+  expect(workspaceContext).toContain("from financial_app.workspace_memberships workspace_member");
+  expect(workspaceContext).not.toContain("workspace_member.active = true");
   expect(workspaceContext).toContain("await sql.unsafe(\"set role financial_app_gateway\")");
   const membershipQuery = workspaceContext.indexOf("from financial_app.workspace_memberships m");
   const setRole = workspaceContext.indexOf('await sql.unsafe("set role financial_app_gateway")');
