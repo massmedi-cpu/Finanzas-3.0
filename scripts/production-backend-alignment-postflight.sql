@@ -4,10 +4,86 @@ begin transaction read only;
 do $$
 declare
   v_count bigint;
+  v_total bigint;
+  v_distinct bigint;
   v_table text;
   v_rel record;
   v_policy record;
+  v_readiness_def text;
 begin
+  select count(*),count(distinct name)
+    into v_total,v_distinct
+  from supabase_migrations.schema_migrations;
+  if v_total <> 58 or v_distinct <> 58 then
+    raise exception 'backend_postflight_migration_boundary_invalid:%/%',v_total,v_distinct;
+  end if;
+
+  select count(*) into v_count
+  from (values
+    ('financial_app_foundations'),
+    ('source_snapshot_history'),
+    ('harden_function_search_paths'),
+    ('index_foreign_keys'),
+    ('enforce_category_child_kind'),
+    ('enforce_category_lifecycle_hierarchy'),
+    ('centralize_configuration_mutations'),
+    ('harden_category_merge_concurrency'),
+    ('phase2_incremental_source_ingestion'),
+    ('sync_cursors_per_sheet'),
+    ('google_oauth_vault_connection'),
+    ('fix_google_oauth_vault_connection_shadowing'),
+    ('recompute_duplicate_candidates_after_source_revision'),
+    ('source_account_lifecycle'),
+    ('disambiguate_source_account_mapping_overloads'),
+    ('google_source_private_policy'),
+    ('google_source_policy_explicit_deny'),
+    ('phase3_merchant_alias_engine'),
+    ('phase3_categorization_rule_engine'),
+    ('phase4_effective_transaction_query_engine'),
+    ('phase4_transaction_override_management'),
+    ('phase4_duplicate_transfer_engine'),
+    ('phase4_duplicate_transfer_hardening'),
+    ('phase4_transfer_effective_kind_consistency'),
+    ('phase5_financial_logic_core'),
+    ('phase5_scope_balances_by_account'),
+    ('phase5_explicit_archived_account_scope'),
+    ('phase5_financial_facts_pushdown'),
+    ('phase5_transfer_pair_count_consistency'),
+    ('phase5_partial_date_range_consistency'),
+    ('phase5_snapshot_range_consistency'),
+    ('phase4_production_auth_allowlist'),
+    ('phase4_production_auth_allowlist_rls'),
+    ('phase4_production_auth_schema_execute_hardening'),
+    ('phase6_budget_engine_core'),
+    ('phase7_recurrence_engine_core'),
+    ('phase7_recurrence_freshness'),
+    ('phase7_server_resolved_candidate_persistence'),
+    ('phase8_forecast_engine_core'),
+    ('phase8_forecast_audit_contract'),
+    ('phase8_reconciliation_candidates'),
+    ('phase8_reactivate_system_superseded_forecasts'),
+    ('phase8_nonzero_manual_forecasts'),
+    ('phase9_document_engine_core'),
+    ('phase9_document_candidate_order_fix'),
+    ('optimize_authorized_users_rls_initplan'),
+    ('pre007_forecast_write_integrity'),
+    ('pre001_workspace_tenancy'),
+    ('pre001_workspace_isolation'),
+    ('pre001_workspace_fk_semantics'),
+    ('pre001_function_surface_lockdown'),
+    ('pre020_workspace_structured_export'),
+    ('pre020_workspace_deletion_impact'),
+    ('pre020_workspace_deletion_intent'),
+    ('pre020_workspace_deletion_readiness'),
+    ('pre020_storage_cleanup_validated'),
+    ('cr001_workspace_deletion_local_executor'),
+    ('cr001_workspace_deletion_readiness_alignment')
+  ) expected(name)
+  where not exists (
+    select 1 from supabase_migrations.schema_migrations m where m.name=expected.name
+  );
+  if v_count <> 0 then raise exception 'backend_postflight_expected_migration_name_missing:%',v_count; end if;
+
   if pg_catalog.to_regrole('financial_app_gateway') is null then
     raise exception 'backend_postflight_gateway_role_missing';
   end if;
@@ -25,12 +101,23 @@ begin
 
   if pg_catalog.to_regprocedure('financial_app.current_workspace_id()') is null
      or pg_catalog.to_regprocedure('financial_app.require_current_workspace_id()') is null
-     or pg_catalog.to_regprocedure('financial_app.workspace_structured_export()') is null
+     or pg_catalog.to_regprocedure('financial_app.export_current_workspace_data()') is null
      or pg_catalog.to_regprocedure('financial_app.workspace_deletion_impact()') is null
      or pg_catalog.to_regprocedure('financial_app.workspace_deletion_readiness()') is null
      or pg_catalog.to_regprocedure('financial_app.begin_workspace_deletion_execution(uuid)') is null
+     or pg_catalog.to_regprocedure('financial_app.record_workspace_deletion_external_cleanup(uuid,uuid,boolean,boolean)') is null
      or pg_catalog.to_regprocedure('financial_app.finalize_workspace_deletion_local(uuid,uuid)') is null then
     raise exception 'backend_postflight_required_function_surface_missing';
+  end if;
+
+  select pg_catalog.pg_get_functiondef(
+    pg_catalog.to_regprocedure('financial_app.workspace_deletion_readiness()')
+  ) into v_readiness_def;
+  if v_readiness_def is null
+     or pg_catalog.position('destructive_executor_not_implemented' in v_readiness_def) > 0
+     or pg_catalog.position('workspace_deletion_local_executor_implemented' in v_readiness_def) = 0
+     or pg_catalog.position('self_service_execution_endpoint_not_exposed' in v_readiness_def) = 0 then
+    raise exception 'backend_postflight_deletion_readiness_not_aligned';
   end if;
 
   for v_table in select unnest(array[
@@ -87,24 +174,6 @@ begin
   join financial_app.authorized_users a on a.user_id=m.user_id and a.active=true
   where m.active=true and m.is_default=true and m.role='owner';
   if v_count <> 1 then raise exception 'backend_postflight_default_owner_membership_invalid'; end if;
-
-  select count(*) into v_count
-  from (values
-    ('pre001_workspace_tenancy'),
-    ('pre001_workspace_isolation'),
-    ('pre001_workspace_fk_semantics'),
-    ('pre001_function_surface_lockdown'),
-    ('pre020_workspace_structured_export'),
-    ('pre020_workspace_deletion_impact'),
-    ('pre020_workspace_deletion_intent'),
-    ('pre020_workspace_deletion_readiness'),
-    ('pre020_storage_cleanup_validated'),
-    ('cr001_workspace_deletion_local_executor')
-  ) expected(name)
-  where not exists (
-    select 1 from supabase_migrations.schema_migrations m where m.name=expected.name
-  );
-  if v_count <> 0 then raise exception 'backend_postflight_pending_migration_name_missing'; end if;
 end
 $$;
 

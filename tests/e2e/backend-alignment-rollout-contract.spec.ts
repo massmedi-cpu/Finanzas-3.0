@@ -5,6 +5,7 @@ const bridge = readFileSync("ops/backend-alignment/workspace-context-rollout-bri
 const strict = readFileSync("supabase/functions/financial-app-db-gateway/workspace-context.ts", "utf8");
 const runbook = readFileSync("docs/production-backend-alignment.md", "utf8");
 const reconciliation = JSON.parse(readFileSync("ops/backend-alignment/production-migration-reconciliation.json", "utf8"));
+const readinessAddendum = JSON.parse(readFileSync("ops/backend-alignment/cr001c-readiness-addendum.json", "utf8"));
 const historyFingerprint = readFileSync("scripts/production-backend-alignment-history-fingerprint.sql", "utf8").toLowerCase();
 const preflight = readFileSync("scripts/production-backend-alignment-preflight.sql", "utf8").toLowerCase();
 const postflight = readFileSync("scripts/production-backend-alignment-postflight.sql", "utf8").toLowerCase();
@@ -25,13 +26,21 @@ test("backend alignment · el gateway permanente sigue siendo estricto y no cont
   expect(strict).not.toContain("workspace_isolation_state_inconsistent");
 });
 
-test("backend alignment · la reconciliación prohíbe timestamp-only y enumera exactamente 10 pendientes", () => {
+test("backend alignment · la reconciliación original queda intacta y el hallazgo CR-001C se añade aparte", () => {
   expect(reconciliation.policy).toBe("reconcile_by_name_and_verified_effect_never_by_timestamp_only");
   expect(reconciliation.productionAppliedCount).toBe(47);
   expect(reconciliation.timestampMismatchCount).toBe(17);
   expect(reconciliation.pendingInOrder).toHaveLength(10);
   expect(reconciliation.pendingInOrder[0].name).toBe("pre001_workspace_tenancy");
   expect(reconciliation.pendingInOrder.at(-1).name).toBe("cr001_workspace_deletion_local_executor");
+
+  expect(readinessAddendum.preservesOriginalReconciliation).toBe(true);
+  expect(readinessAddendum.originalPendingCount).toBe(10);
+  expect(readinessAddendum.additionalPendingInOrder).toHaveLength(1);
+  expect(readinessAddendum.additionalPendingInOrder[0].name).toBe("cr001_workspace_deletion_readiness_alignment");
+  expect(readinessAddendum.totalPendingCount).toBe(11);
+  expect(readinessAddendum.expectedPostAlignmentMigrationCount).toBe(58);
+  expect(readinessAddendum.destructiveActivationChanged).toBe(false);
 });
 
 test("backend alignment · las 17 migraciones con timestamp distinto quedan congeladas por huella", () => {
@@ -52,6 +61,17 @@ test("backend alignment · preflight congela la frontera exacta de Production", 
   expect(preflight).toContain("('pre007_forecast_write_integrity')");
 });
 
+test("backend alignment · postflight exige exactamente la frontera final y la superficie real", () => {
+  expect(postflight).toContain("v_total <> 58 or v_distinct <> 58");
+  expect(postflight).toContain("backend_postflight_migration_boundary_invalid");
+  expect(postflight).toContain("('cr001_workspace_deletion_readiness_alignment')");
+  expect(postflight).toContain("financial_app.export_current_workspace_data()");
+  expect(postflight).not.toContain("financial_app.workspace_structured_export()");
+  expect(postflight).toContain("backend_postflight_deletion_readiness_not_aligned");
+  expect(postflight).toContain("destructive_executor_not_implemented");
+  expect(postflight).toContain("self_service_execution_endpoint_not_exposed");
+});
+
 test("backend alignment · las comprobaciones de borde son de solo lectura y fail-closed", () => {
   for (const sql of [historyFingerprint, preflight, postflight]) {
     expect(sql).toContain("begin transaction read only");
@@ -67,10 +87,12 @@ test("backend alignment · las comprobaciones de borde son de solo lectura y fai
   expect(postflight).toContain("transaction_source_records_no_update");
 });
 
-test("backend alignment · el runbook no autoriza activación destructiva", () => {
+test("backend alignment · el runbook no autoriza activación destructiva ni usa código no validado", () => {
   expect(runbook).toContain("workspace_deletion_runtime_policy.execution_enabled` debe quedar `false`");
   expect(runbook).toContain("No se define ni se inventa una política de retención");
   expect(runbook).toContain("No se usa `supabase db push`");
   expect(runbook).toContain("gateway puente");
   expect(runbook).toContain("gateway final estricto");
+  expect(runbook).toContain("no están autorizadas para Production");
+  expect(runbook).toContain("20260910173000_cr001_workspace_deletion_readiness_alignment.sql");
 });
