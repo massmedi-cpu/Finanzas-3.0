@@ -69,15 +69,17 @@ test("PRE-020D / CR-001B · Edge expone el executor interno sólo detrás de bar
   expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
 });
 
-test("PRE-020D / CR-001B · el contrato preserva fuentes externas y mantiene bloqueada la activación", () => {
+test("PRE-020D / CR-001C · el contrato preserva fuentes externas y mantiene bloqueada la activación", () => {
   expect(protocol).toContain('"foundation_non_destructive"');
   expect(protocol).toContain('"official_bank_source"');
   expect(protocol).toContain('"google_drive_files"');
-  expect(protocol).toContain('"runtime_orchestrator_not_deployed_to_production"');
+  expect(protocol).toContain('"self_service_execution_endpoint_not_exposed"');
+  expect(protocol).not.toContain('"runtime_orchestrator_not_deployed_to_production"');
   expect(protocol).toContain('"post_deletion_receipt_retention_policy_not_defined"');
   expect(protocol).toContain('"production_activation_not_approved"');
   expect(protocol).toContain("commercialPolicyConfigured: false");
   expect(protocol).toContain("productionActivated: false");
+  expect(protocol).toContain("selfServiceExecutionEndpointExposed: false");
 });
 
 test("PRE-020D / CR-001B · UI y contrato comercial siguen declarando borrado no disponible", () => {
