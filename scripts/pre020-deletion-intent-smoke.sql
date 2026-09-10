@@ -43,6 +43,10 @@ declare
   v_blocked boolean;
   v_confirmed jsonb;
   v_confirmed_retry jsonb;
+  v_expired_first jsonb;
+  v_expired_retry jsonb;
+  v_cancel_expired_first jsonb;
+  v_cancel_expired_retry jsonb;
   v_count integer;
 begin
   v_first := financial_app.prepare_workspace_deletion_intent('d3000000-0000-4000-8000-000000000003'::uuid);
@@ -115,6 +119,38 @@ begin
     if sqlerrm='workspace_deletion_intent_not_cancellable' then v_blocked := true; else raise; end if;
   end;
   if not v_blocked then raise exception 'PRE020D_CONFIRMED_INTENT_CANCELLED'; end if;
+
+  -- Un confirmed abandonado debe caducar y liberar el workspace; el retry de confirm
+  -- debe ser idempotente y nunca volver a abrir ni ejecutar nada.
+  update financial_app.workspace_deletion_intents
+  set created_at=now()-interval '20 minutes', expires_at=now()-interval '10 minutes'
+  where id=v_intent_id;
+  v_expired_first := financial_app.confirm_workspace_deletion_intent(v_intent_id,v_nonce);
+  v_expired_retry := financial_app.confirm_workspace_deletion_intent(v_intent_id,v_nonce);
+  if v_expired_first->>'status' <> 'expired'
+     or (v_expired_first->>'idempotentReplay')::boolean
+     or v_expired_retry->>'status' <> 'expired'
+     or not (v_expired_retry->>'idempotentReplay')::boolean
+     or (v_expired_retry->>'destructiveOperationExecuted')::boolean then
+    raise exception 'PRE020D_CONFIRMED_EXPIRY_NOT_IDEMPOTENT first=% retry=%',v_expired_first,v_expired_retry;
+  end if;
+
+  -- Tras expirar el confirmed debe poder abrirse un intent nuevo. Si éste caduca antes
+  -- de cancelar, ambos cancel retries deben responder expired de forma estable.
+  v_first := financial_app.prepare_workspace_deletion_intent('d8000000-0000-4000-8000-000000000008'::uuid);
+  v_intent_id := (v_first->>'intentId')::uuid;
+  update financial_app.workspace_deletion_intents
+  set created_at=now()-interval '20 minutes', expires_at=now()-interval '10 minutes'
+  where id=v_intent_id;
+  v_cancel_expired_first := financial_app.cancel_workspace_deletion_intent(v_intent_id);
+  v_cancel_expired_retry := financial_app.cancel_workspace_deletion_intent(v_intent_id);
+  if v_cancel_expired_first->>'status' <> 'expired'
+     or (v_cancel_expired_first->>'idempotentReplay')::boolean
+     or v_cancel_expired_retry->>'status' <> 'expired'
+     or not (v_cancel_expired_retry->>'idempotentReplay')::boolean
+     or (v_cancel_expired_retry->>'destructiveOperationExecuted')::boolean then
+    raise exception 'PRE020D_CANCEL_EXPIRY_NOT_IDEMPOTENT first=% retry=%',v_cancel_expired_first,v_cancel_expired_retry;
+  end if;
 
   select count(*)::int into v_count from financial_app.accounts;
   if v_count <> 2 then raise exception 'PRE020D_BUSINESS_ROWS_CHANGED:%',v_count; end if;

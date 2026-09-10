@@ -83,10 +83,12 @@ begin
     pg_catalog.hashtext('financial_app.workspace_deletion:' || v_workspace_id::text)
   );
 
+  -- El mismo TTL gobierna prepared y confirmed mientras no exista ejecutor. Así un
+  -- confirmed abandonado nunca bloquea el workspace indefinidamente.
   update financial_app.workspace_deletion_intents
   set status='expired', updated_at=now()
   where workspace_id=v_workspace_id
-    and status='prepared'
+    and status in ('prepared','confirmed')
     and expires_at <= now();
 
   select * into v_existing
@@ -177,6 +179,24 @@ begin
     raise exception using errcode='42501', message='workspace_deletion_confirmation_invalid';
   end if;
 
+  if v_intent.status='expired' then
+    return pg_catalog.jsonb_build_object(
+      'contractVersion',1,'intentId',v_intent.id,'status','expired',
+      'idempotentReplay',true,'executionReady',false,'destructiveOperationExecuted',false
+    );
+  end if;
+
+  if v_intent.status in ('prepared','confirmed') and v_intent.expires_at <= now() then
+    update financial_app.workspace_deletion_intents
+    set status='expired',updated_at=now()
+    where id=v_intent.id
+    returning * into v_intent;
+    return pg_catalog.jsonb_build_object(
+      'contractVersion',1,'intentId',v_intent.id,'status','expired',
+      'idempotentReplay',false,'executionReady',false,'destructiveOperationExecuted',false
+    );
+  end if;
+
   if v_intent.status='confirmed' then
     return pg_catalog.jsonb_build_object(
       'contractVersion',1,'intentId',v_intent.id,'status','confirmed',
@@ -186,15 +206,6 @@ begin
   end if;
   if v_intent.status <> 'prepared' then
     raise exception using errcode='55000', message='workspace_deletion_intent_not_prepared';
-  end if;
-  if v_intent.expires_at <= now() then
-    update financial_app.workspace_deletion_intents
-    set status='expired',updated_at=now()
-    where id=v_intent.id;
-    return pg_catalog.jsonb_build_object(
-      'contractVersion',1,'intentId',v_intent.id,'status','expired',
-      'executionReady',false,'destructiveOperationExecuted',false
-    );
   end if;
 
   v_current_impact := financial_app.workspace_deletion_impact();
@@ -250,6 +261,12 @@ begin
   if v_intent.status='cancelled' then
     return pg_catalog.jsonb_build_object(
       'contractVersion',1,'intentId',v_intent.id,'status','cancelled',
+      'idempotentReplay',true,'destructiveOperationExecuted',false
+    );
+  end if;
+  if v_intent.status='expired' then
+    return pg_catalog.jsonb_build_object(
+      'contractVersion',1,'intentId',v_intent.id,'status','expired',
       'idempotentReplay',true,'destructiveOperationExecuted',false
     );
   end if;
