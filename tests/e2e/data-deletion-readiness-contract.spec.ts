@@ -33,7 +33,7 @@ test("PRE-020F/G · readiness sigue invoker, owner/RLS heredado y fail-closed", 
   }
 });
 
-test("PRE-020G · Storage sale de blockers sólo tras rehearsal aislado verificable", () => {
+test("PRE-020G / CR-001B · Storage validado conserva evidencia histórica y blockers actuales", () => {
   expect(baselineMigration).toContain("supabase_storage_runtime_cleanup_not_validated");
   expect(currentMigration).not.toContain("supabase_storage_runtime_cleanup_not_validated");
   expect(protocol).not.toContain("supabase_storage_runtime_cleanup_not_validated");
@@ -44,8 +44,13 @@ test("PRE-020G · Storage sale de blockers sólo tras rehearsal aislado verifica
   expect(storageRehearsal).toContain("localhost");
   expect(storageWorkflow).toContain("supabase start");
   expect(storageWorkflow).toContain("version: 2.117.0");
+
+  // PRE-020G remains immutable historical evidence: at that point the executor was not implemented.
+  expect(currentMigration).toContain("destructive_executor_not_implemented");
+  expect(protocol).not.toContain("destructive_executor_not_implemented");
+  expect(protocol).toContain("runtime_orchestrator_not_deployed_to_production");
+
   for (const blocker of [
-    "destructive_executor_not_implemented",
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ]) {
@@ -77,7 +82,7 @@ test("PRE-020F/G · Preview/Local devuelven 403 real con headers seguros", async
   });
 });
 
-test("PRE-020G · Storage validado no activa executor, UI ni contrato comercial", () => {
+test("PRE-020G / CR-001B · Storage validado no activa UI ni contrato comercial", () => {
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
   expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
   expect(dataTrustPage).not.toContain(ACTION);

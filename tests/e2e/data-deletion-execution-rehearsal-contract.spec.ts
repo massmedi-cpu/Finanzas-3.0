@@ -51,10 +51,15 @@ test("PRE-020E/G · la limitación Storage del rehearsal DB queda superada sólo
   expect(protocol).toContain('"production_activation_not_approved"');
 });
 
-test("PRE-020E · no existe executor runtime, endpoint ni activación comercial", () => {
+test("PRE-020E / CR-001B · existe orquestador interno pero no endpoint público ni activación comercial", () => {
   const executeActionBranch = /(?:input\.)?action\s*===?\s*["']data\.deletion_execute_v1["']/;
   expect(sourceRouter).not.toMatch(executeActionBranch);
-  expect(intentHandler).not.toMatch(executeActionBranch);
+  expect(intentHandler).toMatch(executeActionBranch);
+  expect(intentHandler).toContain("financial_app.begin_workspace_deletion_execution");
+  expect(intentHandler).toContain("workspace_deletion_execution_policy_not_approved");
+  expect(protocol).toContain("runtimeOrchestratorImplemented: true");
+  expect(protocol).toContain("commercialPolicyConfigured: false");
+  expect(protocol).toContain("productionActivated: false");
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
   expect(dataTrustPage).not.toContain("data.deletion_execute_v1");
   expect(dataTrustPage).not.toContain("/api/data/deletion-execute");

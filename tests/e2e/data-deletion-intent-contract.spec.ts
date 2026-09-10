@@ -25,16 +25,17 @@ const ACTIONS = [
   "data.deletion_prepare_v1",
   "data.deletion_confirm_v1",
   "data.deletion_cancel_v1",
+  "data.deletion_execute_v1",
 ];
 
-test("PRE-020D · ninguna acción del protocolo entra en Preview→Production", () => {
+test("PRE-020D / CR-001B · ninguna acción destructiva entra en Preview→Production", () => {
   const start = gatewayIndex.indexOf("const PREVIEW_READ_ONLY_ACTIONS");
   const end = gatewayIndex.indexOf("]);", start);
   const previewAllowlist = gatewayIndex.slice(start, end + 3);
   for (const action of ACTIONS) expect(previewAllowlist).not.toContain(action);
 });
 
-test("PRE-020D · la máquina de estados es RLS, invoker e incapaz de borrar", () => {
+test("PRE-020D · la máquina de estados base es RLS, invoker e incapaz de borrar", () => {
   expect(migration).toContain("workspace_deletion_intents_workspace_isolation");
   expect(migration).toContain("force row level security");
   expect(migration).toContain("grant select, insert, update");
@@ -55,28 +56,31 @@ test("PRE-020D · prepare es idempotente, corto y snapshot-aware", () => {
   expect(migration).toContain("workspace_deletion_confirmation_invalid");
 });
 
-test("PRE-020D · Edge sólo expone prepare/confirm/cancel internos y no existe executor", () => {
+test("PRE-020D / CR-001B · Edge expone el executor interno sólo detrás de barreras fail-closed", () => {
   expect(sourceRouter).toContain(
     'import { handleWorkspaceDeletionIntentAction } from "./workspace-deletion-intent.ts"',
   );
   expect(sourceRouter).toContain("await handleWorkspaceDeletionIntentAction(input)");
   for (const action of ACTIONS) expect(handler).toContain(action);
   expect(handler).toContain('environment !== "production"');
-  expect(handler).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
-  expect(handler).not.toMatch(/action\s*!==?\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toContain("financial_app.begin_workspace_deletion_execution");
+  expect(handler).toContain("workspace_deletion_execution_policy_not_approved");
   expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
 });
 
-test("PRE-020D · el contrato preserva fuentes externas y bloquea ejecución prematura", () => {
+test("PRE-020D / CR-001B · el contrato preserva fuentes externas y mantiene bloqueada la activación", () => {
   expect(protocol).toContain('"foundation_non_destructive"');
   expect(protocol).toContain('"official_bank_source"');
   expect(protocol).toContain('"google_drive_files"');
-  expect(protocol).toContain('"destructive_executor_not_implemented"');
+  expect(protocol).toContain('"runtime_orchestrator_not_deployed_to_production"');
   expect(protocol).toContain('"post_deletion_receipt_retention_policy_not_defined"');
   expect(protocol).toContain('"production_activation_not_approved"');
+  expect(protocol).toContain("commercialPolicyConfigured: false");
+  expect(protocol).toContain("productionActivated: false");
 });
 
-test("PRE-020D · UI y contrato comercial siguen declarando borrado no disponible", () => {
+test("PRE-020D / CR-001B · UI y contrato comercial siguen declarando borrado no disponible", () => {
   expect(dataTrustContract).toContain('id: "workspace-deletion"');
   expect(dataTrustContract).toContain('state: "not_available"');
   for (const action of ACTIONS) expect(dataTrustPage).not.toContain(action);
