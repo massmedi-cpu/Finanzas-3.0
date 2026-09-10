@@ -44,6 +44,17 @@ test("PRE-020B · la API de descarga está cerrada en Preview y fuerza descarga 
   expect(downloadRoute).toContain('"x-robots-tag": "noindex"');
 });
 
+test("PRE-020B · el endpoint ejecutado rechaza cualquier entorno no Production", async ({ request }) => {
+  const response = await request.get("/api/data/export");
+  expect(response.status()).toBe(403);
+  expect(response.headers()["cache-control"]).toContain("no-store");
+  expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(await response.json()).toEqual({
+    error: "data_export_production_only",
+    code: "preview_production_export_forbidden",
+  });
+});
+
 test("PRE-020B · la superficie comercial no expone aún un botón de descarga", () => {
   expect(dataTrustPage).not.toContain("/api/data/export");
   expect(dataTrustPage).not.toContain("data.export_v1");
