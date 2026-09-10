@@ -29,6 +29,7 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     runtimeOrchestratorImplemented: true,
     commercialPolicyConfigured: false,
     productionActivated: false,
+    selfServiceExecutionEndpointExposed: false,
     directGatewayDeleteOnBankSourceAllowed: false,
     requiresExecutionNonce: true,
     requiresExternalCleanupVerification: true,
@@ -52,7 +53,7 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     externalGoogleDriveMutationAllowed: false,
   },
   executionBlockers: [
-    "runtime_orchestrator_not_deployed_to_production",
+    "self_service_execution_endpoint_not_exposed",
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ],

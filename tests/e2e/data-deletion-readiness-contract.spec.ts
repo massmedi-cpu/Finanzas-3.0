@@ -5,7 +5,8 @@ const gatewayIndex = readFileSync("supabase/functions/financial-app-db-gateway/i
 const sourceRouter = readFileSync("supabase/functions/financial-app-db-gateway/source-sync-router.ts", "utf8");
 const handler = readFileSync("supabase/functions/financial-app-db-gateway/workspace-deletion-readiness.ts", "utf8");
 const baselineMigration = readFileSync("supabase/migrations/20260910070000_pre020_workspace_deletion_readiness.sql", "utf8");
-const currentMigration = readFileSync("supabase/migrations/20260910080000_pre020_storage_cleanup_validated.sql", "utf8");
+const storageMigration = readFileSync("supabase/migrations/20260910080000_pre020_storage_cleanup_validated.sql", "utf8");
+const alignedMigration = readFileSync("supabase/migrations/20260910173000_cr001_workspace_deletion_readiness_alignment.sql", "utf8");
 const protocol = readFileSync("src/domain/workspace-deletion-protocol.ts", "utf8");
 const storageRehearsal = readFileSync("scripts/pre020-storage-runtime-rehearsal.mjs", "utf8");
 const storageWorkflow = readFileSync(".github/workflows/pre020-storage-runtime-rehearsal.yml", "utf8");
@@ -20,8 +21,8 @@ test("PRE-020F/G · readiness no entra en Preview→Production", () => {
   expect(gatewayIndex.slice(start, end + 3)).not.toContain(ACTION);
 });
 
-test("PRE-020F/G · readiness sigue invoker, owner/RLS heredado y fail-closed", () => {
-  for (const migration of [baselineMigration, currentMigration]) {
+test("PRE-020F/G · evidencia histórica sigue invoker, owner/RLS heredado y fail-closed", () => {
+  for (const migration of [baselineMigration, storageMigration]) {
     expect(migration).toContain("financial_app.workspace_deletion_impact()");
     expect(migration).toContain("security invoker");
     expect(migration).toContain("stable");
@@ -33,41 +34,54 @@ test("PRE-020F/G · readiness sigue invoker, owner/RLS heredado y fail-closed", 
   }
 });
 
-test("PRE-020G / CR-001B · Storage validado conserva evidencia histórica y blockers actuales", () => {
+test("PRE-020G / CR-001C · historial conserva el blocker antiguo y el estado actual lo retira", () => {
   expect(baselineMigration).toContain("supabase_storage_runtime_cleanup_not_validated");
-  expect(currentMigration).not.toContain("supabase_storage_runtime_cleanup_not_validated");
-  expect(protocol).not.toContain("supabase_storage_runtime_cleanup_not_validated");
-  expect(protocol).toContain("validatesSupabaseStorageRuntimeCleanup: true");
-  expect(currentMigration).toContain("supabase_storage_runtime_cleanup_validated");
-  expect(currentMigration).toContain("'scope', 'isolated_local_storage_api'");
+  expect(storageMigration).not.toContain("supabase_storage_runtime_cleanup_not_validated");
+  expect(storageMigration).toContain("destructive_executor_not_implemented");
+
+  expect(alignedMigration).not.toContain("destructive_executor_not_implemented");
+  expect(alignedMigration).toContain("workspace_deletion_local_executor_implemented");
+  expect(alignedMigration).toContain("'localExecutorImplemented',true");
+  expect(alignedMigration).toContain("'canExecute',false");
+  expect(alignedMigration).toContain("self_service_execution_endpoint_not_exposed");
+  expect(alignedMigration.toLowerCase()).not.toMatch(/\bdelete\s+from\b/);
+  expect(alignedMigration.toLowerCase()).not.toMatch(/\bupdate\s+financial_app\b/);
+  expect(alignedMigration.toLowerCase()).not.toMatch(/\binsert\s+into\s+financial_app\b/);
+
+  expect(protocol).not.toContain("destructive_executor_not_implemented");
+  expect(protocol).toContain("runtimeOrchestratorImplemented: true");
+  expect(protocol).toContain("selfServiceExecutionEndpointExposed: false");
+  expect(protocol).toContain("self_service_execution_endpoint_not_exposed");
+});
+
+test("PRE-020G / CR-001C · Storage validado conserva evidencia y blockers comerciales", () => {
+  expect(storageMigration).toContain("supabase_storage_runtime_cleanup_validated");
+  expect(storageMigration).toContain("'scope', 'isolated_local_storage_api'");
   expect(storageRehearsal).toContain("127.0.0.1");
   expect(storageRehearsal).toContain("localhost");
   expect(storageWorkflow).toContain("supabase start");
   expect(storageWorkflow).toContain("version: 2.117.0");
 
-  // PRE-020G remains immutable historical evidence: at that point the executor was not implemented.
-  expect(currentMigration).toContain("destructive_executor_not_implemented");
-  expect(protocol).not.toContain("destructive_executor_not_implemented");
-  expect(protocol).toContain("runtime_orchestrator_not_deployed_to_production");
-
   for (const blocker of [
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ]) {
-    expect(currentMigration).toContain(blocker);
+    expect(alignedMigration).toContain(blocker);
     expect(protocol).toContain(blocker);
   }
-  expect(currentMigration).toContain("workspace_deletion_intent_not_confirmed");
-  expect(currentMigration).toContain("'officialBankSource', 'untouched'");
-  expect(currentMigration).toContain("'googleDriveFiles', 'untouched'");
+  expect(alignedMigration).toContain("workspace_deletion_intent_not_confirmed");
+  expect(alignedMigration).toContain("'officialBankSource','untouched'");
+  expect(alignedMigration).toContain("'googleDriveFiles','untouched'");
 });
 
-test("PRE-020F/G · Edge y API sólo diagnostican en Production y rechazan payload no fail-closed", () => {
+test("CR-001C · Edge declara sólo la capacidad que puede comprobar y conserva fail-closed", () => {
   expect(sourceRouter).toContain('import { handleWorkspaceDeletionReadinessAction } from "./workspace-deletion-readiness.ts"');
   expect(sourceRouter).toContain("await handleWorkspaceDeletionReadinessAction(input)");
   expect(handler).toContain(ACTION);
   expect(handler).toContain('environment !== "production"');
   expect(handler).toContain("readiness.canExecute !== false");
+  expect(handler).toContain("runtimeOrchestratorImplemented: true");
+  expect(handler).toContain("selfServiceExecutionEndpointExposed: false");
   expect(handler).not.toContain("data.deletion_execute_v1");
 });
 
@@ -82,9 +96,9 @@ test("PRE-020F/G · Preview/Local devuelven 403 real con headers seguros", async
   });
 });
 
-test("PRE-020G / CR-001B · Storage validado no activa UI ni contrato comercial", () => {
+test("PRE-020G / CR-001C · diagnóstico no activa UI ni contrato comercial", () => {
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
-  expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
+  expect(sourceRouter).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
   expect(dataTrustPage).not.toContain(ACTION);
   expect(dataTrustPage).not.toContain("/api/data/deletion-readiness");
   expect(dataTrustPage).not.toContain("data.deletion_execute_v1");

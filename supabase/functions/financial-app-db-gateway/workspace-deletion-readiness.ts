@@ -16,7 +16,7 @@ export async function handleWorkspaceDeletionReadinessAction(input: {
 }): Promise<Response | null> {
   if (input.action !== "data.deletion_readiness_v1") return null;
 
-  // PRE-020F es diagnóstico, pero tampoco permite Preview→Production.
+  // Diagnóstico Production-only. Preview/Local no consulta readiness de borrado de Production.
   if (input.environment !== "production") {
     return json({ error: "workspace_deletion_readiness_production_only" }, 403);
   }
@@ -32,5 +32,25 @@ export async function handleWorkspaceDeletionReadinessAction(input: {
     return json({ error: "workspace_deletion_readiness_fail_closed_violation" }, 503);
   }
 
-  return json({ readiness });
+  // Si esta respuesta sale de este bundle, el orquestador interno CR-001B forma parte
+  // del gateway desplegado. Esto describe capacidad de código; NO equivale a activación
+  // comercial y NO crea una ruta pública de ejecución.
+  const readinessRecord = readiness as Record<string, unknown>;
+  const existingRuntime =
+    readinessRecord.runtimeFoundation &&
+    typeof readinessRecord.runtimeFoundation === "object" &&
+    !Array.isArray(readinessRecord.runtimeFoundation)
+      ? (readinessRecord.runtimeFoundation as Record<string, unknown>)
+      : {};
+
+  return json({
+    readiness: {
+      ...readinessRecord,
+      runtimeFoundation: {
+        ...existingRuntime,
+        runtimeOrchestratorImplemented: true,
+        selfServiceExecutionEndpointExposed: false,
+      },
+    },
+  });
 }
