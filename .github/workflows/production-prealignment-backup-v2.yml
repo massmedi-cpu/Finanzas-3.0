@@ -31,7 +31,7 @@ jobs:
     env:
       FINANCIAL_APP_DB_URL: ${{ secrets.FINANCIAL_APP_DB_URL }}
       PRODUCTION_SOURCE_COMMIT: d608926a51d8f0a33d4a1b557558991538727595
-      BACKUP_DIR: ${{ runner.temp }}/financial-app-production-prealignment-v2
+      BACKUP_DIR: /tmp/financial-app-production-prealignment-v2
       RESTORE_DB: financial_app_production_v2_restore
       LOCAL_ADMIN_URL: postgresql://postgres:postgres@127.0.0.1:5432/postgres
       LOCAL_RESTORE_URL: postgresql://postgres:postgres@127.0.0.1:5432/financial_app_production_v2_restore
@@ -278,6 +278,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: financial-app-production-prealignment-v2-${{ env.PRODUCTION_SOURCE_COMMIT }}
-          path: ${{ env.BACKUP_DIR }}/
+          path: /tmp/financial-app-production-prealignment-v2/
           if-no-files-found: error
           retention-days: 30
