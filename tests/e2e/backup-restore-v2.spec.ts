@@ -5,6 +5,7 @@ const creator = readFileSync("scripts/create-financial-backup-v2.mjs", "utf8");
 const validator = readFileSync("scripts/validate-financial-backup-v2.mjs", "utf8");
 const rehearsal = readFileSync("scripts/phase13-restore-rehearsal-v2.sh", "utf8");
 const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+const workflow = readFileSync(".github/workflows/backup-v2-restore-rehearsal.yml", "utf8");
 
 test("backup v2 · descubre versión, schema y Storage en vez de confiar en cifras fijas", () => {
   expect(creator).toContain('readFileSync(packageJsonPath');
@@ -12,8 +13,8 @@ test("backup v2 · descubre versión, schema y Storage en vez de confiar en cifr
   expect(creator).toContain("from storage.buckets");
   expect(creator).toContain("from storage.objects");
   expect(creator).toContain("storage-inventory.json");
-  expect(creator).not.toContain('appVersion: "0.0.1"');
-  expect(creator).not.toContain('targetVersion: "10.0.0"');
+  expect(creator).not.toContain('appVersion: \"0.0.1\"');
+  expect(creator).not.toContain('targetVersion: \"10.0.0\"');
 });
 
 test("backup v2 · no restaura acceso, solicitudes de borrado ni activación destructiva", () => {
@@ -61,4 +62,11 @@ test("backup v2 · los comandos nuevos conviven con F13 v1", () => {
   expect(pkg.scripts["backup:validate"]).toBe("node scripts/validate-financial-backup.mjs");
   expect(pkg.scripts["backup:create:v2"]).toBe("node scripts/create-financial-backup-v2.mjs");
   expect(pkg.scripts["backup:validate:v2"]).toBe("node scripts/validate-financial-backup-v2.mjs");
+});
+
+test("backup v2 · tiene rehearsal CI separado y no sustituye el workflow F13", () => {
+  expect(workflow).toContain("workflow_dispatch:");
+  expect(workflow).toContain("[backup-v2-restore]");
+  expect(workflow).toContain("postgres:17");
+  expect(workflow).toContain("phase13-restore-rehearsal-v2.sh");
 });
