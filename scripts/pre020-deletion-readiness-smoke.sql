@@ -37,7 +37,7 @@ begin
   if (v_before->>'workspaceId')::uuid <> 'f1000000-0000-4000-8000-000000000001'::uuid
      or (v_before->>'canExecute')::boolean
      or (v_before->>'destructiveOperationExecuted')::boolean
-     or v_before->'intent' is not null
+     or v_before->>'intent' is not null
      or (v_before#>>'{impact,rowCounts,accounts}')::bigint <> 1
      or v_before#>>'{preservedExternalSources,officialBankSource}' <> 'untouched'
      or v_before#>>'{preservedExternalSources,googleDriveFiles}' <> 'untouched' then
@@ -98,7 +98,7 @@ select pg_catalog.set_config('financial_app.workspace_id','f2000000-0000-4000-80
 do $$ declare v jsonb; begin
   v:=financial_app.workspace_deletion_readiness();
   if (v->>'workspaceId')::uuid <> 'f2000000-0000-4000-8000-000000000002'::uuid
-     or v->'intent' is not null
+     or v->>'intent' is not null
      or (v#>>'{impact,rowCounts,accounts}')::bigint <> 1
      or (v->>'canExecute')::boolean then
     raise exception 'PRE020F_CROSS_TENANT_LEAK:%',v;
