@@ -1,3 +1,8 @@
+// Financial App · Production backend alignment bridge
+// TEMPORARY DROP-IN for supabase/functions/financial-app-db-gateway/workspace-context.ts.
+// Deploy only after PRE-001 tenancy and replace with the strict validated workspace-context
+// immediately after isolation/PRE-020/CR-001 are complete.
+
 import { createClient } from "supabase-js";
 import type { WorkspaceContext } from "../../../src/domain/workspace-context.ts";
 
@@ -24,8 +29,6 @@ function authClient() {
 
 async function clearWorkspaceScope(sql: any, failClosed: boolean) {
   try {
-    // Un backend físico puede ser reciclado por un pooler. Antes de consultar siquiera
-    // memberships se restaura el session_user y se elimina todo contexto de una petición anterior.
     await sql.unsafe("reset role");
     await sql`
       select
@@ -35,10 +38,24 @@ async function clearWorkspaceScope(sql: any, failClosed: boolean) {
         pg_catalog.set_config('financial_app.workspace_membership_count', '', false)
     `;
   } catch (error) {
-    if (failClosed) {
-      throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
-    }
+    if (failClosed) throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
     console.error("financial-app-workspace-reset", error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function detectIsolationState(sql: any) {
+  try {
+    const rows = await sql`
+      select
+        pg_catalog.to_regrole('financial_app_gateway') is not null as gateway_role_exists,
+        pg_catalog.to_regprocedure('financial_app.require_current_workspace_id()') is not null as isolation_marker_exists
+    `;
+    return {
+      gatewayRoleExists: rows[0]?.gateway_role_exists === true,
+      isolationMarkerExists: rows[0]?.isolation_marker_exists === true,
+    };
+  } catch {
+    throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
   }
 }
 
@@ -47,11 +64,20 @@ async function activateWorkspaceScope(
   context: WorkspaceContext,
   workspaceMembershipCount: number,
 ) {
+  const state = await detectIsolationState(sql);
+
+  // Only two complete states are valid during rollout:
+  // legacy = no role + no isolation marker; strict = role + isolation marker.
+  // Any mixed/partial state must fail closed instead of guessing which mode to use.
+  if (state.gatewayRoleExists !== state.isolationMarkerExists) {
+    throw new WorkspaceContextError("workspace_isolation_state_inconsistent", 503);
+  }
+
   try {
-    // PRE-001/PRE-020C: la conexión llega como postgres únicamente para validar membership.
-    // El rol y el recuento TOTAL de memberships del workspace se resuelven ANTES de SET ROLE.
-    // Después, el rol de negocio consume esos GUC sin recuperar SELECT sobre workspace_memberships.
-    await sql.unsafe("set role financial_app_gateway");
+    if (state.gatewayRoleExists && state.isolationMarkerExists) {
+      await sql.unsafe("set role financial_app_gateway");
+    }
+
     await sql`
       select
         pg_catalog.set_config('financial_app.workspace_id', ${context.workspaceId}, false),
@@ -59,7 +85,8 @@ async function activateWorkspaceScope(
         pg_catalog.set_config('financial_app.workspace_role', ${context.role}, false),
         pg_catalog.set_config('financial_app.workspace_membership_count', ${String(workspaceMembershipCount)}, false)
     `;
-  } catch {
+  } catch (error) {
+    if (error instanceof WorkspaceContextError) throw error;
     throw new WorkspaceContextError("workspace_tenancy_unavailable", 503);
   }
 }
@@ -72,20 +99,14 @@ export async function resolveWorkspaceContext(
   request: Request,
   sql: any,
 ): Promise<WorkspaceContext> {
-  // Debe ser la primera operación SQL de la petición. Esto elimina contaminación de
-  // sesión incluso cuando el proveedor reutiliza un backend físico entre conexiones.
   await clearWorkspaceScope(sql, true);
 
   const userToken = request.headers.get("x-financial-app-user-token")?.trim() ?? "";
-  if (!userToken) {
-    throw new WorkspaceContextError("workspace_context_required", 403);
-  }
+  if (!userToken) throw new WorkspaceContextError("workspace_context_required", 403);
 
   const supabase = authClient();
   const { data, error } = await supabase.auth.getUser(userToken);
-  if (error || !data.user?.id) {
-    throw new WorkspaceContextError("workspace_user_invalid", 401);
-  }
+  if (error || !data.user?.id) throw new WorkspaceContextError("workspace_user_invalid", 401);
 
   let memberships: any[];
   try {
@@ -96,7 +117,7 @@ export async function resolveWorkspaceContext(
         (
           select count(*)::int
           from financial_app.workspace_memberships workspace_member
-          where workspace_member.workspace_id = m.workspace_id
+          where workspace_member.workspace_id=m.workspace_id
         ) as workspace_membership_count
       from financial_app.workspace_memberships m
       where m.user_id=${data.user.id}::uuid
