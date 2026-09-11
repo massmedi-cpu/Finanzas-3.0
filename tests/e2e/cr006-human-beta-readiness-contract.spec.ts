@@ -56,3 +56,5 @@ test("CR-006 · la beta protege datos financieros reales de terceros", () => {
   expect(protocol).toContain("datos ficticios o fixtures controlados");
   expect(protocol).toContain("No compartir tokens, claves, enlaces de bypass ni secretos de infraestructura");
 });
+
+// Marcador deliberadamente inerte: fuerza la validación del Preview protegido sobre este SHA exacto.
