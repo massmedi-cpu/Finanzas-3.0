@@ -85,7 +85,8 @@ SQL
 )"
 [ "$protected_table_evidence" = "f|f|f|f" ] || { echo "CR001_FUNCTION_POSTFLIGHT|status=failed|reason=protected_table_privileges|evidence=${protected_table_evidence}"; exit 1; }
 
-# Comprueba que una función futura no recupere EXECUTE implícito para roles cliente/service_role.
+# Comprueba que una función futura no recupere EXECUTE para roles cliente/service_role y
+# que el único grant automático dentro de financial_app sea el gateway restringido.
 psql_db <<'SQL' >/dev/null
 create function financial_app.__cr001_default_acl_probe()
 returns integer
@@ -97,11 +98,12 @@ select concat_ws('|',
   pg_catalog.has_function_privilege('public','financial_app.__cr001_default_acl_probe()','EXECUTE'),
   pg_catalog.has_function_privilege('anon','financial_app.__cr001_default_acl_probe()','EXECUTE'),
   pg_catalog.has_function_privilege('authenticated','financial_app.__cr001_default_acl_probe()','EXECUTE'),
-  pg_catalog.has_function_privilege('service_role','financial_app.__cr001_default_acl_probe()','EXECUTE')
+  pg_catalog.has_function_privilege('service_role','financial_app.__cr001_default_acl_probe()','EXECUTE'),
+  pg_catalog.has_function_privilege('financial_app_gateway','financial_app.__cr001_default_acl_probe()','EXECUTE')
 );
 SQL
 )"
 psql_db -c 'drop function financial_app.__cr001_default_acl_probe();' >/dev/null
-[ "$probe_evidence" = "f|f|f|f" ] || { echo "CR001_FUNCTION_POSTFLIGHT|status=failed|reason=future_function_default_acl|evidence=${probe_evidence}"; exit 1; }
+[ "$probe_evidence" = "f|f|f|f|t" ] || { echo "CR001_FUNCTION_POSTFLIGHT|status=failed|reason=future_function_default_acl|evidence=${probe_evidence}"; exit 1; }
 
 echo "CR001_FUNCTION_POSTFLIGHT|status=ok|functions=${function_count}|public=0|anon=0|authenticated=0|service_role=0|gateway=${gateway_exec}|security_definers=6|search_path=ok|protected_tables=${protected_table_evidence}|future_defaults=${probe_evidence}|sha=${GITHUB_SHA}"
