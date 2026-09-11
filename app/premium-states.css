@@ -1,5 +1,5 @@
 /* Premium visual states. Purely presentational: no data or interaction logic lives here.
- * Contract: motion is decorative only and must be disabled by prefers-reduced-motion.
+ * Contract: motion is decorative only, must respect prefers-reduced-motion, and is validated through commercial-readiness gates.
  */
 
 section[aria-label="Preparando resumen financiero"] > article {
