@@ -1,18 +1,21 @@
-name: PRE-020 Disposable DB Smoke
+name: Backup v2 Restore Rehearsal
 
 on:
+  workflow_dispatch:
   push:
     branches:
-      - 'audit/precommercial-10.0.1-pre020'
+      - 'audit/precommercial-*'
       - 'commercial-readiness/**'
+      - 'release/*'
 
 permissions:
   contents: read
 
 jobs:
-  pre020-structured-export-db-smoke:
+  restore-v2:
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[backup-v2-restore]')
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -25,10 +28,14 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-
     steps:
-      - name: Checkout exact branch commit
+      - name: Checkout exact commit
         uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
 
       - name: Install PostgreSQL 17 client
         shell: bash
@@ -43,8 +50,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
-          /usr/lib/postgresql/17/bin/psql --version
+          /usr/lib/postgresql/17/bin/pg_dump --version
 
-      - name: Apply validated baseline and execute PRE-020 structured export smoke
+      - name: Run workspace-safe backup v2 restore rehearsal
         shell: bash
-        run: bash scripts/pre020-disposable-db-smoke.sh
+        run: bash scripts/phase13-restore-rehearsal-v2.sh

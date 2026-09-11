@@ -17,24 +17,32 @@ const migration = readFileSync(
   "supabase/migrations/20260910060000_pre020_workspace_deletion_intent.sql",
   "utf8",
 );
+const readinessMigration = readFileSync(
+  "supabase/migrations/20260911090000_cr001_workspace_deletion_self_service_readiness.sql",
+  "utf8",
+);
 const protocol = readFileSync("src/domain/workspace-deletion-protocol.ts", "utf8");
 const dataTrustPage = readFileSync("app/configuration/data/page.tsx", "utf8");
 const dataTrustContract = readFileSync("src/domain/data-trust-contract.ts", "utf8");
+const selfServiceRoute = readFileSync("app/api/data/deletion/route.ts", "utf8");
 
 const ACTIONS = [
   "data.deletion_prepare_v1",
   "data.deletion_confirm_v1",
   "data.deletion_cancel_v1",
+  "data.deletion_execute_v1",
 ];
 
-test("PRE-020D · ninguna acción del protocolo entra en Preview→Production", () => {
+test("PRE-020D / CR-001D · ninguna acción destructiva entra en Preview→Production", () => {
   const start = gatewayIndex.indexOf("const PREVIEW_READ_ONLY_ACTIONS");
   const end = gatewayIndex.indexOf("]);", start);
   const previewAllowlist = gatewayIndex.slice(start, end + 3);
   for (const action of ACTIONS) expect(previewAllowlist).not.toContain(action);
+  expect(selfServiceRoute).toContain('process.env.VERCEL_ENV === "production"');
+  expect(selfServiceRoute).toContain("preview_production_deletion_forbidden");
 });
 
-test("PRE-020D · la máquina de estados es RLS, invoker e incapaz de borrar", () => {
+test("PRE-020D · la máquina de estados base es RLS, invoker e incapaz de borrar", () => {
   expect(migration).toContain("workspace_deletion_intents_workspace_isolation");
   expect(migration).toContain("force row level security");
   expect(migration).toContain("grant select, insert, update");
@@ -55,30 +63,45 @@ test("PRE-020D · prepare es idempotente, corto y snapshot-aware", () => {
   expect(migration).toContain("workspace_deletion_confirmation_invalid");
 });
 
-test("PRE-020D · Edge sólo expone prepare/confirm/cancel internos y no existe executor", () => {
+test("CR-001D · readiness sólo permite ejecutar con política activa e intent confirmado", () => {
+  expect(readinessMigration).toContain("'canExecute',(v_execution_enabled and v_confirmed_fresh)");
+  expect(readinessMigration).toContain("'selfServiceExecutionEndpointExposed',true");
+  expect(readinessMigration).toContain("'post_deletion_receipt_retention_policy_not_defined'");
+  expect(readinessMigration).toContain("'production_activation_not_approved'");
+  expect(readinessMigration).not.toContain("execution_enabled=true");
+});
+
+test("PRE-020D / CR-001B · Edge mantiene el executor detrás de barreras fail-closed", () => {
   expect(sourceRouter).toContain(
     'import { handleWorkspaceDeletionIntentAction } from "./workspace-deletion-intent.ts"',
   );
   expect(sourceRouter).toContain("await handleWorkspaceDeletionIntentAction(input)");
   for (const action of ACTIONS) expect(handler).toContain(action);
   expect(handler).toContain('environment !== "production"');
-  expect(handler).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
-  expect(handler).not.toMatch(/action\s*!==?\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
+  expect(handler).toContain("financial_app.begin_workspace_deletion_execution");
+  expect(handler).toContain("workspace_deletion_execution_policy_not_approved");
   expect(sourceRouter).not.toContain("handleWorkspaceDeletionExecutionAction");
 });
 
-test("PRE-020D · el contrato preserva fuentes externas y bloquea ejecución prematura", () => {
-  expect(protocol).toContain('"foundation_non_destructive"');
-  expect(protocol).toContain('"official_bank_source"');
-  expect(protocol).toContain('"google_drive_files"');
-  expect(protocol).toContain('"destructive_executor_not_implemented"');
-  expect(protocol).toContain('"post_deletion_receipt_retention_policy_not_defined"');
-  expect(protocol).toContain('"production_activation_not_approved"');
+test("CR-001D · endpoint web no encadena confirmación y ejecución", () => {
+  expect(selfServiceRoute).toContain('type DeletionOperation = "prepare" | "confirm" | "cancel" | "execute"');
+  expect(selfServiceRoute).toContain("selfServiceActive(readiness)");
+  expect(selfServiceRoute).toContain("readiness.canExecute !== true");
+  expect(selfServiceRoute).toContain('"data.deletion_prepare_v1"');
+  expect(selfServiceRoute).toContain('"data.deletion_confirm_v1"');
+  expect(selfServiceRoute).toContain('"data.deletion_cancel_v1"');
+  expect(selfServiceRoute).toContain('"data.deletion_execute_v1"');
+  expect(protocol).toContain("finalExecutionRequiresSeparateAction: true");
 });
 
-test("PRE-020D · UI y contrato comercial siguen declarando borrado no disponible", () => {
+test("CR-001D · UI sigue declarando borrado no disponible hasta aprobación comercial", () => {
   expect(dataTrustContract).toContain('id: "workspace-deletion"');
-  expect(dataTrustContract).toContain('state: "not_available"');
-  for (const action of ACTIONS) expect(dataTrustPage).not.toContain(action);
-  expect(dataTrustPage).not.toContain("workspace-deletion-intent");
+  expect(dataTrustContract).toMatch(
+    /id:\s*"workspace-deletion"[\s\S]{0,1800}?state:\s*"not_available"/,
+  );
+  expect(dataTrustPage).toContain("WorkspaceDeletionPanel");
+  expect(protocol).toContain("commercialPolicyConfigured: false");
+  expect(protocol).toContain("productionActivated: false");
+  expect(protocol).toContain("selfServiceExecutionEndpointExposed: true");
 });

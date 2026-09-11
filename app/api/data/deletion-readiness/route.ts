@@ -58,11 +58,11 @@ export async function GET() {
       !readiness ||
       typeof readiness !== "object" ||
       Array.isArray(readiness) ||
-      readiness.canExecute !== false ||
+      typeof readiness.canExecute !== "boolean" ||
       readiness.destructiveOperationExecuted !== false
     ) {
       throw new PersistenceGatewayError(
-        "El gateway ha devuelto un readiness de borrado no fail-closed.",
+        "El gateway ha devuelto un readiness de borrado inválido.",
         503,
         "invalid_deletion_readiness_payload",
       );

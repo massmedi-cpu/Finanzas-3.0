@@ -1,0 +1,19 @@
+{
+  "contractVersion": 1,
+  "capturedOn": "2026-09-10",
+  "reason": "post_cr001_readiness_was_still_reporting_historical_executor_missing_blocker",
+  "preservesOriginalReconciliation": true,
+  "originalPendingCount": 10,
+  "additionalPendingInOrder": [
+    {
+      "name": "cr001_workspace_deletion_readiness_alignment",
+      "repositoryVersion": "20260910173000",
+      "file": "supabase/migrations/20260910173000_cr001_workspace_deletion_readiness_alignment.sql",
+      "after": "cr001_workspace_deletion_local_executor"
+    }
+  ],
+  "totalPendingCount": 11,
+  "productionStartingMigrationCount": 47,
+  "expectedPostAlignmentMigrationCount": 58,
+  "destructiveActivationChanged": false
+}

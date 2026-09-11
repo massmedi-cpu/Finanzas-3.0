@@ -1,18 +1,17 @@
-name: PRE-020 Disposable DB Smoke
+name: CR-001 Deletion Self-Service Postflight
 
 on:
   push:
     branches:
-      - 'audit/precommercial-10.0.1-pre020'
       - 'commercial-readiness/**'
 
 permissions:
   contents: read
 
 jobs:
-  pre020-structured-export-db-smoke:
+  disposable-deletion-self-service-postflight:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 20
     services:
       postgres:
         image: postgres:17
@@ -45,6 +44,6 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/psql --version
 
-      - name: Apply validated baseline and execute PRE-020 structured export smoke
+      - name: Validate self-service readiness remains fail-closed
         shell: bash
-        run: bash scripts/pre020-disposable-db-smoke.sh
+        run: bash scripts/cr001-deletion-self-service-postflight.sh

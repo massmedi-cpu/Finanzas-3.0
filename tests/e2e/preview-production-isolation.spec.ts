@@ -53,13 +53,18 @@ test("PRE-003 aplica el aislamiento antes de abrir PostgreSQL", () => {
   expect(gatewaySource).toContain('return json({ error: "preview_production_write_forbidden" }, 403)');
 });
 
-test("PRE-003 Vercel postbuild valida Preview sin ejecutar diagnósticos que escriben", () => {
-  expect(vercelGateSource).toContain('callAction(oidcToken, "source.capabilities")');
-  expect(vercelGateSource).toContain('callAction(oidcToken, "health")');
-  expect(vercelGateSource).toContain('callAction(oidcToken, "test.invariants")');
+test("PRE-003 Vercel postbuild valida la frontera de workspace sin abrir lecturas anónimas", () => {
+  expect(vercelGateSource).toContain("assertWorkspaceBoundary");
+  expect(vercelGateSource).toContain('payload?.error !== "workspace_context_required"');
+  expect(vercelGateSource).toContain("assertInvalidUserRejected");
+  expect(vercelGateSource).toContain('payload?.error !== "workspace_user_invalid"');
+  expect(vercelGateSource).toContain('action: "source.capabilities"');
+  expect(vercelGateSource).toContain('action: "health"');
+  expect(vercelGateSource).toContain('action: "test.invariants"');
   expect(vercelGateSource).toContain('action: "account.save"');
-  expect(vercelGateSource).toContain('response.status !== 403');
   expect(vercelGateSource).toContain('payload?.error !== "preview_production_write_forbidden"');
+  expect(vercelGateSource).not.toContain('callAction(oidcToken, "source.capabilities")');
+  expect(vercelGateSource).not.toContain('callAction(oidcToken, "health")');
 
   for (const forbidden of [
     "test.source_ingestion",

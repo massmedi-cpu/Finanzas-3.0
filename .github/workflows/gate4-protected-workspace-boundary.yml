@@ -1,0 +1,132 @@
+name: Gate 4 Protected Workspace Boundary
+
+on:
+  push:
+    branches:
+      - 'commercial-readiness/**'
+
+permissions:
+  contents: read
+
+jobs:
+  protected-workspace-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Generate ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Discover matching Vercel preview for exact SHA
+        id: vercel
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let attempt = 1; attempt <= 48; attempt += 1) {
+              const deployments = await github.rest.repos.listDeployments({
+                owner,
+                repo,
+                sha: context.sha,
+                per_page: 30,
+              });
+              for (const deployment of deployments.data) {
+                const statuses = await github.rest.repos.listDeploymentStatuses({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  per_page: 30,
+                });
+                const status = statuses.data.find((candidate) => {
+                  const url = candidate.environment_url || candidate.target_url || '';
+                  return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
+                });
+                if (status) {
+                  const url = (status.environment_url || status.target_url).replace(/\/$/, '');
+                  core.info(`Matching Vercel preview discovered on attempt ${attempt}: ${url}`);
+                  core.setOutput('url', url);
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+
+      - name: Verify exact deployed SHA
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            auth_header="x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET"
+          else
+            auth_header="x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN"
+          fi
+          code=$(curl --silent --show-error --output /tmp/build.json --write-out "%{http_code}" -H "$auth_header" "$VERCEL_PREVIEW_URL/api/build")
+          test "$code" = "200"
+          deployed_sha=$(node -e "const fs=require('fs');const j=JSON.parse(fs.readFileSync('/tmp/build.json','utf8'));process.stdout.write(j.commit||'')")
+          test "$deployed_sha" = "$GITHUB_SHA"
+
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify immutable release provenance
+        shell: bash
+        run: |
+          tag="v$(node -p "require('./package.json').version")"
+          npm run release:manifest -- \
+            --build-info /tmp/build.json \
+            --output /tmp/gate4-release-manifest.json \
+            --expected-sha "$GITHUB_SHA" \
+            --tag "$tag" \
+            --expected-environment preview
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Run protected anonymous workspace-boundary smoke
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: >-
+          npm run test:e2e -- tests/e2e/preview-production-isolation-live.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate4-protected-workspace-boundary-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7

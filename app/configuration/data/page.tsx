@@ -4,6 +4,7 @@ import {
   type DataTrustSection,
   type DataTrustState,
 } from "../../../src/domain/data-trust-contract";
+import WorkspaceDeletionPanel from "./workspace-deletion-panel";
 import styles from "./data-trust.module.css";
 
 export const metadata = {
@@ -89,6 +90,7 @@ export default function DataTrustPage() {
                         </small>
                       </div>
                     ) : null}
+                    {capability.id === "workspace-deletion" ? <WorkspaceDeletionPanel /> : null}
                     {capability.state === "verified" && capability.id !== "user-data-export" ? (
                       <small>Respaldado por {capability.evidence.length} controles o pruebas versionadas.</small>
                     ) : null}
