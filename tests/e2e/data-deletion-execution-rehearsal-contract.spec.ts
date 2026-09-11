@@ -11,14 +11,15 @@ const intentHandler = readFileSync(
   "supabase/functions/financial-app-db-gateway/workspace-deletion-intent.ts",
   "utf8",
 );
-const dataTrustPage = readFileSync("app/configuration/data/page.tsx", "utf8");
+const selfServiceRoute = readFileSync("app/api/data/deletion/route.ts", "utf8");
+const selfServicePanel = readFileSync("app/configuration/data/workspace-deletion-panel.tsx", "utf8");
 const dataTrustContract = readFileSync("src/domain/data-trust-contract.ts", "utf8");
 
 test("PRE-020E · el ensayo destructivo sigue siendo admin-only, desechable y reversible", () => {
   expect(protocol).toContain('state: "rehearsal_admin_only"');
   expect(protocol).toContain("disposableDatabaseOnly: true");
   expect(protocol).toContain("transactionalRollbackRequired: true");
-  expect(protocol).toContain("runtimeExecutorAvailable: false");
+  expect(protocol).toContain("runtimeExecutorAvailable: true");
   expect(rehearsal).toContain("begin;");
   expect(rehearsal).toContain("rollback;");
   expect(rehearsal).toContain("PRE020_DELETION_EXECUTION_REHEARSAL_OK");
@@ -42,28 +43,40 @@ test("PRE-020E · el rehearsal prueba orden RESTRICT, aislamiento y OAuth/Vault 
   expect(protocol).toContain("externalGoogleDriveMutationAllowed: false");
 });
 
-test("PRE-020E/G · la limitación Storage del rehearsal DB queda superada sólo por el rehearsal Storage aislado", () => {
+test("PRE-020E/G · Storage sigue validado aisladamente y Production no se usa como banco de pruebas", () => {
   expect(rehearsal).toContain("pg_catalog.to_regclass('storage.objects')");
   expect(protocol).toContain("validatesSupabaseStorageRuntimeCleanup: true");
   expect(protocol).toContain('supabaseStorageValidationScope: "isolated_local_storage_api"');
-  expect(protocol).not.toContain('"supabase_storage_runtime_cleanup_not_validated"');
+  expect(protocol).toContain("productionStorageMutationTested: false");
   expect(protocol).toContain('"post_deletion_receipt_retention_policy_not_defined"');
   expect(protocol).toContain('"production_activation_not_approved"');
 });
 
-test("PRE-020E / CR-001B · existe orquestador interno pero no endpoint público ni activación comercial", () => {
-  const executeActionBranch = /(?:input\.)?action\s*===?\s*["']data\.deletion_execute_v1["']/;
-  expect(sourceRouter).not.toMatch(executeActionBranch);
-  expect(intentHandler).toMatch(executeActionBranch);
+test("CR-001D · el autoservicio existe pero la API corta antes del gateway mientras la política esté apagada", () => {
+  expect(existsSync("app/api/data/deletion/route.ts")).toBe(true);
+  expect(sourceRouter).not.toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
+  expect(intentHandler).toMatch(/action\s*===\s*["']data\.deletion_execute_v1["']/);
   expect(intentHandler).toContain("financial_app.begin_workspace_deletion_execution");
   expect(intentHandler).toContain("workspace_deletion_execution_policy_not_approved");
-  expect(protocol).toContain("runtimeOrchestratorImplemented: true");
+  expect(selfServiceRoute).toContain("if (!selfServiceActive(readiness)) return unavailable(readiness)");
+  expect(selfServiceRoute.indexOf("if (!selfServiceActive(readiness))")).toBeLessThan(
+    selfServiceRoute.indexOf('"data.deletion_prepare_v1"'),
+  );
+  expect(selfServiceRoute).toContain("readiness.canExecute !== true");
   expect(protocol).toContain("commercialPolicyConfigured: false");
   expect(protocol).toContain("productionActivated: false");
-  expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
-  expect(dataTrustPage).not.toContain("data.deletion_execute_v1");
-  expect(dataTrustPage).not.toContain("/api/data/deletion-execute");
+  expect(protocol).toContain("selfServiceExecutionEndpointExposed: true");
+});
+
+test("CR-001D · la UI exige dos pasos y entrega el recibo sin inventar retención", () => {
+  expect(selfServicePanel).toContain('const CONFIRMATION_TEXT = "ELIMINAR MIS DATOS"');
+  expect(selfServicePanel).toContain("Confirmación 1 de 2");
+  expect(selfServicePanel).toContain("Confirmación 2 de 2");
+  expect(selfServicePanel).toContain('run("confirm")');
+  expect(selfServicePanel).toContain('run("execute")');
+  expect(selfServicePanel).toContain("Descargar recibo JSON");
+  expect(selfServicePanel).not.toMatch(/retenci[oó]n\s+de\s+\d+/i);
   expect(dataTrustContract).toMatch(
-    /id:\s*"workspace-deletion"[\s\S]{0,1200}?state:\s*"not_available"/,
+    /id:\s*"workspace-deletion"[\s\S]{0,1800}?state:\s*"not_available"/,
   );
 });
