@@ -27,3 +27,14 @@ test("protected preview bloquea toda la superficie financiera sin workspace aute
     expect(body.error.length, `${endpoint} debe aportar un error de módulo no vacío`).toBeGreaterThan(0);
   }
 });
+
+test("protected preview no puede abrir el autoservicio de borrado de Production", async ({ request }) => {
+  test.skip(!isProtectedPreview, "requires protected preview checkpoint");
+
+  const response = await request.get("/api/data/deletion");
+  expect(response.status()).toBe(403);
+  await expect(response.json()).resolves.toEqual({
+    error: "workspace_deletion_production_only",
+    code: "preview_production_deletion_forbidden",
+  });
+});
