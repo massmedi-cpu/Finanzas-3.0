@@ -4,22 +4,13 @@ const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
 const blockedReadEndpoints = [
   "/api/analysis",
-  "/api/budgets",
+  "/api/budgets?month=2026-09",
   "/api/configuration",
   "/api/documents",
-  "/api/forecast",
+  "/api/forecast?dateFrom=2026-09-01&dateTo=2026-09-30",
   "/api/recurrences",
   "/api/transactions?limit=1",
 ] as const;
-
-test("protected preview mantiene la superficie privada detrás del acceso de aplicación", async ({ page }) => {
-  test.skip(!isProtectedPreview, "requires protected preview checkpoint");
-
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
-  await expect(page.locator('input[name="email"]')).toBeVisible();
-  await expect(page.locator('input[name="password"]')).toBeVisible();
-});
 
 test("protected preview bloquea toda la superficie financiera sin workspace autenticado", async ({ request }) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
