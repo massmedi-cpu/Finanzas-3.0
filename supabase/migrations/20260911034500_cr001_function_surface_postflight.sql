@@ -10,15 +10,24 @@ revoke execute on all functions in schema financial_app from service_role;
 
 grant execute on all functions in schema financial_app to financial_app_gateway;
 
--- Evita que funciones futuras recuperen EXECUTE por los defaults de Supabase/PostgreSQL.
-alter default privileges for role postgres in schema financial_app
+-- PostgreSQL concede EXECUTE a PUBLIC de forma global para funciones nuevas. Un REVOKE
+-- limitado a un esquema no puede anular ese default global. Lo retiramos únicamente para
+-- funciones FUTURAS creadas por postgres. Los defaults explícitos de otros esquemas de
+-- Supabase (por ejemplo public/storage) permanecen intactos y pueden seguir concediendo
+-- sus privilegios específicos.
+alter default privileges for role postgres
   revoke execute on functions from public;
+
+-- En financial_app, una función futura queda cerrada a roles cliente/service_role y el
+-- único ejecutor de negocio que se concede por defecto es el gateway restringido.
 alter default privileges for role postgres in schema financial_app
   revoke execute on functions from anon;
 alter default privileges for role postgres in schema financial_app
   revoke execute on functions from authenticated;
 alter default privileges for role postgres in schema financial_app
   revoke execute on functions from service_role;
+alter default privileges for role postgres in schema financial_app
+  grant execute on functions to financial_app_gateway;
 
 -- Axioma bancario: ni siquiera el gateway puede modificar o borrar la copia del origen oficial.
 revoke update, delete on table financial_app.transaction_source_records from financial_app_gateway;
