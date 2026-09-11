@@ -1,6 +1,6 @@
 export const WORKSPACE_DELETION_PROTOCOL = {
-  contractVersion: 1,
-  state: "runtime_orchestrator_implemented_fail_closed",
+  contractVersion: 2,
+  state: "self_service_endpoint_implemented_fail_closed",
   preparedIntentTtlSeconds: 600,
   intentFoundation: {
     state: "foundation_non_destructive",
@@ -12,6 +12,12 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     requiresServerIssuedNonce: true,
     requiresFreshImpactSnapshot: true,
     confirmationExecutesDeletion: false,
+    finalExecutionRequiresSeparateAction: true,
+  },
+  receiptDelivery: {
+    mode: "inline_json_after_successful_execution",
+    downloadableByUser: true,
+    retentionPolicyRequiredBeforeExecution: true,
   },
   preservedExternalSources: ["official_bank_source", "google_drive_files"],
   executionPhases: [
@@ -23,13 +29,14 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     "delete_workspace_local_rows_in_controlled_transaction",
     "delete_workspace_memberships_and_root",
     "verify_zero_managed_residue",
+    "return_post_deletion_receipt_inline",
   ],
   runtimeFoundation: {
     localExecutorImplemented: true,
     runtimeOrchestratorImplemented: true,
     commercialPolicyConfigured: false,
     productionActivated: false,
-    selfServiceExecutionEndpointExposed: false,
+    selfServiceExecutionEndpointExposed: true,
     directGatewayDeleteOnBankSourceAllowed: false,
     requiresExecutionNonce: true,
     requiresExternalCleanupVerification: true,
@@ -40,7 +47,7 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     state: "rehearsal_admin_only",
     disposableDatabaseOnly: true,
     transactionalRollbackRequired: true,
-    runtimeExecutorAvailable: false,
+    runtimeExecutorAvailable: true,
     validatesConfirmedIntentBarrier: true,
     validatesWorkspaceFkBarrier: true,
     validatesImmutableBankSourceBarrier: true,
@@ -53,7 +60,6 @@ export const WORKSPACE_DELETION_PROTOCOL = {
     externalGoogleDriveMutationAllowed: false,
   },
   executionBlockers: [
-    "self_service_execution_endpoint_not_exposed",
     "post_deletion_receipt_retention_policy_not_defined",
     "production_activation_not_approved",
   ],
