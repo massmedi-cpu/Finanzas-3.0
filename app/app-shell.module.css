@@ -3,6 +3,28 @@
   min-width: 0;
 }
 
+.skipLink {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  max-width: calc(100vw - 1.5rem);
+  transform: translateY(calc(-100% - 1.5rem));
+  padding: 0.7rem 1rem;
+  border: 2px solid var(--color-primary-bright);
+  border-radius: 0.75rem;
+  background: rgba(10, 17, 34, 0.98);
+  color: #ffffff;
+  font-size: var(--font-button);
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.skipLink:focus-visible {
+  transform: translateY(0);
+}
+
 .navigationFrame {
   position: sticky;
   top: 0;

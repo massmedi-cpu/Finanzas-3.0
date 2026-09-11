@@ -5,6 +5,7 @@ import "./globals.css";
 import "./touch-targets.css";
 import "./premium-states.css";
 import "./accessibility-forced-colors.css";
+import "./accessibility-live-regions.css";
 
 export const dynamic = "force-dynamic";
 

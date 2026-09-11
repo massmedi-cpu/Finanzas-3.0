@@ -78,3 +78,19 @@ test("CR-006 · el foco de teclado sigue siendo perceptible con Forced Colors ac
   expect(focusStyle.outlineWidth).toBeGreaterThanOrEqual(2);
   expect(focusStyle.outlineOffset).toBeGreaterThanOrEqual(2);
 });
+
+test("CR-006 · teclado y lector de pantalla pueden saltar la navegación repetida", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "la prueba de bypass CR-006 se ejecuta una vez por run");
+  await isolateShellFromData(page);
+  await page.goto("/");
+
+  const skipLink = page.getByRole("link", { name: "Saltar al contenido principal" });
+  await expect(skipLink).toHaveAttribute("href", "#main-content");
+  await page.keyboard.press("Tab");
+  await expect(skipLink).toBeFocused();
+  await expect(skipLink).toBeVisible();
+
+  await page.keyboard.press("Enter");
+  await expect(page.locator("#main-content")).toBeFocused();
+  await expect(page.getByRole("main")).toHaveCount(1);
+});

@@ -30,6 +30,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className={styles.root}>
+      <a
+        className={styles.skipLink}
+        href="#main-content"
+        onClick={() => document.getElementById("main-content")?.focus()}
+      >
+        Saltar al contenido principal
+      </a>
       <div className={styles.navigationFrame}>
         <nav className={styles.navigation} aria-label="Navegación principal">
           {navigation.map((item) => {
@@ -48,7 +55,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
       </div>
-      <div className={styles.content}>{children}</div>
+      <div id="main-content" tabIndex={-1} className={styles.content}>{children}</div>
     </div>
   );
 }

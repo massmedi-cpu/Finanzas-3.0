@@ -1,0 +1,7 @@
+/* CR-006: los avisos dinámicos deben replegar incluso identificadores o mensajes sin espacios. */
+[role="alert"],
+[role="status"],
+[aria-live] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
