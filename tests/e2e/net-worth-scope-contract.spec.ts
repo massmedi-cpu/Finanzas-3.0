@@ -4,6 +4,7 @@ import { NET_WORTH_SCOPE_DECISION } from "../../src/domain/product-scope-contrac
 
 const models = readFileSync("src/domain/models.ts", "utf8");
 const dashboard = readFileSync("app/dashboard-client.tsx", "utf8");
+const accounts = readFileSync("app/accounts/accounts-client.tsx", "utf8");
 const balancesMigration = readFileSync(
   "supabase/migrations/20260905225858_phase5_scope_balances_by_account.sql",
   "utf8",
@@ -23,9 +24,11 @@ test("CR-005 · saldo agregado de cuentas no se presenta como patrimonio", () =>
   expect(balancesMigration.toLowerCase()).not.toContain("networth");
   expect(balancesMigration.toLowerCase()).not.toContain("net_worth");
 
-  expect(dashboard).toContain("Saldo total en cuentas");
-  expect(dashboard.toLowerCase()).not.toContain("patrimonio neto");
-  expect(dashboard.toLowerCase()).not.toContain("net worth");
+  for (const surface of [dashboard, accounts]) {
+    expect(surface).toContain("Saldo total en cuentas");
+    expect(surface.toLowerCase()).not.toContain("patrimonio neto");
+    expect(surface.toLowerCase()).not.toContain("net worth");
+  }
 });
 
 test("CR-005 · no se inventa un modelo patrimonial a partir de tipos de cuenta", () => {
