@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { ReactNode, SVGProps } from "react";
 
 export type ProductIconName =
   | "home"
@@ -20,7 +20,7 @@ export type ProductIconName =
   | "activity"
   | "arrow";
 
-const iconPaths: Record<ProductIconName, React.ReactNode> = {
+const iconPaths: Record<ProductIconName, ReactNode> = {
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9 20v-6h6v6"/></>,
   onboarding: <><path d="M12 3v4M12 17v4M4.2 4.2 7 7M17 17l2.8 2.8M3 12h4M17 12h4M4.2 19.8 7 17M17 7l2.8-2.8"/><circle cx="12" cy="12" r="4"/></>,
   review: <><path d="M5 4h14v16H5z"/><path d="M8 8h8M8 12h5"/><path d="m14.5 16 1.5 1.5 3-3"/></>,
