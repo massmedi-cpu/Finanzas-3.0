@@ -10,6 +10,7 @@ import {
 } from "../../../../../src/application/source-sync-runtime-contract";
 import { GoogleOauthError } from "../../../../../src/infrastructure/google/google-oauth";
 import {
+  OFFICIAL_GOOGLE_SOURCE_FILE_ID,
   GoogleSourceConnectionContractError,
   GoogleSourceRuntimeConfigurationError,
   createGoogleSourceRuntime,
@@ -52,17 +53,33 @@ type GatewaySourceStatus = {
   }>;
 };
 
+type SourceConnectionResolver = () => Promise<{ sourceFileId: string } | null>;
+
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+
+export async function resolveSourceStatusFileId(
+  resolveConnection: SourceConnectionResolver = resolveGoogleSourceConnection,
+) {
+  try {
+    const connection = await resolveConnection();
+    return connection?.sourceFileId ?? OFFICIAL_GOOGLE_SOURCE_FILE_ID;
+  } catch (error) {
+    if (
+      error instanceof GoogleSourceRuntimeConfigurationError ||
+      error instanceof GoogleSourceConnectionContractError ||
+      error instanceof PersistenceGatewayError
+    ) {
+      return OFFICIAL_GOOGLE_SOURCE_FILE_ID;
+    }
+    throw error;
+  }
+}
 
 export async function GET() {
   try {
-    const connection = await resolveGoogleSourceConnection();
-    if (!connection) {
-      return Response.json({ run: null, cursors: [] }, { headers: HEADERS });
-    }
-
+    const sourceFileId = await resolveSourceStatusFileId();
     const status = await callPersistenceGateway<GatewaySourceStatus>("source.status", {
-      sourceFileId: connection.sourceFileId,
+      sourceFileId,
     });
 
     return Response.json(
@@ -98,15 +115,14 @@ export async function GET() {
       { headers: HEADERS },
     );
   } catch (error) {
-    if (error instanceof GoogleSourceRuntimeConfigurationError) {
-      return Response.json(
-        { error: "google_oauth_not_configured", missing: error.missing },
-        { status: 503, headers: HEADERS },
-      );
-    }
-    if (error instanceof GoogleSourceConnectionContractError) {
-      return Response.json({ error: "google_connection_contract_mismatch" }, { status: 409, headers: HEADERS });
-    }
+    console.error(
+      "google-source-status",
+      error instanceof PersistenceGatewayError
+        ? error.code ?? error.name
+        : error instanceof Error
+          ? error.name
+          : "unknown_error",
+    );
     return Response.json(
       { error: "source_status_unavailable" },
       { status: 503, headers: HEADERS },
