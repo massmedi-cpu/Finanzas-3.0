@@ -54,5 +54,7 @@ test("CR-004 · el contrato expone diagnóstico como operación interna, no sopo
   expect(serviceHealth?.evidence.length).toBeGreaterThanOrEqual(5);
   expect(serviceHealth?.summary).toContain("capacidad interna de operación");
   expect(serviceHealth?.summary).toContain("no un canal de soporte para terceros");
+  expect(serviceHealth?.summary ?? "").not.toMatch(/\bsla\b/i);
+  expect(serviceHealth?.summary ?? "").not.toContain("página pública de estado");
   expect(DATA_TRUST_CAPABILITIES.find((capability) => capability.id === "support-and-service-status")).toBeUndefined();
 });
