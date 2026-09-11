@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
+// CR-001D final release gate: this spec is intentionally exercised against the exact protected Preview SHA.
 const blockedReadEndpoints = [
   "/api/analysis",
   "/api/budgets?month=2026-09",
