@@ -29,7 +29,7 @@ test("CR-005 · saldo agregado de cuentas no se presenta como patrimonio", () =>
 });
 
 test("CR-005 · no se inventa un modelo patrimonial a partir de tipos de cuenta", () => {
-  expect(models).toContain('  | "credit";');
+  expect(models).toContain('  | "credit"');
   expect(models).toContain('  | "investment"');
   expect(models).not.toMatch(/export interface (Asset|Liability|NetWorthSnapshot)\b/);
   expect(NET_WORTH_SCOPE_DECISION.prohibitedShortcuts).toContain(
