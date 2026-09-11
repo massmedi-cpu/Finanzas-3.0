@@ -26,7 +26,7 @@ export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: 
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.chart} role="list" aria-label="Ingresos y gastos por mes. Selecciona un mes para consultar sus importes exactos.">
+      <div className={styles.chart} role="group" aria-label="Ingresos y gastos por mes. Selecciona un mes para consultar sus importes exactos.">
         {rows.map((row) => {
           const label = formatMonth(row.monthStart);
           const active = selected?.monthStart === row.monthStart;
@@ -35,7 +35,6 @@ export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: 
           return (
             <button
               type="button"
-              role="listitem"
               key={row.monthStart}
               className={`${styles.column}${active ? ` ${styles.active}` : ""}`}
               aria-pressed={active}
