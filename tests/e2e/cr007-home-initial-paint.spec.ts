@@ -26,11 +26,35 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
 
   const cards = page.locator("main[aria-busy='true'] article");
   await expect(cards).toHaveCount(6);
-  const expectedSpan = (page.viewportSize()?.width ?? 1280) <= 1050 ? "span 12" : "span 6";
-  for (let index = 0; index < 6; index += 1) {
-    await expect(cards.nth(index)).toHaveCSS("grid-column-end", expectedSpan);
-  }
   await expect(page.getByText("Preparando tu resumen financiero…").first()).toBeVisible();
+
+  const geometry = await cards.evaluateAll((nodes) => nodes.map((node) => {
+    const rect = node.getBoundingClientRect();
+    return {
+      left: rect.left,
+      right: rect.right,
+      top: rect.top,
+      bottom: rect.bottom,
+      width: rect.width,
+    };
+  }));
+
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 1050;
+  if (isMobile) {
+    for (let index = 1; index < geometry.length; index += 1) {
+      expect(Math.abs(geometry[index].left - geometry[0].left)).toBeLessThanOrEqual(2);
+      expect(Math.abs(geometry[index].width - geometry[0].width)).toBeLessThanOrEqual(2);
+      expect(geometry[index].top).toBeGreaterThanOrEqual(geometry[index - 1].bottom);
+    }
+  } else {
+    for (let index = 0; index < geometry.length; index += 2) {
+      const leftCard = geometry[index];
+      const rightCard = geometry[index + 1];
+      expect(Math.abs(leftCard.top - rightCard.top)).toBeLessThanOrEqual(2);
+      expect(Math.abs(leftCard.width - rightCard.width)).toBeLessThanOrEqual(2);
+      expect(leftCard.right).toBeLessThanOrEqual(rightCard.left);
+    }
+  }
 
   release();
   await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toBeVisible();
