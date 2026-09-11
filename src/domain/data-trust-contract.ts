@@ -79,8 +79,14 @@ export const DATA_TRUST_CAPABILITIES = [
     title: "Borrado completo de datos",
     state: "not_available",
     summary:
-      "Todavía no existe un flujo autoservicio, verificado y reversible hasta confirmación para eliminar todos los datos del workspace.",
-    evidence: [],
+      "El autoservicio, el orquestador Storage/Vault y la entrega de recibo ya están implementados en modo fail-closed. El borrado permanece bloqueado hasta que exista una política de retención aprobada y una activación comercial explícita.",
+    evidence: [
+      "app/api/data/deletion/route.ts",
+      "app/configuration/data/workspace-deletion-panel.tsx",
+      "src/domain/workspace-deletion-protocol.ts",
+      "supabase/functions/financial-app-db-gateway/workspace-deletion-intent.ts",
+      "tests/e2e/data-deletion-self-service-contract.spec.ts",
+    ],
   },
   {
     id: "commercial-retention",
@@ -112,7 +118,7 @@ export const DATA_TRUST_CAPABILITIES = [
 ] as const satisfies readonly DataTrustCapability[];
 
 export const DATA_TRUST_REVIEW = {
-  contractVersion: 1,
-  reviewedOn: "2026-09-10",
+  contractVersion: 2,
+  reviewedOn: "2026-09-11",
   scope: "Financial App · preparación comercial",
 } as const;
