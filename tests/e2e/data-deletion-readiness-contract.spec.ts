@@ -101,11 +101,13 @@ test("PRE-020F/G · Preview/Local devuelven 403 real con headers seguros", async
   });
 });
 
-test("PRE-020G / CR-001C/D · diagnóstico no activa el contrato comercial aunque el autoservicio exista", () => {
+test("PRE-020G / CR-001C/D · diagnóstico conserva backend fail-closed sin reaparecer en la UI monousuario", () => {
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
   expect(sourceRouter).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
   expect(dataTrustPage).not.toContain(ACTION);
   expect(dataTrustPage).not.toContain("/api/data/deletion-readiness");
   expect(dataTrustPage).not.toContain("data.deletion_execute_v1");
-  expect(dataTrustContract).toMatch(/id:\s*"workspace-deletion"[\s\S]{0,1200}?state:\s*"not_available"/);
+  expect(dataTrustPage).not.toContain("WorkspaceDeletionPanel");
+  expect(dataTrustContract).not.toContain('id: "workspace-deletion"');
+  expect(dataTrustContract).not.toContain('id: "commercial-retention"');
 });

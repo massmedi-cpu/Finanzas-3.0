@@ -95,12 +95,11 @@ test("CR-001D · endpoint web no encadena confirmación y ejecución", () => {
   expect(protocol).toContain("finalExecutionRequiresSeparateAction: true");
 });
 
-test("CR-001D · UI sigue declarando borrado no disponible hasta aprobación comercial", () => {
-  expect(dataTrustContract).toContain('id: "workspace-deletion"');
-  expect(dataTrustContract).toMatch(
-    /id:\s*"workspace-deletion"[\s\S]{0,1800}?state:\s*"not_available"/,
-  );
-  expect(dataTrustPage).toContain("WorkspaceDeletionPanel");
+test("CR-001D · backend queda fail-closed y la UI monousuario no expone borrado", () => {
+  expect(dataTrustContract).not.toContain('id: "workspace-deletion"');
+  expect(dataTrustContract).not.toContain('id: "commercial-retention"');
+  expect(dataTrustPage).not.toContain("WorkspaceDeletionPanel");
+  expect(dataTrustPage).not.toContain("/api/data/deletion");
   expect(protocol).toContain("commercialPolicyConfigured: false");
   expect(protocol).toContain("productionActivated: false");
   expect(protocol).toContain("selfServiceExecutionEndpointExposed: true");
