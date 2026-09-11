@@ -75,44 +75,6 @@ begin
 end
 $$;
 
--- Las claves workspace-scoped se crean antes del backfill. Así el UPDATE de tenancy puede
--- poblarlas y ser validado por los índices sin intentar CREATE INDEX después de generar
--- eventos de trigger pendientes dentro de la misma transacción de migración.
--- Las claves globales legacy permanecen temporalmente para compatibilidad.
-create unique index if not exists accounts_workspace_normalized_name_unique
-  on financial_app.accounts(workspace_id, lower(btrim(name)))
-  where workspace_id is not null;
-
-create unique index if not exists transactions_workspace_source_row_identity_unique
-  on financial_app.transactions(workspace_id, source_row_identity)
-  where workspace_id is not null;
-
-create unique index if not exists documents_workspace_storage_identity_unique
-  on financial_app.documents(workspace_id, storage_provider, storage_key)
-  where workspace_id is not null;
-
-create unique index if not exists documents_workspace_drive_file_identity_unique
-  on financial_app.documents(workspace_id, source_drive_file_id)
-  where workspace_id is not null and source_drive_file_id is not null;
-
--- Se denomina *_pkey porque será la futura PK al retirar la PK legacy de dos columnas.
--- En esta fase es deliberadamente un índice UNIQUE paralelo para mantener compatibilidad.
-create unique index if not exists sync_cursors_workspace_pkey
-  on financial_app.sync_cursors(workspace_id, source_file_id, source_sheet_id)
-  where workspace_id is not null;
-
-create unique index if not exists account_source_mappings_workspace_identity_unique
-  on financial_app.account_source_mappings(workspace_id, source_file_id, account_external_key)
-  where workspace_id is not null;
-
-create unique index if not exists google_oauth_connections_workspace_unique
-  on financial_app.google_oauth_connections(workspace_id)
-  where workspace_id is not null;
-
-create unique index if not exists google_source_policy_workspace_unique
-  on financial_app.google_source_policy(workspace_id)
-  where workspace_id is not null;
-
 -- pre001_personal_workspace_backfill
 -- La instancia existente sólo puede backfillearse automáticamente cuando hay exactamente
 -- un usuario activo autorizado. Si no se cumple, se falla cerrado en vez de adivinar ownership.
@@ -211,6 +173,43 @@ begin
   end if;
 end
 $$;
+
+-- Primeras claves workspace-scoped. Las claves globales legacy permanecen temporalmente
+-- para compatibilidad; PRE-001 hardening las sustituirá sólo después de que el gateway
+-- propague identidad y todas las regresiones cross-tenant sean verdes.
+create unique index if not exists accounts_workspace_normalized_name_unique
+  on financial_app.accounts(workspace_id, lower(btrim(name)))
+  where workspace_id is not null;
+
+create unique index if not exists transactions_workspace_source_row_identity_unique
+  on financial_app.transactions(workspace_id, source_row_identity)
+  where workspace_id is not null;
+
+create unique index if not exists documents_workspace_storage_identity_unique
+  on financial_app.documents(workspace_id, storage_provider, storage_key)
+  where workspace_id is not null and storage_provider is not null and storage_key is not null;
+
+create unique index if not exists documents_workspace_drive_file_identity_unique
+  on financial_app.documents(workspace_id, source_drive_file_id)
+  where workspace_id is not null and source_drive_file_id is not null;
+
+-- Se denomina *_pkey porque será la futura PK al retirar la PK legacy de dos columnas.
+-- En esta fase es deliberadamente un índice UNIQUE paralelo para mantener compatibilidad.
+create unique index if not exists sync_cursors_workspace_pkey
+  on financial_app.sync_cursors(workspace_id, source_file_id, source_sheet_id)
+  where workspace_id is not null;
+
+create unique index if not exists account_source_mappings_workspace_identity_unique
+  on financial_app.account_source_mappings(workspace_id, source_file_id, account_external_key)
+  where workspace_id is not null;
+
+create unique index if not exists google_oauth_connections_workspace_unique
+  on financial_app.google_oauth_connections(workspace_id)
+  where workspace_id is not null;
+
+create unique index if not exists google_source_policy_workspace_unique
+  on financial_app.google_source_policy(workspace_id)
+  where workspace_id is not null;
 
 -- Utilidad común para las siguientes fases de constraints compuestos y funciones.
 -- Cualquier referencia explícita entre workspaces debe fallar cerrada con este código.
