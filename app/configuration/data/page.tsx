@@ -4,7 +4,6 @@ import {
   type DataTrustSection,
   type DataTrustState,
 } from "../../../src/domain/data-trust-contract";
-import WorkspaceDeletionPanel from "./workspace-deletion-panel";
 import styles from "./data-trust.module.css";
 
 export const metadata = {
@@ -46,10 +45,10 @@ export default function DataTrustPage() {
         <p className={styles.eyebrow}>Transparencia de datos</p>
         <h1>Datos y privacidad</h1>
         <p className={styles.lead}>
-          Aquí se distingue lo que Financial App puede demostrar hoy de lo que todavía no ofrece. Ninguna capacidad pendiente se presenta como disponible.
+          Financial App está diseñada para un único usuario. Esta pantalla resume las protecciones y capacidades de datos que puede demostrar hoy.
         </p>
         <div className={styles.notice} role="note">
-          Esta pantalla describe capacidades actuales del producto. No sustituye una política de privacidad ni unas condiciones de uso comerciales.
+          La separación interna de datos es una medida técnica de seguridad y no implica cuentas compartidas, equipos ni espacios de trabajo gestionables.
         </div>
       </header>
 
@@ -90,7 +89,6 @@ export default function DataTrustPage() {
                         </small>
                       </div>
                     ) : null}
-                    {capability.id === "workspace-deletion" ? <WorkspaceDeletionPanel /> : null}
                     {capability.state === "verified" && capability.id !== "user-data-export" ? (
                       <small>Respaldado por {capability.evidence.length} controles o pruebas versionadas.</small>
                     ) : null}
