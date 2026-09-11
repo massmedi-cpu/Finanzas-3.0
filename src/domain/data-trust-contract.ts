@@ -48,6 +48,21 @@ export const DATA_TRUST_CAPABILITIES = [
     ],
   },
   {
+    id: "technical-privacy",
+    section: "protection",
+    title: "Privacidad técnica",
+    state: "verified",
+    summary:
+      "La sesión usa cookies estrictamente necesarias con HttpOnly y SameSite=Lax; en Production también se marcan Secure. La conexión de Google solicita identidad básica y únicamente permisos de lectura para Sheets y metadatos de Drive.",
+    evidence: [
+      "src/infrastructure/auth/access-control.ts",
+      "src/infrastructure/auth/supabase-auth.ts",
+      "src/infrastructure/google/google-oauth.ts",
+      "src/infrastructure/google/official-bank-source-reader.ts",
+      "tests/e2e/technical-privacy-contract.spec.ts",
+    ],
+  },
+  {
     id: "operator-backup",
     section: "data_lifecycle",
     title: "Copia técnica y restauración",
@@ -74,15 +89,6 @@ export const DATA_TRUST_CAPABILITIES = [
     ],
   },
   {
-    id: "privacy-and-terms",
-    section: "commercial_readiness",
-    title: "Privacidad y condiciones",
-    state: "not_available",
-    summary:
-      "La aplicación aún no publica una política de privacidad ni condiciones comerciales definitivas.",
-    evidence: [],
-  },
-  {
     id: "support-and-service-status",
     section: "commercial_readiness",
     title: "Soporte y estado del servicio",
@@ -94,7 +100,7 @@ export const DATA_TRUST_CAPABILITIES = [
 ] as const satisfies readonly DataTrustCapability[];
 
 export const DATA_TRUST_REVIEW = {
-  contractVersion: 3,
+  contractVersion: 4,
   reviewedOn: "2026-09-11",
   scope: "Financial App · producto monousuario",
 } as const;
