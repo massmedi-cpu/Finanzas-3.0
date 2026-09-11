@@ -116,11 +116,11 @@ export async function handleTransactionReviewAction(input: {
               bank_date,concept_original,amount_cents,balance_after_cents,account_external_key
             ) values (
               ${sourceFileId},'sheet-1',${rowKey},${sourceFileId + '::sheet-1::' + rowKey},${fingerprint},
-              ${{ test: token, row: index }},
+              ${{ test: token, row: index, Hora: index <= 2 ? "10:00" : index === 3 ? "09:00" : "10:00" }},
               ${index <= 2 ? '2026-09-05' : index === 3 ? '2026-09-04' : '2026-09-05'}::date,
               ${index <= 2 ? 'DUPLICADO PRUEBA ' + token : 'TRANSFERENCIA PRUEBA ' + token},
               ${index <= 2 ? -1234 : index === 3 ? -25000 : 25000},
-              ${50000 - index * 1000},
+              ${index <= 2 ? 49000 : 50000 - index * 1000},
               ${index === 4 ? 'Phase4 review account B ' + token : 'Phase4 review account A ' + token}
             ) returning id
           `;
@@ -141,7 +141,7 @@ export async function handleTransactionReviewAction(input: {
             source_record_id,source_row_identity,account_id,bank_date,concept_normalized,kind,amount_cents,balance_after_cents,review_state,duplicate_state
           ) values (
             ${sourceIds[1]}::uuid,${sourceFileId + '::sheet-1::ROW-2'},${accountAId}::uuid,'2026-09-05'::date,
-            ${'DUPLICADO PRUEBA ' + token},'expense',-1234,48000,'pending','none'
+            ${'DUPLICADO PRUEBA ' + token},'expense',-1234,49000,'pending','none'
           ) returning id
         `;
         const transferA = await tx`

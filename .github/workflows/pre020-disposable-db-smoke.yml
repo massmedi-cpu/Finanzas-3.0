@@ -45,6 +45,6 @@ jobs:
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
           /usr/lib/postgresql/17/bin/psql --version
 
-      - name: Apply validated baseline and execute PRE-020 structured export smoke
+      - name: Apply validated baseline and execute PRE-020 + CR-006 duplicate evidence smoke
         shell: bash
-        run: bash scripts/pre020-disposable-db-smoke.sh
+        run: bash scripts/cr006-duplicate-disposable-db-smoke.sh
