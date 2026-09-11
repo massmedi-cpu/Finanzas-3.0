@@ -18,7 +18,14 @@ export type ProductIconName =
   | "budget"
   | "future"
   | "activity"
-  | "arrow";
+  | "arrow"
+  | "spent"
+  | "remaining"
+  | "progress"
+  | "spark"
+  | "category"
+  | "refresh"
+  | "warning";
 
 const iconPaths: Record<ProductIconName, ReactNode> = {
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9 20v-6h6v6"/></>,
@@ -39,6 +46,13 @@ const iconPaths: Record<ProductIconName, ReactNode> = {
   future: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
   activity: <path d="M3 12h4l2-5 4 10 2-5h6"/>,
   arrow: <><path d="M5 12h14M14 7l5 5-5 5"/></>,
+  spent: <><path d="M4 4v16h16"/><path d="m7 15 4-4 3 3 5-6"/><path d="M16 8h3v3"/></>,
+  remaining: <><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></>,
+  progress: <><path d="M4 18V9"/><path d="M10 18V5"/><path d="M16 18v-7"/><path d="M22 18H2"/></>,
+  spark: <><path d="m12 2 1.5 5.5L19 9l-5.5 1.5L12 16l-1.5-5.5L5 9l5.5-1.5Z"/><path d="m19 15 .8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8Z"/></>,
+  category: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
+  refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.4 6.4L4 9"/><path d="M5.5 15A7 7 0 0 0 17.6 17.6L20 15"/></>,
+  warning: <><path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
 };
 
 type ProductIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & {
