@@ -90,9 +90,10 @@ test("PRE-020C · el endpoint ejecutado rechaza local/Preview sin tocar datos", 
   });
 });
 
-test("PRE-020C · la UI sigue declarando borrado no disponible y no expone el endpoint", () => {
-  expect(dataTrustContract).toContain('id: "workspace-deletion"');
-  expect(dataTrustContract).toContain('state: "not_available"');
+test("PRE-020C · backend conserva el impacto aislado y la UI monousuario no lo expone", () => {
+  expect(dataTrustContract).not.toContain('id: "workspace-deletion"');
+  expect(dataTrustContract).not.toContain('id: "commercial-retention"');
+  expect(dataTrustPage).not.toContain("WorkspaceDeletionPanel");
   expect(dataTrustPage).not.toContain("/api/data/deletion-impact");
   expect(dataTrustPage).not.toContain("data.deletion_impact_v1");
 });

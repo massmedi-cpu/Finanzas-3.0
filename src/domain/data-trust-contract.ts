@@ -26,10 +26,10 @@ export const DATA_TRUST_CAPABILITIES = [
   {
     id: "workspace-isolation",
     section: "protection",
-    title: "Aislamiento por espacio de trabajo",
+    title: "Aislamiento interno de datos",
     state: "verified",
     summary:
-      "La persistencia incorpora ownership por workspace y pruebas negativas para impedir acceso cruzado entre espacios de trabajo.",
+      "Financial App mantiene una frontera técnica interna para aislar la persistencia y aplicar controles de acceso. Es una medida de seguridad, no una función multiusuario visible.",
     evidence: [
       "supabase/migrations/20260909193000_pre001_workspace_isolation.sql",
       "scripts/pre001-cross-tenant-smoke.sql",
@@ -66,36 +66,12 @@ export const DATA_TRUST_CAPABILITIES = [
     title: "Exportar mis datos",
     state: "verified",
     summary:
-      "Puedes descargar una exportación JSON estructurada de los datos de negocio del workspace. No incluye credenciales, secretos de plataforma ni binarios de documentos.",
+      "Puedes descargar una exportación JSON estructurada de los datos gestionados por Financial App. No incluye credenciales, secretos de plataforma ni binarios de documentos.",
     evidence: [
       "supabase/migrations/20260909213000_pre020_workspace_structured_export.sql",
       "app/api/data/export/route.ts",
       "tests/e2e/data-export-delivery-contract.spec.ts",
     ],
-  },
-  {
-    id: "workspace-deletion",
-    section: "data_lifecycle",
-    title: "Borrado completo de datos",
-    state: "not_available",
-    summary:
-      "El autoservicio, el orquestador Storage/Vault y la entrega de recibo ya están implementados en modo fail-closed. El borrado permanece bloqueado hasta que exista una política de retención aprobada y una activación comercial explícita.",
-    evidence: [
-      "app/api/data/deletion/route.ts",
-      "app/configuration/data/workspace-deletion-panel.tsx",
-      "src/domain/workspace-deletion-protocol.ts",
-      "supabase/functions/financial-app-db-gateway/workspace-deletion-intent.ts",
-      "tests/e2e/data-deletion-self-service-contract.spec.ts",
-    ],
-  },
-  {
-    id: "commercial-retention",
-    section: "data_lifecycle",
-    title: "Política de retención",
-    state: "not_available",
-    summary:
-      "No hay una política comercial de retención definida. La retención de artefactos técnicos no se presenta como política de datos del usuario.",
-    evidence: [],
   },
   {
     id: "privacy-and-terms",
@@ -118,7 +94,7 @@ export const DATA_TRUST_CAPABILITIES = [
 ] as const satisfies readonly DataTrustCapability[];
 
 export const DATA_TRUST_REVIEW = {
-  contractVersion: 2,
+  contractVersion: 3,
   reviewedOn: "2026-09-11",
-  scope: "Financial App · preparación comercial",
+  scope: "Financial App · producto monousuario",
 } as const;

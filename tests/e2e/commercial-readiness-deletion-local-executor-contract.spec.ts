@@ -61,6 +61,7 @@ test("CR-001A/D · executor local y autoservicio existen pero Production permane
   expect(handler).toContain("workspace_deletion_execution_policy_not_approved");
   expect(selfService).toContain("workspace_deletion_commercial_policy_not_active");
   expect(selfService).toContain("if (!selfserviceactive(readiness)) return unavailable(readiness)");
-  expect(trust).toContain('id: "workspace-deletion"');
-  expect(trust).toContain('state: "not_available"');
+  expect(trust).toContain("monousuario");
+  expect(trust).not.toContain('id: "workspace-deletion"');
+  expect(trust).not.toContain('id: "commercial-retention"');
 });

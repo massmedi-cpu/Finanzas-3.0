@@ -13,6 +13,7 @@ const intentHandler = readFileSync(
 );
 const selfServiceRoute = readFileSync("app/api/data/deletion/route.ts", "utf8");
 const selfServicePanel = readFileSync("app/configuration/data/workspace-deletion-panel.tsx", "utf8");
+const dataTrustPage = readFileSync("app/configuration/data/page.tsx", "utf8");
 const dataTrustContract = readFileSync("src/domain/data-trust-contract.ts", "utf8");
 
 test("PRE-020E · el ensayo destructivo sigue siendo admin-only, desechable y reversible", () => {
@@ -68,7 +69,7 @@ test("CR-001D · el autoservicio existe pero la API corta antes del gateway mien
   expect(protocol).toContain("selfServiceExecutionEndpointExposed: true");
 });
 
-test("CR-001D · la UI exige dos pasos y entrega el recibo sin inventar retención", () => {
+test("CR-001D · el componente histórico conserva doble confirmación pero no vuelve a la UI monousuario", () => {
   expect(selfServicePanel).toContain('const CONFIRMATION_TEXT = "ELIMINAR MIS DATOS"');
   expect(selfServicePanel).toContain("Confirmación 1 de 2");
   expect(selfServicePanel).toContain("Confirmación 2 de 2");
@@ -76,7 +77,7 @@ test("CR-001D · la UI exige dos pasos y entrega el recibo sin inventar retenci�
   expect(selfServicePanel).toContain('run("execute")');
   expect(selfServicePanel).toContain("Descargar recibo JSON");
   expect(selfServicePanel).not.toMatch(/retenci[oó]n\s+de\s+\d+/i);
-  expect(dataTrustContract).toMatch(
-    /id:\s*"workspace-deletion"[\s\S]{0,1800}?state:\s*"not_available"/,
-  );
+  expect(dataTrustPage).not.toContain("WorkspaceDeletionPanel");
+  expect(dataTrustContract).not.toContain('id: "workspace-deletion"');
+  expect(dataTrustContract).not.toContain('id: "commercial-retention"');
 });
