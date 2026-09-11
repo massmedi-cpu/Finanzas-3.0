@@ -54,7 +54,7 @@ test("CR-001B · la orquestación destructiva sólo puede usar contexto servidor
   expect(protocol).toContain('"official_bank_source"');
   expect(protocol).toContain('"google_drive_files"');
   expect(protocol).toContain("externalGoogleDriveMutationAllowed: false");
-  expect(trust).toContain('state: "not_available"');
+  expect(trust).not.toContain('id: "workspace-deletion"');
 
   for (const workflow of [dbWorkflow, storageWorkflow, previewWorkflow]) {
     expect(workflow).toContain("'commercial-readiness/**'");
