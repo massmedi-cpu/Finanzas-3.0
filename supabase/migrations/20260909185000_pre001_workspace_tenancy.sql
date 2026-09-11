@@ -187,7 +187,7 @@ create unique index if not exists transactions_workspace_source_row_identity_uni
 
 create unique index if not exists documents_workspace_storage_identity_unique
   on financial_app.documents(workspace_id, storage_provider, storage_key)
-  where workspace_id is not null and storage_provider is not null and storage_key is not null;
+  where workspace_id is not null;
 
 create unique index if not exists documents_workspace_drive_file_identity_unique
   on financial_app.documents(workspace_id, source_drive_file_id)
