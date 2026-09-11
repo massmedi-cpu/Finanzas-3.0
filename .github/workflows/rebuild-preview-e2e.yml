@@ -238,13 +238,15 @@ jobs:
           done
           npx playwright install --with-deps chromium
 
-      - name: Run protected preview live E2E
+      - name: Run protected preview fail-closed boundary E2E
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: >-
-          npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
-          --grep-invert "unknown budget category|ingesta sintética roundtrip|Vault OAuth roundtrip|persistencia completa y limpieza|forged PDF bytes"
+          npm run test:e2e --
+          tests/e2e/preview-production-isolation-live.spec.ts
+          tests/e2e/protected-preview-auth-boundary-live.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
         if: failure()
