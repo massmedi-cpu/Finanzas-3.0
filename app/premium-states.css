@@ -1,0 +1,118 @@
+/* Premium visual states. Purely presentational: no data or interaction logic lives here.
+ * Contract: motion is decorative only, must respect prefers-reduced-motion, and is validated through commercial-readiness gates.
+ */
+
+section[aria-label="Preparando resumen financiero"] > article {
+  animation: premium-card-reveal 320ms ease both;
+}
+
+section[aria-label="Preparando resumen financiero"] > article:nth-child(2) { animation-delay: 35ms; }
+section[aria-label="Preparando resumen financiero"] > article:nth-child(3) { animation-delay: 70ms; }
+section[aria-label="Preparando resumen financiero"] > article:nth-child(4) { animation-delay: 105ms; }
+section[aria-label="Preparando resumen financiero"] > article:nth-child(5) { animation-delay: 140ms; }
+section[aria-label="Preparando resumen financiero"] > article:nth-child(6) { animation-delay: 175ms; }
+
+section[aria-label="Preparando resumen financiero"] > article > div:last-child {
+  position: relative;
+  min-height: 7.5rem;
+  display: grid;
+  align-content: center;
+  gap: 0.75rem;
+  overflow: hidden;
+  border: 1px solid rgba(137, 173, 255, 0.1);
+  border-radius: 0.95rem;
+  padding: 1rem;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.038), rgba(77, 141, 255, 0.025));
+}
+
+section[aria-label="Preparando resumen financiero"] > article > div:last-child::before {
+  content: "";
+  display: block;
+  width: min(72%, 18rem);
+  height: 1.05rem;
+  border-radius: 999px;
+  background: linear-gradient(100deg, rgba(137, 173, 255, 0.08) 20%, rgba(137, 173, 255, 0.22) 42%, rgba(137, 173, 255, 0.08) 64%);
+  background-size: 220% 100%;
+  animation: premium-skeleton-shimmer 1.35s ease-in-out infinite;
+}
+
+section[aria-label="Preparando resumen financiero"] > article > div:last-child > span:first-child {
+  display: block;
+  width: min(46%, 10rem);
+  height: 0.78rem;
+  margin: 0;
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(100deg, rgba(137, 173, 255, 0.07) 20%, rgba(137, 173, 255, 0.18) 42%, rgba(137, 173, 255, 0.07) 64%);
+  background-size: 220% 100%;
+  animation: premium-skeleton-shimmer 1.35s ease-in-out infinite reverse;
+}
+
+section[aria-label="Preparando resumen financiero"] > article > div:last-child > p {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+  line-height: 1.45;
+}
+
+section[aria-label="Resumen financiero"] > article {
+  animation: premium-content-reveal 240ms ease both;
+}
+
+p[role="status"][data-testid^="dashboard-"][data-testid$="-unavailable"] {
+  position: relative;
+  min-height: 5.5rem;
+  display: flex;
+  align-items: center;
+  margin: 0.5rem 0 0;
+  padding: 0.95rem 1rem 0.95rem 3.75rem;
+  border: 1px solid rgba(137, 173, 255, 0.12);
+  border-radius: 0.95rem;
+  background: linear-gradient(145deg, rgba(77, 141, 255, 0.055), rgba(255, 255, 255, 0.025));
+  color: var(--color-text-secondary);
+  font-size: var(--font-label);
+  line-height: 1.5;
+}
+
+p[role="status"][data-testid^="dashboard-"][data-testid$="-unavailable"]::before {
+  content: "·";
+  position: absolute;
+  left: 1rem;
+  top: 50%;
+  width: 2rem;
+  height: 2rem;
+  display: grid;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid rgba(137, 173, 255, 0.18);
+  border-radius: 0.72rem;
+  background: linear-gradient(145deg, rgba(31, 107, 255, 0.18), rgba(43, 217, 247, 0.06));
+  color: var(--color-primary-bright);
+  font-size: 1.35rem;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@keyframes premium-skeleton-shimmer {
+  0% { background-position: 160% 0; }
+  100% { background-position: -60% 0; }
+}
+
+@keyframes premium-card-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes premium-content-reveal {
+  from { opacity: 0.72; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  section[aria-label="Preparando resumen financiero"] > article,
+  section[aria-label="Resumen financiero"] > article,
+  section[aria-label="Preparando resumen financiero"] > article > div:last-child::before,
+  section[aria-label="Preparando resumen financiero"] > article > div:last-child > span:first-child {
+    animation: none;
+  }
+}

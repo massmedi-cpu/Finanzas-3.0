@@ -3,6 +3,7 @@ import { APP_VERSION } from "../src/core/build-info";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import "./globals.css";
 import "./touch-targets.css";
+import "./premium-states.css";
 
 export const dynamic = "force-dynamic";
 
