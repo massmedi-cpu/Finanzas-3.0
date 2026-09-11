@@ -25,16 +25,19 @@ export async function handleWorkspaceDeletionReadinessAction(input: {
     select financial_app.workspace_deletion_readiness() as readiness
   `;
   const readiness = rows[0]?.readiness;
-  if (!readiness || typeof readiness !== "object" || Array.isArray(readiness)) {
+  if (
+    !readiness ||
+    typeof readiness !== "object" ||
+    Array.isArray(readiness) ||
+    typeof readiness.canExecute !== "boolean" ||
+    readiness.destructiveOperationExecuted !== false
+  ) {
     return json({ error: "workspace_deletion_readiness_unavailable" }, 503);
   }
-  if (readiness.canExecute !== false || readiness.destructiveOperationExecuted !== false) {
-    return json({ error: "workspace_deletion_readiness_fail_closed_violation" }, 503);
-  }
 
-  // Si esta respuesta sale de este bundle, el orquestador interno CR-001B forma parte
-  // del gateway desplegado. Esto describe capacidad de código; NO equivale a activación
-  // comercial y NO crea una ruta pública de ejecución.
+  // CR-001C/D: el bundle ya contiene el orquestador y el endpoint web de autoservicio.
+  // Esto describe capacidad de código. La operación destructiva continúa gobernada por la
+  // política DB: mientras policy/retention/activation sigan OFF, canExecute permanece false.
   const readinessRecord = readiness as Record<string, unknown>;
   const existingRuntime =
     readinessRecord.runtimeFoundation &&
@@ -49,7 +52,7 @@ export async function handleWorkspaceDeletionReadinessAction(input: {
       runtimeFoundation: {
         ...existingRuntime,
         runtimeOrchestratorImplemented: true,
-        selfServiceExecutionEndpointExposed: false,
+        selfServiceExecutionEndpointExposed: true,
       },
     },
   });
