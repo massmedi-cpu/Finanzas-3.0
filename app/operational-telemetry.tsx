@@ -31,15 +31,15 @@ function sendTelemetry(payload: OperationalTelemetry) {
   }).catch(() => undefined);
 }
 
-export function OperationalTelemetryReporter() {
+export function OperationalTelemetryReporter({ enabled }: Readonly<{ enabled: boolean }>) {
   const pathname = usePathname();
   const routeRef = useRef<TelemetryRoute>(normalizeTelemetryRoute(pathname));
-  const enabledRef = useRef(pathname !== "/login");
+  const enabledRef = useRef(enabled && pathname !== "/login");
 
   useEffect(() => {
     routeRef.current = normalizeTelemetryRoute(pathname);
-    enabledRef.current = pathname !== "/login";
-  }, [pathname]);
+    enabledRef.current = enabled && pathname !== "/login";
+  }, [enabled, pathname]);
 
   const reportMetric = useCallback((metric: { name: string; value: number }) => {
     if (!enabledRef.current || !isWebVitalName(metric.name)) return;
@@ -55,7 +55,7 @@ export function OperationalTelemetryReporter() {
   useReportWebVitals(reportMetric);
 
   useEffect(() => {
-    if (pathname === "/login") return;
+    if (!enabled || pathname === "/login") return;
     const route = normalizeTelemetryRoute(pathname);
 
     const handleError = (event: ErrorEvent) => {
@@ -82,7 +82,7 @@ export function OperationalTelemetryReporter() {
       window.removeEventListener("error", handleError);
       window.removeEventListener("unhandledrejection", handleUnhandledRejection);
     };
-  }, [pathname]);
+  }, [enabled, pathname]);
 
   return null;
 }

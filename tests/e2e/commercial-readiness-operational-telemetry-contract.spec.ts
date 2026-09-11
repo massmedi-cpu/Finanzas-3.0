@@ -27,7 +27,8 @@ test("CR-007 · la telemetría operativa es first-party, mínima y no contamina 
   expect(reporter).toContain('TELEMETRY_ENDPOINT = "/api/telemetry/client"');
   expect(reporter).toContain('credentials: "same-origin"');
   expect(reporter).toContain('keepalive: true');
-  expect(reporter).toContain('pathname !== "/login"');
+  expect(reporter).toContain('enabled && pathname !== "/login"');
+  expect(reporter).toContain('if (!enabled || pathname === "/login") return;');
   expect(reporter).toContain('"window_error"');
   expect(reporter).toContain('"unhandled_rejection"');
   expect(reporter).not.toContain('error.message');
@@ -44,7 +45,7 @@ test("CR-007 · la telemetría operativa es first-party, mínima y no contamina 
   expect(endpoint).toContain('budget: WEB_VITAL_BUDGETS[telemetry.name]');
   expect(endpoint).not.toContain('console.info("financial-app-rum", rawBody');
   expect(endpoint).not.toContain('console.info("financial-app-client-error", rawBody');
-  expect(layout).toContain('<OperationalTelemetryReporter />');
+  expect(layout).toContain('<OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />');
   expect(accessControl).not.toContain('"/api/telemetry/client"');
 
   const validVital = await request.post('/api/telemetry/client', {
