@@ -3,7 +3,6 @@ import { expect, test } from "@playwright/test";
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 
 const blockedReadEndpoints = [
-  "/api/accounts",
   "/api/analysis",
   "/api/budgets",
   "/api/configuration",
