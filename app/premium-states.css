@@ -1,4 +1,6 @@
-/* Premium visual states. Purely presentational: no data or interaction logic lives here. */
+/* Premium visual states. Purely presentational: no data or interaction logic lives here.
+ * Contract: motion is decorative only and must be disabled by prefers-reduced-motion.
+ */
 
 section[aria-label="Preparando resumen financiero"] > article {
   animation: premium-card-reveal 320ms ease both;
