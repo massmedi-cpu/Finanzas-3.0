@@ -26,9 +26,9 @@ export type TelemetryRoute = (typeof TELEMETRY_ROUTES)[number];
 
 /**
  * Production RUM budgets. Timing values are milliseconds; CLS is unitless.
- * The thresholds intentionally match the "good" boundary used by the web-vitals
- * ecosystem for the corresponding metric. FID remains only for compatibility;
- * INP is the current responsiveness metric used for readiness decisions.
+ * These thresholds use the established "good" boundary for the corresponding
+ * web-vitals metric. FID remains only for compatibility; INP is the current
+ * responsiveness metric used for readiness decisions.
  */
 export const WEB_VITAL_BUDGETS: Readonly<Record<WebVitalName, number>> = {
   CLS: 0.1,
@@ -43,6 +43,8 @@ const WEB_VITAL_SET = new Set<string>(WEB_VITAL_NAMES);
 const RATING_SET = new Set<string>(WEB_VITAL_RATINGS);
 const CLIENT_ERROR_KIND_SET = new Set<string>(CLIENT_ERROR_KINDS);
 const ROUTE_SET = new Set<string>(TELEMETRY_ROUTES);
+const WEB_VITAL_FIELDS = new Set(["type", "route", "name", "value", "rating"]);
+const CLIENT_ERROR_FIELDS = new Set(["type", "route", "kind", "errorName"]);
 const SAFE_ERROR_NAME = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
 
 export type WebVitalTelemetry = {
@@ -66,6 +68,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: ReadonlySet<string>) {
+  return Object.keys(value).every((key) => allowed.has(key));
+}
+
 export function isWebVitalName(value: unknown): value is WebVitalName {
   return typeof value === "string" && WEB_VITAL_SET.has(value);
 }
@@ -81,37 +87,40 @@ export function webVitalWithinBudget(name: WebVitalName, value: number) {
 }
 
 export function parseOperationalTelemetry(value: unknown): OperationalTelemetry | null {
-  if (!isRecord(value)) return null;
+  if (!isRecord(value) || typeof value.route !== "string") return null;
 
   const route = normalizeTelemetryRoute(value.route);
 
   if (value.type === "web_vital") {
+    if (!hasOnlyKeys(value, WEB_VITAL_FIELDS)) return null;
     if (!isWebVitalName(value.name)) return null;
     if (typeof value.value !== "number" || !Number.isFinite(value.value) || value.value < 0 || value.value > 3_600_000) {
       return null;
     }
-    const rating = typeof value.rating === "string" && RATING_SET.has(value.rating)
-      ? (value.rating as WebVitalRating)
-      : null;
+    if (
+      value.rating !== null &&
+      (typeof value.rating !== "string" || !RATING_SET.has(value.rating))
+    ) {
+      return null;
+    }
     return {
       type: "web_vital",
       route,
       name: value.name,
       value: value.value,
-      rating,
+      rating: value.rating as WebVitalRating | null,
     };
   }
 
   if (value.type === "client_error") {
+    if (!hasOnlyKeys(value, CLIENT_ERROR_FIELDS)) return null;
     if (typeof value.kind !== "string" || !CLIENT_ERROR_KIND_SET.has(value.kind)) return null;
-    const errorName = typeof value.errorName === "string" && SAFE_ERROR_NAME.test(value.errorName)
-      ? value.errorName
-      : "UnknownError";
+    if (typeof value.errorName !== "string" || !SAFE_ERROR_NAME.test(value.errorName)) return null;
     return {
       type: "client_error",
       route,
       kind: value.kind as ClientErrorKind,
-      errorName,
+      errorName: value.errorName,
     };
   }
 

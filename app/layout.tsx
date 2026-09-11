@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { APP_VERSION } from "../src/core/build-info";
+import { OperationalTelemetryReporter } from "./operational-telemetry";
 import "./globals.css";
 import "./touch-targets.css";
 
@@ -13,7 +14,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      <body>{children}</body>
+      <body>
+        {children}
+        <OperationalTelemetryReporter />
+      </body>
     </html>
   );
 }

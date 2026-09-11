@@ -1,6 +1,7 @@
 import { APP_VERSION } from "../../../../src/core/build-info";
 import {
   parseOperationalTelemetry,
+  WEB_VITAL_BUDGETS,
   webVitalWithinBudget,
 } from "../../../../src/observability/operational-telemetry-contract";
 
@@ -66,7 +67,7 @@ export async function POST(request: Request) {
       metric: telemetry.name,
       value: telemetry.value,
       rating: telemetry.rating,
-      budget: telemetry.name,
+      budget: WEB_VITAL_BUDGETS[telemetry.name],
       withinBudget: webVitalWithinBudget(telemetry.name, telemetry.value),
     }));
   } else {
