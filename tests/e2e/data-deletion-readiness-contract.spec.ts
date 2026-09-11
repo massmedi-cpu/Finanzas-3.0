@@ -34,7 +34,7 @@ test("PRE-020F/G · evidencia histórica sigue invoker, owner/RLS heredado y fai
   }
 });
 
-test("PRE-020G / CR-001C · historial conserva el blocker antiguo y el estado actual lo retira", () => {
+test("PRE-020G / CR-001C/D · historial conserva blockers antiguos y CR-001D expone autoservicio sin activar borrado", () => {
   expect(baselineMigration).toContain("supabase_storage_runtime_cleanup_not_validated");
   expect(storageMigration).not.toContain("supabase_storage_runtime_cleanup_not_validated");
   expect(storageMigration).toContain("destructive_executor_not_implemented");
@@ -50,8 +50,12 @@ test("PRE-020G / CR-001C · historial conserva el blocker antiguo y el estado ac
 
   expect(protocol).not.toContain("destructive_executor_not_implemented");
   expect(protocol).toContain("runtimeOrchestratorImplemented: true");
-  expect(protocol).toContain("selfServiceExecutionEndpointExposed: false");
-  expect(protocol).toContain("self_service_execution_endpoint_not_exposed");
+  expect(protocol).toContain("selfServiceExecutionEndpointExposed: true");
+  expect(protocol).not.toContain("self_service_execution_endpoint_not_exposed");
+  expect(protocol).toContain("commercialPolicyConfigured: false");
+  expect(protocol).toContain("productionActivated: false");
+  expect(protocol).toContain("post_deletion_receipt_retention_policy_not_defined");
+  expect(protocol).toContain("production_activation_not_approved");
 });
 
 test("PRE-020G / CR-001C · Storage validado conserva evidencia y blockers comerciales", () => {
@@ -74,14 +78,15 @@ test("PRE-020G / CR-001C · Storage validado conserva evidencia y blockers comer
   expect(alignedMigration).toContain("'googleDriveFiles','untouched'");
 });
 
-test("CR-001C · Edge declara sólo la capacidad que puede comprobar y conserva fail-closed", () => {
+test("CR-001C/D · Edge declara capacidad real del autoservicio y conserva la frontera fail-closed", () => {
   expect(sourceRouter).toContain('import { handleWorkspaceDeletionReadinessAction } from "./workspace-deletion-readiness.ts"');
   expect(sourceRouter).toContain("await handleWorkspaceDeletionReadinessAction(input)");
   expect(handler).toContain(ACTION);
   expect(handler).toContain('environment !== "production"');
-  expect(handler).toContain("readiness.canExecute !== false");
+  expect(handler).toContain('typeof readiness.canExecute !== "boolean"');
+  expect(handler).toContain("readiness.destructiveOperationExecuted !== false");
   expect(handler).toContain("runtimeOrchestratorImplemented: true");
-  expect(handler).toContain("selfServiceExecutionEndpointExposed: false");
+  expect(handler).toContain("selfServiceExecutionEndpointExposed: true");
   expect(handler).not.toContain("data.deletion_execute_v1");
 });
 
@@ -96,7 +101,7 @@ test("PRE-020F/G · Preview/Local devuelven 403 real con headers seguros", async
   });
 });
 
-test("PRE-020G / CR-001C · diagnóstico no activa UI ni contrato comercial", () => {
+test("PRE-020G / CR-001C/D · diagnóstico no activa el contrato comercial aunque el autoservicio exista", () => {
   expect(existsSync("app/api/data/deletion-execute/route.ts")).toBe(false);
   expect(sourceRouter).not.toMatch(/action\s*===?\s*["']data\.deletion_execute_v1["']/);
   expect(dataTrustPage).not.toContain(ACTION);
