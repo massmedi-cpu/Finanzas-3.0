@@ -3,21 +3,22 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { ProductIcon, type ProductIconName } from "../src/design/product-icons";
 import styles from "./app-shell.module.css";
 
 const navigation = [
-  { href: "/", label: "Inicio" },
-  { href: "/onboarding", label: "Primeros pasos" },
-  { href: "/review", label: "Para revisar" },
-  { href: "/transactions", label: "Movimientos" },
-  { href: "/analysis", label: "Análisis" },
-  { href: "/accounts", label: "Cuentas" },
-  { href: "/budgets", label: "Presupuestos" },
-  { href: "/recurrences", label: "Recurrentes" },
-  { href: "/forecast", label: "Previsión" },
-  { href: "/documents", label: "Documentos" },
-  { href: "/configuration", label: "Configuración" },
-] as const;
+  { href: "/", label: "Inicio", icon: "home" },
+  { href: "/onboarding", label: "Primeros pasos", icon: "onboarding" },
+  { href: "/review", label: "Para revisar", icon: "review" },
+  { href: "/transactions", label: "Movimientos", icon: "transactions" },
+  { href: "/analysis", label: "Análisis", icon: "analysis" },
+  { href: "/accounts", label: "Cuentas", icon: "accounts" },
+  { href: "/budgets", label: "Presupuestos", icon: "budgets" },
+  { href: "/recurrences", label: "Recurrentes", icon: "recurrences" },
+  { href: "/forecast", label: "Previsión", icon: "forecast" },
+  { href: "/documents", label: "Documentos", icon: "documents" },
+  { href: "/configuration", label: "Configuración", icon: "settings" },
+] satisfies ReadonlyArray<{ href: string; label: string; icon: ProductIconName }>;
 
 function isActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
@@ -40,7 +41,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 className={`${styles.link}${active ? ` ${styles.active}` : ""}`}
                 aria-current={active ? "page" : undefined}
               >
-                {item.label}
+                <span className={styles.linkIcon}><ProductIcon name={item.icon} /></span>
+                <span>{item.label}</span>
               </Link>
             );
           })}
