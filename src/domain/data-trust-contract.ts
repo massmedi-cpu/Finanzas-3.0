@@ -89,18 +89,24 @@ export const DATA_TRUST_CAPABILITIES = [
     ],
   },
   {
-    id: "support-and-service-status",
+    id: "operator-service-health",
     section: "commercial_readiness",
-    title: "Soporte y estado del servicio",
-    state: "not_available",
+    title: "Diagnóstico técnico del servicio",
+    state: "operator_only",
     summary:
-      "Todavía no existe un canal comercial de soporte ni una página pública de estado e incidentes.",
-    evidence: [],
+      "La operación dispone de comprobaciones autenticadas para persistencia, calidad de datos y runtime, además de logs de infraestructura para diagnóstico. Es una capacidad interna de operación, no un canal de soporte para terceros.",
+    evidence: [
+      "app/api/health/foundations/route.ts",
+      "app/api/health/persistence/route.ts",
+      "app/api/health/data-quality/route.ts",
+      "app/api/health/source-runtime/route.ts",
+      "tests/e2e/service-health-contract.spec.ts",
+    ],
   },
 ] as const satisfies readonly DataTrustCapability[];
 
 export const DATA_TRUST_REVIEW = {
-  contractVersion: 4,
+  contractVersion: 5,
   reviewedOn: "2026-09-11",
   scope: "Financial App · producto monousuario",
 } as const;

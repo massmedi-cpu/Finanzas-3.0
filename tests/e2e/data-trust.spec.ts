@@ -12,29 +12,33 @@ test("PRE-020 · toda afirmación verificada tiene evidencia técnica versionada
   }
 });
 
-test("scope monousuario · sólo publica privacidad técnica verificable", () => {
+test("scope monousuario · sólo publica capacidades técnicas verificables", () => {
   expect(DATA_TRUST_REVIEW.scope).toContain("monousuario");
-  expect(DATA_TRUST_REVIEW.contractVersion).toBe(4);
+  expect(DATA_TRUST_REVIEW.contractVersion).toBe(5);
   expect(byId("user-data-export")?.state).toBe("verified");
   expect(byId("technical-privacy")?.state).toBe("verified");
+  expect(byId("operator-service-health")?.state).toBe("operator_only");
   expect(byId("workspace-deletion")).toBeUndefined();
   expect(byId("commercial-retention")).toBeUndefined();
   expect(byId("privacy-and-terms")).toBeUndefined();
-  expect(byId("support-and-service-status")?.state).toBe("not_available");
+  expect(byId("support-and-service-status")).toBeUndefined();
   expect(byId("operator-backup")?.state).toBe("operator_only");
 });
 
-test("scope monousuario · Datos y privacidad comunica seguridad interna sin promesas comerciales ficticias", async ({ page }) => {
+test("scope monousuario · Datos y privacidad comunica operación interna sin promesas comerciales ficticias", async ({ page }) => {
   await page.goto("/configuration/data");
 
   await expect(page.getByRole("heading", { name: "Datos y privacidad" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Datos y privacidad" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText("Verificado", { exact: true })).toHaveCount(5);
-  await expect(page.getByText("Operación técnica", { exact: true })).toHaveCount(1);
-  await expect(page.getByText("No disponible todavía", { exact: true })).toHaveCount(1);
+  await expect(page.getByText("Operación técnica", { exact: true })).toHaveCount(2);
+  await expect(page.getByText("No disponible todavía", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Privacidad técnica" })).toBeVisible();
   await expect(page.getByText(/cookies estrictamente necesarias/i)).toBeVisible();
   await expect(page.getByText(/permisos de lectura para Sheets y metadatos de Drive/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Operación y fiabilidad" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Diagnóstico técnico del servicio" })).toBeVisible();
+  await expect(page.getByText(/comprobaciones autenticadas para persistencia, calidad de datos y runtime/i)).toBeVisible();
   await expect(page.getByRole("link", { name: "Descargar mis datos" })).toHaveAttribute("href", "/api/data/export");
   await expect(page.getByText(/diseñada para un único usuario/i)).toBeVisible();
   await expect(page.getByText(/no implica cuentas compartidas, equipos ni espacios de trabajo gestionables/i)).toBeVisible();
@@ -45,6 +49,8 @@ test("scope monousuario · Datos y privacidad comunica seguridad interna sin pro
   expect(body).not.toContain("política de retención");
   expect(body).not.toContain("política de privacidad");
   expect(body).not.toContain("condiciones comerciales definitivas");
+  expect(body).not.toContain("página pública de estado");
+  expect(body).not.toContain("sla");
   expect(body).not.toContain("bank-grade");
   expect(body).not.toContain("100% seguro");
 });
