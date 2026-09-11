@@ -50,7 +50,7 @@ test("scope monousuario · Datos y privacidad comunica operación interna sin pr
   expect(body).not.toContain("política de privacidad");
   expect(body).not.toContain("condiciones comerciales definitivas");
   expect(body).not.toContain("página pública de estado");
-  expect(body).not.toContain("sla");
+  expect(body).not.toMatch(/\bsla\b/);
   expect(body).not.toContain("bank-grade");
   expect(body).not.toContain("100% seguro");
 });
