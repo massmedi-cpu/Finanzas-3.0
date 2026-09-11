@@ -4,6 +4,7 @@ import { OperationalTelemetryReporter } from "./operational-telemetry";
 import "./globals.css";
 import "./touch-targets.css";
 import "./premium-states.css";
+import "./accessibility-forced-colors.css";
 
 export const dynamic = "force-dynamic";
 
