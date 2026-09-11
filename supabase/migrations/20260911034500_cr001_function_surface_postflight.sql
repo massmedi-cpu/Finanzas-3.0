@@ -33,10 +33,11 @@ declare
   v_bad_search_path text;
   v_client_executable text;
 begin
-  -- Allowlist exacto de SECURITY DEFINER. La sexta función pertenece al executor CR-001A
-  -- y necesita privilegios de owner únicamente para el purge local tras todas las pruebas fail-closed.
+  -- Allowlist exacto por regprocedure canónico: compara tipos de argumentos, no sus nombres.
+  -- La sexta función pertenece al executor CR-001A y necesita privilegios de owner únicamente
+  -- para el purge local tras todas las pruebas fail-closed.
   select pg_catalog.string_agg(
-    pg_catalog.format('%I.%I(%s)', n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)),
+    p.oid::pg_catalog.regprocedure::text,
     E'\n' order by p.proname, p.oid
   )
   into v_unexpected
@@ -44,13 +45,13 @@ begin
   join pg_catalog.pg_namespace n on n.oid = p.pronamespace
   where n.nspname = 'financial_app'
     and p.prosecdef = true
-    and pg_catalog.format('%I(%s)', p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)) not in (
-      'disconnect_google_oauth_connection()',
-      'finalize_workspace_deletion_local(uuid, uuid)',
-      'get_google_oauth_connection_status()',
-      'get_google_oauth_refresh_token()',
-      'mark_google_oauth_verified()',
-      'store_google_oauth_connection(text, text, text, text[], text, text)'
+    and p.oid::pg_catalog.regprocedure::text not in (
+      'financial_app.disconnect_google_oauth_connection()',
+      'financial_app.finalize_workspace_deletion_local(uuid,uuid)',
+      'financial_app.get_google_oauth_connection_status()',
+      'financial_app.get_google_oauth_refresh_token()',
+      'financial_app.mark_google_oauth_verified()',
+      'financial_app.store_google_oauth_connection(text,text,text,text[],text,text)'
     );
 
   if v_unexpected is not null then
@@ -58,7 +59,7 @@ begin
   end if;
 
   select pg_catalog.string_agg(
-    pg_catalog.format('%I.%I(%s)', n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)),
+    p.oid::pg_catalog.regprocedure::text,
     E'\n' order by p.proname, p.oid
   )
   into v_bad_search_path
@@ -73,7 +74,7 @@ begin
   end if;
 
   select pg_catalog.string_agg(
-    pg_catalog.format('%I.%I(%s)', n.nspname, p.proname, pg_catalog.pg_get_function_identity_arguments(p.oid)),
+    p.oid::pg_catalog.regprocedure::text,
     E'\n' order by p.proname, p.oid
   )
   into v_client_executable
