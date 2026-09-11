@@ -17,10 +17,9 @@ type FinancialBarChartProps = {
 };
 
 export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: FinancialBarChartProps) {
-  const fallbackMonth = rows.at(-1)?.monthStart ?? null;
-  const [selectedMonth, setSelectedMonth] = useState<string | null>(fallbackMonth);
+  const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const selected = useMemo(
-    () => rows.find((row) => row.monthStart === selectedMonth) ?? rows.at(-1) ?? null,
+    () => rows.find((row) => row.monthStart === selectedMonth) ?? null,
     [rows, selectedMonth],
   );
 
