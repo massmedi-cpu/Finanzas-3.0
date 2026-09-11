@@ -191,31 +191,27 @@ export default function SourceClient() {
     setError(null);
 
     try {
-      const [googleResponse, runtimeResponse] = await Promise.all([
+      const [googleResponse, runtimeResponse, syncResponse] = await Promise.all([
         fetch("/api/source/google/status", { cache: "no-store" }),
         fetch("/api/health/source-runtime", { cache: "no-store" }),
+        fetch("/api/source/google/sync", { cache: "no-store" }),
       ]);
       const googlePayload = await jsonOrEmpty<GoogleStatus>(googleResponse);
       const runtimePayload = await jsonOrEmpty<RuntimeHealth>(runtimeResponse);
+      const syncPayload = syncResponse.ok
+        ? await jsonOrEmpty<SyncStatus>(syncResponse)
+        : EMPTY_SYNC_STATUS;
 
       setGoogle(googlePayload);
       setRuntime(runtimePayload);
-
-      if (googlePayload.configured) {
-        const syncResponse = await fetch("/api/source/google/sync", { cache: "no-store" });
-        if (syncResponse.ok) {
-          setSyncStatus(await jsonOrEmpty<SyncStatus>(syncResponse));
-        } else {
-          setSyncStatus(EMPTY_SYNC_STATUS);
-        }
-      } else {
-        setSyncStatus(EMPTY_SYNC_STATUS);
-      }
+      setSyncStatus(syncPayload);
 
       if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido verificar el runtime seguro de sincronización.");
+      } else if (!syncResponse.ok) {
+        setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
     } catch {
       setError("No se ha podido leer el estado de la fuente bancaria.");
@@ -496,7 +492,7 @@ export default function SourceClient() {
                   <div><dt>Revisados</dt><dd>{syncStatus.run.rowsRevised}</dd></div>
                   <div><dt>Sin cambios</dt><dd>{syncStatus.run.rowsSkipped}</dd></div>
                   <div><dt>Fallidas</dt><dd>{syncStatus.run.rowsFailed}</dd></div>
-                  <div><dt>Duplicados</dt><dd>{syncStatus.run.duplicatesDetected}</dd></div>
+                  <div><dt>Duplicados detectados en esa ejecución</dt><dd>{syncStatus.run.duplicatesDetected}</dd></div>
                   <div><dt>Avisos</dt><dd>{syncStatus.run.warningsCount}</dd></div>
                 </dl>
                 <div className={styles.metaRows}>
