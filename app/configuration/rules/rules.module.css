@@ -16,7 +16,7 @@
 .kicker {
   margin: 0 0 0.35rem;
   color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -207,7 +207,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   align-items: center;
   padding: 0.3rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   white-space: nowrap;
 }
@@ -238,7 +238,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 0.8rem;
   background: rgba(2, 7, 17, 0.78);
   color: #dce6fb;
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

@@ -114,7 +114,7 @@
 .preflightProducts small {
   display: block;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-helper);
 }
 
 .preflightProducts strong {
@@ -171,7 +171,7 @@
 
 .metrics dt {
   color: var(--color-text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-helper);
 }
 
 .metrics dd {
@@ -221,7 +221,7 @@
 .cursorList small {
   display: block;
   color: var(--color-text-muted);
-  font-size: 0.75rem;
+  font-size: var(--font-helper);
 }
 
 .cursorList strong {
