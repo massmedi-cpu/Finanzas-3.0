@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { OcrWord } from "../../src/domain/document-ocr";
 import {
+  deriveNumericColumnBands,
   mergeRefinedNumericRow,
   mergeRefinedTextRow,
   selectRowsForRefinement,
@@ -138,4 +139,37 @@ test("CR008-OCR-002 prioritizes product and summary rows over noisy header ident
   for (const product of products) expect(selected.some((text) => text.includes(product))).toBeTruthy();
   expect(selected.some((text) => /Total:/i.test(text))).toBeTruthy();
   expect(selected.filter((text) => text.includes("REF")).length).toBeLessThan(12);
+});
+
+test("CR008-OCR-002 derives stable UDS, price and amount bands from repeated receipt geometry", () => {
+  const words: OcrWord[] = [];
+  for (let index = 0; index < 5; index += 1) {
+    const y = 0.40 + index * 0.045;
+    words.push(
+      word(index === 0 ? "ENERGY" : `ITEM${index}`, 0.10, y, 0.10, 0.8),
+      word(index === 2 ? "2" : "1", 0.48, y, 0.02, 0.84),
+      word(index === 2 ? "2.800" : "1.00", 0.59, y, 0.07, 0.52),
+      word(index === 2 ? "560" : "1,80", 0.73, y, 0.05, 0.5),
+    );
+  }
+  words.push(word("189984220", 0.35, 0.10, 0.09, 0.3));
+
+  const bands = deriveNumericColumnBands(words, 0.45, 0.82, 0.72);
+  expect(bands).toHaveLength(3);
+  expect(bands[0].center).toBeCloseTo(0.49, 2);
+  expect(bands[1].center).toBeCloseTo(0.625, 2);
+  expect(bands[2].center).toBeCloseTo(0.755, 2);
+  expect(bands[0].right).toBeLessThan(bands[1].center);
+  expect(bands[1].right).toBeLessThan(bands[2].center);
+  expect(bands[2].right).toBeGreaterThan(0.77);
+});
+
+test("CR008-OCR-002 refuses to invent numeric columns from isolated identifiers", () => {
+  const words = [
+    word("REF", 0.10, 0.10, 0.06, 0.8),
+    word("189984220", 0.60, 0.10, 0.09, 0.3),
+    word("Pedido", 0.10, 0.15, 0.08, 0.8),
+    word("200203", 0.70, 0.15, 0.06, 0.3),
+  ];
+  expect(deriveNumericColumnBands(words, 0.45, 0.82, 0.72)).toEqual([]);
 });
