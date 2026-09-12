@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, FormEvent, useEffect, useMemo, useState } from "react";
 import type { AnalysisDriver, AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import visualStyles from "./analysis-visual.module.css";
 import styles from "./analysis.module.css";
 
 const moneyFormatter = new Intl.NumberFormat("es-ES", {
@@ -84,14 +85,41 @@ function DriverList({ title, items }: { title: string; items: AnalysisDriver[] }
   );
 }
 
+function deltaClass(cents: number) {
+  if (cents > 0) return visualStyles.deltaPositive;
+  if (cents < 0) return visualStyles.deltaNegative;
+  return visualStyles.deltaNeutral;
+}
+
 function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const [activePoint, setActivePoint] = useState<string | null>(null);
   const currentMonth = monthLabel(snapshot.month);
   const previousMonth = monthLabel(snapshot.previous.dateFrom.slice(0, 7));
   const rows = [
-    { key: "income", label: "Ingresos", current: snapshot.current.incomeCents, previous: snapshot.previous.incomeCents },
-    { key: "expense", label: "Gastos", current: snapshot.current.expenseCents, previous: snapshot.previous.expenseCents },
-    { key: "net", label: "Neto", current: snapshot.current.operatingNetCents, previous: snapshot.previous.operatingNetCents },
+    {
+      key: "income",
+      label: "Ingresos",
+      current: snapshot.current.incomeCents,
+      previous: snapshot.previous.incomeCents,
+      delta: snapshot.comparison.incomeDeltaCents,
+      changeBps: snapshot.comparison.incomeChangeBps,
+    },
+    {
+      key: "expense",
+      label: "Gastos",
+      current: snapshot.current.expenseCents,
+      previous: snapshot.previous.expenseCents,
+      delta: snapshot.comparison.expenseDeltaCents,
+      changeBps: snapshot.comparison.expenseChangeBps,
+    },
+    {
+      key: "net",
+      label: "Neto",
+      current: snapshot.current.operatingNetCents,
+      previous: snapshot.previous.operatingNetCents,
+      delta: snapshot.comparison.netDeltaCents,
+      changeBps: snapshot.comparison.netChangeBps,
+    },
   ];
   const maximum = Math.max(1, ...rows.flatMap((row) => [Math.abs(row.current), Math.abs(row.previous)]));
 
@@ -101,36 +129,31 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
   }
 
   return (
-    <section
-      aria-label="Comparativa financiera visual"
-      style={{
-        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
-        borderRadius: "24px",
-        padding: "clamp(1rem, 2.2vw, 1.5rem)",
-        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
-        display: "grid",
-        gap: "1.25rem",
-      }}
-    >
+    <section className={visualStyles.visual} aria-label="Comparativa financiera visual">
       <div className={styles.panelHeading}>
         <div>
           <p className={styles.kicker}>LECTURA VISUAL</p>
           <h2>Comparativa financiera</h2>
         </div>
-        <Link
-          className={styles.drilldown}
-          href={`/transactions?dateFrom=${snapshot.current.dateFrom}&dateTo=${snapshot.current.dateTo}`}
-          aria-label="Ver movimientos del periodo"
-        >
-          Ver movimientos del periodo
-        </Link>
+        <div className={visualStyles.headingActions}>
+          <span className={`${visualStyles.reconciled} ${snapshot.quality.reconciled ? "" : visualStyles.pending}`}>
+            {snapshot.quality.reconciled ? "Reconciliado al céntimo" : "Pendiente de reconciliar"}
+          </span>
+          <Link
+            className={styles.drilldown}
+            href={`/transactions?dateFrom=${snapshot.current.dateFrom}&dateTo=${snapshot.current.dateTo}`}
+            aria-label="Ver movimientos del periodo"
+          >
+            Ver movimientos del periodo
+          </Link>
+        </div>
       </div>
 
-      <div style={{ display: "grid", gap: ".9rem" }}>
+      <div className={visualStyles.chart}>
         {rows.map((row) => (
-          <div key={row.key} style={{ display: "grid", gridTemplateColumns: "minmax(5.5rem, .35fr) 1fr", gap: ".75rem", alignItems: "center" }}>
-            <strong style={{ fontSize: ".92rem" }}>{row.label}</strong>
-            <div style={{ display: "grid", gap: ".45rem" }}>
+          <div key={row.key} className={visualStyles.visualRow}>
+            <strong className={visualStyles.metricName}>{row.label}</strong>
+            <div className={visualStyles.periods}>
               {([
                 ["current", currentMonth, row.current],
                 ["previous", previousMonth, row.previous],
@@ -138,10 +161,11 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
                 const id = `${row.key}-${periodKey}`;
                 const label = pointLabel(row.label, period, cents);
                 const width = Math.max(8, (Math.abs(cents) / maximum) * 100);
+                const barStyle = { "--bar-width": `${width}%` } as CSSProperties;
                 return (
-                  <div key={id} style={{ display: "grid", gridTemplateColumns: "minmax(5.4rem, auto) 1fr", gap: ".6rem", alignItems: "center" }}>
-                    <span style={{ color: "var(--text-muted, #aeb6c6)", fontSize: ".78rem" }}>{periodKey === "current" ? "Actual" : "Anterior"}</span>
-                    <div style={{ position: "relative", minHeight: "2.1rem", display: "flex", alignItems: "center" }}>
+                  <div key={id} className={visualStyles.periodRow}>
+                    <span className={visualStyles.periodLabel}>{periodKey === "current" ? "Actual" : "Anterior"}</span>
+                    <div className={visualStyles.barArea}>
                       <button
                         type="button"
                         aria-label={label}
@@ -149,37 +173,12 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
                         onBlur={() => setActivePoint((current) => current === id ? null : current)}
                         onMouseEnter={() => setActivePoint(id)}
                         onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                        style={{
-                          width: `${width}%`,
-                          minWidth: "3rem",
-                          height: "1.65rem",
-                          border: cents < 0 ? "1px solid rgba(255,124,145,.5)" : "1px solid rgba(99,219,180,.42)",
-                          borderRadius: "999px",
-                          background: cents < 0
-                            ? "linear-gradient(90deg, rgba(255,104,132,.30), rgba(255,104,132,.12))"
-                            : "linear-gradient(90deg, rgba(72,211,170,.28), rgba(72,211,170,.10))",
-                          cursor: "default",
-                          position: "relative",
-                        }}
+                        className={`${visualStyles.bar} ${cents < 0 ? visualStyles.negative : visualStyles.positive}`}
+                        style={barStyle}
                       />
-                      <span style={{ marginLeft: ".55rem", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontSize: ".82rem" }}>{formatMoney(cents)}</span>
+                      <span className={visualStyles.amount}>{formatMoney(cents)}</span>
                       {activePoint === id ? (
-                        <div
-                          role="tooltip"
-                          style={{
-                            position: "absolute",
-                            zIndex: 5,
-                            left: "0",
-                            top: "calc(100% + .35rem)",
-                            padding: ".5rem .65rem",
-                            borderRadius: ".65rem",
-                            background: "var(--surface-elevated, #151922)",
-                            border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
-                            boxShadow: "0 10px 30px rgba(0,0,0,.25)",
-                            fontSize: ".78rem",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
+                        <div role="tooltip" className={visualStyles.tooltip}>
                           {label}
                         </div>
                       ) : null}
@@ -192,21 +191,25 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
         ))}
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", borderCollapse: "collapse", minWidth: "30rem" }}>
+      <div className={visualStyles.tableWrap}>
+        <table aria-label="Datos de la comparativa financiera" className={visualStyles.table}>
           <thead>
             <tr>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
-              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{currentMonth}</th>
-              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{previousMonth}</th>
+              <th scope="col">Métrica</th>
+              <th scope="col">{currentMonth}</th>
+              <th scope="col">{previousMonth}</th>
+              <th scope="col">Diferencia</th>
+              <th scope="col">Variación</th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.key}>
-                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{row.label}</th>
-                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.current)}</td>
-                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.previous)}</td>
+                <th scope="row">{row.label}</th>
+                <td>{formatMoney(row.current)}</td>
+                <td>{formatMoney(row.previous)}</td>
+                <td className={deltaClass(row.delta)}>{formatMoney(row.delta)}</td>
+                <td className={row.changeBps === null ? visualStyles.deltaNeutral : row.changeBps > 0 ? visualStyles.deltaPositive : row.changeBps < 0 ? visualStyles.deltaNegative : visualStyles.deltaNeutral}>{formatBps(row.changeBps)}</td>
               </tr>
             ))}
           </tbody>
@@ -285,18 +288,6 @@ export default function AnalysisClient() {
           </section>
 
           <FinancialComparisonVisual snapshot={snapshot} />
-
-          <section className={styles.comparison} aria-labelledby="comparison-heading">
-            <div className={styles.panelHeading}>
-              <div><p className={styles.kicker}>COMPARACIÓN TEMPORAL</p><h2 id="comparison-heading">Frente a {previousLabel}</h2></div>
-              <span>{snapshot.quality.reconciled ? "Reconciliado al céntimo" : "Pendiente"}</span>
-            </div>
-            <div className={styles.comparisonGrid}>
-              <div><span>Ingresos anteriores</span><strong>{formatMoney(snapshot.previous.incomeCents)}</strong><small>Diferencia {formatMoney(snapshot.comparison.incomeDeltaCents)}</small></div>
-              <div><span>Gastos anteriores</span><strong>{formatMoney(snapshot.previous.expenseCents)}</strong><small>Diferencia {formatMoney(snapshot.comparison.expenseDeltaCents)}</small></div>
-              <div><span>Balance anterior</span><strong>{formatMoney(snapshot.previous.operatingNetCents)}</strong><small>{formatBps(snapshot.comparison.netChangeBps)} de variación</small></div>
-            </div>
-          </section>
 
           <div className={styles.driverGrid}>
             <DriverList title="Por categoría" items={snapshot.categoryDrivers} />
