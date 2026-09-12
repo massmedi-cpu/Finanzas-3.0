@@ -18,6 +18,12 @@ test("CR008-OCR-002 v7 clamps very small and already-large cells defensively", (
   expect(cellUpscaleFactor(180)).toBe(2);
 });
 
+test("CR008-OCR-002 v7 fails safe for invalid source heights", () => {
+  expect(cellUpscaleFactor(0)).toBe(6);
+  expect(cellUpscaleFactor(Number.NaN)).toBe(6);
+  expect(cellUpscaleFactor(Number.POSITIVE_INFINITY)).toBe(6);
+});
+
 test("CR008-OCR-002 v7 keeps explicit-decimal consensus and never accepts bare digits", () => {
   expect(chooseRowCellConsensus([word("5,60"), word("5.60")], "money")?.text).toMatch(/^5[,.]60$/);
   expect(chooseRowCellConsensus([word("560", 0.99), word("560", 0.99)], "money")).toBeNull();
