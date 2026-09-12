@@ -13,30 +13,22 @@ const EXTRACTOR = "tesseract-js-7.0.0-spa";
 const ROTATION_EPSILON = 0.01;
 const MIN_BACKGROUND_SHARE = 0.08;
 const MIN_DOCUMENT_SHARE = 0.58;
-const HORIZONTAL_CROP_MARGIN = 0.035;
+const DOCUMENT_CORE_SHARE = 0.72;
+const HORIZONTAL_LINK_GAP = 0.065;
+const MIN_DETACHED_GAP = 0.04;
+const HORIZONTAL_CROP_MARGIN = 0.025;
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type TimeoutKind = "queue" | "worker" | "recognize";
 type RecognitionData = Record<string, unknown>;
 type ImageRectangle = { left: number; top: number; width: number; height: number };
-type RecognitionBlock = {
-  id: string;
-  words: OcrWord[];
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  weight: number;
-};
 type RecognitionCandidate = {
   words: OcrWord[];
-  blocks: RecognitionBlock[];
   score: number;
   rotationRadians: number;
   autoRotate: boolean;
   backgroundFiltered?: boolean;
 };
-type ParsedTsv = { words: OcrWord[]; blocks: RecognitionBlock[] };
 type DocumentIsolation = {
   words: OcrWord[];
   left: number;
@@ -98,16 +90,9 @@ async function exclusive<T>(task: () => Promise<T>) {
   }
 }
 
-function textWeight(word: OcrWord) {
-  const chars = Math.max(1, word.text.replace(/\s+/g, "").length);
-  return chars * (0.35 + word.confidence * 0.65);
-}
-
-function parseTsv(tsv: unknown, width: number, height: number): ParsedTsv {
-  if (typeof tsv !== "string") return { words: [], blocks: [] };
+function parseTsv(tsv: unknown, width: number, height: number): OcrWord[] {
+  if (typeof tsv !== "string") return [];
   const words: OcrWord[] = [];
-  const blockWords = new Map<string, OcrWord[]>();
-
   for (const line of tsv.split(/\r?\n/).slice(1)) {
     const columns = line.split("\t");
     if (columns.length < 12 || columns[0] !== "5") continue;
@@ -126,31 +111,9 @@ function parseTsv(tsv: unknown, width: number, height: number): ParsedTsv {
     const normalizedHeight = Math.min(1 - y, Math.max(0, (bottom - Math.max(0, top)) / height));
     if (normalizedWidth <= 0 || normalizedHeight <= 0) continue;
     const confidence = Number.isFinite(rawConfidence) ? Math.min(1, Math.max(0, rawConfidence / 100)) : 0.5;
-    const word: OcrWord = { text, confidence, box: { x, y, width: normalizedWidth, height: normalizedHeight } };
-    words.push(word);
-    const blockId = `${columns[1]}:${columns[2]}`;
-    const bucket = blockWords.get(blockId) ?? [];
-    bucket.push(word);
-    blockWords.set(blockId, bucket);
+    words.push({ text, confidence, box: { x, y, width: normalizedWidth, height: normalizedHeight } });
   }
-
-  const blocks: RecognitionBlock[] = [...blockWords.entries()].map(([id, entries]) => {
-    const left = Math.min(...entries.map((word) => word.box.x));
-    const right = Math.max(...entries.map((word) => word.box.x + word.box.width));
-    const top = Math.min(...entries.map((word) => word.box.y));
-    const bottom = Math.max(...entries.map((word) => word.box.y + word.box.height));
-    return {
-      id,
-      words: entries,
-      left,
-      right,
-      top,
-      bottom,
-      weight: entries.reduce((sum, word) => sum + textWeight(word), 0),
-    };
-  });
-
-  return { words, blocks };
+  return words;
 }
 
 function processedImageMetadata(data: RecognitionData, fallback: OcrImageMetadata, rotationRadians: number) {
@@ -200,104 +163,169 @@ function needsOrientationFallback(words: OcrWord[], metadata: OcrImageMetadata) 
   return landscape || words.length < 5 || stats.chars < 24 || stats.averageConfidence < 0.62;
 }
 
-function intervalOverlap(leftA: number, rightA: number, leftB: number, rightB: number) {
-  return Math.max(0, Math.min(rightA, rightB) - Math.max(leftA, leftB));
+function textWeight(word: OcrWord) {
+  const chars = Math.max(1, word.text.replace(/\s+/g, "").length);
+  return chars * (0.35 + word.confidence * 0.65);
 }
 
-function horizontalOverlapRatio(a: RecognitionBlock, b: RecognitionBlock) {
-  const denominator = Math.max(0.001, Math.min(a.right - a.left, b.right - b.left));
-  return intervalOverlap(a.left, a.right, b.left, b.right) / denominator;
+function wordRight(word: OcrWord) {
+  return word.box.x + word.box.width;
 }
 
-function verticalGap(a: RecognitionBlock, b: RecognitionBlock) {
-  if (a.bottom < b.top) return b.top - a.bottom;
-  if (b.bottom < a.top) return a.top - b.bottom;
+function wordCenter(word: OcrWord) {
+  return word.box.x + word.box.width / 2;
+}
+
+function bandGap(word: OcrWord, left: number, right: number) {
+  const end = wordRight(word);
+  if (end < left) return left - end;
+  if (word.box.x > right) return word.box.x - right;
   return 0;
 }
 
-function primaryDocumentBlocks(blocks: RecognitionBlock[]) {
-  const usable = blocks.filter((block) => block.words.length >= 2 && block.weight >= 3);
-  if (usable.length < 2) return usable.length ? usable : blocks;
+function horizontalComponents(words: OcrWord[]) {
+  const sorted = [...words].sort((a, b) => a.box.x - b.box.x || wordRight(a) - wordRight(b));
+  const components: OcrWord[][] = [];
+  let current: OcrWord[] = [];
+  let right = 0;
 
-  const visited = new Set<string>();
-  const components: RecognitionBlock[][] = [];
-  for (const seed of usable) {
-    if (visited.has(seed.id)) continue;
-    const component: RecognitionBlock[] = [];
-    const queue = [seed];
-    visited.add(seed.id);
-    while (queue.length) {
-      const current = queue.shift()!;
-      component.push(current);
-      for (const candidate of usable) {
-        if (visited.has(candidate.id)) continue;
-        const overlap = horizontalOverlapRatio(current, candidate);
-        const gap = verticalGap(current, candidate);
-        if (overlap >= 0.28 && gap <= 0.16) {
-          visited.add(candidate.id);
-          queue.push(candidate);
-        }
-      }
+  for (const word of sorted) {
+    if (!current.length) {
+      current = [word];
+      right = wordRight(word);
+      continue;
     }
-    components.push(component);
+    if (word.box.x - right > HORIZONTAL_LINK_GAP) {
+      components.push(current);
+      current = [word];
+      right = wordRight(word);
+      continue;
+    }
+    current.push(word);
+    right = Math.max(right, wordRight(word));
   }
-
-  const scored = components.map((component) => {
-    const weight = component.reduce((sum, block) => sum + block.weight, 0);
-    const top = Math.min(...component.map((block) => block.top));
-    const bottom = Math.max(...component.map((block) => block.bottom));
-    const left = Math.min(...component.map((block) => block.left));
-    const right = Math.max(...component.map((block) => block.right));
-    const verticalSpan = Math.min(1, bottom - top);
-    const horizontalSpan = Math.min(1, right - left);
-    const score = weight * (1 + Math.min(0.35, verticalSpan * 0.25)) + component.length * 1.5 + horizontalSpan * 4;
-    return { component, score, weight, left, right };
-  }).sort((a, b) => b.score - a.score);
-
-  const primary = scored[0];
-  if (!primary) return blocks;
-  const totalWeight = usable.reduce((sum, block) => sum + block.weight, 0);
-  if (!totalWeight || primary.weight / totalWeight < 0.45) return blocks;
-
-  const bandMargin = Math.min(0.12, Math.max(0.045, (primary.right - primary.left) * 0.12));
-  const bandLeft = Math.max(0, primary.left - bandMargin);
-  const bandRight = Math.min(1, primary.right + bandMargin);
-  return usable.filter((block) => {
-    if (primary.component.some((entry) => entry.id === block.id)) return true;
-    const overlap = intervalOverlap(block.left, block.right, bandLeft, bandRight);
-    const blockWidth = Math.max(0.001, block.right - block.left);
-    const center = (block.left + block.right) / 2;
-    return overlap / blockWidth >= 0.55 || (center >= bandLeft && center <= bandRight);
-  });
+  if (current.length) components.push(current);
+  return components;
 }
 
-function isolateDocumentWords(candidate: RecognitionCandidate): DocumentIsolation | null {
-  if (candidate.words.length < 10 || candidate.blocks.length < 2) return null;
-  const keptBlocks = primaryDocumentBlocks(candidate.blocks);
-  if (!keptBlocks.length || keptBlocks.length === candidate.blocks.length) return null;
+function weightedCore(words: OcrWord[]) {
+  const sorted = [...words].sort((a, b) => wordCenter(a) - wordCenter(b));
+  const weights = sorted.map(textWeight);
+  const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
+  if (!totalWeight) return [] as OcrWord[];
+  const target = totalWeight * DOCUMENT_CORE_SHARE;
+  let best: { start: number; end: number; width: number; weight: number } | null = null;
+  let start = 0;
+  let windowWeight = 0;
 
-  const keptIds = new Set(keptBlocks.map((block) => block.id));
-  const words = candidate.blocks.filter((block) => keptIds.has(block.id)).flatMap((block) => block.words);
-  if (words.length < 6) return null;
+  for (let end = 0; end < sorted.length; end += 1) {
+    windowWeight += weights[end];
+    while (start < end && windowWeight - weights[start] >= target) {
+      windowWeight -= weights[start];
+      start += 1;
+    }
+    if (windowWeight < target) continue;
+    const left = Math.min(...sorted.slice(start, end + 1).map((word) => word.box.x));
+    const right = Math.max(...sorted.slice(start, end + 1).map(wordRight));
+    const width = right - left;
+    if (!best || width < best.width || (Math.abs(width - best.width) < 0.005 && windowWeight > best.weight)) {
+      best = { start, end, width, weight: windowWeight };
+    }
+  }
 
-  const totalWeight = candidate.blocks.reduce((sum, block) => sum + block.weight, 0);
-  const keptWeight = keptBlocks.reduce((sum, block) => sum + block.weight, 0);
+  return best ? sorted.slice(best.start, best.end + 1) : [];
+}
+
+function expandHorizontalBand(seedWords: OcrWord[], allWords: OcrWord[]) {
+  const selected = new Set(seedWords);
+  let left = Math.min(...seedWords.map((word) => word.box.x));
+  let right = Math.max(...seedWords.map(wordRight));
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    for (const word of allWords) {
+      if (selected.has(word)) continue;
+      if (bandGap(word, left, right) > HORIZONTAL_LINK_GAP) continue;
+      selected.add(word);
+      left = Math.min(left, word.box.x);
+      right = Math.max(right, wordRight(word));
+      changed = true;
+    }
+  }
+
+  return [...selected];
+}
+
+function validateIsolation(selectedWords: OcrWord[], allWords: OcrWord[]): DocumentIsolation | null {
+  if (selectedWords.length < 6 || selectedWords.length >= allWords.length) return null;
+  const selected = new Set(selectedWords);
+  const outsideWords = allWords.filter((word) => !selected.has(word));
+  if (!outsideWords.length) return null;
+
+  const totalWeight = allWords.reduce((sum, word) => sum + textWeight(word), 0);
+  const selectedWeight = selectedWords.reduce((sum, word) => sum + textWeight(word), 0);
   if (!totalWeight) return null;
-  const keptShare = keptWeight / totalWeight;
+  const keptShare = selectedWeight / totalWeight;
   const removedShare = 1 - keptShare;
   if (keptShare < MIN_DOCUMENT_SHARE || removedShare < MIN_BACKGROUND_SHARE) return null;
 
-  const left = Math.max(0, Math.min(...words.map((word) => word.box.x)) - HORIZONTAL_CROP_MARGIN);
-  const right = Math.min(1, Math.max(...words.map((word) => word.box.x + word.box.width)) + HORIZONTAL_CROP_MARGIN);
+  let left = Math.min(...selectedWords.map((word) => word.box.x));
+  let right = Math.max(...selectedWords.map(wordRight));
+  const rawWidth = right - left;
+  if (rawWidth < 0.2 || rawWidth > 0.9) return null;
+
+  let leftGap = Number.POSITIVE_INFINITY;
+  let rightGap = Number.POSITIVE_INFINITY;
+  for (const word of outsideWords) {
+    const end = wordRight(word);
+    if (end <= left) leftGap = Math.min(leftGap, left - end);
+    else if (word.box.x >= right) rightGap = Math.min(rightGap, word.box.x - right);
+    else return null;
+  }
+
+  const nearestGap = Math.min(leftGap, rightGap);
+  if (!Number.isFinite(nearestGap) || nearestGap < MIN_DETACHED_GAP) return null;
+
+  const leftMargin = Number.isFinite(leftGap) ? Math.min(HORIZONTAL_CROP_MARGIN, leftGap * 0.4) : HORIZONTAL_CROP_MARGIN;
+  const rightMargin = Number.isFinite(rightGap) ? Math.min(HORIZONTAL_CROP_MARGIN, rightGap * 0.4) : HORIZONTAL_CROP_MARGIN;
+  left = Math.max(0, left - leftMargin);
+  right = Math.min(1, right + rightMargin);
   if (right - left < 0.22 || right - left > 0.92) return null;
-  return { words, left, right, removedWords: candidate.words.length - words.length };
+
+  return { words: selectedWords, left, right, removedWords: outsideWords.length };
+}
+
+function isolateDocumentWords(candidate: RecognitionCandidate): DocumentIsolation | null {
+  if (candidate.words.length < 10) return null;
+
+  const components = horizontalComponents(candidate.words);
+  if (components.length > 1) {
+    const scored = components
+      .filter((component) => component.length >= 2)
+      .map((component) => {
+        const weight = component.reduce((sum, word) => sum + textWeight(word), 0);
+        const top = Math.min(...component.map((word) => word.box.y));
+        const bottom = Math.max(...component.map((word) => word.box.y + word.box.height));
+        const verticalSpan = Math.min(1, bottom - top);
+        return { component, score: weight * (1 + Math.min(0.4, verticalSpan * 0.35)) + component.length * 0.2 };
+      })
+      .sort((a, b) => b.score - a.score);
+    const direct = scored[0] ? validateIsolation(scored[0].component, candidate.words) : null;
+    if (direct) return direct;
+  }
+
+  const core = weightedCore(candidate.words);
+  if (!core.length) return null;
+  const expanded = expandHorizontalBand(core, candidate.words);
+  return validateIsolation(expanded, candidate.words);
 }
 
 function refinementIsSafe(baseWords: OcrWord[], refinedWords: OcrWord[]) {
   const base = wordStats(baseWords);
   const refined = wordStats(refinedWords);
-  if (refinedWords.length < 5 || refined.chars < Math.max(20, base.chars * 0.68)) return false;
-  return refined.averageConfidence >= Math.max(0.4, base.averageConfidence - 0.1);
+  if (refinedWords.length < 5 || refined.chars < Math.max(20, base.chars * 0.64)) return false;
+  return refined.averageConfidence >= Math.max(0.38, base.averageConfidence - 0.12);
 }
 
 function cropRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata): ImageRectangle {
@@ -327,8 +355,8 @@ async function recognizeCandidate(
   const dimensions = rectangle && Math.abs(rotationRadians) <= ROTATION_EPSILON
     ? metadata
     : processedImageMetadata(data, metadata, rotationRadians);
-  const parsed = parseTsv(data?.tsv, dimensions.width, dimensions.height);
-  return { words: parsed.words, blocks: parsed.blocks, score: candidateScore(parsed.words), rotationRadians, autoRotate };
+  const words = parseTsv(data?.tsv, dimensions.width, dimensions.height);
+  return { words, score: candidateScore(words), rotationRadians, autoRotate };
 }
 
 async function refineBackgroundContamination(
@@ -340,24 +368,22 @@ async function refineBackgroundContamination(
   const isolation = isolateDocumentWords(candidate);
   if (!isolation) return candidate;
 
-  // Rectangle coordinates are reliable for upright images. For a quarter-turn fallback,
-  // keep the deterministic block filter without trying to remap crop coordinates.
+  // Rectangle coordinates remain deterministic for the upright camera path. For quarter-turn
+  // fallbacks we still remove a detached word band, but do not risk a wrongly remapped crop.
   if (Math.abs(candidate.rotationRadians) > ROTATION_EPSILON) {
-    return { ...candidate, words: isolation.words, backgroundFiltered: true };
+    return { ...candidate, words: isolation.words, score: candidateScore(isolation.words), backgroundFiltered: true };
   }
 
   const rectangle = cropRectangle(isolation, metadata);
   try {
     const refined = await recognizeCandidate(worker, bytes, metadata, 0, false, rectangle);
-    const refinedIsolation = isolateDocumentWords(refined);
-    const refinedWords = refinedIsolation?.words ?? refined.words;
-    if (refinementIsSafe(isolation.words, refinedWords)) {
-      return { ...refined, words: refinedWords, backgroundFiltered: true };
+    if (refinementIsSafe(isolation.words, refined.words)) {
+      return { ...refined, backgroundFiltered: true };
     }
   } catch {
-    // The first pass is still useful; fail safely back to geometry-filtered words.
+    // The geometry-filtered first pass is still safer than reintroducing detached background text.
   }
-  return { ...candidate, words: isolation.words, backgroundFiltered: true };
+  return { ...candidate, words: isolation.words, score: candidateScore(isolation.words), backgroundFiltered: true };
 }
 
 export class TesseractImageOcrProvider implements DocumentOcrProvider {

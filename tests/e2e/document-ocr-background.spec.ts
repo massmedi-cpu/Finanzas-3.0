@@ -177,15 +177,17 @@ test("CR008-OCR-002 isolates a photographed receipt from an adjacent printed she
   });
 
   const text = result.plainText.toUpperCase();
+  const foreignLabels = ["PLATO ARROZ", "MENU DIA", "PATA BRAVA", "BOOK NOW", "SHAWARMA", "POSTRE", "BEBIDA", "PROMO MESA"];
+  for (const label of foreignLabels) expect(text).not.toContain(label);
+
   expect(text).toContain("AVILA BAR");
   expect(text).toContain("GALICIA");
+  expect(text).toContain("CUBATA");
   expect(text).toMatch(/15[,.]91/);
   expect(text).toMatch(/1[,.]59/);
   expect(text).toMatch(/17[,.]50/);
   expect(text).toMatch(/5[,.]60/);
-  expect(text).not.toContain("PLATO ARROZ");
-  expect(text).not.toContain("MENU DIA");
-  expect(text).not.toContain("SHAWARMA");
+  expect(text).toMatch(/5[,.]50/);
   expect(result.warnings).toContain("background_text_filtered");
   expect(result.principles.financialWrites).toBe(false);
   expect(result.principles.requiresHumanReview).toBe(true);
