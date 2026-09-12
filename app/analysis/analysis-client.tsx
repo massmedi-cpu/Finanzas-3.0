@@ -25,6 +25,8 @@ const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
+type ComparisonKey = "income" | "expense" | "net";
+
 function formatMoney(cents: number) {
   return moneyFormatter.format(cents / 100);
 }
@@ -85,17 +87,24 @@ function DriverList({ title, items }: { title: string; items: AnalysisDriver[] }
   );
 }
 
-function deltaClass(cents: number) {
-  if (cents > 0) return visualStyles.deltaPositive;
-  if (cents < 0) return visualStyles.deltaNegative;
-  return visualStyles.deltaNeutral;
+function trendClass(metric: ComparisonKey, value: number | null) {
+  if (value === null || value === 0) return visualStyles.deltaNeutral;
+  const favorable = metric === "expense" ? value < 0 : value > 0;
+  return favorable ? visualStyles.deltaPositive : visualStyles.deltaNegative;
 }
 
 function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const [activePoint, setActivePoint] = useState<string | null>(null);
   const currentMonth = monthLabel(snapshot.month);
   const previousMonth = monthLabel(snapshot.previous.dateFrom.slice(0, 7));
-  const rows = [
+  const rows: Array<{
+    key: ComparisonKey;
+    label: string;
+    current: number;
+    previous: number;
+    delta: number;
+    changeBps: number | null;
+  }> = [
     {
       key: "income",
       label: "Ingresos",
@@ -173,7 +182,7 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
                         onBlur={() => setActivePoint((current) => current === id ? null : current)}
                         onMouseEnter={() => setActivePoint(id)}
                         onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                        className={`${visualStyles.bar} ${cents < 0 ? visualStyles.negative : visualStyles.positive}`}
+                        className={`${visualStyles.bar} ${cents < 0 ? visualStyles.negative : visualStyles.standard}`}
                         style={barStyle}
                       />
                       <span className={visualStyles.amount}>{formatMoney(cents)}</span>
@@ -208,8 +217,8 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
                 <th scope="row">{row.label}</th>
                 <td>{formatMoney(row.current)}</td>
                 <td>{formatMoney(row.previous)}</td>
-                <td className={deltaClass(row.delta)}>{formatMoney(row.delta)}</td>
-                <td className={row.changeBps === null ? visualStyles.deltaNeutral : row.changeBps > 0 ? visualStyles.deltaPositive : row.changeBps < 0 ? visualStyles.deltaNegative : visualStyles.deltaNeutral}>{formatBps(row.changeBps)}</td>
+                <td className={trendClass(row.key, row.delta)}>{formatMoney(row.delta)}</td>
+                <td className={trendClass(row.key, row.changeBps)}>{formatBps(row.changeBps)}</td>
               </tr>
             ))}
           </tbody>
