@@ -35,7 +35,6 @@
     const reviewState = normalizeReviewState(row?.reviewState);
     const userNote = row?.userNote ?? row?.note ?? null;
     const overriddenFields = Array.isArray(row?.overriddenFields) ? row.overriddenFields : [];
-
     return {
       ...row,
       id,
@@ -123,16 +122,17 @@
   window.fetch = async function cr006BetaContractShimFetch(input, init) {
     const url = new URL(input instanceof Request ? input.url : String(input), window.location.href);
     const method = String(init?.method || (input instanceof Request ? input.method : "GET")).toUpperCase();
-
     let forwardedInput = input;
     let forwardedInit = init;
 
-    // El cliente real de Presupuestos persiste manualAmountCents; el fixture beta
-    // original usaba amountCents. Traducimos sólo dentro de la beta aislada.
     if (url.origin === window.location.origin && url.pathname === "/api/budgets" && method === "PATCH") {
       const body = await requestBody(input, init);
       if (body && Object.prototype.hasOwnProperty.call(body, "manualAmountCents")) {
-        const translated = { ...body, amountCents: body.manualAmountCents };
+        const translated = {
+          ...body,
+          amountCents: body.manualAmountCents,
+          ...(body.categoryId ? {} : { scope: "total" }),
+        };
         forwardedInput = url.toString();
         forwardedInit = {
           ...(init || {}),
