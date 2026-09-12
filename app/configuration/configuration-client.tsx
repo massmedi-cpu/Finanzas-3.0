@@ -53,14 +53,26 @@ const CATEGORY_KINDS: Array<{ value: CategoryKind; label: string }> = [
   { value: "transfer", label: "Transferencia" },
 ];
 
-const ICONS = ["wallet", "home", "cart", "car", "heart", "briefcase", "gift", "bolt", "plane", "more"];
+const ICONS = [
+  { value: "wallet", label: "Cartera" },
+  { value: "home", label: "Hogar" },
+  { value: "cart", label: "Compras" },
+  { value: "car", label: "Transporte" },
+  { value: "heart", label: "Salud" },
+  { value: "briefcase", label: "Trabajo" },
+  { value: "gift", label: "Regalos" },
+  { value: "bolt", label: "Suministros" },
+  { value: "plane", label: "Viajes" },
+  { value: "more", label: "Otros" },
+];
+
 const COLORS = [
-  "category.blue",
-  "category.cyan",
-  "category.green",
-  "category.amber",
-  "category.violet",
-  "category.rose",
+  { value: "category.blue", label: "Azul" },
+  { value: "category.cyan", label: "Turquesa" },
+  { value: "category.green", label: "Verde" },
+  { value: "category.amber", label: "Ámbar" },
+  { value: "category.violet", label: "Violeta" },
+  { value: "category.rose", label: "Rosa" },
 ];
 
 function labelForAccountType(type: AccountType) {
@@ -69,6 +81,10 @@ function labelForAccountType(type: AccountType) {
 
 function labelForCategoryKind(kind: CategoryKind) {
   return CATEGORY_KINDS.find((item) => item.value === kind)?.label ?? kind;
+}
+
+function labelForCategoryIcon(iconKey: string) {
+  return ICONS.find((item) => item.value === iconKey)?.label ?? iconKey;
 }
 
 function sameAccountGroup(left: Account, right: Account) {
@@ -350,7 +366,7 @@ function canToggleCategoryLifecycle(category: Category) {
             {data.categories.length === 0 ? <div className="empty-state"><Icon name="more" /><h3>Aún no hay categorías</h3><p>Crea una categoría de gasto, ingreso o transferencia para organizar tus movimientos.</p></div> : (
               <div className="entity-list">
                 {data.categories.map((category, index) => <article className={`entity-card ${category.lifecycle === "archived" ? "archived" : ""}`} key={category.id}>
-                  <div className="entity-main"><div className={`entity-icon category-swatch ${category.colorToken.replace(".", "-")}`}><Icon name="more" /></div><div><div className="entity-title-row"><h3>{category.name}</h3><span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{labelForCategoryKind(category.kind)}{category.parentCategoryId ? " · Subcategoría" : " · Principal"}</p><strong>{category.iconKey}</strong></div></div>
+                  <div className="entity-main"><div className={`entity-icon category-swatch ${category.colorToken.replace(".", "-")}`}><Icon name="more" /></div><div><div className="entity-title-row"><h3>{category.name}</h3><span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{labelForCategoryKind(category.kind)}{category.parentCategoryId ? " · Subcategoría" : " · Principal"}</p><strong>{labelForCategoryIcon(category.iconKey)}</strong></div></div>
                   <div className="entity-actions">
                     <button type="button" className="icon-button" onClick={() => beginCategoryEdit(category)} aria-label={`Editar ${category.name}`}><Icon name="edit" /></button>
                     <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, -1)} onClick={() => void reorderCategories(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
@@ -369,7 +385,7 @@ function canToggleCategoryLifecycle(category: Category) {
                 <label>Nombre<input required value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Ej. Supermercado" /></label>
                 <label>Tipo<select value={categoryForm.kind} onChange={(e) => setCategoryForm({ ...categoryForm, kind: e.target.value as CategoryKind, parentCategoryId: "" })}>{CATEGORY_KINDS.map((item) => <option value={item.value} key={item.value} disabled={!canUseCategoryKind(item.value)}>{item.label}</option>)}</select></label>
                 <label>Categoría superior<select value={categoryForm.parentCategoryId} onChange={(e) => setCategoryForm({ ...categoryForm, parentCategoryId: e.target.value })}><option value="">Sin categoría superior</option>{parentOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-                <div className="form-row"><label>Icono<select value={categoryForm.iconKey} onChange={(e) => setCategoryForm({ ...categoryForm, iconKey: e.target.value })}>{ICONS.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Color<select value={categoryForm.colorToken} onChange={(e) => setCategoryForm({ ...categoryForm, colorToken: e.target.value })}>{COLORS.map((item) => <option value={item} key={item}>{item.replace("category.", "")}</option>)}</select></label></div>
+                <div className="form-row"><label>Icono<select value={categoryForm.iconKey} onChange={(e) => setCategoryForm({ ...categoryForm, iconKey: e.target.value })}>{ICONS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label><label>Color<select value={categoryForm.colorToken} onChange={(e) => setCategoryForm({ ...categoryForm, colorToken: e.target.value })}>{COLORS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label></div>
                 <div className="form-actions"><button className="primary-button" type="submit" disabled={busy}><Icon name="plus" />{editingCategoryId ? "Guardar cambios" : "Crear categoría"}</button>{editingCategoryId && <button className="secondary-button" type="button" onClick={() => { setEditingCategoryId(null); setCategoryForm(INITIAL_CATEGORY); }}>Cancelar</button>}</div>
               </form>
             </section>
