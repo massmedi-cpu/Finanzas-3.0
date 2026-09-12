@@ -41,11 +41,11 @@ test("protected preview no puede abrir el autoservicio de borrado de Production"
 });
 
 // ---------------------------------------------------------------------------
-// CR-006 · BETA SIMULADA B01–B08
+// CR-006 · PERSONAS SIMULADAS B01–B08 · EVIDENCIA TÉCNICA COMPLEMENTARIA
 //
-// Directiva del propietario 12/09/2026: B01–B08 son PERSONAS SIMULADAS.
-// Estos tests ejecutan comportamiento observable en la Preview aislada de coste
-// 0,00 €. No se presentan como evidencia de usuarios humanos externos.
+// Esta batería automatizada modela ocho perspectivas de uso sobre la Preview
+// aislada de coste 0,00 €. NO constituye beta humana ni sustituye la evidencia
+// real exigida por el protocolo maestro de CR-006.
 // ---------------------------------------------------------------------------
 
 const navLabels = [
@@ -76,24 +76,6 @@ const criticalRoutes = [
   "/configuration",
 ] as const;
 
-async function activateBeta(page: Page) {
-  test.skip(!isProtectedPreview, "CR-006 simulated personas require the exact protected beta Preview");
-  const response = await page.goto("/beta?reset=1", { waitUntil: "networkidle" });
-  expect(response, "la entrada /beta debe responder").not.toBeNull();
-  expect(response!.status(), "la entrada /beta no puede devolver error").toBeLessThan(400);
-  await expect(page).toHaveURL(/\/$/);
-
-  const cookie = (await page.context().cookies()).find((entry) => entry.name === "financial_app_cr006_beta");
-  expect(cookie?.value, "la sesión debe quedar marcada como beta aislada").toBe("1");
-
-  const probe = await betaJson(page, "/api/financial?mode=snapshot&dateFrom=2026-09-01&dateTo=2026-09-30");
-  expect(probe.status).toBe(200);
-  expect(probe.body?.principles?.bankSource).toBe("read_only");
-  expect(JSON.stringify(probe.body)).toContain("Demo");
-  expect(JSON.stringify(probe.body)).not.toContain("Openbank");
-  expect(JSON.stringify(probe.body)).not.toContain("Alberto");
-}
-
 async function betaJson(page: Page, path: string, init?: { method?: string; body?: unknown }) {
   return page.evaluate(async ({ path, init }) => {
     const response = await fetch(path, {
@@ -105,6 +87,38 @@ async function betaJson(page: Page, path: string, init?: { method?: string; body
     try { body = await response.json(); } catch {}
     return { status: response.status, body };
   }, { path, init });
+}
+
+async function activateBeta(page: Page) {
+  test.skip(!isProtectedPreview, "CR-006 simulated personas require the exact protected beta Preview");
+  const response = await page.goto("/beta?reset=1", { waitUntil: "domcontentloaded", timeout: 15_000 });
+  expect(response, "la entrada /beta debe responder").not.toBeNull();
+  expect(response!.status(), "la entrada /beta no puede devolver error").toBeLessThan(400);
+  await expect(page).toHaveURL(/\/$/, { timeout: 8_000 });
+  await expect(page.locator("main")).toBeVisible({ timeout: 8_000 });
+
+  const cookie = (await page.context().cookies()).find((entry) => entry.name === "financial_app_cr006_beta");
+  expect(cookie?.value, "la sesión debe quedar marcada como beta aislada").toBe("1");
+
+  await expect.poll(async () => (await betaJson(page, "/api/financial?mode=snapshot&dateFrom=2026-09-01&dateTo=2026-09-30")).status, {
+    timeout: 8_000,
+    message: "el runtime beta debe interceptar la API financiera sin esperar networkidle",
+  }).toBe(200);
+
+  const probe = await betaJson(page, "/api/financial?mode=snapshot&dateFrom=2026-09-01&dateTo=2026-09-30");
+  expect(probe.body?.principles?.bankSource).toBe("read_only");
+  expect(JSON.stringify(probe.body)).toContain("Demo");
+  expect(JSON.stringify(probe.body)).not.toContain("Openbank");
+  expect(JSON.stringify(probe.body)).not.toContain("Alberto");
+}
+
+async function gotoBetaRoute(page: Page, route: string) {
+  const response = await page.goto(route, { waitUntil: "domcontentloaded", timeout: 15_000 });
+  expect(response, `${route}: debe responder`).not.toBeNull();
+  expect(response!.status(), `${route}: no debe devolver error de servidor`).toBeLessThan(500);
+  await expect(page.locator("main")).toBeVisible({ timeout: 8_000 });
+  await expect(page.locator("h1").first()).toBeVisible({ timeout: 8_000 });
+  return response;
 }
 
 async function assertNoGlobalOverflow(page: Page, label: string) {
@@ -169,13 +183,13 @@ test("CR-006 B01 · persona no técnica recorre acceso, orientación y comprensi
 
 test("CR-006 B02 · usuario habitual de banca filtra movimientos y modifica presupuesto con formato español", async ({ page }) => {
   await activateBeta(page);
-  await page.goto("/transactions", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/transactions");
   await expect(page.getByRole("heading", { name: "Movimientos", level: 1 })).toBeVisible();
   await page.getByLabel("Buscar").fill("carrefour");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect(page.getByText("CARREFOUR DEMO", { exact: true }).first()).toBeVisible();
 
-  await page.goto("/budgets", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/budgets");
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
   const manual = page.getByLabel("Presupuesto manual de total mensual");
@@ -183,8 +197,8 @@ test("CR-006 B02 · usuario habitual de banca filtra movimientos y modifica pres
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.getByRole("status")).toContainText("Límite manual guardado");
 
-  await page.reload({ waitUntil: "networkidle" });
-  await expect(page.getByText(/Manual · automático/).first()).toBeVisible();
+  await page.reload({ waitUntil: "domcontentloaded", timeout: 15_000 });
+  await expect(page.getByText(/Manual · automático/).first()).toBeVisible({ timeout: 8_000 });
   await assertNoGlobalOverflow(page, "B02 Presupuestos");
 });
 
@@ -210,9 +224,9 @@ test("CR-006 B03 · usuario avanzado valida invariantes financieros y opera la p
     forecast.body.summary.openingBalanceCents + forecast.body.summary.projectedNetCents,
   );
 
-  await page.goto("/analysis", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/analysis");
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
-  await page.goto("/forecast", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/forecast");
   await expect(page.getByRole("heading", { name: "Previsión", exact: true })).toBeVisible();
   await page.getByLabel("Concepto").fill("Prueba B03 anual");
   await page.getByLabel("Importe").fill("12,34");
@@ -222,22 +236,20 @@ test("CR-006 B03 · usuario avanzado valida invariantes financieros y opera la p
 
 test("CR-006 B04 · usuario móvil completa las once secciones, OCR y controles táctiles", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-mobile", "B04 representa específicamente usuario móvil");
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
   await activateBeta(page);
   await page.setViewportSize({ width: 390, height: 844 });
 
   for (const route of criticalRoutes) {
     await test.step(`B04 ${route}`, async () => {
-      const response = await page.goto(route, { waitUntil: "networkidle", timeout: 20_000 });
-      expect(response).not.toBeNull();
-      expect(response!.status()).toBeLessThan(500);
+      await gotoBetaRoute(page, route);
       await assertNoGlobalOverflow(page, `B04 ${route}`);
       await assertVisibleControlsNamed(page, `B04 ${route}`);
       await assertTouchTargets(page, `B04 ${route}`);
     });
   }
 
-  await page.goto("/documents", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/documents");
   await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
   await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
   await page.getByRole("button", { name: "Analizar con OCR" }).click();
@@ -247,7 +259,7 @@ test("CR-006 B04 · usuario móvil completa las once secciones, OCR y controles 
 
 test("CR-006 B05 · usuario escritorio hace recorrido integral con teclado, edición y OCR", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "B05 representa específicamente usuario escritorio");
-  test.setTimeout(180_000);
+  test.setTimeout(90_000);
   await activateBeta(page);
 
   await page.keyboard.press("Tab");
@@ -261,27 +273,27 @@ test("CR-006 B05 · usuario escritorio hace recorrido integral con teclado, edic
     await expect(link).toBeVisible();
   }
 
-  await page.goto("/transactions", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/transactions");
   await page.getByLabel("Buscar").fill("telecom");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect(page.getByText("TELECOM DEMO", { exact: true }).first()).toBeVisible();
 
-  await page.goto("/forecast", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/forecast");
   await page.getByLabel("Concepto").fill("Prueba B05 escritorio");
   await page.getByLabel("Importe").fill("5,67");
   await page.getByRole("button", { name: "Añadir al calendario" }).click();
   await expect(page.getByRole("heading", { name: "Prueba B05 escritorio", exact: true })).toBeVisible();
 
-  await page.goto("/documents", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/documents");
   await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
   await page.getByRole("button", { name: "Analizar con OCR" }).click();
   await expect(page.getByText("FACTURA DEMO")).toBeVisible();
   await assertNoGlobalOverflow(page, "B05 Documentos");
 });
 
-test("CR-006 B06 · perfil de accesibilidad cubre teclado, bypass, reflow, forced colors y semántica", async ({ page }, testInfo) => {
+test("CR-006 B06 · perfil de accesibilidad cubre teclado, zoom técnico 200 %, reflow 400 %, forced colors y semántica", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "B06 se ejecuta una vez en escritorio");
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
   await activateBeta(page);
 
   await page.keyboard.press("Tab");
@@ -290,25 +302,33 @@ test("CR-006 B06 · perfil de accesibilidad cubre teclado, bypass, reflow, force
   expect(await page.evaluate(() => document.activeElement?.id)).toBe("main-content");
   await assertVisibleControlsNamed(page, "B06 semántica inicial");
 
-  // A03/A04: equivalente reproducible de zoom/reflow a 320 CSS px.
-  await page.setViewportSize({ width: 320, height: 900 });
+  // A03 técnico: 640 CSS px equivale a la anchura efectiva de 1280 px a zoom 200 %.
+  await page.setViewportSize({ width: 640, height: 900 });
   for (const route of ["/", "/transactions", "/budgets", "/forecast", "/documents", "/configuration"] as const) {
-    await page.goto(route, { waitUntil: "networkidle", timeout: 20_000 });
-    await assertNoGlobalOverflow(page, `B06 reflow ${route}`);
-    await assertVisibleControlsNamed(page, `B06 semántica ${route}`);
+    await gotoBetaRoute(page, route);
+    await assertNoGlobalOverflow(page, `B06 zoom técnico 200 % ${route}`);
+    await assertVisibleControlsNamed(page, `B06 semántica 200 % ${route}`);
   }
 
-  // A05: forced colors mantiene controles operables y visibles.
+  // A04 técnico: 320 CSS px equivale al reflow de 400 % sobre 1280 px.
+  await page.setViewportSize({ width: 320, height: 900 });
+  for (const route of ["/", "/transactions", "/budgets", "/forecast", "/documents", "/configuration"] as const) {
+    await gotoBetaRoute(page, route);
+    await assertNoGlobalOverflow(page, `B06 reflow 400 % ${route}`);
+    await assertVisibleControlsNamed(page, `B06 semántica 400 % ${route}`);
+  }
+
+  // A05 técnico: forced colors mantiene controles operables y visibles.
   await page.emulateMedia({ forcedColors: "active" });
-  await page.goto("/", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/");
   for (const label of ["Movimientos", "Presupuestos", "Previsión", "Documentos"] as const) {
     await expect(page.getByRole("link", { name: label, exact: true })).toBeVisible();
   }
 
-  // A06 en beta simulada: contrato semántico/ARIA observable. No se etiqueta como prueba NVDA/TalkBack humana.
+  // A06 técnico: contrato semántico/ARIA observable. No se etiqueta como NVDA/TalkBack humano.
   const semanticLandmarks = await page.locator("nav, main, [role='main'], [role='navigation'], h1").count();
   expect(semanticLandmarks).toBeGreaterThan(0);
-  await assertVisibleControlsNamed(page, "B06 contrato equivalente a lector de pantalla");
+  await assertVisibleControlsNamed(page, "B06 contrato semántico equivalente");
 });
 
 test("CR-006 B07 · perfil breaker fuerza errores, entradas ambiguas y fronteras fail-closed", async ({ page }) => {
@@ -332,13 +352,13 @@ test("CR-006 B07 · perfil breaker fuerza errores, entradas ambiguas y fronteras
   expect(blockedGoogle.status).toBe(451);
   expect(blockedGoogle.body).toMatchObject({ error: "cr006_beta_external_persistence_blocked" });
 
-  await page.goto("/budgets", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/budgets");
   await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
   await page.getByLabel("Presupuesto manual de total mensual").fill("1,234");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.locator("main").getByRole("alert").filter({ hasText: "Introduce un importe válido" })).toBeVisible();
 
-  await page.goto("/transactions", { waitUntil: "networkidle" });
+  await gotoBetaRoute(page, "/transactions");
   await page.getByLabel("Buscar").fill("x".repeat(300));
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect(page.getByRole("heading", { name: "Movimientos", level: 1 })).toBeVisible();
