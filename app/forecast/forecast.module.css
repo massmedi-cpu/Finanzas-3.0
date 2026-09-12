@@ -166,6 +166,12 @@
   outline: none;
 }
 
+.manualForm input,
+.manualForm select {
+  width: 100%;
+  min-width: 0;
+}
+
 .controls input:focus,
 .manualForm input:focus,
 .manualForm select:focus,
@@ -519,7 +525,7 @@
 
 .formSplit {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 
