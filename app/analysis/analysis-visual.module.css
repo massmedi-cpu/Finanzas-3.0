@@ -93,9 +93,9 @@
   cursor: default;
 }
 
-.positive {
-  border: 1px solid rgba(53, 208, 127, 0.38);
-  background: linear-gradient(90deg, rgba(53, 208, 127, 0.24), rgba(53, 208, 127, 0.08));
+.standard {
+  border: 1px solid rgba(77, 141, 255, 0.42);
+  background: linear-gradient(90deg, rgba(31, 107, 255, 0.3), rgba(43, 217, 247, 0.1));
 }
 
 .negative {
