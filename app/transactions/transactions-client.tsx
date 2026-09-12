@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatMoney as formatCurrency } from "../../src/core/formatters";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -167,13 +168,6 @@ const OVERRIDE_LABELS: Record<string, string> = {
   note: "nota",
 };
 
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
   month: "2-digit",
@@ -182,7 +176,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-ES", {
 });
 
 function formatMoney(cents: number | null) {
-  return cents === null ? "—" : moneyFormatter.format(cents / 100);
+  return cents === null ? "—" : formatCurrency(cents / 100);
 }
 
 function formatDate(value: string) {
