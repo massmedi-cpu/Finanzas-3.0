@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
 import styles from "./accounts.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -178,6 +179,12 @@ function accountTypeLabel(type: string) {
   return ACCOUNT_TYPE_LABELS[type] ?? "Cuenta";
 }
 
+function accountIconName(type: string): ProductIconName {
+  if (type === "cash") return "wallet";
+  if (type === "savings" || type === "investment") return "balance";
+  return "accounts";
+}
+
 async function readJson<T>(url: string): Promise<T> {
   const response = await fetch(url, { cache: "no-store" });
   if (!response.ok) throw new Error(`request_failed_${response.status}`);
@@ -331,7 +338,9 @@ export default function AccountsClient() {
                   aria-pressed={selected}
                   onClick={() => setSelectedId(account.id)}
                 >
-                  <span className={styles.accountIcon} aria-hidden="true">{account.type === "savings" ? "◇" : "○"}</span>
+                  <span className={styles.accountIcon} aria-hidden="true">
+                    <ProductIcon name={accountIconName(account.type)} size={20} />
+                  </span>
                   <span className={styles.accountMain}>
                     <span className={styles.accountName}>{account.name}</span>
                     <span className={styles.accountMeta}>
@@ -354,7 +363,7 @@ export default function AccountsClient() {
         <section className={styles.detailPanel} aria-live="polite">
           {!selectedAccount ? (
             <div className={styles.emptyDetail}>
-              <span aria-hidden="true">◎</span>
+              <span aria-hidden="true"><ProductIcon name="accounts" size={40} /></span>
               <h2>Selecciona una cuenta</h2>
               <p>Elige una cuenta para ver su saldo, evolución y movimientos recientes.</p>
             </div>
