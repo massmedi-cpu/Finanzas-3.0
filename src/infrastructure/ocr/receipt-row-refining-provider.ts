@@ -14,7 +14,7 @@ const INTEGER_TOKEN = /^\d{1,2}$/;
 const MAX_REFINED_ROWS = 12;
 const REFINE_TIMEOUT_MS = 9_000;
 const QUEUE_TIMEOUT_MS = 8_000;
-const EXTRACTOR_SUFFIX = "+row-refinement-v1";
+const EXTRACTOR_SUFFIX = "+row-refinement-v2";
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type ImageRectangle = { left: number; top: number; width: number; height: number };
@@ -241,6 +241,28 @@ function clusterRows(words: OcrWord[]) {
   }).filter((row) => row.shouldRefine);
 }
 
+function rowPriority(row: Row) {
+  const numeric = row.words.filter((word) => /\d/.test(word.text));
+  const suspiciousCount = numeric.filter((word) => suspiciousNumeric(word.text)).length;
+  const moneyCount = numeric.filter((word) => isMoney(word.text)).length;
+  const productLike = alphaChars(row.text) >= 3 && numeric.length >= 2;
+  return (row.summaryLike ? 1000 : 0)
+    + suspiciousCount * 120
+    + (numeric.length >= 3 ? 80 : 0)
+    + (productLike ? 100 : 0)
+    + moneyCount * 8
+    + Math.min(40, alphaChars(row.text)) * 0.1;
+}
+
+export function selectRowsForRefinement(words: OcrWord[]) {
+  return clusterRows(words)
+    .map((row) => ({ row, score: rowPriority(row) }))
+    .sort((a, b) => b.score - a.score || a.row.box.y - b.row.box.y)
+    .slice(0, MAX_REFINED_ROWS)
+    .map((item) => item.row)
+    .sort((a, b) => a.box.y - b.box.y);
+}
+
 function documentBounds(words: OcrWord[]) {
   const substantial = words.filter((word) => alphaChars(word.text) >= 2 || /\d/.test(word.text));
   const source = substantial.length >= 6 ? substantial : words;
@@ -293,13 +315,76 @@ function overlapsRow(word: OcrWord, row: Row) {
   return verticalOverlap(word.box, row.box) >= 0.25;
 }
 
+function horizontallyAdjacent(left: OcrWord, right: OcrWord) {
+  const gap = right.box.x - (left.box.x + left.box.width);
+  const allowance = Math.max(0.01, Math.max(left.box.height, right.box.height) * 1.35);
+  return gap >= -allowance * 0.5 && gap <= allowance;
+}
+
+function mergedOcrWord(parts: OcrWord[], text: string): OcrWord {
+  return {
+    text,
+    confidence: Math.min(...parts.map((word) => word.confidence)),
+    box: unionBox(parts),
+  };
+}
+
+function coalesceExplicitDecimalTokens(words: OcrWord[]) {
+  const ordered = [...words].sort((a, b) => a.box.x - b.box.x);
+  const result: OcrWord[] = [];
+  for (let index = 0; index < ordered.length; index += 1) {
+    const first = ordered[index];
+    const firstToken = cleanToken(first.text);
+    const second = ordered[index + 1];
+    const secondToken = second ? cleanToken(second.text) : "";
+    const third = ordered[index + 2];
+    const thirdToken = third ? cleanToken(third.text) : "";
+
+    if (
+      /^\d{1,6}$/.test(firstToken)
+      && /^[,.]$/.test(secondToken)
+      && /^\d{2}$/.test(thirdToken)
+      && horizontallyAdjacent(first, second)
+      && horizontallyAdjacent(second, third)
+    ) {
+      result.push(mergedOcrWord([first, second, third], `${firstToken}${secondToken}${thirdToken}`));
+      index += 2;
+      continue;
+    }
+
+    if (
+      /^\d{1,6}[,.]$/.test(firstToken)
+      && /^\d{2}$/.test(secondToken)
+      && horizontallyAdjacent(first, second)
+    ) {
+      result.push(mergedOcrWord([first, second], `${firstToken}${secondToken}`));
+      index += 1;
+      continue;
+    }
+
+    if (
+      /^\d{1,6}$/.test(firstToken)
+      && /^[,.]\d{2}$/.test(secondToken)
+      && horizontallyAdjacent(first, second)
+    ) {
+      result.push(mergedOcrWord([first, second], `${firstToken}${secondToken}`));
+      index += 1;
+      continue;
+    }
+
+    result.push(first);
+  }
+  return result;
+}
+
 export function mergeRefinedNumericRow(
   baseWords: OcrWord[],
   row: Row,
   refinedWords: OcrWord[],
   numericStart: number,
 ) {
-  const usable = refinedWords.filter((word) => {
+  const normalizedRefinedWords = coalesceExplicitDecimalTokens(refinedWords);
+  const usable = normalizedRefinedWords.filter((word) => {
     const token = cleanToken(word.text);
     return word.confidence >= 0.12 && (MONEY_TOKEN.test(token) || INTEGER_TOKEN.test(token));
   });
@@ -365,7 +450,7 @@ async function recognizeRectangle(
 
 async function refineRows(bytes: Uint8Array, metadata: OcrImageMetadata, baseWords: OcrWord[]) {
   if (baseWords.length < 8) return baseWords;
-  const rows = clusterRows(baseWords).slice(0, MAX_REFINED_ROWS);
+  const rows = selectRowsForRefinement(baseWords);
   if (!rows.length) return baseWords;
   const bounds = documentBounds(baseWords);
   if (bounds.width < 0.18) return baseWords;
@@ -396,7 +481,7 @@ async function refineRows(bytes: Uint8Array, metadata: OcrImageMetadata, baseWor
       classify_bln_numeric_mode: "0",
     });
     for (const item of recognized) {
-      if (item.row.summaryLike || !item.numericWords.some((word) => isMoney(word.text))) continue;
+      if (item.row.summaryLike || !coalesceExplicitDecimalTokens(item.numericWords).some((word) => isMoney(word.text))) continue;
       const rectangle = rowRectangle(
         item.row,
         metadata,
