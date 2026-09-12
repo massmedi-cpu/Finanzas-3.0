@@ -1,0 +1,45 @@
+name: CR-008 Production Redeploy
+
+on:
+  push:
+    branches:
+      - commercial-readiness/cr006-zero-cost-beta
+    paths:
+      - .github/workflows/cr008-production-redeploy.yml
+
+permissions:
+  contents: read
+
+jobs:
+  redeploy-production:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      SOURCE_DEPLOYMENT: https://finanzas-3-0-eotdsvpzn-massmedi-9832s-projects.vercel.app
+    steps:
+      - name: Fail closed when Vercel deployment credential is unavailable
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${VERCEL_TOKEN:-}" ]; then
+            echo "VERCEL_TOKEN unavailable. Production was not changed."
+            exit 2
+          fi
+
+      - name: Redeploy exact current Production artifact with refreshed environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes vercel@latest redeploy "$SOURCE_DEPLOYMENT" \
+            --target=production \
+            --scope=massmedi-9832s-projects \
+            --token="$VERCEL_TOKEN" \
+            --yes | tee /tmp/vercel-redeploy.txt
+
+      - name: Record non-secret deployment evidence
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tail -n 20 /tmp/vercel-redeploy.txt
