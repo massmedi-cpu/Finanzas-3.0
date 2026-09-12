@@ -188,9 +188,21 @@ test("CR008-OCR-002 isolates a photographed receipt from an adjacent printed she
   expect(text).toMatch(/17[,.]50/);
   expect(text).toMatch(/5[,.]60/);
   expect(text).toMatch(/5[,.]50/);
+
+  // Regressions observed in the real photographed receipt: losing the decimal separator or
+  // cross-merging neighbouring price/amount columns must fail this gate even when the intended
+  // amounts are also present elsewhere in the page.
+  expect(text).not.toMatch(/\b560\b/);
+  expect(text).not.toMatch(/\b280\b/);
+  expect(text).not.toMatch(/\b2[.,]800\b/);
+  expect(text).not.toMatch(/\b5[.,]508\b/);
+  expect(text).not.toMatch(/\b1[.,]008\b/);
   expect(text).not.toMatch(/505\s*\/\s*60/);
   expect(text).not.toContain("50550");
+
   expect(result.warnings).toContain("background_text_filtered");
+  expect(result.warnings).not.toContain("numeric_structure_unreliable");
+  expect(result.principles.preservesGeometry).toBe(true);
   expect(result.principles.financialWrites).toBe(false);
   expect(result.principles.requiresHumanReview).toBe(true);
 });
