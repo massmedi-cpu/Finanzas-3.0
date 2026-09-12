@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatMoney } from "../../src/core/formatters";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
 
@@ -115,13 +116,6 @@ type TransactionSearch = {
 const DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1UCUZSmOWfGM5VyvhDcx7ExeBw3LS872t";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp";
-
-const money = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
@@ -505,7 +499,7 @@ export function DocumentsClient() {
                 {list.items.map((item) => (
                   <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
-                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : money.format(item.totalCents / 100)}</small></span>
+                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoney(item.totalCents / 100)}</small></span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>
                   </button>
                 ))}
@@ -541,18 +535,18 @@ export function DocumentsClient() {
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Movimientos asociados</h3><p>La asociación documental nunca modifica el movimiento bancario.</p></div></div>
-                  {detail.associations.length ? <div className={styles.associationList}>{detail.associations.map((association) => <article key={association.id} className={styles.association}><div><strong>{association.concept}</strong><p>{formatDate(association.date)} · {association.accountName} · {money.format(association.amountCents / 100)}</p><small>{association.method === "suggested" ? "Sugerencia confirmada" : "Asociación manual"}</small></div><button className={styles.dangerButton} onClick={() => void unassociate(association.transactionId)} disabled={busy !== null}>Desasociar</button></article>)}</div> : <p className={styles.muted}>Este documento todavía no tiene movimientos asociados.</p>}
+                  {detail.associations.length ? <div className={styles.associationList}>{detail.associations.map((association) => <article key={association.id} className={styles.association}><div><strong>{association.concept}</strong><p>{formatDate(association.date)} · {association.accountName} · {formatMoney(association.amountCents / 100)}</p><small>{association.method === "suggested" ? "Sugerencia confirmada" : "Asociación manual"}</small></div><button className={styles.dangerButton} onClick={() => void unassociate(association.transactionId)} disabled={busy !== null}>Desasociar</button></article>)}</div> : <p className={styles.muted}>Este documento todavía no tiene movimientos asociados.</p>}
                 </section>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Sugerencias del motor financiero</h3><p>Se calculan en servidor por fecha e importe y nunca se guardan hasta que confirmes.</p></div><button className={styles.secondaryButton} onClick={() => void findCandidates()} disabled={busy !== null}>Buscar sugerencias</button></div>
-                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p><small>{money.format(candidate.amountCents / 100)} · diferencia {money.format(candidate.amountDifferenceCents / 100)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
+                  {candidates ? (!candidates.ready ? <p className={styles.muted}>Completa fecha e importe para generar sugerencias.</p> : candidates.candidates.length ? <div className={styles.candidateList}>{candidates.candidates.map((candidate) => <article key={candidate.transactionId} className={styles.candidate}><div><strong>{candidate.concept}</strong><p>{formatDate(candidate.date)} · {candidate.accountName}</p><small>{formatMoney(candidate.amountCents / 100)} · diferencia {formatMoney(candidate.amountDifferenceCents / 100)} · {candidate.dayDifference} días</small></div><button className={styles.primaryButton} onClick={() => void associate(candidate.transactionId, "suggested")} disabled={busy !== null}>Confirmar sugerencia</button></article>)}</div> : <p className={styles.muted}>No hay candidatos suficientemente próximos.</p>) : null}
                 </section>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Asociación manual</h3><p>Busca por concepto en los movimientos efectivos.</p></div></div>
                   <form className={styles.manualSearch} onSubmit={searchTransactions}><label>Buscar movimiento<input value={manualQuery} onChange={(event) => setManualQuery(event.target.value)} placeholder="Ej. comunidad, seguro, supermercado" /></label><button className={styles.secondaryButton} type="submit" disabled={busy === "manual-search"}>Buscar</button></form>
-                  {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p><small>{money.format(transaction.amountCents / 100)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
+                  {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p><small>{formatMoney(transaction.amountCents / 100)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
                 <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR temporal y revisable</span></div>
