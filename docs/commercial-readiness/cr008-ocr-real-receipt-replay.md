@@ -24,30 +24,38 @@ La comprobación final debe confirmar, sin correcciones inventadas ni residuos d
 
 Debe rechazar o marcar para revisión residuos como `560`, `280`, `2.800`, `5,508`, `1,008`, `505/60` o `50550` cuando no exista evidencia geométrica fiable.
 
-## Tercer candidato
+## Candidato V8
 
-SHA previo a este commit: `b66d1ff242304f06c39bb5a63dde0aa680c5cd36`.
+Código OCR funcional previo a este commit: `4840aa637ecbb9c2a78e6704306e5abd9227994b`.
 
-Cambios principales:
+Cambios principales de V8:
 
-- las filas de producto y resumen tienen prioridad frente a ruido e identificadores de cabecera;
-- el límite de refinado ya no se consume simplemente con las primeras filas sospechosas por posición vertical;
-- un decimal partido solo se recompone cuando la puntuación decimal aparece explícitamente en la lectura aislada (`2` + `,` + `80`, por ejemplo);
-- no se transforma un entero ambiguo como `560` en `5,60` por heurística;
-- se mantienen los estados de baja confianza / geometría por revisar para evitar falsos éxitos.
+- la ruta de imágenes usa el proveedor `ReceiptUpscaledCellConsensusImageOcrProvider`;
+- cada celda numérica sospechosa se recorta de forma focalizada y se amplía físicamente hasta una altura objetivo de al menos 180 px antes de Tesseract;
+- cada celda se somete a tres variantes de preprocesado independientes;
+- una cifra monetaria solo se acepta cuando existe consenso estricto de al menos 2 de 3 observaciones válidas;
+- el consenso usa tanto texto OCR directo como geometría TSV para recomponer únicamente decimales explícitos;
+- un entero ambiguo como `560` no se convierte por heurística en `5,60`;
+- se mantienen los estados de revisión obligatoria cuando la geometría o la lectura no son suficientemente fiables.
 
-## Evidencia automatizada previa
+## Evidencia automatizada V8
 
-Sobre `b66d1ff242304f06c39bb5a63dde0aa680c5cd36`:
+Sobre `4840aa637ecbb9c2a78e6704306e5abd9227994b`:
 
-- Rebuild Preview E2E `34713541588`: SUCCESS.
-- Gate 4 Protected Workspace Boundary `34713541610`: SUCCESS.
-- PRE-020 Storage Runtime Rehearsal `34713541616`: SUCCESS.
-- PRE-020 Disposable DB Smoke `34713541598`: SUCCESS.
-- CR-001 Function Surface Postflight `34713541608`: SUCCESS.
-- CR-001 Deletion Self-Service Postflight `34713541586`: SUCCESS.
+- deployment exacto Vercel `dpl_4cBWBfGtnVdTG5mSn9qoh1m8otMx`: READY;
+- Rebuild Preview E2E `34722377445`: SUCCESS;
+- `browser-interaction-e2e`: SUCCESS;
+- Gate 4 Protected Workspace Boundary `34722377418`: SUCCESS;
+- PRE-020 Storage Runtime Rehearsal `34722377436`: SUCCESS;
+- PRE-020 Disposable DB Smoke `34722377431`: SUCCESS;
+- CR-001 Function Surface Postflight `34722377423`: SUCCESS;
+- CR-001 Deletion Self-Service Postflight `34722377492`: SUCCESS.
 
-Este commit solicita además la validación live del Preview protegido mediante el marcador `[vercel-preview]`. Production y `main` permanecen fuera de esta prueba.
+Este commit solicita además la validación live del Preview protegido mediante el marcador `[vercel-preview]` sin modificar el código OCR ya certificado localmente. Production y `main` permanecen fuera de esta prueba.
+
+## Resultado real anterior que mantiene el blocker
+
+V7 queda descartada tras replay real del 13/09/2026: confianza global 62 %, TERCIO GALICIA CERO sin importe, CAÑA GRANDE con `5,00` en lugar de `5,60`, CUBATA sin importe e IVA/Total ausentes. Por tanto CR-008 no puede cerrarse con evidencia sintética ni con CI verde por sí sola.
 
 ## Límite de automatización
 
