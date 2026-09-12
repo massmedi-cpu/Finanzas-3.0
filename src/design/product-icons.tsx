@@ -25,7 +25,11 @@ export type ProductIconName =
   | "spark"
   | "category"
   | "refresh"
-  | "warning";
+  | "warning"
+  | "merchant"
+  | "rules"
+  | "bank"
+  | "privacy";
 
 const iconPaths: Record<ProductIconName, ReactNode> = {
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9 20v-6h6v6"/></>,
@@ -53,6 +57,10 @@ const iconPaths: Record<ProductIconName, ReactNode> = {
   category: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.4 6.4L4 9"/><path d="M5.5 15A7 7 0 0 0 17.6 17.6L20 15"/></>,
   warning: <><path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+  merchant: <><path d="M4 10h16l-1.5-5h-13L4 10Z"/><path d="M5 10v9h14v-9M9 19v-5h6v5"/></>,
+  rules: <><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></>,
+  bank: <><path d="m3 9 9-5 9 5"/><path d="M5 10h14M6 10v8M10 10v8M14 10v8M18 10v8M4 19h16"/></>,
+  privacy: <><path d="M12 3 5 6v5c0 4.5 2.8 7.7 7 10 4.2-2.3 7-5.5 7-10V6Z"/><rect x="9" y="11" width="6" height="5" rx="1"/><path d="M10.5 11V9.5a1.5 1.5 0 0 1 3 0V11"/></>,
 };
 
 type ProductIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & {

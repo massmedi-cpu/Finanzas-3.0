@@ -22,7 +22,7 @@
 .kicker {
   margin: 0 0 0.35rem;
   color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.08em;
 }

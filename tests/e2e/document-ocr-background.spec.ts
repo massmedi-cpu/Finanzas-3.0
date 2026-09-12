@@ -72,6 +72,73 @@ async function renderReceiptOnTextBackground(page: Page) {
   return Buffer.from(dataUrl.split(",", 2)[1], "base64");
 }
 
+async function renderReceiptBesidePrintedSheet(page: Page) {
+  await page.setViewportSize({ width: 1300, height: 1600 });
+  const dataUrl = await page.evaluate(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1300;
+    canvas.height = 1600;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("canvas_context_unavailable");
+    ctx.fillStyle = "#77736a";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const x = 90;
+    const y = 55;
+    const w = 760;
+    const h = 1485;
+    ctx.fillStyle = "#f4f2ea";
+    ctx.fillRect(x, y, w, h);
+    ctx.fillStyle = "#171717";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "center";
+    ctx.font = "700 42px 'Courier New', monospace";
+    ctx.fillText("AVILA BAR - VICTORIA KENT", x + w / 2, y + 65);
+    ctx.font = "29px 'Courier New', monospace";
+    ctx.fillText("N.I.F.: YB398422C", x + w / 2, y + 135);
+    ctx.fillText("TELEFONO: +34 641552438", x + w / 2, y + 185);
+
+    ctx.textAlign = "left";
+    ctx.fillText("DESCRIPCION", x + 45, y + 330);
+    ctx.fillText("ENERGY", x + 45, y + 405);
+    ctx.fillText("TERCIO GALICIA CERO", x + 45, y + 480);
+    ctx.fillText("CANA GRANDE", x + 45, y + 555);
+    ctx.fillText("CUBATA", x + 45, y + 630);
+    ctx.fillText("AGUA CON GAS", x + 45, y + 705);
+    ctx.textAlign = "right";
+    ctx.fillText("UDS  PRECIO IMPORTE", x + w - 45, y + 330);
+    ctx.fillText("1  1,80  1,80", x + w - 45, y + 405);
+    ctx.fillText("1  2,80  2,80", x + w - 45, y + 480);
+    ctx.fillText("2  2,80  5,60", x + w - 45, y + 555);
+    ctx.fillText("1  5,50  5,50", x + w - 45, y + 630);
+    ctx.fillText("1  1,80  1,80", x + w - 45, y + 705);
+    ctx.font = "700 34px 'Courier New', monospace";
+    ctx.fillText("Base: 15,91", x + w - 45, y + 840);
+    ctx.fillText("Total IVA 1,59", x + w - 45, y + 905);
+    ctx.font = "700 58px 'Courier New', monospace";
+    ctx.fillText("Total: 17,50", x + w - 45, y + 990);
+    ctx.textAlign = "center";
+    ctx.font = "700 48px 'Courier New', monospace";
+    ctx.fillText("PENDIENTE DE PAGO", x + w / 2, y + 1110);
+    ctx.fillText("Mesa T29", x + w / 2, y + 1210);
+    ctx.fillText("Terraza", x + w / 2, y + 1280);
+
+    // A second printed sheet sits immediately beside the receipt. Its readable text must never
+    // be reconstructed as part of the receipt, even though it has similar contrast and size.
+    const bx = 900;
+    ctx.fillStyle = "#f5f3e9";
+    ctx.fillRect(bx, 80, 400, 1420);
+    ctx.fillStyle = "#111";
+    ctx.textAlign = "left";
+    ctx.font = "700 40px Arial";
+    const foreign = ["PLATO ARROZ", "MENU DIA", "PATA BRAVA", "BOOK NOW", "SHAWARMA", "POSTRE", "BEBIDA", "PROMO MESA"];
+    foreign.forEach((label, index) => ctx.fillText(label, bx + 28, 190 + index * 150));
+
+    return canvas.toDataURL("image/jpeg", 0.83);
+  });
+  return Buffer.from(dataUrl.split(",", 2)[1], "base64");
+}
+
 test("F11 camera OCR keeps readable background text out of the receipt result", async ({ page }, testInfo) => {
   desktopOcrOnly(testInfo);
   const image = await renderReceiptOnTextBackground(page);
@@ -92,6 +159,36 @@ test("F11 camera OCR keeps readable background text out of the receipt result", 
   expect(text).not.toContain("NO ES TICKET");
   expect(text).not.toContain("PUBLICIDAD MESA");
   expect(result.pages[0].lines.some((line) => line.words.some((word) => /4[,.]45/.test(word.text) && word.box.x > 0.55))).toBe(true);
+  expect(result.principles.financialWrites).toBe(false);
+  expect(result.principles.requiresHumanReview).toBe(true);
+});
+
+test("CR008-OCR-002 isolates a photographed receipt from an adjacent printed sheet and keeps monetary rows", async ({ page }, testInfo) => {
+  desktopOcrOnly(testInfo);
+  const image = await renderReceiptBesidePrintedSheet(page);
+
+  const result = await runDocumentOcr({
+    documentId: "99000000-0000-4000-8000-000000000099",
+    bytes: new Uint8Array(image),
+    mimeType: "image/jpeg",
+    originalFileName: "ticket-con-hoja-adyacente.jpg",
+    provider: new TesseractImageOcrProvider(),
+    now: () => new Date("2026-09-12T16:30:00Z"),
+  });
+
+  const text = result.plainText.toUpperCase();
+  const foreignLabels = ["PLATO ARROZ", "MENU DIA", "PATA BRAVA", "BOOK NOW", "SHAWARMA", "POSTRE", "BEBIDA", "PROMO MESA"];
+  for (const label of foreignLabels) expect(text).not.toContain(label);
+
+  expect(text).toContain("AVILA BAR");
+  expect(text).toContain("GALICIA");
+  expect(text).toContain("CUBATA");
+  expect(text).toMatch(/15[,.]91/);
+  expect(text).toMatch(/1[,.]59/);
+  expect(text).toMatch(/17[,.]50/);
+  expect(text).toMatch(/5[,.]60/);
+  expect(text).toMatch(/5[,.]50/);
+  expect(result.warnings).toContain("background_text_filtered");
   expect(result.principles.financialWrites).toBe(false);
   expect(result.principles.requiresHumanReview).toBe(true);
 });

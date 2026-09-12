@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
+import basisStyles from "./budget-basis.module.css";
 import styles from "./budgets.module.css";
 
 type BudgetStatus = "empty" | "unfunded" | "on_track" | "over";
@@ -59,6 +60,7 @@ const moneyFormatter = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const monthFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -106,6 +108,11 @@ function formatProgress(bps: number | null) {
 function progressWidth(item: BudgetItem) {
   if (item.progressBps === null || item.progressBps <= 0) return 0;
   return Math.min(100, item.progressBps / 100);
+}
+
+function averageHistoryCents(history: HistoryMonth[]) {
+  if (!history.length) return null;
+  return Math.round(history.reduce((sum, row) => sum + row.expenseCents, 0) / history.length);
 }
 
 function readableError(payload: any) {
@@ -238,8 +245,8 @@ function BudgetCard({
             <h3>{total ? "Presupuesto mensual total" : item.categoryName ?? "Categoría"}</h3>
             <p>
               {item.manualAmountCents !== null
-                ? "Límite manual activo"
-                : "Límite automático · media de 3 meses"}
+                ? "Tu límite · definido por ti"
+                : "Tu límite · recomendación automática"}
               {!total && item.categoryLifecycle === "archived" ? " · categoría archivada" : ""}
             </p>
           </div>
@@ -249,11 +256,11 @@ function BudgetCard({
 
       <div className={styles.amounts}>
         <div>
-          <span>Presupuesto</span>
+          <span>Tu límite</span>
           <strong>{formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
-          <span>Gastado</span>
+          <span>Gastado este mes</span>
           <strong>{formatMoney(item.actualExpenseCents)}</strong>
         </div>
         <div>
@@ -500,6 +507,11 @@ export default function BudgetsClient() {
     };
   }, [snapshot]);
 
+  const historyAverageCents = useMemo(
+    () => snapshot ? averageHistoryCents(snapshot.total.historyMonths) : null,
+    [snapshot],
+  );
+
   return (
     <main className={styles.shell}>
       <section className={styles.hero} aria-labelledby="budget-title">
@@ -554,9 +566,9 @@ export default function BudgetsClient() {
           <>
             <section className={styles.summaryGrid} aria-label="Resumen del presupuesto mensual">
               <article className={styles.metric}>
-                <span className={styles.metricLabel}><Icon name="wallet" /> Presupuesto</span>
+                <span className={styles.metricLabel}><Icon name="wallet" /> Tu límite del mes</span>
                 <strong>{formatMoney(snapshot.total.effectiveAmountCents)}</strong>
-                <small>{snapshot.total.manualAmountCents === null ? "Calculado automáticamente" : "Límite manual activo"}</small>
+                <small>{snapshot.total.manualAmountCents === null ? "Recomendado automáticamente" : "Definido por ti"}</small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="spent" /> Gastado</span>
@@ -639,12 +651,42 @@ export default function BudgetsClient() {
                 <div className={styles.panelInner}>
                   <div className={styles.panelHeading}>
                     <div>
-                      <h2>Cómo se calcula</h2>
-                      <p>Reglas visibles para entender el presupuesto.</p>
+                      <h2>De histórico a límite</h2>
+                      <p>Qué observamos, qué recomienda la app y qué límite estás usando.</p>
                     </div>
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
 
+                  <div className={basisStyles.basis} aria-label="Cómo se forma tu límite mensual">
+                    <div className={basisStyles.heading}>
+                      <strong>Tres conceptos distintos</strong>
+                      <span>El histórico informa la recomendación; tú decides si la mantienes o la sustituyes por un límite manual.</span>
+                    </div>
+                    <div className={basisStyles.step} data-step="1">
+                      <div className={basisStyles.stepCopy}>
+                        <strong>Media histórica</strong>
+                        <span>Media del gasto de los meses mostrados abajo.</span>
+                      </div>
+                      <span className={basisStyles.value}>{historyAverageCents === null ? "Sin histórico" : formatMoney(historyAverageCents)}</span>
+                    </div>
+                    <div className={basisStyles.step} data-step="2">
+                      <div className={basisStyles.stepCopy}>
+                        <strong>Recomendación de la app</strong>
+                        <span>Referencia automática que se conserva aunque fijes otro límite.</span>
+                      </div>
+                      <span className={basisStyles.value}>{formatMoney(snapshot.total.automaticAmountCents)}</span>
+                    </div>
+                    <div className={`${basisStyles.step} ${basisStyles.current}`} data-step="3">
+                      <div className={basisStyles.stepCopy}>
+                        <strong>Tu límite actual</strong>
+                        <span>{snapshot.total.manualAmountCents === null ? "Ahora coincide con la recomendación automática." : "Has decidido sustituir la recomendación para este presupuesto."}</span>
+                        <span className={basisStyles.mode}>{snapshot.total.manualAmountCents === null ? "Automático" : "Manual"}</span>
+                      </div>
+                      <span className={basisStyles.value}>{formatMoney(snapshot.total.effectiveAmountCents)}</span>
+                    </div>
+                  </div>
+
+                  <p className={basisStyles.sectionLabel}>Histórico usado como referencia</p>
                   <div className={styles.history} aria-label="Histórico de gasto usado para recomendar presupuesto">
                     {snapshot.total.historyMonths.map((row) => {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
@@ -658,7 +700,10 @@ export default function BudgetsClient() {
                     })}
                   </div>
 
-                  <p className={styles.explanation}>{snapshot.total.automaticExplanation}</p>
+                  <div className={basisStyles.explanation}>
+                    <strong>Por qué recomienda este importe</strong>
+                    <p>{snapshot.total.automaticExplanation}</p>
+                  </div>
 
                   <div className={styles.principles}>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>La fuente bancaria se mantiene estrictamente en solo lectura.</span></div>
