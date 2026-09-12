@@ -132,7 +132,8 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
   ];
   const maximum = Math.max(1, ...rows.flatMap((row) => [Math.abs(row.current), Math.abs(row.previous)]));
 
-  function pointLabel(label: string, period: string, cents: number) {
+  function pointLabel(metric: ComparisonKey, label: string, period: string, cents: number) {
+    if (metric !== "net") return `${label} ${period}: ${formatMoney(cents)}`;
     const state = cents < 0 ? "déficit" : cents > 0 ? "superávit" : "equilibrio";
     return `${label} ${period}: ${formatMoney(cents)} · ${state}`;
   }
@@ -168,7 +169,7 @@ function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot })
                 ["previous", previousMonth, row.previous],
               ] as const).map(([periodKey, period, cents]) => {
                 const id = `${row.key}-${periodKey}`;
-                const label = pointLabel(row.label, period, cents);
+                const label = pointLabel(row.key, row.label, period, cents);
                 const width = Math.max(8, (Math.abs(cents) / maximum) * 100);
                 const barStyle = { "--bar-width": `${width}%` } as CSSProperties;
                 return (
