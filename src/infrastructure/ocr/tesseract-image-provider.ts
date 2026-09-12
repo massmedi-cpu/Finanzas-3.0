@@ -17,7 +17,10 @@ const DOCUMENT_CORE_SHARE = 0.72;
 const HORIZONTAL_LINK_GAP = 0.065;
 const MIN_DETACHED_GAP = 0.04;
 const HORIZONTAL_CROP_MARGIN = 0.025;
-const NUMERIC_COLUMN_START_SHARE = 0.48;
+const NUMERIC_COLUMN_START_SHARE = 0.36;
+const NUMERIC_CLUSTER_GAP_SHARE = 0.055;
+const NUMERIC_CLUSTER_MARGIN_SHARE = 0.035;
+const MAX_NUMERIC_COLUMNS = 3;
 const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
@@ -36,6 +39,14 @@ type DocumentIsolation = {
   left: number;
   right: number;
   removedWords: number;
+};
+type RawTsvWord = {
+  text: string;
+  confidence: number;
+  left: number;
+  top: number;
+  width: number;
+  height: number;
 };
 
 class OcrTimeoutError extends Error {
@@ -92,28 +103,70 @@ async function exclusive<T>(task: () => Promise<T>) {
   }
 }
 
-function parseTsv(tsv: unknown, width: number, height: number): OcrWord[] {
+function rawTsvWords(tsv: unknown): RawTsvWord[] {
   if (typeof tsv !== "string") return [];
-  const words: OcrWord[] = [];
+  const words: RawTsvWord[] = [];
   for (const line of tsv.split(/\r?\n/).slice(1)) {
     const columns = line.split("\t");
     if (columns.length < 12 || columns[0] !== "5") continue;
     const left = Number(columns[6]);
     const top = Number(columns[7]);
-    const boxWidth = Number(columns[8]);
-    const boxHeight = Number(columns[9]);
+    const width = Number(columns[8]);
+    const height = Number(columns[9]);
     const rawConfidence = Number(columns[10]);
     const text = columns.slice(11).join("\t").replace(/\s+/g, " ").trim();
-    if (!text || ![left, top, boxWidth, boxHeight].every(Number.isFinite) || boxWidth <= 0 || boxHeight <= 0) continue;
-    const right = Math.min(width, Math.max(0, left + boxWidth));
-    const bottom = Math.min(height, Math.max(0, top + boxHeight));
-    const x = Math.min(1, Math.max(0, left / width));
-    const y = Math.min(1, Math.max(0, top / height));
-    const normalizedWidth = Math.min(1 - x, Math.max(0, (right - Math.max(0, left)) / width));
-    const normalizedHeight = Math.min(1 - y, Math.max(0, (bottom - Math.max(0, top)) / height));
-    if (normalizedWidth <= 0 || normalizedHeight <= 0) continue;
+    if (!text || ![left, top, width, height].every(Number.isFinite) || width <= 0 || height <= 0) continue;
     const confidence = Number.isFinite(rawConfidence) ? Math.min(1, Math.max(0, rawConfidence / 100)) : 0.5;
-    words.push({ text, confidence, box: { x, y, width: normalizedWidth, height: normalizedHeight } });
+    words.push({ text, confidence, left, top, width, height });
+  }
+  return words;
+}
+
+function parseTsv(tsv: unknown, width: number, height: number, rectangle?: ImageRectangle): OcrWord[] {
+  const raw = rawTsvWords(tsv);
+  if (!raw.length) return [];
+
+  // Tesseract can report rectangle coordinates in crop-local space. Detect that once for the
+  // whole recognition result and translate them back to source-image space before normalizing.
+  // If it already reports source coordinates, the minimum lies inside the requested rectangle
+  // and no offset is applied. This keeps geometry stable across full-image and cropped passes.
+  const minLeft = Math.min(...raw.map((word) => word.left));
+  const maxRight = Math.max(...raw.map((word) => word.left + word.width));
+  const minTop = Math.min(...raw.map((word) => word.top));
+  const maxBottom = Math.max(...raw.map((word) => word.top + word.height));
+  const localX = Boolean(
+    rectangle
+    && rectangle.left > 0
+    && minLeft < rectangle.left - 2
+    && maxRight <= rectangle.width + 4,
+  );
+  const localY = Boolean(
+    rectangle
+    && rectangle.top > 0
+    && minTop < rectangle.top - 2
+    && maxBottom <= rectangle.height + 4,
+  );
+  const offsetX = localX && rectangle ? rectangle.left : 0;
+  const offsetY = localY && rectangle ? rectangle.top : 0;
+
+  const words: OcrWord[] = [];
+  for (const rawWord of raw) {
+    const left = rawWord.left + offsetX;
+    const top = rawWord.top + offsetY;
+    const right = Math.min(width, Math.max(0, left + rawWord.width));
+    const bottom = Math.min(height, Math.max(0, top + rawWord.height));
+    const clippedLeft = Math.max(0, left);
+    const clippedTop = Math.max(0, top);
+    const x = Math.min(1, Math.max(0, clippedLeft / width));
+    const y = Math.min(1, Math.max(0, clippedTop / height));
+    const normalizedWidth = Math.min(1 - x, Math.max(0, (right - clippedLeft) / width));
+    const normalizedHeight = Math.min(1 - y, Math.max(0, (bottom - clippedTop) / height));
+    if (normalizedWidth <= 0 || normalizedHeight <= 0) continue;
+    words.push({
+      text: rawWord.text,
+      confidence: rawWord.confidence,
+      box: { x, y, width: normalizedWidth, height: normalizedHeight },
+    });
   }
   return words;
 }
@@ -336,12 +389,50 @@ function cropRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata)
   return { left, top: 0, width: Math.max(1, right - left), height: metadata.height };
 }
 
-function numericColumnRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata): ImageRectangle {
+function fallbackNumericRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata): ImageRectangle {
   const documentWidth = isolation.right - isolation.left;
   const numericLeft = isolation.left + documentWidth * NUMERIC_COLUMN_START_SHARE;
   const left = Math.max(0, Math.floor(numericLeft * metadata.width));
   const right = Math.min(metadata.width, Math.ceil(isolation.right * metadata.width));
   return { left, top: 0, width: Math.max(1, right - left), height: metadata.height };
+}
+
+function numericColumnRectangles(words: OcrWord[], isolation: DocumentIsolation, metadata: OcrImageMetadata) {
+  const documentWidth = isolation.right - isolation.left;
+  const start = isolation.left + documentWidth * NUMERIC_COLUMN_START_SHARE;
+  const candidates = words
+    .filter((word) => /\d/.test(word.text) && wordCenter(word) >= start && wordCenter(word) <= isolation.right)
+    .sort((a, b) => wordCenter(a) - wordCenter(b));
+  if (candidates.length < 2) return [fallbackNumericRectangle(isolation, metadata)];
+
+  const gapLimit = Math.max(0.012, documentWidth * NUMERIC_CLUSTER_GAP_SHARE);
+  const clusters: OcrWord[][] = [];
+  for (const word of candidates) {
+    const previous = clusters.at(-1);
+    if (!previous) {
+      clusters.push([word]);
+      continue;
+    }
+    const previousCenter = previous.reduce((sum, item) => sum + wordCenter(item), 0) / previous.length;
+    if (Math.abs(wordCenter(word) - previousCenter) <= gapLimit) previous.push(word);
+    else clusters.push([word]);
+  }
+
+  const margin = documentWidth * NUMERIC_CLUSTER_MARGIN_SHARE;
+  const rectangles = clusters
+    .filter((cluster) => cluster.length >= 2)
+    .map((cluster) => {
+      const leftNorm = Math.max(isolation.left, Math.min(...cluster.map((word) => word.box.x)) - margin);
+      const rightNorm = Math.min(isolation.right, Math.max(...cluster.map(wordRight)) + margin);
+      const left = Math.max(0, Math.floor(leftNorm * metadata.width));
+      const right = Math.min(metadata.width, Math.ceil(rightNorm * metadata.width));
+      return { left, top: 0, width: Math.max(1, right - left), height: metadata.height };
+    })
+    .filter((rectangle) => rectangle.width >= Math.max(12, metadata.width * 0.025))
+    .sort((a, b) => a.left - b.left)
+    .slice(-MAX_NUMERIC_COLUMNS);
+
+  return rectangles.length ? rectangles : [fallbackNumericRectangle(isolation, metadata)];
 }
 
 function verticalOverlapRatio(a: OcrWord, b: OcrWord) {
@@ -369,21 +460,33 @@ function mergeMonetaryRefinement(baseWords: OcrWord[], numericWords: OcrWord[]) 
     if (!isReplaceableNumericWord(word)) return true;
     return !replacements.some((replacement) => {
       if (verticalOverlapRatio(word, replacement) < 0.35) return false;
-      return Math.abs(wordCenter(word) - wordCenter(replacement)) <= 0.18;
+      const widthAwareLimit = Math.max(0.025, Math.min(0.075, Math.max(word.box.width, replacement.box.width) * 1.6));
+      return Math.abs(wordCenter(word) - wordCenter(replacement)) <= widthAwareLimit;
     });
   });
 
-  return [...kept, ...replacements].sort((a, b) => {
+  const deduplicated = [...kept];
+  for (const replacement of replacements) {
+    const duplicate = deduplicated.some((word) => (
+      word.text === replacement.text
+      && verticalOverlapRatio(word, replacement) >= 0.65
+      && Math.abs(wordCenter(word) - wordCenter(replacement)) <= 0.025
+    ));
+    if (!duplicate) deduplicated.push(replacement);
+  }
+
+  return deduplicated.sort((a, b) => {
     const yDelta = a.box.y - b.box.y;
     return Math.abs(yDelta) > 0.006 ? yDelta : a.box.x - b.box.x;
   });
 }
 
-async function recognizeMonetaryColumn(
+async function recognizeMonetaryColumns(
   worker: Worker,
   bytes: Uint8Array,
   metadata: OcrImageMetadata,
   isolation: DocumentIsolation,
+  baseWords: OcrWord[],
 ) {
   await worker.setParameters({
     tessedit_pageseg_mode: PSM.SPARSE_TEXT,
@@ -392,17 +495,21 @@ async function recognizeMonetaryColumn(
     classify_bln_numeric_mode: "1",
   });
   try {
-    const recognition = await withTimeout(
-      worker.recognize(
-        Buffer.from(bytes),
-        { rotateRadians: 0, rectangle: numericColumnRectangle(isolation, metadata) },
-        { text: true, tsv: true },
-      ),
-      OCR_TIMEOUT_MS,
-      "recognize",
-    );
-    const data = recognition?.data as unknown as RecognitionData;
-    return parseTsv(data?.tsv, metadata.width, metadata.height);
+    const words: OcrWord[] = [];
+    for (const rectangle of numericColumnRectangles(baseWords, isolation, metadata)) {
+      const recognition = await withTimeout(
+        worker.recognize(
+          Buffer.from(bytes),
+          { rotateRadians: 0, rectangle },
+          { text: true, tsv: true },
+        ),
+        OCR_TIMEOUT_MS,
+        "recognize",
+      );
+      const data = recognition?.data as unknown as RecognitionData;
+      words.push(...parseTsv(data?.tsv, metadata.width, metadata.height, rectangle));
+    }
+    return words;
   } finally {
     try {
       await worker.setParameters({
@@ -438,7 +545,7 @@ async function recognizeCandidate(
   const dimensions = rectangle && Math.abs(rotationRadians) <= ROTATION_EPSILON
     ? metadata
     : processedImageMetadata(data, metadata, rotationRadians);
-  const words = parseTsv(data?.tsv, dimensions.width, dimensions.height);
+  const words = parseTsv(data?.tsv, dimensions.width, dimensions.height, rectangle);
   return { words, score: candidateScore(words), rotationRadians, autoRotate };
 }
 
@@ -465,11 +572,13 @@ async function refineBackgroundContamination(
     // The geometry-filtered first pass is still safer than reintroducing detached background text.
   }
 
-  // A clean receipt band can still contain monetary glyphs that a general-language pass merges
-  // incorrectly. Re-read only the numeric side from the original pixels with a numeric OCR
-  // contract, then replace overlapping corrupted numeric tokens. No amount is inferred from text.
+  // Receipts commonly place quantity, unit price and line amount in neighbouring columns. Reading
+  // the whole numeric half as one OCR region can merge those columns (for example swallowing a
+  // decimal separator or joining adjacent amounts). Detect stable numeric x-clusters first and
+  // re-read each narrow column independently from the original pixels. Replacements still require
+  // an explicit two-decimal token; no amount is inferred from malformed text.
   try {
-    const monetaryWords = await recognizeMonetaryColumn(worker, bytes, metadata, isolation);
+    const monetaryWords = await recognizeMonetaryColumns(worker, bytes, metadata, isolation, selectedWords);
     selectedWords = mergeMonetaryRefinement(selectedWords, monetaryWords);
   } catch {
     // Numeric refinement is additive hardening; keep the isolated document result if unavailable.
