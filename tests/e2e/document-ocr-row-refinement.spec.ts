@@ -3,6 +3,7 @@ import type { OcrWord } from "../../src/domain/document-ocr";
 import {
   mergeRefinedNumericRow,
   mergeRefinedTextRow,
+  selectRowsForRefinement,
 } from "../../src/infrastructure/ocr/receipt-row-refining-provider";
 
 function word(text: string, x: number, y: number, width = 0.055, confidence = 0.62): OcrWord {
@@ -48,6 +49,31 @@ test("CR008-OCR-002 row refinement replaces malformed receipt amounts only with 
   expect(text).not.toMatch(/\b560\b/);
 });
 
+test("CR008-OCR-002 row refinement recovers explicitly split decimal tokens without inventing punctuation", () => {
+  const base = [
+    word("CAÑA", 0.12, 0.42, 0.07, 0.7),
+    word("GRANDE", 0.20, 0.42, 0.09, 0.72),
+    word("2", 0.48, 0.42, 0.02, 0.82),
+    word("2.800", 0.59, 0.42, 0.07, 0.34),
+    word("560", 0.73, 0.42, 0.05, 0.28),
+  ];
+  const targetRow = row(base);
+  const refined = [
+    word("2", 0.48, 0.42, 0.02, 0.93),
+    word(",", 0.501, 0.42, 0.009, 0.9),
+    word("80", 0.511, 0.42, 0.03, 0.92),
+    word("5,", 0.69, 0.42, 0.035, 0.91),
+    word("60", 0.727, 0.42, 0.03, 0.92),
+  ];
+
+  const merged = mergeRefinedNumericRow(base, targetRow, refined, 0.45);
+  const text = merged.map((item) => item.text).join(" ");
+  expect(text).toContain("2,80");
+  expect(text).toContain("5,60");
+  expect(text).not.toContain("2.800");
+  expect(text).not.toMatch(/\b560\b/);
+});
+
 test("CR008-OCR-002 row refinement can recover a missing summary amount without inventing it", () => {
   const base = [
     word("Total:", 0.18, 0.67, 0.08, 0.78),
@@ -84,4 +110,32 @@ test("CR008-OCR-002 row refinement replaces a damaged product description only w
   expect(text).not.toContain("SCON");
   expect(text).not.toContain("fas");
   expect(text).not.toContain("eco");
+});
+
+test("CR008-OCR-002 prioritizes product and summary rows over noisy header identifiers", () => {
+  const words: OcrWord[] = [];
+  for (let index = 0; index < 14; index += 1) {
+    const y = 0.05 + index * 0.018;
+    words.push(
+      word("REF", 0.10, y, 0.06, 0.72),
+      word(String(1200 + index), 0.68, y, 0.06, 0.3),
+    );
+  }
+
+  const products = ["ENERGY", "TERCIO", "CANA", "CUBATA", "AGUA"];
+  for (let index = 0; index < products.length; index += 1) {
+    const y = 0.42 + index * 0.045;
+    words.push(
+      word(products[index], 0.10, y, 0.10, 0.78),
+      word("1", 0.48, y, 0.02, 0.82),
+      word("2.800", 0.59, y, 0.07, 0.34),
+      word("560", 0.73, y, 0.05, 0.28),
+    );
+  }
+  words.push(word("Total:", 0.16, 0.70, 0.08, 0.82), word("1", 0.72, 0.70, 0.02, 0.2));
+
+  const selected = selectRowsForRefinement(words).map((item) => item.text);
+  for (const product of products) expect(selected.some((text) => text.includes(product))).toBeTruthy();
+  expect(selected.some((text) => /Total:/i.test(text))).toBeTruthy();
+  expect(selected.filter((text) => text.includes("REF")).length).toBeLessThan(12);
 });
