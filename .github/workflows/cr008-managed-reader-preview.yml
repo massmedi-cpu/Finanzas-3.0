@@ -1,0 +1,138 @@
+name: CR-008 Managed Reader Preview Gate
+
+on:
+  push:
+    branches:
+      - 'commercial-readiness/**'
+
+permissions:
+  contents: read
+
+jobs:
+  managed-reader-preview:
+    if: contains(github.event.head_commit.message, '[vercel-preview]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Generate ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Discover matching Vercel preview for exact SHA
+        id: vercel
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let attempt = 1; attempt <= 48; attempt += 1) {
+              const deployments = await github.rest.repos.listDeployments({
+                owner,
+                repo,
+                sha: context.sha,
+                per_page: 30,
+              });
+              for (const deployment of deployments.data) {
+                const statuses = await github.rest.repos.listDeploymentStatuses({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  per_page: 30,
+                });
+                const status = statuses.data.find((candidate) => {
+                  const url = candidate.environment_url || candidate.target_url || '';
+                  return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
+                });
+                if (status) {
+                  const url = (status.environment_url || status.target_url).replace(/\/$/, '');
+                  core.info(`Matching Vercel preview discovered on attempt ${attempt}: ${url}`);
+                  core.setOutput('url', url);
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+
+      - name: Verify exact deployed SHA and Financial App Reader runtime
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          request() {
+            local path="$1"
+            local output="$2"
+            if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+              curl --silent --show-error \
+                --output "$output" \
+                --write-out "%{http_code}" \
+                -H "x-vercel-protection-bypass: $VERCEL_AUTOMATION_BYPASS_SECRET" \
+                "$VERCEL_PREVIEW_URL$path"
+            else
+              curl --silent --show-error \
+                --output "$output" \
+                --write-out "%{http_code}" \
+                -H "x-vercel-trusted-oidc-idp-token: $VERCEL_TRUSTED_OIDC_TOKEN" \
+                "$VERCEL_PREVIEW_URL$path"
+            fi
+          }
+
+          build_status=$(request "/api/build" "/tmp/build.json")
+          if [ "$build_status" != "200" ]; then
+            echo "Build identity probe failed with HTTP $build_status."
+            exit 1
+          fi
+
+          deployed_sha=$(python3 -c "import json; print(json.load(open('/tmp/build.json')).get('commit',''))")
+          if [ "$deployed_sha" != "$GITHUB_SHA" ]; then
+            echo "Preview SHA mismatch: expected $GITHUB_SHA, got $deployed_sha."
+            exit 1
+          fi
+
+          reader_status=$(request "/api/health/document-reader" "/tmp/document-reader.json")
+          cat /tmp/document-reader.json
+          echo
+          if [ "$reader_status" != "200" ]; then
+            echo "Financial App Reader runtime probe failed with HTTP $reader_status."
+            exit 1
+          fi
+
+          python3 - <<'PY'
+          import json
+          import sys
+
+          with open('/tmp/document-reader.json', encoding='utf-8') as handle:
+              payload = json.load(handle)
+
+          expected = {
+              'status': 'ok',
+              'reader': 'financial_app_reader',
+              'managed': True,
+              'credential': 'valid',
+              'googleAuth': 'ok',
+              'driveRead': 'ok',
+          }
+          mismatches = {
+              key: (payload.get(key), value)
+              for key, value in expected.items()
+              if payload.get(key) != value
+          }
+          if mismatches:
+              print(f'Financial App Reader contract mismatch: {mismatches}')
+              sys.exit(1)
+          print('Financial App Reader credential, Google auth and Drive read are healthy on the exact Preview SHA.')
+          PY
