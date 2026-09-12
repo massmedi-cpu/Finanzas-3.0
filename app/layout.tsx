@@ -29,6 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <>
             <Script src="/cr006-beta-runtime.js" strategy="beforeInteractive" />
             <Script src="/cr006-beta-compat.js" strategy="beforeInteractive" />
+            <Script src="/cr006-beta-contract-shim.js" strategy="beforeInteractive" />
           </>
         ) : null}
         {children}
