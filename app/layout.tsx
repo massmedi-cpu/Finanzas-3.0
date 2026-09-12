@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { APP_VERSION } from "../src/core/build-info";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import "./globals.css";
@@ -9,15 +10,27 @@ import "./accessibility-live-regions.css";
 
 export const dynamic = "force-dynamic";
 
+const CR006_BETA_BRANCH = "commercial-readiness/cr006-zero-cost-beta";
+
 export const metadata: Metadata = {
   title: `Financial App ${APP_VERSION}`,
   description: `Financial App ${APP_VERSION} · finanzas personales seguras, acumulativas y verificadas`,
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const cr006BetaRuntimeAvailable =
+    process.env.VERCEL_ENV === "preview" &&
+    process.env.VERCEL_GIT_COMMIT_REF === CR006_BETA_BRANCH;
+
   return (
     <html lang="es">
       <body>
+        {cr006BetaRuntimeAvailable ? (
+          <>
+            <Script src="/cr006-beta-runtime.js" strategy="beforeInteractive" />
+            <Script src="/cr006-beta-compat.js" strategy="beforeInteractive" />
+          </>
+        ) : null}
         {children}
         <OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />
       </body>
