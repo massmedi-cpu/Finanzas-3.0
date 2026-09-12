@@ -72,6 +72,33 @@ test("F11 OCR contract marks low-confidence extraction for review instead of inv
   expect(result.confidence).toBeLessThan(0.65);
 });
 
+test("F11 OCR contract rejects malformed numeric receipt geometry instead of certifying it", () => {
+  const page = reconstructOcrPage(1, [
+    word("PRODUCTO", 0.96, 0.08, 0.30, 0.28),
+    word("2", 0.92, 0.55, 0.30, 0.025),
+    word("2.800", 0.83, 0.68, 0.30, 0.075),
+    word("560", 0.85, 0.84, 0.30, 0.06),
+    word("OTRO", 0.95, 0.08, 0.37, 0.18),
+    word("1", 0.94, 0.55, 0.37, 0.025),
+    word("5,50", 0.95, 0.68, 0.37, 0.075),
+    word("5,508", 0.82, 0.84, 0.37, 0.07),
+  ]);
+  const result = buildDocumentOcrResult({
+    documentId,
+    source: "image_ocr",
+    extractor: "test-provider",
+    extractedAt: "2026-09-12T18:45:00Z",
+    pages: [page],
+  });
+
+  expect(result.status).toBe("needs_review");
+  expect(result.warnings).toContain("numeric_structure_unreliable");
+  expect(result.warnings).toContain("geometry_unreliable");
+  expect(result.principles.preservesGeometry).toBe(false);
+  expect(result.plainText).toContain("560");
+  expect(result.plainText).toContain("5,508");
+});
+
 test("F11 OCR geometry rejects boxes outside the source instead of silently clipping evidence", () => {
   expect(() => reconstructOcrPage(1, [word("FUERA", 0.9, 0.95, 0.1, 0.2)])).toThrow("invalid_ocr_box");
   expect(() => reconstructOcrPage(0, [])).toThrow("invalid_ocr_page_number");
