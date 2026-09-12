@@ -95,6 +95,10 @@ async function gotoBetaRoute(page: Page, route: string) {
   expect(response!.status(), `${route}: no debe devolver error de servidor`).toBeLessThan(500);
   await expect(page.locator("main")).toBeVisible({ timeout: 8_000 });
   await expect(page.locator("h1").first()).toBeVisible({ timeout: 8_000 });
+  await expect.poll(
+    async () => page.evaluate(() => Boolean((window as any).__FINANCIAL_APP_CR006_BETA__?.active)),
+    { timeout: 8_000 },
+  ).toBe(true);
 }
 
 async function assertNoGlobalOverflow(page: Page, label: string) {
