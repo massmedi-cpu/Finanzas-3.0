@@ -10,7 +10,7 @@ import {
   getGoogleServiceAccountCredentialsFromEnvironment,
 } from "../../../../src/infrastructure/google/google-service-account";
 import { PdfTextOcrProvider } from "../../../../src/infrastructure/ocr/pdf-text-provider";
-import { ReceiptRowRefiningImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-row-refining-provider";
+import { ReceiptCellRecoveryImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-cell-recovery-provider";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -25,7 +25,7 @@ const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
-const imageProvider = new ReceiptRowRefiningImageOcrProvider();
+const imageProvider = new ReceiptCellRecoveryImageOcrProvider();
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
