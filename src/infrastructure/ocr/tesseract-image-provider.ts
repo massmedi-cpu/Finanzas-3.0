@@ -1,5 +1,5 @@
 import path from "node:path";
-import { createWorker } from "tesseract.js";
+import { createWorker, PSM } from "tesseract.js";
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
 import type { OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
@@ -17,6 +17,8 @@ const DOCUMENT_CORE_SHARE = 0.72;
 const HORIZONTAL_LINK_GAP = 0.065;
 const MIN_DETACHED_GAP = 0.04;
 const HORIZONTAL_CROP_MARGIN = 0.025;
+const NUMERIC_COLUMN_START_SHARE = 0.48;
+const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type TimeoutKind = "queue" | "worker" | "recognize";
@@ -334,6 +336,87 @@ function cropRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata)
   return { left, top: 0, width: Math.max(1, right - left), height: metadata.height };
 }
 
+function numericColumnRectangle(isolation: DocumentIsolation, metadata: OcrImageMetadata): ImageRectangle {
+  const documentWidth = isolation.right - isolation.left;
+  const numericLeft = isolation.left + documentWidth * NUMERIC_COLUMN_START_SHARE;
+  const left = Math.max(0, Math.floor(numericLeft * metadata.width));
+  const right = Math.min(metadata.width, Math.ceil(isolation.right * metadata.width));
+  return { left, top: 0, width: Math.max(1, right - left), height: metadata.height };
+}
+
+function verticalOverlapRatio(a: OcrWord, b: OcrWord) {
+  const aBottom = a.box.y + a.box.height;
+  const bBottom = b.box.y + b.box.height;
+  const overlap = Math.max(0, Math.min(aBottom, bBottom) - Math.max(a.box.y, b.box.y));
+  return overlap / Math.max(0.001, Math.min(a.box.height, b.box.height));
+}
+
+function isMonetaryWord(word: OcrWord) {
+  return MONEY_TOKEN.test(word.text.replace(/\s+/g, ""));
+}
+
+function isReplaceableNumericWord(word: OcrWord) {
+  const text = word.text.replace(/\s+/g, "");
+  if (!/\d/.test(text)) return false;
+  return /[,.\/]/.test(text) || /^\d{3,}$/.test(text);
+}
+
+function mergeMonetaryRefinement(baseWords: OcrWord[], numericWords: OcrWord[]) {
+  const replacements = numericWords.filter((word) => isMonetaryWord(word) && word.confidence >= 0.2);
+  if (!replacements.length) return baseWords;
+
+  const kept = baseWords.filter((word) => {
+    if (!isReplaceableNumericWord(word)) return true;
+    return !replacements.some((replacement) => {
+      if (verticalOverlapRatio(word, replacement) < 0.35) return false;
+      return Math.abs(wordCenter(word) - wordCenter(replacement)) <= 0.18;
+    });
+  });
+
+  return [...kept, ...replacements].sort((a, b) => {
+    const yDelta = a.box.y - b.box.y;
+    return Math.abs(yDelta) > 0.006 ? yDelta : a.box.x - b.box.x;
+  });
+}
+
+async function recognizeMonetaryColumn(
+  worker: Worker,
+  bytes: Uint8Array,
+  metadata: OcrImageMetadata,
+  isolation: DocumentIsolation,
+) {
+  await worker.setParameters({
+    tessedit_pageseg_mode: PSM.SPARSE_TEXT,
+    tessedit_char_whitelist: "0123456789,.",
+    preserve_interword_spaces: "1",
+    classify_bln_numeric_mode: "1",
+  });
+  try {
+    const recognition = await withTimeout(
+      worker.recognize(
+        Buffer.from(bytes),
+        { rotateRadians: 0, rectangle: numericColumnRectangle(isolation, metadata) },
+        { text: true, tsv: true },
+      ),
+      OCR_TIMEOUT_MS,
+      "recognize",
+    );
+    const data = recognition?.data as unknown as RecognitionData;
+    return parseTsv(data?.tsv, metadata.width, metadata.height);
+  } finally {
+    try {
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+        tessedit_char_whitelist: "",
+        preserve_interword_spaces: "0",
+        classify_bln_numeric_mode: "0",
+      });
+    } catch {
+      invalidateWorker();
+    }
+  }
+}
+
 async function recognizeCandidate(
   worker: Worker,
   bytes: Uint8Array,
@@ -365,25 +448,34 @@ async function refineBackgroundContamination(
   metadata: OcrImageMetadata,
   candidate: RecognitionCandidate,
 ) {
+  // Fixed quarter-turn fallbacks are already proven by the rotation/EXIF regression suite.
+  // Their coordinates are in the rotated space, so horizontal filtering must not reinterpret
+  // the right-hand monetary column as a detached background band.
+  if (Math.abs(candidate.rotationRadians) > ROTATION_EPSILON) return candidate;
+
   const isolation = isolateDocumentWords(candidate);
   if (!isolation) return candidate;
 
-  // Rectangle coordinates remain deterministic for the upright camera path. For quarter-turn
-  // fallbacks we still remove a detached word band, but do not risk a wrongly remapped crop.
-  if (Math.abs(candidate.rotationRadians) > ROTATION_EPSILON) {
-    return { ...candidate, words: isolation.words, score: candidateScore(isolation.words), backgroundFiltered: true };
-  }
-
   const rectangle = cropRectangle(isolation, metadata);
+  let selectedWords = isolation.words;
   try {
     const refined = await recognizeCandidate(worker, bytes, metadata, 0, false, rectangle);
-    if (refinementIsSafe(isolation.words, refined.words)) {
-      return { ...refined, backgroundFiltered: true };
-    }
+    if (refinementIsSafe(isolation.words, refined.words)) selectedWords = refined.words;
   } catch {
     // The geometry-filtered first pass is still safer than reintroducing detached background text.
   }
-  return { ...candidate, words: isolation.words, score: candidateScore(isolation.words), backgroundFiltered: true };
+
+  // A clean receipt band can still contain monetary glyphs that a general-language pass merges
+  // incorrectly. Re-read only the numeric side from the original pixels with a numeric OCR
+  // contract, then replace overlapping corrupted numeric tokens. No amount is inferred from text.
+  try {
+    const monetaryWords = await recognizeMonetaryColumn(worker, bytes, metadata, isolation);
+    selectedWords = mergeMonetaryRefinement(selectedWords, monetaryWords);
+  } catch {
+    // Numeric refinement is additive hardening; keep the isolated document result if unavailable.
+  }
+
+  return { ...candidate, words: selectedWords, score: candidateScore(selectedWords), backgroundFiltered: true };
 }
 
 export class TesseractImageOcrProvider implements DocumentOcrProvider {
