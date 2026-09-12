@@ -14,7 +14,7 @@ const INTEGER_TOKEN = /^\d{1,2}$/;
 const MAX_REFINED_ROWS = 12;
 const REFINE_TIMEOUT_MS = 9_000;
 const QUEUE_TIMEOUT_MS = 8_000;
-const EXTRACTOR_SUFFIX = "+row-refinement-v2";
+const EXTRACTOR_SUFFIX = "+row-refinement-v3";
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type ImageRectangle = { left: number; top: number; width: number; height: number };
@@ -32,6 +32,12 @@ type Row = {
   text: string;
   shouldRefine: boolean;
   summaryLike: boolean;
+};
+type NumericColumnBand = {
+  left: number;
+  right: number;
+  center: number;
+  support: number;
 };
 
 type RowRecognition = {
@@ -197,6 +203,10 @@ function averageConfidence(words: OcrWord[]) {
   return words.reduce((sum, word) => sum + word.confidence, 0) / words.length;
 }
 
+function wordCenterX(word: OcrWord) {
+  return word.box.x + word.box.width / 2;
+}
+
 function clusterRows(words: OcrWord[]) {
   const sorted = [...words].sort((a, b) => {
     const ay = a.box.y + a.box.height / 2;
@@ -269,6 +279,67 @@ function documentBounds(words: OcrWord[]) {
   const left = Math.max(0, Math.min(...source.map((word) => word.box.x)) - 0.012);
   const right = Math.min(1, Math.max(...source.map((word) => word.box.x + word.box.width)) + 0.012);
   return { left, right, width: Math.max(0.001, right - left) };
+}
+
+export function deriveNumericColumnBands(
+  words: OcrWord[],
+  numericStart: number,
+  boundsRight: number,
+  boundsWidth: number,
+): NumericColumnBand[] {
+  const tolerance = Math.max(0.014, boundsWidth * 0.045);
+  const centers = words
+    .filter((word) => isNumericLike(word) && wordCenterX(word) >= numericStart)
+    .map((word) => wordCenterX(word))
+    .sort((a, b) => a - b);
+  if (centers.length < 4) return [];
+
+  const clusters: Array<{ center: number; total: number; support: number }> = [];
+  for (const center of centers) {
+    let best = -1;
+    let bestDistance = Number.POSITIVE_INFINITY;
+    for (let index = 0; index < clusters.length; index += 1) {
+      const distance = Math.abs(center - clusters[index].center);
+      if (distance <= tolerance && distance < bestDistance) {
+        best = index;
+        bestDistance = distance;
+      }
+    }
+    if (best === -1) {
+      clusters.push({ center, total: center, support: 1 });
+    } else {
+      const cluster = clusters[best];
+      cluster.total += center;
+      cluster.support += 1;
+      cluster.center = cluster.total / cluster.support;
+    }
+  }
+
+  const supported = clusters.filter((cluster) => cluster.support >= 2);
+  if (supported.length < 2) return [];
+  const selected = [...supported]
+    .sort((a, b) => b.support - a.support || b.center - a.center)
+    .slice(0, 3)
+    .sort((a, b) => a.center - b.center);
+
+  const fallbackHalfWidth = Math.max(0.02, boundsWidth * 0.055);
+  const pad = Math.max(0.004, boundsWidth * 0.008);
+  return selected.map((cluster, index) => {
+    const previous = selected[index - 1];
+    const next = selected[index + 1];
+    const rawLeft = previous
+      ? (previous.center + cluster.center) / 2
+      : Math.max(numericStart, cluster.center - fallbackHalfWidth);
+    const rawRight = next
+      ? (cluster.center + next.center) / 2
+      : Math.min(boundsRight, cluster.center + fallbackHalfWidth);
+    return {
+      left: Math.max(numericStart, rawLeft - pad),
+      right: Math.min(1, Math.max(rawLeft + 0.006, rawRight + pad)),
+      center: cluster.center,
+      support: cluster.support,
+    };
+  });
 }
 
 function rowRectangle(
@@ -430,6 +501,30 @@ export function mergeRefinedTextRow(
   return [...kept, ...usable];
 }
 
+function wordsInBand(row: Row, band: NumericColumnBand) {
+  return row.words.filter((word) => {
+    const center = wordCenterX(word);
+    return isNumericLike(word) && center >= band.left && center <= band.right;
+  });
+}
+
+function cellNeedsRefinement(
+  row: Row,
+  existing: OcrWord[],
+  index: number,
+  totalBands: number,
+) {
+  const moneyColumn = index >= Math.max(0, totalBands - 2);
+  if (row.summaryLike) {
+    return index === totalBands - 1
+      && (!existing.some((word) => isMoney(word.text)) || existing.some((word) => suspiciousNumeric(word.text)));
+  }
+  if (moneyColumn) {
+    return !existing.some((word) => isMoney(word.text)) || existing.some((word) => suspiciousNumeric(word.text));
+  }
+  return !existing.some((word) => isInteger(word.text)) || existing.some((word) => suspiciousNumeric(word.text));
+}
+
 async function recognizeRectangle(
   worker: Worker,
   bytes: Uint8Array,
@@ -448,6 +543,45 @@ async function recognizeRectangle(
   return parseRectangleTsv((recognition?.data as unknown as Record<string, unknown>)?.tsv, metadata, rectangle);
 }
 
+async function recognizeNumericCells(
+  worker: Worker,
+  bytes: Uint8Array,
+  metadata: OcrImageMetadata,
+  row: Row,
+  bands: NumericColumnBand[],
+) {
+  const result: OcrWord[] = [];
+  let attempted = 0;
+  let minRectangleWidth = Number.POSITIVE_INFINITY;
+
+  for (let index = 0; index < bands.length; index += 1) {
+    const band = bands[index];
+    const existing = wordsInBand(row, band);
+    if (!cellNeedsRefinement(row, existing, index, bands.length)) {
+      result.push(...existing);
+      continue;
+    }
+
+    const rectangle = rowRectangle(row, metadata, band.left, band.right);
+    attempted += 1;
+    minRectangleWidth = Math.min(minRectangleWidth, rectangle.width);
+    const recognized = await recognizeRectangle(worker, bytes, metadata, rectangle).catch(() => []);
+    const normalized = coalesceExplicitDecimalTokens(recognized)
+      .filter((word) => word.confidence >= 0.12 && (isMoney(word.text) || isInteger(word.text)));
+    const moneyColumn = index >= Math.max(0, bands.length - 2);
+    const accepted = moneyColumn
+      ? normalized.filter((word) => isMoney(word.text))
+      : normalized.filter((word) => isInteger(word.text));
+    result.push(...(accepted.length ? accepted : existing));
+  }
+
+  return {
+    words: result,
+    attempted,
+    minRectangleWidth: Number.isFinite(minRectangleWidth) ? minRectangleWidth : null,
+  };
+}
+
 async function refineRows(bytes: Uint8Array, metadata: OcrImageMetadata, baseWords: OcrWord[]) {
   if (baseWords.length < 8) return baseWords;
   const rows = selectRowsForRefinement(baseWords);
@@ -457,21 +591,45 @@ async function refineRows(bytes: Uint8Array, metadata: OcrImageMetadata, baseWor
   const numericStart = bounds.left + bounds.width * 0.4;
   const numericLeft = Math.max(bounds.left, numericStart - bounds.width * 0.035);
   const numericRight = Math.min(1, bounds.right + bounds.width * 0.02);
+  const columnBands = deriveNumericColumnBands(
+    rows.flatMap((row) => row.words),
+    numericStart,
+    numericRight,
+    bounds.width,
+  );
 
   return exclusive(async () => {
     const worker = await withTimeout(getWorker(), REFINE_TIMEOUT_MS, "ocr_row_refinement_worker_timeout");
     const recognized: RowRecognition[] = [];
+    let attemptedCells = 0;
+    let minCellWidth = Number.POSITIVE_INFINITY;
 
     await worker.setParameters({
-      tessedit_pageseg_mode: PSM.SINGLE_LINE,
+      tessedit_pageseg_mode: columnBands.length >= 2 ? PSM.SINGLE_WORD : PSM.SINGLE_LINE,
       tessedit_char_whitelist: "0123456789,.",
       preserve_interword_spaces: "1",
       classify_bln_numeric_mode: "1",
     });
     for (const row of rows) {
-      const rectangle = rowRectangle(row, metadata, numericLeft, numericRight);
-      const numericWords = await recognizeRectangle(worker, bytes, metadata, rectangle).catch(() => []);
-      recognized.push({ row, numericWords, textWords: [] });
+      if (columnBands.length >= 2) {
+        const cells = await recognizeNumericCells(worker, bytes, metadata, row, columnBands);
+        attemptedCells += cells.attempted;
+        if (cells.minRectangleWidth !== null) minCellWidth = Math.min(minCellWidth, cells.minRectangleWidth);
+        recognized.push({ row, numericWords: cells.words, textWords: [] });
+      } else {
+        const rectangle = rowRectangle(row, metadata, numericLeft, numericRight);
+        const numericWords = await recognizeRectangle(worker, bytes, metadata, rectangle).catch(() => []);
+        recognized.push({ row, numericWords, textWords: [] });
+      }
+    }
+
+    if (process.env.VERCEL_ENV === "preview") {
+      console.info("ocr-row-refinement-v3", {
+        rows: rows.length,
+        numericBands: columnBands.length,
+        attemptedCells,
+        minCellWidth: Number.isFinite(minCellWidth) ? minCellWidth : null,
+      });
     }
 
     await worker.setParameters({
