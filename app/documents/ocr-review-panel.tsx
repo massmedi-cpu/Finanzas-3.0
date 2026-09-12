@@ -34,7 +34,7 @@ type OcrResult = {
     bankSource: "read_only";
     financialWrites: false;
     requiresHumanReview: true;
-    preservesGeometry: true;
+    preservesGeometry: boolean;
   };
 };
 
@@ -49,6 +49,9 @@ const WARNING_LABELS: Record<string, string> = {
   no_text_detected: "No se ha detectado texto fiable.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
+  numeric_structure_unreliable: "Se han detectado importes o columnas numéricas con estructura dudosa. No se consideran fiables hasta revisar el original.",
+  peripheral_noise_detected: "Se ha detectado texto periférico que puede pertenecer al fondo de la fotografía y no al documento.",
+  geometry_unreliable: "La geometría reconstruida no es suficientemente fiable para afirmar que filas y columnas se han preservado.",
 };
 
 function warningLabel(warning: string) {
@@ -189,7 +192,9 @@ export function OcrReviewPanel({
 
           <div className={ocrStyles.principles}>
             <span>✓ Sin escrituras financieras</span>
-            <span>✓ Geometría preservada</span>
+            <span className={result.principles.preservesGeometry ? undefined : ocrStyles.warningPrinciple}>
+              {result.principles.preservesGeometry ? "✓ Geometría preservada" : "⚠ Geometría por revisar"}
+            </span>
             <span>✓ Revisión humana obligatoria</span>
           </div>
         </div>
