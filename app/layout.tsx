@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Inter } from "next/font/google";
 import Script from "next/script";
 import { APP_VERSION } from "../src/core/build-info";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
@@ -10,6 +11,7 @@ import "./accessibility-live-regions.css";
 
 export const dynamic = "force-dynamic";
 
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 const CR006_BETA_BRANCH = "commercial-readiness/cr006-zero-cost-beta";
 
 export const metadata: Metadata = {
@@ -30,7 +32,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
 
   return (
     <html lang="es-ES">
-      <body>
+      <body className={inter.className}>
         {cr006BetaRuntimeAvailable ? (
           <>
             <Script src="/cr006-beta-runtime.js" strategy="beforeInteractive" />
