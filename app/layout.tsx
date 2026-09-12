@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import Script from "next/script";
 import { APP_VERSION } from "../src/core/build-info";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
@@ -15,6 +15,12 @@ const CR006_BETA_BRANCH = "commercial-readiness/cr006-zero-cost-beta";
 export const metadata: Metadata = {
   title: `Financial App ${APP_VERSION}`,
   description: `Financial App ${APP_VERSION} · finanzas personales seguras, acumulativas y verificadas`,
+  applicationName: "Financial App",
+};
+
+export const viewport: Viewport = {
+  themeColor: "#07101f",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
@@ -23,7 +29,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     process.env.VERCEL_GIT_COMMIT_REF === CR006_BETA_BRANCH;
 
   return (
-    <html lang="es">
+    <html lang="es-ES">
       <body>
         {cr006BetaRuntimeAvailable ? (
           <>
