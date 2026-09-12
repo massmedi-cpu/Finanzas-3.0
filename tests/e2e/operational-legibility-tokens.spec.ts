@@ -22,3 +22,20 @@ test("Recurrentes usa tokens legibles en métricas, badges y detalle funcional",
   expect(css).toMatch(/\.details dd\s*\{[^}]*font-size:\s*var\(--font-label\)/s);
   expect(css).toMatch(/\.explanation\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
 });
+
+test("Inicio mantiene la información auxiliar y de jerarquía en al menos 13 px", async () => {
+  const css = readCss("app/dashboard.module.css");
+  expect(css).toMatch(/\.eyebrow,\s*\.kicker\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(css).toMatch(/\.heroBalance small\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(css).toMatch(/\.accountRow span,\s*\.futureRow span,\s*\.transactionRow span\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(css).toMatch(/\.panelFoot\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(css).toMatch(/\.legend\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(css).toMatch(/\.footerNote\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+});
+
+test("Para revisar y Previsión mantienen su jerarquía visual en el token helper", async () => {
+  const reviewCss = readCss("app/review/review.module.css");
+  const forecastCss = readCss("app/forecast/forecast.module.css");
+  expect(reviewCss).toMatch(/\.eyebrow\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+  expect(forecastCss).toMatch(/\.eyebrow\s*\{[^}]*font-size:\s*var\(--font-helper\)/s);
+});
