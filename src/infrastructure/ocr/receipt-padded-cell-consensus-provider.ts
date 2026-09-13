@@ -24,12 +24,12 @@ const INTEGER_TOKEN = /^\d{1,2}$/;
 const CELL_TIMEOUT_MS = 8_000;
 const QUEUE_TIMEOUT_MS = 8_000;
 const MAX_TARGET_CELLS = 12;
-const TARGET_CONTENT_HEIGHT = 240;
+const TARGET_CONTENT_HEIGHT = 280;
 const MIN_SCALE = 3;
-const MAX_SCALE = 8;
+const MAX_SCALE = 9;
 const HORIZONTAL_PADDING = 112;
 const VERTICAL_PADDING = 80;
-const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v9";
+const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v11";
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type NumericBand = ReturnType<typeof deriveNumericColumnBands>[number];
@@ -199,6 +199,32 @@ export function paddedCellDimensions(sourceWidth: number, sourceHeight: number) 
   };
 }
 
+export function paddedFocusedCellRectangle(
+  metadata: OcrImageMetadata,
+  row: SweepRow,
+  band: NumericBand,
+  kind: CellKind,
+  variant: PreparedVariant,
+): ImageRectangle {
+  const rectangle = focusedCellRectangle(metadata, row, band, kind, variant);
+  if (kind !== "money") return rectangle;
+
+  // The previous real replay showed that a band derived from already-damaged OCR can clip the
+  // comma/dot itself. Give monetary cells a small amount of source-pixel breathing room before
+  // upscaling. Consensus still requires explicit decimal punctuation, so this never turns bare
+  // digits into money or derives an amount arithmetically.
+  const lineHeight = Math.max(10, row.box.height * metadata.height);
+  const margin = Math.max(6, Math.round(lineHeight * (row.summaryLike ? 0.8 : 0.55)));
+  const left = Math.max(0, rectangle.left - margin);
+  const right = Math.min(metadata.width, rectangle.left + rectangle.width + margin);
+  return {
+    left,
+    top: rectangle.top,
+    width: Math.max(3, right - left),
+    height: rectangle.height,
+  };
+}
+
 async function prepareCell(
   bytes: Uint8Array,
   rectangle: ImageRectangle,
@@ -216,7 +242,7 @@ async function prepareCell(
 
   pipeline = variant === 0
     ? pipeline.sharpen({ sigma: 1.0, m1: 0.9, m2: 1.8 })
-    : pipeline.threshold(182);
+    : pipeline.threshold(210);
 
   const prepared = await pipeline
     .extend({
@@ -450,7 +476,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       attemptedCells += 1;
       const observations: PaddedRecognitionObservation[] = [];
       for (const variant of [0, 1] as const) {
-        const rectangle = focusedCellRectangle(metadata, target.row, target.band, target.kind, variant);
+        const rectangle = paddedFocusedCellRectangle(metadata, target.row, target.band, target.kind, variant);
         let prepared: PreparedCell;
         try {
           prepared = await prepareCell(bytes, rectangle, variant);
@@ -486,7 +512,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-padded-cell-consensus-v9", {
+      console.info("ocr-padded-cell-consensus-v11", {
         rows: rows.length,
         numericBands: bands.length,
         targetCells: targets.length,
