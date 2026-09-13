@@ -6,7 +6,7 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v13";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v14";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
@@ -378,13 +378,12 @@ export function filterReceiptAnchorWords(words: OcrWord[]): ReceiptAnchorFilterR
       && y <= bounds.bottom
       && !obviousShortNoise(word);
   });
-  if (selected.length < 10 || selected.length >= words.length) return null;
+  if (selected.length < 10) return null;
 
   const selectedText = selected.map((word) => normalizedToken(word.text)).join(" ");
   if (!selectedText.includes("descrip") || !/(precio|importe)/.test(selectedText)) return null;
 
   const removedWords = words.length - selected.length;
-  if (removedWords < 2) return null;
   return {
     words: selected.sort((a, b) => {
       const yDelta = a.box.y - b.box.y;
@@ -506,7 +505,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-anchor-recrop-v13", {
+      console.info("ocr-anchor-recrop-v14", {
         removedWords: filtered.removedWords,
         initialKeptWords: filtered.words.length,
         rereadWords,
@@ -520,7 +519,11 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     return {
       ...base,
       extractor: `${base.extractor}${EXTRACTOR_SUFFIX}`.slice(0, 100),
-      warnings: [...new Set([...(base.warnings ?? []), ...rereadWarnings, "background_text_filtered"])],
+      warnings: [...new Set([
+        ...(base.warnings ?? []),
+        ...rereadWarnings,
+        ...(filtered.removedWords > 0 ? ["background_text_filtered"] : []),
+      ])],
       pages: [{ ...base.pages[0], words }],
     };
   }
