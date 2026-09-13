@@ -10,7 +10,7 @@ import {
   getGoogleServiceAccountCredentialsFromEnvironment,
 } from "../../../../src/infrastructure/google/google-service-account";
 import { PdfTextOcrProvider } from "../../../../src/infrastructure/ocr/pdf-text-provider";
-import { ReceiptFocusedCellConsensusImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-focused-cell-consensus-provider";
+import { ReceiptPaddedCellConsensusImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-padded-cell-consensus-provider";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -25,7 +25,7 @@ const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
-const imageProvider = new ReceiptFocusedCellConsensusImageOcrProvider();
+const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider();
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
@@ -61,7 +61,7 @@ function apiError(error: unknown) {
   }
   if (error instanceof GoogleDriveDocumentError) {
     const status: Record<GoogleDriveDocumentError["code"], number> = {
-      google_drive_document_id_invalid: 409,
+      google_drive_document_id_invalid: 400,
       google_drive_document_access_denied: 409,
       google_drive_document_not_found: 404,
       google_drive_document_metadata_invalid: 409,
@@ -70,10 +70,10 @@ function apiError(error: unknown) {
       google_drive_document_too_large: 413,
       google_drive_document_download_failed: 503,
     };
-    return Response.json({ error: "ocr_failed", code: error.code }, { status: status[error.code], headers: HEADERS });
+    return Response.json({ error: "invalid_drive_document", code: error.code }, { status: status[error.code], headers: HEADERS });
   }
   if (error instanceof GoogleServiceAccountError) {
-    return Response.json({ error: "ocr_failed", code: error.code }, { status: 503, headers: HEADERS });
+    return Response.json({ error: "drive_reader_unavailable", code: error.code }, { status: 503, headers: HEADERS });
   }
   if (error instanceof Error) {
     const known: Record<string, number> = {
