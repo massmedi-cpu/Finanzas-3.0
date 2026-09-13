@@ -13,8 +13,9 @@ const HORIZONTAL_MARGIN = 0.022;
 const RECROP_TARGET_MIN_WIDTH = 1_600;
 const RECROP_MAX_SCALE = 2;
 const RECROP_MISSING_AMOUNT_MAX_EXTENSION = 0.18;
-const RECROP_MIN_BOTTOM_EXTENSION = 0.045;
+const RECROP_MIN_BOTTOM_EXTENSION = 0.07;
 const RECROP_MAX_BOTTOM_EXTENSION = 0.12;
+const RECROP_SUMMARY_TAIL_ROWS = 2.25;
 
 type ReceiptRow = {
   words: OcrWord[];
@@ -314,8 +315,9 @@ function buildRecoveryBounds(
   }
 
   // Base can be visible while IVA/Total are still missed on the first OCR pass. Keep the strict
-  // output bounds unchanged, but give the recovery crop enough vertical breathing room to see a
-  // short summary tail. The second pass must still physically recognise the missing text.
+  // output bounds unchanged, but let the recovery crop cover roughly two following row pitches.
+  // Row pitch is more representative than glyph height on photographed receipts and avoids
+  // clipping the lower half of TOTAL while the second pass still has to physically recognise it.
   const structuralRows = rows
     .slice(bounds.startIndex, bounds.endIndex + 1)
     .filter((row) => intersectsHorizontalBand(row, bounds.left, bounds.right));
@@ -324,9 +326,22 @@ function buildRecoveryBounds(
       .map((row) => row.box.height)
       .filter((height) => Number.isFinite(height) && height > 0),
   ) ?? 0.018;
+  const rowCenters = structuralRows
+    .map((row) => row.box.y + row.box.height / 2)
+    .sort((a, b) => a - b);
+  const typicalRowPitch = median(
+    rowCenters
+      .slice(1)
+      .map((center, index) => center - rowCenters[index])
+      .filter((pitch) => pitch >= typicalRowHeight * 1.15 && pitch <= 0.12),
+  ) ?? typicalRowHeight * 2.2;
   const bottomExtension = Math.min(
     RECROP_MAX_BOTTOM_EXTENSION,
-    Math.max(RECROP_MIN_BOTTOM_EXTENSION, typicalRowHeight * 2.6),
+    Math.max(
+      RECROP_MIN_BOTTOM_EXTENSION,
+      typicalRowPitch * RECROP_SUMMARY_TAIL_ROWS,
+      typicalRowHeight * 4,
+    ),
   );
   const recoveryBottom = Math.min(1, bounds.bottom + bottomExtension);
 
