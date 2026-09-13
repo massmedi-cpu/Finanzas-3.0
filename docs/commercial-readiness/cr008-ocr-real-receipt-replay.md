@@ -81,3 +81,19 @@ Si cualquiera de esos puntos falla, CR-008 continúa abierto y la corrección de
 ## Límite de automatización
 
 El archivo real está en un bucket privado y su acceso está ligado al workspace del propietario. No se debe introducir un bypass, una excepción de tenancy ni una credencial permanente solo para automatizar esta comprobación. La última ejecución debe realizarse desde una sesión legítima del propietario en Preview si no puede ejercitarse respetando la frontera de seguridad vigente.
+
+## Corrección de integridad de columnas · 13/09/2026
+
+Sobre el candidato V12 `9cfb561d57cb383b85ef8b4b904a57eb0826ea87` se reprodujo un fallo independiente de la calidad del motor: Tesseract reconoce correctamente una tabla de cuatro columnas, pero `validateIsolation` considera la columna `IMPORTE` un componente horizontal de fondo y elimina sus valores, incluidos Base/IVA/Total.
+
+La regresión nativa falló antes del cambio con `Received: []` para todos los tokens de esa columna. La corrección conserva componentes predominantemente numéricos que comparten al menos tres filas distintas con el texto seleccionado, antes de validar el recorte de fondo. No cambia palabras, coordenadas, confianza ni separadores, y conserva literalmente tokens ambiguos como `560`. Ante una columna numérica de procedencia ambigua se prioriza no destruir evidencia; no se certifica su validez financiera.
+
+Evidencia local:
+
+- `npm run test:ocr`: 56 pruebas, incluidas cuatro extracciones con Tesseract real y el proveedor base / composición de runtime, con y sin texto adyacente. Las imágenes se generan localmente con Sharp, sin navegador ni credenciales.
+- Se comprueban por fila cantidad, precio e importe, así como Base 15,91, IVA 1,59 y Total 17,50. El texto de la hoja adyacente sigue excluido.
+- `npm run typecheck`: correcto.
+- `npm run build`: correcto; el postbuild de runtime Vercel se omite por tratarse de un build local.
+- Sin cambios de UI, autenticación, persistencia ni fuentes bancarias. Sin importes calculados o inventados; revisión humana obligatoria.
+
+Esta evidencia sintética no cierra CR008-OCR-002 ni sustituye el replay del archivo real. No se promueve `main` ni Production. La verificación de navegador local sigue pendiente porque los binarios no pudieron descargarse en este entorno.
