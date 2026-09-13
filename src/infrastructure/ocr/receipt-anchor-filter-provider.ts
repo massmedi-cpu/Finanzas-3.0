@@ -6,10 +6,11 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v14";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v17";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
+const HEADER_ANCHOR_MAX_WIDTH = 0.985;
 const RECROP_TARGET_MIN_WIDTH = 1_600;
 const RECROP_MAX_SCALE = 2;
 const RECROP_MISSING_AMOUNT_MAX_EXTENSION = 0.18;
@@ -195,6 +196,27 @@ function intersectsHorizontalBand(row: ReceiptRow, left: number, right: number) 
   return Math.max(0, Math.min(rowRight, right) - Math.max(rowLeft, left)) > 0;
 }
 
+function completeHeaderBand(row: ReceiptRow) {
+  const roles = headerRoles(row);
+  if (!(roles.description && roles.units && roles.price && roles.amount)) return null;
+  const anchorWords = row.words.filter((word) => {
+    const token = normalizedToken(word.text);
+    return token.startsWith("descrip")
+      || token === "uds"
+      || token === "ud"
+      || token.startsWith("unid")
+      || token.startsWith("precio")
+      || token.startsWith("importe");
+  });
+  if (anchorWords.length < 4) return null;
+  const anchorBox = unionBox(anchorWords);
+  const left = Math.max(0, anchorBox.x - HORIZONTAL_MARGIN);
+  const right = Math.min(1, anchorBox.x + anchorBox.width + HORIZONTAL_MARGIN);
+  const width = right - left;
+  if (width < 0.2 || width > HEADER_ANCHOR_MAX_WIDTH) return null;
+  return { left, right };
+}
+
 function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): ReceiptStructuralBounds | null {
   const productEntries = rows
     .map((row, index) => ({ row, index }))
@@ -211,9 +233,16 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
     ...productEntries.map(({ row }) => row),
     ...summaryEntries.map(({ row }) => row),
   ];
-  const left = Math.max(0, Math.min(...structural.map((row) => row.box.x)) - HORIZONTAL_MARGIN);
-  const right = Math.min(1, Math.max(...structural.map((row) => row.box.x + row.box.width)) + HORIZONTAL_MARGIN);
-  if (right - left < 0.2 || right - left > 0.92) return null;
+  let left = Math.max(0, Math.min(...structural.map((row) => row.box.x)) - HORIZONTAL_MARGIN);
+  let right = Math.min(1, Math.max(...structural.map((row) => row.box.x + row.box.width)) + HORIZONTAL_MARGIN);
+  const structuralWidth = right - left;
+  if (structuralWidth < 0.2) return null;
+  if (structuralWidth > 0.92) {
+    const anchored = completeHeaderBand(header.row);
+    if (!anchored) return null;
+    left = anchored.left;
+    right = anchored.right;
+  }
 
   const metadataIndexes = rows
     .map((row, index) => ({ row, index }))
@@ -505,7 +534,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-anchor-recrop-v14", {
+      console.info("ocr-anchor-recrop-v17", {
         removedWords: filtered.removedWords,
         initialKeptWords: filtered.words.length,
         rereadWords,
