@@ -312,7 +312,34 @@ function expandHorizontalBand(seedWords: OcrWord[], allWords: OcrWord[]) {
   return [...selected];
 }
 
+export function preserveAlignedNumericColumns(selectedWords: OcrWord[], allWords: OcrWord[]) {
+  const selected = new Set(selectedWords);
+  const outside = allWords.filter((word) => !selected.has(word));
+
+  for (const column of horizontalComponents(outside)) {
+    // A wide inter-column gap is not evidence of a different document. Protect a
+    // predominantly numeric column when it shares at least three distinct rows with
+    // the selected text. Keep uncertain tokens verbatim too: this is an isolation
+    // safeguard, not monetary parsing ("560" must never become "5,60" here).
+    const numericWords = column.filter((word) => /^[€$£+-]?\d[\d.,/]*[%€$£]?$/.test(word.text.replace(/\s+/g, "")));
+    const substantiveWords = column.filter((word) => !/^(?:EUR|USD|GBP|[€$£])$/i.test(word.text));
+    if (numericWords.length < 3 || numericWords.length / substantiveWords.length < 0.6) continue;
+
+    const alignedRows: OcrWord[] = [];
+    for (const word of numericWords) {
+      if (!selectedWords.some((anchor) => verticalOverlapRatio(word, anchor) >= 0.6)) continue;
+      if (alignedRows.some((row) => verticalOverlapRatio(word, row) >= 0.6)) continue;
+      alignedRows.push(word);
+    }
+    if (alignedRows.length < 3) continue;
+    for (const word of column) selected.add(word);
+  }
+
+  return allWords.filter((word) => selected.has(word));
+}
+
 function validateIsolation(selectedWords: OcrWord[], allWords: OcrWord[]): DocumentIsolation | null {
+  selectedWords = preserveAlignedNumericColumns(selectedWords, allWords);
   if (selectedWords.length < 6 || selectedWords.length >= allWords.length) return null;
   const selected = new Set(selectedWords);
   const outsideWords = allWords.filter((word) => !selected.has(word));
