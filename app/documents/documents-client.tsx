@@ -170,7 +170,13 @@ function parseEuroToCents(input: string) {
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const code = typeof body?.code === "string" ? body.code : typeof body?.error === "string" ? body.error : "request_failed";
+    const code = response.status === 401 || response.status === 403
+      ? "authentication_required"
+      : typeof body?.code === "string"
+        ? body.code
+        : typeof body?.error === "string"
+          ? body.error
+          : "request_failed";
     throw new Error(code);
   }
   return body;
@@ -187,9 +193,9 @@ function friendlyError(error: unknown) {
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
-    authentication_required: "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+    authentication_required: "La sesión de Financial App no está disponible en este acceso. Inicia sesión y vuelve a Documentos.",
   };
-  return labels[code] ?? "No se pudo completar la operación documental.";
+  return labels[code] ?? "No se ha podido completar esta acción. Actualiza la página y vuelve a intentarlo.";
 }
 
 function StatusBadge({ status }: { status: DocumentStatus }) {
