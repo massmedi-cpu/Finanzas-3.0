@@ -10,6 +10,7 @@ import {
   getGoogleServiceAccountCredentialsFromEnvironment,
 } from "../../../../src/infrastructure/google/google-service-account";
 import { PdfTextOcrProvider } from "../../../../src/infrastructure/ocr/pdf-text-provider";
+import { ReceiptAnchorFilteringImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-anchor-filter-provider";
 import { ReceiptPaddedCellConsensusImageOcrProvider } from "../../../../src/infrastructure/ocr/receipt-padded-cell-consensus-provider";
 import { TesseractImageOcrProvider } from "../../../../src/infrastructure/ocr/tesseract-image-provider";
 import {
@@ -26,10 +27,13 @@ const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
-// Keep the runtime pipeline flat. Historical V3-V8 providers remain available for regression
+// Keep the runtime pipeline flat. The anchor filter is pure geometry/text post-processing and
+// does not create another OCR worker. Historical V3-V8 providers remain available for regression
 // coverage, but chaining them here creates multiple concurrent Tesseract workers and can exhaust
-// the Vercel function memory before V9 reaches its focused cell pass.
-const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(new TesseractImageOcrProvider());
+// the Vercel function memory before the focused cell pass.
+const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
+  new ReceiptAnchorFilteringImageOcrProvider(new TesseractImageOcrProvider()),
+);
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
