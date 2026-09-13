@@ -123,3 +123,75 @@ test("CR008-OCR-002 v11 refuses to crop generic text without a receipt table anc
   ];
   expect(filterReceiptAnchorWords(words)).toBeNull();
 });
+
+test("CR008-OCR-002 v13 reserves missing IMPORTE and IVA/Total pixels for the recovery pass without widening strict output", () => {
+  const words: OcrWord[] = [
+    word("FONDO", 0.04, 0.04, 0.09),
+    word("PUBLICIDAD", 0.86, 0.08, 0.12),
+
+    word("AVILA", 0.20, 0.14, 0.08),
+    word("BAR", 0.30, 0.14, 0.06),
+    word("NIF", 0.22, 0.20, 0.05),
+    word("YB398422C", 0.33, 0.20, 0.10),
+    word("Pedido", 0.22, 0.28, 0.07),
+    word("LUIS", 0.34, 0.28, 0.06),
+
+    // Reproduce the real failure shape: IMPORTE is missing from the first pass.
+    word("DESCRIPCION", 0.20, 0.40, 0.13),
+    word("UDS", 0.54, 0.40, 0.05),
+    word("PRECIO", 0.65, 0.40, 0.08),
+
+    word("ENERGY", 0.20, 0.45, 0.08),
+    word("1", 0.55, 0.45, 0.02),
+    word("1,80", 0.66, 0.45, 0.06),
+
+    word("TERCIO", 0.20, 0.50, 0.08),
+    word("GALICIA", 0.30, 0.50, 0.09),
+    word("CERO", 0.41, 0.50, 0.06),
+    word("1", 0.55, 0.50, 0.02),
+    word("2,80", 0.66, 0.50, 0.06),
+
+    word("CANA", 0.20, 0.55, 0.06),
+    word("GRANDE", 0.28, 0.55, 0.08),
+    word("2", 0.55, 0.55, 0.02),
+    word("2,80", 0.66, 0.55, 0.06),
+
+    word("CUBATA", 0.20, 0.60, 0.08),
+    word("1", 0.55, 0.60, 0.02),
+    word("5,50", 0.66, 0.60, 0.06),
+
+    word("AGUA", 0.20, 0.65, 0.06),
+    word("CON", 0.28, 0.65, 0.05),
+    word("GAS", 0.35, 0.65, 0.05),
+    word("1", 0.55, 0.65, 0.02),
+    word("1,80", 0.66, 0.65, 0.06),
+
+    // Base is visible but IVA/Total are missing from the first pass.
+    word("Base", 0.60, 0.72, 0.06),
+    word("15,91", 0.68, 0.72, 0.07),
+
+    word("AJENO", 0.06, 0.94, 0.08),
+  ];
+
+  const filtered = filterReceiptAnchorWords(words);
+  expect(filtered).not.toBeNull();
+
+  const strictRight = filtered!.bounds.x + filtered!.bounds.width;
+  const recoveryRight = filtered!.recoveryBounds.x + filtered!.recoveryBounds.width;
+  const strictBottom = filtered!.bounds.y + filtered!.bounds.height;
+  const recoveryBottom = filtered!.recoveryBounds.y + filtered!.recoveryBounds.height;
+
+  expect(recoveryRight).toBeGreaterThan(strictRight + 0.04);
+  expect(recoveryBottom).toBeGreaterThan(strictBottom + 0.03);
+
+  const strictText = filtered!.words.map((item) => item.text).join(" ").toUpperCase();
+  expect(strictText).toContain("DESCRIPCION");
+  expect(strictText).toContain("PRECIO");
+  expect(strictText).toContain("15,91");
+  expect(strictText).not.toContain("IMPORTE");
+  expect(strictText).not.toContain("IVA");
+  expect(strictText).not.toContain("TOTAL");
+  expect(strictText).not.toContain("FONDO");
+  expect(strictText).not.toContain("PUBLICIDAD");
+  expect(strictText).not.toContain("AJENO");
+});
