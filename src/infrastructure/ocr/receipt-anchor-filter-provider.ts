@@ -6,12 +6,15 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v12";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v13";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
 const RECROP_TARGET_MIN_WIDTH = 1_600;
 const RECROP_MAX_SCALE = 2;
+const RECROP_MISSING_AMOUNT_MAX_EXTENSION = 0.18;
+const RECROP_MIN_BOTTOM_EXTENSION = 0.045;
+const RECROP_MAX_BOTTOM_EXTENSION = 0.12;
 
 type ReceiptRow = {
   words: OcrWord[];
@@ -40,6 +43,7 @@ export type ReceiptAnchorFilterResult = {
   removedWords: number;
   headerText: string;
   bounds: OcrBoundingBox;
+  recoveryBounds: OcrBoundingBox;
 };
 
 function unionBox(words: OcrWord[]): OcrBoundingBox {
@@ -250,6 +254,90 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
   return { left, right, top, bottom, startIndex, endIndex };
 }
 
+function headerWordsForRole(row: ReceiptRow, role: "units" | "price" | "amount") {
+  return row.words.filter((word) => {
+    const token = normalizedToken(word.text);
+    if (role === "units") return token === "uds" || token === "ud" || token.startsWith("unid");
+    if (role === "price") return token.startsWith("precio");
+    return token.startsWith("importe");
+  });
+}
+
+function averageWordCenter(words: OcrWord[]) {
+  if (!words.length) return null;
+  return words.reduce((sum, word) => sum + centerX(word), 0) / words.length;
+}
+
+function median(values: number[]) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[middle - 1] + sorted[middle]) / 2
+    : sorted[middle];
+}
+
+function buildRecoveryBounds(
+  rows: ReceiptRow[],
+  header: ReceiptHeaderAnchor,
+  bounds: ReceiptStructuralBounds,
+): OcrBoundingBox {
+  let recoveryRight = bounds.right;
+  const roles = headerRoles(header.row);
+
+  // The first pass may recognise DESCRIPCION + UDS + PRECIO but miss IMPORTE entirely.
+  // In that case the strict structural filter is intentionally kept narrow, while only the
+  // second-pass pixel crop reserves one additional numeric-column slot. This preserves the
+  // original pixels for recovery without inventing any monetary value or leaking them directly.
+  if (!roles.amount && roles.units && roles.price) {
+    const units = headerWordsForRole(header.row, "units");
+    const prices = headerWordsForRole(header.row, "price");
+    const unitsCenter = averageWordCenter(units);
+    const priceCenter = averageWordCenter(prices);
+    if (unitsCenter !== null && priceCenter !== null) {
+      const columnGap = priceCenter - unitsCenter;
+      if (columnGap >= 0.035 && columnGap <= 0.22) {
+        const widestPrice = Math.max(...prices.map((word) => word.box.width));
+        const estimatedAmountRight = priceCenter
+          + columnGap
+          + Math.max(widestPrice * 0.65, columnGap * 0.28)
+          + HORIZONTAL_MARGIN;
+        recoveryRight = Math.min(
+          1,
+          Math.max(
+            recoveryRight,
+            Math.min(bounds.right + RECROP_MISSING_AMOUNT_MAX_EXTENSION, estimatedAmountRight),
+          ),
+        );
+      }
+    }
+  }
+
+  // Base can be visible while IVA/Total are still missed on the first OCR pass. Keep the strict
+  // output bounds unchanged, but give the recovery crop enough vertical breathing room to see a
+  // short summary tail. The second pass must still physically recognise the missing text.
+  const structuralRows = rows
+    .slice(bounds.startIndex, bounds.endIndex + 1)
+    .filter((row) => intersectsHorizontalBand(row, bounds.left, bounds.right));
+  const typicalRowHeight = median(
+    structuralRows
+      .map((row) => row.box.height)
+      .filter((height) => Number.isFinite(height) && height > 0),
+  ) ?? 0.018;
+  const bottomExtension = Math.min(
+    RECROP_MAX_BOTTOM_EXTENSION,
+    Math.max(RECROP_MIN_BOTTOM_EXTENSION, typicalRowHeight * 2.6),
+  );
+  const recoveryBottom = Math.min(1, bounds.bottom + bottomExtension);
+
+  return {
+    x: bounds.left,
+    y: bounds.top,
+    width: Math.max(0, recoveryRight - bounds.left),
+    height: Math.max(0, recoveryBottom - bounds.top),
+  };
+}
+
 function obviousShortNoise(word: OcrWord) {
   if (/\d/.test(word.text)) return false;
   const token = normalizedToken(word.text);
@@ -264,6 +352,7 @@ export function filterReceiptAnchorWords(words: OcrWord[]): ReceiptAnchorFilterR
 
   const bounds = structuralBounds(rows, header);
   if (!bounds) return null;
+  const recoveryBounds = buildRecoveryBounds(rows, header, bounds);
 
   const selected = words.filter((word) => {
     const x = centerX(word);
@@ -294,6 +383,7 @@ export function filterReceiptAnchorWords(words: OcrWord[]): ReceiptAnchorFilterR
       width: bounds.right - bounds.left,
       height: bounds.bottom - bounds.top,
     },
+    recoveryBounds,
   };
 }
 
@@ -388,7 +478,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
 
     if (!(base.warnings ?? []).includes("orientation_corrected")) {
       try {
-        const reread = await rereadReceiptCrop(this.base, input, filtered.bounds);
+        const reread = await rereadReceiptCrop(this.base, input, filtered.recoveryBounds);
         if (reread) {
           words = reread.words;
           rereadWords = reread.words.length;
@@ -401,13 +491,14 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-anchor-recrop-v12", {
+      console.info("ocr-anchor-recrop-v13", {
         removedWords: filtered.removedWords,
         initialKeptWords: filtered.words.length,
         rereadWords,
         recropUsed,
         header: filtered.headerText.slice(0, 80),
-        bounds: filtered.bounds,
+        filterBounds: filtered.bounds,
+        recoveryBounds: filtered.recoveryBounds,
       });
     }
 
