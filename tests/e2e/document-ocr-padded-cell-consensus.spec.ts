@@ -1,9 +1,11 @@
 import { expect, test } from "@playwright/test";
 import type { OcrWord } from "../../src/domain/document-ocr";
+import type { SweepRow } from "../../src/infrastructure/ocr/receipt-column-sweep-provider";
 import {
   choosePaddedNumericConsensus,
   paddedCellDimensions,
   paddedExplicitNumericTokens,
+  paddedFocusedCellRectangle,
   type PaddedRecognitionObservation,
 } from "../../src/infrastructure/ocr/receipt-padded-cell-consensus-provider";
 
@@ -21,9 +23,9 @@ function observation(
   return { word, variant, segmentation };
 }
 
-test("CR008-OCR-002 v9 preserves aspect ratio and adds real white breathing room around a small cell", () => {
+test("CR008-OCR-002 v11 preserves aspect ratio and adds real white breathing room around a small cell", () => {
   const dimensions = paddedCellDimensions(72, 36);
-  expect(dimensions.contentHeight).toBeGreaterThanOrEqual(240);
+  expect(dimensions.contentHeight).toBeGreaterThanOrEqual(280);
   expect(dimensions.contentWidth).toBeGreaterThanOrEqual(96);
   expect(dimensions.paddedHeight).toBe(dimensions.contentHeight + dimensions.verticalPadding * 2);
   expect(dimensions.paddedWidth).toBe(dimensions.contentWidth + dimensions.horizontalPadding * 2);
@@ -31,14 +33,29 @@ test("CR008-OCR-002 v9 preserves aspect ratio and adds real white breathing room
   expect(dimensions.verticalPadding).toBeGreaterThanOrEqual(60);
 });
 
-test("CR008-OCR-002 v9 accepts only physically explicit decimal punctuation", () => {
+test("CR008-OCR-002 v11 gives money source pixels breathing room without changing integer crops", () => {
+  const metadata = { mimeType: "image/jpeg" as const, width: 1600, height: 1800 };
+  const row: SweepRow = {
+    words: [],
+    box: { x: 0.12, y: 0.48, width: 0.72, height: 0.02 },
+    text: "CANA GRANDE 2 2,80 560",
+    summaryLike: false,
+  };
+  const band = { left: 0.68, right: 0.76, center: 0.72, support: 5 };
+  const money = paddedFocusedCellRectangle(metadata, row, band, "money", 0);
+  const integer = paddedFocusedCellRectangle(metadata, row, band, "integer", 0);
+  expect(money.width).toBeGreaterThan(integer.width);
+  expect(money.left).toBeLessThan(integer.left);
+});
+
+test("CR008-OCR-002 v11 accepts only physically explicit decimal punctuation", () => {
   expect(paddedExplicitNumericTokens("5 , 60", "money")).toEqual(["5,60"]);
   expect(paddedExplicitNumericTokens("5.60", "money")).toEqual(["5.60"]);
   expect(paddedExplicitNumericTokens("560", "money")).toEqual([]);
   expect(paddedExplicitNumericTokens("2.800", "money")).toEqual([]);
 });
 
-test("CR008-OCR-002 v9 requires independent preprocessing agreement for normal cell recovery", () => {
+test("CR008-OCR-002 v11 requires independent preprocessing agreement for normal cell recovery", () => {
   const recovered = choosePaddedNumericConsensus([
     observation("5,60", 0, "single_word", 0.72),
     observation("5,60", 1, "single_line", 0.66),
@@ -50,7 +67,7 @@ test("CR008-OCR-002 v9 requires independent preprocessing agreement for normal c
   ], "money")).toBeNull();
 });
 
-test("CR008-OCR-002 v9 may accept three independent segmentation reads only when confidence is strong", () => {
+test("CR008-OCR-002 v11 may accept three independent segmentation reads only when confidence is strong", () => {
   const recovered = choosePaddedNumericConsensus([
     observation("17,50", 0, "single_word", 0.72),
     observation("17,50", 0, "single_line", 0.68),
@@ -65,7 +82,7 @@ test("CR008-OCR-002 v9 may accept three independent segmentation reads only when
   ], "money")).toBeNull();
 });
 
-test("CR008-OCR-002 v9 refuses conflicting explicit-money consensus", () => {
+test("CR008-OCR-002 v11 refuses conflicting explicit-money consensus", () => {
   const recovered = choosePaddedNumericConsensus([
     observation("5,60", 0, "single_word"),
     observation("5,60", 1, "single_line"),
