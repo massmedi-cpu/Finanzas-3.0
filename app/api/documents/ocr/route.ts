@@ -27,12 +27,61 @@ const IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_BYTES = 15 * 1024 * 1024;
 const SUPABASE_STORAGE_HOST = "btzukbfesxdratqnxuoj.supabase.co";
 
+function normalizeDiagnosticToken(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+}
+
+class PreviewAnchorSignalDiagnosticProvider implements DocumentOcrProvider {
+  constructor(private readonly base: DocumentOcrProvider) {}
+
+  supports(mimeType: string) {
+    return this.base.supports(mimeType);
+  }
+
+  async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }) {
+    const output = await this.base.extract(input);
+    if (process.env.VERCEL_ENV === "preview" && output.pages.length === 1) {
+      const words = output.pages[0]?.words ?? [];
+      const tokens = words.map((word) => normalizeDiagnosticToken(word.text)).filter(Boolean);
+      const hasPrefix = (prefix: string) => tokens.some((token) => token.startsWith(prefix));
+      const numericWords = words.filter((word) => /\d/.test(word.text)).length;
+      const averageConfidence = words.length
+        ? words.reduce((sum, word) => sum + word.confidence, 0) / words.length
+        : 0;
+
+      console.info("ocr-anchor-input-v15", {
+        wordCount: words.length,
+        numericWords,
+        averageConfidence: Number(averageConfidence.toFixed(3)),
+        headerSignals: {
+          description: hasPrefix("descrip"),
+          units: tokens.some((token) => token === "uds" || token === "ud" || token.startsWith("unid")),
+          price: hasPrefix("precio"),
+          amount: hasPrefix("importe"),
+        },
+        summarySignals: {
+          base: tokens.includes("base"),
+          iva: tokens.includes("iva"),
+          total: tokens.some((token) => token === "total" || token.startsWith("total")),
+        },
+      });
+    }
+    return output;
+  }
+}
+
 // Keep the runtime pipeline flat. The anchor filter is pure geometry/text post-processing and
 // does not create another OCR worker. Historical V3-V8 providers remain available for regression
 // coverage, but chaining them here creates multiple concurrent Tesseract workers and can exhaust
 // the Vercel function memory before the focused cell pass.
 const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
-  new ReceiptAnchorFilteringImageOcrProvider(new TesseractImageOcrProvider()),
+  new ReceiptAnchorFilteringImageOcrProvider(
+    new PreviewAnchorSignalDiagnosticProvider(new TesseractImageOcrProvider()),
+  ),
 );
 const pdfProvider = new PdfTextOcrProvider();
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
