@@ -340,11 +340,11 @@ export function choosePaddedNumericConsensus(
   return [...best.group].sort((a, b) => b.word.confidence - a.word.confidence)[0]?.word ?? null;
 }
 
-const SEGMENTATIONS: Array<{ name: SegmentationName; mode: string }> = [
+const SEGMENTATIONS = [
   { name: "single_word", mode: PSM.SINGLE_WORD },
   { name: "single_line", mode: PSM.SINGLE_LINE },
   { name: "raw_line", mode: PSM.RAW_LINE },
-];
+] as const;
 
 async function recognizePrepared(
   worker: Worker,
@@ -352,7 +352,7 @@ async function recognizePrepared(
   metadata: OcrImageMetadata,
   kind: CellKind,
   variant: PreparedVariant,
-  segmentation: { name: SegmentationName; mode: string },
+  segmentation: (typeof SEGMENTATIONS)[number],
 ) {
   await worker.setParameters({
     tessedit_pageseg_mode: segmentation.mode,
