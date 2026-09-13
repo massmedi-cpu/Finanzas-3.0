@@ -24,39 +24,60 @@ La comprobación final debe confirmar, sin correcciones inventadas ni residuos d
 
 Debe rechazar o marcar para revisión residuos como `560`, `280`, `2.800`, `5,508`, `1,008`, `505/60` o `50550` cuando no exista evidencia geométrica fiable.
 
-## Candidato V8
+## Resultado real que mantiene el blocker
 
-Código OCR funcional previo a este commit: `4840aa637ecbb9c2a78e6704306e5abd9227994b`.
+V10 resolvió el fallo de memoria/500 y el replay real del 13/09/2026 terminó HTTP 200, pero la calidad siguió siendo insuficiente:
 
-Cambios principales de V8:
+- confianza global: 64 %;
+- contaminación de fondo/periferia visible en la reconstrucción;
+- pérdida de separadores decimales en varias celdas monetarias;
+- Base 15,91 reconocible, pero IVA/Total no suficientemente fiables;
+- por tanto, V10 queda descartada como candidato de cierre.
 
-- la ruta de imágenes usa el proveedor `ReceiptUpscaledCellConsensusImageOcrProvider`;
-- cada celda numérica sospechosa se recorta de forma focalizada y se amplía físicamente hasta una altura objetivo de al menos 180 px antes de Tesseract;
-- cada celda se somete a tres variantes de preprocesado independientes;
-- una cifra monetaria solo se acepta cuando existe consenso estricto de al menos 2 de 3 observaciones válidas;
-- el consenso usa tanto texto OCR directo como geometría TSV para recomponer únicamente decimales explícitos;
-- un entero ambiguo como `560` no se convierte por heurística en `5,60`;
-- se mantienen los estados de revisión obligatoria cuando la geometría o la lectura no son suficientemente fiables.
+El criterio sigue siendo conservador: un entero ambiguo como `560` no se transforma por heurística en `5,60`, ni se corrigen importes mediante aritmética del ticket.
 
-## Evidencia automatizada V8
+## Candidato V11
 
-Sobre `4840aa637ecbb9c2a78e6704306e5abd9227994b`:
+Código candidato: `751d132618fcb232886ca1f9717efaab08fb7fc4`.
 
-- deployment exacto Vercel `dpl_4cBWBfGtnVdTG5mSn9qoh1m8otMx`: READY;
-- Rebuild Preview E2E `34722377445`: SUCCESS;
+Cambios principales de V11:
+
+- filtrado estructural del contenido periférico antes del OCR focalizado, sin añadir otro worker Tesseract;
+- aislamiento de la región coherente con el ticket para reducir texto procedente del fondo de la fotografía;
+- ampliación del margen físico de los crops monetarios para evitar recortar coma o punto decimal;
+- preprocesado menos agresivo en celdas numéricas para preservar puntuación real;
+- se mantiene la prohibición de inventar decimales, convertir bare digits o completar importes por consistencia aritmética;
+- si no existe evidencia geométrica y visual suficiente, el documento permanece en revisión humana obligatoria.
+
+## Evidencia automatizada V11
+
+Sobre `751d132618fcb232886ca1f9717efaab08fb7fc4`:
+
+- deployment exacto Vercel `dpl_8dwCYvzdYVv6nmsPy79CPEE8nQiM`: READY;
+- Rebuild Preview E2E `34749811520`: SUCCESS;
 - `browser-interaction-e2e`: SUCCESS;
-- Gate 4 Protected Workspace Boundary `34722377418`: SUCCESS;
-- PRE-020 Storage Runtime Rehearsal `34722377436`: SUCCESS;
-- PRE-020 Disposable DB Smoke `34722377431`: SUCCESS;
-- CR-001 Function Surface Postflight `34722377423`: SUCCESS;
-- CR-001 Deletion Self-Service Postflight `34722377492`: SUCCESS.
+- build de producción: SUCCESS;
+- Playwright desktop y móvil: SUCCESS;
+- Production y `main`: sin modificar.
 
-Este commit solicita además la validación live del Preview protegido mediante el marcador `[vercel-preview]` sin modificar el código OCR ya certificado localmente. Production y `main` permanecen fuera de esta prueba.
+Este commit documental usa el marcador `[vercel-preview]` únicamente para ejecutar la validación live del Preview protegido sobre el mismo código OCR V11 ya certificado localmente. No introduce cambios funcionales en OCR.
 
-## Resultado real anterior que mantiene el blocker
+## Gate final pendiente
 
-V7 queda descartada tras replay real del 13/09/2026: confianza global 62 %, TERCIO GALICIA CERO sin importe, CAÑA GRANDE con `5,00` en lugar de `5,60`, CUBATA sin importe e IVA/Total ausentes. Por tanto CR-008 no puede cerrarse con evidencia sintética ni con CI verde por sí sola.
+Si la validación live protegida también termina en verde, quedará una sola intervención humana imprescindible: repetir el análisis del documento real `PXL_20260821_220553447.jpg` desde una sesión legítima del propietario en el Preview exacto correspondiente.
+
+Ese replay deberá confirmar:
+
+- HTTP 200 sin OOM ni 5xx;
+- ausencia de texto perteneciente al fondo de la foto;
+- importes monetarios con separador decimal físicamente reconocido;
+- Base 15,91;
+- IVA 1,59;
+- Total 17,50;
+- ninguna corrección inventada para forzar coherencia.
+
+Si cualquiera de esos puntos falla, CR-008 continúa abierto y la corrección debe seguir en la rama sin promover a `main` ni Production.
 
 ## Límite de automatización
 
-El archivo real está en un bucket privado y su acceso está ligado al workspace del propietario. No se debe introducir un bypass, una excepción de tenancy ni una credencial permanente solo para automatizar esta comprobación. Si el replay exacto no puede realizarse con la frontera de seguridad vigente, la última ejecución deberá hacerse desde una sesión legítima del propietario en Preview.
+El archivo real está en un bucket privado y su acceso está ligado al workspace del propietario. No se debe introducir un bypass, una excepción de tenancy ni una credencial permanente solo para automatizar esta comprobación. La última ejecución debe realizarse desde una sesión legítima del propietario en Preview si no puede ejercitarse respetando la frontera de seguridad vigente.
