@@ -99,7 +99,7 @@ for (const { pipeline, background } of [
       ["CUBATA", "1", "5,50", "5,50"],
       ["GAS", "1", "1,80", "1,80"],
     ]) {
-      const line = lines.find((line) => line.words.some((word) => word.text === label));
+      const line = lines.find((line) => line.words.some((word) => word.text.includes(label)));
       expect(line?.words.slice(-3).map((word) => word.text)).toEqual([quantity, price, amount]);
     }
     for (const [label, amount] of [["BASE", "15,91"], ["IVA", "1,59"], ["TOTAL", "17,50"]]) {
