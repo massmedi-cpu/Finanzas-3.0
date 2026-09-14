@@ -7,6 +7,7 @@ export type FinancialBarPoint = {
   monthStart: string;
   incomeCents: number;
   expenseCents: number;
+  operatingNetCents: number;
 };
 
 type FinancialBarChartProps = {
@@ -16,7 +17,12 @@ type FinancialBarChartProps = {
   formatMonth: (date: string) => string;
 };
 
-export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: FinancialBarChartProps) {
+export function FinancialBarChart({
+  rows,
+  maxValue,
+  formatMoney,
+  formatMonth,
+}: FinancialBarChartProps) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const selected = useMemo(
     () => rows.find((row) => row.monthStart === selectedMonth) ?? null,
@@ -25,25 +31,46 @@ export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: 
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.chart} role="group" aria-label="Ingresos y gastos por mes. Selecciona un mes para consultar sus importes exactos.">
+      <div className={styles.legend} aria-hidden="true">
+        <span><i className={styles.incomeDot} />Ingresos</span>
+        <span><i className={styles.expenseDot} />Gastos</span>
+        <span><i className={styles.netDot} />Balance neto</span>
+      </div>
+
+      <div
+        className={styles.chart}
+        role="group"
+        aria-label="Ingresos y gastos por mes, con balance neto. Selecciona un mes para consultar sus importes exactos."
+      >
         {rows.map((row) => {
           const label = formatMonth(row.monthStart);
           const active = selected?.monthStart === row.monthStart;
-          const incomeHeight = Math.max(4, (row.incomeCents / Math.max(1, maxValue)) * 100);
-          const expenseHeight = Math.max(4, (row.expenseCents / Math.max(1, maxValue)) * 100);
+          const scale = Math.max(1, maxValue);
+          const incomeHeight = Math.max(4, (Math.abs(row.incomeCents) / scale) * 100);
+          const expenseHeight = Math.max(4, (Math.abs(row.expenseCents) / scale) * 100);
+          const netHeight = Math.max(4, (Math.abs(row.operatingNetCents) / scale) * 100);
+
           return (
             <button
               type="button"
               key={row.monthStart}
               className={`${styles.column}${active ? ` ${styles.active}` : ""}`}
               aria-pressed={active}
-              aria-label={`${label}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(row.expenseCents)}`}
+              aria-label={`${label}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(
+                row.expenseCents,
+              )}, balance neto ${formatMoney(row.operatingNetCents)}`}
               onClick={() => setSelectedMonth(row.monthStart)}
               onFocus={() => setSelectedMonth(row.monthStart)}
             >
               <span className={styles.bars} aria-hidden="true">
                 <span className={styles.incomeBar} style={{ height: `${incomeHeight}%` }} />
                 <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
+                <span
+                  className={`${styles.netBar} ${
+                    row.operatingNetCents < 0 ? styles.netNegative : styles.netPositive
+                  }`}
+                  style={{ height: `${netHeight}%` }}
+                />
               </span>
               <span className={styles.month}>{label}</span>
             </button>
@@ -54,8 +81,23 @@ export function FinancialBarChart({ rows, maxValue, formatMoney, formatMonth }: 
       {selected && (
         <div className={styles.readout} role="status" aria-live="polite">
           <strong>{formatMonth(selected.monthStart)}</strong>
-          <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos {formatMoney(selected.incomeCents)}</span>
-          <span><i className={styles.expenseDot} aria-hidden="true" />Gastos {formatMoney(selected.expenseCents)}</span>
+          <span>
+            <i className={styles.incomeDot} aria-hidden="true" />
+            Ingresos {formatMoney(selected.incomeCents)}
+          </span>
+          <span>
+            <i className={styles.expenseDot} aria-hidden="true" />
+            Gastos {formatMoney(selected.expenseCents)}
+          </span>
+          <span>
+            <i
+              className={
+                selected.operatingNetCents < 0 ? styles.netNegativeDot : styles.netPositiveDot
+              }
+              aria-hidden="true"
+            />
+            Balance neto {formatMoney(selected.operatingNetCents)}
+          </span>
         </div>
       )}
     </div>

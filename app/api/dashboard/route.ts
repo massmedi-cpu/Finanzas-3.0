@@ -1,0 +1,196 @@
+import {
+  callPersistenceGatewayBatch,
+  PersistenceGatewayError,
+  type PersistenceGatewayOperation,
+} from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+
+export const dynamic = "force-dynamic";
+
+const HEADERS = {
+  "cache-control": "no-store",
+  "x-content-type-options": "nosniff",
+  "x-robots-tag": "noindex",
+};
+
+const SCOPES = new Set(["primary", "secondary", "all"] as const);
+type DashboardScope = "primary" | "secondary" | "all";
+type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
+
+type NamedOperation = PersistenceGatewayOperation & {
+  source: DashboardSource;
+};
+
+function madridToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Europe/Madrid",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function addDays(date: string, days: number) {
+  const parsed = new Date(`${date}T12:00:00Z`);
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
+  const month = today.slice(0, 7);
+  const monthStart = `${month}-01`;
+  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const forecastTo = addDays(today, 30);
+
+  const financial: NamedOperation = {
+    source: "financial",
+    action: "financial.snapshot",
+    payload: {
+      dateFrom: monthStart,
+      dateTo: today,
+      accountId: null,
+      includeArchived: false,
+    },
+  };
+
+  const secondary: NamedOperation[] = [
+    {
+      source: "monthly",
+      action: "financial.monthly",
+      payload: {
+        dateFrom: yearStart,
+        dateTo: today,
+        accountId: null,
+        includeArchived: false,
+      },
+    },
+    {
+      source: "budgets",
+      action: "budget.snapshot",
+      payload: { month },
+    },
+    {
+      source: "forecast",
+      action: "forecast.snapshot",
+      payload: {
+        dateFrom: today,
+        dateTo: forecastTo,
+        accountId: null,
+      },
+    },
+    {
+      source: "transactions",
+      action: "transaction.query",
+      payload: {
+        query: null,
+        accountId: null,
+        categoryId: null,
+        merchantId: null,
+        kind: null,
+        reviewState: null,
+        duplicateState: null,
+        dateFrom: null,
+        dateTo: null,
+        cursorBankDate: null,
+        cursorId: null,
+        limit: 6,
+        uncategorized: false,
+      },
+    },
+  ];
+
+  if (scope === "primary") return [financial];
+  if (scope === "secondary") return secondary;
+  return [financial, ...secondary];
+}
+
+function emptyData() {
+  return {
+    financial: null,
+    monthly: null,
+    budgets: null,
+    forecast: null,
+    transactions: null,
+  } as Record<DashboardSource, unknown | null>;
+}
+
+function responseHeaders(scope: DashboardScope, durationMs: number) {
+  return {
+    ...HEADERS,
+    "x-dashboard-scope": scope,
+    "server-timing": `dashboard;dur=${durationMs.toFixed(1)}`,
+  };
+}
+
+export async function GET(request: Request) {
+  const startedAt = performance.now();
+  const { searchParams } = new URL(request.url);
+  const rawScope = searchParams.get("scope") ?? "all";
+
+  if (!SCOPES.has(rawScope as DashboardScope)) {
+    return Response.json(
+      { error: "invalid_request", code: "invalid_dashboard_scope" },
+      { status: 400, headers: HEADERS },
+    );
+  }
+
+  const scope = rawScope as DashboardScope;
+  const today = madridToday();
+  const operations = operationsForScope(scope, today);
+  const requestedSources = operations.map((operation) => operation.source);
+  const data = emptyData();
+
+  try {
+    const results = await callPersistenceGatewayBatch(operations);
+    const failedSources: DashboardSource[] = [];
+
+    results.forEach((result, index) => {
+      const source = operations[index].source;
+      if (result.status === "fulfilled") {
+        data[source] = result.value;
+      } else {
+        failedSources.push(source);
+      }
+    });
+
+    const durationMs = performance.now() - startedAt;
+    const allRequestedFailed = failedSources.length === requestedSources.length;
+
+    return Response.json(
+      {
+        contractVersion: 1,
+        scope,
+        asOfDate: today,
+        generatedAt: new Date().toISOString(),
+        requestedSources,
+        failedSources,
+        data,
+      },
+      {
+        status: allRequestedFailed ? 503 : 200,
+        headers: responseHeaders(scope, durationMs),
+      },
+    );
+  } catch (error) {
+    const durationMs = performance.now() - startedAt;
+    const code = error instanceof PersistenceGatewayError ? error.code ?? null : null;
+    console.error(
+      "dashboard-api",
+      error instanceof Error ? error.name : typeof error,
+      code ?? "",
+    );
+
+    return Response.json(
+      {
+        error: "dashboard_unavailable",
+        code,
+        scope,
+        requestedSources,
+        failedSources: requestedSources,
+        data,
+      },
+      { status: 503, headers: responseHeaders(scope, durationMs) },
+    );
+  }
+}

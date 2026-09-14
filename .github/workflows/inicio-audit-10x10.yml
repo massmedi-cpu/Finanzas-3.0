@@ -1,0 +1,185 @@
+name: Inicio Audit 10x10
+
+on:
+  push:
+    branches:
+      - 'audit/inicio-*'
+      - 'audit/precommercial-inicio-*'
+
+permissions:
+  contents: read
+
+jobs:
+  inicio-audit-local:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Validate Inicio audit categories on desktop and mobile
+        run: >-
+          npm run test:e2e --
+          tests/e2e/cr007-home-initial-paint.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/dashboard-performance-contract.spec.ts
+          tests/e2e/dashboard.spec.ts
+          tests/e2e/premium-dashboard-visual.spec.ts
+          tests/e2e/foundation-gate-static-contract.spec.ts
+          tests/e2e/design-token-source.spec.ts
+          tests/e2e/axiom-final-gates.spec.ts
+          tests/e2e/content-security-policy.spec.ts
+          tests/e2e/security-headers.spec.ts
+          tests/e2e/production-auth.spec.ts
+          tests/e2e/preview-production-isolation.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload audit report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inicio-audit-local-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7
+
+  inicio-audit-protected-preview:
+    if: contains(github.event.head_commit.message, '[vercel-preview]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Generate ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Discover matching Vercel preview for exact SHA
+        id: vercel
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            for (let attempt = 1; attempt <= 48; attempt += 1) {
+              const deployments = await github.rest.repos.listDeployments({
+                owner,
+                repo,
+                sha: context.sha,
+                per_page: 30,
+              });
+              for (const deployment of deployments.data) {
+                const statuses = await github.rest.repos.listDeploymentStatuses({
+                  owner,
+                  repo,
+                  deployment_id: deployment.id,
+                  per_page: 30,
+                });
+                const status = statuses.data.find((candidate) => {
+                  const url = candidate.environment_url || candidate.target_url || '';
+                  return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
+                });
+                if (status) {
+                  const url = (status.environment_url || status.target_url).replace(/\/$/, '');
+                  core.info(`Matching Vercel preview discovered on attempt ${attempt}: ${url}`);
+                  core.setOutput('url', url);
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+
+      - name: Verify protected preview exact SHA
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -n "$VERCEL_AUTOMATION_BYPASS_SECRET" ]; then
+            header_name="x-vercel-protection-bypass"
+            header_value="$VERCEL_AUTOMATION_BYPASS_SECRET"
+          else
+            header_name="x-vercel-trusted-oidc-idp-token"
+            header_value="$VERCEL_TRUSTED_OIDC_TOKEN"
+          fi
+          status=$(curl --silent --show-error --output /tmp/build.json --write-out "%{http_code}" -H "$header_name: $header_value" "$VERCEL_PREVIEW_URL/api/build")
+          test "$status" = "200"
+          deployed_sha=$(node -e "const j=require('/tmp/build.json');process.stdout.write(j.commit||'')")
+          test "$deployed_sha" = "$GITHUB_SHA"
+          echo "Protected preview matches $GITHUB_SHA."
+
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Validate real protected Preview and dashboard orchestration
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: >-
+          npm run test:e2e --
+          tests/e2e/dashboard.spec.ts
+          tests/e2e/preview-production-isolation-live.spec.ts
+          tests/e2e/protected-preview-auth-boundary-live.spec.ts
+          --grep-invert "protected preview exposes dashboard orchestration using validated engines"
+          --project=chromium-desktop --project=chromium-mobile
+
+      - name: Upload protected Preview report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: inicio-audit-protected-preview-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7
