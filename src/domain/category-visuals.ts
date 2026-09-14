@@ -69,7 +69,7 @@ export const CATEGORY_COLOR_OPTIONS = [
 
 const ICON_KEYS = new Set<string>(CATEGORY_ICON_OPTIONS.map((item) => item.value));
 const COLOR_TOKENS = new Set<string>(CATEGORY_COLOR_OPTIONS.map((item) => item.value));
-const COLOR_BY_TOKEN = new Map(CATEGORY_COLOR_OPTIONS.map((item) => [item.value, item.hex] as const));
+const COLOR_BY_TOKEN = new Map<string, string>(CATEGORY_COLOR_OPTIONS.map((item) => [item.value, item.hex]));
 
 export function isSupportedCategoryIcon(value: string) {
   return ICON_KEYS.has(value);
