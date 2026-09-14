@@ -1,12 +1,30 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type CSSProperties, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Account, AccountType, Category, CategoryKind, EntityId } from "../../src/domain/models";
 import { validateCategoryHierarchy, validateCategoryMerge } from "../../src/domain/configuration-policies";
+import {
+  CATEGORY_COLOR_OPTIONS,
+  CATEGORY_ICON_OPTIONS,
+  categoryColorHex,
+} from "../../src/domain/category-visuals";
+import { CategoryGlyph } from "../../src/ui/category-glyph";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "../../src/core/money";
 
 type ConfigPayload = { accounts: Account[]; categories: Category[] };
 type Tab = "accounts" | "categories";
+type CategoryFilter = "all" | CategoryKind;
+type CategoryImpact = {
+  transactionCount: number;
+  overrideCount: number;
+  ruleConditionCount: number;
+  ruleTargetCount: number;
+  merchantCount: number;
+  budgetCount: number;
+  activeRecurrenceCount: number;
+  futureForecastCount: number;
+  activeChildCount: number;
+};
 
 type AccountForm = {
   name: string;
@@ -23,13 +41,7 @@ type CategoryForm = {
   parentCategoryId: string;
 };
 
-const INITIAL_ACCOUNT: AccountForm = {
-  name: "",
-  institution: "",
-  type: "checking",
-  openingBalance: "0,00",
-};
-
+const INITIAL_ACCOUNT: AccountForm = { name: "", institution: "", type: "checking", openingBalance: "0,00" };
 const INITIAL_CATEGORY: CategoryForm = {
   name: "",
   kind: "expense",
@@ -48,35 +60,47 @@ const ACCOUNT_TYPES: Array<{ value: AccountType; label: string }> = [
 ];
 
 const CATEGORY_KINDS: Array<{ value: CategoryKind; label: string }> = [
-  { value: "expense", label: "Gasto" },
-  { value: "income", label: "Ingreso" },
-  { value: "transfer", label: "Transferencia" },
+  { value: "expense", label: "Gastos" },
+  { value: "income", label: "Ingresos" },
+  { value: "transfer", label: "Transferencias" },
 ];
-
-const ICONS = ["wallet", "home", "cart", "car", "heart", "briefcase", "gift", "bolt", "plane", "more"];
-const COLORS = [
-  "category.blue",
-  "category.cyan",
-  "category.green",
-  "category.amber",
-  "category.violet",
-  "category.rose",
-];
+const EMPTY_IMPACT: CategoryImpact = {
+  transactionCount: 0,
+  overrideCount: 0,
+  ruleConditionCount: 0,
+  ruleTargetCount: 0,
+  merchantCount: 0,
+  budgetCount: 0,
+  activeRecurrenceCount: 0,
+  futureForecastCount: 0,
+  activeChildCount: 0,
+};
 
 function labelForAccountType(type: AccountType) {
   return ACCOUNT_TYPES.find((item) => item.value === type)?.label ?? type;
 }
-
 function labelForCategoryKind(kind: CategoryKind) {
   return CATEGORY_KINDS.find((item) => item.value === kind)?.label ?? kind;
 }
-
 function sameAccountGroup(left: Account, right: Account) {
   return left.lifecycle === right.lifecycle;
 }
-
 function sameCategoryGroup(left: Category, right: Category) {
   return left.kind === right.kind && left.parentCategoryId === right.parentCategoryId;
+}
+function normalizeSearch(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-ES").trim();
+}
+function categoryStyle(category: Category): CSSProperties {
+  return { "--category-color": categoryColorHex(category.colorToken) } as CSSProperties;
+}
+function impactTotal(impact: CategoryImpact) {
+  return impact.transactionCount + impact.overrideCount + impact.ruleConditionCount + impact.ruleTargetCount +
+    impact.merchantCount + impact.budgetCount + impact.activeRecurrenceCount + impact.futureForecastCount + impact.activeChildCount;
+}
+function archiveBlocked(impact: CategoryImpact) {
+  return impact.ruleConditionCount > 0 || impact.ruleTargetCount > 0 || impact.merchantCount > 0 ||
+    impact.activeRecurrenceCount > 0 || impact.futureForecastCount > 0 || impact.activeChildCount > 0;
 }
 
 function Icon({ name }: { name: string }) {
@@ -89,6 +113,7 @@ function Icon({ name }: { name: string }) {
   if (name === "down") return <svg {...common}><path d="m6 9 6 6 6-6" /></svg>;
   if (name === "merge") return <svg {...common}><path d="M7 4v4c0 2.2 1.8 4 4 4h6" /><path d="m14 9 3 3-3 3" /><path d="M7 20v-4c0-1.7 1-3.2 2.5-3.8" /></svg>;
   if (name === "account") return <svg {...common}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M3 10h18M7 15h3" /></svg>;
+  if (name === "search") return <svg {...common}><circle cx="11" cy="11" r="6" /><path d="m16 16 4 4" /></svg>;
   return <svg {...common}><circle cx="12" cy="12" r="8" /><path d="M9 12h6" /></svg>;
 }
 
@@ -102,7 +127,7 @@ async function requestConfiguration(operation: string, payload: Record<string, u
   if (!response.ok) {
     const message = Array.isArray(data?.issues)
       ? data.issues.map((issue: { message?: string }) => issue.message).filter(Boolean).join(" ")
-      : data?.message || data?.error || "No se pudo completar la operación.";
+      : data?.message || data?.code || data?.error || "No se pudo completar la operación.";
     throw new Error(message);
   }
   return data;
@@ -119,8 +144,15 @@ export default function ConfigurationClient() {
   const [editingAccountId, setEditingAccountId] = useState<EntityId | null>(null);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(INITIAL_CATEGORY);
   const [editingCategoryId, setEditingCategoryId] = useState<EntityId | null>(null);
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
+  const [showArchived, setShowArchived] = useState(false);
   const [mergeSource, setMergeSource] = useState("");
   const [mergeTarget, setMergeTarget] = useState("");
+  const [mergeImpact, setMergeImpact] = useState<CategoryImpact | null>(null);
+  const [mergeReviewed, setMergeReviewed] = useState(false);
+  const [archiveCandidateId, setArchiveCandidateId] = useState<EntityId | null>(null);
+  const [archiveImpact, setArchiveImpact] = useState<CategoryImpact | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -128,8 +160,7 @@ export default function ConfigurationClient() {
     try {
       const response = await fetch("/api/configuration", { cache: "no-store" });
       if (!response.ok) throw new Error("No se pudo cargar la configuración.");
-      const payload = (await response.json()) as ConfigPayload;
-      setData(payload);
+      setData((await response.json()) as ConfigPayload);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Error al cargar la configuración.");
     } finally {
@@ -142,25 +173,44 @@ export default function ConfigurationClient() {
   const activeAccounts = useMemo(() => data.accounts.filter((item) => item.lifecycle === "active").length, [data.accounts]);
   const activeCategories = useMemo(() => data.categories.filter((item) => item.lifecycle === "active").length, [data.categories]);
   const editingCategory = editingCategoryId ? data.categories.find((item) => item.id === editingCategoryId) ?? null : null;
-  const parentOptions = useMemo(() => data.categories.filter((item) => {
-    if (item.lifecycle !== "active" || item.kind !== categoryForm.kind || item.id === editingCategoryId) {
-      return false;
-    }
+  const categoryById = useMemo(() => new Map(data.categories.map((item) => [item.id, item])), [data.categories]);
 
+  const parentOptions = useMemo(() => data.categories.filter((item) => {
+    if (item.lifecycle !== "active" || item.kind !== categoryForm.kind || item.id === editingCategoryId || item.parentCategoryId) return false;
     const candidate = editingCategory
       ? { ...editingCategory, kind: categoryForm.kind, parentCategoryId: item.id }
       : { id: "__new-category__", kind: categoryForm.kind, parentCategoryId: item.id };
-
     return validateCategoryHierarchy(candidate, data.categories).length === 0;
   }), [data.categories, categoryForm.kind, editingCategoryId, editingCategory]);
+
   const mergeSources = useMemo(() => data.categories.filter((item) => item.lifecycle === "active"), [data.categories]);
   const selectedSource = data.categories.find((item) => item.id === mergeSource);
   const mergeTargets = useMemo(() => selectedSource
-    ? data.categories.filter((item) =>
-        item.lifecycle === "active" &&
-        validateCategoryMerge(selectedSource, item, data.categories).length === 0,
-      )
+    ? data.categories.filter((item) => item.lifecycle === "active" && validateCategoryMerge(selectedSource, item, data.categories).length === 0)
     : [], [data.categories, selectedSource]);
+
+  const visibleCategoryIds = useMemo(() => {
+    const query = normalizeSearch(categorySearch);
+    const visible = new Set<EntityId>();
+    for (const category of data.categories) {
+      if (!showArchived && category.lifecycle === "archived") continue;
+      if (categoryFilter !== "all" && category.kind !== categoryFilter) continue;
+      const parent = category.parentCategoryId ? categoryById.get(category.parentCategoryId) : null;
+      const haystack = normalizeSearch(`${category.name} ${parent?.name ?? ""} ${labelForCategoryKind(category.kind)}`);
+      if (!query || haystack.includes(query)) {
+        visible.add(category.id);
+        if (category.parentCategoryId) visible.add(category.parentCategoryId);
+      }
+    }
+    return visible;
+  }, [data.categories, categorySearch, categoryFilter, showArchived, categoryById]);
+
+  const categoryGroups = useMemo(() => CATEGORY_KINDS.map((kind) => {
+    const roots = data.categories
+      .filter((category) => category.kind === kind.value && !category.parentCategoryId && visibleCategoryIds.has(category.id))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
+    return { ...kind, roots };
+  }).filter((group) => group.roots.length > 0), [data.categories, visibleCategoryIds]);
 
   function beginAccountEdit(account: Account) {
     setEditingAccountId(account.id);
@@ -182,37 +232,22 @@ export default function ConfigurationClient() {
     return Boolean(current && next && sameAccountGroup(current, next));
   }
 
-  function canMoveCategory(index: number, delta: number) {
-    const current = data.categories[index];
-    const next = data.categories[index + delta];
-    return Boolean(current && next && sameCategoryGroup(current, next));
+  function canMoveCategory(category: Category, delta: number) {
+    const siblings = data.categories
+      .filter((item) => sameCategoryGroup(item, category))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
+    const index = siblings.findIndex((item) => item.id === category.id);
+    return index >= 0 && Boolean(siblings[index + delta]);
   }
 
   function canUseCategoryKind(kind: CategoryKind) {
     if (!editingCategory) return true;
-    return validateCategoryHierarchy(
-      { ...editingCategory, kind, parentCategoryId: null },
-      data.categories,
-    ).length === 0;
+    return validateCategoryHierarchy({ ...editingCategory, kind, parentCategoryId: null }, data.categories).length === 0;
   }
 
   function hasActiveCategoryChildren(categoryId: EntityId) {
-  return data.categories.some(
-    (item) => item.parentCategoryId === categoryId && item.lifecycle === "active",
-  );
-}
-
-function canToggleCategoryLifecycle(category: Category) {
-  if (category.lifecycle === "active") {
-    return !hasActiveCategoryChildren(category.id);
+    return data.categories.some((item) => item.parentCategoryId === categoryId && item.lifecycle === "active");
   }
-  if (!category.parentCategoryId) {
-    return true;
-  }
-  return data.categories.some(
-    (item) => item.id === category.parentCategoryId && item.lifecycle === "active",
-  );
-}
 
   async function run(action: () => Promise<void>, success: string) {
     setBusy(true);
@@ -229,12 +264,16 @@ function canToggleCategoryLifecycle(category: Category) {
     }
   }
 
+  async function getImpact(id: EntityId) {
+    const result = await requestConfiguration("category.impact", { id });
+    return (result?.impact ?? EMPTY_IMPACT) as CategoryImpact;
+  }
+
   async function submitAccount(event: FormEvent) {
     event.preventDefault();
     let openingBalanceCents: number;
-    try {
-      openingBalanceCents = parseSpanishMoneyToCents(accountForm.openingBalance);
-    } catch {
+    try { openingBalanceCents = parseSpanishMoneyToCents(accountForm.openingBalance); }
+    catch {
       setError("El saldo inicial debe usar formato español, por ejemplo 1.234,56.");
       return;
     }
@@ -281,13 +320,81 @@ function canToggleCategoryLifecycle(category: Category) {
     await run(() => requestConfiguration("account.reorder", { orderedIds: ordered }).then(() => undefined), "Orden de cuentas actualizado.");
   }
 
-  async function reorderCategories(index: number, delta: number) {
-    const nextIndex = index + delta;
-    if (!canMoveCategory(index, delta)) return;
+  async function reorderCategories(category: Category, delta: number) {
+    const siblings = data.categories
+      .filter((item) => sameCategoryGroup(item, category))
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
+    const siblingIndex = siblings.findIndex((item) => item.id === category.id);
+    const nextSibling = siblings[siblingIndex + delta];
+    if (!nextSibling) return;
+    const currentIndex = data.categories.findIndex((item) => item.id === category.id);
+    const nextIndex = data.categories.findIndex((item) => item.id === nextSibling.id);
     const ordered = data.categories.map((item) => item.id);
-    [ordered[index], ordered[nextIndex]] = [ordered[nextIndex], ordered[index]];
+    [ordered[currentIndex], ordered[nextIndex]] = [ordered[nextIndex], ordered[currentIndex]];
     await run(() => requestConfiguration("category.reorder", { orderedIds: ordered }).then(() => undefined), "Orden de categorías actualizado.");
   }
+
+  async function prepareArchive(category: Category) {
+    if (category.lifecycle === "archived") {
+      await run(() => requestConfiguration("category.archive", { id: category.id, archived: false }).then(() => undefined), "Categoría reactivada.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const impact = await getImpact(category.id);
+      setArchiveCandidateId(category.id);
+      setArchiveImpact(impact);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "No se pudo comprobar el impacto del archivo.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function selectMergeSource(id: string) {
+    setMergeSource(id);
+    setMergeTarget("");
+    setMergeReviewed(false);
+    setMergeImpact(null);
+    if (!id) return;
+    setBusy(true);
+    try { setMergeImpact(await getImpact(id)); }
+    catch (cause) { setError(cause instanceof Error ? cause.message : "No se pudo comprobar el impacto de la fusión."); }
+    finally { setBusy(false); }
+  }
+
+  function renderCategory(category: Category, depth = 0) {
+    const parent = category.parentCategoryId ? categoryById.get(category.parentCategoryId) : null;
+    return (
+      <article
+        className={`entity-card category-card ${depth ? "category-child" : ""} ${category.lifecycle === "archived" ? "archived" : ""}`}
+        key={category.id}
+        style={categoryStyle(category)}
+      >
+        <div className="entity-main">
+          <div className="entity-icon category-swatch"><CategoryGlyph name={category.iconKey} /></div>
+          <div>
+            <div className="entity-title-row">
+              <h3>{category.name}</h3>
+              <span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span>
+            </div>
+            <p>{depth ? `Subcategoría de ${parent?.name ?? "categoría"}` : labelForCategoryKind(category.kind)}</p>
+          </div>
+        </div>
+        <div className="entity-actions">
+          <button type="button" className="icon-button" onClick={() => beginCategoryEdit(category)} aria-label={`Editar ${category.name}`}><Icon name="edit" /></button>
+          <button type="button" className="icon-button" disabled={busy || !canMoveCategory(category, -1)} onClick={() => void reorderCategories(category, -1)} aria-label={`Subir ${category.name}`}><Icon name="up" /></button>
+          <button type="button" className="icon-button" disabled={busy || !canMoveCategory(category, 1)} onClick={() => void reorderCategories(category, 1)} aria-label={`Bajar ${category.name}`}><Icon name="down" /></button>
+          <button type="button" className="icon-button" disabled={busy || (category.lifecycle === "active" && hasActiveCategoryChildren(category.id))} onClick={() => void prepareArchive(category)} aria-label={category.lifecycle === "active" ? `Archivar ${category.name}` : `Reactivar ${category.name}`}><Icon name="archive" /></button>
+        </div>
+      </article>
+    );
+  }
+
+  const archiveCandidate = archiveCandidateId ? data.categories.find((item) => item.id === archiveCandidateId) ?? null : null;
+  const selectedIconLabel = CATEGORY_ICON_OPTIONS.find((item) => item.value === categoryForm.iconKey)?.label ?? categoryForm.iconKey;
+  const selectedColorLabel = CATEGORY_COLOR_OPTIONS.find((item) => item.value === categoryForm.colorToken)?.label ?? categoryForm.colorToken;
 
   return (
     <main className="configuration-shell">
@@ -296,7 +403,6 @@ function canToggleCategoryLifecycle(category: Category) {
           <a className="back-link" href="/">← Inicio</a>
           <p className="eyebrow">FINANCIAL APP · CONFIGURACIÓN</p>
           <h1>Cuentas y categorías</h1>
-          <p className="hero-copy">Gestiona tus cuentas y categorías. Los cambios se guardan en Financial App y nunca modifican la fuente bancaria.</p>
         </div>
         <div className="configuration-summary" aria-label="Resumen de configuración">
           <div><strong>{activeAccounts}</strong><span>Cuentas activas</span></div>
@@ -307,17 +413,47 @@ function canToggleCategoryLifecycle(category: Category) {
 
       <nav className="config-tabs" aria-label="Secciones de configuración">
         <button className={tab === "accounts" ? "active" : ""} onClick={() => setTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
-        <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}><Icon name="more" />Categorías <span>{data.categories.length}</span></button>
+        <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
       </nav>
 
       {error && <div className="config-message error" role="alert">{error}</div>}
       {notice && <div className="config-message success" role="status">{notice}</div>}
 
+      {tab === "categories" && archiveCandidate && archiveImpact && (
+        <section className="category-confirmation" role="alertdialog" aria-labelledby="archive-title" aria-describedby="archive-detail">
+          <div>
+            <h2 id="archive-title">Archivar «{archiveCandidate.name}»</h2>
+            <p id="archive-detail">
+              {archiveBlocked(archiveImpact)
+                ? "Esta categoría aún tiene dependencias activas y no puede archivarse de forma segura."
+                : `${archiveImpact.transactionCount} movimientos históricos conservarán la categoría archivada.`}
+            </p>
+          </div>
+          <div className="impact-grid" aria-label="Impacto de la categoría">
+            <span><strong>{archiveImpact.transactionCount}</strong> movimientos</span>
+            <span><strong>{archiveImpact.ruleConditionCount + archiveImpact.ruleTargetCount}</strong> reglas activas</span>
+            <span><strong>{archiveImpact.merchantCount}</strong> comercios</span>
+            <span><strong>{archiveImpact.activeRecurrenceCount}</strong> recurrentes</span>
+            <span><strong>{archiveImpact.futureForecastCount}</strong> previsiones</span>
+          </div>
+          <div className="form-actions">
+            {!archiveBlocked(archiveImpact) && (
+              <button className="secondary-button danger-aware" disabled={busy} type="button" onClick={() => void run(async () => {
+                await requestConfiguration("category.archive", { id: archiveCandidate.id, archived: true });
+                setArchiveCandidateId(null);
+                setArchiveImpact(null);
+              }, "Categoría archivada.")}>Confirmar archivo</button>
+            )}
+            <button className="secondary-button" type="button" onClick={() => { setArchiveCandidateId(null); setArchiveImpact(null); }}>Cancelar</button>
+          </div>
+        </section>
+      )}
+
       {loading ? <section className="config-panel loading-state">Cargando configuración…</section> : tab === "accounts" ? (
         <div className="config-layout">
           <section className="config-panel list-panel" aria-labelledby="accounts-heading">
-            <div className="panel-heading"><div><p className="panel-kicker">ORIGEN DEL DINERO</p><h2 id="accounts-heading">Cuentas</h2></div><span className="status-chip">Datos guardados</span></div>
-            {data.accounts.length === 0 ? <div className="empty-state"><Icon name="account" /><h3>Aún no hay cuentas</h3><p>Crea la primera cuenta para empezar a organizar tu dinero. La fuente bancaria seguirá intacta.</p></div> : (
+            <div className="panel-heading"><h2 id="accounts-heading">Cuentas</h2><span className="status-chip">Datos guardados</span></div>
+            {data.accounts.length === 0 ? <div className="empty-state"><Icon name="account" /><h3>Aún no hay cuentas</h3></div> : (
               <div className="entity-list">
                 {data.accounts.map((account, index) => <article className={`entity-card ${account.lifecycle === "archived" ? "archived" : ""}`} key={account.id}>
                   <div className="entity-main"><div className="entity-icon"><Icon name="account" /></div><div><div className="entity-title-row"><h3>{account.name}</h3><span className={`lifecycle ${account.lifecycle}`}>{account.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{account.institution || "Sin entidad"} · {labelForAccountType(account.type)}</p><strong>{formatMoneyCents(account.openingBalanceCents)}</strong></div></div>
@@ -333,7 +469,7 @@ function canToggleCategoryLifecycle(category: Category) {
           </section>
 
           <aside className="config-panel form-panel" id="account-form">
-            <div className="panel-heading"><div><p className="panel-kicker">{editingAccountId ? "EDICIÓN" : "NUEVA CUENTA"}</p><h2>{editingAccountId ? "Editar cuenta" : "Añadir cuenta"}</h2></div></div>
+            <div className="panel-heading"><h2>{editingAccountId ? "Editar cuenta" : "Añadir cuenta"}</h2></div>
             <form className="config-form" onSubmit={submitAccount}>
               <label>Nombre<input required value={accountForm.name} onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })} placeholder="Ej. Cuenta principal" /></label>
               <label>Entidad<input value={accountForm.institution} onChange={(e) => setAccountForm({ ...accountForm, institution: e.target.value })} placeholder="Ej. Openbank" /></label>
@@ -344,40 +480,97 @@ function canToggleCategoryLifecycle(category: Category) {
           </aside>
         </div>
       ) : (
-        <div className="config-layout">
+        <div className="config-layout categories-layout">
           <section className="config-panel list-panel" aria-labelledby="categories-heading">
-            <div className="panel-heading"><div><p className="panel-kicker">CLASIFICACIÓN</p><h2 id="categories-heading">Categorías</h2></div><span className="status-chip">Guardadas</span></div>
-            {data.categories.length === 0 ? <div className="empty-state"><Icon name="more" /><h3>Aún no hay categorías</h3><p>Crea una categoría de gasto, ingreso o transferencia para organizar tus movimientos.</p></div> : (
-              <div className="entity-list">
-                {data.categories.map((category, index) => <article className={`entity-card ${category.lifecycle === "archived" ? "archived" : ""}`} key={category.id}>
-                  <div className="entity-main"><div className={`entity-icon category-swatch ${category.colorToken.replace(".", "-")}`}><Icon name="more" /></div><div><div className="entity-title-row"><h3>{category.name}</h3><span className={`lifecycle ${category.lifecycle}`}>{category.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{labelForCategoryKind(category.kind)}{category.parentCategoryId ? " · Subcategoría" : " · Principal"}</p><strong>{category.iconKey}</strong></div></div>
-                  <div className="entity-actions">
-                    <button type="button" className="icon-button" onClick={() => beginCategoryEdit(category)} aria-label={`Editar ${category.name}`}><Icon name="edit" /></button>
-                    <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, -1)} onClick={() => void reorderCategories(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
-                    <button type="button" className="icon-button" disabled={busy || !canMoveCategory(index, 1)} onClick={() => void reorderCategories(index, 1)} aria-label="Bajar dentro de su grupo"><Icon name="down" /></button>
-                    <button type="button" className="icon-button" disabled={busy || !canToggleCategoryLifecycle(category)} onClick={() => void run(() => requestConfiguration("category.archive", { id: category.id, archived: category.lifecycle === "active" }).then(() => undefined), category.lifecycle === "active" ? "Categoría archivada." : "Categoría reactivada.")} aria-label={category.lifecycle === "active" ? "Archivar" : "Reactivar"}><Icon name="archive" /></button>
-                  </div>
-                </article>)}
+            <div className="panel-heading"><h2 id="categories-heading">Categorías</h2><span className="status-chip">{activeCategories} activas</span></div>
+
+            <div className="category-toolbar">
+              <label className="category-search"><Icon name="search" /><span className="sr-only">Buscar categoría</span><input value={categorySearch} onChange={(event) => setCategorySearch(event.target.value)} placeholder="Buscar categoría…" /></label>
+              <div className="category-filter" role="group" aria-label="Filtrar categorías por tipo">
+                <button type="button" className={categoryFilter === "all" ? "active" : ""} onClick={() => setCategoryFilter("all")}>Todas</button>
+                {CATEGORY_KINDS.map((item) => <button type="button" key={item.value} className={categoryFilter === item.value ? "active" : ""} onClick={() => setCategoryFilter(item.value)}>{item.label}</button>)}
+              </div>
+              <label className="archive-toggle"><input type="checkbox" checked={showArchived} onChange={(event) => setShowArchived(event.target.checked)} />Ver archivadas</label>
+            </div>
+
+            {categoryGroups.length === 0 ? <div className="empty-state"><CategoryGlyph name="wallet" size={28} /><h3>No hay categorías que coincidan</h3></div> : (
+              <div className="category-groups">
+                {categoryGroups.map((group) => (
+                  <section className="category-group" key={group.value} aria-labelledby={`category-group-${group.value}`}>
+                    <div className="category-group-heading"><h3 id={`category-group-${group.value}`}>{group.label}</h3><span>{group.roots.reduce((count, root) => count + 1 + data.categories.filter((item) => item.parentCategoryId === root.id && visibleCategoryIds.has(item.id)).length, 0)}</span></div>
+                    <div className="entity-list">
+                      {group.roots.flatMap((root) => {
+                        const children = data.categories
+                          .filter((item) => item.parentCategoryId === root.id && visibleCategoryIds.has(item.id))
+                          .sort((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name, "es"));
+                        return [renderCategory(root), ...children.map((child) => renderCategory(child, 1))];
+                      })}
+                    </div>
+                  </section>
+                ))}
               </div>
             )}
           </section>
 
           <aside className="configuration-side-stack">
             <section className="config-panel form-panel" id="category-form">
-              <div className="panel-heading"><div><p className="panel-kicker">{editingCategoryId ? "EDICIÓN" : "NUEVA CATEGORÍA"}</p><h2>{editingCategoryId ? "Editar categoría" : "Añadir categoría"}</h2></div></div>
+              <div className="panel-heading"><h2>{editingCategoryId ? "Editar categoría" : "Añadir categoría"}</h2></div>
               <form className="config-form" onSubmit={submitCategory}>
                 <label>Nombre<input required value={categoryForm.name} onChange={(e) => setCategoryForm({ ...categoryForm, name: e.target.value })} placeholder="Ej. Supermercado" /></label>
                 <label>Tipo<select value={categoryForm.kind} onChange={(e) => setCategoryForm({ ...categoryForm, kind: e.target.value as CategoryKind, parentCategoryId: "" })}>{CATEGORY_KINDS.map((item) => <option value={item.value} key={item.value} disabled={!canUseCategoryKind(item.value)}>{item.label}</option>)}</select></label>
                 <label>Categoría superior<select value={categoryForm.parentCategoryId} onChange={(e) => setCategoryForm({ ...categoryForm, parentCategoryId: e.target.value })}><option value="">Sin categoría superior</option>{parentOptions.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
-                <div className="form-row"><label>Icono<select value={categoryForm.iconKey} onChange={(e) => setCategoryForm({ ...categoryForm, iconKey: e.target.value })}>{ICONS.map((item) => <option value={item} key={item}>{item}</option>)}</select></label><label>Color<select value={categoryForm.colorToken} onChange={(e) => setCategoryForm({ ...categoryForm, colorToken: e.target.value })}>{COLORS.map((item) => <option value={item} key={item}>{item.replace("category.", "")}</option>)}</select></label></div>
+
+                <div className="category-visual-preview" style={{ "--category-color": categoryColorHex(categoryForm.colorToken) } as CSSProperties}>
+                  <div className="entity-icon category-swatch"><CategoryGlyph name={categoryForm.iconKey} size={20} /></div>
+                  <div><strong>{selectedIconLabel}</strong><span>{selectedColorLabel}</span></div>
+                </div>
+
+                <div className="form-row">
+                  <label>Icono<select value={categoryForm.iconKey} onChange={(e) => setCategoryForm({ ...categoryForm, iconKey: e.target.value })}>{CATEGORY_ICON_OPTIONS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label>
+                  <label>Color<select value={categoryForm.colorToken} onChange={(e) => setCategoryForm({ ...categoryForm, colorToken: e.target.value })}>{CATEGORY_COLOR_OPTIONS.map((item) => <option value={item.value} key={item.value}>{item.label}</option>)}</select></label>
+                </div>
+                <div className="color-palette" role="group" aria-label="Paleta de colores">
+                  {CATEGORY_COLOR_OPTIONS.map((item) => <button key={item.value} type="button" className={categoryForm.colorToken === item.value ? "selected" : ""} style={{ "--swatch": item.hex } as CSSProperties} onClick={() => setCategoryForm({ ...categoryForm, colorToken: item.value })} aria-label={`Color ${item.label}`} aria-pressed={categoryForm.colorToken === item.value} />)}
+                </div>
                 <div className="form-actions"><button className="primary-button" type="submit" disabled={busy}><Icon name="plus" />{editingCategoryId ? "Guardar cambios" : "Crear categoría"}</button>{editingCategoryId && <button className="secondary-button" type="button" onClick={() => { setEditingCategoryId(null); setCategoryForm(INITIAL_CATEGORY); }}>Cancelar</button>}</div>
               </form>
             </section>
 
             <section className="config-panel merge-panel">
-              <div className="panel-heading"><div><p className="panel-kicker">MANTENIMIENTO</p><h2>Fusionar categorías</h2></div><Icon name="merge" /></div>
-              <p>La categoría origen se archiva y sus referencias pasan a la de destino. No se combinan presupuestos incompatibles por suposición.</p>
-              <div className="config-form compact"><label>Origen<select value={mergeSource} onChange={(e) => { setMergeSource(e.target.value); setMergeTarget(""); }}><option value="">Seleccionar</option>{mergeSources.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><label>Destino<select value={mergeTarget} onChange={(e) => setMergeTarget(e.target.value)} disabled={!mergeSource}><option value="">Seleccionar</option>{mergeTargets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label><button type="button" className="secondary-button danger-aware" disabled={!mergeSource || !mergeTarget || busy} onClick={() => void run(async () => { await requestConfiguration("category.merge", { sourceCategoryId: mergeSource, targetCategoryId: mergeTarget }); setMergeSource(""); setMergeTarget(""); }, "Categorías fusionadas correctamente.")}><Icon name="merge" />Fusionar</button></div>
+              <div className="panel-heading"><h2>Fusionar categorías</h2><Icon name="merge" /></div>
+              <div className="config-form compact">
+                <label>Origen<select value={mergeSource} onChange={(e) => void selectMergeSource(e.target.value)}><option value="">Seleccionar</option>{mergeSources.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+                <label>Destino<select value={mergeTarget} onChange={(e) => { setMergeTarget(e.target.value); setMergeReviewed(false); }} disabled={!mergeSource}><option value="">Seleccionar</option>{mergeTargets.map((item) => <option value={item.id} key={item.id}>{item.name}</option>)}</select></label>
+
+                {mergeImpact && mergeSource && (
+                  <div className="merge-impact" aria-live="polite">
+                    <strong>{impactTotal(mergeImpact)} referencias relacionadas</strong>
+                    <div className="impact-grid compact-impact">
+                      <span><b>{mergeImpact.transactionCount}</b> movimientos</span>
+                      <span><b>{mergeImpact.ruleConditionCount + mergeImpact.ruleTargetCount}</b> reglas</span>
+                      <span><b>{mergeImpact.merchantCount}</b> comercios</span>
+                      <span><b>{mergeImpact.budgetCount}</b> presupuestos</span>
+                      <span><b>{mergeImpact.activeRecurrenceCount}</b> recurrentes</span>
+                      <span><b>{mergeImpact.futureForecastCount}</b> previsiones</span>
+                    </div>
+                  </div>
+                )}
+
+                <button type="button" className={`secondary-button ${mergeReviewed ? "danger-aware" : ""}`} disabled={!mergeSource || !mergeTarget || busy} onClick={() => {
+                  if (!mergeReviewed) {
+                    setMergeReviewed(true);
+                    return;
+                  }
+                  void run(async () => {
+                    await requestConfiguration("category.merge", { sourceCategoryId: mergeSource, targetCategoryId: mergeTarget });
+                    setMergeSource("");
+                    setMergeTarget("");
+                    setMergeImpact(null);
+                    setMergeReviewed(false);
+                  }, "Categorías fusionadas correctamente.");
+                }}><Icon name="merge" />{mergeReviewed ? "Confirmar fusión" : "Revisar fusión"}</button>
+                {mergeReviewed && <p className="merge-confirmation-note" role="status">La categoría origen se archivará y todas sus referencias compatibles pasarán al destino.</p>}
+              </div>
             </section>
           </aside>
         </div>
