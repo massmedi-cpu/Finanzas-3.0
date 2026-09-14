@@ -43,9 +43,18 @@ test("CR008-OCR-002 v18 recrop cannot erase first-pass evidence from an omitted 
   expect(text.filter((item) => item === "15,91")).toHaveLength(1);
 });
 
-test("CR008-OCR-002 v18 lets recrop replace the same physical slot instead of duplicating it", () => {
+test("CR008-OCR-002 v18 lets recrop upgrade malformed numeric evidence in the same physical slot", () => {
   const firstPass = [word("560", 0.80, 0.55, 0.06, 0.61)];
   const reread = [word("5,60", 0.801, 0.551, 0.06, 0.88)];
+
+  const merged = mergeReceiptRecropWords(firstPass, reread);
+
+  expect(merged.map((item) => item.text)).toEqual(["5,60"]);
+});
+
+test("CR008-OCR-002 v18 recrop cannot downgrade an explicit monetary token to bare digits", () => {
+  const firstPass = [word("5,60", 0.80, 0.55, 0.06, 0.79)];
+  const reread = [word("560", 0.801, 0.551, 0.06, 0.91)];
 
   const merged = mergeReceiptRecropWords(firstPass, reread);
 
