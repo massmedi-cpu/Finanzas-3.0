@@ -184,6 +184,22 @@
 }
 .categoryAssignment small { min-width: 0; color: var(--color-text-muted); font-size: .84rem; font-weight: 600; line-height: 1.35; }
 .categoryAssignment button { flex: 0 0 auto; min-height: 2.35rem; padding: .42rem .72rem; font-size: .84rem; }
+.fieldRestore {
+  justify-self: flex-start;
+  width: auto;
+  min-height: 0 !important;
+  height: auto !important;
+  padding: .12rem 0 !important;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #8fb4ff !important;
+  font-size: .78rem !important;
+  font-weight: 650;
+  line-height: 1.25;
+  text-align: left;
+}
+.fieldRestore:hover:not(:disabled) { color: #b5ccff !important; text-decoration: underline; }
 .checkboxLabel {
   display: flex !important;
   align-items: center;

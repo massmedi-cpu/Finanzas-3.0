@@ -108,11 +108,14 @@ type CategoryEditorMode = "inherit" | "set";
 
 type EditorState = {
   concept: string;
+  merchantMode: "inherit" | "set";
   merchant: string;
   categoryMode: CategoryEditorMode;
   categoryRoot: string;
   categoryLeaf: string;
+  kindMode: "inherit" | "set";
   kind: string;
+  reviewStateMode: "inherit" | "set";
   reviewState: string;
   excludedFromAnalytics: boolean;
   note: string;
@@ -267,12 +270,15 @@ function editorFor(row: TransactionRow, categories: Facets["categories"]): Edito
   const selection = categorySelectionFor(categories, row.category.effectiveId);
   return {
     concept: row.concept.effective,
-    merchant: merchantWasOverridden ? (row.merchant.effectiveId ?? NONE) : INHERIT,
+    merchantMode: merchantWasOverridden ? "set" : "inherit",
+    merchant: row.merchant.effectiveId ?? NONE,
     categoryMode: categoryWasOverridden ? "set" : "inherit",
     categoryRoot: selection.root,
     categoryLeaf: selection.leaf,
-    kind: row.overriddenFields.includes("kind") ? row.kind.effective : INHERIT,
-    reviewState: row.overriddenFields.includes("reviewState") ? row.reviewState.effective : INHERIT,
+    kindMode: row.overriddenFields.includes("kind") ? "set" : "inherit",
+    kind: row.kind.effective,
+    reviewStateMode: row.overriddenFields.includes("reviewState") ? "set" : "inherit",
+    reviewState: row.reviewState.effective,
     excludedFromAnalytics: row.excludedFromAnalytics,
     note: row.userNote ?? "",
   };
@@ -282,12 +288,12 @@ function individualPatch(row: TransactionRow, editor: EditorState, categories: F
   const concept = editor.concept.trim();
   return {
     concept: concept === row.concept.processed ? null : concept,
-    merchantMode: editor.merchant === INHERIT ? "inherit" : "set",
-    merchantId: editor.merchant === INHERIT || editor.merchant === NONE ? null : editor.merchant,
+    merchantMode: editor.merchantMode,
+    merchantId: editor.merchantMode === "inherit" || editor.merchant === NONE ? null : editor.merchant,
     categoryMode: editor.categoryMode,
     categoryId: editor.categoryMode === "inherit" ? null : selectedCategoryId(editor, categories),
-    kind: editor.kind === INHERIT ? null : editor.kind,
-    reviewState: editor.reviewState === INHERIT ? null : editor.reviewState,
+    kind: editor.kindMode === "inherit" ? null : editor.kind,
+    reviewState: editor.reviewStateMode === "inherit" ? null : editor.reviewState,
     excludedFromAnalytics: editor.excludedFromAnalytics,
     note: editor.note.trim() || null,
   } satisfies Record<string, unknown>;
@@ -781,7 +787,7 @@ async function saveEdit(row: TransactionRow) {
                               />
                               {conceptError ? <small id={CONCEPT_ERROR_ID} className={styles.fieldError} role="alert">{conceptError}</small> : null}
                             </label>
-                            <label className={`${styles.editorField} ${styles.merchantField}`}><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("merchant") ? "Restaurar valor detectado" : "Mantener valor actual"}</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
+                            <label className={`${styles.editorField} ${styles.merchantField}`}><span>Comercio</span><select data-testid="edit-merchant" value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchantMode: "set", merchant: event.target.value })}><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select>{editor.merchantMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving} onClick={() => setEditor({ ...editor, merchantMode: "inherit", merchant: row.merchant.originalId ?? NONE })}>Restaurar valor detectado: {row.merchant.originalName ?? "Sin comercio"}</button> : null}</label>
                             <label className={`${styles.editorField} ${styles.categoryField}`}><span>Categoría</span><select data-testid="edit-category-root" value={editor.categoryRoot} onChange={(event) => {
                     const categoryRoot = event.target.value;
                     setEditor({ ...editor, categoryMode: "set", categoryRoot, categoryLeaf: "" });
@@ -799,8 +805,8 @@ async function saveEdit(row: TransactionRow) {
                       setCategoryError("");
                     }}>Restaurar clasificación detectada</button> : null}
                   </div>
-                            <label className={`${styles.editorField} ${styles.typeField}`}><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("kind") ? "Restaurar valor detectado" : "Mantener valor actual"}</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
-                            <label className={`${styles.editorField} ${styles.reviewField}`}><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewState: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("reviewState") ? "Restaurar valor detectado" : "Mantener valor actual"}</option>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                            <label className={`${styles.editorField} ${styles.typeField}`}><span>Tipo</span><select data-testid="edit-kind" value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kindMode: "set", kind: event.target.value })}>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editor.kindMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving || Boolean(row.transferPairId)} onClick={() => setEditor({ ...editor, kindMode: "inherit", kind: row.kind.original })}>Restaurar valor detectado: {KIND_LABELS[row.kind.original]}</button> : row.transferPairId ? <small>Desempareja la transferencia antes de cambiar su tipo.</small> : null}</label>
+                            <label className={`${styles.editorField} ${styles.reviewField}`}><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewStateMode: "set", reviewState: event.target.value })}>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editor.reviewStateMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving} onClick={() => setEditor({ ...editor, reviewStateMode: "inherit", reviewState: row.reviewState.original })}>Restaurar valor detectado: {REVIEW_LABELS[row.reviewState.original]}</button> : null}</label>
                             <label className={`${styles.editorField} ${styles.noteField}`}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
                             <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
