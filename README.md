@@ -1,19 +1,24 @@
 # Financial App
 
-Construcción desde cero de una nueva Financial App.
+Financial App es una aplicación personal de finanzas construida con Next.js, TypeScript, Supabase y Vercel.
 
-## Versión actual
+## Estado actual
 
-`0.0.1`
+- Versión de aplicación: 10.0.2.
+- Fuente bancaria oficial: estrictamente de solo lectura.
+- Persistencia financiera y modificaciones manuales: Supabase.
+- Catálogo de categorías: 64 categorías de sistema jerárquicas, editables mediante la configuración sin modificar la fuente bancaria.
+- Categorización automática: prioridad manual > regla personalizada > comercio > catálogo integrado.
+- OCR y documentos: aislados del núcleo financiero para evitar degradaciones cruzadas.
 
-## Objetivo de versión
+## Principios de implementación
 
-La aplicación avanzará mediante versiones incrementales desde `0.0.1`. La versión `10.0.0` se reservará exclusivamente para el primer estado completo, estable y validado de la nueva aplicación.
+- Datos monetarios en céntimos enteros y presentación `es-ES` / EUR.
+- Zona horaria de producto: Europe/Madrid.
+- Cambios acumulativos, verificables y reversibles.
+- Responsive y accesibilidad como requisitos de base.
+- La categorización automática puede recalcular decisiones del sistema, pero nunca debe sobrescribir una corrección manual del usuario.
 
-Hasta alcanzar ese hito, cada versión representa progreso de construcción, integración, corrección o validación. No se debe marcar la aplicación como `10.0.0` antes de completar y validar el alcance funcional acordado.
+## Verificación
 
-A partir de `10.0.0`, las mejoras posteriores seguirán versionado incremental normal: `10.0.1`, `10.1.0`, `11.0.0`, etc., según el impacto de los cambios.
-
-## Regla de reconstrucción
-
-La rama activa no reutiliza código funcional heredado de la aplicación anterior salvo decisión explícita. El proyecto y el dominio de producción de Vercel sí se conservan para mantener continuidad de infraestructura y URL.
+Las migraciones y cambios funcionales deben comprobarse antes de integrarse en `main`. Las pruebas que escriben en base de datos deben ejecutarse dentro de transacciones con `ROLLBACK` o en entornos aislados, manteniendo la política que impide escrituras de Preview sobre Production.
