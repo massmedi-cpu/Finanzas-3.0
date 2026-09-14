@@ -11,3 +11,10 @@ test("la edición muestra la categoría automática efectiva sin crear un overri
   expect(helper).toContain('option.value === INHERIT');
   expect(page).toContain("<AutomaticCategoryLabel />");
 });
+
+test("la etiqueta automática no usa un observador global que pueda bloquear la página", async () => {
+  expect(helper).not.toContain("MutationObserver");
+  expect(helper).not.toContain("observer.observe(document.body");
+  expect(helper).toContain("requestAnimationFrame");
+  expect(helper).toContain('document.addEventListener("click", scheduleSync, true)');
+});
