@@ -1,0 +1,101 @@
+/*
+ * Global visual hierarchy correction.
+ *
+ * Keep functional copy, alerts, labels and help text intact while removing
+ * decorative page introductions and reducing the oversized typography that
+ * made financial data unnecessarily conspicuous.
+ */
+
+:root {
+  --font-page-title: clamp(1.45rem, 1.28rem + 0.65vw, 2.05rem);
+  --font-section-title: clamp(1.075rem, 1.02rem + 0.22vw, 1.3rem);
+  --font-subtitle: clamp(0.95rem, 0.93rem + 0.08vw, 1rem);
+  --font-kpi-primary: clamp(1.35rem, 1.2rem + 0.5vw, 1.75rem);
+  --font-kpi-secondary: clamp(1.02rem, 0.99rem + 0.14vw, 1.15rem);
+}
+
+/* Keep the highest levels of the hierarchy compact on every route, even
+   where a CSS module previously used an explicit clamp larger than tokens. */
+main h1 {
+  font-size: var(--font-page-title) !important;
+  line-height: 1.08 !important;
+  letter-spacing: -0.03em !important;
+}
+
+main h2 {
+  font-size: var(--font-section-title) !important;
+  line-height: 1.2 !important;
+  letter-spacing: -0.02em !important;
+}
+
+main h3 {
+  font-size: clamp(1rem, 0.97rem + 0.12vw, 1.12rem) !important;
+  line-height: 1.25 !important;
+}
+
+/* Turbopack keeps the local CSS-module name as the stable __local suffix,
+   e.g. dashboard-module__HASH__hero. Match that suffix rather than a hash. */
+main header[class*="__hero"] > div:first-child > p:last-of-type:not(:first-child),
+main header[class*="__hero"] [class*="__heroText"],
+main header[class*="__hero"] [class*="__principles"],
+.configuration-hero .hero-copy {
+  display: none !important;
+}
+
+/* The total balance is intentionally discreet: useful at a glance without
+   becoming the visual focal point of Inicio/Cuentas. */
+main [class*="__heroBalance"] strong,
+main [class*="__totalCard"] strong {
+  font-size: clamp(1.25rem, 1.12rem + 0.4vw, 1.6rem) !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+}
+
+/* Secondary financial figures stay readable but no longer compete with
+   section titles or dominate compact/mobile layouts. */
+main [class*="__currentBalance"] strong,
+main [class*="__metricGrid"] strong,
+main [class*="__metrics"] strong,
+main [class*="__budgetSummary"] strong,
+main [class*="__futureBalance"] strong,
+main [class*="__comparisonGrid"] strong {
+  font-size: var(--font-kpi-secondary) !important;
+  letter-spacing: -0.015em !important;
+}
+
+/* Removing intro copy should also reduce the empty vertical footprint of
+   hero blocks instead of leaving oversized presentation areas behind. */
+main header[class*="__hero"] {
+  gap: clamp(0.75rem, 1.5vw, 1.1rem) !important;
+}
+
+main header[class*="__hero"] > div:first-child,
+.configuration-hero {
+  padding-block: clamp(1rem, 1.8vw, 1.4rem) !important;
+}
+
+@media (max-width: 48rem) {
+  :root {
+    --font-page-title: clamp(1.35rem, 1.26rem + 0.45vw, 1.55rem);
+    --font-section-title: clamp(1.025rem, 1rem + 0.15vw, 1.15rem);
+    --font-kpi-primary: clamp(1.2rem, 1.13rem + 0.35vw, 1.4rem);
+    --font-kpi-secondary: 1.025rem;
+  }
+
+  main [class*="__heroBalance"] strong,
+  main [class*="__totalCard"] strong {
+    font-size: 1.3rem !important;
+  }
+}
+
+@media (max-width: 30rem) {
+  :root {
+    --font-page-title: 1.35rem;
+    --font-section-title: 1.025rem;
+  }
+
+  main header[class*="__hero"] > div:first-child,
+  .configuration-hero {
+    padding-block: 0.9rem !important;
+  }
+}
