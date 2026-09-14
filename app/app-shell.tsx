@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { ProductIcon, type ProductIconName } from "../src/design/product-icons";
+import { PwaInstallButton } from "./pwa-install-button";
 import styles from "./app-shell.module.css";
 
 const navigation = [
@@ -53,6 +54,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <PwaInstallButton className={`${styles.link} ${styles.installButton}`} />
         </nav>
       </div>
       <div id="main-content" tabIndex={-1} className={styles.content}>{children}</div>
