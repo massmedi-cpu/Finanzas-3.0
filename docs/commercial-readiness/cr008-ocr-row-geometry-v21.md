@@ -18,7 +18,8 @@ El caso de regresión de geometría, ejecutado como JavaScript con el algoritmo 
 - Un único agrupador compartido utiliza centros y alturas típicas. Los glifos regulares se agrupan primero; una marca de altura anómala no puede iniciar una fila que absorba las vecinas.
 - El filtro de anclas y la recuperación numérica calculan la altura de texto sin marcas que atraviesan varias líneas. La evidencia original se conserva.
 - El recorte de una celda usa los glifos de su columna, o los demás números de esa misma fila si falta la celda. Se elimina la expansión vertical de 1,55–2 veces que incluía otras filas.
-- Se conservan los límites horizontales de V20, la lectura física de separadores y el consenso antes de reemplazar un importe. No se insertan decimales ni se calculan valores para completar el ticket.
+- En Base/IVA/Total, el área numérica se deriva del espacio situado después de la etiqueta: un total impreso con caracteres grandes no debe perder sus primeros dígitos por usar el ancho de una celda de producto.
+- Se conservan los límites horizontales de V20 para las columnas de productos, la lectura física de separadores y el consenso antes de reemplazar un importe. No se insertan decimales ni se calculan valores para completar el ticket.
 - La batería OCR sin navegador incorpora las regresiones de V14–V20 que su expresión de selección omitía y las nuevas pruebas de geometría.
 
 ## Validación y límites

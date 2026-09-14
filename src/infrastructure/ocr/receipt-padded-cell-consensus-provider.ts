@@ -212,6 +212,7 @@ export function paddedFocusedCellRectangle(
   // Prefer glyphs inside this column; fall back to other numbers on the same
   // baseline when this cell was missed. Horizontal V20 band limits stay intact.
   const normalNumbers = row.words.filter((word) => /\d/.test(word.text)
+    && word.box.height >= row.box.height * 0.45
     && word.box.height <= row.box.height * 1.7);
   const inColumn = normalNumbers.filter((word) => centerX(word) >= band.left && centerX(word) <= band.right);
   const referenceWords = inColumn.length ? inColumn : normalNumbers;
@@ -416,6 +417,17 @@ async function recognizePrepared(
   );
 }
 
+export function summaryRecoveryBand(row: SweepRow, amountBand: NumericBand): NumericBand {
+  if (!row.summaryLike) return amountBand;
+  const labels = row.words.filter((word) => /\b(total|subtotal|base|iva)\b/i.test(word.text));
+  if (!labels.length) return amountBand;
+  const labelRight = Math.max(...labels.map((word) => word.box.x + word.box.width));
+  // Summary lines have one amount, which can be printed much larger than the
+  // product prices. Reserve the pixels after its label, never another column.
+  const left = Math.min(amountBand.left, labelRight + row.box.height * 0.3);
+  return { ...amountBand, left, center: (left + amountBand.right) / 2 };
+}
+
 function targetCells(baseWords: OcrWord[], rows: SweepRow[], bands: NumericBand[]) {
   const targets: CellTarget[] = [];
   const seen = new Set<string>();
@@ -429,7 +441,7 @@ function targetCells(baseWords: OcrWord[], rows: SweepRow[], bands: NumericBand[
 
   for (const row of rows) {
     if (row.summaryLike) {
-      const amountBand = bands[bands.length - 1];
+      const amountBand = summaryRecoveryBand(row, bands[bands.length - 1]);
       const existing = existingWordsForCell(baseWords, row, amountBand, "money");
       if (!existing.length && /\b(total|subtotal|base|iva)\b/i.test(row.text)) {
         push({ row, band: amountBand, kind: "money", reason: "summary_missing" });

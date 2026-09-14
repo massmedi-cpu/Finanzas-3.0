@@ -4,7 +4,7 @@ import { reconstructOcrPage } from "../../src/domain/document-ocr";
 import { clusterOcrRows, ocrRowTextBox } from "../../src/domain/ocr-rows";
 import { filterReceiptAnchorWords } from "../../src/infrastructure/ocr/receipt-anchor-filter-provider";
 import { selectReceiptRowsForColumnSweep } from "../../src/infrastructure/ocr/receipt-column-sweep-provider";
-import { paddedFocusedCellRectangle } from "../../src/infrastructure/ocr/receipt-padded-cell-consensus-provider";
+import { paddedFocusedCellRectangle, summaryRecoveryBand } from "../../src/infrastructure/ocr/receipt-padded-cell-consensus-provider";
 
 const w = (text: string, x: number, y: number, width = 0.06, height = 0.02): OcrWord => ({
   text, confidence: 0.88, box: { x, y, width, height },
@@ -50,7 +50,7 @@ test("anchor filtering, numeric recovery and final layout share the same distinc
     expect(rows.some((row) => row.text.includes(label))).toBe(true);
   }
   const page = reconstructOcrPage(1, words);
-  expect(page.lines.find((line) => line.text.includes("PRODUCTO_B"))?.words.slice(-3).map((word) => word.text))
+  expect(page.lines.find((line) => line.text.includes("PRODUCTO_B"))?.words.filter((word) => /\d/.test(word.text)).map((word) => word.text))
     .toEqual(["2", "2,80", "560"]);
   expect(page.plainText).not.toContain("5,60");
 });
@@ -85,4 +85,37 @@ test("a missed numeric cell uses the numbers' baseline rather than a slanted des
   const crop = paddedFocusedCellRectangle(metadata, row, band, "money", 1);
   expect(crop.top).toBeLessThan(0.4 * metadata.height);
   expect(crop.top + crop.height).toBeLessThan(0.43 * metadata.height);
+});
+
+test("a large summary amount keeps its leading digits without crossing the label", () => {
+  const metadata = { mimeType: "image/jpeg" as const, width: 1600, height: 2000 };
+  const row = { words: [w("Total", 0.4, 0.75, 0.14, 0.05)],
+    box: { x: 0.4, y: 0.75, width: 0.5, height: 0.05 }, text: "Total", summaryLike: true };
+  const productBand = { left: 0.78, right: 0.93, center: 0.855, support: 5 };
+  const summaryBand = summaryRecoveryBand(row, productBand);
+  for (const variant of [0, 1] as const) {
+    const crop = paddedFocusedCellRectangle(metadata, row, summaryBand, "money", variant);
+    expect(crop.left).toBeGreaterThan(0.54 * metadata.width);
+    expect(crop.left).toBeLessThanOrEqual(0.65 * metadata.width);
+    expect(crop.left + crop.width).toBeGreaterThanOrEqual(0.9 * metadata.width);
+  }
+  expect(summaryRecoveryBand({ ...row, summaryLike: false }, productBand)).toBe(productBand);
+  expect(productBand.left).toBe(0.78);
+});
+
+test("a tiny spurious digit cannot shrink the crop of a large summary line", () => {
+  const metadata = { mimeType: "image/jpeg" as const, width: 1600, height: 2000 };
+  const row = { words: [w("Total", 0.4, 0.75, 0.14, 0.05), w("1", 0.82, 0.773, 0.003, 0.003)],
+    box: { x: 0.4, y: 0.75, width: 0.5, height: 0.05 }, text: "Total 1", summaryLike: true };
+  const band = summaryRecoveryBand(row, { left: 0.78, right: 0.93, center: 0.855, support: 5 });
+  const crop = paddedFocusedCellRectangle(metadata, row, band, "money", 0);
+  expect(crop.top).toBeLessThanOrEqual(0.75 * metadata.height);
+  expect(crop.top + crop.height).toBeGreaterThanOrEqual(0.8 * metadata.height);
+});
+
+test("fixing row grouping preserves a merchant title followed by a wrapped letter", () => {
+  const filtered = filterReceiptAnchorWords([...receipt(), w("t", 0.5, 0.19, 0.015)]);
+  expect(filtered).not.toBeNull();
+  expect(filtered!.words.map((word) => word.text)).toContain("TIENDA");
+  expect(filtered!.words.map((word) => word.text)).toContain("t");
 });

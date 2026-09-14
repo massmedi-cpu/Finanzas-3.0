@@ -232,7 +232,20 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
   let startIndex = metadataIndexes.length
     ? Math.min(...metadataIndexes)
     : Math.max(0, header.startIndex - 2);
-  const precedingIndex = startIndex - 1;
+  let precedingIndex = startIndex - 1;
+  // A merchant name can wrap its last letter onto a short line. Keep both
+  // lines when they are adjacent; fixing row grouping must not crop the title.
+  if (precedingIndex >= 1) {
+    const fragment = rows[precedingIndex];
+    const title = rows[precedingIndex - 1];
+    const gap = fragment.box.y - (title.box.y + title.box.height);
+    if (alphaChars(fragment.text) > 0 && alphaChars(fragment.text) < 3
+      && !/\d/.test(fragment.text)
+      && intersectsHorizontalBand(fragment, left, right)
+      && gap <= Math.max(0.02, title.box.height * 1.5)) {
+      precedingIndex -= 1;
+    }
+  }
   if (
     precedingIndex >= 0
     && intersectsHorizontalBand(rows[precedingIndex], left, right)
