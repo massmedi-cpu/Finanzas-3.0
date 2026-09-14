@@ -98,7 +98,6 @@ type Filters = {
   categoryId: string;
   merchantId: string;
   kind: string;
-  reviewState: string;
   duplicateState: string;
   dateFrom: string;
   dateTo: string;
@@ -115,8 +114,6 @@ type EditorState = {
   categoryLeaf: string;
   kindMode: "inherit" | "set";
   kind: string;
-  reviewStateMode: "inherit" | "set";
-  reviewState: string;
   excludedFromAnalytics: boolean;
   note: string;
 };
@@ -136,7 +133,6 @@ const EMPTY_FILTERS: Filters = {
   categoryId: "",
   merchantId: "",
   kind: "",
-  reviewState: "",
   duplicateState: "",
   dateFrom: "",
   dateTo: "",
@@ -152,12 +148,6 @@ const KIND_LABELS: Record<TransactionKind, string> = {
   adjustment: "Ajuste",
 };
 
-const REVIEW_LABELS: Record<ReviewState, string> = {
-  confirmed: "Confirmado",
-  pending: "Pendiente",
-  needs_review: "Revisar",
-};
-
 const DUPLICATE_LABELS: Record<DuplicateState, string> = {
   none: "Sin duplicado",
   suspected: "Posible duplicado",
@@ -169,7 +159,6 @@ const OVERRIDE_LABELS: Record<string, string> = {
   merchant: "comercio",
   category: "categoría",
   kind: "tipo",
-  reviewState: "revisión",
   excludedFromAnalytics: "analítica",
   note: "nota",
 };
@@ -205,7 +194,6 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["accountId", "accountId"],
     ["merchantId", "merchantId"],
     ["kind", "kind"],
-    ["reviewState", "reviewState"],
     ["duplicateState", "duplicateState"],
     ["dateFrom", "dateFrom"],
     ["dateTo", "dateTo"],
@@ -277,8 +265,6 @@ function editorFor(row: TransactionRow, categories: Facets["categories"]): Edito
     categoryLeaf: selection.leaf,
     kindMode: row.overriddenFields.includes("kind") ? "set" : "inherit",
     kind: row.kind.effective,
-    reviewStateMode: row.overriddenFields.includes("reviewState") ? "set" : "inherit",
-    reviewState: row.reviewState.effective,
     excludedFromAnalytics: row.excludedFromAnalytics,
     note: row.userNote ?? "",
   };
@@ -293,7 +279,6 @@ function individualPatch(row: TransactionRow, editor: EditorState, categories: F
     categoryMode: editor.categoryMode,
     categoryId: editor.categoryMode === "inherit" ? null : selectedCategoryId(editor, categories),
     kind: editor.kindMode === "inherit" ? null : editor.kind,
-    reviewState: editor.reviewStateMode === "inherit" ? null : editor.reviewState,
     excludedFromAnalytics: editor.excludedFromAnalytics,
     note: editor.note.trim() || null,
   } satisfies Record<string, unknown>;
@@ -314,7 +299,6 @@ export default function TransactionsClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState(UNCHANGED);
-  const [bulkReview, setBulkReview] = useState(UNCHANGED);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [conceptError, setConceptError] = useState("");
@@ -388,7 +372,6 @@ export default function TransactionsClient() {
     const categoryId = params.get("categoryId");
     const merchantId = params.get("merchantId");
     const kind = params.get("kind");
-    const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
@@ -401,7 +384,6 @@ export default function TransactionsClient() {
       categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
       merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
       kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
-      reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
       dateFrom: safeDateRange ? safeDateFrom : "",
       dateTo: safeDateRange ? safeDateTo : "",
@@ -617,9 +599,6 @@ async function saveEdit(row: TransactionRow) {
         patch.categoryId = bulkCategory === NONE ? null : bulkCategory;
       }
     }
-    if (bulkReview !== UNCHANGED) {
-      patch.reviewState = bulkReview === INHERIT ? null : bulkReview;
-    }
     if (Object.keys(patch).length === 0) {
       setError("Selecciona al menos un cambio para aplicar en bloque.");
       return;
@@ -627,7 +606,6 @@ async function saveEdit(row: TransactionRow) {
     const ok = await patchTransactions(selectedIds, patch, "Edición masiva completada");
     if (ok) {
       setBulkCategory(UNCHANGED);
-      setBulkReview(UNCHANGED);
     }
   }
 
@@ -685,13 +663,6 @@ async function saveEdit(row: TransactionRow) {
           </select>
         </label>
         <label>
-          <span>Revisión</span>
-          <select value={draftFilters.reviewState} onChange={(event) => updateFilter("reviewState", event.target.value)}>
-            <option value="">Todos</option>
-            {(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </label>
-        <label>
           <span>Duplicados</span>
           <select value={draftFilters.duplicateState} onChange={(event) => updateFilter("duplicateState", event.target.value)}>
             <option value="">Todos</option>
@@ -713,10 +684,6 @@ async function saveEdit(row: TransactionRow) {
             <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar automática</option><option value={NONE}>Sin categoría</option>
             {facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <label><span>Revisión</span><select data-testid="bulk-review" value={bulkReview} onChange={(event) => setBulkReview(event.target.value)}>
-            <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar automática</option>
-            {(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select></label>
           <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving}>Aplicar cambios</button>
         </section>
       )}
@@ -736,7 +703,7 @@ async function saveEdit(row: TransactionRow) {
         {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>No hay movimientos que coincidan con los filtros actuales.</div> : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th className={styles.selectHeading}>Sel.</th><th>Fecha</th><th>Concepto y trazabilidad</th><th>Cuenta</th><th>Categoría</th><th>Estado</th><th className={styles.amountHeading}>Importe</th><th>Gestión</th></tr></thead>
+              <thead><tr><th className={styles.selectHeading}>Sel.</th><th>Fecha</th><th>Concepto y trazabilidad</th><th>Cuenta</th><th>Categoría</th><th className={styles.amountHeading}>Importe</th><th>Gestión</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
                   <Fragment key={row.id}>
@@ -744,7 +711,7 @@ async function saveEdit(row: TransactionRow) {
                       <td data-label="Seleccionar" className={styles.selectCell}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={() => toggleRow(row.id)} /></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
-                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.hasUserOverride && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}</div>
+                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
                         <p>{row.merchant.effectiveName ?? "Sin comercio"}</p>
                         <details className={styles.trace}><summary>Detalle y trazabilidad</summary><dl>
                           <div><dt>Concepto original</dt><dd>{row.concept.original}</dd></div><div><dt>Concepto procesado</dt><dd>{row.concept.processed}</dd></div><div><dt>Concepto efectivo</dt><dd>{row.concept.effective}</dd></div>
@@ -753,12 +720,11 @@ async function saveEdit(row: TransactionRow) {
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
-                          {row.overriddenFields.length > 0 && <div><dt>Campos modificados</dt><dd>{row.overriddenFields.map((field) => OVERRIDE_LABELS[field] ?? field).join(", ")}</dd></div>}{row.userNote && <div><dt>Nota</dt><dd>{row.userNote}</dd></div>}
+                          {row.overriddenFields.some((field) => field !== "reviewState") && <div><dt>Campos modificados</dt><dd>{row.overriddenFields.filter((field) => field !== "reviewState").map((field) => OVERRIDE_LABELS[field] ?? field).join(", ")}</dd></div>}{row.userNote && <div><dt>Nota</dt><dd>{row.userNote}</dd></div>}
                         </dl></details>
                       </td>
                       <td data-label="Cuenta">{row.account.name}</td>
                       <td data-label="Categoría">{row.category.effectiveName ?? <span className={styles.muted}>Sin categoría</span>}</td>
-                      <td data-label="Estado"><div className={styles.statusStack}><span className={`${styles.stateChip} ${styles[row.reviewState.effective]}`}>{REVIEW_LABELS[row.reviewState.effective]}</span>{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div></td>
                       <td data-label="Importe" className={`${styles.amount} ${row.amountCents >= 0 ? styles.positive : styles.negative}`}>{formatMoney(row.amountCents)}</td>
                       <td data-label="Gestión"><div className={styles.rowActions}>
                         <button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button>
@@ -767,7 +733,7 @@ async function saveEdit(row: TransactionRow) {
                       </div></td>
                     </tr>
                     {editingId === row.id && editor && (
-                      <tr className={styles.editorRow}><td colSpan={8}>
+                      <tr className={styles.editorRow}><td colSpan={7}>
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
                           <div className={styles.editorHeading}><strong>Editar movimiento</strong></div>
                           <div className={styles.editorGrid}>
@@ -806,7 +772,6 @@ async function saveEdit(row: TransactionRow) {
                     }}>Restaurar clasificación detectada</button> : null}
                   </div>
                             <label className={`${styles.editorField} ${styles.typeField}`}><span>Tipo</span><select data-testid="edit-kind" value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kindMode: "set", kind: event.target.value })}>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editor.kindMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving || Boolean(row.transferPairId)} onClick={() => setEditor({ ...editor, kindMode: "inherit", kind: row.kind.original })}>Restaurar valor detectado: {KIND_LABELS[row.kind.original]}</button> : row.transferPairId ? <small>Desempareja la transferencia antes de cambiar su tipo.</small> : null}</label>
-                            <label className={`${styles.editorField} ${styles.reviewField}`}><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewStateMode: "set", reviewState: event.target.value })}>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editor.reviewStateMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving} onClick={() => setEditor({ ...editor, reviewStateMode: "inherit", reviewState: row.reviewState.original })}>Restaurar valor detectado: {REVIEW_LABELS[row.reviewState.original]}</button> : null}</label>
                             <label className={`${styles.editorField} ${styles.noteField}`}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
                             <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
@@ -815,7 +780,7 @@ async function saveEdit(row: TransactionRow) {
                       </td></tr>
                     )}
                     {reviewingId === row.id && reviewMode && (
-                      <tr className={styles.reviewRow}><td colSpan={8}>
+                      <tr className={styles.reviewRow}><td colSpan={7}>
                         <section className={styles.reviewPanel} aria-label={reviewMode === "duplicate" ? `Revisar duplicado ${row.concept.effective}` : `Revisar transferencia ${row.concept.effective}`}>
                           <div className={styles.editorHeading}>
                             <div><strong>{reviewMode === "duplicate" ? "Revisión de duplicado" : "Emparejado de transferencia interna"}</strong><span>{reviewMode === "duplicate" ? "La decisión queda vinculada a la revisión bancaria actual y nunca borra la fuente." : "Solo se proponen cuentas distintas, importes opuestos exactos y fechas dentro de 3 días."}</span></div>
