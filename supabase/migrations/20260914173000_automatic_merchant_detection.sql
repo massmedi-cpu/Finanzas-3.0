@@ -74,7 +74,7 @@ begin
   if v_concept = '' then return null; end if;
 
   if p_kind = 'transfer'
-     or pg_catalog.position('bizum' in pg_catalog.lower(v_concept)) > 0
+     or position('bizum' in pg_catalog.lower(v_concept)) > 0
      or v_concept ~* '^TRASPASO ' then
     return 'Personal';
   end if;
