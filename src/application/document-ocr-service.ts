@@ -77,7 +77,7 @@ export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<Docume
     ? ["incomplete_page_coverage"]
     : [];
 
-  return buildDocumentOcrResult({
+  const result = buildDocumentOcrResult({
     documentId: input.documentId,
     source: output.source,
     extractor: output.extractor,
@@ -85,4 +85,18 @@ export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<Docume
     pages,
     warnings: [...(output.warnings ?? []), ...coverageWarnings],
   });
+
+  if (process.env.VERCEL_ENV === "preview") {
+    console.info("ocr-final-result-v1", {
+      documentId: result.documentId,
+      status: result.status,
+      extractor: result.extractor,
+      confidence: result.confidence === null ? null : Number(result.confidence.toFixed(3)),
+      warnings: result.warnings,
+      plainText: result.plainText,
+      layoutText: result.pages.map((page) => page.layoutText).filter(Boolean).join("\n\n"),
+    });
+  }
+
+  return result;
 }
