@@ -6,7 +6,7 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v18";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v19";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
@@ -315,10 +315,6 @@ function buildRecoveryBounds(
   let recoveryRight = bounds.right;
   const roles = headerRoles(header.row);
 
-  // The first pass may recognise DESCRIPCION + UDS + PRECIO but miss IMPORTE entirely.
-  // In that case the strict structural filter is intentionally kept narrow, while only the
-  // second-pass pixel crop reserves one additional numeric-column slot. This preserves the
-  // original pixels for recovery without inventing any monetary value or leaking them directly.
   if (!roles.amount && roles.units && roles.price) {
     const units = headerWordsForRole(header.row, "units");
     const prices = headerWordsForRole(header.row, "price");
@@ -343,10 +339,6 @@ function buildRecoveryBounds(
     }
   }
 
-  // Base can be visible while IVA/Total are still missed on the first OCR pass. Keep the strict
-  // output bounds unchanged, but let the recovery crop cover roughly two following row pitches.
-  // Row pitch is more representative than glyph height on photographed receipts and avoids
-  // clipping the lower half of TOTAL while the second pass still has to physically recognise it.
   const structuralRows = rows
     .slice(bounds.startIndex, bounds.endIndex + 1)
     .filter((row) => intersectsHorizontalBand(row, bounds.left, bounds.right));
@@ -458,30 +450,74 @@ function sameEvidenceSlot(a: OcrWord, b: OcrWord) {
     && Math.abs(centerX(a) - centerX(b)) <= columnTolerance;
 }
 
+function sameNumericEvidenceRegion(a: OcrWord, b: OcrWord) {
+  const rowTolerance = Math.max(0.014, Math.max(a.box.height, b.box.height) * 1.35);
+  const columnTolerance = Math.max(0.025, Math.max(a.box.width, b.box.width) * 1.15);
+  return Math.abs(centerY(a) - centerY(b)) <= rowTolerance
+    && Math.abs(centerX(a) - centerX(b)) <= columnTolerance;
+}
+
+function explicitMoneyToken(text: string) {
+  const token = text.replace(/[€\s]/g, "");
+  return /^\d{1,6}[,.]\d{2}$/.test(token) ? token.replace(".", ",") : null;
+}
+
 function explicitNumericToken(text: string) {
   const token = text.replace(/[€\s]/g, "");
-  return /^\d{1,6}[,.]\d{2}$/.test(token) || /^\d{1,2}$/.test(token) ? token : null;
+  return explicitMoneyToken(token) ?? (/^\d{1,2}$/.test(token) ? token : null);
+}
+
+function digitSignature(text: string) {
+  return text.replace(/\D/g, "");
+}
+
+function sameRowLexicalToken(a: OcrWord, b: OcrWord) {
+  const tokenA = normalizedToken(a.text);
+  const tokenB = normalizedToken(b.text);
+  if (!tokenA || tokenA !== tokenB) return false;
+  const tolerance = Math.max(0.014, Math.max(a.box.height, b.box.height) * 1.4);
+  return Math.abs(centerY(a) - centerY(b)) <= tolerance;
 }
 
 export function mergeReceiptRecropWords(firstPass: OcrWord[], reread: OcrWord[]) {
-  let merged = [...reread];
-  for (const word of firstPass) {
-    const slotCandidates = merged.filter((candidate) => sameEvidenceSlot(word, candidate));
-    if (!slotCandidates.length) {
+  let merged = [...firstPass];
+
+  for (const word of reread) {
+    const rereadMoney = explicitMoneyToken(word.text);
+    if (rereadMoney) {
+      const nearbyNumeric = merged.filter((candidate) => (
+        /\d/.test(candidate.text) && sameNumericEvidenceRegion(word, candidate)
+      ));
+      const existingMoney = nearbyNumeric.find((candidate) => explicitMoneyToken(candidate.text));
+
+      // The first pass owns any already-explicit money cell. A recrop may be cleaner overall but
+      // it must not replace 2,80 with 272,80, 1,80 with 1,008, or any other different amount.
+      if (existingMoney) continue;
+
+      if (nearbyNumeric.length) {
+        const sameDigits = nearbyNumeric.filter((candidate) => (
+          digitSignature(candidate.text) === digitSignature(word.text)
+        ));
+        if (!sameDigits.length) continue;
+        merged = merged.filter((candidate) => !sameDigits.includes(candidate));
+        merged.push(word);
+        continue;
+      }
+
       merged.push(word);
       continue;
     }
 
-    // A second OCR pass is allowed to upgrade malformed/missing evidence (for example 560 -> 5,60),
-    // but it must never downgrade an already explicit numeric token merely because another reading
-    // occupied the same physical slot. This is monotonic evidence preservation, not arithmetic inference.
-    const firstToken = explicitNumericToken(word.text);
-    if (!firstToken) continue;
-    if (slotCandidates.some((candidate) => explicitNumericToken(candidate.text) === firstToken)) continue;
+    const slotCandidates = merged.filter((candidate) => sameEvidenceSlot(word, candidate));
+    if (slotCandidates.length) continue;
 
-    merged = merged.filter((candidate) => !sameEvidenceSlot(word, candidate));
+    const numeric = explicitNumericToken(word.text);
+    const lexical = alphaChars(word.text) >= 3;
+    if (!numeric && !lexical) continue;
+    if (merged.some((candidate) => sameRowLexicalToken(word, candidate))) continue;
     merged.push(word);
   }
+
   return merged.sort((a, b) => {
     const yDelta = a.box.y - b.box.y;
     return Math.abs(yDelta) > 0.006 ? yDelta : a.box.x - b.box.x;
@@ -566,12 +602,11 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
           recropUsed = true;
         }
       } catch {
-        // The structurally filtered first pass is still safer than reintroducing the photo background.
       }
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-anchor-recrop-v18", {
+      console.info("ocr-anchor-recrop-v19", {
         removedWords: filtered.removedWords,
         initialKeptWords: filtered.words.length,
         rereadWords,
