@@ -332,7 +332,7 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
   });
 
   expect(calls).toBe(2);
-  expect(output.extractor).toContain("anchor-recrop-v17");
+  expect(output.extractor).toContain("anchor-recrop-v18");
   expect(output.warnings).toContain("background_text_filtered");
   const text = output.pages[0].words.map((item) => item.text).join(" ").toUpperCase();
   for (const expected of ["IMPORTE", "5,60", "15,91", "IVA", "1,59", "TOTAL", "17,50"]) {
