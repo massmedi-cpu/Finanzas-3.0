@@ -61,7 +61,7 @@
 
 .bulkBar {
   display: grid;
-  grid-template-columns: minmax(15rem, 1.5fr) minmax(12rem, 1fr) minmax(12rem, 1fr) auto;
+  grid-template-columns: minmax(15rem, 1.5fr) minmax(12rem, 1fr) auto;
   align-items: end;
   gap: .8rem;
   margin: 0 0 1rem;
@@ -89,16 +89,15 @@
 .loading, .empty { padding: 3rem 1.25rem; color: var(--color-text-secondary); text-align: center; }
 
 .tableWrap { width: 100%; overflow-x: auto; }
-.table { width: 100%; min-width: 1040px; border-collapse: collapse; table-layout: fixed; font-size: var(--font-table); }
+.table { width: 100%; min-width: 940px; border-collapse: collapse; table-layout: fixed; font-size: var(--font-table); }
 .table th { padding: .75rem .7rem; border-bottom: 1px solid var(--color-border); color: var(--color-text-muted); font-size: .875rem; font-weight: 800; letter-spacing: .04em; text-align: left; text-transform: uppercase; }
 .table th:nth-child(1) { width: 4.25rem; }
 .table th:nth-child(2) { width: 7.8rem; }
-.table th:nth-child(3) { width: 30%; }
-.table th:nth-child(4) { width: 13%; }
-.table th:nth-child(5) { width: 13%; }
-.table th:nth-child(6) { width: 9.5rem; }
-.table th:nth-child(7) { width: 8.5rem; }
-.table th:nth-child(8) { width: 10rem; }
+.table th:nth-child(3) { width: 34%; }
+.table th:nth-child(4) { width: 14%; }
+.table th:nth-child(5) { width: 15%; }
+.table th:nth-child(6) { width: 8.5rem; }
+.table th:nth-child(7) { width: 10rem; }
 .table td { min-width: 0; padding: .9rem .7rem; border-bottom: 1px solid rgba(137, 173, 255, .09); vertical-align: top; color: #dce5f6; overflow-wrap: anywhere; }
 .table tbody tr { transition: background .15s ease; }
 .table tbody tr:hover { background: rgba(31, 107, 255, .045); }
@@ -115,15 +114,11 @@
 .conceptCell strong { color: #f6f8fe; font-size: .98rem; line-height: 1.35; }
 .conceptCell > p { margin: .3rem 0 0; color: var(--color-text-muted); font-size: .875rem; }
 .conceptTop { display: flex; align-items: flex-start; flex-wrap: wrap; gap: .4rem; }
-.overrideChip, .mutedChip, .stateChip, .duplicateChip, .transferChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
+.overrideChip, .mutedChip, .duplicateChip, .transferChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
 .overrideChip { background: rgba(77, 141, 255, .12); color: #a9c5ff; }
 .mutedChip { background: rgba(116, 131, 161, .12); color: #a7b2c8; }
-.confirmed { background: rgba(53, 208, 127, .11); color: #8ee7b3; }
-.pending { background: rgba(255, 191, 71, .11); color: #ffd583; }
-.needs_review { background: rgba(255, 93, 115, .11); color: #ffb3be; }
 .duplicateChip { background: rgba(255, 93, 115, .09); color: #ffc0c9; }
 .transferChip { background: rgba(43, 217, 247, .09); color: #9cecf8; }
-.statusStack { display: flex; flex-direction: column; align-items: flex-start; gap: .35rem; }
 .rowActions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .rowActions button { flex: 1 1 6rem; }
 .muted { color: var(--color-text-muted); }
@@ -151,12 +146,12 @@
 .editorHeading strong { color: #f3f7ff; font-size: 1rem; letter-spacing: -.015em; }
 .editorGrid {
   display: grid;
-  grid-template-columns: minmax(0, 2.25fr) minmax(0, 2.25fr) minmax(0, 1.35fr) minmax(0, 1.35fr);
+  grid-template-columns: minmax(0, 2.25fr) minmax(0, 2.25fr) minmax(0, 1.35fr);
   grid-template-areas:
-    "concept concept concept merchant"
-    "category subcategory type review"
-    "note note note analytics"
-    "assignment assignment assignment assignment";
+    "concept concept merchant"
+    "category subcategory type"
+    "note note analytics"
+    "assignment assignment assignment";
   align-items: start;
   gap: .78rem .85rem;
 }
@@ -167,7 +162,6 @@
 .categoryField { grid-area: category; }
 .subcategoryField { grid-area: subcategory; }
 .typeField { grid-area: type; }
-.reviewField { grid-area: review; }
 .noteField { grid-area: note; }
 .analyticsField { grid-area: analytics; }
 .editor input, .editor select { min-height: 2.75rem; height: 2.75rem; }
@@ -251,7 +245,7 @@
       "concept concept"
       "merchant merchant"
       "category subcategory"
-      "type review"
+      "type type"
       "note note"
       "analytics analytics"
       "assignment assignment";
@@ -315,7 +309,6 @@
       "category"
       "subcategory"
       "type"
-      "review"
       "note"
       "analytics"
       "assignment";

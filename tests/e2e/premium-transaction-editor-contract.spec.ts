@@ -10,14 +10,16 @@ test("editor premium separa jerarquía, intención y acciones", async () => {
   expect(client).not.toContain('Mantener valor actual');
   expect(client).toContain('merchantMode: "inherit" | "set"');
   expect(client).toContain('kindMode: "inherit" | "set"');
-  expect(client).toContain('reviewStateMode: "inherit" | "set"');
+  expect(client).not.toContain('data-testid="edit-review"');
+  expect(client).not.toContain('data-testid="bulk-review"');
+  expect(client).not.toContain('<span>Revisión</span>');
   expect(client).toContain('Restaurar valor detectado:');
   expect(client).toContain('data-testid="edit-merchant"');
   expect(client).toContain('data-testid="edit-kind"');
   expect(client).toContain('Restaurar clasificación detectada');
   expect(client).not.toContain('Automático/original');
   expect(client).not.toContain('Automática/original');
-  expect(css).toContain('"category subcategory type review"');
+  expect(css).toContain('"category subcategory type"');
   expect(css).toContain('width: 1.15rem; height: 1.15rem');
   expect(css).toContain('grid-area: analytics');
   expect(css).toContain('.fieldRestore');
