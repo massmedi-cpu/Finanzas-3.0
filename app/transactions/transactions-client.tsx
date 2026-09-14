@@ -104,10 +104,14 @@ type Filters = {
   dateTo: string;
 };
 
+type CategoryEditorMode = "inherit" | "set";
+
 type EditorState = {
   concept: string;
   merchant: string;
-  category: string;
+  categoryMode: CategoryEditorMode;
+  categoryRoot: string;
+  categoryLeaf: string;
   kind: string;
   reviewState: string;
   excludedFromAnalytics: boolean;
@@ -235,13 +239,38 @@ function readableError(payload: any) {
   return "No se pudo completar la operación sobre los movimientos.";
 }
 
-function editorFor(row: TransactionRow): EditorState {
+function categorySelectionFor(categories: Facets["categories"], categoryId: string | null) {
+  if (!categoryId) return { root: NONE, leaf: "" };
+  const category = categories.find((candidate) => candidate.id === categoryId);
+  if (!category) return { root: NONE, leaf: "" };
+  return category.parent_category_id
+    ? { root: category.parent_category_id, leaf: category.id }
+    : { root: category.id, leaf: "" };
+}
+
+function activeSubcategories(categories: Facets["categories"], rootId: string) {
+  if (!rootId || rootId === NONE) return [];
+  return categories
+    .filter((category) => category.lifecycle === "active" && category.parent_category_id === rootId)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "es"));
+}
+
+function selectedCategoryId(editor: EditorState, categories: Facets["categories"]) {
+  if (editor.categoryRoot === NONE) return null;
+  const children = activeSubcategories(categories, editor.categoryRoot);
+  return children.length > 0 ? (editor.categoryLeaf || null) : editor.categoryRoot;
+}
+
+function editorFor(row: TransactionRow, categories: Facets["categories"]): EditorState {
   const categoryWasOverridden = row.overriddenFields.includes("category");
   const merchantWasOverridden = row.overriddenFields.includes("merchant");
+  const selection = categorySelectionFor(categories, row.category.effectiveId);
   return {
     concept: row.concept.effective,
     merchant: merchantWasOverridden ? (row.merchant.effectiveId ?? NONE) : INHERIT,
-    category: categoryWasOverridden ? (row.category.effectiveId ?? NONE) : INHERIT,
+    categoryMode: categoryWasOverridden ? "set" : "inherit",
+    categoryRoot: selection.root,
+    categoryLeaf: selection.leaf,
     kind: row.overriddenFields.includes("kind") ? row.kind.effective : INHERIT,
     reviewState: row.overriddenFields.includes("reviewState") ? row.reviewState.effective : INHERIT,
     excludedFromAnalytics: row.excludedFromAnalytics,
@@ -249,20 +278,19 @@ function editorFor(row: TransactionRow): EditorState {
   };
 }
 
-function individualPatch(row: TransactionRow, editor: EditorState) {
+function individualPatch(row: TransactionRow, editor: EditorState, categories: Facets["categories"]) {
   const concept = editor.concept.trim();
-  const patch: Record<string, unknown> = {
+  return {
     concept: concept === row.concept.processed ? null : concept,
     merchantMode: editor.merchant === INHERIT ? "inherit" : "set",
     merchantId: editor.merchant === INHERIT || editor.merchant === NONE ? null : editor.merchant,
-    categoryMode: editor.category === INHERIT ? "inherit" : "set",
-    categoryId: editor.category === INHERIT || editor.category === NONE ? null : editor.category,
+    categoryMode: editor.categoryMode,
+    categoryId: editor.categoryMode === "inherit" ? null : selectedCategoryId(editor, categories),
     kind: editor.kind === INHERIT ? null : editor.kind,
     reviewState: editor.reviewState === INHERIT ? null : editor.reviewState,
     excludedFromAnalytics: editor.excludedFromAnalytics,
     note: editor.note.trim() || null,
-  };
-  return patch;
+  } satisfies Record<string, unknown>;
 }
 
 export default function TransactionsClient() {
@@ -284,6 +312,7 @@ export default function TransactionsClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [conceptError, setConceptError] = useState("");
+  const [categoryError, setCategoryError] = useState("");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -385,6 +414,13 @@ export default function TransactionsClient() {
     () => Object.values(appliedFilters).filter((value) => value.trim() !== "").length,
     [appliedFilters],
   );
+
+  const activeRootCategories = useMemo(
+  () => facets.categories
+    .filter((category) => category.lifecycle === "active" && category.parent_category_id === null)
+    .sort((a, b) => a.sort_order - b.sort_order || a.name.localeCompare(b.name, "es")),
+  [facets.categories],
+);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allLoadedSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row.id));
@@ -529,31 +565,40 @@ export default function TransactionsClient() {
   }
 
   function beginEdit(row: TransactionRow) {
-    setEditingId(row.id);
-    setEditor(editorFor(row));
-    setConceptError("");
+  setEditingId(row.id);
+  setEditor(editorFor(row, facets.categories));
+  setConceptError("");
+  setCategoryError("");
+  setError(null);
+  setNotice(null);
+  closeReview();
+}
+
+function cancelEdit() {
+  setEditingId(null);
+  setEditor(null);
+  setConceptError("");
+  setCategoryError("");
+}
+
+async function saveEdit(row: TransactionRow) {
+  if (!editor || editingId !== row.id) return;
+  if (!editor.concept.trim()) {
     setError(null);
-    setNotice(null);
-    closeReview();
+    setConceptError("El concepto no puede quedar vacío.");
+    conceptInputRef.current?.focus();
+    return;
   }
-
-  function cancelEdit() {
-    setEditingId(null);
-    setEditor(null);
-    setConceptError("");
+  const children = activeSubcategories(facets.categories, editor.categoryRoot);
+  if (editor.categoryMode === "set" && editor.categoryRoot !== NONE && children.length > 0 && !editor.categoryLeaf) {
+    setError(null);
+    setCategoryError("Selecciona una subcategoría.");
+    return;
   }
-
-  async function saveEdit(row: TransactionRow) {
-    if (!editor || editingId !== row.id) return;
-    if (!editor.concept.trim()) {
-      setError(null);
-      setConceptError("El concepto no puede quedar vacío.");
-      conceptInputRef.current?.focus();
-      return;
-    }
-    setConceptError("");
-    await patchTransactions([row.id], individualPatch(row, editor), "Movimiento actualizado");
-  }
+  setConceptError("");
+  setCategoryError("");
+  await patchTransactions([row.id], individualPatch(row, editor, facets.categories), "Movimiento actualizado");
+}
 
   async function applyBulk() {
     if (selectedIds.length === 0) return;
@@ -718,7 +763,7 @@ export default function TransactionsClient() {
                     {editingId === row.id && editor && (
                       <tr className={styles.editorRow}><td colSpan={8}>
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
-                          <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>Solo se modifica la capa personal de overrides.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
+                          <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>La categoría se asigna automáticamente hasta que tú la cambias.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
                           <div className={styles.editorGrid}>
                             <label className={styles.editorWide}>
                               <span>Concepto</span>
@@ -737,7 +782,20 @@ export default function TransactionsClient() {
                               {conceptError ? <small id={CONCEPT_ERROR_ID} className={styles.fieldError} role="alert">{conceptError}</small> : null}
                             </label>
                             <label><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>Automático/original</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
-                            <label><span>Categoría</span><select data-testid="edit-category" value={editor.category} onChange={(event) => setEditor({ ...editor, category: event.target.value })}><option value={INHERIT}>Automática/original</option><option value={NONE}>Sin categoría</option>{facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select></label>
+                            <label><span>Categoría</span><select data-testid="edit-category-root" value={editor.categoryRoot} onChange={(event) => {
+                    const categoryRoot = event.target.value;
+                    setEditor({ ...editor, categoryMode: "set", categoryRoot, categoryLeaf: "" });
+                    setCategoryError("");
+                  }}><option value={NONE}>Sin categoría</option>{activeRootCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><small>{editor.categoryMode === "inherit" ? "Asignación automática" : "Asignación manual"}</small></label>
+                  <label><span>Subcategoría</span><select data-testid="edit-subcategory" value={editor.categoryLeaf} disabled={editor.categoryRoot === NONE || activeSubcategories(facets.categories, editor.categoryRoot).length === 0} aria-invalid={categoryError ? "true" : "false"} onChange={(event) => {
+                    setEditor({ ...editor, categoryMode: "set", categoryLeaf: event.target.value });
+                    setCategoryError("");
+                  }}>{activeSubcategories(facets.categories, editor.categoryRoot).length > 0 ? <><option value="">Selecciona una subcategoría</option>{activeSubcategories(facets.categories, editor.categoryRoot).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</> : <option value="">No hay subcategorías</option>}</select>{categoryError ? <small className={styles.fieldError} role="alert">{categoryError}</small> : null}</label>
+                  <div className={`${styles.editorWide} ${styles.categoryAssignment}`}><button data-testid="reset-category-auto" className={styles.secondaryButton} type="button" disabled={saving || editor.categoryMode === "inherit"} onClick={() => {
+                    const automatic = categorySelectionFor(facets.categories, row.category.originalId);
+                    setEditor({ ...editor, categoryMode: "inherit", categoryRoot: automatic.root, categoryLeaf: automatic.leaf });
+                    setCategoryError("");
+                  }}>Restablecer categoría automática</button><small>Asignación automática actual: {row.category.originalName ?? "Sin categoría"}</small></div>
                             <label><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
                             <label><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewState: event.target.value })}><option value={INHERIT}>Automática/original</option>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
                             <label className={styles.editorWide}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
