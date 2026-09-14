@@ -21,11 +21,15 @@ test("UI · la jerarquía compacta se aplica globalmente y conserva ayudas funci
     expect(density, `visual-density.css debe redefinir ${token}`).toContain(token);
   }
 
-  expect(density).toContain('header[class*="_hero__"] > div:first-child > p:last-of-type');
-  expect(density).toContain('[class*="_principles__"]');
+  expect(density).toContain('header[class*="__hero"] > div:first-child > p:last-of-type');
+  expect(density).toContain('[class*="__heroText"]');
+  expect(density).toContain('[class*="__principles"]');
   expect(density).toContain('.configuration-hero .hero-copy');
-  expect(density).toContain('[class*="_heroBalance__"] strong');
-  expect(density).toContain('[class*="_totalCard__"] strong');
+  expect(density).toContain('[class*="__heroBalance"] strong');
+  expect(density).toContain('[class*="__totalCard"] strong');
+
+  expect(density).not.toContain('[class*="_hero__"]');
+  expect(density).not.toContain('[class*="_heroBalance__"]');
 
   expect(density).toContain("@media (max-width: 48rem)");
   expect(density).toContain("@media (max-width: 30rem)");
