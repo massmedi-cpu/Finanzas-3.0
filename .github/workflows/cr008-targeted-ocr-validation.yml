@@ -1,0 +1,29 @@
+name: CR-008 Targeted OCR Validation
+
+on:
+  push:
+    branches:
+      - 'validation/cr008-ocr-b5b6191'
+
+permissions:
+  contents: read
+
+jobs:
+  ocr-provider-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact validation commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run isolated OCR provider and geometry contracts
+        run: npx playwright test --config=playwright.ocr.config.ts
