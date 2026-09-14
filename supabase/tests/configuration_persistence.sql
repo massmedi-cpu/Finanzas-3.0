@@ -37,17 +37,17 @@ begin
 
   insert into financial_app.categories (
     name, kind, parent_category_id, icon_key, color_token, lifecycle, sort_order
-  ) values ('Origen', 'expense', null, 'source', 'category.source', 'active', 0)
+  ) values ('Origen', 'expense', null, 'wallet', 'category.violet', 'active', 0)
   returning id into v_source_category_id;
 
   insert into financial_app.categories (
     name, kind, parent_category_id, icon_key, color_token, lifecycle, sort_order
-  ) values ('Destino', 'expense', null, 'target', 'category.target', 'active', 1)
+  ) values ('Destino', 'expense', null, 'wallet', 'category.blue', 'active', 1)
   returning id into v_target_category_id;
 
   insert into financial_app.categories (
     name, kind, parent_category_id, icon_key, color_token, lifecycle, sort_order
-  ) values ('Hija', 'expense', v_source_category_id, 'child', 'category.child', 'active', 0)
+  ) values ('Hija', 'expense', v_source_category_id, 'receipt', 'category.cyan', 'active', 0)
   returning id into v_child_category_id;
 
   insert into financial_app.merchants (normalized_name, default_category_id)

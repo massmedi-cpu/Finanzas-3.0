@@ -19,9 +19,9 @@ begin
   values ('Rule account '||v_token,'Test','checking',0,'EUR','active',0) returning id into v_account;
 
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order)
-  values ('Rule source '||v_token,'expense','test','neutral','active',0) returning id into v_source_category;
+  values ('Rule source '||v_token,'expense','wallet','category.slate','active',0) returning id into v_source_category;
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order)
-  values ('Rule target '||v_token,'expense','test','neutral','active',0) returning id into v_target_category;
+  values ('Rule target '||v_token,'expense','wallet','category.blue','active',0) returning id into v_target_category;
 
   v_merchant := financial_app.save_merchant(null,'Café Regla '||v_token,v_source_category,'active');
   perform financial_app.save_merchant_alias(null,v_merchant,'TPV CAFÉ REGLA VIP '||v_token);
@@ -43,12 +43,8 @@ begin
     '__phase3_rule_sql__'||v_token||'::sheet-1::ROW-1'
   ) returning id into v_transaction;
 
-  perform financial_app.save_categorization_rule(
-    null,'Disabled '||v_token,'disabled',0,'cafe',null,null,null,null,null,v_source_category,null
-  );
-  perform financial_app.save_categorization_rule(
-    null,'Low '||v_token,'active',200,'cafe',null,null,null,null,null,v_source_category,null
-  );
+  perform financial_app.save_categorization_rule(null,'Disabled '||v_token,'disabled',0,'cafe',null,null,null,null,null,v_source_category,null);
+  perform financial_app.save_categorization_rule(null,'Low '||v_token,'active',200,'cafe',null,null,null,null,null,v_source_category,null);
   v_rule_high := financial_app.save_categorization_rule(
     null,'High '||v_token,'active',10,'CAFÉ',v_merchant,v_account,v_source_category,-13000,-12000,v_target_category,null
   );

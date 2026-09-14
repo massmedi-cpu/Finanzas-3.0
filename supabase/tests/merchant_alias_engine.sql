@@ -15,11 +15,11 @@ declare
   v_failed boolean;
 begin
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order)
-  values ('Phase3 merchant category','expense','store','neutral','active',0)
+  values ('Phase3 merchant category','expense','cart','category.green','active',0)
   returning id into v_category;
 
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order)
-  values ('Phase3 archived category','expense','archive','neutral','archived',1)
+  values ('Phase3 archived category','expense','receipt','category.slate','archived',1)
   returning id into v_archived_category;
 
   v_merchant := financial_app.save_merchant(null,'  Café   Bar Sevilla  ',v_category,'active');
@@ -34,18 +34,9 @@ begin
     exists(select 1 from financial_app.merchant_aliases where id=v_alias and alias='TPV-123 / Café Bar' and normalized_alias='tpv 123 cafe bar')
   );
 
-  insert into phase3_merchant_alias_result values (
-    'canonical-resolution',
-    financial_app.resolve_merchant_id('CAFÉ---BAR SEVILLA') = v_merchant
-  );
-  insert into phase3_merchant_alias_result values (
-    'alias-resolution',
-    financial_app.resolve_merchant_id('tpv 123 cafe bar') = v_merchant
-  );
-  insert into phase3_merchant_alias_result values (
-    'default-category',
-    financial_app.resolve_merchant_default_category_id(v_merchant) = v_category
-  );
+  insert into phase3_merchant_alias_result values ('canonical-resolution',financial_app.resolve_merchant_id('CAFÉ---BAR SEVILLA') = v_merchant);
+  insert into phase3_merchant_alias_result values ('alias-resolution',financial_app.resolve_merchant_id('tpv 123 cafe bar') = v_merchant);
+  insert into phase3_merchant_alias_result values ('default-category',financial_app.resolve_merchant_default_category_id(v_merchant) = v_category);
 
   v_other := financial_app.save_merchant(null,'Mercado Norte',null,'active');
 
@@ -74,25 +65,14 @@ begin
   insert into phase3_merchant_alias_result values ('archived-default-category-blocked',v_failed);
 
   perform financial_app.save_merchant(v_merchant,'Café Bar Sevilla',v_category,'archived');
-  insert into phase3_merchant_alias_result values (
-    'archived-merchant-not-resolved',
-    financial_app.resolve_merchant_id('Café Bar Sevilla') is null
-  );
-  insert into phase3_merchant_alias_result values (
-    'archived-merchant-no-default',
-    financial_app.resolve_merchant_default_category_id(v_merchant) is null
-  );
+  insert into phase3_merchant_alias_result values ('archived-merchant-not-resolved',financial_app.resolve_merchant_id('Café Bar Sevilla') is null);
+  insert into phase3_merchant_alias_result values ('archived-merchant-no-default',financial_app.resolve_merchant_default_category_id(v_merchant) is null);
 
   perform financial_app.save_merchant(v_merchant,'Café Bar Sevilla',v_category,'active');
   perform financial_app.save_merchant_alias(v_alias,v_merchant,'TPV 456 Café Bar');
+  insert into phase3_merchant_alias_result values ('alias-update-resolution',financial_app.resolve_merchant_id('TPV-456 Cafe Bar') = v_merchant);
   insert into phase3_merchant_alias_result values (
-    'alias-update-resolution',
-    financial_app.resolve_merchant_id('TPV-456 Cafe Bar') = v_merchant
-  );
-  insert into phase3_merchant_alias_result values (
-    'alias-delete',
-    financial_app.delete_merchant_alias(v_alias)
-      and financial_app.resolve_merchant_id('TPV 456 Café Bar') is null
+    'alias-delete',financial_app.delete_merchant_alias(v_alias) and financial_app.resolve_merchant_id('TPV 456 Café Bar') is null
   );
 end $$;
 

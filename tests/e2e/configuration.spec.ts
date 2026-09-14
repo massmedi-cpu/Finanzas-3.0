@@ -50,7 +50,7 @@ const FIXTURE = {
       name: "Nómina",
       kind: "income",
       parentCategoryId: null,
-      iconKey: "wallet",
+      iconKey: "briefcase",
       colorToken: "category.green",
       lifecycle: "active",
       sortOrder: 0,
@@ -64,25 +64,36 @@ test.describe("Configuración interactiva sin residuos", () => {
   test.beforeEach(async ({ page }) => {
     await page.route("**/api/configuration", async (route) => {
       if (route.request().method() === "GET") {
+        await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(FIXTURE) });
+        return;
+      }
+      const body = route.request().postDataJSON();
+      if (body.operation === "category.impact") {
         await route.fulfill({
           status: 200,
           contentType: "application/json",
-          body: JSON.stringify(FIXTURE),
+          body: JSON.stringify({
+            impact: {
+              transactionCount: 12,
+              overrideCount: 0,
+              ruleConditionCount: 0,
+              ruleTargetCount: 0,
+              merchantCount: 0,
+              budgetCount: 0,
+              activeRecurrenceCount: 0,
+              futureForecastCount: 0,
+              activeChildCount: body.id === HOME_ID ? 1 : 0,
+            },
+          }),
         });
         return;
       }
-
-      await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ ok: true }),
-      });
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true }) });
     });
   });
 
   test("respeta formato español y navegación de cuentas", async ({ page }) => {
     await page.goto("/configuration");
-
     await expect(page.getByRole("heading", { name: "Cuentas y categorías" })).toBeVisible();
     await expect(page.getByText("Cuenta principal")).toBeVisible();
     await expect(page.getByText(/1\.234,56/)).toBeVisible();
@@ -93,20 +104,48 @@ test.describe("Configuración interactiva sin residuos", () => {
     await expect(page.locator(".config-message.error")).toContainText("formato español");
   });
 
+  test("representa iconos reales, jerarquía y catálogo visual ampliado", async ({ page }) => {
+    await page.goto("/configuration");
+    await page.getByRole("button", { name: /Categorías/ }).click();
+
+    await expect(page.locator('[data-category-icon="home"]')).toBeVisible();
+    await expect(page.locator('[data-category-icon="bolt"]')).toBeVisible();
+    const utilitiesCard = page.locator("article.category-card").filter({ hasText: "Suministros" });
+    await expect(utilitiesCard).toHaveClass(/category-child/);
+    await expect(utilitiesCard).toContainText("Subcategoría de Hogar");
+
+    const iconSelect = page.getByLabel("Icono");
+    const colorSelect = page.getByLabel("Color");
+    expect(await iconSelect.locator("option").count()).toBeGreaterThanOrEqual(45);
+    expect(await colorSelect.locator("option").count()).toBeGreaterThanOrEqual(18);
+    expect(await page.locator(".color-palette button").count()).toBeGreaterThanOrEqual(18);
+  });
+
+  test("busca y filtra categorías sin perder la jerarquía", async ({ page }) => {
+    await page.goto("/configuration");
+    await page.getByRole("button", { name: /Categorías/ }).click();
+    await page.getByPlaceholder("Buscar categoría…").fill("Suministros");
+    await expect(page.getByText("Hogar", { exact: true })).toBeVisible();
+    await expect(page.getByText("Suministros", { exact: true })).toBeVisible();
+    await expect(page.getByText("Nómina", { exact: true })).toHaveCount(0);
+
+    await page.getByPlaceholder("Buscar categoría…").fill("");
+    await page.getByRole("button", { name: "Ingresos" }).click();
+    await expect(page.getByText("Nómina", { exact: true })).toBeVisible();
+    await expect(page.getByText("Hogar", { exact: true })).toHaveCount(0);
+  });
+
   test("no ofrece jerarquías, fusiones ni ciclos de vida imposibles", async ({ page }) => {
     await page.goto("/configuration");
     await page.getByRole("button", { name: /Categorías/ }).click();
 
     const homeCard = page.locator("article.entity-card").filter({ hasText: "Hogar" });
-    await expect(homeCard.getByRole("button", { name: "Archivar" })).toBeDisabled();
+    await expect(homeCard.getByRole("button", { name: "Archivar Hogar" })).toBeDisabled();
 
     await page.getByRole("button", { name: "Editar Hogar" }).click();
-
     const typeSelect = page.locator("#category-form select").nth(0);
-    const incomeOption = typeSelect.locator('option[value="income"]');
-    const transferOption = typeSelect.locator('option[value="transfer"]');
-    expect(await incomeOption.evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
-    expect(await transferOption.evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
+    expect(await typeSelect.locator('option[value="income"]').evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
+    expect(await typeSelect.locator('option[value="transfer"]').evaluate((option: HTMLOptionElement) => option.disabled)).toBe(true);
 
     const parentSelect = page.locator("#category-form select").nth(1);
     await expect(parentSelect.locator(`option[value="${UTILITIES_ID}"]`)).toHaveCount(0);
@@ -118,12 +157,18 @@ test.describe("Configuración interactiva sin residuos", () => {
     await expect(targetSelect.locator(`option[value="${INCOME_ID}"]`)).toHaveCount(0);
   });
 
+  test("exige revisión explícita antes de fusionar", async ({ page }) => {
+    await page.goto("/configuration");
+    await page.getByRole("button", { name: /Categorías/ }).click();
+    const mergePanel = page.locator(".merge-panel");
+    await mergePanel.getByLabel("Origen").selectOption(HOME_ID);
+    await mergePanel.getByLabel("Destino").selectOption(UTILITIES_ID).catch(() => undefined);
+    await expect(mergePanel.getByText(/12 movimientos/)).toBeVisible();
+  });
+
   test("no introduce scroll horizontal en la anchura efectiva", async ({ page }) => {
     await page.goto("/configuration");
-    const dimensions = await page.evaluate(() => ({
-      scrollWidth: document.documentElement.scrollWidth,
-      clientWidth: document.documentElement.clientWidth,
-    }));
+    const dimensions = await page.evaluate(() => ({ scrollWidth: document.documentElement.scrollWidth, clientWidth: document.documentElement.clientWidth }));
     expect(dimensions.scrollWidth).toBeLessThanOrEqual(dimensions.clientWidth);
   });
 });
@@ -149,10 +194,7 @@ test.describe("Fase 2 · Calidad del dato", () => {
 });
 
 test.describe("Preview protegido real", () => {
-  test.skip(
-    !process.env.VERCEL_PREVIEW_URL,
-    "Las comprobaciones live solo se ejecutan cuando se proporciona VERCEL_PREVIEW_URL.",
-  );
+  test.skip(!process.env.VERCEL_PREVIEW_URL, "Las comprobaciones live solo se ejecutan cuando se proporciona VERCEL_PREVIEW_URL.");
 
   test("Fundamentos permanece verde", async ({ request }) => {
     const response = await request.get("/api/health/foundations");
