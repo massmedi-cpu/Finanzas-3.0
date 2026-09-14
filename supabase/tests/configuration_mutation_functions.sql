@@ -16,18 +16,14 @@ declare
   swap_id uuid;
 begin
   select array_agg(id order by case lifecycle when 'active' then 0 else 1 end, sort_order, name, id)
-    into ordered_ids
-  from financial_app.accounts;
-
+    into ordered_ids from financial_app.accounts;
   perform financial_app.reorder_accounts(ordered_ids);
-
   active_position := array_position(ordered_ids, '10000000-0000-4000-8000-000000000091'::uuid);
   archived_position := array_position(ordered_ids, '10000000-0000-4000-8000-000000000093'::uuid);
   invalid_ids := ordered_ids;
   swap_id := invalid_ids[active_position];
   invalid_ids[active_position] := invalid_ids[archived_position];
   invalid_ids[archived_position] := swap_id;
-
   begin
     perform financial_app.reorder_accounts(invalid_ids);
     raise exception 'expected_account_reorder_rejection';
@@ -43,8 +39,8 @@ insert into financial_app.categories (
 ('20000000-0000-4000-8000-000000000091','__fa_mutation_test_expense_a__','expense',null,'wallet','category.blue','active',0,now(),now()),
 ('20000000-0000-4000-8000-000000000092','__fa_mutation_test_expense_b__','expense',null,'wallet','category.blue','active',1,now(),now()),
 ('20000000-0000-4000-8000-000000000093','__fa_mutation_test_income__','income',null,'wallet','category.green','active',0,now(),now()),
-('20000000-0000-4000-8000-000000000094','__fa_mutation_test_archived_target__','expense',null,'wallet','category.gray','archived',2,now(),now()),
-('20000000-0000-4000-8000-000000000095','__fa_mutation_test_merge_source__','expense',null,'wallet','category.blue','active',3,now(),now()),
+('20000000-0000-4000-8000-000000000094','__fa_mutation_test_archived_target__','expense',null,'wallet','category.slate','archived',2,now(),now()),
+('20000000-0000-4000-8000-000000000095','__fa_mutation_test_merge_source__','expense',null,'arrows','category.violet','active',3,now(),now()),
 ('20000000-0000-4000-8000-000000000096','__fa_mutation_test_merge_target__','expense',null,'wallet','category.blue','active',4,now(),now());
 
 do $$
@@ -56,18 +52,14 @@ declare
   swap_id uuid;
 begin
   select array_agg(id order by kind, parent_category_id nulls first, sort_order, name, id)
-    into ordered_ids
-  from financial_app.categories;
-
+    into ordered_ids from financial_app.categories;
   perform financial_app.reorder_categories(ordered_ids);
-
   expense_position := array_position(ordered_ids, '20000000-0000-4000-8000-000000000091'::uuid);
   income_position := array_position(ordered_ids, '20000000-0000-4000-8000-000000000093'::uuid);
   invalid_ids := ordered_ids;
   swap_id := invalid_ids[expense_position];
   invalid_ids[expense_position] := invalid_ids[income_position];
   invalid_ids[income_position] := swap_id;
-
   begin
     perform financial_app.reorder_categories(invalid_ids);
     raise exception 'expected_category_reorder_rejection';
@@ -88,6 +80,16 @@ begin
   end;
 end $$;
 
+select financial_app.save_categorization_rule(
+  null,'__fa_merge_condition_rule__','active',10,null,null,null,
+  '20000000-0000-4000-8000-000000000095'::uuid,null,null,
+  '20000000-0000-4000-8000-000000000096'::uuid,null
+);
+select financial_app.save_categorization_rule(
+  null,'__fa_merge_target_rule__','active',20,'merge target',null,null,null,null,null,
+  '20000000-0000-4000-8000-000000000095'::uuid,null
+);
+
 select financial_app.merge_categories(
   '20000000-0000-4000-8000-000000000095'::uuid,
   '20000000-0000-4000-8000-000000000096'::uuid
@@ -97,17 +99,26 @@ do $$
 declare
   source_lifecycle text;
   target_lifecycle text;
+  condition_ref uuid;
+  target_ref uuid;
 begin
-  select lifecycle into source_lifecycle
-  from financial_app.categories
-  where id = '20000000-0000-4000-8000-000000000095'::uuid;
-
-  select lifecycle into target_lifecycle
-  from financial_app.categories
-  where id = '20000000-0000-4000-8000-000000000096'::uuid;
+  select lifecycle into source_lifecycle from financial_app.categories
+  where id='20000000-0000-4000-8000-000000000095'::uuid;
+  select lifecycle into target_lifecycle from financial_app.categories
+  where id='20000000-0000-4000-8000-000000000096'::uuid;
+  select category_id into condition_ref from financial_app.categorization_rules
+  where name='__fa_merge_condition_rule__';
+  select target_category_id into target_ref from financial_app.categorization_rules
+  where name='__fa_merge_target_rule__';
 
   if source_lifecycle <> 'archived' or target_lifecycle <> 'active' then
     raise exception 'merge_lifecycle_assertion_failed';
+  end if;
+  if condition_ref <> '20000000-0000-4000-8000-000000000096'::uuid then
+    raise exception 'merge_rule_condition_reference_failed';
+  end if;
+  if target_ref <> '20000000-0000-4000-8000-000000000096'::uuid then
+    raise exception 'merge_rule_target_reference_failed';
   end if;
 end $$;
 
