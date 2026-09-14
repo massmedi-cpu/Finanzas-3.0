@@ -6,7 +6,7 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v17";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v18";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
@@ -451,6 +451,24 @@ function mapCropWords(words: OcrWord[], bounds: OcrBoundingBox) {
   }));
 }
 
+function sameEvidenceSlot(a: OcrWord, b: OcrWord) {
+  const rowTolerance = Math.max(0.008, Math.max(a.box.height, b.box.height) * 0.9);
+  const columnTolerance = Math.max(0.012, Math.max(a.box.width, b.box.width) * 0.8);
+  return Math.abs(centerY(a) - centerY(b)) <= rowTolerance
+    && Math.abs(centerX(a) - centerX(b)) <= columnTolerance;
+}
+
+export function mergeReceiptRecropWords(firstPass: OcrWord[], reread: OcrWord[]) {
+  const merged = [...reread];
+  for (const word of firstPass) {
+    if (!merged.some((candidate) => sameEvidenceSlot(word, candidate))) merged.push(word);
+  }
+  return merged.sort((a, b) => {
+    const yDelta = a.box.y - b.box.y;
+    return Math.abs(yDelta) > 0.006 ? yDelta : a.box.x - b.box.x;
+  });
+}
+
 function rereadLooksSafe(words: OcrWord[]) {
   if (words.length < 12) return false;
   const rows = clusterRows(words);
@@ -523,7 +541,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
       try {
         const reread = await rereadReceiptCrop(this.base, input, filtered.recoveryBounds);
         if (reread) {
-          words = reread.words;
+          words = mergeReceiptRecropWords(filtered.words, reread.words);
           rereadWords = reread.words.length;
           rereadWarnings = reread.warnings;
           recropUsed = true;
@@ -534,10 +552,11 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-anchor-recrop-v17", {
+      console.info("ocr-anchor-recrop-v18", {
         removedWords: filtered.removedWords,
         initialKeptWords: filtered.words.length,
         rereadWords,
+        mergedWords: words.length,
         recropUsed,
         header: filtered.headerText.slice(0, 80),
         filterBounds: filtered.bounds,
