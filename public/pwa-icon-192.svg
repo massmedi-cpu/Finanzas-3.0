@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="192" height="192" viewBox="0 0 192 192" role="img" aria-label="Financial App">
+  <defs>
+    <linearGradient id="bg" x1="22" y1="16" x2="170" y2="176" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#111C38"/>
+      <stop offset="0.55" stop-color="#0A1122"/>
+      <stop offset="1" stop-color="#050914"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="54" y1="55" x2="142" y2="138" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#5BA5FF"/>
+      <stop offset="1" stop-color="#2BD9F7"/>
+    </linearGradient>
+  </defs>
+  <rect width="192" height="192" rx="42" fill="url(#bg)"/>
+  <rect x="34" y="34" width="124" height="124" rx="35" fill="#0B142A" stroke="#243A67" stroke-width="4"/>
+  <path d="M62 132V61h51c17 0 29 9 29 23 0 10-6 18-16 21 12 3 19 12 19 24 0 2 0 3-.2 5h-23c.1-1 .2-2 .2-3 0-10-7-16-20-16H85v17H62Zm23-45h25c7 0 11-3 11-8s-4-8-11-8H85v16Z" fill="url(#accent)"/>
+  <circle cx="141" cy="54" r="7" fill="#E8F5FF"/>
+</svg>
