@@ -57,7 +57,7 @@
 .eyebrow {
   margin: 0 0 0.5rem;
   color: #6d9cff;
-  font-size: 0.76rem;
+  font-size: var(--font-helper);
   font-weight: 850;
   letter-spacing: 0.16em;
   text-transform: uppercase;
@@ -182,7 +182,7 @@
 .metric span {
   display: block;
   color: #7f90af;
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   font-weight: 750;
 }
 
@@ -198,7 +198,7 @@
   display: block;
   margin-top: 0.5rem;
   color: #7483a1;
-  font-size: 0.73rem;
+  font-size: var(--font-helper);
   line-height: 1.4;
 }
 
@@ -238,7 +238,7 @@
   min-height: 1.75rem;
   border-radius: 999px;
   padding: 0.28rem 0.62rem;
-  font-size: 0.7rem;
+  font-size: var(--font-helper);
   font-weight: 850;
   white-space: nowrap;
 }
@@ -347,7 +347,7 @@
 
 .details dt {
   color: #7283a2;
-  font-size: 0.68rem;
+  font-size: var(--font-helper);
   font-weight: 750;
 }
 
@@ -355,7 +355,7 @@
   margin: 0.3rem 0 0;
   overflow-wrap: anywhere;
   color: #dbe5f7;
-  font-size: 0.8rem;
+  font-size: var(--font-label);
   font-weight: 780;
   font-variant-numeric: tabular-nums;
 }
@@ -363,7 +363,7 @@
 .explanation {
   margin: 0;
   color: #8595b2;
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   line-height: 1.5;
 }
 

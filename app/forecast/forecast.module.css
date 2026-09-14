@@ -38,7 +38,7 @@
 
 .eyebrow {
   margin: 0 0 8px;
-  font-size: 0.74rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.14em;
   color: var(--color-primary-bright);
@@ -164,6 +164,12 @@
   font: inherit;
   font-size: 1rem;
   outline: none;
+}
+
+.manualForm input,
+.manualForm select {
+  width: 100%;
+  min-width: 0;
 }
 
 .controls input:focus,
@@ -519,7 +525,7 @@
 
 .formSplit {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 

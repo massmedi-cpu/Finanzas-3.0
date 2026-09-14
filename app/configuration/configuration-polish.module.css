@@ -1,0 +1,7 @@
+.scope :global(.panel-kicker),
+.scope :global(.status-chip),
+.scope :global(.lifecycle),
+.scope :global(.field-hint),
+.scope :global(.config-tabs button span) {
+  font-size: var(--font-helper);
+}

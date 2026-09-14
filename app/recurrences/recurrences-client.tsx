@@ -55,6 +55,7 @@ const euro = new Intl.NumberFormat("es-ES", {
   currency: "EUR",
   minimumFractionDigits: 2,
   maximumFractionDigits: 2,
+  useGrouping: "always",
 });
 
 const shortDate = new Intl.DateTimeFormat("es-ES", {
@@ -206,14 +207,17 @@ export default function RecurrencesClient() {
             Ningún patrón se confirma como recurrencia sin una decisión explícita.
           </p>
         </div>
-        <button
-          className={styles.actionButton}
-          type="button"
-          onClick={() => void load(true)}
-          disabled={loading || pendingKey !== null}
-        >
-          {loading ? "Analizando…" : "Recalcular patrones"}
-        </button>
+        <div className={styles.actions} aria-label="Acciones de recurrentes">
+          <Link href="/forecast" className={styles.secondaryButton}>Ver impacto en Previsión</Link>
+          <button
+            className={styles.actionButton}
+            type="button"
+            onClick={() => void load(true)}
+            disabled={loading || pendingKey !== null}
+          >
+            {loading ? "Analizando…" : "Recalcular patrones"}
+          </button>
+        </div>
       </section>
 
       <section className={styles.content}>
