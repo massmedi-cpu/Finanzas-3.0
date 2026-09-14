@@ -1,0 +1,46 @@
+name: Temp Editor Effective Values
+
+on:
+  push:
+    branches:
+      - fix/editor-effective-values-20260914
+    paths:
+      - .github/workflows/temp-editor-effective-values.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: fix/editor-effective-values-20260914
+          fetch-depth: 0
+      - name: Aplicar corrección
+        run: python scripts/temp-fix-editor-effective-values.py
+      - name: Validar contrato fuente
+        shell: bash
+        run: |
+          git diff --check
+          grep -q 'merchantMode: "inherit" | "set"' app/transactions/transactions-client.tsx
+          grep -q 'kindMode: "inherit" | "set"' app/transactions/transactions-client.tsx
+          grep -q 'reviewStateMode: "inherit" | "set"' app/transactions/transactions-client.tsx
+          ! grep -q 'Mantener valor actual' app/transactions/transactions-client.tsx
+          grep -q 'Restaurar valor detectado:' app/transactions/transactions-client.tsx
+      - name: Prueba específica
+        run: |
+          npm ci --ignore-scripts
+          npx playwright test tests/e2e/premium-transaction-editor-contract.spec.ts
+      - name: Limpiar auxiliares y publicar rama
+        shell: bash
+        run: |
+          rm scripts/temp-fix-editor-effective-values.py
+          rm .github/workflows/temp-editor-effective-values.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m 'fix(transactions): mostrar valores efectivos en edición'
+          git push origin HEAD:fix/editor-effective-values-20260914
