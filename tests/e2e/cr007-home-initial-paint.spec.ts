@@ -1,43 +1,54 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
-function holdResponse(route: Route, gate: Promise<void>) {
-  return gate.then(() => route.fulfill({
-    status: 503,
-    contentType: "application/json",
-    body: JSON.stringify({ error: "temporary_unavailable" }),
-  }));
+function holdFailure(route: Route, gate: Promise<void>) {
+  return gate.then(() =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "temporary_unavailable" }),
+    }),
+  );
 }
 
 test("Inicio pinta estructura útil antes de que terminen las fuentes financieras", async ({ page }: { page: Page }) => {
   let release!: () => void;
-  const gate = new Promise<void>((resolve) => { release = resolve; });
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
 
-  await page.route("**/api/financial?*", (route) => holdResponse(route, gate));
-  await page.route("**/api/budgets?*", (route) => holdResponse(route, gate));
-  await page.route("**/api/forecast?*", (route) => holdResponse(route, gate));
-  await page.route("**/api/transactions?*", (route) => holdResponse(route, gate));
+  await page.route("**/api/dashboard?*", (route) => holdFailure(route, gate));
+  await page.route("**/api/financial?*", (route) => holdFailure(route, gate));
+  await page.route("**/api/budgets?*", (route) => holdFailure(route, gate));
+  await page.route("**/api/forecast?*", (route) => holdFailure(route, gate));
+  await page.route("**/api/transactions?*", (route) => holdFailure(route, gate));
 
   await page.goto("/");
 
-  await expect(page.getByRole("heading", { name: "Tu dinero, claro en segundos." })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Tu dinero, claro en segundos." }),
+  ).toBeVisible();
   const primaryNav = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(primaryNav).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Inicio", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(
+    primaryNav.getByRole("link", { name: "Inicio", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
 
   const cards = page.locator("main[aria-busy='true'] article");
   await expect(cards).toHaveCount(6);
   await expect(page.getByText("Preparando tu resumen financiero…").first()).toBeVisible();
 
-  const geometry = await cards.evaluateAll((nodes) => nodes.map((node) => {
-    const rect = node.getBoundingClientRect();
-    return {
-      left: rect.left,
-      right: rect.right,
-      top: rect.top,
-      bottom: rect.bottom,
-      width: rect.width,
-    };
-  }));
+  const geometry = await cards.evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const rect = node.getBoundingClientRect();
+      return {
+        left: rect.left,
+        right: rect.right,
+        top: rect.top,
+        bottom: rect.bottom,
+        width: rect.width,
+      };
+    }),
+  );
 
   const isMobile = (page.viewportSize()?.width ?? 1280) <= 1050;
   if (isMobile) {
@@ -57,5 +68,7 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
   }
 
   release();
-  await expect(page.getByRole("heading", { name: "No se ha podido cargar Inicio" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "No se ha podido cargar Inicio" }),
+  ).toBeVisible();
 });

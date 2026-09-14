@@ -14,6 +14,16 @@ export type EncodedPersistenceGatewayRequest = {
   encodedBytes: number;
 };
 
+export type PersistenceGatewayOperation = {
+  action: string;
+  payload?: Record<string, unknown>;
+};
+
+type PersistenceGatewayContext = {
+  oidcToken: string;
+  workspaceAccessToken: string | null;
+};
+
 export function encodePersistenceGatewayRequest(
   action: string,
   payload: Record<string, unknown> = {},
@@ -50,29 +60,44 @@ export class PersistenceGatewayError extends Error {
   }
 }
 
-export async function callPersistenceGateway<Result>(
+async function resolvePersistenceGatewayContext(): Promise<PersistenceGatewayContext> {
+  const [oidcToken, workspaceSession] = await Promise.all([
+    getVercelOidcToken({
+      project: "prj_SbZ64E02YhCK4ds24Yi7qf5CeQjo",
+      team: "team_xrSskbkRKwQkyYc0vvLVGUnb",
+      expirationBufferMs: 60_000,
+    }),
+    resolveWorkspaceSession(),
+  ]);
+
+  if (!oidcToken) {
+    throw new PersistenceGatewayError(
+      "Vercel no ha proporcionado identidad OIDC.",
+      503,
+      "oidc_unavailable",
+    );
+  }
+
+  return {
+    oidcToken,
+    workspaceAccessToken: workspaceSession?.accessToken ?? null,
+  };
+}
+
+async function callPersistenceGatewayWithContext<Result>(
+  context: PersistenceGatewayContext,
   action: string,
   payload: Record<string, unknown> = {},
 ): Promise<Result> {
-  const oidcToken = await getVercelOidcToken({
-    project: "prj_SbZ64E02YhCK4ds24Yi7qf5CeQjo",
-    team: "team_xrSskbkRKwQkyYc0vvLVGUnb",
-    expirationBufferMs: 60_000,
-  });
-
-  if (!oidcToken) {
-    throw new PersistenceGatewayError("Vercel no ha proporcionado identidad OIDC.", 503, "oidc_unavailable");
-  }
-
-  const workspaceSession = await resolveWorkspaceSession();
   const encodedRequest = encodePersistenceGatewayRequest(action, payload);
   const headers: Record<string, string> = {
-    authorization: `Bearer ${oidcToken}`,
+    authorization: `Bearer ${context.oidcToken}`,
     "content-type": "application/json",
     "x-region": SUPABASE_GATEWAY_REGION,
   };
-  if (workspaceSession?.accessToken) {
-    headers["x-financial-app-user-token"] = workspaceSession.accessToken;
+
+  if (context.workspaceAccessToken) {
+    headers["x-financial-app-user-token"] = context.workspaceAccessToken;
   }
   if (encodedRequest.contentEncoding) {
     headers["content-encoding"] = encodedRequest.contentEncoding;
@@ -106,4 +131,35 @@ export async function callPersistenceGateway<Result>(
   }
 
   return body;
+}
+
+export async function callPersistenceGateway<Result>(
+  action: string,
+  payload: Record<string, unknown> = {},
+): Promise<Result> {
+  const context = await resolvePersistenceGatewayContext();
+  return callPersistenceGatewayWithContext<Result>(context, action, payload);
+}
+
+/**
+ * Executes independent read operations with one request-scoped identity/session
+ * resolution. The operations remain isolated and are still evaluated by the
+ * canonical persistence gateway; this only removes repeated authentication
+ * work from composite read surfaces such as Inicio.
+ */
+export async function callPersistenceGatewayBatch(
+  operations: readonly PersistenceGatewayOperation[],
+): Promise<PromiseSettledResult<unknown>[]> {
+  if (operations.length === 0) return [];
+
+  const context = await resolvePersistenceGatewayContext();
+  return Promise.allSettled(
+    operations.map((operation) =>
+      callPersistenceGatewayWithContext(
+        context,
+        operation.action,
+        operation.payload ?? {},
+      ),
+    ),
+  );
 }

@@ -1,0 +1,229 @@
+import { expect, test, type Page, type Route } from "@playwright/test";
+
+const financial = {
+  period: {
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-14",
+    incomeCents: 150000,
+    expenseCents: 70000,
+    operatingNetCents: 80000,
+    savingsCents: 80000,
+    savingsRateBps: 5333,
+    transfers: { grossCents: 0 },
+    quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
+  },
+  balances: {
+    asOfDate: "2026-09-14",
+    activeBalanceCents: 30000,
+    quality: {
+      accounts: 1,
+      explicitBalanceAccounts: 1,
+      reconstructedBalanceAccounts: 0,
+      integrityDeltaAccounts: 0,
+    },
+    accounts: [
+      {
+        id: "a",
+        name: "Cuenta principal",
+        type: "checking",
+        lifecycle: "active",
+        balanceCents: 30000,
+        balanceSource: "bank_explicit",
+        explicitBalanceDate: "2026-09-14",
+        reconstructionDeltaCents: 0,
+      },
+    ],
+  },
+  principles: {
+    bankSource: "read_only",
+    transfersExcludedFromSavings: true,
+    explicitBankBalancePreferred: true,
+  },
+};
+
+const monthly = {
+  dateFrom: "2026-01-01",
+  dateTo: "2026-09-14",
+  rows: [
+    {
+      monthStart: "2026-08-01",
+      incomeCents: 100000,
+      expenseCents: 40000,
+      operatingNetCents: 60000,
+    },
+    {
+      monthStart: "2026-09-01",
+      incomeCents: 150000,
+      expenseCents: 70000,
+      operatingNetCents: 80000,
+    },
+  ],
+};
+
+const budgets = {
+  month: "2026-09",
+  total: {
+    categoryId: null,
+    categoryName: null,
+    effectiveAmountCents: 100000,
+    actualExpenseCents: 60000,
+    remainingCents: 40000,
+    progressBps: 6000,
+    status: "on_track",
+  },
+  categories: [
+    {
+      categoryId: "food",
+      categoryName: "Alimentación",
+      effectiveAmountCents: 40000,
+      actualExpenseCents: 36000,
+      remainingCents: 4000,
+      progressBps: 9000,
+      status: "on_track",
+    },
+  ],
+};
+
+const forecast = {
+  period: { dateFrom: "2026-09-14", dateTo: "2026-10-14", accountId: null },
+  summary: {
+    openingBalanceCents: 30000,
+    projectedIncomeCents: 5000,
+    projectedExpenseCents: 7000,
+    projectedNetCents: -2000,
+    projectedClosingBalanceCents: 28000,
+    plannedItems: 1,
+    excludedItems: 0,
+    confirmedItems: 0,
+  },
+  items: [
+    {
+      id: "f1",
+      date: "2026-09-16",
+      concept: "Internet",
+      amountCents: -5000,
+      origin: "recurring",
+      confidence: "high",
+      status: "planned",
+      affectsProjection: true,
+    },
+  ],
+};
+
+const transactions = {
+  rows: [
+    {
+      id: "t1",
+      bankDate: "2026-09-13",
+      amountCents: -1234,
+      account: { id: "a", name: "Cuenta principal" },
+      concept: { effective: "COMPRA TARJETA 1234" },
+      merchant: {
+        originalId: null,
+        originalName: null,
+        effectiveId: "m1",
+        effectiveName: "Carrefour",
+      },
+      category: { effectiveName: "Alimentación" },
+      kind: { effective: "expense" },
+      duplicateState: "none",
+      excludedFromAnalytics: false,
+    },
+  ],
+  totalCount: 1,
+};
+
+function envelope(
+  scope: "primary" | "secondary",
+  data: Record<string, unknown>,
+  requestedSources: string[],
+) {
+  return {
+    contractVersion: 1,
+    scope,
+    asOfDate: "2026-09-14",
+    generatedAt: "2026-09-14T18:30:00.000Z",
+    requestedSources,
+    failedSources: [],
+    data: {
+      financial: null,
+      monthly: null,
+      budgets: null,
+      forecast: null,
+      transactions: null,
+      ...data,
+    },
+  };
+}
+
+async function fulfillJson(route: Route, body: unknown) {
+  await route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(body),
+  });
+}
+
+async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
+  await page.route("**/api/dashboard?scope=primary", (route) =>
+    fulfillJson(route, envelope("primary", { financial }, ["financial"])),
+  );
+
+  await page.route("**/api/dashboard?scope=secondary", async (route) => {
+    if (secondaryGate) await secondaryGate;
+    await fulfillJson(
+      route,
+      envelope(
+        "secondary",
+        { monthly, budgets, forecast, transactions },
+        ["monthly", "budgets", "forecast", "transactions"],
+      ),
+    );
+  });
+}
+
+test("Inicio prioriza saldo y balance sin esperar a los módulos secundarios", async ({ page }) => {
+  let releaseSecondary!: () => void;
+  const secondaryGate = new Promise<void>((resolve) => {
+    releaseSecondary = resolve;
+  });
+
+  await installDashboardMocks(page, secondaryGate);
+  await page.goto("/");
+
+  const balance = page.getByLabel("Saldo total en cuentas");
+  await expect(balance.getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.locator("main[aria-busy='true']")).toBeVisible();
+  await expect(page.getByText("Preparando tu resumen financiero…").first()).toBeVisible();
+
+  releaseSecondary();
+
+  await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
+  await expect(page.getByText(/1 categoría está cerca del límite/i)).toBeVisible();
+  await expect(page.getByText(/Balance neto del último mes/i)).toBeVisible();
+});
+
+test("Inicio usa privacidad persistente para ocultar importes sensibles", async ({ page }) => {
+  await installDashboardMocks(page);
+  await page.goto("/");
+
+  const balance = page.getByLabel("Saldo total en cuentas");
+  await expect(balance.getByText("300,00 €", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Ocultar importes" }).click();
+  await expect(balance.getByText("300,00 €", { exact: true })).toHaveCount(0);
+  await expect(balance.getByText("••••,•• €", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
+  await expect(balance.getByText("300,00 €", { exact: true })).toHaveCount(0);
+});
+
+test("Inicio mantiene comercio como lectura principal de la actividad reciente", async ({ page }) => {
+  await installDashboardMocks(page);
+  await page.goto("/");
+
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
+  await expect(page.getByText(/COMPRA TARJETA 1234/)).toBeVisible();
+});
