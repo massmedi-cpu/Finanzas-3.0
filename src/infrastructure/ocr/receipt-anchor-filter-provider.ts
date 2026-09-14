@@ -1,3 +1,4 @@
+import { clusterOcrRows, ocrRowTextBox } from "../../domain/ocr-rows";
 import sharp from "sharp";
 import type {
   DocumentOcrProvider,
@@ -64,39 +65,13 @@ function centerX(word: OcrWord) {
   return word.box.x + word.box.width / 2;
 }
 
-function rowOverlap(word: OcrWord, rowWords: OcrWord[]) {
-  const row = unionBox(rowWords);
-  const top = Math.max(word.box.y, row.y);
-  const bottom = Math.min(word.box.y + word.box.height, row.y + row.height);
-  const overlap = Math.max(0, bottom - top) / Math.max(0.000001, Math.min(word.box.height, row.height));
-  if (overlap >= 0.32) return true;
-  return Math.abs(centerY(word) - (row.y + row.height / 2)) <= Math.max(word.box.height, row.height) * 0.62;
-}
-
 function clusterRows(words: OcrWord[]) {
-  const sorted = [...words].sort((a, b) => centerY(a) - centerY(b) || a.box.x - b.box.x);
-  const rows: OcrWord[][] = [];
-  for (const word of sorted) {
-    let bestIndex = -1;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < rows.length; index += 1) {
-      if (!rowOverlap(word, rows[index])) continue;
-      const row = unionBox(rows[index]);
-      const distance = Math.abs(centerY(word) - (row.y + row.height / 2));
-      if (distance < bestDistance) {
-        bestIndex = index;
-        bestDistance = distance;
-      }
-    }
-    if (bestIndex === -1) rows.push([word]);
-    else rows[bestIndex].push(word);
-  }
-  return rows
+  return clusterOcrRows(words)
     .map((rowWords) => {
       const ordered = [...rowWords].sort((a, b) => a.box.x - b.box.x);
       return {
         words: ordered,
-        box: unionBox(ordered),
+        box: ocrRowTextBox(ordered),
         text: ordered.map((word) => word.text).join(" "),
       } satisfies ReceiptRow;
     })

@@ -1,3 +1,4 @@
+import { ocrRowTextBox } from "../../domain/ocr-rows";
 import path from "node:path";
 import sharp from "sharp";
 import { createWorker, PSM } from "tesseract.js";
@@ -206,7 +207,19 @@ export function paddedFocusedCellRectangle(
   kind: CellKind,
   variant: PreparedVariant,
 ): ImageRectangle {
-  const rectangle = focusedCellRectangle(metadata, row, band, kind, variant);
+  const initial = focusedCellRectangle(metadata, row, band, kind, variant);
+  // The historical 1.55x/2x vertical expansion can include the adjacent line.
+  // Prefer glyphs inside this column; fall back to other numbers on the same
+  // baseline when this cell was missed. Horizontal V20 band limits stay intact.
+  const normalNumbers = row.words.filter((word) => /\d/.test(word.text)
+    && word.box.height <= row.box.height * 1.7);
+  const inColumn = normalNumbers.filter((word) => centerX(word) >= band.left && centerX(word) <= band.right);
+  const referenceWords = inColumn.length ? inColumn : normalNumbers;
+  const reference = referenceWords.length ? ocrRowTextBox(referenceWords) : row.box;
+  const padding = Math.max(2, reference.height * metadata.height * 0.18);
+  const top = Math.max(0, Math.floor(reference.y * metadata.height - padding));
+  const bottom = Math.min(metadata.height, Math.ceil((reference.y + reference.height) * metadata.height + padding));
+  const rectangle = { ...initial, top, height: Math.max(3, bottom - top) };
   if (kind !== "money") return rectangle;
 
   // Keep enough source pixels around the monetary glyphs to preserve punctuation, but never let

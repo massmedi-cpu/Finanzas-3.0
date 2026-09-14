@@ -1,3 +1,5 @@
+import { clusterOcrRows } from "./ocr-rows";
+
 export type OcrBoundingBox = {
   x: number;
   y: number;
@@ -108,14 +110,6 @@ function verticalOverlap(a: OcrBoundingBox, b: OcrBoundingBox) {
   return overlap / Math.max(0.000001, Math.min(a.height, b.height));
 }
 
-function belongsToRow(word: OcrWord, rowWords: OcrWord[]) {
-  const rowBox = unionBox(rowWords);
-  if (verticalOverlap(word.box, rowBox) >= 0.35) return true;
-  const wordCenter = word.box.y + word.box.height / 2;
-  const rowCenter = rowBox.y + rowBox.height / 2;
-  return Math.abs(wordCenter - rowCenter) <= Math.max(word.box.height, rowBox.height) * 0.58;
-}
-
 function wordRight(word: OcrWord) {
   return word.box.x + word.box.width;
 }
@@ -214,24 +208,7 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
     return a.box.x - b.box.x;
   });
 
-  const rows: OcrWord[][] = [];
-  for (const word of words) {
-    let bestIndex = -1;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < rows.length; index += 1) {
-      if (!belongsToRow(word, rows[index])) continue;
-      const rowBox = unionBox(rows[index]);
-      const distance = Math.abs((word.box.y + word.box.height / 2) - (rowBox.y + rowBox.height / 2));
-      if (distance < bestDistance) {
-        bestIndex = index;
-        bestDistance = distance;
-      }
-    }
-    if (bestIndex === -1) rows.push([word]);
-    else rows[bestIndex].push(word);
-  }
-
-  rows.sort((a, b) => unionBox(a).y - unionBox(b).y);
+  const rows = clusterOcrRows(words);
   const bounds = horizontalBounds(words);
   const lines = rows.map((row, index) => {
     const ordered = [...row].sort((a, b) => a.box.x - b.box.x);

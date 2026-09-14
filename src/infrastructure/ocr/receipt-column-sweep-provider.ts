@@ -1,3 +1,4 @@
+import { clusterOcrRows, ocrRowTextBox } from "../../domain/ocr-rows";
 import path from "node:path";
 import { createWorker, PSM } from "tesseract.js";
 import type {
@@ -138,40 +139,13 @@ function verticalOverlap(a: OcrBoundingBox, b: OcrBoundingBox) {
   return Math.max(0, bottom - top) / Math.max(0.000001, Math.min(a.height, b.height));
 }
 
-function belongsToRow(word: OcrWord, rowWords: OcrWord[]) {
-  const row = unionBox(rowWords);
-  if (verticalOverlap(word.box, row) >= 0.3) return true;
-  const wordCenter = centerY(word);
-  const rowCenter = row.y + row.height / 2;
-  return Math.abs(wordCenter - rowCenter) <= Math.max(word.box.height, row.height) * 0.58;
-}
-
 function clusterRows(words: OcrWord[]): SweepRow[] {
-  const sorted = [...words].sort((a, b) => centerY(a) - centerY(b) || a.box.x - b.box.x);
-  const rows: OcrWord[][] = [];
-
-  for (const word of sorted) {
-    let best = -1;
-    let distance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < rows.length; index += 1) {
-      if (!belongsToRow(word, rows[index])) continue;
-      const box = unionBox(rows[index]);
-      const nextDistance = Math.abs(centerY(word) - (box.y + box.height / 2));
-      if (nextDistance < distance) {
-        best = index;
-        distance = nextDistance;
-      }
-    }
-    if (best === -1) rows.push([word]);
-    else rows[best].push(word);
-  }
-
-  return rows.map((rowWords) => {
+  return clusterOcrRows(words).map((rowWords) => {
     const ordered = [...rowWords].sort((a, b) => a.box.x - b.box.x);
     const text = ordered.map((word) => word.text).join(" ");
     return {
       words: ordered,
-      box: unionBox(ordered),
+      box: ocrRowTextBox(ordered),
       text,
       summaryLike: /\b(total|subtotal|base|iva)\b/i.test(text),
     };
