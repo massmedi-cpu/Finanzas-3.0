@@ -29,7 +29,7 @@ const MIN_SCALE = 3;
 const MAX_SCALE = 9;
 const HORIZONTAL_PADDING = 112;
 const VERTICAL_PADDING = 80;
-const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v11";
+const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v12";
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type NumericBand = ReturnType<typeof deriveNumericColumnBands>[number];
@@ -209,14 +209,15 @@ export function paddedFocusedCellRectangle(
   const rectangle = focusedCellRectangle(metadata, row, band, kind, variant);
   if (kind !== "money") return rectangle;
 
-  // The previous real replay showed that a band derived from already-damaged OCR can clip the
-  // comma/dot itself. Give monetary cells a small amount of source-pixel breathing room before
-  // upscaling. Consensus still requires explicit decimal punctuation, so this never turns bare
-  // digits into money or derives an amount arithmetically.
+  // Keep enough source pixels around the monetary glyphs to preserve punctuation, but never let
+  // the recovery crop cross into a neighbouring numeric band. The V19 real replay showed that
+  // cross-column contamination yields digit reads without a trustworthy single monetary token.
   const lineHeight = Math.max(10, row.box.height * metadata.height);
   const margin = Math.max(6, Math.round(lineHeight * (row.summaryLike ? 0.8 : 0.55)));
-  const left = Math.max(0, rectangle.left - margin);
-  const right = Math.min(metadata.width, rectangle.left + rectangle.width + margin);
+  const bandLeft = Math.max(0, Math.floor(band.left * metadata.width));
+  const bandRight = Math.min(metadata.width, Math.ceil(band.right * metadata.width));
+  const left = Math.max(bandLeft, rectangle.left - margin);
+  const right = Math.min(bandRight, rectangle.left + rectangle.width + margin);
   return {
     left,
     top: rectangle.top,
@@ -512,7 +513,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-padded-cell-consensus-v11", {
+      console.info("ocr-padded-cell-consensus-v12", {
         rows: rows.length,
         numericBands: bands.length,
         targetCells: targets.length,
