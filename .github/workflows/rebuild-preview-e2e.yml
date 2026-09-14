@@ -14,7 +14,7 @@ permissions:
 jobs:
   browser-interaction-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 30
     steps:
       - name: Checkout branch commit
         uses: actions/checkout@v6
@@ -113,7 +113,7 @@ jobs:
           script: |
             const token = await core.getIDToken();
             core.setSecret(token);
-            core.setOutput('token', token);
+            core.setOutput('token', token)
 
       - name: Discover matching Vercel preview for exact SHA
         id: vercel
