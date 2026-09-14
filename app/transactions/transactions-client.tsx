@@ -763,9 +763,9 @@ async function saveEdit(row: TransactionRow) {
                     {editingId === row.id && editor && (
                       <tr className={styles.editorRow}><td colSpan={8}>
                         <section className={styles.editor} aria-label={`Editar ${row.concept.effective}`}>
-                          <div className={styles.editorHeading}><div><strong>Editar movimiento</strong><span>La categoría se asigna automáticamente hasta que tú la cambias.</span></div><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button></div>
+                          <div className={styles.editorHeading}><strong>Editar movimiento</strong></div>
                           <div className={styles.editorGrid}>
-                            <label className={styles.editorWide}>
+                            <label className={`${styles.editorField} ${styles.conceptField}`}>
                               <span>Concepto</span>
                               <input
                                 ref={conceptInputRef}
@@ -781,27 +781,30 @@ async function saveEdit(row: TransactionRow) {
                               />
                               {conceptError ? <small id={CONCEPT_ERROR_ID} className={styles.fieldError} role="alert">{conceptError}</small> : null}
                             </label>
-                            <label><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>Automático/original</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
-                            <label><span>Categoría</span><select data-testid="edit-category-root" value={editor.categoryRoot} onChange={(event) => {
+                            <label className={`${styles.editorField} ${styles.merchantField}`}><span>Comercio</span><select value={editor.merchant} onChange={(event) => setEditor({ ...editor, merchant: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("merchant") ? "Restaurar valor detectado" : "Mantener valor actual"}</option><option value={NONE}>Sin comercio</option>{facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}</select></label>
+                            <label className={`${styles.editorField} ${styles.categoryField}`}><span>Categoría</span><select data-testid="edit-category-root" value={editor.categoryRoot} onChange={(event) => {
                     const categoryRoot = event.target.value;
                     setEditor({ ...editor, categoryMode: "set", categoryRoot, categoryLeaf: "" });
                     setCategoryError("");
-                  }}><option value={NONE}>Sin categoría</option>{activeRootCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><small>{editor.categoryMode === "inherit" ? "Asignación automática" : "Asignación manual"}</small></label>
-                  <label><span>Subcategoría</span><select data-testid="edit-subcategory" value={editor.categoryLeaf} disabled={editor.categoryRoot === NONE || activeSubcategories(facets.categories, editor.categoryRoot).length === 0} aria-invalid={categoryError ? "true" : "false"} onChange={(event) => {
+                  }}><option value={NONE}>Sin categoría</option>{activeRootCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><small className={styles.assignmentHint}>{editor.categoryMode === "inherit" ? "Origen: clasificación detectada" : "Origen: ajuste manual"}</small></label>
+                  <label className={`${styles.editorField} ${styles.subcategoryField}`}><span>Subcategoría</span><select data-testid="edit-subcategory" value={editor.categoryLeaf} disabled={editor.categoryRoot === NONE || activeSubcategories(facets.categories, editor.categoryRoot).length === 0} aria-invalid={categoryError ? "true" : "false"} onChange={(event) => {
                     setEditor({ ...editor, categoryMode: "set", categoryLeaf: event.target.value });
                     setCategoryError("");
                   }}>{activeSubcategories(facets.categories, editor.categoryRoot).length > 0 ? <><option value="">Selecciona una subcategoría</option>{activeSubcategories(facets.categories, editor.categoryRoot).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</> : <option value="">No hay subcategorías</option>}</select>{categoryError ? <small className={styles.fieldError} role="alert">{categoryError}</small> : null}</label>
-                  <div className={`${styles.editorWide} ${styles.categoryAssignment}`}><button data-testid="reset-category-auto" className={styles.secondaryButton} type="button" disabled={saving || editor.categoryMode === "inherit"} onClick={() => {
-                    const automatic = categorySelectionFor(facets.categories, row.category.originalId);
-                    setEditor({ ...editor, categoryMode: "inherit", categoryRoot: automatic.root, categoryLeaf: automatic.leaf });
-                    setCategoryError("");
-                  }}>Restablecer categoría automática</button><small>Asignación automática actual: {row.category.originalName ?? "Sin categoría"}</small></div>
-                            <label><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>Automático/original</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
-                            <label><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewState: event.target.value })}><option value={INHERIT}>Automática/original</option>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                            <label className={styles.editorWide}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
-                            <label className={styles.checkboxLabel}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
+                  <div className={styles.categoryAssignment}>
+                    <small>Clasificación detectada: {row.category.originalName ?? "Sin categoría"}</small>
+                    {editor.categoryMode === "set" ? <button data-testid="reset-category-auto" className={styles.secondaryButton} type="button" disabled={saving} onClick={() => {
+                      const automatic = categorySelectionFor(facets.categories, row.category.originalId);
+                      setEditor({ ...editor, categoryMode: "inherit", categoryRoot: automatic.root, categoryLeaf: automatic.leaf });
+                      setCategoryError("");
+                    }}>Restaurar clasificación detectada</button> : null}
+                  </div>
+                            <label className={`${styles.editorField} ${styles.typeField}`}><span>Tipo</span><select value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kind: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("kind") ? "Restaurar valor detectado" : "Mantener valor actual"}</option>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{row.transferPairId && <small>Desempareja la transferencia antes de cambiar su tipo.</small>}</label>
+                            <label className={`${styles.editorField} ${styles.reviewField}`}><span>Revisión</span><select data-testid="edit-review" value={editor.reviewState} onChange={(event) => setEditor({ ...editor, reviewState: event.target.value })}><option value={INHERIT}>{row.overriddenFields.includes("reviewState") ? "Restaurar valor detectado" : "Mantener valor actual"}</option>{(Object.entries(REVIEW_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                            <label className={`${styles.editorField} ${styles.noteField}`}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
+                            <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
-                          <div className={styles.editorActions}><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
+                          <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
                         </section>
                       </td></tr>
                     )}
