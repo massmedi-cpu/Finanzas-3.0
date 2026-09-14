@@ -4,6 +4,10 @@ import type {
   EntityId,
   MoneyCents,
 } from "./models";
+import {
+  isSupportedCategoryColor,
+  isSupportedCategoryIcon,
+} from "./category-visuals";
 
 export interface AccountDraft {
   name: string;
@@ -49,19 +53,11 @@ export function validateAccountDraft(draft: AccountDraft): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (!draft.name.trim()) {
-    issues.push({
-      field: "name",
-      code: "required",
-      message: "La cuenta debe tener un nombre.",
-    });
+    issues.push({ field: "name", code: "required", message: "La cuenta debe tener un nombre." });
   }
 
   if (!ACCOUNT_TYPES.has(draft.type)) {
-    issues.push({
-      field: "type",
-      code: "invalid_account_type",
-      message: "El tipo de cuenta no es válido.",
-    });
+    issues.push({ field: "type", code: "invalid_account_type", message: "El tipo de cuenta no es válido." });
   }
 
   if (!Number.isSafeInteger(draft.openingBalanceCents)) {
@@ -87,34 +83,30 @@ export function validateCategoryDraft(draft: CategoryDraft): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
 
   if (!draft.name.trim()) {
-    issues.push({
-      field: "name",
-      code: "required",
-      message: "La categoría debe tener un nombre.",
-    });
+    issues.push({ field: "name", code: "required", message: "La categoría debe tener un nombre." });
   }
 
   if (!CATEGORY_KINDS.has(draft.kind)) {
-    issues.push({
-      field: "kind",
-      code: "invalid_category_kind",
-      message: "El tipo de categoría no es válido.",
-    });
+    issues.push({ field: "kind", code: "invalid_category_kind", message: "El tipo de categoría no es válido." });
   }
 
   if (!draft.iconKey.trim()) {
+    issues.push({ field: "iconKey", code: "required", message: "La categoría debe tener un icono." });
+  } else if (!isSupportedCategoryIcon(draft.iconKey.trim())) {
     issues.push({
       field: "iconKey",
-      code: "required",
-      message: "La categoría debe tener un icono.",
+      code: "unsupported_category_icon",
+      message: "El icono seleccionado no pertenece al catálogo admitido.",
     });
   }
 
   if (!draft.colorToken.trim()) {
+    issues.push({ field: "colorToken", code: "required", message: "La categoría debe tener un color." });
+  } else if (!isSupportedCategoryColor(draft.colorToken.trim())) {
     issues.push({
       field: "colorToken",
-      code: "required",
-      message: "La categoría debe tener un color.",
+      code: "unsupported_category_color",
+      message: "El color seleccionado no pertenece al catálogo admitido.",
     });
   }
 
