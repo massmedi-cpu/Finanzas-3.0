@@ -458,10 +458,29 @@ function sameEvidenceSlot(a: OcrWord, b: OcrWord) {
     && Math.abs(centerX(a) - centerX(b)) <= columnTolerance;
 }
 
+function explicitNumericToken(text: string) {
+  const token = text.replace(/[€\s]/g, "");
+  return /^\d{1,6}[,.]\d{2}$/.test(token) || /^\d{1,2}$/.test(token) ? token : null;
+}
+
 export function mergeReceiptRecropWords(firstPass: OcrWord[], reread: OcrWord[]) {
-  const merged = [...reread];
+  let merged = [...reread];
   for (const word of firstPass) {
-    if (!merged.some((candidate) => sameEvidenceSlot(word, candidate))) merged.push(word);
+    const slotCandidates = merged.filter((candidate) => sameEvidenceSlot(word, candidate));
+    if (!slotCandidates.length) {
+      merged.push(word);
+      continue;
+    }
+
+    // A second OCR pass is allowed to upgrade malformed/missing evidence (for example 560 -> 5,60),
+    // but it must never downgrade an already explicit numeric token merely because another reading
+    // occupied the same physical slot. This is monotonic evidence preservation, not arithmetic inference.
+    const firstToken = explicitNumericToken(word.text);
+    if (!firstToken) continue;
+    if (slotCandidates.some((candidate) => explicitNumericToken(candidate.text) === firstToken)) continue;
+
+    merged = merged.filter((candidate) => !sameEvidenceSlot(word, candidate));
+    merged.push(word);
   }
   return merged.sort((a, b) => {
     const yDelta = a.box.y - b.box.y;
