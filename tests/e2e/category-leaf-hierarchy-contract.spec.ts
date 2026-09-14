@@ -7,6 +7,7 @@ test("la taxonomía automática termina en hojas y conserva la ruta completa", a
   expect(migration).toContain("Ingresos");
   expect(migration).toContain("Transferencias");
   expect(migration).toContain("parent_category_id");
-  expect(migration).toContain("category_path");
+  expect(migration).toContain("category_display_name");
+  expect(migration).toContain("p.name || ' › ' || c.name");
   expect(migration).toContain("query_effective_transactions");
 });
