@@ -152,7 +152,7 @@ export function runFoundationHealthChecks(): FoundationHealth {
     kind: "expense",
     parentCategoryId: null,
     iconKey: "home",
-    colorToken: "category.home",
+    colorToken: "category.indigo",
     lifecycle: "active",
     sortOrder: 0,
     createdAt: "2026-09-03T10:00:00Z",
@@ -173,8 +173,8 @@ export function runFoundationHealthChecks(): FoundationHealth {
       name: "  Suministros   hogar ",
       kind: "expense",
       parentCategoryId: categoryA.id,
-      iconKey: " utilities ",
-      colorToken: " category.utilities ",
+      iconKey: " bolt ",
+      colorToken: " category.amber ",
       lifecycle: "active",
       sortOrder: 1,
     },
@@ -291,8 +291,8 @@ export function runFoundationHealthChecks(): FoundationHealth {
           name: "Categoría de validación",
           kind: "expense",
           parentCategoryId: null,
-          iconKey: "validation",
-          colorToken: "category.validation",
+          iconKey: "wallet",
+          colorToken: "category.blue",
           lifecycle: "active",
           sortOrder: 0,
         }).length === 0,
@@ -323,8 +323,8 @@ export function runFoundationHealthChecks(): FoundationHealth {
       name: "category-command-normalization",
       passed:
         preparedCategory.name === "Suministros hogar" &&
-        preparedCategory.iconKey === "utilities" &&
-        preparedCategory.colorToken === "category.utilities" &&
+        preparedCategory.iconKey === "bolt" &&
+        preparedCategory.colorToken === "category.amber" &&
         preparedCategory.createdAt === categoryB.createdAt &&
         preparedCategory.updatedAt === "2026-09-03T11:00:00Z",
     },
