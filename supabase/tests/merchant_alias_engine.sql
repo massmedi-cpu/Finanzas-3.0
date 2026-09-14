@@ -19,7 +19,7 @@ begin
   returning id into v_category;
 
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order)
-  values ('Phase3 archived category','expense','archive','category.slate','archived',1)
+  values ('Phase3 archived category','expense','receipt','category.slate','archived',1)
   returning id into v_archived_category;
 
   v_merchant := financial_app.save_merchant(null,'  Café   Bar Sevilla  ',v_category,'active');
