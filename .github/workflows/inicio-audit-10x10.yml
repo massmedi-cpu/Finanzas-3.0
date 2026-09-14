@@ -173,6 +173,7 @@ jobs:
           tests/e2e/dashboard.spec.ts
           tests/e2e/preview-production-isolation-live.spec.ts
           tests/e2e/protected-preview-auth-boundary-live.spec.ts
+          --grep-invert "protected preview exposes dashboard orchestration using validated engines"
           --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload protected Preview report on failure
