@@ -27,3 +27,30 @@ jobs:
 
       - name: Run isolated OCR provider and geometry contracts
         run: npx playwright test --config=playwright.ocr.config.ts
+
+  ui-network-mocks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact validation commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Validate mocked UI flows with service workers blocked
+        run: >-
+          npx playwright test
+          tests/e2e/accounts.spec.ts
+          tests/e2e/dashboard.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
