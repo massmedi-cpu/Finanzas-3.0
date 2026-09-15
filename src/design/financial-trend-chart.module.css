@@ -30,7 +30,8 @@
 .expenseDot { background: var(--color-danger); }
 .netDot { background: var(--color-cyan); }
 
-.viewport {
+.viewport,
+.monthViewport {
   min-width: 0;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
@@ -139,6 +140,7 @@
 }
 
 .readout {
+  min-width: 0;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
@@ -156,6 +158,7 @@
 }
 
 .readout dl {
+  min-width: 0;
   margin: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -164,7 +167,7 @@
 
 .readout dl div { min-width: 0; }
 .readout dt { color: var(--color-text-muted); font-size: var(--font-helper); }
-.readout dd { margin: 0.15rem 0 0; font-weight: 750; font-variant-numeric: tabular-nums; }
+.readout dd { margin: 0.15rem 0 0; overflow-wrap: anywhere; font-weight: 750; font-variant-numeric: tabular-nums; }
 .readout a { color: #bcd0f8; font-size: var(--font-helper); font-weight: 750; text-decoration: none; }
 .readout a:hover { color: white; }
 
