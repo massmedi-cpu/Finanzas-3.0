@@ -1,0 +1,138 @@
+.panel {
+  margin-top: 1.25rem;
+  padding: clamp(1rem, 2.2vw, 1.5rem);
+  border: 1px solid var(--color-border);
+  border-radius: 20px;
+  background: var(--color-surface);
+  box-shadow: 0 14px 38px rgba(0, 0, 0, 0.16);
+  display: grid;
+  gap: 1rem;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.4rem;
+  color: var(--color-primary-bright);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+
+.header h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  letter-spacing: -0.025em;
+}
+
+.meta {
+  color: var(--color-text-secondary);
+  font-size: 0.8rem;
+}
+
+.plot {
+  position: relative;
+  height: 15rem;
+  min-width: 36rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.plotScroller,
+.tableScroller {
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+}
+
+.svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  color: var(--color-primary-bright);
+}
+
+.point {
+  position: absolute;
+  transform: translate(-50%, -50%);
+}
+
+.pointButton {
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--color-primary-bright);
+  background: radial-gradient(circle, currentColor 0 7px, transparent 8px);
+  cursor: default;
+}
+
+.pointButton:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.tooltip {
+  position: absolute;
+  z-index: 6;
+  left: 50%;
+  bottom: calc(100% + 0.7rem);
+  transform: translateX(-50%);
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.65rem;
+  background: var(--color-bg-elevated);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  color: var(--color-text);
+  white-space: nowrap;
+  font-size: 0.78rem;
+}
+
+.table {
+  width: 100%;
+  min-width: 34rem;
+  border-collapse: collapse;
+}
+
+.table th,
+.table td {
+  padding: 0.65rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.table thead th {
+  border-top: 0;
+}
+
+.table th {
+  text-align: left;
+}
+
+.table td:last-child,
+.table th:last-child {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 48rem) {
+  .panel {
+    border-radius: 16px;
+  }
+
+  .header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pointButton {
+    transition: none;
+  }
+}
