@@ -1,3 +1,5 @@
+export type AnalysisRange = "1m" | "3m" | "6m" | "12m" | "ytd";
+
 export type AnalysisPeriod = {
   dateFrom: string;
   dateTo: string;
@@ -6,31 +8,154 @@ export type AnalysisPeriod = {
   operatingNetCents: number;
   savingsCents: number;
   savingsRateBps: number | null;
+  quality?: {
+    scopedRows?: number;
+    includedRows?: number;
+    manuallyExcludedRows?: number;
+    confirmedDuplicateRows?: number;
+    suspectedDuplicateRows?: number;
+    signMismatchRows?: number;
+  };
 };
 
-export type AnalysisTransactionRow = {
+export type AnalysisMonthlyRow = {
+  monthStart: string;
+  rows: number;
+  incomeCents: number;
+  expenseCents: number;
+  operatingNetCents: number;
+  savingsCents: number;
+  savingsRateBps: number | null;
+};
+
+export type AnalysisAccount = {
   id: string;
-  bankDate: string;
-  amountCents: number;
-  category: { effectiveId: string | null; effectiveName: string | null };
-  merchant: { effectiveId: string | null; effectiveName: string | null };
-  kind: { effective: string };
-  duplicateState: string;
-  excludedFromAnalytics: boolean;
+  name: string;
+  lifecycle: string;
 };
 
 export type AnalysisDriver = {
   id: string | null;
   name: string;
   expenseCents: number;
+  previousExpenseCents: number;
+  deltaCents: number;
+  changeBps: number | null;
   shareBps: number | null;
   rows: number;
+  previousRows: number;
   href: string | null;
 };
 
+export type AnalysisMerchantDriver = AnalysisDriver & {
+  averageCents: number | null;
+  habitualAverageCents: number | null;
+  habitualRows: number;
+  habitualVariationBps: number | null;
+};
+
+export type AnalysisTrend = {
+  direction: "up" | "down" | "stable" | "insufficient";
+  delta: number | null;
+  recentAverage: number | null;
+  previousAverage: number | null;
+  sampleMonths: number;
+};
+
+export type AnalysisGatewaySnapshot = {
+  current: AnalysisPeriod;
+  previous: AnalysisPeriod;
+  history: {
+    rows: Array<Omit<AnalysisMonthlyRow, "savingsRateBps"> & { savingsRateBps?: number | null }>;
+  };
+  accounts: AnalysisAccount[];
+  categories: Array<{
+    id: string | null;
+    name: string;
+    currentExpenseCents: number;
+    previousExpenseCents: number;
+    currentRows: number;
+    previousRows: number;
+  }>;
+  merchants: Array<{
+    id: string | null;
+    name: string;
+    currentExpenseCents: number;
+    previousExpenseCents: number;
+    currentRows: number;
+    previousRows: number;
+    currentAverageCents: number | null;
+    habitualAverageCents: number | null;
+    historyRows: number | null;
+  }>;
+  concentration: {
+    top3CategoryBps: number | null;
+    top3MerchantBps: number | null;
+  };
+  anomalies: Array<{
+    transactionId: string;
+    bankDate: string;
+    amountCents: number;
+    merchantId: string | null;
+    merchantName: string;
+    categoryId: string | null;
+    categoryName: string;
+    conceptNormalized: string;
+    habitualCents: number;
+    historyRows: number;
+    variationBps: number | null;
+  }>;
+  fixedVariable: {
+    available: boolean;
+    reliableRecurrences: number;
+    fixedExpenseCents: number;
+    variableExpenseCents: number;
+  };
+  budget: null | {
+    month: string;
+    total: null | {
+      effectiveAmountCents: number;
+      actualExpenseCents: number;
+      remainingCents: number;
+      progressBps: number | null;
+      status: string;
+    };
+    overCategories: Array<{
+      categoryId: string | null;
+      categoryName: string | null;
+      effectiveAmountCents: number;
+      actualExpenseCents: number;
+      remainingCents: number;
+      progressBps: number | null;
+      status: string;
+    }>;
+  };
+  forecast: null | {
+    period: { dateFrom: string; dateTo: string; accountId: string | null };
+    summary: {
+      plannedItems: number;
+      projectedNetCents: number;
+      projectedIncomeCents: number;
+      projectedExpenseCents: number;
+      projectedClosingBalanceCents: number;
+      openingBalanceCents: number;
+    };
+  };
+};
+
 export type AnalysisSnapshot = {
-  contractVersion: 1;
-  month: string;
+  contractVersion: 2;
+  selection: {
+    range: AnalysisRange;
+    month: string;
+    accountId: string | null;
+    dateFrom: string;
+    dateTo: string;
+    previousDateFrom: string;
+    previousDateTo: string;
+    partial: boolean;
+    partialMonthStart: string | null;
+  };
   current: AnalysisPeriod;
   previous: AnalysisPeriod;
   comparison: {
@@ -40,20 +165,55 @@ export type AnalysisSnapshot = {
     expenseChangeBps: number | null;
     netDeltaCents: number;
     netChangeBps: number | null;
+    savingsDeltaCents: number;
+    savingsChangeBps: number | null;
+    savingsRateDeltaBps: number | null;
+  };
+  averages: {
+    last3Months: AnalysisPeriodAverage | null;
+    last6Months: AnalysisPeriodAverage | null;
+  };
+  history: AnalysisMonthlyRow[];
+  trends: {
+    income: AnalysisTrend;
+    expense: AnalysisTrend;
+    savings: AnalysisTrend;
+    net: AnalysisTrend;
+    savingsRate: AnalysisTrend;
   };
   categoryDrivers: AnalysisDriver[];
-  merchantDrivers: AnalysisDriver[];
+  merchantDrivers: AnalysisMerchantDriver[];
+  changeDrivers: AnalysisDriver[];
+  concentration: AnalysisGatewaySnapshot["concentration"];
+  anomalies: Array<AnalysisGatewaySnapshot["anomalies"][number] & { href: string }>;
+  fixedVariable: AnalysisGatewaySnapshot["fixedVariable"] & { fixedShareBps: number | null };
+  budget: AnalysisGatewaySnapshot["budget"];
+  forecast: AnalysisGatewaySnapshot["forecast"];
+  accounts: AnalysisAccount[];
   quality: {
+    reconciled: boolean;
+    categoryExpenseCents: number;
     expenseRows: number;
     excludedRows: number;
     confirmedDuplicateRows: number;
-    reconciled: boolean;
   };
   principles: {
     bankSource: "read_only";
     totals: "financial_period";
-    drivers: "effective_transaction_query";
+    history: "financial_monthly_series";
+    drivers: "financial_transaction_facts_aggregate";
+    anomalies: "deterministic_history_threshold";
+    generativeAi: false;
   };
+};
+
+export type AnalysisPeriodAverage = {
+  months: number;
+  incomeCents: number;
+  expenseCents: number;
+  operatingNetCents: number;
+  savingsCents: number;
+  savingsRateBps: number | null;
 };
 
 function changeBps(current: number, previous: number) {
@@ -61,102 +221,237 @@ function changeBps(current: number, previous: number) {
   return Math.round(((current - previous) * 10000) / Math.abs(previous));
 }
 
-function driverHref(
-  dateFrom: string,
-  dateTo: string,
-  kind: "category" | "merchant",
-  id: string | null,
-) {
-  if (kind === "merchant" && id === null) return null;
-  const params = new URLSearchParams({ dateFrom, dateTo, kind: "expense" });
-  if (kind === "category") params.set("categoryId", id ?? "__uncategorized__");
-  else if (id) params.set("merchantId", id);
+function average(values: number[]) {
+  if (values.length === 0) return null;
+  return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
+}
+
+function periodAverage(rows: AnalysisMonthlyRow[], months: number): AnalysisPeriodAverage | null {
+  const sample = rows.slice(-months);
+  if (sample.length < months) return null;
+  const rates = sample.map((row) => row.savingsRateBps).filter((value): value is number => value !== null);
+  return {
+    months,
+    incomeCents: average(sample.map((row) => row.incomeCents)) ?? 0,
+    expenseCents: average(sample.map((row) => row.expenseCents)) ?? 0,
+    operatingNetCents: average(sample.map((row) => row.operatingNetCents)) ?? 0,
+    savingsCents: average(sample.map((row) => row.savingsCents)) ?? 0,
+    savingsRateBps: average(rates),
+  };
+}
+
+function trend(rows: AnalysisMonthlyRow[], selector: (row: AnalysisMonthlyRow) => number | null): AnalysisTrend {
+  const values = rows
+    .map(selector)
+    .filter((value): value is number => value !== null);
+  if (values.length < 6) {
+    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: values.length };
+  }
+  const sample = values.slice(-6);
+  const previousAverage = average(sample.slice(0, 3));
+  const recentAverage = average(sample.slice(3));
+  if (previousAverage === null || recentAverage === null) {
+    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: sample.length };
+  }
+  const delta = recentAverage - previousAverage;
+  return {
+    direction: delta === 0 ? "stable" : delta > 0 ? "up" : "down",
+    delta,
+    recentAverage,
+    previousAverage,
+    sampleMonths: sample.length,
+  };
+}
+
+function drilldownHref(input: {
+  dateFrom: string;
+  dateTo: string;
+  accountId: string | null;
+  kind: "category" | "merchant";
+  id: string | null;
+}) {
+  if (input.kind === "merchant" && input.id === null) return null;
+  const params = new URLSearchParams({ dateFrom: input.dateFrom, dateTo: input.dateTo, kind: "expense" });
+  if (input.accountId) params.set("accountId", input.accountId);
+  if (input.kind === "category") params.set("categoryId", input.id ?? "__uncategorized__");
+  if (input.kind === "merchant" && input.id) params.set("merchantId", input.id);
   return `/transactions?${params.toString()}`;
 }
 
-function aggregateDrivers(
-  rows: AnalysisTransactionRow[],
-  dateFrom: string,
-  dateTo: string,
-  kind: "category" | "merchant",
-  totalExpenseCents: number,
+function anomalyHref(
+  anomaly: AnalysisGatewaySnapshot["anomalies"][number],
+  accountId: string | null,
 ) {
-  const grouped = new Map<string, { id: string | null; name: string; expenseCents: number; rows: number }>();
-  for (const row of rows) {
-    const ref = kind === "category" ? row.category : row.merchant;
-    const key = ref.effectiveId ?? "__none__";
-    const current = grouped.get(key) ?? {
-      id: ref.effectiveId,
-      name: ref.effectiveName ?? (kind === "category" ? "Sin categoría" : "Sin comercio"),
-      expenseCents: 0,
-      rows: 0,
-    };
-    current.expenseCents += -row.amountCents;
-    current.rows += 1;
-    grouped.set(key, current);
-  }
-
-  return [...grouped.values()]
-    .map<AnalysisDriver>((driver) => ({
-      ...driver,
-      shareBps: totalExpenseCents > 0 ? Math.round((driver.expenseCents * 10000) / totalExpenseCents) : null,
-      href: driverHref(dateFrom, dateTo, kind, driver.id),
-    }))
-    .sort((a, b) => b.expenseCents - a.expenseCents || a.name.localeCompare(b.name, "es"));
+  const params = new URLSearchParams({
+    dateFrom: anomaly.bankDate,
+    dateTo: anomaly.bankDate,
+    kind: "expense",
+  });
+  if (accountId) params.set("accountId", accountId);
+  if (anomaly.merchantId) params.set("merchantId", anomaly.merchantId);
+  else if (anomaly.categoryId) params.set("categoryId", anomaly.categoryId);
+  return `/transactions?${params.toString()}`;
 }
 
 export function buildAnalysisSnapshot(input: {
+  range: AnalysisRange;
   month: string;
-  current: AnalysisPeriod;
-  previous: AnalysisPeriod;
-  expenseRows: AnalysisTransactionRow[];
+  accountId: string | null;
+  dateFrom: string;
+  dateTo: string;
+  previousDateFrom: string;
+  previousDateTo: string;
+  partial: boolean;
+  partialMonthStart: string | null;
+  gateway: AnalysisGatewaySnapshot;
 }): AnalysisSnapshot {
-  const eligibleExpenses = input.expenseRows.filter(
-    (row) => row.kind.effective === "expense" && row.duplicateState !== "confirmed" && !row.excludedFromAnalytics,
-  );
-  const excludedRows = input.expenseRows.filter((row) => row.excludedFromAnalytics).length;
-  const confirmedDuplicateRows = input.expenseRows.filter((row) => row.duplicateState === "confirmed").length;
-  const driverExpenseCents = eligibleExpenses.reduce((sum, row) => sum - row.amountCents, 0);
-  const reconciled = driverExpenseCents === input.current.expenseCents;
+  const history = (input.gateway.history?.rows ?? []).map<AnalysisMonthlyRow>((row) => ({
+    ...row,
+    savingsRateBps: row.savingsRateBps ?? (row.incomeCents > 0
+      ? Math.round((row.savingsCents * 10000) / row.incomeCents)
+      : null),
+  }));
+  const completeHistory = input.partialMonthStart
+    ? history.filter((row) => row.monthStart !== input.partialMonthStart)
+    : history;
+
+  const categoryDrivers = (input.gateway.categories ?? [])
+    .map<AnalysisDriver>((row) => ({
+      id: row.id,
+      name: row.name,
+      expenseCents: row.currentExpenseCents,
+      previousExpenseCents: row.previousExpenseCents,
+      deltaCents: row.currentExpenseCents - row.previousExpenseCents,
+      changeBps: changeBps(row.currentExpenseCents, row.previousExpenseCents),
+      shareBps: input.gateway.current.expenseCents > 0
+        ? Math.round((row.currentExpenseCents * 10000) / input.gateway.current.expenseCents)
+        : null,
+      rows: row.currentRows,
+      previousRows: row.previousRows,
+      href: drilldownHref({
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        accountId: input.accountId,
+        kind: "category",
+        id: row.id,
+      }),
+    }))
+    .sort((a, b) => b.expenseCents - a.expenseCents || Math.abs(b.deltaCents) - Math.abs(a.deltaCents));
+
+  const merchantDrivers = (input.gateway.merchants ?? [])
+    .map<AnalysisMerchantDriver>((row) => ({
+      id: row.id,
+      name: row.name,
+      expenseCents: row.currentExpenseCents,
+      previousExpenseCents: row.previousExpenseCents,
+      deltaCents: row.currentExpenseCents - row.previousExpenseCents,
+      changeBps: changeBps(row.currentExpenseCents, row.previousExpenseCents),
+      shareBps: input.gateway.current.expenseCents > 0
+        ? Math.round((row.currentExpenseCents * 10000) / input.gateway.current.expenseCents)
+        : null,
+      rows: row.currentRows,
+      previousRows: row.previousRows,
+      href: drilldownHref({
+        dateFrom: input.dateFrom,
+        dateTo: input.dateTo,
+        accountId: input.accountId,
+        kind: "merchant",
+        id: row.id,
+      }),
+      averageCents: row.currentAverageCents,
+      habitualAverageCents: row.habitualAverageCents,
+      habitualRows: row.historyRows ?? 0,
+      habitualVariationBps: row.currentAverageCents !== null && row.habitualAverageCents !== null && (row.historyRows ?? 0) >= 4
+        ? changeBps(row.currentAverageCents, row.habitualAverageCents)
+        : null,
+    }))
+    .sort((a, b) => b.expenseCents - a.expenseCents || Math.abs(b.deltaCents) - Math.abs(a.deltaCents));
+
+  const categoryExpenseCents = categoryDrivers.reduce((sum, row) => sum + row.expenseCents, 0);
+  const reconciled = categoryExpenseCents === input.gateway.current.expenseCents;
   if (!reconciled) throw new Error("analysis_reconciliation_failed");
 
+  const fixedVariable = input.gateway.fixedVariable ?? {
+    available: false,
+    reliableRecurrences: 0,
+    fixedExpenseCents: 0,
+    variableExpenseCents: input.gateway.current.expenseCents,
+  };
+  const fixedVariableTotal = fixedVariable.fixedExpenseCents + fixedVariable.variableExpenseCents;
+
   return {
-    contractVersion: 1,
-    month: input.month,
-    current: input.current,
-    previous: input.previous,
-    comparison: {
-      incomeDeltaCents: input.current.incomeCents - input.previous.incomeCents,
-      incomeChangeBps: changeBps(input.current.incomeCents, input.previous.incomeCents),
-      expenseDeltaCents: input.current.expenseCents - input.previous.expenseCents,
-      expenseChangeBps: changeBps(input.current.expenseCents, input.previous.expenseCents),
-      netDeltaCents: input.current.operatingNetCents - input.previous.operatingNetCents,
-      netChangeBps: changeBps(input.current.operatingNetCents, input.previous.operatingNetCents),
+    contractVersion: 2,
+    selection: {
+      range: input.range,
+      month: input.month,
+      accountId: input.accountId,
+      dateFrom: input.dateFrom,
+      dateTo: input.dateTo,
+      previousDateFrom: input.previousDateFrom,
+      previousDateTo: input.previousDateTo,
+      partial: input.partial,
+      partialMonthStart: input.partialMonthStart,
     },
-    categoryDrivers: aggregateDrivers(
-      eligibleExpenses,
-      input.current.dateFrom,
-      input.current.dateTo,
-      "category",
-      input.current.expenseCents,
-    ),
-    merchantDrivers: aggregateDrivers(
-      eligibleExpenses,
-      input.current.dateFrom,
-      input.current.dateTo,
-      "merchant",
-      input.current.expenseCents,
-    ),
+    current: input.gateway.current,
+    previous: input.gateway.previous,
+    comparison: {
+      incomeDeltaCents: input.gateway.current.incomeCents - input.gateway.previous.incomeCents,
+      incomeChangeBps: changeBps(input.gateway.current.incomeCents, input.gateway.previous.incomeCents),
+      expenseDeltaCents: input.gateway.current.expenseCents - input.gateway.previous.expenseCents,
+      expenseChangeBps: changeBps(input.gateway.current.expenseCents, input.gateway.previous.expenseCents),
+      netDeltaCents: input.gateway.current.operatingNetCents - input.gateway.previous.operatingNetCents,
+      netChangeBps: changeBps(input.gateway.current.operatingNetCents, input.gateway.previous.operatingNetCents),
+      savingsDeltaCents: input.gateway.current.savingsCents - input.gateway.previous.savingsCents,
+      savingsChangeBps: changeBps(input.gateway.current.savingsCents, input.gateway.previous.savingsCents),
+      savingsRateDeltaBps: input.gateway.current.savingsRateBps !== null && input.gateway.previous.savingsRateBps !== null
+        ? input.gateway.current.savingsRateBps - input.gateway.previous.savingsRateBps
+        : null,
+    },
+    averages: {
+      last3Months: periodAverage(completeHistory, 3),
+      last6Months: periodAverage(completeHistory, 6),
+    },
+    history,
+    trends: {
+      income: trend(completeHistory, (row) => row.incomeCents),
+      expense: trend(completeHistory, (row) => row.expenseCents),
+      savings: trend(completeHistory, (row) => row.savingsCents),
+      net: trend(completeHistory, (row) => row.operatingNetCents),
+      savingsRate: trend(completeHistory, (row) => row.savingsRateBps),
+    },
+    categoryDrivers,
+    merchantDrivers,
+    changeDrivers: [...categoryDrivers]
+      .filter((row) => row.deltaCents !== 0)
+      .sort((a, b) => Math.abs(b.deltaCents) - Math.abs(a.deltaCents)),
+    concentration: input.gateway.concentration,
+    anomalies: (input.gateway.anomalies ?? []).map((row) => ({
+      ...row,
+      href: anomalyHref(row, input.accountId),
+    })),
+    fixedVariable: {
+      ...fixedVariable,
+      fixedShareBps: fixedVariable.available && fixedVariableTotal > 0
+        ? Math.round((fixedVariable.fixedExpenseCents * 10000) / fixedVariableTotal)
+        : null,
+    },
+    budget: input.gateway.budget,
+    forecast: input.gateway.forecast,
+    accounts: input.gateway.accounts ?? [],
     quality: {
-      expenseRows: input.expenseRows.length,
-      excludedRows,
-      confirmedDuplicateRows,
       reconciled,
+      categoryExpenseCents,
+      expenseRows: input.gateway.current.quality?.includedRows ?? categoryDrivers.reduce((sum, row) => sum + row.rows, 0),
+      excludedRows: input.gateway.current.quality?.manuallyExcludedRows ?? 0,
+      confirmedDuplicateRows: input.gateway.current.quality?.confirmedDuplicateRows ?? 0,
     },
     principles: {
       bankSource: "read_only",
       totals: "financial_period",
-      drivers: "effective_transaction_query",
+      history: "financial_monthly_series",
+      drivers: "financial_transaction_facts_aggregate",
+      anomalies: "deterministic_history_threshold",
+      generativeAi: false,
     },
   };
 }
