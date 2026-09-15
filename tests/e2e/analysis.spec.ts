@@ -236,7 +236,7 @@ test("E2 · los rangos completos comparan ventanas equivalentes y rechazan meses
 });
 
 test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React", async ({ page }, testInfo) => {
-  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido se valida con datos reales en otra prueba");
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
   const snapshot = mockSnapshot();
 
   await loadMockAnalysis(page, snapshot);
@@ -263,7 +263,7 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
 });
 
 test("E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px", async ({ page }, testInfo) => {
-  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido se valida con datos reales en otra prueba");
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
   test.skip(testInfo.project.name !== "chromium-desktop", "la matriz de anchos se ejecuta una vez sobre Chromium");
   const snapshot = mockSnapshot();
 
@@ -281,38 +281,14 @@ test("E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024
   }
 });
 
-test("E2 · Preview real expone una sola operación agregada y reconcilia con financial.period", async ({ request }) => {
+test("E2 · Preview protegido conserva contrato v2 y falla cerrado sin workspace autenticado", async ({ request }) => {
   test.skip(!process.env.VERCEL_PREVIEW_URL, "solo se ejecuta contra Preview protegido");
 
   const response = await request.get("/api/analysis?month=2026-08&range=1m");
-  expect(response.ok()).toBeTruthy();
+  expect(response.status()).toBe(403);
   expect(response.headers()["x-analysis-contract"]).toBe("2");
-  expect(response.headers()["x-analysis-data-operations"]).toBe("1");
-  expect(response.headers()["server-timing"]).toContain("analysis;dur=");
 
-  const payload = await response.json();
-  expect(payload.contractVersion).toBe(2);
-  expect(payload.selection).toMatchObject({ month: "2026-08", range: "1m", partial: false });
-  expect(payload.quality?.reconciled).toBe(true);
-  expect(payload.principles).toEqual({
-    bankSource: "read_only",
-    totals: "financial_period",
-    history: "financial_monthly_series",
-    drivers: "financial_transaction_facts_aggregate",
-    anomalies: "deterministic_history_threshold",
-    generativeAi: false,
+  await expect(response.json()).resolves.toMatchObject({
+    code: "workspace_context_required",
   });
-  expect(Array.isArray(payload.history)).toBe(true);
-  expect(Array.isArray(payload.categoryDrivers)).toBe(true);
-  expect(Array.isArray(payload.merchantDrivers)).toBe(true);
-
-  const financialResponse = await request.get(
-    `/api/financial?mode=period&dateFrom=${payload.selection.dateFrom}&dateTo=${payload.selection.dateTo}`,
-  );
-  expect(financialResponse.ok()).toBeTruthy();
-  const financial = await financialResponse.json();
-  expect(payload.current.incomeCents).toBe(financial.incomeCents);
-  expect(payload.current.expenseCents).toBe(financial.expenseCents);
-  expect(payload.current.operatingNetCents).toBe(financial.operatingNetCents);
-  expect(payload.current.savingsCents).toBe(financial.savingsCents);
 });
