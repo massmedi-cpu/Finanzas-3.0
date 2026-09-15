@@ -129,21 +129,34 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
-  await page.route("**/api/source/google/sync", (route) => fulfillJson(route, { run: null }));
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
 
-  await page.route(/\/api\/dashboard\?scope=primary(?:&|$)/, (route) =>
-    fulfillJson(
-      route,
-      envelope("primary", { financial, transactions }, ["financial", "transactions"]),
-    ),
-  );
+    if (url.pathname === "/api/source/google/sync") {
+      await fulfillJson(route, { run: null });
+      return;
+    }
 
-  await page.route(/\/api\/dashboard\?scope=secondary(?:&|$)/, async (route) => {
-    if (secondaryGate) await secondaryGate;
-    await fulfillJson(
-      route,
-      envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
-    );
+    if (url.pathname === "/api/dashboard") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "primary") {
+        await fulfillJson(
+          route,
+          envelope("primary", { financial, transactions }, ["financial", "transactions"]),
+        );
+        return;
+      }
+      if (scope === "secondary") {
+        if (secondaryGate) await secondaryGate;
+        await fulfillJson(
+          route,
+          envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
+        );
+        return;
+      }
+    }
+
+    await route.fallback();
   });
 }
 
