@@ -37,6 +37,13 @@ function addDays(date: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function trailingMonthStart(date: string, months: number) {
+  const [year, month] = date.slice(0, 7).split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, 1));
+  parsed.setUTCMonth(parsed.getUTCMonth() - Math.max(0, months - 1));
+  return parsed.toISOString().slice(0, 10);
+}
+
 function transactionOperation(): NamedOperation {
   return {
     source: "transactions",
@@ -62,7 +69,7 @@ function transactionOperation(): NamedOperation {
 function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
-  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const cashFlowStart = trailingMonthStart(today, 12);
   const forecastTo = addDays(today, 30);
 
   const financial: NamedOperation = {
@@ -82,7 +89,7 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
       source: "monthly",
       action: "financial.monthly",
       payload: {
-        dateFrom: yearStart,
+        dateFrom: cashFlowStart,
         dateTo: today,
         accountId: null,
         includeArchived: false,
@@ -157,11 +164,8 @@ export async function GET(request: Request) {
 
     results.forEach((result, index) => {
       const source = operations[index].source;
-      if (result.status === "fulfilled") {
-        data[source] = result.value;
-      } else {
-        failedSources.push(source);
-      }
+      if (result.status === "fulfilled") data[source] = result.value;
+      else failedSources.push(source);
     });
 
     const durationMs = performance.now() - startedAt;
@@ -186,11 +190,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const durationMs = performance.now() - startedAt;
     const code = error instanceof PersistenceGatewayError ? error.code ?? null : null;
-    console.error(
-      "dashboard-api",
-      error instanceof Error ? error.name : typeof error,
-      code ?? "",
-    );
+    console.error("dashboard-api", error instanceof Error ? error.name : typeof error, code ?? "");
 
     return Response.json(
       {
