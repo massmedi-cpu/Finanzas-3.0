@@ -1,0 +1,31 @@
+import { expect, test } from "@playwright/test";
+
+test("metodología de presupuestos queda disponible sin dominar la pantalla", async ({ page }) => {
+  const snapshot = {
+    contractVersion: 1,
+    month: "2026-09",
+    monthStart: "2026-09-01",
+    monthEnd: "2026-09-30",
+    total: {
+      id: null, persisted: false, categoryId: null, categoryName: null, categoryLifecycle: null,
+      automaticAmountCents: 100000, manualAmountCents: null, effectiveAmountCents: 100000,
+      actualExpenseCents: 40000, remainingCents: 60000, progressBps: 4000, status: "on_track",
+      automaticExplanation: "Media de los tres meses completos anteriores.", historyMonths: [],
+    },
+    categories: [],
+    principles: {
+      bankSource: "read_only", actualSource: "financial_transaction_facts",
+      recommendation: "trailing_3_complete_month_average", transfersConsumeBudget: false,
+      confirmedDuplicatesConsumeBudget: false, manualAnalyticsExclusionsRespected: true,
+      refundsNetAgainstExpense: false, manualOverrideWins: true, parentCategoryIncludesDescendants: true,
+    },
+  };
+  await page.route("**/api/budgets*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) }));
+  await page.goto("/budgets");
+
+  const method = page.locator("details").filter({ hasText: "Cómo se calcula" });
+  await expect(method).not.toHaveAttribute("open", "");
+  await method.getByText("Cómo se calcula", { exact: true }).click();
+  await expect(method).toHaveAttribute("open", "");
+  await expect(method.getByText(/solo lectura/i)).toBeVisible();
+});
