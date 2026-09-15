@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
@@ -31,10 +31,16 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(home).not.toContain("runCompleteFoundationHealthChecks");
   expect(home).toContain('import InicioOverview from "./inicio-overview"');
 
+  // Inicio debe tener una sola implementación activa. Las versiones antiguas
+  // contenían la reconexión Google errónea y no pueden reaparecer como fallback.
+  expect(existsSync(join(root, "app/inicio-client.tsx"))).toBe(false);
+  expect(existsSync(join(root, "app/inicio.module.css"))).toBe(false);
+
   expect(client).toContain("/api/dashboard?scope=");
   expect(client).toContain("Ocultar importes");
   expect(client).toContain("merchant?.effectiveName");
   expect(client).toContain('fetch("/api/source/google/sync"');
+  expect(client).toContain('method: "POST"');
   expect(client).not.toContain("quickNav");
   expect(client).not.toContain("Reconectar Google");
 
