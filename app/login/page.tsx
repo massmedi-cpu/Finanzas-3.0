@@ -1,4 +1,5 @@
 import { safeNextPath } from "../../src/infrastructure/auth/access-control";
+import { PwaInstallButton } from "../pwa-install-button";
 import LoginForm from "./login-form";
 import styles from "./login.module.css";
 
@@ -18,6 +19,9 @@ export default async function LoginPage({ searchParams }: Props) {
         <p>Esta aplicación contiene información financiera personal. Inicia sesión para continuar.</p>
         <div className={styles.formWrap}>
           <LoginForm nextPath={safeNextPath(next)} />
+        </div>
+        <div className={styles.installWrap}>
+          <PwaInstallButton className="primary-button" />
         </div>
       </section>
     </main>
