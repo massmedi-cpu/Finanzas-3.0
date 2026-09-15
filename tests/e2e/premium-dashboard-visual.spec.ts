@@ -68,33 +68,46 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 async function mockDashboard(page: Page) {
-  await page.route("**/api/source/google/sync", (route) => fulfillJson(route, { run: null }));
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
 
-  await page.route(/\/api\/dashboard\?scope=primary(?:&|$)/, (route) =>
-    fulfillJson(route, {
-      contractVersion: 1,
-      scope: "primary",
-      asOfDate: "2026-09-11",
-      dataThroughDate: null,
-      generatedAt: "2026-09-11T12:00:00.000Z",
-      requestedSources: ["financial", "transactions"],
-      failedSources: [],
-      data: { financial, monthly: null, budgets: null, forecast: null, transactions },
-    }),
-  );
+    if (url.pathname === "/api/source/google/sync") {
+      await fulfillJson(route, { run: null });
+      return;
+    }
 
-  await page.route(/\/api\/dashboard\?scope=secondary(?:&|$)/, (route) =>
-    fulfillJson(route, {
-      contractVersion: 1,
-      scope: "secondary",
-      asOfDate: "2026-09-11",
-      dataThroughDate: null,
-      generatedAt: "2026-09-11T12:00:00.000Z",
-      requestedSources: ["monthly", "budgets", "forecast"],
-      failedSources: [],
-      data: { financial: null, monthly, budgets, forecast, transactions: null },
-    }),
-  );
+    if (url.pathname === "/api/dashboard") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "primary") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "primary",
+          asOfDate: "2026-09-11",
+          dataThroughDate: null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: ["financial", "transactions"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
+      if (scope === "secondary") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "secondary",
+          asOfDate: "2026-09-11",
+          dataThroughDate: null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: ["monthly", "budgets", "forecast"],
+          failedSources: [],
+          data: { financial: null, monthly, budgets, forecast, transactions: null },
+        });
+        return;
+      }
+    }
+
+    await route.fallback();
+  });
 }
 
 test("Premium · la gráfica de Inicio expone valores exactos mediante foco y tap sin depender de hover", async ({ page }) => {
