@@ -73,36 +73,102 @@ jobs:
             core.setSecret(token);
             core.setOutput('token', token);
 
-      - name: Discover exact Vercel preview by SHA
+      - name: Discover safe Vercel Preview
         id: vercel
         uses: actions/github-script@v8
         with:
           script: |
             const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const branch = context.ref.replace('refs/heads/', '');
             const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-            for (let attempt = 1; attempt <= 48; attempt += 1) {
-              const deployments = await github.rest.repos.listDeployments({ owner, repo, sha: context.sha, per_page: 30 });
-              for (const deployment of deployments.data) {
-                const statuses = await github.rest.repos.listDeploymentStatuses({
-                  owner,
-                  repo,
-                  deployment_id: deployment.id,
-                  per_page: 30,
-                });
-                const status = statuses.data.find((candidate) => {
-                  const url = candidate.environment_url || candidate.target_url || '';
-                  return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
-                });
-                if (status) {
-                  const url = (status.environment_url || status.target_url).replace(/\/$/, '');
+
+            async function successfulPreview(deployment) {
+              const statuses = await github.rest.repos.listDeploymentStatuses({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+                per_page: 30,
+              });
+              const status = statuses.data.find((candidate) => {
+                const url = candidate.environment_url || candidate.target_url || '';
+                return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
+              });
+              if (!status) return null;
+              return (status.environment_url || status.target_url).replace(/\/$/, '');
+            }
+
+            for (let attempt = 1; attempt <= 12; attempt += 1) {
+              const exact = await github.rest.repos.listDeployments({ owner, repo, sha: context.sha, per_page: 30 });
+              for (const deployment of exact.data) {
+                const url = await successfulPreview(deployment);
+                if (url) {
                   core.setOutput('url', url);
-                  core.info(`Exact preview discovered on attempt ${attempt}: ${url}`);
+                  core.setOutput('sha', deployment.sha);
+                  core.setOutput('exact', 'true');
+                  core.info(`Exact Preview discovered on attempt ${attempt}: ${url}`);
                   return;
                 }
               }
               await sleep(5000);
             }
-            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+
+            core.warning(`No successful exact Preview for ${context.sha}; looking for the newest successful Preview on ${branch}.`);
+            const branchDeployments = await github.rest.repos.listDeployments({ owner, repo, ref: branch, per_page: 50 });
+            for (const deployment of branchDeployments.data) {
+              const url = await successfulPreview(deployment);
+              if (!url) continue;
+              core.setOutput('url', url);
+              core.setOutput('sha', deployment.sha);
+              core.setOutput('exact', 'false');
+              core.warning(`Using fail-safe Preview fallback ${deployment.sha}: ${url}`);
+              return;
+            }
+
+            core.setFailed(`No successful Vercel Preview was found for ${context.sha} or branch ${branch}.`);
+
+      - name: Verify fallback cannot hide Analysis API changes
+        if: steps.vercel.outputs.exact != 'true'
+        uses: actions/github-script@v8
+        env:
+          PREVIEW_SHA: ${{ steps.vercel.outputs.sha }}
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const previewSha = process.env.PREVIEW_SHA;
+            if (!previewSha) {
+              core.setFailed('Fallback Preview SHA is missing.');
+              return;
+            }
+            const comparison = await github.rest.repos.compareCommitsWithBasehead({
+              owner,
+              repo,
+              basehead: `${previewSha}...${context.sha}`,
+              per_page: 100,
+            });
+            if (comparison.data.status === 'behind' || comparison.data.status === 'diverged') {
+              core.setFailed(`Fallback Preview ${previewSha} is not an ancestor of ${context.sha}.`);
+              return;
+            }
+            const criticalPrefixes = [
+              'app/api/analysis/',
+              'src/application/analysis/analysis-engine.ts',
+              'src/application/analysis/analysis-loader.ts',
+              'src/infrastructure/persistence/vercel-supabase-gateway.ts',
+              'supabase/functions/financial-app-db-gateway/analysis-query.ts',
+              'supabase/functions/financial-app-db-gateway/financial-logic.ts',
+              'supabase/functions/financial-app-db-gateway/index.ts',
+              'package.json',
+              'package-lock.json',
+              'next.config',
+            ];
+            const unsafe = (comparison.data.files || [])
+              .map((file) => file.filename)
+              .filter((filename) => criticalPrefixes.some((prefix) => filename === prefix || filename.startsWith(prefix)));
+            if (unsafe.length > 0) {
+              core.setFailed(`Fallback Preview is unsafe because Analysis API/runtime sources changed: ${unsafe.join(', ')}`);
+              return;
+            }
+            core.info(`Fallback is safe: no Analysis API/runtime source changed between ${previewSha} and ${context.sha}.`);
 
       - name: Checkout exact branch commit
         uses: actions/checkout@v6
@@ -127,7 +193,7 @@ jobs:
           done
           npx playwright install --with-deps chromium
 
-      - name: Run Analysis against exact protected Preview
+      - name: Run Analysis against protected Preview
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
