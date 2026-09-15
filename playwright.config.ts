@@ -33,6 +33,7 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     extraHTTPHeaders: protectionHeaders,
+    serviceWorkers: "block",
   },
   projects: [
     {
