@@ -1,7 +1,7 @@
 import AppShell from "../app-shell";
 import { loadAnalysisSnapshot } from "../../src/application/analysis/analysis-loader";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
-import AnalysisClient from "./analysis-client";
+import AnalysisPageClient from "./analysis-page-client";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +15,7 @@ export default async function AnalysisPage() {
 
   return (
     <AppShell>
-      <AnalysisClient initialSnapshot={initialSnapshot} />
+      <AnalysisPageClient initialSnapshot={initialSnapshot} />
     </AppShell>
   );
 }

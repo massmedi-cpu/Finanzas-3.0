@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import styles from "./financial-trend-chart.module.css";
 
 export type FinancialTrendPoint = {
@@ -19,6 +19,22 @@ type Props = {
   partialMonthStart?: string | null;
 };
 
+const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
+  month: "long",
+  year: "numeric",
+  timeZone: "Europe/Madrid",
+});
+
+function longMonthLabel(monthStart: string) {
+  return longMonthFormatter.format(new Date(`${monthStart.slice(0, 7)}-01T12:00:00Z`));
+}
+
+function netState(cents: number) {
+  if (cents < 0) return "déficit";
+  if (cents > 0) return "superávit";
+  return "equilibrio";
+}
+
 export function FinancialTrendChart({
   rows,
   formatMoney,
@@ -26,6 +42,7 @@ export function FinancialTrendChart({
   hrefForMonth,
   partialMonthStart = null,
 }: Props) {
+  const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
   const active = rows.find((row) => row.monthStart === activeMonth) ?? rows.at(-1) ?? null;
 
@@ -61,9 +78,15 @@ export function FinancialTrendChart({
   }
 
   const path = chart.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const netPointLabel = (row: FinancialTrendPoint) => `Neto ${longMonthLabel(row.monthStart)}: ${formatMoney(row.operatingNetCents)} · ${netState(row.operatingNetCents)}`;
+  const tableRows = [
+    { key: "income", label: "Ingresos", value: (row: FinancialTrendPoint) => row.incomeCents },
+    { key: "expense", label: "Gastos", value: (row: FinancialTrendPoint) => row.expenseCents },
+    { key: "net", label: "Neto", value: (row: FinancialTrendPoint) => row.operatingNetCents },
+  ];
 
   return (
-    <div className={styles.wrapper}>
+    <section className={styles.wrapper} aria-label="Comparativa financiera visual">
       <div className={styles.legend} aria-hidden="true">
         <span><i className={styles.incomeDot} />Ingresos</span>
         <span><i className={styles.expenseDot} />Gastos</span>
@@ -75,7 +98,7 @@ export function FinancialTrendChart({
           className={styles.chart}
           viewBox={`0 0 ${chart.width} ${chart.height}`}
           role="img"
-          aria-label="Evolución mensual de ingresos, gastos y ahorro. Los valores exactos están disponibles mediante los controles situados bajo la gráfica."
+          aria-label="Evolución mensual de ingresos, gastos y ahorro. Los valores exactos están disponibles en la tabla alternativa y mediante los controles situados bajo la gráfica."
         >
           {chart.ticks.map((tick) => {
             const y = chart.y(tick);
@@ -128,6 +151,31 @@ export function FinancialTrendChart({
         </svg>
       </div>
 
+      <div style={{ overflowX: "auto" }}>
+        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", minWidth: "32rem", borderCollapse: "collapse" }}>
+          <thead>
+            <tr>
+              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
+              {rows.map((row) => (
+                <th key={row.monthStart} scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{longMonthLabel(row.monthStart)}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {tableRows.map((metric) => (
+              <tr key={metric.key}>
+                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{metric.label}</th>
+                {rows.map((row) => (
+                  <td key={`${metric.key}-${row.monthStart}`} style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>
+                    {formatMoney(metric.value(row))}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
       <div className={styles.monthViewport}>
         <div className={styles.monthRail} style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(2.75rem, 1fr))` }}>
           {rows.map((row) => {
@@ -139,7 +187,8 @@ export function FinancialTrendChart({
                 type="button"
                 className={selected ? styles.monthButtonActive : styles.monthButton}
                 aria-pressed={selected}
-                aria-label={`${formatMonth(row.monthStart)}${partial ? ", periodo parcial" : ""}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(row.expenseCents)}, ahorro o neto ${formatMoney(row.operatingNetCents)}`}
+                aria-describedby={selected ? tooltipId : undefined}
+                aria-label={`${netPointLabel(row)}. Ingresos ${formatMoney(row.incomeCents)}; gastos ${formatMoney(row.expenseCents)}${partial ? "; periodo parcial" : ""}`}
                 onClick={() => setActiveMonth(row.monthStart)}
                 onFocus={() => setActiveMonth(row.monthStart)}
               >
@@ -152,19 +201,20 @@ export function FinancialTrendChart({
       </div>
 
       {active && (
-        <div className={styles.readout} role="status" aria-live="polite">
+        <div id={tooltipId} className={styles.readout} role="tooltip" aria-live="polite">
           <div>
             <strong>{formatMonth(active.monthStart)}</strong>
             {active.monthStart === partialMonthStart && <span className={styles.partialBadge}>Parcial</span>}
+            <span>{netPointLabel(active)}</span>
           </div>
           <dl>
             <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
             <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
             <div><dt>Ahorro / neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
           </dl>
-          <Link href={hrefForMonth(active.monthStart)}>Ver movimientos del mes</Link>
+          <Link href={hrefForMonth(active.monthStart)} aria-label="Ver movimientos del periodo">Ver movimientos del periodo</Link>
         </div>
       )}
-    </div>
+    </section>
   );
 }
