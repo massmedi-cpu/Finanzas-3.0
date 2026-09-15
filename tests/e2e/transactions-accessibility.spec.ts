@@ -83,7 +83,7 @@ test("Movimientos conserva targets táctiles de al menos 44 px en 360, 430 y 480
   }
 });
 
-test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos 14 px", async ({ page }, testInfo) => {
+test("Movimientos mantiene clasificación, contexto y trazabilidad funcional en al menos 14 px", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "chromium-desktop", "la medición tipográfica se ejecuta una vez por run");
   await mockTransactions(page);
   await page.setViewportSize({ width: 430, height: 900 });
@@ -95,7 +95,7 @@ test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos
     page.getByText("1 de 2", { exact: true }).first(),
     page.locator('td[data-label="Concepto"]').getByText("Supermercado Demo", { exact: true }).first(),
     page.getByText("Modificado", { exact: true }),
-    page.locator('td[data-label="Estado"]').getByText("Confirmado", { exact: true }).first(),
+    page.locator('td[data-label="Categoría"]').getByText("Alimentación", { exact: true }).first(),
   ];
   for (const target of targets) {
     await expect(target).toBeVisible();
@@ -113,7 +113,7 @@ test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos
     expect(fontSize).toBeGreaterThanOrEqual(14);
   }
   await page.getByTestId(`edit-${transactionId}`).click();
-  const editorHelper = page.getByText("Solo se modifica la capa personal de overrides.", { exact: true });
+  const editorHelper = page.getByText("Origen: ajuste manual", { exact: true });
   await expect(editorHelper).toBeVisible();
   const helperFontSize = await editorHelper.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   expect(helperFontSize).toBeGreaterThanOrEqual(14);

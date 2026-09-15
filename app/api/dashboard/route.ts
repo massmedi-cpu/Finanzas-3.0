@@ -37,10 +37,39 @@ function addDays(date: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function trailingMonthStart(date: string, months: number) {
+  const [year, month] = date.slice(0, 7).split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, 1));
+  parsed.setUTCMonth(parsed.getUTCMonth() - Math.max(0, months - 1));
+  return parsed.toISOString().slice(0, 10);
+}
+
+function transactionOperation(): NamedOperation {
+  return {
+    source: "transactions",
+    action: "transaction.query",
+    payload: {
+      query: null,
+      accountId: null,
+      categoryId: null,
+      merchantId: null,
+      kind: null,
+      reviewState: null,
+      duplicateState: null,
+      dateFrom: null,
+      dateTo: null,
+      cursorBankDate: null,
+      cursorId: null,
+      limit: 10,
+      uncategorized: false,
+    },
+  };
+}
+
 function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
-  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const cashFlowStart = trailingMonthStart(today, 12);
   const forecastTo = addDays(today, 30);
 
   const financial: NamedOperation = {
@@ -54,12 +83,13 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
     },
   };
 
+  const transactions = transactionOperation();
   const secondary: NamedOperation[] = [
     {
       source: "monthly",
       action: "financial.monthly",
       payload: {
-        dateFrom: yearStart,
+        dateFrom: cashFlowStart,
         dateTo: today,
         accountId: null,
         includeArchived: false,
@@ -79,30 +109,11 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
         accountId: null,
       },
     },
-    {
-      source: "transactions",
-      action: "transaction.query",
-      payload: {
-        query: null,
-        accountId: null,
-        categoryId: null,
-        merchantId: null,
-        kind: null,
-        reviewState: null,
-        duplicateState: null,
-        dateFrom: null,
-        dateTo: null,
-        cursorBankDate: null,
-        cursorId: null,
-        limit: 6,
-        uncategorized: false,
-      },
-    },
   ];
 
-  if (scope === "primary") return [financial];
+  if (scope === "primary") return [financial, transactions];
   if (scope === "secondary") return secondary;
-  return [financial, ...secondary];
+  return [financial, transactions, ...secondary];
 }
 
 function emptyData() {
@@ -121,6 +132,12 @@ function responseHeaders(scope: DashboardScope, durationMs: number) {
     "x-dashboard-scope": scope,
     "server-timing": `dashboard;dur=${durationMs.toFixed(1)}`,
   };
+}
+
+function latestBankDate(data: Record<DashboardSource, unknown | null>) {
+  const transactions = data.transactions as { rows?: Array<{ bankDate?: unknown }> } | null;
+  const bankDate = transactions?.rows?.[0]?.bankDate;
+  return typeof bankDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(bankDate) ? bankDate : null;
 }
 
 export async function GET(request: Request) {
@@ -147,11 +164,8 @@ export async function GET(request: Request) {
 
     results.forEach((result, index) => {
       const source = operations[index].source;
-      if (result.status === "fulfilled") {
-        data[source] = result.value;
-      } else {
-        failedSources.push(source);
-      }
+      if (result.status === "fulfilled") data[source] = result.value;
+      else failedSources.push(source);
     });
 
     const durationMs = performance.now() - startedAt;
@@ -162,6 +176,7 @@ export async function GET(request: Request) {
         contractVersion: 1,
         scope,
         asOfDate: today,
+        dataThroughDate: latestBankDate(data),
         generatedAt: new Date().toISOString(),
         requestedSources,
         failedSources,
@@ -175,11 +190,7 @@ export async function GET(request: Request) {
   } catch (error) {
     const durationMs = performance.now() - startedAt;
     const code = error instanceof PersistenceGatewayError ? error.code ?? null : null;
-    console.error(
-      "dashboard-api",
-      error instanceof Error ? error.name : typeof error,
-      code ?? "",
-    );
+    console.error("dashboard-api", error instanceof Error ? error.name : typeof error, code ?? "");
 
     return Response.json(
       {
@@ -188,6 +199,7 @@ export async function GET(request: Request) {
         scope,
         requestedSources,
         failedSources: requestedSources,
+        dataThroughDate: null,
         data,
       },
       { status: 503, headers: responseHeaders(scope, durationMs) },

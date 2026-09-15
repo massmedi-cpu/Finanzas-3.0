@@ -260,7 +260,13 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
     summaryEntries.length ? Math.max(...summaryEntries.map(({ index }) => index)) : -1,
     productEntries.length ? Math.max(...productEntries.map(({ index }) => index)) : -1,
   );
-  const endIndex = Math.min(rows.length - 1, lastStructure + 1);
+  let endIndex = lastStructure;
+  const tail = rows[lastStructure + 1];
+  const last = rows[lastStructure];
+  if (tail && tail.box.y - (last.box.y + last.box.height)
+    <= Math.max(0.02, Math.min(last.box.height, tail.box.height) * 1.7)) {
+    endIndex += 1;
+  }
 
   const selectedRows = rows.slice(startIndex, endIndex + 1)
     .filter((row) => intersectsHorizontalBand(row, left, right));
@@ -370,21 +376,40 @@ function obviousShortNoise(word: OcrWord) {
 
 export function filterReceiptAnchorWords(words: OcrWord[]): ReceiptAnchorFilterResult | null {
   if (words.length < 12) return null;
-  const rows = clusterRows(words);
-  const header = findReceiptHeader(rows);
+  let rows = clusterRows(words);
+  let header = findReceiptHeader(rows);
   if (!header) return null;
+
+  // A complete table header locates the paper more reliably than unrelated
+  // words in the surrounding photograph. Re-cluster inside that band so a
+  // background mark cannot sit between a wrapped merchant title and metadata.
+  const headerBand = completeHeaderBand(header.row);
+  let candidates = words;
+  if (headerBand) {
+    const inBand = words.filter((word) => centerX(word) >= headerBand.left && centerX(word) <= headerBand.right);
+    const focusedRows = clusterRows(inBand);
+    const focusedHeader = findReceiptHeader(focusedRows);
+    if (focusedHeader) {
+      candidates = inBand;
+      rows = focusedRows;
+      header = focusedHeader;
+    }
+  }
 
   const bounds = structuralBounds(rows, header);
   if (!bounds) return null;
   const recoveryBounds = buildRecoveryBounds(rows, header, bounds);
 
-  const selected = words.filter((word) => {
+  const normalHeight = median(candidates.filter((word) => alphaChars(word.text) >= 3)
+    .map((word) => word.box.height)) ?? 0;
+  const selected = candidates.filter((word) => {
     const x = centerX(word);
     const y = centerY(word);
     return x >= bounds.left
       && x <= bounds.right
       && y >= bounds.top
       && y <= bounds.bottom
+      && !(word.box.height < normalHeight * 0.3 && /^[\p{L}|]+$/u.test(word.text))
       && !obviousShortNoise(word);
   });
   if (selected.length < 10) return null;

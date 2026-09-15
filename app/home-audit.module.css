@@ -1,0 +1,14 @@
+.scope {
+  display: contents;
+
+  /* Inicio debe informar sin convertir cifras o titulares en una pantalla escaparate. */
+  --font-page-title: clamp(1.35rem, 1.23rem + 0.38vw, 1.65rem);
+  --font-section-title: clamp(1.05rem, 1rem + 0.18vw, 1.22rem);
+  --font-kpi-primary: clamp(1.22rem, 1.12rem + 0.42vw, 1.62rem);
+  --font-kpi-secondary: clamp(1.02rem, 0.98rem + 0.16vw, 1.18rem);
+}
+
+/* El scope de Inicio prevalece sobre overrides locales más compactos. */
+.scope.scope :where(a, button) {
+  min-height: 2.75rem;
+}

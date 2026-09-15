@@ -1,119 +1,112 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page, type Route } from "@playwright/test";
 
-async function mockDashboard(page: import("@playwright/test").Page) {
-  const financial = {
-    period: {
-      dateFrom: "2026-09-01",
-      dateTo: "2026-09-11",
-      incomeCents: 150000,
-      expenseCents: 70000,
-      operatingNetCents: 80000,
-      savingsCents: 80000,
-      savingsRateBps: 5333,
-      transfers: { grossCents: 0 },
-      quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
-    },
-    balances: {
-      asOfDate: "2026-09-11",
-      activeBalanceCents: 30000,
-      quality: {
-        accounts: 1,
-        explicitBalanceAccounts: 1,
-        reconstructedBalanceAccounts: 0,
-        integrityDeltaAccounts: 0,
-      },
-      accounts: [
-        {
-          id: "a",
-          name: "Cuenta principal",
-          type: "checking",
-          lifecycle: "active",
-          balanceCents: 30000,
-          balanceSource: "bank_explicit",
-          explicitBalanceDate: "2026-09-11",
-          reconstructionDeltaCents: 0,
-        },
-      ],
-    },
-    principles: {
-      bankSource: "read_only",
-      transfersExcludedFromSavings: true,
-      explicitBankBalancePreferred: true,
-    },
-  };
-
-  const monthly = {
-    dateFrom: "2026-01-01",
+const financial = {
+  period: {
+    dateFrom: "2026-09-01",
     dateTo: "2026-09-11",
-    rows: [
+    incomeCents: 150000,
+    expenseCents: 70000,
+    operatingNetCents: 80000,
+    savingsCents: 80000,
+    savingsRateBps: 5333,
+    quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
+  },
+  balances: {
+    asOfDate: "2026-09-11",
+    activeBalanceCents: 30000,
+    accounts: [
       {
-        monthStart: "2026-08-01",
-        incomeCents: 100000,
-        expenseCents: 40000,
-        operatingNetCents: 60000,
-      },
-      {
-        monthStart: "2026-09-01",
-        incomeCents: 150000,
-        expenseCents: 70000,
-        operatingNetCents: 80000,
+        id: "a",
+        name: "Cuenta principal",
+        type: "checking",
+        lifecycle: "active",
+        balanceCents: 30000,
+        explicitBalanceDate: "2026-09-11",
       },
     ],
-  };
+  },
+};
 
-  const budgets = {
-    month: "2026-09",
-    total: {
-      effectiveAmountCents: 100000,
-      actualExpenseCents: 60000,
-      remainingCents: 40000,
-      progressBps: 6000,
-      status: "on_track",
-    },
-    categories: [],
-  };
+const monthly = {
+  dateFrom: "2026-01-01",
+  dateTo: "2026-09-11",
+  rows: [
+    { monthStart: "2026-08-01", incomeCents: 100000, expenseCents: 40000, operatingNetCents: 60000 },
+    { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
+  ],
+};
 
-  const forecast = {
-    period: { dateFrom: "2026-09-11", dateTo: "2026-10-11", accountId: null },
-    summary: {
-      openingBalanceCents: 30000,
-      projectedIncomeCents: 0,
-      projectedExpenseCents: 0,
-      projectedNetCents: 0,
-      projectedClosingBalanceCents: 30000,
-      plannedItems: 0,
-      excludedItems: 0,
-      confirmedItems: 0,
-    },
-    items: [],
-  };
+const budgets = {
+  month: "2026-09",
+  total: {
+    categoryId: null,
+    categoryName: null,
+    effectiveAmountCents: 100000,
+    actualExpenseCents: 60000,
+    remainingCents: 40000,
+    progressBps: 6000,
+    status: "on_track",
+  },
+  categories: [],
+};
 
-  const transactions = { rows: [], totalCount: 0 };
+const forecast = {
+  summary: {
+    projectedIncomeCents: 0,
+    projectedExpenseCents: 0,
+    projectedNetCents: 0,
+    projectedClosingBalanceCents: 30000,
+    plannedItems: 0,
+  },
+  items: [],
+};
 
-  await page.route("**/api/dashboard?*", async (route) => {
-    const scope = new URL(route.request().url()).searchParams.get("scope");
-    const primary = scope === "primary";
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        contractVersion: 1,
-        scope,
-        asOfDate: "2026-09-11",
-        generatedAt: "2026-09-11T12:00:00.000Z",
-        requestedSources: primary
-          ? ["financial"]
-          : ["monthly", "budgets", "forecast", "transactions"],
-        failedSources: [],
-        data: {
-          financial: primary ? financial : null,
-          monthly: primary ? null : monthly,
-          budgets: primary ? null : budgets,
-          forecast: primary ? null : forecast,
-          transactions: primary ? null : transactions,
-        },
-      }),
-    });
+const transactions = { rows: [], totalCount: 0 };
+
+async function fulfillJson(route: Route, body: unknown) {
+  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+}
+
+async function mockDashboard(page: Page) {
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+
+    if (url.pathname === "/api/source/google/sync") {
+      await fulfillJson(route, { run: null });
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "primary") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "primary",
+          asOfDate: "2026-09-11",
+          dataThroughDate: null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: ["financial", "transactions"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
+      if (scope === "secondary") {
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "secondary",
+          asOfDate: "2026-09-11",
+          dataThroughDate: null,
+          generatedAt: "2026-09-11T12:00:00.000Z",
+          requestedSources: ["monthly", "budgets", "forecast"],
+          failedSources: [],
+          data: { financial: null, monthly, budgets, forecast, transactions: null },
+        });
+        return;
+      }
+    }
+
+    await route.fallback();
   });
 }
 
@@ -122,21 +115,19 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto("/");
 
-  const chart = page.getByRole("group", {
-    name: /Ingresos y gastos por mes/i,
-  });
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/i });
   await expect(chart).toBeVisible();
 
   const september = chart.getByRole("button", {
     name: /ingresos 1\.500,00.*gastos 700,00.*balance neto 800,00/i,
   });
   await expect(september).toBeVisible();
-  await expect(page.getByRole("status")).toHaveCount(0);
+  await expect(september).toHaveAccessibleName(/mes parcial/i);
 
   await september.focus();
   await expect(september).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.500,00.*Gastos 700,00.*Balance neto 800,00/i,
+  await expect(page.getByRole("status").filter({ hasText: /Ingresos 1\.500,00/ })).toContainText(
+    /Ingresos 1\.500,00.*Gastos 700,00.*Balance 800,00/i,
   );
 
   const august = chart.getByRole("button", {
@@ -144,15 +135,11 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
   });
   await august.click();
   await expect(august).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.000,00.*Gastos 400,00.*Balance neto 600,00/i,
+  await expect(page.getByRole("status").filter({ hasText: /Ingresos 1\.000,00/ })).toContainText(
+    /Ingresos 1\.000,00.*Gastos 400,00.*Balance 600,00/i,
   );
 
   expect(
-    await page.evaluate(
-      () =>
-        document.documentElement.scrollWidth <=
-        document.documentElement.clientWidth + 1,
-    ),
+    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
   ).toBe(true);
 });

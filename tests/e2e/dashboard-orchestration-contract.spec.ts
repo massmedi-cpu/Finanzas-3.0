@@ -9,18 +9,11 @@ const financial = {
     operatingNetCents: 80000,
     savingsCents: 80000,
     savingsRateBps: 5333,
-    transfers: { grossCents: 0 },
     quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
   },
   balances: {
     asOfDate: "2026-09-14",
     activeBalanceCents: 30000,
-    quality: {
-      accounts: 1,
-      explicitBalanceAccounts: 1,
-      reconstructedBalanceAccounts: 0,
-      integrityDeltaAccounts: 0,
-    },
     accounts: [
       {
         id: "a",
@@ -28,16 +21,9 @@ const financial = {
         type: "checking",
         lifecycle: "active",
         balanceCents: 30000,
-        balanceSource: "bank_explicit",
         explicitBalanceDate: "2026-09-14",
-        reconstructionDeltaCents: 0,
       },
     ],
-  },
-  principles: {
-    bankSource: "read_only",
-    transfersExcludedFromSavings: true,
-    explicitBankBalancePreferred: true,
   },
 };
 
@@ -45,18 +31,9 @@ const monthly = {
   dateFrom: "2026-01-01",
   dateTo: "2026-09-14",
   rows: [
-    {
-      monthStart: "2026-08-01",
-      incomeCents: 100000,
-      expenseCents: 40000,
-      operatingNetCents: 60000,
-    },
-    {
-      monthStart: "2026-09-01",
-      incomeCents: 150000,
-      expenseCents: 70000,
-      operatingNetCents: 80000,
-    },
+    { monthStart: "2026-07-01", incomeCents: 90000, expenseCents: 45000, operatingNetCents: 45000 },
+    { monthStart: "2026-08-01", incomeCents: 100000, expenseCents: 40000, operatingNetCents: 60000 },
+    { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
   ],
 };
 
@@ -85,16 +62,12 @@ const budgets = {
 };
 
 const forecast = {
-  period: { dateFrom: "2026-09-14", dateTo: "2026-10-14", accountId: null },
   summary: {
-    openingBalanceCents: 30000,
     projectedIncomeCents: 5000,
     projectedExpenseCents: 7000,
     projectedNetCents: -2000,
     projectedClosingBalanceCents: 28000,
     plannedItems: 1,
-    excludedItems: 0,
-    confirmedItems: 0,
   },
   items: [
     {
@@ -102,8 +75,6 @@ const forecast = {
       date: "2026-09-16",
       concept: "Internet",
       amountCents: -5000,
-      origin: "recurring",
-      confidence: "high",
       status: "planned",
       affectsProjection: true,
     },
@@ -118,14 +89,10 @@ const transactions = {
       amountCents: -1234,
       account: { id: "a", name: "Cuenta principal" },
       concept: { effective: "COMPRA TARJETA 1234" },
-      merchant: {
-        originalId: null,
-        originalName: null,
-        effectiveId: "m1",
-        effectiveName: "Carrefour",
-      },
+      merchant: { effectiveName: "Carrefour" },
       category: { effectiveName: "Alimentación" },
       kind: { effective: "expense" },
+      reviewState: { effective: "confirmed" },
       duplicateState: "none",
       excludedFromAnalytics: false,
     },
@@ -142,6 +109,7 @@ function envelope(
     contractVersion: 1,
     scope,
     asOfDate: "2026-09-14",
+    dataThroughDate: "2026-09-13",
     generatedAt: "2026-09-14T18:30:00.000Z",
     requestedSources,
     failedSources: [],
@@ -157,32 +125,42 @@ function envelope(
 }
 
 async function fulfillJson(route: Route, body: unknown) {
-  await route.fulfill({
-    status: 200,
-    contentType: "application/json",
-    body: JSON.stringify(body),
-  });
+  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
 async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
-  await page.route("**/api/dashboard?scope=primary", (route) =>
-    fulfillJson(route, envelope("primary", { financial }, ["financial"])),
-  );
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
 
-  await page.route("**/api/dashboard?scope=secondary", async (route) => {
-    if (secondaryGate) await secondaryGate;
-    await fulfillJson(
-      route,
-      envelope(
-        "secondary",
-        { monthly, budgets, forecast, transactions },
-        ["monthly", "budgets", "forecast", "transactions"],
-      ),
-    );
+    if (url.pathname === "/api/source/google/sync") {
+      await fulfillJson(route, { run: null });
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "primary") {
+        await fulfillJson(
+          route,
+          envelope("primary", { financial, transactions }, ["financial", "transactions"]),
+        );
+        return;
+      }
+      if (scope === "secondary") {
+        if (secondaryGate) await secondaryGate;
+        await fulfillJson(
+          route,
+          envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
+        );
+        return;
+      }
+    }
+
+    await route.fallback();
   });
 }
 
-test("Inicio prioriza saldo y balance sin esperar a los módulos secundarios", async ({ page }) => {
+test("Inicio prioriza resumen y actividad sin esperar a los módulos secundarios", async ({ page }) => {
   let releaseSecondary!: () => void;
   const secondaryGate = new Promise<void>((resolve) => {
     releaseSecondary = resolve;
@@ -191,33 +169,33 @@ test("Inicio prioriza saldo y balance sin esperar a los módulos secundarios", a
   await installDashboardMocks(page, secondaryGate);
   await page.goto("/");
 
-  const balance = page.getByLabel("Saldo total en cuentas");
-  await expect(balance.getByText("300,00 €", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
   await expect(page.locator("main[aria-busy='true']")).toBeVisible();
-  await expect(page.getByText("Preparando tu resumen financiero…").first()).toBeVisible();
 
   releaseSecondary();
 
   await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
-  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
-  await expect(page.getByText(/1 categoría está cerca del límite/i)).toBeVisible();
-  await expect(page.getByText(/Balance neto del último mes/i)).toBeVisible();
+  await expect(page.getByText(/Último mes completo/i)).toBeVisible();
+  await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/i })).toBeVisible();
+  await expect(page.getByText("Alimentación", { exact: true }).first()).toBeVisible();
 });
 
-test("Inicio usa privacidad persistente para ocultar importes sensibles", async ({ page }) => {
+test("Inicio usa privacidad persistente para ocultar todos los importes del resumen", async ({ page }) => {
   await installDashboardMocks(page);
   await page.goto("/");
 
-  const balance = page.getByLabel("Saldo total en cuentas");
-  await expect(balance.getByText("300,00 €", { exact: true })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Ocultar importes" }).click();
-  await expect(balance.getByText("300,00 €", { exact: true })).toHaveCount(0);
-  await expect(balance.getByText("••••,•• €", { exact: true })).toBeVisible();
+  await expect(summary.getByText("300,00 €", { exact: true })).toHaveCount(0);
+  await expect(summary.getByText("••••,•• €", { exact: true }).first()).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
-  await expect(balance.getByText("300,00 €", { exact: true })).toHaveCount(0);
+  await expect(summary.getByText("300,00 €", { exact: true })).toHaveCount(0);
 });
 
 test("Inicio mantiene comercio como lectura principal de la actividad reciente", async ({ page }) => {
@@ -225,5 +203,5 @@ test("Inicio mantiene comercio como lectura principal de la actividad reciente",
   await page.goto("/");
 
   await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
-  await expect(page.getByText(/COMPRA TARJETA 1234/)).toBeVisible();
+  await expect(page.getByText("Alimentación · Cuenta principal", { exact: true })).toBeVisible();
 });

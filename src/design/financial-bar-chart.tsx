@@ -15,6 +15,7 @@ type FinancialBarChartProps = {
   maxValue: number;
   formatMoney: (cents: number) => string;
   formatMonth: (date: string) => string;
+  partialMonthStart?: string | null;
 };
 
 export function FinancialBarChart({
@@ -22,10 +23,11 @@ export function FinancialBarChart({
   maxValue,
   formatMoney,
   formatMonth,
+  partialMonthStart = null,
 }: FinancialBarChartProps) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const selected = useMemo(
-    () => rows.find((row) => row.monthStart === selectedMonth) ?? null,
+    () => rows.find((row) => row.monthStart === selectedMonth) ?? rows.at(-1) ?? null,
     [rows, selectedMonth],
   );
 
@@ -34,29 +36,29 @@ export function FinancialBarChart({
       <div className={styles.legend} aria-hidden="true">
         <span><i className={styles.incomeDot} />Ingresos</span>
         <span><i className={styles.expenseDot} />Gastos</span>
-        <span><i className={styles.netDot} />Balance neto</span>
+        <span>Toca un mes para ver las cifras exactas</span>
       </div>
 
       <div
         className={styles.chart}
         role="group"
-        aria-label="Ingresos y gastos por mes, con balance neto. Selecciona un mes para consultar sus importes exactos."
+        aria-label="Ingresos y gastos por mes. Selecciona un mes para consultar ingresos, gastos y balance neto con signo."
       >
         {rows.map((row) => {
           const label = formatMonth(row.monthStart);
           const active = selected?.monthStart === row.monthStart;
+          const partial = partialMonthStart === row.monthStart;
           const scale = Math.max(1, maxValue);
-          const incomeHeight = Math.max(4, (Math.abs(row.incomeCents) / scale) * 100);
-          const expenseHeight = Math.max(4, (Math.abs(row.expenseCents) / scale) * 100);
-          const netHeight = Math.max(4, (Math.abs(row.operatingNetCents) / scale) * 100);
+          const incomeHeight = Math.max(3, (Math.abs(row.incomeCents) / scale) * 100);
+          const expenseHeight = Math.max(3, (Math.abs(row.expenseCents) / scale) * 100);
 
           return (
             <button
               type="button"
               key={row.monthStart}
-              className={`${styles.column}${active ? ` ${styles.active}` : ""}`}
+              className={`${styles.column}${active ? ` ${styles.active}` : ""}${partial ? ` ${styles.partial}` : ""}`}
               aria-pressed={active}
-              aria-label={`${label}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(
+              aria-label={`${label}${partial ? ", mes parcial" : ""}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(
                 row.expenseCents,
               )}, balance neto ${formatMoney(row.operatingNetCents)}`}
               onClick={() => setSelectedMonth(row.monthStart)}
@@ -65,14 +67,9 @@ export function FinancialBarChart({
               <span className={styles.bars} aria-hidden="true">
                 <span className={styles.incomeBar} style={{ height: `${incomeHeight}%` }} />
                 <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
-                <span
-                  className={`${styles.netBar} ${
-                    row.operatingNetCents < 0 ? styles.netNegative : styles.netPositive
-                  }`}
-                  style={{ height: `${netHeight}%` }}
-                />
               </span>
               <span className={styles.month}>{label}</span>
+              {partial && <span className={styles.partialLabel} aria-hidden="true">Par.</span>}
             </button>
           );
         })}
@@ -80,7 +77,10 @@ export function FinancialBarChart({
 
       {selected && (
         <div className={styles.readout} role="status" aria-live="polite">
-          <strong>{formatMonth(selected.monthStart)}</strong>
+          <strong>
+            {formatMonth(selected.monthStart)}
+            {partialMonthStart === selected.monthStart ? " · parcial" : ""}
+          </strong>
           <span>
             <i className={styles.incomeDot} aria-hidden="true" />
             Ingresos {formatMoney(selected.incomeCents)}
@@ -89,14 +89,8 @@ export function FinancialBarChart({
             <i className={styles.expenseDot} aria-hidden="true" />
             Gastos {formatMoney(selected.expenseCents)}
           </span>
-          <span>
-            <i
-              className={
-                selected.operatingNetCents < 0 ? styles.netNegativeDot : styles.netPositiveDot
-              }
-              aria-hidden="true"
-            />
-            Balance neto {formatMoney(selected.operatingNetCents)}
+          <span className={selected.operatingNetCents < 0 ? styles.readoutNegative : styles.readoutPositive}>
+            Balance {formatMoney(selected.operatingNetCents)}
           </span>
         </div>
       )}
