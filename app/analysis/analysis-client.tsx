@@ -560,7 +560,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <>
                   <strong className={styles.contextValue}>{formatPercentBps(snapshot.budget.total.progressBps)} consumido</strong>
                   <p>{formatMoney(snapshot.budget.total.actualExpenseCents)} de {formatMoney(snapshot.budget.total.effectiveAmountCents)}.</p>
-                  {snapshot.budget.overCategories.length > 0 ? (
+                  {snapshot.budget.categoryDetailDeferred ? (
+                    <p className={styles.empty}>El estado global está actualizado. El detalle por categorías se consulta en Presupuestos para no ralentizar Análisis.</p>
+                  ) : snapshot.budget.overCategories.length > 0 ? (
                     <ul className={styles.contextAlerts}>
                       {snapshot.budget.overCategories.slice(0, 3).map((item) => (
                         <li key={item.categoryId ?? item.categoryName ?? "budget"}>
