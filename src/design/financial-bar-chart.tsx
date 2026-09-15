@@ -69,7 +69,7 @@ export function FinancialBarChart({
                 <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
               </span>
               <span className={styles.month}>{label}</span>
-              {partial && <span className={styles.partialLabel}>Parcial</span>}
+              {partial && <span className={styles.partialLabel} aria-hidden="true">Par.</span>}
             </button>
           );
         })}
