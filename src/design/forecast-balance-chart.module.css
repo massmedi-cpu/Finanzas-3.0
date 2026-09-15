@@ -35,6 +35,43 @@
   font-size: 0.8rem;
 }
 
+.insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.insights article {
+  min-width: 0;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+  display: grid;
+  gap: 0.3rem;
+}
+
+.insights span,
+.insights small {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+}
+
+.insights strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(1rem, 1.5vw, 1.28rem);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.riskValue {
+  color: var(--color-danger);
+}
+
+.safeValue {
+  color: var(--color-success);
+}
+
 .plot {
   position: relative;
   height: 15rem;
@@ -128,6 +165,19 @@
   .header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .insights {
+    grid-template-columns: 1fr;
+  }
+
+  .insights article {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+  }
+
+  .insights article small {
+    grid-column: 1 / -1;
   }
 }
 
