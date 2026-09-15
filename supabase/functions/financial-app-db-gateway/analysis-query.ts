@@ -6,7 +6,6 @@ type AnalysisQueryInput = {
   historyDateFrom: string;
   accountId: string | null;
   budgetMonth: string;
-  today: string;
 };
 
 export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
@@ -22,7 +21,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         ${input.budgetMonth}::text as budget_month,
         to_date(${input.budgetMonth} || '-01', 'YYYY-MM-DD') as budget_start,
         (to_date(${input.budgetMonth} || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day')::date as budget_end,
-        ${input.today}::date as today,
+        (current_timestamp at time zone 'Europe/Madrid')::date as today,
         (date_trunc('month', ${input.dateTo}::date) + interval '1 month - 1 day')::date as forecast_date_to
     ),
     bounds as (
@@ -321,7 +320,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
               else 'on_track'
             end
           ),
-          'overCategories', null,
+          'overCategories', jsonb_build_array(),
           'categoryDetailDeferred', true
         )
         from budget_light b
@@ -337,7 +336,9 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
             'plannedItems', f.planned_items,
             'projectedNetCents', f.net_cents,
             'projectedIncomeCents', f.income_cents,
-            'projectedExpenseCents', f.expense_cents
+            'projectedExpenseCents', f.expense_cents,
+            'projectedClosingBalanceCents', null,
+            'openingBalanceCents', null
           ),
           'detailDeferred', true
         )
