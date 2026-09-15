@@ -1,5 +1,8 @@
+import { runAnalysisSnapshotQuery } from "./analysis-query.ts";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -48,6 +51,17 @@ function isCalendarDate(value: string) {
 function nullableDate(value: unknown, field: string): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string" || !isCalendarDate(value)) throw new Error(`invalid_${field}`);
+  return value;
+}
+
+function requiredDate(value: unknown, field: string): string {
+  const result = nullableDate(value, field);
+  if (!result) throw new Error(`invalid_${field}`);
+  return result;
+}
+
+function requiredMonth(value: unknown, field: string): string {
+  if (typeof value !== "string" || !MONTH.test(value)) throw new Error(`invalid_${field}`);
   return value;
 }
 
@@ -108,6 +122,24 @@ export async function handleFinancialLogicAction(input: {
 
   if (action === "financial.snapshot") {
     const f = financialFilters(payload);
+    if (payload.analysis === true) {
+      const previousDateFrom = requiredDate(payload.previousDateFrom, "financial_analysis_previous_date_from");
+      const previousDateTo = requiredDate(payload.previousDateTo, "financial_analysis_previous_date_to");
+      const historyDateFrom = requiredDate(payload.historyDateFrom, "financial_analysis_history_date_from");
+      const budgetMonth = requiredMonth(payload.budgetMonth, "financial_analysis_budget_month");
+      if (!f.dateFrom || !f.dateTo || f.dateFrom > f.dateTo || previousDateFrom > previousDateTo || historyDateFrom > f.dateTo) {
+        throw new Error("invalid_financial_analysis_date_range");
+      }
+      return financialQuery(() => runAnalysisSnapshotQuery(sql, {
+        dateFrom: f.dateFrom,
+        dateTo: f.dateTo,
+        previousDateFrom,
+        previousDateTo,
+        historyDateFrom,
+        accountId: f.accountId,
+        budgetMonth,
+      }));
+    }
     return financialQuery(() => sql`
       select financial_app.financial_snapshot(
         ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid,${f.includeArchived}
