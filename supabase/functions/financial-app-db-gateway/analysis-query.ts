@@ -43,9 +43,13 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         f.*,
         c.name as category_name,
         m.name as merchant_name,
-        t.concept_normalized
+        coalesce(nullif(btrim(o.concept_override), ''), t.concept_normalized) as concept_normalized,
+        financial_app.normalize_label(
+          coalesce(nullif(btrim(o.concept_override), ''), t.concept_normalized)
+        ) as concept_key
       from facts f
       join financial_app.transactions t on t.id = f.transaction_id
+      left join financial_app.transaction_overrides o on o.transaction_id = f.transaction_id
       left join financial_app.categories c on c.id = f.effective_category_id
       left join financial_app.merchants m on m.id = f.effective_merchant_id
       where f.analytics_eligible and f.effective_kind = 'expense'
@@ -72,7 +76,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
       from expenses e
       cross join bounds p
       where e.effective_merchant_id is not null
-        and e.bank_date >= p.history_from
+        and e.bank_date >= least(p.history_from, p.previous_from)
         and e.bank_date < p.date_from
       group by e.effective_merchant_id
     ),
@@ -139,6 +143,9 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
             from reliable_recurrences r
             where r.merchant_id = e.effective_merchant_id
               and (r.account_id is null or r.account_id = e.account_id)
+              and (r.category_id is null or r.category_id = e.effective_category_id)
+              and financial_app.normalize_label(r.concept_pattern) = e.concept_key
+              and abs(e.amount_cents - r.usual_amount_cents) <= r.amount_tolerance_cents
           )
         ), 0)::bigint as fixed_expense_cents
       from expenses e
