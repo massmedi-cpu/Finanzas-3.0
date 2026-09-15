@@ -58,3 +58,101 @@ jobs:
           name: forecast-premium-targeted-report-${{ github.sha }}
           path: playwright-report/
           retention-days: 7
+
+  forecast-protected-preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    permissions:
+      contents: read
+      deployments: read
+      id-token: write
+    env:
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Generate ephemeral GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken();
+            core.setSecret(token);
+            core.setOutput('token', token);
+
+      - name: Discover exact Preview
+        id: vercel
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const [owner, repo] = process.env.GITHUB_REPOSITORY.split('/');
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+            async function successfulPreview(deployment) {
+              const statuses = await github.rest.repos.listDeploymentStatuses({
+                owner,
+                repo,
+                deployment_id: deployment.id,
+                per_page: 30,
+              });
+              const status = statuses.data.find((candidate) => {
+                const url = candidate.environment_url || candidate.target_url || '';
+                return candidate.state === 'success' && /\.vercel\.app\/?$/i.test(url);
+              });
+              if (!status) return null;
+              return (status.environment_url || status.target_url).replace(/\/$/, '');
+            }
+
+            for (let attempt = 1; attempt <= 8; attempt += 1) {
+              const exact = await github.rest.repos.listDeployments({ owner, repo, sha: context.sha, per_page: 30 });
+              for (const deployment of exact.data) {
+                const url = await successfulPreview(deployment);
+                if (url) {
+                  core.setOutput('url', url);
+                  core.setOutput('sha', deployment.sha);
+                  core.info(`Exact Forecast Preview discovered on attempt ${attempt}: ${url}`);
+                  return;
+                }
+              }
+              await sleep(5000);
+            }
+
+            core.setFailed(`No successful Vercel Preview found for exact SHA ${context.sha}.`);
+
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Run Forecast against exact protected Preview
+        env:
+          VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
+        run: >-
+          npm run test:e2e --
+          tests/e2e/forecast.spec.ts
+          --project=chromium-desktop
+
+      - name: Upload protected Preview report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forecast-premium-protected-preview-report-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7
