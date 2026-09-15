@@ -74,7 +74,7 @@ export function FinancialBarChart({
                   row.operatingNetCents < 0 ? styles.netNegative : styles.netPositive
                 }`}
               >
-                Saldo {formatMoney(row.operatingNetCents)}
+                <span>Saldo </span><span>{formatMoney(row.operatingNetCents)}</span>
               </span>
               {partial && <span className={styles.partialLabel}>Parcial</span>}
             </button>

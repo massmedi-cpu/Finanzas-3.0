@@ -78,7 +78,7 @@ async function mockDashboard(page: import("@playwright/test").Page) {
   await page.route("**/api/source/google/sync", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) }),
   );
-  await page.route("**/api/dashboard?*", async (route) => {
+  await page.route(/\/api\/dashboard\?scope=/, async (route) => {
     const scope = new URL(route.request().url()).searchParams.get("scope");
     const primary = scope === "primary";
     await route.fulfill({
@@ -90,9 +90,7 @@ async function mockDashboard(page: import("@playwright/test").Page) {
         asOfDate: "2026-09-11",
         dataThroughDate: null,
         generatedAt: "2026-09-11T12:00:00.000Z",
-        requestedSources: primary
-          ? ["financial", "transactions"]
-          : ["monthly", "budgets", "forecast"],
+        requestedSources: primary ? ["financial", "transactions"] : ["monthly", "budgets", "forecast"],
         failedSources: [],
         data: {
           financial: primary ? financial : null,
@@ -123,22 +121,16 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
 
   await september.focus();
   await expect(september).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.500,00.*Gastos 700,00.*Balance 800,00/i,
-  );
+  await expect(page.getByRole("status")).toContainText(/Ingresos 1\.500,00.*Gastos 700,00.*Balance 800,00/i);
 
   const august = chart.getByRole("button", {
     name: /ingresos 1\.000,00.*gastos 400,00.*balance neto 600,00/i,
   });
   await august.click();
   await expect(august).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.000,00.*Gastos 400,00.*Balance 600,00/i,
-  );
+  await expect(page.getByRole("status")).toContainText(/Ingresos 1\.000,00.*Gastos 400,00.*Balance 600,00/i);
 
   expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
-    ),
+    await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
   ).toBe(true);
 });

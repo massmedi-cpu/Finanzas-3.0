@@ -145,15 +145,14 @@ async function fulfillJson(route: Route, body: unknown) {
 
 async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
   await page.route("**/api/source/google/sync", (route) => fulfillJson(route, { run: null }));
-  await page.route("**/api/dashboard?scope=primary", (route) =>
-    fulfillJson(route, envelope("primary", { financial, transactions }, ["financial", "transactions"])),
-  );
-  await page.route("**/api/dashboard?scope=secondary", async (route) => {
-    if (secondaryGate) await secondaryGate;
-    await fulfillJson(
-      route,
-      envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
-    );
+  await page.route(/\/api\/dashboard\?scope=/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("scope");
+    if (scope === "secondary" && secondaryGate) await secondaryGate;
+    if (scope === "primary") {
+      await fulfillJson(route, envelope("primary", { financial, transactions }, ["financial", "transactions"]));
+      return;
+    }
+    await fulfillJson(route, envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]));
   });
 }
 
@@ -199,5 +198,5 @@ test("Inicio mantiene comercio como lectura principal de la actividad reciente",
   await page.goto("/");
 
   await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
-  await expect(page.getByText(/COMPRA TARJETA 1234/)).toBeVisible();
+  await expect(page.getByText("Alimentación · Cuenta principal", { exact: true })).toBeVisible();
 });
