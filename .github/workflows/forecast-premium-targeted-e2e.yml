@@ -46,6 +46,7 @@ jobs:
           tests/e2e/forecast-period-race.spec.ts
           tests/e2e/forecast-accessibility.spec.ts
           tests/e2e/visual-system-forecast.spec.ts
+          tests/e2e/premium-forecast-visual.spec.ts
           tests/e2e/forecast-boundaries.spec.ts
           --project=chromium-desktop
           --project=chromium-mobile
