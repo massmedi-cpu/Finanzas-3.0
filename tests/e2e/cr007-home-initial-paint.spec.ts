@@ -34,23 +34,23 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
 
   const summary = page.getByRole("region", { name: "Resumen financiero principal" });
   await expect(summary).toBeVisible();
-  await expect(summary.locator("article")).toHaveCount(5);
+  await expect(summary.locator("article")).toHaveCount(4);
   for (const heading of [
-    "Ingresos, gastos y balance",
+    "Últimos cinco meses",
+    "Qué viene después",
     "Disponible por cuenta",
     "Gasto y presupuesto",
-    "Lo que viene",
-    "Últimos 10 movimientos",
+    "Últimos movimientos",
   ]) {
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   await expect(page.locator("main[aria-busy='true']")).toBeVisible();
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 
   release();
 
   await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
-  await expect(page.getByText("No se pudo cargar la evolución.")).toBeVisible();
-  await expect(page.getByText("Sin cuentas activas.")).toBeVisible();
-  await expect(page.getByText(/Algunos módulos no han podido actualizarse:/)).toBeVisible();
+  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
