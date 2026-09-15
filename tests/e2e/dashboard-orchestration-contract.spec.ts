@@ -9,13 +9,11 @@ const financial = {
     operatingNetCents: 80000,
     savingsCents: 80000,
     savingsRateBps: 5333,
-    transfers: { grossCents: 0 },
     quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
   },
   balances: {
     asOfDate: "2026-09-14",
     activeBalanceCents: 30000,
-    quality: { accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0, integrityDeltaAccounts: 0 },
     accounts: [
       {
         id: "a",
@@ -23,16 +21,9 @@ const financial = {
         type: "checking",
         lifecycle: "active",
         balanceCents: 30000,
-        balanceSource: "bank_explicit",
         explicitBalanceDate: "2026-09-14",
-        reconstructionDeltaCents: 0,
       },
     ],
-  },
-  principles: {
-    bankSource: "read_only",
-    transfersExcludedFromSavings: true,
-    explicitBankBalancePreferred: true,
   },
 };
 
@@ -71,16 +62,12 @@ const budgets = {
 };
 
 const forecast = {
-  period: { dateFrom: "2026-09-14", dateTo: "2026-10-14", accountId: null },
   summary: {
-    openingBalanceCents: 30000,
     projectedIncomeCents: 5000,
     projectedExpenseCents: 7000,
     projectedNetCents: -2000,
     projectedClosingBalanceCents: 28000,
     plannedItems: 1,
-    excludedItems: 0,
-    confirmedItems: 0,
   },
   items: [
     {
@@ -88,8 +75,6 @@ const forecast = {
       date: "2026-09-16",
       concept: "Internet",
       amountCents: -5000,
-      origin: "recurring",
-      confidence: "high",
       status: "planned",
       affectsProjection: true,
     },
@@ -104,7 +89,7 @@ const transactions = {
       amountCents: -1234,
       account: { id: "a", name: "Cuenta principal" },
       concept: { effective: "COMPRA TARJETA 1234" },
-      merchant: { originalId: null, originalName: null, effectiveId: "m1", effectiveName: "Carrefour" },
+      merchant: { effectiveName: "Carrefour" },
       category: { effectiveName: "Alimentación" },
       kind: { effective: "expense" },
       reviewState: { effective: "confirmed" },
@@ -145,14 +130,20 @@ async function fulfillJson(route: Route, body: unknown) {
 
 async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
   await page.route("**/api/source/google/sync", (route) => fulfillJson(route, { run: null }));
-  await page.route(/\/api\/dashboard\?scope=/, async (route) => {
-    const scope = new URL(route.request().url()).searchParams.get("scope");
-    if (scope === "secondary" && secondaryGate) await secondaryGate;
-    if (scope === "primary") {
-      await fulfillJson(route, envelope("primary", { financial, transactions }, ["financial", "transactions"]));
-      return;
-    }
-    await fulfillJson(route, envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]));
+
+  await page.route(/\/api\/dashboard\?scope=primary(?:&|$)/, (route) =>
+    fulfillJson(
+      route,
+      envelope("primary", { financial, transactions }, ["financial", "transactions"]),
+    ),
+  );
+
+  await page.route(/\/api\/dashboard\?scope=secondary(?:&|$)/, async (route) => {
+    if (secondaryGate) await secondaryGate;
+    await fulfillJson(
+      route,
+      envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
+    );
   });
 }
 
@@ -174,6 +165,7 @@ test("Inicio prioriza resumen y actividad sin esperar a los módulos secundarios
 
   await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
   await expect(page.getByText(/Último mes completo/i)).toBeVisible();
+  await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/i })).toBeVisible();
   await expect(page.getByText("Alimentación", { exact: true }).first()).toBeVisible();
 });
 
