@@ -18,6 +18,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         ${input.previousDateTo}::date as previous_to,
         ${input.historyDateFrom}::date as history_from,
         least(${input.historyDateFrom}::date, ${input.previousDateFrom}::date) as facts_from,
+        (date_trunc('month', ${input.dateTo}::date) + interval '1 month - 1 day')::date as forecast_date_to,
         ${input.accountId}::uuid as account_id,
         ${input.budgetMonth}::text as budget_month
     ),
@@ -143,7 +144,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
     forecast_raw as (
       select case
         when p.date_to >= current_date
-          then financial_app.forecast_snapshot(greatest(current_date, p.date_from), p.date_to, p.account_id)
+          then financial_app.forecast_snapshot(greatest(current_date, p.date_from), p.forecast_date_to, p.account_id)
         else null
       end as j
       from p
