@@ -228,7 +228,10 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
 
   const controlsTooSmall = await page.locator("main button, main input, main select, main summary, main a").evaluateAll((elements) =>
     elements.filter((element) => {
-      const rect = element.getBoundingClientRect();
+      // A checkbox's associated label is also a real clickable target.
+      const target = element instanceof HTMLInputElement && element.type === "checkbox"
+        ? element.labels?.[0] ?? element : element;
+      const rect = target.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.height < 44;
     }).map((element) => ({ tag: element.tagName, label: element.getAttribute("aria-label") ?? element.textContent?.trim(), height: element.getBoundingClientRect().height })),
   );

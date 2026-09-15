@@ -39,6 +39,16 @@ La batería general anterior (34923993369) terminó con 582 passed, 109 skipped 
 SHA. El navegador de Playwright no está instalado en este entorno local; la
 validación interactiva debe ejecutarse en CI con su Chromium declarado.
 
+La primera batería V22 (34966962686, SHA 7a06a561) terminó con **677 passed,
+109 skipped y 2 failed**. Los únicos fallos corresponden a la misma casilla de
+selección de Movimientos en escritorio y móvil: su área interactiva mide 18,39 px.
+El gate `protected-preview-live` pasó sobre ese SHA y la Preview está READY.
+La corrección añade una etiqueta pulsable de 44 × 44 px manteniendo el glifo
+nativo compacto. Las pruebas miden el área asociada a la casilla, esperan a que
+la fila cargue y pulsan el margen exterior del glifo para verificar su efecto.
+El nuevo build es correcto; se requiere repetir el gate global sobre el commit
+que contiene esta corrección.
+
 La fuente bancaria continúa en solo lectura. OCR sigue aislado con
 `financialWrites: false` y `requiresHumanReview: true`. No fusionar ni promover a
 Production hasta pasar los gates automáticos y el replay real autenticado.
