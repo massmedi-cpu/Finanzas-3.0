@@ -184,16 +184,6 @@ async function fulfillScope(
 async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
   const failed = new Set(failures);
 
-  await page.route("**/api/source/google/sync", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) }),
-  );
-  await page.route(/\/api\/dashboard\?scope=primary(?:&|$)/, (route) =>
-    fulfillScope(route, "primary", ["financial", "transactions"], failed),
-  );
-  await page.route(/\/api\/dashboard\?scope=secondary(?:&|$)/, (route) =>
-    fulfillScope(route, "secondary", ["monthly", "budgets", "forecast"], failed),
-  );
-
   await page.route("**/api/financial?*", async (route) => {
     const source: DashboardSource = new URL(route.request().url()).searchParams.get("mode") === "monthly" ? "monthly" : "financial";
     await route.fulfill(
@@ -217,6 +207,29 @@ async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
       ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) }
       : { status: 200, contentType: "application/json", body: JSON.stringify(transactions) },
   ));
+
+  await page.route("**/*", async (route) => {
+    const url = new URL(route.request().url());
+
+    if (url.pathname === "/api/source/google/sync") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) });
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "primary") {
+        await fulfillScope(route, "primary", ["financial", "transactions"], failed);
+        return;
+      }
+      if (scope === "secondary") {
+        await fulfillScope(route, "secondary", ["monthly", "budgets", "forecast"], failed);
+        return;
+      }
+    }
+
+    await route.fallback();
+  });
 }
 
 function monthlyChart(page: Page) {
