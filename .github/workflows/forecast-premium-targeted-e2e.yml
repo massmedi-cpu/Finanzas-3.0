@@ -204,6 +204,7 @@ jobs:
       - name: Run Forecast workspace boundary against protected Preview
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
+          FORECAST_PREVIEW_SHA: ${{ steps.vercel.outputs.sha }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: >-
           npm run test:e2e --
