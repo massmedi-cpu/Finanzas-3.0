@@ -14,12 +14,12 @@ const dashboardSource = readFileSync(
 
 function maxClampRem(token: string) {
   const match = polishSource.match(
-    new RegExp(`${token.replace(/[.*+?^${}()|[\\]\\]/g, "\\$&")}:\\s*clamp\\([^;]*,\\s*([0-9.]+)rem\\s*\\);`),
+    new RegExp(`${token}:\\s*clamp\\([^;]*,\\s*([0-9.]+)rem\\s*\\);`),
   );
   return match ? Number(match[1]) : Number.NaN;
 }
 
-test("Inicio · la jerarquía visual queda contenida y aislada del resto de la app", async () => {
+test("Inicio · la jerarquía visual queda contenida y aislada del resto de la app", () => {
   expect(pageSource).toContain('import styles from "./home-audit.module.css"');
   expect(pageSource).toContain("<div className={styles.scope}>");
   expect(polishSource).toContain("display: contents");
@@ -34,11 +34,17 @@ test("Inicio · la jerarquía visual queda contenida y aislada del resto de la a
   expect(polishSource).not.toMatch(/font-size\s*:/i);
 });
 
-test("Inicio · conserva privacidad y cabeceras sin descripciones ornamentales", async () => {
+test("Inicio · conserva privacidad y cabeceras sin descripciones ornamentales", () => {
   expect(dashboardSource).toContain('const PRIVACY_KEY = "financial-app:home-amounts"');
-  expect(dashboardSource).toContain('aria-label={revealAmounts ? "Ocultar importes" : "Mostrar importes"}');
+  expect(dashboardSource).toContain(
+    'aria-label={revealAmounts ? "Ocultar importes" : "Mostrar importes"}',
+  );
 
-  const panelHeaders = [...dashboardSource.matchAll(/<div className=\{styles\.panelHeader\}>([\s\S]*?)<\/div>\s*(?:\{financial|\{monthly|\{budgets|\{forecast|\{transactions)/g)];
+  const panelHeaders = [
+    ...dashboardSource.matchAll(
+      /<div className=\{styles\.panelHeader\}>([\s\S]*?)<\/div>\s*(?:\{financial|\{monthly|\{budgets|\{forecast|\{transactions)/g,
+    ),
+  ];
   expect(panelHeaders.length).toBeGreaterThanOrEqual(5);
   for (const header of panelHeaders) {
     expect(header[1]).not.toMatch(/<p[\s>]/i);
