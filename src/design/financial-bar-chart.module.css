@@ -112,12 +112,18 @@
 }
 
 .partialLabel {
-  justify-self: center;
+  width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  justify-self: stretch;
   color: var(--color-warning);
   font-size: 0.6rem;
   font-weight: 700;
   letter-spacing: 0.02em;
+  text-align: center;
+  text-overflow: clip;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .readout {
