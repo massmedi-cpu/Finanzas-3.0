@@ -14,8 +14,11 @@ test("Inicio prioriza decisiones y deja de abrir con un saldo total aislado", ()
   expect(inicioSource).toContain("Disponible");
   expect(inicioSource).toContain("Este mes");
   expect(inicioSource).toContain("Próximos 30 días");
-  expect(inicioSource).toContain("Por revisar");
+  expect(inicioSource).toContain("Gasto medio mensual");
   expect(inicioSource).toContain("Necesita tu atención");
+  expect(inicioSource).not.toContain("Por revisar");
+  expect(inicioSource).not.toContain("Revisar movimientos");
+  expect(inicioSource).not.toContain("pendingRecent");
   expect(inicioSource).not.toContain("balanceSummary");
   expect(inicioSource).not.toContain("Tu dinero, claro en segundos");
 });
@@ -41,14 +44,15 @@ test("Inicio evita porcentajes de ahorro absurdos cuando no hay base de ingresos
   expect(inicioSource).toContain("financial?.period.incomeCents ?? 0");
 });
 
-test("la gráfica de Inicio cabe sin scroll y reserva el histórico completo para Análisis", () => {
-  expect(inicioSource).toContain("data.monthly?.rows.slice(-5)");
-  expect(inicioSource).toContain("Últimos cinco meses");
+test("el cash flow de Inicio muestra 12 meses sin scroll horizontal", () => {
+  expect(inicioSource).toContain("data.monthly?.rows.slice(-12)");
+  expect(inicioSource).toContain("Últimos 12 meses");
+  expect(dashboardApiSource).toContain("trailingMonthStart(today, 12)");
   expect(chartSource).not.toContain("Math.abs(row.operatingNetCents)");
   expect(chartSource).not.toContain("styles.netBar");
   expect(chartSource).toContain("Toca un mes para ver las cifras exactas");
   expect(chartSource).toContain("partialMonthStart");
-  expect(chartCss).toContain("grid-template-columns: repeat(5, minmax(0, 1fr))");
+  expect(chartCss).toContain("grid-template-columns: repeat(12, minmax(0, 1fr))");
   expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
   expect(chartCss).not.toMatch(/min-width\s*:\s*3\.[0-9]+rem/i);
 });

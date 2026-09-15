@@ -39,8 +39,11 @@ test("Inicio · conserva privacidad y muestra decisiones, no métricas de escapa
   expect(inicioSource).toContain("Disponible");
   expect(inicioSource).toContain("Este mes");
   expect(inicioSource).toContain("Próximos 30 días");
-  expect(inicioSource).toContain("Por revisar");
+  expect(inicioSource).toContain("Gasto medio mensual");
   expect(inicioSource).toContain("Necesita tu atención");
+  expect(inicioSource).not.toContain("Por revisar");
+  expect(inicioSource).not.toContain("Revisar movimientos");
+  expect(inicioSource).not.toContain("pendingRecent");
   expect(inicioSource).not.toContain("Tasa de ahorro</span>");
   expect(inicioSource).not.toContain("balanceSummary");
 });

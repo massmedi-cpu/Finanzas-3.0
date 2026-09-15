@@ -36,7 +36,7 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
   await expect(summary).toBeVisible();
   await expect(summary.locator("article")).toHaveCount(4);
   for (const heading of [
-    "Últimos cinco meses",
+    "Últimos 12 meses",
     "Qué viene después",
     "Disponible por cuenta",
     "Gasto y presupuesto",

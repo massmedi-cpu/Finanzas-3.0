@@ -86,7 +86,6 @@ type TransactionRow = {
   merchant?: { effectiveName: string | null };
   category: { effectiveName: string | null };
   kind: { effective: TransactionKind };
-  reviewState?: { effective: "confirmed" | "pending" | "needs_review" };
   duplicateState: "none" | "suspected" | "confirmed";
   excludedFromAnalytics: boolean;
 };
@@ -129,7 +128,13 @@ type SyncStatus = {
   cursors?: Array<{ sourceRevision: string | null; updatedAt: string }>;
 };
 
-type AttentionItem = { title: string; detail: string; href: string; action: string; tone: "warning" | "danger" | "info" };
+type AttentionItem = {
+  title: string;
+  detail: string;
+  href: string;
+  action: string;
+  tone: "warning" | "danger" | "info";
+};
 
 const PRIVACY_KEY = "financial-app:home-amounts";
 const money = new Intl.NumberFormat("es-ES", {
@@ -140,7 +145,11 @@ const money = new Intl.NumberFormat("es-ES", {
   useGrouping: true,
 });
 const percent = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 });
-const dayFormatter = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", timeZone: "Europe/Madrid" });
+const dayFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric",
+  month: "short",
+  timeZone: "Europe/Madrid",
+});
 const dateTimeFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -168,6 +177,13 @@ function madridToday() {
 function addDays(date: string, days: number) {
   const parsed = new Date(`${date}T12:00:00Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function trailingMonthStart(date: string, months: number) {
+  const [year, month] = date.slice(0, 7).split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, 1));
+  parsed.setUTCMonth(parsed.getUTCMonth() - Math.max(0, months - 1));
   return parsed.toISOString().slice(0, 10);
 }
 
@@ -219,15 +235,17 @@ async function readJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
 async function legacySource(source: DashboardSource, today: string) {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
-  const yearStart = `${today.slice(0, 4)}-01-01`;
+  const cashFlowStart = trailingMonthStart(today, 12);
   if (source === "financial") {
     return readJson<FinancialSnapshot>(`/api/financial?mode=snapshot&dateFrom=${monthStart}&dateTo=${today}`);
   }
   if (source === "monthly") {
-    return readJson<MonthlyResponse>(`/api/financial?mode=monthly&dateFrom=${yearStart}&dateTo=${today}`);
+    return readJson<MonthlyResponse>(`/api/financial?mode=monthly&dateFrom=${cashFlowStart}&dateTo=${today}`);
   }
   if (source === "budgets") return readJson<BudgetSnapshot>(`/api/budgets?month=${month}`);
-  if (source === "forecast") return readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${addDays(today, 30)}`);
+  if (source === "forecast") {
+    return readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${addDays(today, 30)}`);
+  }
   return readJson<TransactionsResponse>("/api/transactions?limit=10");
 }
 
@@ -318,7 +336,11 @@ export default function InicioOverview() {
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      const payload = await response.json().catch(() => null) as null | { rowsInserted?: number; rowsRevised?: number; error?: string };
+      const payload = await response.json().catch(() => null) as null | {
+        rowsInserted?: number;
+        rowsRevised?: number;
+        error?: string;
+      };
       if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
       const changed = (payload?.rowsInserted ?? 0) + (payload?.rowsRevised ?? 0);
       setSyncFeedback(changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios nuevos.");
@@ -347,7 +369,7 @@ export default function InicioOverview() {
     [financial],
   );
 
-  const homeMonthlyRows = useMemo(() => data.monthly?.rows.slice(-5) ?? [], [data.monthly]);
+  const homeMonthlyRows = useMemo(() => data.monthly?.rows.slice(-12) ?? [], [data.monthly]);
   const monthlyScale = useMemo(
     () => Math.max(1, ...homeMonthlyRows.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)])),
     [homeMonthlyRows],
@@ -361,6 +383,14 @@ export default function InicioOverview() {
     const current = completedMonthlyRows.at(-1)!;
     const previous = completedMonthlyRows.length > 1 ? completedMonthlyRows.at(-2)! : null;
     return { current, previous, delta: previous ? current.operatingNetCents - previous.operatingNetCents : null };
+  }, [completedMonthlyRows]);
+  const recentExpenseAverage = useMemo(() => {
+    const sample = completedMonthlyRows.slice(-3);
+    if (!sample.length) return null;
+    return {
+      cents: Math.round(sample.reduce((sum, row) => sum + row.expenseCents, 0) / sample.length),
+      months: sample.length,
+    };
   }, [completedMonthlyRows]);
 
   const topBudgetCategories = useMemo(
@@ -377,7 +407,6 @@ export default function InicioOverview() {
       .slice(0, 4) ?? [],
     [data.forecast],
   );
-  const pendingRecent = transactions?.rows.filter((row) => row.reviewState?.effective !== "confirmed").length ?? 0;
   const overBudgetCount = data.budgets?.categories.filter((item) => item.status === "over").length ?? 0;
   const hasSavingsBase = (financial?.period.incomeCents ?? 0) >= 10_000;
 
@@ -390,15 +419,6 @@ export default function InicioOverview() {
         href: "/configuration/source",
         action: "Ver fuente",
         tone: "danger",
-      });
-    }
-    if (pendingRecent > 0) {
-      items.push({
-        title: `${pendingRecent} de los últimos 10 movimientos están pendientes`,
-        detail: "Revisarlos mejora categorías, análisis y previsiones.",
-        href: "/transactions",
-        action: "Revisar movimientos",
-        tone: "warning",
       });
     }
     if ((financial?.period.operatingNetCents ?? 0) < 0) {
@@ -438,7 +458,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, pendingRecent, syncFailed]);
+  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || secondaryLoading}>
@@ -462,11 +482,22 @@ export default function InicioOverview() {
         </button>
       </header>
 
-      <section className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncSucceeded ? styles.sourceOk : ""}`} aria-label="Estado de los datos bancarios">
+      <section
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncSucceeded ? styles.sourceOk : ""}`}
+        aria-label="Estado de los datos bancarios"
+      >
         <div className={styles.sourceText}>
           <span className={styles.healthDot} aria-hidden="true" />
           <div>
-            <strong>{syncing ? "Actualizando datos…" : syncFailed ? "La última actualización falló" : syncSucceeded ? "Datos bancarios actualizados" : "Estado de la fuente pendiente"}</strong>
+            <strong>
+              {syncing
+                ? "Actualizando datos…"
+                : syncFailed
+                  ? "La última actualización falló"
+                  : syncSucceeded
+                    ? "Datos bancarios actualizados"
+                    : "Estado de la fuente pendiente"}
+            </strong>
             <p>
               {syncSucceeded && syncRun
                 ? `Sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)} · movimientos hasta ${formatDate(latestDataDate)}.`
@@ -496,21 +527,39 @@ export default function InicioOverview() {
           <strong className={(financial?.period.operatingNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
             {financial ? displayMoney(financial.period.operatingNetCents) : "—"}
           </strong>
-          <small>{financial ? `Ingresos ${displayMoney(financial.period.incomeCents)} · gastos ${displayMoney(financial.period.expenseCents)}` : "Balance pendiente"}</small>
-          {financial && <small>{hasSavingsBase && financial.period.savingsRateBps !== null ? `Ahorro ${percent.format(financial.period.savingsRateBps / 100)} %` : "Ahorro: sin base suficiente"}</small>}
+          <small>
+            {financial
+              ? `Ingresos ${displayMoney(financial.period.incomeCents)} · gastos ${displayMoney(financial.period.expenseCents)}`
+              : "Balance pendiente"}
+          </small>
+          {financial && (
+            <small>
+              {hasSavingsBase && financial.period.savingsRateBps !== null
+                ? `Ahorro ${percent.format(financial.period.savingsRateBps / 100)} %`
+                : "Ahorro: sin base suficiente"}
+            </small>
+          )}
         </article>
         <article className={styles.decisionCard}>
           <span>Próximos 30 días</span>
           <strong className={(data.forecast?.summary.projectedNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
             {data.forecast ? displayMoney(data.forecast.summary.projectedNetCents) : "—"}
           </strong>
-          <small>{data.forecast ? `${data.forecast.summary.plannedItems} previstos · cierre ${displayMoney(data.forecast.summary.projectedClosingBalanceCents)}` : "Previsión pendiente"}</small>
+          <small>
+            {data.forecast
+              ? `${data.forecast.summary.plannedItems} previstos · cierre ${displayMoney(data.forecast.summary.projectedClosingBalanceCents)}`
+              : "Previsión pendiente"}
+          </small>
         </article>
         <article className={styles.decisionCard}>
-          <span>Por revisar</span>
-          <strong>{transactions ? pendingRecent : "—"}</strong>
-          <small>{transactions ? `${pendingRecent} de los últimos 10 · ${transactions.totalCount.toLocaleString("es-ES")} movimientos cargados` : "Actividad pendiente"}</small>
-          <Link className={styles.inlineLink} href="/transactions">Abrir movimientos</Link>
+          <span>Gasto medio mensual</span>
+          <strong>{recentExpenseAverage ? displayMoney(recentExpenseAverage.cents) : "—"}</strong>
+          <small>
+            {recentExpenseAverage
+              ? `Media de ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes completo" : "meses completos"}`
+              : "Histórico pendiente"}
+          </small>
+          <Link className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
         </article>
       </section>
 
@@ -533,7 +582,7 @@ export default function InicioOverview() {
       <section className={styles.contentGrid}>
         <article className={`${styles.panel} ${styles.evolutionPanel}`}>
           <div className={styles.sectionHeading}>
-            <div><span>EVOLUCIÓN</span><h2>Últimos cinco meses</h2></div>
+            <div><span>CASH FLOW</span><h2>Últimos 12 meses</h2></div>
             <Link className={styles.panelAction} href="/analysis">Abrir análisis</Link>
           </div>
           {completedComparison && (
@@ -542,7 +591,11 @@ export default function InicioOverview() {
               <strong className={completedComparison.current.operatingNetCents < 0 ? styles.negative : styles.positive}>
                 {displayMoney(completedComparison.current.operatingNetCents)}
               </strong>
-              {completedComparison.delta !== null && <small>{completedComparison.delta >= 0 ? "+" : ""}{displayMoney(completedComparison.delta)} frente al mes anterior</small>}
+              {completedComparison.delta !== null && (
+                <small>
+                  {completedComparison.delta >= 0 ? "+" : ""}{displayMoney(completedComparison.delta)} frente al mes anterior
+                </small>
+              )}
             </div>
           )}
           {homeMonthlyRows.length > 0 ? (
@@ -553,7 +606,11 @@ export default function InicioOverview() {
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
             />
-          ) : secondaryLoading ? <div className={styles.skeleton} /> : <p className={styles.empty}>No hay evolución disponible.</p>}
+          ) : secondaryLoading ? (
+            <div className={styles.skeleton} />
+          ) : (
+            <p className={styles.empty}>No hay evolución disponible.</p>
+          )}
           {latestDataDate && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
             <p className={styles.helper}>El mes actual es parcial: incluye movimientos importados hasta el {formatDate(latestDataDate)}.</p>
           )}
@@ -574,8 +631,14 @@ export default function InicioOverview() {
                   </li>
                 ))}
               </ul>
-            ) : <p className={styles.empty}>No hay movimientos previstos en los próximos 30 días.</p>
-          ) : secondaryLoading ? <div className={styles.skeleton} /> : <p className={styles.empty}>La previsión no está disponible.</p>}
+            ) : (
+              <p className={styles.empty}>No hay movimientos previstos en los próximos 30 días.</p>
+            )
+          ) : secondaryLoading ? (
+            <div className={styles.skeleton} />
+          ) : (
+            <p className={styles.empty}>La previsión no está disponible.</p>
+          )}
         </article>
 
         <article className={styles.panel}>
@@ -587,12 +650,19 @@ export default function InicioOverview() {
             <ul className={styles.compactList}>
               {activeAccounts.map((account) => (
                 <li key={account.id}>
-                  <div><strong>{account.name}</strong><span>{accountType(account.type)} · saldo {formatDate(account.explicitBalanceDate)}</span></div>
+                  <div>
+                    <strong>{account.name}</strong>
+                    <span>{accountType(account.type)} · saldo {formatDate(account.explicitBalanceDate)}</span>
+                  </div>
                   <b>{displayMoney(account.balanceCents)}</b>
                 </li>
               ))}
             </ul>
-          ) : primaryLoading ? <div className={styles.skeleton} /> : <p className={styles.empty}>No hay cuentas activas disponibles.</p>}
+          ) : primaryLoading ? (
+            <div className={styles.skeleton} />
+          ) : (
+            <p className={styles.empty}>No hay cuentas activas disponibles.</p>
+          )}
         </article>
 
         <article className={styles.panel}>
@@ -605,17 +675,28 @@ export default function InicioOverview() {
               <div className={styles.budgetSummary}>
                 <strong>{displayMoney(data.budgets.total.actualExpenseCents)}</strong>
                 <span>gastados de {displayMoney(data.budgets.total.effectiveAmountCents)}</span>
-                <div className={styles.progressTrack} aria-label={`Presupuesto usado ${Math.max(0, data.budgets.total.progressBps ?? 0) / 100} por ciento`}>
+                <div
+                  className={styles.progressTrack}
+                  aria-label={`Presupuesto usado ${Math.max(0, data.budgets.total.progressBps ?? 0) / 100} por ciento`}
+                >
                   <span style={{ width: `${Math.min(100, Math.max(0, (data.budgets.total.progressBps ?? 0) / 100))}%` }} />
                 </div>
               </div>
               {topBudgetCategories.length > 0 && (
                 <ul className={styles.simpleRows}>
-                  {topBudgetCategories.map((item) => <li key={item.categoryId ?? item.categoryName ?? "total"}><span>{item.categoryName}</span><b>{displayMoney(item.actualExpenseCents)}</b></li>)}
+                  {topBudgetCategories.map((item) => (
+                    <li key={item.categoryId ?? item.categoryName ?? "total"}>
+                      <span>{item.categoryName}</span><b>{displayMoney(item.actualExpenseCents)}</b>
+                    </li>
+                  ))}
                 </ul>
               )}
             </>
-          ) : secondaryLoading ? <div className={styles.skeleton} /> : <p className={styles.empty}>No hay presupuesto mensual configurado.</p>}
+          ) : secondaryLoading ? (
+            <div className={styles.skeleton} />
+          ) : (
+            <p className={styles.empty}>No hay presupuesto mensual configurado.</p>
+          )}
         </article>
 
         <article className={`${styles.panel} ${styles.activityPanel}`}>
@@ -629,14 +710,21 @@ export default function InicioOverview() {
                 const mainLabel = row.merchant?.effectiveName?.trim() || row.concept.effective;
                 return (
                   <li key={row.id}>
-                    <div className={styles.activityMain}><strong>{mainLabel}</strong><span>{row.category.effectiveName ?? kindLabel(row.kind.effective)} · {row.account.name}</span></div>
+                    <div className={styles.activityMain}>
+                      <strong>{mainLabel}</strong>
+                      <span>{row.category.effectiveName ?? kindLabel(row.kind.effective)} · {row.account.name}</span>
+                    </div>
                     <span className={styles.activityDate}>{formatDate(row.bankDate)}</span>
                     <b className={row.amountCents < 0 ? styles.negative : styles.positive}>{displayMoney(row.amountCents)}</b>
                   </li>
                 );
               })}
             </ul>
-          ) : primaryLoading ? <div className={styles.skeleton} /> : <p className={styles.empty}>No hay actividad reciente.</p>}
+          ) : primaryLoading ? (
+            <div className={styles.skeleton} />
+          ) : (
+            <p className={styles.empty}>No hay actividad reciente.</p>
+          )}
         </article>
       </section>
     </main>

@@ -22,9 +22,15 @@ const financial = {
 };
 
 const monthly = {
-  dateFrom: "2026-01-01",
+  dateFrom: "2025-10-01",
   dateTo: "2026-09-11",
   rows: [
+    { monthStart: "2025-10-01", incomeCents: 125000, expenseCents: 76000, operatingNetCents: 49000 },
+    { monthStart: "2025-11-01", incomeCents: 130000, expenseCents: 82000, operatingNetCents: 48000 },
+    { monthStart: "2025-12-01", incomeCents: 145000, expenseCents: 99000, operatingNetCents: 46000 },
+    { monthStart: "2026-01-01", incomeCents: 115000, expenseCents: 87000, operatingNetCents: 28000 },
+    { monthStart: "2026-02-01", incomeCents: 118000, expenseCents: 84000, operatingNetCents: 34000 },
+    { monthStart: "2026-03-01", incomeCents: 123000, expenseCents: 81000, operatingNetCents: 42000 },
     { monthStart: "2026-04-01", incomeCents: 120000, expenseCents: 70000, operatingNetCents: 50000 },
     { monthStart: "2026-05-01", incomeCents: 110000, expenseCents: 90000, operatingNetCents: 20000 },
     { monthStart: "2026-06-01", incomeCents: 100000, expenseCents: 120000, operatingNetCents: -20000 },
@@ -57,7 +63,6 @@ const transactions = {
       merchant: { effectiveName: "Mercadona" },
       category: { effectiveName: "Alimentación" },
       kind: { effective: "expense" },
-      reviewState: { effective: "pending" },
       duplicateState: "none",
       excludedFromAnalytics: false,
     },
@@ -164,14 +169,27 @@ test("Inicio sustituye una tasa de ahorro sin base suficiente por una lectura co
   await expect(page.getByText(/37\.060/)).toHaveCount(0);
 });
 
-test("la gráfica de Inicio usa cinco meses y no necesita scroll horizontal", async ({ page }) => {
+test("Inicio elimina la revisión de movimientos y usa el hueco para gasto medio mensual", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.getByText("Gasto medio mensual", { exact: true })).toBeVisible();
+  await expect(summary.getByText("666,67 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("Por revisar", { exact: true })).toHaveCount(0);
+  await expect(page.getByText(/Revisar movimientos/i)).toHaveCount(0);
+  await expect(page.getByText(/movimientos están pendientes/i)).toHaveCount(0);
+});
+
+test("el cash flow de Inicio usa 12 meses y no necesita scroll horizontal", async ({ page }) => {
   await mockInicio(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
+  await expect(page.getByRole("heading", { name: "Últimos 12 meses", exact: true })).toBeVisible();
   const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/i });
   await expect(chart).toBeVisible();
-  await expect(chart.getByRole("button")).toHaveCount(5);
+  await expect(chart.getByRole("button")).toHaveCount(12);
   const geometry = await chart.evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);

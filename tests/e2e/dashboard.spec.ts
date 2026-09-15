@@ -34,9 +34,16 @@ const financial = {
 };
 
 const monthly = {
-  dateFrom: "2026-01-01",
+  dateFrom: "2025-10-01",
   dateTo: "2026-09-07",
   rows: [
+    { monthStart: "2025-10-01", incomeCents: 85000, expenseCents: 56000, operatingNetCents: 29000 },
+    { monthStart: "2025-11-01", incomeCents: 88000, expenseCents: 59000, operatingNetCents: 29000 },
+    { monthStart: "2025-12-01", incomeCents: 95000, expenseCents: 61000, operatingNetCents: 34000 },
+    { monthStart: "2026-01-01", incomeCents: 90000, expenseCents: 57000, operatingNetCents: 33000 },
+    { monthStart: "2026-02-01", incomeCents: 92000, expenseCents: 60000, operatingNetCents: 32000 },
+    { monthStart: "2026-03-01", incomeCents: 94000, expenseCents: 62000, operatingNetCents: 32000 },
+    { monthStart: "2026-04-01", incomeCents: 96000, expenseCents: 58000, operatingNetCents: 38000 },
     { monthStart: "2026-05-01", incomeCents: 80000, expenseCents: 55000, operatingNetCents: 25000 },
     { monthStart: "2026-06-01", incomeCents: 90000, expenseCents: 65000, operatingNetCents: 25000 },
     { monthStart: "2026-07-01", incomeCents: 90000, expenseCents: 45000, operatingNetCents: 45000 },
@@ -83,7 +90,6 @@ const transactions = {
       merchant: { effectiveName: "Mercado Central" },
       category: { effectiveName: "Alimentación" },
       kind: { effective: "expense" },
-      reviewState: { effective: "confirmed" },
       duplicateState: "none",
       excludedFromAnalytics: false,
     },
@@ -208,11 +214,14 @@ test("Inicio compone decisiones y bloques útiles desde motores centrales", asyn
   await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("-20,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("53,3 %", { exact: false })).toBeVisible();
+  await expect(summary(page).getByText("500,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("Gasto medio mensual", { exact: true })).toBeVisible();
+  await expect(page.getByText("Por revisar", { exact: true })).toHaveCount(0);
   await expect(chart(page)).toBeVisible();
-  await expect(chart(page).getByRole("button")).toHaveCount(5);
+  await expect(chart(page).getByRole("button")).toHaveCount(12);
   await expect(page.getByText("Internet", { exact: true })).toBeVisible();
   await expect(page.getByText("Mercado Central", { exact: true })).toBeVisible();
-  for (const heading of ["Últimos cinco meses", "Qué viene después", "Disponible por cuenta", "Gasto y presupuesto", "Últimos movimientos"]) {
+  for (const heading of ["Últimos 12 meses", "Qué viene después", "Disponible por cuenta", "Gasto y presupuesto", "Últimos movimientos"]) {
     await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   await expect(page.getByText(/FASE\s+\d/i)).toHaveCount(0);
