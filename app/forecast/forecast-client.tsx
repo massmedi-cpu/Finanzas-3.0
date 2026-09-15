@@ -2,110 +2,13 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type {
+  ForecastCandidateSnapshot,
+  ForecastItem,
+  ForecastSnapshot,
+} from "../../src/application/forecast/forecast-contract";
+import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import styles from "./forecast.module.css";
-
-type ForecastItem = {
-  id: string;
-  date: string;
-  accountId: string | null;
-  accountName: string | null;
-  categoryId: string | null;
-  categoryName: string | null;
-  merchantId: string | null;
-  merchantName: string | null;
-  concept: string;
-  amountCents: number;
-  origin: "known" | "recurring" | "budget" | "manual" | "inferred";
-  confidence: "high" | "medium" | "low";
-  recurrenceId: string | null;
-  budgetId: string | null;
-  confirmedTransactionId: string | null;
-  excluded: boolean;
-  excludedReason: string;
-  reconciliationNote: string;
-  projectionKey: string | null;
-  updatedAt: string;
-  status: "planned" | "excluded" | "confirmed";
-  affectsProjection: boolean;
-  projectionEffectCents: number;
-  projectedBalanceAfterCents: number;
-  actual: null | {
-    date: string;
-    amountCents: number;
-    accountId: string;
-    categoryId: string | null;
-    merchantId: string | null;
-    analyticsEligible: boolean;
-  };
-};
-
-type ForecastSnapshot = {
-  contractVersion: number;
-  period: { dateFrom: string; dateTo: string; accountId: string | null };
-  summary: {
-    openingBalanceCents: number;
-    projectedIncomeCents: number;
-    projectedExpenseCents: number;
-    projectedNetCents: number;
-    projectedClosingBalanceCents: number;
-    plannedItems: number;
-    excludedItems: number;
-    confirmedItems: number;
-  };
-  items: ForecastItem[];
-  budgetContext: Array<{
-    month: string;
-    budgetCents: number;
-    actualExpenseCents: number;
-    remainingCents: number;
-    status: string;
-  }>;
-  balanceContext: {
-    quality: {
-      accounts: number;
-      integrityDeltaAccounts: number;
-      explicitBalanceAccounts: number;
-      reconstructedBalanceAccounts: number;
-    };
-    accounts: Array<{
-      id: string;
-      name: string;
-      balanceCents: number;
-      balanceSource: string;
-      explicitBalanceDate: string | null;
-      reconstructionDeltaCents: number;
-    }>;
-  };
-  principles: {
-    bankSource: string;
-    openingBalanceSource: string;
-    recurrenceSource: string;
-    budgetsCreateDatedItems: boolean;
-    excludedItemsAffectCashFlow: boolean;
-    confirmedItemsAffectCashFlow: boolean;
-    getHasSideEffects: boolean;
-  };
-};
-
-type Candidate = {
-  transactionId: string;
-  date: string;
-  amountCents: number;
-  differenceCents: number;
-  dayDifference: number;
-  accountId: string;
-  categoryId: string | null;
-  merchantId: string | null;
-  concept: string;
-};
-
-type CandidateSnapshot = {
-  forecastItemId: string;
-  forecastDate: string;
-  forecastAmountCents: number;
-  days: number;
-  candidates: Candidate[];
-};
 
 type ManualErrors = {
   concept?: string;
@@ -207,159 +110,25 @@ async function readJson(response: Response) {
   return body;
 }
 
-function ForecastBalanceCurve({ snapshot }: { snapshot: ForecastSnapshot }) {
-  const [activePoint, setActivePoint] = useState<string | null>(null);
-  const points = [
-    {
-      id: "opening",
-      label: "Saldo inicial",
-      date: snapshot.period.dateFrom,
-      balanceCents: snapshot.summary.openingBalanceCents,
-    },
-    ...snapshot.items.map((item) => ({
-      id: item.id,
-      label: item.concept,
-      date: item.date,
-      balanceCents: item.projectedBalanceAfterCents,
-    })),
-  ];
-  const balances = points.map((point) => point.balanceCents);
-  const minimum = Math.min(...balances);
-  const maximum = Math.max(...balances);
-  const range = Math.max(1, maximum - minimum);
-  const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
-  const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
-  const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
-
-  return (
-    <section
-      aria-label="Curva de saldo prevista"
-      style={{
-        marginTop: "1.25rem",
-        padding: "clamp(1rem, 2.2vw, 1.5rem)",
-        borderRadius: "24px",
-        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
-        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
-        display: "grid",
-        gap: "1rem",
-      }}
-    >
-      <div className={styles.sectionHeader}>
-        <div>
-          <p className={styles.eyebrow}>SALDO PROYECTADO</p>
-          <h2>Curva de saldo prevista</h2>
-        </div>
-        <span style={{ fontSize: ".82rem", opacity: .75 }}>Valores del motor de previsión · sin recálculo visual</span>
-      </div>
-
-      <div style={{ position: "relative", height: "15rem", borderRadius: "1rem", overflow: "visible", background: "rgba(255,255,255,.018)" }}>
-        <svg viewBox="0 0 1000 240" preserveAspectRatio="none" aria-hidden="true" style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }}>
-          <defs>
-            <linearGradient id="forecast-curve-gradient" x1="0" x2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity=".45" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity=".95" />
-            </linearGradient>
-          </defs>
-          <line x1="0" x2="1000" y1="120" y2="120" stroke="currentColor" strokeOpacity=".08" strokeDasharray="8 12" />
-          <polyline points={polyline} fill="none" stroke="url(#forecast-curve-gradient)" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" />
-        </svg>
-
-        {points.map((point, index) => {
-          const id = `forecast-balance-${point.id}`;
-          const label = `${point.label} · ${formatDate(point.date)} · ${money.format(point.balanceCents / 100)}`;
-          return (
-            <div
-              key={point.id}
-              style={{
-                position: "absolute",
-                left: `${xFor(index)}%`,
-                top: `${coordinateFor(point.balanceCents)}%`,
-                transform: "translate(-50%, -50%)",
-              }}
-            >
-              <button
-                type="button"
-                aria-label={label}
-                onFocus={() => setActivePoint(id)}
-                onBlur={() => setActivePoint((current) => current === id ? null : current)}
-                onMouseEnter={() => setActivePoint(id)}
-                onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                style={{
-                  width: "44px",
-                  height: "44px",
-                  borderRadius: "999px",
-                  border: 0,
-                  padding: 0,
-                  background: "radial-gradient(circle, currentColor 0 7px, transparent 8px)",
-                  boxShadow: "none",
-                  cursor: "default",
-                }}
-              />
-              {activePoint === id ? (
-                <div
-                  role="tooltip"
-                  style={{
-                    position: "absolute",
-                    zIndex: 6,
-                    left: "50%",
-                    bottom: "calc(100% + .7rem)",
-                    transform: "translateX(-50%)",
-                    padding: ".5rem .65rem",
-                    borderRadius: ".65rem",
-                    background: "var(--surface-elevated, #151922)",
-                    border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
-                    boxShadow: "0 10px 30px rgba(0,0,0,.28)",
-                    whiteSpace: "nowrap",
-                    fontSize: ".78rem",
-                  }}
-                >
-                  {point.label} · {money.format(point.balanceCents / 100)}
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table aria-label="Datos de la curva de saldo" style={{ width: "100%", borderCollapse: "collapse", minWidth: "34rem" }}>
-          <thead>
-            <tr>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Hito</th>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Fecha</th>
-              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>Saldo previsto</th>
-            </tr>
-          </thead>
-          <tbody>
-            {points.map((point) => (
-              <tr key={point.id}>
-                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{point.label}</th>
-                <td style={{ padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{formatDate(point.date)}</td>
-                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{money.format(point.balanceCents / 100)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  );
-}
-
-export function ForecastClient() {
+export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: ForecastSnapshot | null }) {
   const today = useMemo(() => madridToday(), []);
-  const initialFrom = useMemo(() => addDays(today, 1), [today]);
-  const initialTo = useMemo(() => addDays(today, 90), [today]);
+  const fallbackFrom = useMemo(() => addDays(today, 1), [today]);
+  const fallbackTo = useMemo(() => addDays(today, 90), [today]);
+  const initialFrom = initialSnapshot?.period.dateFrom ?? fallbackFrom;
+  const initialTo = initialSnapshot?.period.dateTo ?? fallbackTo;
 
   const [dateFrom, setDateFrom] = useState(initialFrom);
   const [dateTo, setDateTo] = useState(initialTo);
   const dateFromRef = useRef(initialFrom);
   const dateToRef = useRef(initialTo);
   const loadSequence = useRef(0);
+  const loadAbortRef = useRef<AbortController | null>(null);
+  const skipInitialReloadRef = useRef(Boolean(initialSnapshot));
   dateFromRef.current = dateFrom;
   dateToRef.current = dateTo;
 
-  const [snapshot, setSnapshot] = useState<ForecastSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [snapshot, setSnapshot] = useState<ForecastSnapshot | null>(initialSnapshot);
+  const [loading, setLoading] = useState(!initialSnapshot);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -372,7 +141,7 @@ export function ForecastClient() {
   const [excludeReasons, setExcludeReasons] = useState<Record<string, string>>({});
   const [excludeErrorFor, setExcludeErrorFor] = useState<string | null>(null);
   const [candidateFor, setCandidateFor] = useState<string | null>(null);
-  const [candidateData, setCandidateData] = useState<CandidateSnapshot | null>(null);
+  const [candidateData, setCandidateData] = useState<ForecastCandidateSnapshot | null>(null);
   const manualConceptRef = useRef<HTMLInputElement | null>(null);
   const manualAmountRef = useRef<HTMLInputElement | null>(null);
   const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -383,24 +152,40 @@ export function ForecastClient() {
     const sequence = ++loadSequence.current;
     const requestedFrom = dateFromRef.current;
     const requestedTo = dateToRef.current;
+    loadAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadAbortRef.current = controller;
     setLoading(true);
     setError(null);
+
     try {
       const params = new URLSearchParams({ dateFrom: requestedFrom, dateTo: requestedTo });
-      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
-      if (sequence !== loadSequence.current) return;
+      const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      }));
+      if (controller.signal.aborted || sequence !== loadSequence.current) return;
       setSnapshot(data as ForecastSnapshot);
     } catch (err) {
-      if (sequence !== loadSequence.current) return;
+      if (controller.signal.aborted || sequence !== loadSequence.current) return;
       setError(err instanceof Error ? err.message : "No se pudo cargar la previsión");
     } finally {
-      if (sequence === loadSequence.current) setLoading(false);
+      if (loadAbortRef.current === controller) loadAbortRef.current = null;
+      if (!controller.signal.aborted && sequence === loadSequence.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    if (skipInitialReloadRef.current) {
+      skipInitialReloadRef.current = false;
+      return;
+    }
     void loadSnapshot();
   }, [dateFrom, dateTo, loadSnapshot]);
+
+  useEffect(() => () => {
+    loadAbortRef.current?.abort();
+  }, []);
 
   async function runMutation(key: string, task: () => Promise<void>) {
     setBusy(key);
@@ -431,7 +216,7 @@ export function ForecastClient() {
           action: "refresh",
           dateFrom: dateFromRef.current,
           dateTo: dateToRef.current,
-          accountId: null,
+          accountId: snapshot?.period.accountId ?? null,
         }),
       }));
       setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
@@ -465,7 +250,7 @@ export function ForecastClient() {
       date: manualDate,
       concept: manualConcept.trim(),
       amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
-      accountId: null,
+      accountId: snapshot?.period.accountId ?? null,
       categoryId: null,
       merchantId: null,
       confidence: manualConfidence,
@@ -527,7 +312,7 @@ export function ForecastClient() {
     try {
       const params = new URLSearchParams({ itemId: item.id, days: "7", limit: "8" });
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, { cache: "no-store" }));
-      setCandidateData(data as CandidateSnapshot);
+      setCandidateData(data as ForecastCandidateSnapshot);
       window.requestAnimationFrame(() => candidateCloseRef.current?.focus());
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudieron buscar movimientos reales");
@@ -566,7 +351,7 @@ export function ForecastClient() {
   const items = snapshot?.items ?? [];
 
   return (
-    <main className={styles.page}>
+    <main className={styles.page} aria-busy={loading || undefined}>
       <header className={styles.hero}>
         <div>
           <p className={styles.eyebrow}>FINANCIAL APP · PREVISIÓN</p>
@@ -587,15 +372,20 @@ export function ForecastClient() {
       <section className={styles.controls} aria-label="Periodo de previsión">
         <label>
           Desde
-          <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(event) => {
+              const nextFrom = event.target.value;
+              setDateFrom(nextFrom);
+              if (dateToRef.current < nextFrom) setDateTo(nextFrom);
+            }}
+          />
         </label>
         <label>
           Hasta
           <input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} />
         </label>
-        <button className={styles.secondaryButton} onClick={() => void loadSnapshot()} disabled={loading || busy !== null}>
-          Aplicar periodo
-        </button>
       </section>
 
       {error ? <div className={styles.error} role="alert">{error}</div> : null}
@@ -615,7 +405,7 @@ export function ForecastClient() {
             </article>
           </section>
 
-          <ForecastBalanceCurve snapshot={snapshot} />
+          <ForecastBalanceChart snapshot={snapshot} />
 
           <section className={styles.mainGrid}>
             <div className={styles.timelinePanel}>
@@ -642,119 +432,120 @@ export function ForecastClient() {
                     const excludeErrorId = `exclude-reason-error-${item.id}`;
                     const candidatesId = `forecast-candidates-${item.id}`;
                     return (
-                    <article key={item.id} className={`${styles.itemCard} ${styles[item.status]}`}>
-                      <div className={styles.itemDate}>
-                        <span>{formatDate(item.date)}</span>
-                        <small>{originLabel(item.origin)} · confianza {confidenceLabel(item.confidence)}</small>
-                      </div>
-                      <div className={styles.itemMain}>
-                        <div className={styles.itemTitleRow}>
-                          <h3>{item.concept}</h3>
-                          <strong className={item.amountCents < 0 ? styles.outflow : styles.inflow}>
-                            {money.format(item.amountCents / 100)}
-                          </strong>
+                      <article key={item.id} className={`${styles.itemCard} ${styles[item.status]}`}>
+                        <div className={styles.itemDate}>
+                          <span>{formatDate(item.date)}</span>
+                          <small>{originLabel(item.origin)} · confianza {confidenceLabel(item.confidence)}</small>
                         </div>
-                        <div className={styles.itemMeta}>
-                          <span className={styles.statusPill}>{statusLabel(item.status)}</span>
-                          {item.accountName ? <span>{item.accountName}</span> : <span>Todas las cuentas</span>}
-                          {item.categoryName ? <span>{item.categoryName}</span> : null}
-                          {item.merchantName ? <span>{item.merchantName}</span> : null}
-                        </div>
-                        {item.affectsProjection ? (
-                          <p className={styles.balanceLine}>Saldo después: <strong>{money.format(item.projectedBalanceAfterCents / 100)}</strong></p>
-                        ) : null}
-                        {item.excluded && item.excludedReason ? <p className={styles.reason}>Motivo: {item.excludedReason}</p> : null}
-                        {item.confirmedTransactionId && item.actual ? (
-                          <p className={styles.confirmedLine}>
-                            Movimiento real: {formatDate(item.actual.date)} · {money.format(item.actual.amountCents / 100)}
-                          </p>
-                        ) : null}
+                        <div className={styles.itemMain}>
+                          <div className={styles.itemTitleRow}>
+                            <h3>{item.concept}</h3>
+                            <strong className={item.amountCents < 0 ? styles.outflow : styles.inflow}>
+                              {money.format(item.amountCents / 100)}
+                            </strong>
+                          </div>
+                          <div className={styles.itemMeta}>
+                            <span className={styles.statusPill}>{statusLabel(item.status)}</span>
+                            {item.accountName ? <span>{item.accountName}</span> : <span>Todas las cuentas</span>}
+                            {item.categoryName ? <span>{item.categoryName}</span> : null}
+                            {item.merchantName ? <span>{item.merchantName}</span> : null}
+                          </div>
+                          {item.affectsProjection ? (
+                            <p className={styles.balanceLine}>Saldo después: <strong>{money.format(item.projectedBalanceAfterCents / 100)}</strong></p>
+                          ) : null}
+                          {item.excluded && item.excludedReason ? <p className={styles.reason}>Motivo: {item.excludedReason}</p> : null}
+                          {item.confirmedTransactionId && item.actual ? (
+                            <p className={styles.confirmedLine}>
+                              Movimiento real: {formatDate(item.actual.date)} · {money.format(item.actual.amountCents / 100)}
+                            </p>
+                          ) : null}
 
-                        <div className={styles.itemActions}>
-                          {item.status !== "confirmed" ? (
-                            <>
-                              {!item.excluded ? (
-                                <>
-                                  <input
-                                    id={`exclude-reason-${item.id}`}
-                                    className={styles.reasonInput}
-                                    placeholder="Motivo para excluir"
-                                    value={excludeReasons[item.id] ?? ""}
-                                    onChange={(event) => {
-                                      const value = event.target.value;
-                                      setExcludeReasons((current) => ({ ...current, [item.id]: value }));
-                                      if (excludeErrorFor === item.id && value.trim()) setExcludeErrorFor(null);
-                                    }}
-                                    aria-label={`Motivo para excluir ${item.concept}`}
-                                    aria-invalid={excludeErrorFor === item.id || undefined}
-                                    aria-describedby={excludeErrorFor === item.id ? excludeErrorId : undefined}
-                                  />
-                                  {excludeErrorFor === item.id ? (
-                                    <span id={excludeErrorId} className={styles.fieldError} role="alert">
-                                      Indica el motivo antes de excluir un elemento previsto.
-                                    </span>
-                                  ) : null}
-                                </>
-                              ) : null}
+                          <div className={styles.itemActions}>
+                            {item.status !== "confirmed" ? (
+                              <>
+                                {!item.excluded ? (
+                                  <>
+                                    <input
+                                      id={`exclude-reason-${item.id}`}
+                                      className={styles.reasonInput}
+                                      placeholder="Motivo para excluir"
+                                      value={excludeReasons[item.id] ?? ""}
+                                      onChange={(event) => {
+                                        const value = event.target.value;
+                                        setExcludeReasons((current) => ({ ...current, [item.id]: value }));
+                                        if (excludeErrorFor === item.id && value.trim()) setExcludeErrorFor(null);
+                                      }}
+                                      aria-label={`Motivo para excluir ${item.concept}`}
+                                      aria-invalid={excludeErrorFor === item.id || undefined}
+                                      aria-describedby={excludeErrorFor === item.id ? excludeErrorId : undefined}
+                                    />
+                                    {excludeErrorFor === item.id ? (
+                                      <span id={excludeErrorId} className={styles.fieldError} role="alert">
+                                        Indica el motivo antes de excluir un elemento previsto.
+                                      </span>
+                                    ) : null}
+                                  </>
+                                ) : null}
+                                <button
+                                  className={styles.ghostButton}
+                                  onClick={() => void toggleExcluded(item)}
+                                  disabled={busy !== null}
+                                >
+                                  {item.excluded ? "Restaurar" : "Excluir"}
+                                </button>
+                              </>
+                            ) : null}
+
+                            {item.status === "planned" ? (
+                              <button
+                                ref={(node) => { candidateTriggerRefs.current[item.id] = node; }}
+                                className={styles.ghostButton}
+                                onClick={() => void loadCandidates(item)}
+                                disabled={busy !== null}
+                                aria-expanded={candidateFor === item.id}
+                                aria-controls={candidatesId}
+                              >
+                                {busy === `candidates:${item.id}` ? "Buscando…" : "Buscar movimiento real"}
+                              </button>
+                            ) : null}
+
+                            {item.status === "confirmed" ? (
                               <button
                                 className={styles.ghostButton}
-                                onClick={() => void toggleExcluded(item)}
+                                onClick={() => void reconcile(item, null)}
                                 disabled={busy !== null}
                               >
-                                {item.excluded ? "Restaurar" : "Excluir"}
+                                Desvincular movimiento
                               </button>
-                            </>
-                          ) : null}
+                            ) : null}
+                          </div>
 
-                          {item.status === "planned" ? (
-                            <button
-                              ref={(node) => { candidateTriggerRefs.current[item.id] = node; }}
-                              className={styles.ghostButton}
-                              onClick={() => void loadCandidates(item)}
-                              disabled={busy !== null}
-                              aria-expanded={candidateFor === item.id}
-                              aria-controls={candidatesId}
-                            >
-                              {busy === `candidates:${item.id}` ? "Buscando…" : "Buscar movimiento real"}
-                            </button>
-                          ) : null}
-
-                          {item.status === "confirmed" ? (
-                            <button
-                              className={styles.ghostButton}
-                              onClick={() => void reconcile(item, null)}
-                              disabled={busy !== null}
-                            >
-                              Desvincular movimiento
-                            </button>
+                          {candidateFor === item.id ? (
+                            <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
+                              <div className={styles.candidateHeader}>
+                                <strong>Candidatos reales ±7 días</strong>
+                                <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
+                              </div>
+                              {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
+                                <div key={candidate.transactionId} className={styles.candidateRow}>
+                                  <div>
+                                    <strong>{candidate.concept || "Movimiento bancario"}</strong>
+                                    <small>{formatDate(candidate.date)} · diferencia {money.format(candidate.differenceCents / 100)}</small>
+                                  </div>
+                                  <span>{money.format(candidate.amountCents / 100)}</span>
+                                  <button className={styles.primarySmall} onClick={() => void reconcile(item, candidate.transactionId)} disabled={busy !== null}>
+                                    Conciliar
+                                  </button>
+                                </div>
+                              )) : (
+                                <p className={styles.candidateEmpty}>No hay movimientos elegibles cercanos con el mismo signo.</p>
+                              )}
+                            </div>
                           ) : null}
                         </div>
-
-                        {candidateFor === item.id ? (
-                          <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
-                            <div className={styles.candidateHeader}>
-                              <strong>Candidatos reales ±7 días</strong>
-                              <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>
-                            </div>
-                            {candidateData?.candidates.length ? candidateData.candidates.map((candidate) => (
-                              <div key={candidate.transactionId} className={styles.candidateRow}>
-                                <div>
-                                  <strong>{candidate.concept || "Movimiento bancario"}</strong>
-                                  <small>{formatDate(candidate.date)} · diferencia {money.format(candidate.differenceCents / 100)}</small>
-                                </div>
-                                <span>{money.format(candidate.amountCents / 100)}</span>
-                                <button className={styles.primarySmall} onClick={() => void reconcile(item, candidate.transactionId)} disabled={busy !== null}>
-                                  Conciliar
-                                </button>
-                              </div>
-                            )) : (
-                              <p className={styles.candidateEmpty}>No hay movimientos elegibles cercanos con el mismo signo.</p>
-                            )}
-                          </div>
-                        ) : null}
-                      </div>
-                    </article>
-                  );})}
+                      </article>
+                    );
+                  })}
                 </div>
               )}
             </div>
