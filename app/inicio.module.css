@@ -1,0 +1,508 @@
+.shell {
+  display: grid;
+  gap: var(--space-4);
+  width: min(100%, 96rem);
+  margin: 0 auto;
+  padding: clamp(0.75rem, 1.8vw, 1.35rem);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.header h1 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-page-title);
+  line-height: 1.08;
+}
+
+.eyebrow,
+.kicker {
+  margin: 0 0 var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.privacyButton,
+.primaryAction,
+.secondaryAction,
+.cardHeader a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.privacyButton {
+  cursor: pointer;
+}
+
+.privacyButton:hover,
+.privacyButton:focus-visible,
+.secondaryAction:hover,
+.secondaryAction:focus-visible,
+.cardHeader a:hover,
+.cardHeader a:focus-visible {
+  border-color: var(--color-border-strong);
+  color: var(--color-text);
+}
+
+.syncWarning {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid color-mix(in srgb, var(--color-warning) 45%, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-surface));
+}
+
+.syncWarning strong {
+  color: var(--color-text);
+  font-size: var(--font-section-title);
+}
+
+.syncWarning p {
+  max-width: 56rem;
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-secondary);
+  font-size: var(--font-body);
+  line-height: 1.45;
+}
+
+.syncActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+}
+
+.primaryAction {
+  border-color: color-mix(in srgb, var(--color-primary) 70%, var(--color-border));
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.metric {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.metric > span,
+.metric small,
+.signalRow span,
+.accountRow span,
+.budgetHeadline span,
+.forecastHeadline span,
+.transactionRow span,
+.chartSummary span,
+.chartSummary small {
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+}
+
+.metric > strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-kpi-secondary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signalRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
+  overflow: hidden;
+}
+
+.signalRow > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--space-3) var(--space-4);
+  border-right: 1px solid var(--color-border);
+}
+
+.signalRow > div:last-child {
+  border-right: 0;
+}
+
+.signalRow strong {
+  color: var(--color-text);
+  font-size: var(--font-body);
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+.card {
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.evolution {
+  grid-column: span 8;
+}
+
+.accounts {
+  grid-column: span 4;
+}
+
+.budget,
+.forecast {
+  grid-column: span 6;
+}
+
+.activity {
+  grid-column: 1 / -1;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
+.cardHeader h2 {
+  margin: 0;
+  color: var(--color-text);
+  font-size: var(--font-section-title);
+  line-height: 1.2;
+}
+
+.cardHeader a {
+  min-height: 2.35rem;
+  flex: 0 0 auto;
+}
+
+.chartSummary {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-2);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chartSummary strong {
+  font-size: var(--font-kpi-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.chartNote {
+  margin: var(--space-3) 0 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+  line-height: 1.4;
+}
+
+.accountList,
+.categoryList,
+.upcomingList,
+.transactionList {
+  display: grid;
+}
+
+.accountRow,
+.transactionRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.accountRow:first-child,
+.transactionRow:first-child {
+  padding-top: 0;
+}
+
+.accountRow:last-child,
+.transactionRow:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.accountRow > div,
+.transactionMain,
+.transactionMeta {
+  min-width: 0;
+  display: grid;
+  gap: 0.18rem;
+}
+
+.accountRow > div:last-child,
+.transactionMeta {
+  text-align: right;
+}
+
+.accountRow strong,
+.transactionRow strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-body);
+  text-overflow: ellipsis;
+}
+
+.transactionMain strong {
+  white-space: nowrap;
+}
+
+.transactionMeta strong {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.budgetHeadline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+
+.budgetHeadline > div {
+  min-width: 0;
+  display: grid;
+  gap: 0.15rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-strong);
+}
+
+.budgetHeadline strong,
+.forecastHeadline strong {
+  color: var(--color-text);
+  font-size: var(--font-kpi-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.categoryList > div,
+.upcomingList > div {
+  display: grid;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.categoryList > div {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.upcomingList > div {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.categoryList > div:last-child,
+.upcomingList > div:last-child {
+  border-bottom: 0;
+}
+
+.categoryList strong,
+.upcomingList strong {
+  color: var(--color-text-secondary);
+  font-size: var(--font-body);
+}
+
+.forecastHeadline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-strong);
+}
+
+.metric > strong.positive,
+.chartSummary strong.positive,
+.forecastHeadline strong.positive,
+.transactionMeta strong.positive {
+  color: var(--color-success);
+}
+
+.metric > strong.negative,
+.chartSummary strong.negative,
+.forecastHeadline strong.negative,
+.transactionMeta strong.negative {
+  color: var(--color-danger);
+}
+
+.empty,
+.degraded,
+.footer {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+}
+
+.degraded {
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.footer {
+  padding: var(--space-2) 0 var(--space-1);
+  text-align: right;
+}
+
+@media (max-width: 72rem) {
+  .summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .evolution,
+  .accounts,
+  .budget,
+  .forecast {
+    grid-column: span 6;
+  }
+}
+
+@media (max-width: 52rem) {
+  .syncWarning {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary,
+  .signalRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .signalRow > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .signalRow > div:nth-child(-n + 2) {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .evolution,
+  .accounts,
+  .budget,
+  .forecast {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 36rem) {
+  .shell {
+    gap: var(--space-3);
+    padding: var(--space-3);
+  }
+
+  .header {
+    align-items: flex-start;
+  }
+
+  .privacyButton {
+    min-height: 2.5rem;
+    padding-inline: var(--space-2);
+  }
+
+  .summary {
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2);
+  }
+
+  .metric {
+    padding: var(--space-3);
+  }
+
+  .metric:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .signalRow {
+    grid-template-columns: 1fr;
+  }
+
+  .signalRow > div,
+  .signalRow > div:nth-child(2) {
+    border-right: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  .signalRow > div:last-child {
+    border-bottom: 0;
+  }
+
+  .card {
+    padding: var(--space-3);
+  }
+
+  .cardHeader {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: var(--space-3);
+  }
+
+  .cardHeader a {
+    width: 100%;
+  }
+
+  .budgetHeadline {
+    grid-template-columns: 1fr;
+  }
+
+  .transactionRow {
+    align-items: start;
+  }
+
+  .upcomingList > div {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .upcomingList > div > span:last-child {
+    grid-column: 2;
+  }
+}

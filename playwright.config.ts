@@ -33,6 +33,10 @@ export default defineConfig({
     screenshot: "only-on-failure",
     video: "retain-on-failure",
     extraHTTPHeaders: protectionHeaders,
+    // Las suites de Inicio usan page.route() para validar contratos de datos.
+    // Playwright no puede interceptar peticiones tomadas por un Service Worker,
+    // así que se bloquean en E2E para que los mocks sean deterministas.
+    serviceWorkers: "block",
   },
   projects: [
     {

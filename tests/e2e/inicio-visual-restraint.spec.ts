@@ -3,14 +3,9 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const pageSource = readFileSync(resolve(process.cwd(), "app/page.tsx"), "utf8");
-const polishSource = readFileSync(
-  resolve(process.cwd(), "app/home-audit.module.css"),
-  "utf8",
-);
-const dashboardSource = readFileSync(
-  resolve(process.cwd(), "app/dashboard-client.tsx"),
-  "utf8",
-);
+const polishSource = readFileSync(resolve(process.cwd(), "app/home-audit.module.css"), "utf8");
+const inicioSource = readFileSync(resolve(process.cwd(), "app/inicio-client.tsx"), "utf8");
+const inicioCss = readFileSync(resolve(process.cwd(), "app/inicio.module.css"), "utf8");
 
 function maxClampRem(token: string) {
   const match = polishSource.match(
@@ -20,6 +15,7 @@ function maxClampRem(token: string) {
 }
 
 test("Inicio · la jerarquía visual queda contenida y aislada del resto de la app", () => {
+  expect(pageSource).toContain('import InicioClient from "./inicio-client"');
   expect(pageSource).toContain('import styles from "./home-audit.module.css"');
   expect(pageSource).toContain("<div className={styles.scope}>");
   expect(polishSource).toContain("display: contents");
@@ -30,23 +26,18 @@ test("Inicio · la jerarquía visual queda contenida y aislada del resto de la a
   expect(maxClampRem("--font-kpi-secondary")).toBeLessThanOrEqual(1.18);
 
   expect(polishSource).not.toMatch(/!important/i);
-  expect(polishSource).not.toMatch(/backdrop-filter/i);
-  expect(polishSource).not.toMatch(/font-size\s*:/i);
+  expect(inicioCss).not.toMatch(/!important/i);
+  expect(inicioCss).not.toMatch(/backdrop-filter/i);
 });
 
-test("Inicio · conserva privacidad y cabeceras sin descripciones ornamentales", () => {
-  expect(dashboardSource).toContain('const PRIVACY_KEY = "financial-app:home-amounts"');
-  expect(dashboardSource).toContain(
-    'aria-label={revealAmounts ? "Ocultar importes" : "Mostrar importes"}',
-  );
-
-  const panelHeaders = [
-    ...dashboardSource.matchAll(
-      /<div className=\{styles\.panelHeader\}>([\s\S]*?)<\/div>\s*(?:\{financial|\{monthly|\{budgets|\{forecast|\{transactions)/g,
-    ),
-  ];
-  expect(panelHeaders.length).toBeGreaterThanOrEqual(5);
-  for (const header of panelHeaders) {
-    expect(header[1]).not.toMatch(/<p[\s>]/i);
-  }
+test("Inicio · conserva privacidad y evita un único saldo dominante", () => {
+  expect(inicioSource).toContain('const PRIVACY_KEY = "financial-app:home-amounts"');
+  expect(inicioSource).toContain('aria-label={revealAmounts ? "Ocultar importes" : "Mostrar importes"}');
+  expect(inicioSource).toContain('className={styles.summary}');
+  expect(inicioSource).toContain("Disponible");
+  expect(inicioSource).toContain("Ingresos del mes");
+  expect(inicioSource).toContain("Gastos del mes");
+  expect(inicioSource).toContain("Balance del mes");
+  expect(inicioSource).toContain("Tasa de ahorro");
+  expect(inicioSource).not.toContain("balanceSummary");
 });

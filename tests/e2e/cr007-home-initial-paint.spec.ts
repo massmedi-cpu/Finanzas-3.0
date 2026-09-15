@@ -16,6 +16,9 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
     release = resolve;
   });
 
+  await page.route("**/api/source/google/sync", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) }),
+  );
   await page.route("**/api/dashboard?*", (route) => holdFailure(route, gate));
   await page.route("**/api/financial?*", (route) => holdFailure(route, gate));
   await page.route("**/api/budgets?*", (route) => holdFailure(route, gate));
@@ -24,51 +27,30 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
 
   await page.goto("/");
 
-  await expect(
-    page.getByRole("heading", { name: "Tu dinero, claro en segundos." }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
   const primaryNav = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(primaryNav).toBeVisible();
-  await expect(
-    primaryNav.getByRole("link", { name: "Inicio", exact: true }),
-  ).toHaveAttribute("aria-current", "page");
+  await expect(primaryNav.getByRole("link", { name: "Inicio", exact: true })).toHaveAttribute("aria-current", "page");
 
-  const cards = page.locator("main[aria-busy='true'] article");
-  await expect(cards).toHaveCount(6);
-  await expect(page.getByText("Preparando tu resumen financiero…").first()).toBeVisible();
-
-  const geometry = await cards.evaluateAll((nodes) =>
-    nodes.map((node) => {
-      const rect = node.getBoundingClientRect();
-      return {
-        left: rect.left,
-        right: rect.right,
-        top: rect.top,
-        bottom: rect.bottom,
-        width: rect.width,
-      };
-    }),
-  );
-
-  const isMobile = (page.viewportSize()?.width ?? 1280) <= 1050;
-  if (isMobile) {
-    for (let index = 1; index < geometry.length; index += 1) {
-      expect(Math.abs(geometry[index].left - geometry[0].left)).toBeLessThanOrEqual(2);
-      expect(Math.abs(geometry[index].width - geometry[0].width)).toBeLessThanOrEqual(2);
-      expect(geometry[index].top).toBeGreaterThanOrEqual(geometry[index - 1].bottom);
-    }
-  } else {
-    for (let index = 0; index < geometry.length; index += 2) {
-      const leftCard = geometry[index];
-      const rightCard = geometry[index + 1];
-      expect(Math.abs(leftCard.top - rightCard.top)).toBeLessThanOrEqual(2);
-      expect(Math.abs(leftCard.width - rightCard.width)).toBeLessThanOrEqual(2);
-      expect(leftCard.right).toBeLessThanOrEqual(rightCard.left);
-    }
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary).toBeVisible();
+  await expect(summary.locator("article")).toHaveCount(5);
+  for (const heading of [
+    "Ingresos, gastos y balance",
+    "Disponible por cuenta",
+    "Gasto y presupuesto",
+    "Lo que viene",
+    "Últimos 10 movimientos",
+  ]) {
+    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
   }
+  await expect(page.locator("main[aria-busy='true']")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
   release();
-  await expect(
-    page.getByRole("heading", { name: "No se ha podido cargar Inicio" }),
-  ).toBeVisible();
+
+  await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
+  await expect(page.getByText("No se pudo cargar la evolución.")).toBeVisible();
+  await expect(page.getByText("Sin cuentas activas.")).toBeVisible();
+  await expect(page.getByText(/Algunos módulos no han podido actualizarse:/)).toBeVisible();
 });
