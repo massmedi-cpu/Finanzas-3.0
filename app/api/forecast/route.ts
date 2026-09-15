@@ -36,6 +36,13 @@ function dateValue(value: unknown, code: string) {
   return value;
 }
 
+function forecastRange(dateFromValue: unknown, dateToValue: unknown) {
+  const dateFrom = dateValue(dateFromValue, "invalid_forecast_date_from");
+  const dateTo = dateValue(dateToValue, "invalid_forecast_date_to");
+  if (dateFrom > dateTo) throw new Error("invalid_forecast_date_range");
+  return { dateFrom, dateTo };
+}
+
 function timestampValue(value: unknown, code: string) {
   if (typeof value !== "string" || !value.trim() || value.length > 64) throw new Error(code);
   const parsed = new Date(value);
@@ -107,8 +114,7 @@ export async function GET(request: Request) {
       return Response.json(result, { headers: HEADERS });
     }
 
-    const dateFrom = dateValue(searchParams.get("dateFrom"), "invalid_forecast_date_from");
-    const dateTo = dateValue(searchParams.get("dateTo"), "invalid_forecast_date_to");
+    const { dateFrom, dateTo } = forecastRange(searchParams.get("dateFrom"), searchParams.get("dateTo"));
     const accountId = nullableUuid(searchParams.get("accountId"), "invalid_forecast_account_id");
     const result = await callPersistenceGateway("forecast.snapshot", { dateFrom, dateTo, accountId });
     return Response.json(result, { headers: HEADERS });
@@ -123,9 +129,10 @@ export async function POST(request: Request) {
     const action = stringValue(row.action, "invalid_forecast_action", 32);
 
     if (action === "refresh") {
+      const { dateFrom, dateTo } = forecastRange(row.dateFrom, row.dateTo);
       const payload = {
-        dateFrom: dateValue(row.dateFrom, "invalid_forecast_date_from"),
-        dateTo: dateValue(row.dateTo, "invalid_forecast_date_to"),
+        dateFrom,
+        dateTo,
         accountId: nullableUuid(row.accountId, "invalid_forecast_account_id"),
       };
       const result = await callPersistenceGateway("forecast.refresh", payload);
