@@ -70,6 +70,7 @@ export type AnalysisSelectionInput = {
 };
 
 export type ResolvedAnalysisSelection = {
+  today: string;
   range: AnalysisRange;
   month: string;
   accountId: string | null;
@@ -116,6 +117,7 @@ export function resolveAnalysisSelection(input: AnalysisSelectionInput = {}): Re
   }
 
   return {
+    today,
     range,
     month,
     accountId: accountCandidate,
@@ -133,6 +135,7 @@ export async function loadAnalysisSnapshot(input: AnalysisSelectionInput = {}): 
   const selection = resolveAnalysisSelection(input);
   const gateway = await callPersistenceGateway<AnalysisGatewaySnapshot>("financial.snapshot", {
     analysis: true,
+    today: selection.today,
     dateFrom: selection.dateFrom,
     dateTo: selection.dateTo,
     previousDateFrom: selection.previousDateFrom,
