@@ -361,12 +361,18 @@
   background: var(--color-surface-strong);
 }
 
-.positive {
-  color: var(--color-success) !important;
+.metric > strong.positive,
+.chartSummary strong.positive,
+.forecastHeadline strong.positive,
+.transactionMeta strong.positive {
+  color: var(--color-success);
 }
 
-.negative {
-  color: var(--color-danger) !important;
+.metric > strong.negative,
+.chartSummary strong.negative,
+.forecastHeadline strong.negative,
+.transactionMeta strong.negative {
+  color: var(--color-danger);
 }
 
 .empty,
