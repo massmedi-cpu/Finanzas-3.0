@@ -2,6 +2,7 @@ import AppShell from "../app-shell";
 import { loadForecastSnapshot } from "../../src/application/forecast/forecast-loader";
 import type { ForecastSnapshot } from "../../src/application/forecast/forecast-contract";
 import { ForecastClient } from "./forecast-client";
+import premium from "./forecast-premium.module.css";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,9 @@ export default async function ForecastPage() {
 
   return (
     <AppShell>
-      <ForecastClient initialSnapshot={initialSnapshot} />
+      <div className={premium.root}>
+        <ForecastClient initialSnapshot={initialSnapshot} />
+      </div>
     </AppShell>
   );
 }
