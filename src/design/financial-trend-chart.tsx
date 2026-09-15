@@ -53,7 +53,7 @@ export function FinancialTrendChart({
       y: y(row.operatingNetCents),
     }));
     const ticks = Array.from({ length: 5 }, (_, index) => maximum - (span * index) / 4);
-    return { width, height, left, right, top, bottom, innerWidth, innerHeight, y, baseline, step, groupWidth, barWidth, points, ticks };
+    return { width, height, left, right, y, baseline, step, barWidth, points, ticks };
   }, [rows]);
 
   if (!chart || rows.length === 0) {
@@ -128,25 +128,27 @@ export function FinancialTrendChart({
         </svg>
       </div>
 
-      <div className={styles.monthRail} style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(2.75rem, 1fr))` }}>
-        {rows.map((row) => {
-          const partial = row.monthStart === partialMonthStart;
-          const selected = row.monthStart === active?.monthStart;
-          return (
-            <button
-              key={row.monthStart}
-              type="button"
-              className={selected ? styles.monthButtonActive : styles.monthButton}
-              aria-pressed={selected}
-              aria-label={`${formatMonth(row.monthStart)}${partial ? ", periodo parcial" : ""}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(row.expenseCents)}, ahorro o neto ${formatMoney(row.operatingNetCents)}`}
-              onClick={() => setActiveMonth(row.monthStart)}
-              onFocus={() => setActiveMonth(row.monthStart)}
-            >
-              <span>{formatMonth(row.monthStart)}</span>
-              {partial && <small>Parcial</small>}
-            </button>
-          );
-        })}
+      <div className={styles.monthViewport}>
+        <div className={styles.monthRail} style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(2.75rem, 1fr))` }}>
+          {rows.map((row) => {
+            const partial = row.monthStart === partialMonthStart;
+            const selected = row.monthStart === active?.monthStart;
+            return (
+              <button
+                key={row.monthStart}
+                type="button"
+                className={selected ? styles.monthButtonActive : styles.monthButton}
+                aria-pressed={selected}
+                aria-label={`${formatMonth(row.monthStart)}${partial ? ", periodo parcial" : ""}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(row.expenseCents)}, ahorro o neto ${formatMoney(row.operatingNetCents)}`}
+                onClick={() => setActiveMonth(row.monthStart)}
+                onFocus={() => setActiveMonth(row.monthStart)}
+              >
+                <span>{formatMonth(row.monthStart)}</span>
+                {partial && <small>Parcial</small>}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {active && (
