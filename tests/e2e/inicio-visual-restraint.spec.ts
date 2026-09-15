@@ -4,8 +4,9 @@ import { resolve } from "node:path";
 
 const pageSource = readFileSync(resolve(process.cwd(), "app/page.tsx"), "utf8");
 const polishSource = readFileSync(resolve(process.cwd(), "app/home-audit.module.css"), "utf8");
-const inicioSource = readFileSync(resolve(process.cwd(), "app/inicio-client.tsx"), "utf8");
-const inicioCss = readFileSync(resolve(process.cwd(), "app/inicio.module.css"), "utf8");
+const inicioSource = readFileSync(resolve(process.cwd(), "app/inicio-overview.tsx"), "utf8");
+const inicioCss = readFileSync(resolve(process.cwd(), "app/inicio-overview.module.css"), "utf8");
+const chartCss = readFileSync(resolve(process.cwd(), "src/design/financial-bar-chart.module.css"), "utf8");
 
 function maxClampRem(token: string) {
   const match = polishSource.match(
@@ -15,7 +16,7 @@ function maxClampRem(token: string) {
 }
 
 test("Inicio · la jerarquía visual queda contenida y aislada del resto de la app", () => {
-  expect(pageSource).toContain('import InicioClient from "./inicio-client"');
+  expect(pageSource).toContain('import InicioOverview from "./inicio-overview"');
   expect(pageSource).toContain('import styles from "./home-audit.module.css"');
   expect(pageSource).toContain("<div className={styles.scope}>");
   expect(polishSource).toContain("display: contents");
@@ -28,16 +29,18 @@ test("Inicio · la jerarquía visual queda contenida y aislada del resto de la a
   expect(polishSource).not.toMatch(/!important/i);
   expect(inicioCss).not.toMatch(/!important/i);
   expect(inicioCss).not.toMatch(/backdrop-filter/i);
+  expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
 });
 
-test("Inicio · conserva privacidad y evita un único saldo dominante", () => {
+test("Inicio · conserva privacidad y muestra decisiones, no métricas de escaparate", () => {
   expect(inicioSource).toContain('const PRIVACY_KEY = "financial-app:home-amounts"');
   expect(inicioSource).toContain('aria-label={revealAmounts ? "Ocultar importes" : "Mostrar importes"}');
-  expect(inicioSource).toContain('className={styles.summary}');
+  expect(inicioSource).toContain('className={styles.decisionGrid}');
   expect(inicioSource).toContain("Disponible");
-  expect(inicioSource).toContain("Ingresos del mes");
-  expect(inicioSource).toContain("Gastos del mes");
-  expect(inicioSource).toContain("Balance del mes");
-  expect(inicioSource).toContain("Tasa de ahorro");
+  expect(inicioSource).toContain("Este mes");
+  expect(inicioSource).toContain("Próximos 30 días");
+  expect(inicioSource).toContain("Por revisar");
+  expect(inicioSource).toContain("Necesita tu atención");
+  expect(inicioSource).not.toContain("Tasa de ahorro</span>");
   expect(inicioSource).not.toContain("balanceSummary");
 });
