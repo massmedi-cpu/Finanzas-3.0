@@ -28,8 +28,9 @@ jobs:
       - name: Build production bundle
         run: npm run build
 
-      - name: Validate discreet Inicio hierarchy
+      - name: Validate Inicio hierarchy and live-data contract
         run: >-
           npx playwright test
           tests/e2e/inicio-visual-restraint.spec.ts
+          tests/e2e/inicio-live-data-contract.spec.ts
           --project=chromium-desktop
