@@ -53,6 +53,19 @@
   font-size: 0.82rem;
 }
 
+.root form,
+.root form > div,
+.root form label {
+  min-width: 0;
+}
+
+.root form input,
+.root form select {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 @media (max-width: 67.5rem) {
   .root main > header {
     align-items: flex-start;
