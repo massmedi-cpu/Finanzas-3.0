@@ -26,6 +26,7 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(route).toContain('scope === "secondary"');
   expect(route).toContain("callPersistenceGatewayBatch");
   expect(route).toContain('"server-timing"');
+  expect(route).toContain("trailingMonthStart(today, 12)");
 
   expect(home).not.toContain('dynamic = "force-dynamic"');
   expect(home).not.toContain("runCompleteFoundationHealthChecks");
@@ -41,6 +42,12 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(client).toContain("merchant?.effectiveName");
   expect(client).toContain('fetch("/api/source/google/sync"');
   expect(client).toContain('method: "POST"');
+  expect(client).toContain("Últimos 12 meses");
+  expect(client).toContain("Gasto medio mensual");
+  expect(client).toContain("rows.slice(-12)");
+  expect(client).not.toContain("pendingRecent");
+  expect(client).not.toContain("Por revisar");
+  expect(client).not.toContain("Revisar movimientos");
   expect(client).not.toContain("quickNav");
   expect(client).not.toContain("Reconectar Google");
 
@@ -62,5 +69,6 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(css).not.toContain("backdrop-filter");
   expect(css).not.toContain("!important");
   expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  expect(chartCss).toContain("repeat(12, minmax(0, 1fr))");
   expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
 });
