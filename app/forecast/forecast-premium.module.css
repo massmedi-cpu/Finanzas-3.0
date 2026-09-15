@@ -1,0 +1,90 @@
+.root {
+  min-width: 0;
+}
+
+.root main > header {
+  padding: clamp(18px, 2.3vw, 28px);
+  gap: 18px;
+  border-radius: 22px;
+}
+
+.root main > header h1 {
+  font-size: clamp(1.75rem, 3vw, 2.45rem);
+  line-height: 1.03;
+  letter-spacing: -0.03em;
+}
+
+.root main > header > div:first-child > p:last-child {
+  max-width: 680px;
+  margin-top: 10px;
+  font-size: clamp(0.94rem, 1.15vw, 1rem);
+  line-height: 1.5;
+}
+
+.root [aria-label="Periodo de previsión"] {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  border-radius: 16px;
+}
+
+.root [aria-label="Resumen de previsión"] {
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.root [aria-label="Resumen de previsión"] article {
+  min-height: 112px;
+  padding: 16px;
+  border-radius: 16px;
+}
+
+.root [aria-label="Resumen de previsión"] article > strong {
+  margin-top: 12px;
+  font-size: clamp(1.3rem, 2vw, 1.78rem);
+  letter-spacing: -0.025em;
+}
+
+.root main h2 {
+  font-size: clamp(1.15rem, 1.6vw, 1.55rem);
+  letter-spacing: -0.025em;
+}
+
+.root main > header + [aria-label="Periodo de previsión"] label {
+  font-size: 0.82rem;
+}
+
+@media (max-width: 67.5rem) {
+  .root main > header {
+    align-items: flex-start;
+  }
+}
+
+@media (max-width: 45rem) {
+  .root main > header {
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+
+  .root main > header h1 {
+    font-size: clamp(1.7rem, 8vw, 2.05rem);
+  }
+
+  .root [aria-label="Periodo de previsión"] {
+    padding: 12px;
+  }
+
+  .root [aria-label="Resumen de previsión"] article {
+    min-height: 102px;
+    padding: 13px;
+  }
+
+  .root [aria-label="Resumen de previsión"] article > strong {
+    font-size: clamp(1.22rem, 5vw, 1.55rem);
+  }
+}
+
+@media (max-width: 27.5rem) {
+  .root main > header > div:first-child > p:last-child {
+    display: none;
+  }
+}
