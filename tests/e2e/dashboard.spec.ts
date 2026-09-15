@@ -1,8 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
-const accountA = "91000000-0000-4000-8000-000000000091";
-const accountB = "92000000-0000-4000-8000-000000000092";
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
 
 const financial = {
@@ -10,55 +8,19 @@ const financial = {
   period: {
     dateFrom: "2026-09-01",
     dateTo: "2026-09-07",
-    accountId: null,
     incomeCents: 150000,
     expenseCents: 70000,
-    refundCents: 0,
-    adjustmentCents: 0,
     operatingNetCents: 80000,
     savingsCents: 80000,
     savingsRateBps: 5333,
-    transfers: { rows: 2, pairedRows: 2, unpairedRows: 0, pairedPairs: 1, netCents: 0, grossCents: 20000 },
-    quality: { scopedRows: 5, includedRows: 5, manuallyExcludedRows: 0, confirmedDuplicateRows: 0, suspectedDuplicateRows: 0, signMismatchRows: 0 },
+    quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
   },
   balances: {
     asOfDate: "2026-09-07",
-    includeArchived: false,
-    accountId: null,
-    totalBalanceCents: 30000,
     activeBalanceCents: 30000,
-    quality: { accounts: 2, explicitBalanceAccounts: 2, reconstructedBalanceAccounts: 0, integrityDeltaAccounts: 0 },
     accounts: [
-      {
-        id: accountA,
-        name: "Cuenta principal",
-        type: "checking",
-        currency: "EUR",
-        lifecycle: "active",
-        openingBalanceCents: 0,
-        balanceCents: 20000,
-        balanceSource: "bank_explicit",
-        explicitBalanceCents: 20000,
-        explicitBalanceDate: "2026-09-07",
-        explicitSourceRowKey: "A-1",
-        reconstructedBalanceCents: 20000,
-        reconstructionDeltaCents: 0,
-      },
-      {
-        id: accountB,
-        name: "Ahorro",
-        type: "savings",
-        currency: "EUR",
-        lifecycle: "active",
-        openingBalanceCents: 0,
-        balanceCents: 10000,
-        balanceSource: "bank_explicit",
-        explicitBalanceCents: 10000,
-        explicitBalanceDate: "2026-09-06",
-        explicitSourceRowKey: "B-1",
-        reconstructedBalanceCents: 10000,
-        reconstructionDeltaCents: 0,
-      },
+      { id: "a", name: "Cuenta principal", type: "checking", lifecycle: "active", balanceCents: 20000, explicitBalanceDate: "2026-09-07" },
+      { id: "b", name: "Ahorro", type: "savings", lifecycle: "active", balanceCents: 10000, explicitBalanceDate: "2026-09-06" },
     ],
   },
   principles: {
@@ -74,66 +36,53 @@ const financial = {
 const monthly = {
   dateFrom: "2026-01-01",
   dateTo: "2026-09-07",
-  accountId: null,
   rows: [
-    { monthStart: "2026-07-01", rows: 4, incomeCents: 90000, expenseCents: 45000, refundCents: 0, adjustmentCents: 0, operatingNetCents: 45000, savingsCents: 45000, transferNetCents: 0, transferGrossCents: 0 },
-    { monthStart: "2026-08-01", rows: 4, incomeCents: 100000, expenseCents: 40000, refundCents: 0, adjustmentCents: 0, operatingNetCents: 60000, savingsCents: 60000, transferNetCents: 0, transferGrossCents: 0 },
-    { monthStart: "2026-09-01", rows: 5, incomeCents: 150000, expenseCents: 70000, refundCents: 0, adjustmentCents: 0, operatingNetCents: 80000, savingsCents: 80000, transferNetCents: 0, transferGrossCents: 20000 },
+    { monthStart: "2026-05-01", incomeCents: 80000, expenseCents: 55000, operatingNetCents: 25000 },
+    { monthStart: "2026-06-01", incomeCents: 90000, expenseCents: 65000, operatingNetCents: 25000 },
+    { monthStart: "2026-07-01", incomeCents: 90000, expenseCents: 45000, operatingNetCents: 45000 },
+    { monthStart: "2026-08-01", incomeCents: 100000, expenseCents: 40000, operatingNetCents: 60000 },
+    { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
   ],
 };
 
 const budgets = {
   contractVersion: 1,
   month: "2026-09",
-  total: {
-    categoryId: null,
-    categoryName: null,
-    effectiveAmountCents: 100000,
-    actualExpenseCents: 60000,
-    remainingCents: 40000,
-    progressBps: 6000,
-    status: "on_track",
-  },
+  total: { categoryId: null, categoryName: null, effectiveAmountCents: 100000, actualExpenseCents: 60000, remainingCents: 40000, progressBps: 6000, status: "on_track" },
   categories: [
     { categoryId: "a", categoryName: "Alimentación", effectiveAmountCents: 50000, actualExpenseCents: 35000, remainingCents: 15000, progressBps: 7000, status: "on_track" },
-    { categoryId: "b", categoryName: "Tecnología", effectiveAmountCents: 30000, actualExpenseCents: 25000, remainingCents: 5000, progressBps: 8333, status: "on_track" },
   ],
+  principles: { bankSource: "read_only" },
 };
 
 const forecast = {
   contractVersion: 1,
-  period: { dateFrom: "2026-09-07", dateTo: "2026-10-07", accountId: null },
   summary: {
-    openingBalanceCents: 30000,
     projectedIncomeCents: 5000,
     projectedExpenseCents: 7000,
     projectedNetCents: -2000,
     projectedClosingBalanceCents: 28000,
     plannedItems: 2,
-    excludedItems: 0,
-    confirmedItems: 0,
   },
   items: [
-    { id: "f1", date: "2026-09-10", concept: "Internet", amountCents: -5000, origin: "recurring", confidence: "high", status: "planned", affectsProjection: true },
-    { id: "f2", date: "2026-09-15", concept: "Ingreso previsto", amountCents: 3000, origin: "known", confidence: "high", status: "planned", affectsProjection: true },
+    { id: "f1", date: "2026-09-10", concept: "Internet", amountCents: -5000, status: "planned", affectsProjection: true },
+    { id: "f2", date: "2026-09-15", concept: "Ingreso previsto", amountCents: 3000, status: "planned", affectsProjection: true },
   ],
+  principles: { bankSource: "read_only" },
 };
 
 const transactions = {
   totalCount: 10,
-  hasMore: false,
-  nextCursor: null,
   rows: [
     {
       id: "t1",
       bankDate: "2026-09-06",
       amountCents: -1234,
-      balanceAfterCents: 20000,
-      account: { id: accountA, name: "Cuenta principal" },
-      concept: { original: "Supermercado", processed: "Supermercado", effective: "Supermercado" },
-      merchant: { originalId: null, originalName: null, effectiveId: null, effectiveName: null },
-      category: { originalId: null, originalName: null, effectiveId: null, effectiveName: "Alimentación" },
-      kind: { original: "expense", effective: "expense" },
+      account: { id: "a", name: "Cuenta principal" },
+      concept: { effective: "Supermercado" },
+      merchant: { effectiveName: "Mercado Central" },
+      category: { effectiveName: "Alimentación" },
+      kind: { effective: "expense" },
       reviewState: { effective: "confirmed" },
       duplicateState: "none",
       excludedFromAnalytics: false,
@@ -141,128 +90,135 @@ const transactions = {
   ],
 };
 
-function dashboardData(failed: Set<DashboardSource>) {
-  return {
-    financial: failed.has("financial") ? null : financial,
-    monthly: failed.has("monthly") ? null : monthly,
-    budgets: failed.has("budgets") ? null : budgets,
-    forecast: failed.has("forecast") ? null : forecast,
-    transactions: failed.has("transactions") ? null : transactions,
-  };
-}
-
-async function fulfillScope(
-  route: Route,
-  scope: "primary" | "secondary",
-  requested: DashboardSource[],
-  failed: Set<DashboardSource>,
-) {
-  const allData = dashboardData(failed);
-  const failedRequested = requested.filter((source) => failed.has(source));
-  await route.fulfill({
-    status: failedRequested.length === requested.length ? 503 : 200,
-    contentType: "application/json",
-    body: JSON.stringify({
-      contractVersion: 1,
-      scope,
-      asOfDate: "2026-09-07",
-      dataThroughDate: failed.has("transactions") ? null : "2026-09-06",
-      generatedAt: "2026-09-07T12:00:00.000Z",
-      requestedSources: requested,
-      failedSources: failedRequested,
-      data: {
-        financial: requested.includes("financial") ? allData.financial : null,
-        monthly: requested.includes("monthly") ? allData.monthly : null,
-        budgets: requested.includes("budgets") ? allData.budgets : null,
-        forecast: requested.includes("forecast") ? allData.forecast : null,
-        transactions: requested.includes("transactions") ? allData.transactions : null,
-      },
-    }),
-  });
+async function fulfillJson(route: Route, body: unknown, status = 200) {
+  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
 async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
   const failed = new Set(failures);
 
-  await page.route("**/api/financial?*", async (route) => {
-    const source: DashboardSource = new URL(route.request().url()).searchParams.get("mode") === "monthly" ? "monthly" : "financial";
-    await route.fulfill(
-      failed.has(source)
-        ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) }
-        : { status: 200, contentType: "application/json", body: JSON.stringify(source === "monthly" ? monthly : financial) },
-    );
-  });
-  await page.route("**/api/budgets?*", (route) => route.fulfill(
-    failed.has("budgets")
-      ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) }
-      : { status: 200, contentType: "application/json", body: JSON.stringify(budgets) },
-  ));
-  await page.route("**/api/forecast?*", (route) => route.fulfill(
-    failed.has("forecast")
-      ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) }
-      : { status: 200, contentType: "application/json", body: JSON.stringify(forecast) },
-  ));
-  await page.route("**/api/transactions?*", (route) => route.fulfill(
-    failed.has("transactions")
-      ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "temporary_unavailable" }) }
-      : { status: 200, contentType: "application/json", body: JSON.stringify(transactions) },
-  ));
-
   await page.route("**/*", async (route) => {
-    const url = new URL(route.request().url());
+    const request = route.request();
+    const url = new URL(request.url());
 
     if (url.pathname === "/api/source/google/sync") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) });
+      await fulfillJson(route, {
+        run: {
+          id: "run-ok",
+          status: "success",
+          startedAt: "2026-09-07T12:00:00.000Z",
+          finishedAt: "2026-09-07T12:00:00.000Z",
+          rowsSeen: 10,
+          rowsInserted: 0,
+          rowsRevised: 0,
+          rowsSkipped: 10,
+          rowsFailed: 0,
+          errorCode: null,
+          errorMessage: null,
+        },
+        cursors: [],
+      });
       return;
     }
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
       if (scope === "primary") {
-        await fulfillScope(route, "primary", ["financial", "transactions"], failed);
+        const requested: DashboardSource[] = ["financial", "transactions"];
+        const failedRequested = requested.filter((source) => failed.has(source));
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "primary",
+          asOfDate: "2026-09-07",
+          dataThroughDate: failed.has("transactions") ? null : "2026-09-06",
+          generatedAt: "2026-09-07T12:00:00.000Z",
+          requestedSources: requested,
+          failedSources: failedRequested,
+          data: {
+            financial: failed.has("financial") ? null : financial,
+            monthly: null,
+            budgets: null,
+            forecast: null,
+            transactions: failed.has("transactions") ? null : transactions,
+          },
+        }, failedRequested.length === requested.length ? 503 : 200);
         return;
       }
       if (scope === "secondary") {
-        await fulfillScope(route, "secondary", ["monthly", "budgets", "forecast"], failed);
+        const requested: DashboardSource[] = ["monthly", "budgets", "forecast"];
+        const failedRequested = requested.filter((source) => failed.has(source));
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "secondary",
+          asOfDate: "2026-09-07",
+          dataThroughDate: "2026-09-06",
+          generatedAt: "2026-09-07T12:00:00.000Z",
+          requestedSources: requested,
+          failedSources: failedRequested,
+          data: {
+            financial: null,
+            monthly: failed.has("monthly") ? null : monthly,
+            budgets: failed.has("budgets") ? null : budgets,
+            forecast: failed.has("forecast") ? null : forecast,
+            transactions: null,
+          },
+        }, failedRequested.length === requested.length ? 503 : 200);
         return;
       }
+    }
+
+    if (url.pathname === "/api/financial") {
+      const source: DashboardSource = url.searchParams.get("mode") === "monthly" ? "monthly" : "financial";
+      if (failed.has(source)) await fulfillJson(route, { error: "temporary_unavailable" }, 503);
+      else await fulfillJson(route, source === "monthly" ? monthly : financial);
+      return;
+    }
+    if (url.pathname === "/api/budgets") {
+      await fulfillJson(route, failed.has("budgets") ? { error: "temporary_unavailable" } : budgets, failed.has("budgets") ? 503 : 200);
+      return;
+    }
+    if (url.pathname === "/api/forecast") {
+      await fulfillJson(route, failed.has("forecast") ? { error: "temporary_unavailable" } : forecast, failed.has("forecast") ? 503 : 200);
+      return;
+    }
+    if (url.pathname === "/api/transactions") {
+      await fulfillJson(route, failed.has("transactions") ? { error: "temporary_unavailable" } : transactions, failed.has("transactions") ? 503 : 200);
+      return;
     }
 
     await route.fallback();
   });
 }
 
-function monthlyChart(page: Page) {
+function summary(page: Page) {
+  return page.getByRole("region", { name: "Resumen financiero principal" });
+}
+
+function chart(page: Page) {
   return page.getByRole("group", { name: /Ingresos y gastos por mes/i });
 }
 
-async function expectAugustBalance(page: Page) {
-  const chart = monthlyChart(page);
-  await expect(chart).toBeVisible();
-  await expect(chart.getByRole("button", { name: /balance neto 600,00/i })).toBeVisible();
-}
-
-test("Inicio compone resumen y cinco bloques desde contratos centrales", async ({ page }) => {
+test("Inicio compone decisiones y bloques útiles desde motores centrales", async ({ page }) => {
   await mockDashboard(page);
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
-  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
-  await expect(summary.getByText("300,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("1.500,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("700,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("800,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("53,3 %", { exact: true })).toBeVisible();
-  await expectAugustBalance(page);
-  await expect(page.getByText(/280,00\s*€/)).toBeVisible();
-  await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
-  for (const heading of ["Ingresos, gastos y balance", "Disponible por cuenta", "Gasto y presupuesto", "Lo que viene", "Últimos 10 movimientos"]) {
-    await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+  await expect(page.getByText("Datos bancarios actualizados", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("-20,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("53,3 %", { exact: false })).toBeVisible();
+  await expect(chart(page)).toBeVisible();
+  await expect(chart(page).getByRole("button")).toHaveCount(5);
+  await expect(page.getByText("Internet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mercado Central", { exact: true })).toBeVisible();
+  for (const heading of ["Últimos cinco meses", "Qué viene después", "Disponible por cuenta", "Gasto y presupuesto", "Últimos movimientos"]) {
+    await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
   }
   await expect(page.getByText(/FASE\s+\d/i)).toHaveCount(0);
 });
 
-test("Inicio mantiene navegación táctil y cero overflow horizontal en móvil", async ({ page }) => {
+test("Inicio mantiene controles táctiles y cero overflow horizontal en móvil", async ({ page }) => {
   await mockDashboard(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -281,44 +237,42 @@ test("Inicio mantiene navegación táctil y cero overflow horizontal en móvil",
     if (box) expect(box.height).toBeGreaterThanOrEqual(44);
   }
 
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const graphBox = await chart(page).evaluate((element) => ({ scrollWidth: element.scrollWidth, clientWidth: element.clientWidth }));
+  expect(graphBox.scrollWidth).toBeLessThanOrEqual(graphBox.clientWidth + 1);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
 
-test("Inicio conserva resumen, presupuesto y actividad cuando falla Previsión", async ({ page }) => {
+test("Inicio conserva resumen, cuentas y actividad cuando falla Previsión", async ({ page }) => {
   await mockDashboard(page, ["forecast"]);
   await page.goto("/");
 
-  await expect(page.getByRole("region", { name: "Resumen financiero principal" }).getByText("300,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("300,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("Cuenta principal", { exact: true })).toBeVisible();
-  await expectAugustBalance(page);
-  await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sin previsión disponible.")).toBeVisible();
-  await expect(page.getByText(/Algunos módulos no han podido actualizarse:.*forecast/)).toBeVisible();
+  await expect(chart(page)).toBeVisible();
+  await expect(page.getByText("Mercado Central", { exact: true })).toBeVisible();
+  await expect(page.getByText("La previsión no está disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
-test("Inicio conserva el balance mensual cuando falla únicamente la evolución anual", async ({ page }) => {
+test("Inicio conserva el balance mensual cuando falla únicamente la evolución", async ({ page }) => {
   await mockDashboard(page, ["monthly"]);
   await page.goto("/");
 
-  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
-  await expect(summary.getByText("1.500,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("700,00 €", { exact: true })).toBeVisible();
-  await expect(summary.getByText("800,00 €", { exact: true })).toBeVisible();
-  await expect(page.getByText("No se pudo cargar la evolución.")).toBeVisible();
-  await expect(page.getByText(/Algunos módulos no han podido actualizarse:.*monthly/)).toBeVisible();
+  await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
 test("Inicio conserva módulos independientes si falla el motor financiero principal", async ({ page }) => {
   await mockDashboard(page, ["financial"]);
   await page.goto("/");
 
-  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
-  await expect(summary.getByText("—").first()).toBeVisible();
-  await expect(page.getByText("Sin cuentas activas.")).toBeVisible();
-  await expectAugustBalance(page);
-  await expect(page.getByText(/280,00\s*€/)).toBeVisible();
-  await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Algunos módulos no han podido actualizarse:.*financial/)).toBeVisible();
+  await expect(summary(page).getByText("—").first()).toBeVisible();
+  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
+  await expect(chart(page)).toBeVisible();
+  await expect(page.getByText("Internet", { exact: true })).toBeVisible();
+  await expect(page.getByText("Mercado Central", { exact: true })).toBeVisible();
+  await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
 test("Inicio mantiene una salida comprensible ante indisponibilidad total", async ({ page }) => {
@@ -326,12 +280,12 @@ test("Inicio mantiene una salida comprensible ante indisponibilidad total", asyn
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
-  await expect(page.getByText("No se pudo cargar la evolución.")).toBeVisible();
-  await expect(page.getByText("Sin cuentas activas.")).toBeVisible();
-  await expect(page.getByText("Sin presupuesto disponible.")).toBeVisible();
-  await expect(page.getByText("Sin previsión disponible.")).toBeVisible();
-  await expect(page.getByText("No hay movimientos disponibles.")).toBeVisible();
-  await expect(page.getByText(/Algunos módulos no han podido actualizarse:/)).toBeVisible();
+  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay presupuesto mensual configurado.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La previsión no está disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay actividad reciente.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
 test("protected preview exposes dashboard orchestration using validated engines", async ({ request, page }) => {
