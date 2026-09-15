@@ -18,7 +18,16 @@ function currentMadridMonth() {
 function isAnalysisSnapshot(value: unknown): value is AnalysisSnapshot {
   if (!value || typeof value !== "object") return false;
   const candidate = value as Partial<AnalysisSnapshot>;
-  return candidate.contractVersion === 2 && Boolean(candidate.selection) && Boolean(candidate.current);
+  return candidate.contractVersion === 2
+    && Boolean(candidate.selection)
+    && Boolean(candidate.current)
+    && Boolean(candidate.previous)
+    && Array.isArray(candidate.history)
+    && Array.isArray(candidate.categoryDrivers)
+    && Array.isArray(candidate.merchantDrivers)
+    && candidate.quality?.reconciled === true
+    && candidate.principles?.bankSource === "read_only"
+    && candidate.principles?.generativeAi === false;
 }
 
 export default function AnalysisPageClient({ initialSnapshot }: { initialSnapshot: AnalysisSnapshot | null }) {
