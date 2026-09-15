@@ -15,8 +15,9 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   );
   const route = readFileSync(join(root, "app/api/dashboard/route.ts"), "utf8");
   const home = readFileSync(join(root, "app/page.tsx"), "utf8");
-  const client = readFileSync(join(root, "app/dashboard-client.tsx"), "utf8");
-  const css = readFileSync(join(root, "app/dashboard.module.css"), "utf8");
+  const client = readFileSync(join(root, "app/inicio-overview.tsx"), "utf8");
+  const css = readFileSync(join(root, "app/inicio-overview.module.css"), "utf8");
+  const chartCss = readFileSync(join(root, "src/design/financial-bar-chart.module.css"), "utf8");
 
   expect(gateway).toContain("callPersistenceGatewayBatch");
   expect(gateway).toContain("const context = await resolvePersistenceGatewayContext()");
@@ -28,24 +29,26 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
 
   expect(home).not.toContain('dynamic = "force-dynamic"');
   expect(home).not.toContain("runCompleteFoundationHealthChecks");
+  expect(home).toContain('import InicioOverview from "./inicio-overview"');
 
   expect(client).toContain("/api/dashboard?scope=");
   expect(client).toContain("Ocultar importes");
   expect(client).toContain("merchant?.effectiveName");
+  expect(client).toContain('fetch("/api/source/google/sync"');
   expect(client).not.toContain("quickNav");
+  expect(client).not.toContain("Reconectar Google");
 
   for (const token of [
     "--color-surface",
     "--color-border",
     "--color-text",
-    "--color-primary-bright",
+    "--color-primary",
     "--color-success",
     "--color-warning",
     "--color-danger",
     "--font-page-title",
     "--font-section-title",
     "--font-kpi-primary",
-    "--radius-panel",
   ]) {
     expect(css, `Inicio debe consumir ${token}`).toContain(`var(${token})`);
   }
@@ -53,4 +56,5 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(css).not.toContain("backdrop-filter");
   expect(css).not.toContain("!important");
   expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
 });
