@@ -168,6 +168,25 @@ function mockSnapshot(): AnalysisSnapshot {
   });
 }
 
+async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+  await page.route("**/api/analysis**", async (route: any) => {
+    const url = new URL(route.request().url());
+    expect(url.pathname).toBe("/api/analysis");
+    expect(url.searchParams.get("month")).toBe("2026-09");
+    expect(url.searchParams.get("range")).toBe("1m");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+  });
+}
+
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
+  await mockAnalysisApi(page, snapshot);
+  await page.goto("/analysis");
+  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "1 mes" }).click();
+  await page.getByRole("button", { name: "Aplicar" }).click();
+  await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+}
+
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
   const snapshot = mockSnapshot();
 
@@ -220,20 +239,8 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
   test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido se valida con datos reales en otra prueba");
   const snapshot = mockSnapshot();
 
-  await page.route("**/api/analysis**", async (route) => {
-    const url = new URL(route.request().url());
-    expect(url.pathname).toBe("/api/analysis");
-    expect(url.searchParams.get("month")).toBe("2026-09");
-    expect(url.searchParams.get("range")).toBe("1m");
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
-  });
+  await loadMockAnalysis(page, snapshot);
 
-  await page.goto("/analysis");
-  await page.getByLabel("Mes de referencia").fill("2026-09");
-  await page.getByRole("button", { name: "1 mes" }).click();
-  await page.getByRole("button", { name: "Aplicar" }).click();
-
-  await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Tu gasto ha disminuido 50,00/ })).toBeVisible();
   await expect(page.getByLabel("Indicadores principales del periodo")).toContainText(/2\.100,00/);
@@ -247,10 +254,30 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
     const applyBox = await page.getByRole("button", { name: "Aplicar" }).boundingBox();
     expect(applyBox).not.toBeNull();
     expect(applyBox!.height).toBeGreaterThanOrEqual(44);
-    const monthButton = page.getByRole("button", { name: /sep.*periodo parcial.*ingresos/i }).last();
+    const monthButton = page.getByRole("button", { name: /^Neto septiembre de 2026:/i }).last();
+    await expect(monthButton).toHaveAttribute("aria-label", /periodo parcial/i);
     const monthBox = await monthButton.boundingBox();
     expect(monthBox).not.toBeNull();
     expect(monthBox!.height).toBeGreaterThanOrEqual(44);
+  }
+});
+
+test("E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px", async ({ page }, testInfo) => {
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido se valida con datos reales en otra prueba");
+  test.skip(testInfo.project.name !== "chromium-desktop", "la matriz de anchos se ejecuta una vez sobre Chromium");
+  const snapshot = mockSnapshot();
+
+  await loadMockAnalysis(page, snapshot);
+
+  for (const width of [360, 430, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+    await expect(page.getByLabel("Indicadores principales del periodo")).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, `overflow horizontal a ${width}px`).toBeLessThanOrEqual(1);
+    const applyBox = await page.getByRole("button", { name: "Aplicar" }).boundingBox();
+    expect(applyBox, `botón Aplicar a ${width}px`).not.toBeNull();
+    expect(applyBox!.height, `alto táctil de Aplicar a ${width}px`).toBeGreaterThanOrEqual(44);
   }
 });
 
