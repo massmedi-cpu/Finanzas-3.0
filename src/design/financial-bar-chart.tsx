@@ -27,7 +27,7 @@ export function FinancialBarChart({
 }: FinancialBarChartProps) {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const selected = useMemo(
-    () => rows.find((row) => row.monthStart === selectedMonth) ?? null,
+    () => rows.find((row) => row.monthStart === selectedMonth) ?? rows.at(-1) ?? null,
     [rows, selectedMonth],
   );
 
@@ -36,13 +36,13 @@ export function FinancialBarChart({
       <div className={styles.legend} aria-hidden="true">
         <span><i className={styles.incomeDot} />Ingresos</span>
         <span><i className={styles.expenseDot} />Gastos</span>
-        <span>El balance se muestra como cifra con signo</span>
+        <span>Toca un mes para ver las cifras exactas</span>
       </div>
 
       <div
         className={styles.chart}
         role="group"
-        aria-label="Ingresos y gastos por mes. El balance neto se muestra como cifra con signo para no representar un saldo negativo como una barra positiva."
+        aria-label="Ingresos y gastos por mes. Selecciona un mes para consultar ingresos, gastos y balance neto con signo."
       >
         {rows.map((row) => {
           const label = formatMonth(row.monthStart);
@@ -69,13 +69,6 @@ export function FinancialBarChart({
                 <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
               </span>
               <span className={styles.month}>{label}</span>
-              <span
-                className={`${styles.netValue} ${
-                  row.operatingNetCents < 0 ? styles.netNegative : styles.netPositive
-                }`}
-              >
-                <span>Saldo </span><span>{formatMoney(row.operatingNetCents)}</span>
-              </span>
               {partial && <span className={styles.partialLabel}>Parcial</span>}
             </button>
           );
