@@ -37,6 +37,28 @@ function addDays(date: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function transactionOperation(): NamedOperation {
+  return {
+    source: "transactions",
+    action: "transaction.query",
+    payload: {
+      query: null,
+      accountId: null,
+      categoryId: null,
+      merchantId: null,
+      kind: null,
+      reviewState: null,
+      duplicateState: null,
+      dateFrom: null,
+      dateTo: null,
+      cursorBankDate: null,
+      cursorId: null,
+      limit: 10,
+      uncategorized: false,
+    },
+  };
+}
+
 function operationsForScope(scope: DashboardScope, today: string): NamedOperation[] {
   const month = today.slice(0, 7);
   const monthStart = `${month}-01`;
@@ -54,6 +76,7 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
     },
   };
 
+  const transactions = transactionOperation();
   const secondary: NamedOperation[] = [
     {
       source: "monthly",
@@ -79,30 +102,11 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
         accountId: null,
       },
     },
-    {
-      source: "transactions",
-      action: "transaction.query",
-      payload: {
-        query: null,
-        accountId: null,
-        categoryId: null,
-        merchantId: null,
-        kind: null,
-        reviewState: null,
-        duplicateState: null,
-        dateFrom: null,
-        dateTo: null,
-        cursorBankDate: null,
-        cursorId: null,
-        limit: 6,
-        uncategorized: false,
-      },
-    },
   ];
 
-  if (scope === "primary") return [financial];
+  if (scope === "primary") return [financial, transactions];
   if (scope === "secondary") return secondary;
-  return [financial, ...secondary];
+  return [financial, transactions, ...secondary];
 }
 
 function emptyData() {
@@ -121,6 +125,12 @@ function responseHeaders(scope: DashboardScope, durationMs: number) {
     "x-dashboard-scope": scope,
     "server-timing": `dashboard;dur=${durationMs.toFixed(1)}`,
   };
+}
+
+function latestBankDate(data: Record<DashboardSource, unknown | null>) {
+  const transactions = data.transactions as { rows?: Array<{ bankDate?: unknown }> } | null;
+  const bankDate = transactions?.rows?.[0]?.bankDate;
+  return typeof bankDate === "string" && /^\d{4}-\d{2}-\d{2}$/.test(bankDate) ? bankDate : null;
 }
 
 export async function GET(request: Request) {
@@ -162,6 +172,7 @@ export async function GET(request: Request) {
         contractVersion: 1,
         scope,
         asOfDate: today,
+        dataThroughDate: latestBankDate(data),
         generatedAt: new Date().toISOString(),
         requestedSources,
         failedSources,
@@ -188,6 +199,7 @@ export async function GET(request: Request) {
         scope,
         requestedSources,
         failedSources: requestedSources,
+        dataThroughDate: null,
         data,
       },
       { status: 503, headers: responseHeaders(scope, durationMs) },
