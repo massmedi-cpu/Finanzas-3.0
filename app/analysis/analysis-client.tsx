@@ -1,8 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import type { AnalysisDriver, AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { FormEvent, useMemo, useState } from "react";
+import type {
+  AnalysisDriver,
+  AnalysisMerchantDriver,
+  AnalysisRange,
+  AnalysisSnapshot,
+  AnalysisTrend,
+} from "../../src/application/analysis/analysis-engine";
+import { ContributionChart } from "../../src/design/contribution-chart";
+import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
 
 const moneyFormatter = new Intl.NumberFormat("es-ES", {
@@ -18,292 +26,552 @@ const percentFormatter = new Intl.NumberFormat("es-ES", {
   maximumFractionDigits: 1,
 });
 
-const monthFormatter = new Intl.DateTimeFormat("es-ES", {
+const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
   year: "numeric",
   timeZone: "Europe/Madrid",
 });
 
+const shortMonthFormatter = new Intl.DateTimeFormat("es-ES", {
+  month: "short",
+  timeZone: "Europe/Madrid",
+});
+
+const dateFormatter = new Intl.DateTimeFormat("es-ES", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Europe/Madrid",
+});
+
+const RANGE_OPTIONS: Array<{ value: AnalysisRange; label: string }> = [
+  { value: "1m", label: "1 mes" },
+  { value: "3m", label: "3 meses" },
+  { value: "6m", label: "6 meses" },
+  { value: "12m", label: "12 meses" },
+  { value: "ytd", label: "Año actual" },
+];
+
 function formatMoney(cents: number) {
   return moneyFormatter.format(cents / 100);
 }
 
-function formatBps(bps: number | null) {
+function formatPercentBps(bps: number | null, signed = false) {
   if (bps === null) return "—";
-  return `${bps > 0 ? "+" : ""}${percentFormatter.format(bps / 100)} %`;
+  const sign = signed && bps > 0 ? "+" : "";
+  return `${sign}${percentFormatter.format(bps / 100)} %`;
 }
 
-function monthLabel(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  return monthFormatter.format(new Date(Date.UTC(year, monthNumber - 1, 1, 12)));
+function monthDate(monthStart: string) {
+  return new Date(`${monthStart.slice(0, 7)}-01T12:00:00Z`);
 }
 
-function madridMonth() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Madrid",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}`;
+function formatLongMonth(monthStart: string) {
+  return longMonthFormatter.format(monthDate(monthStart));
 }
 
-function DriverList({ title, items }: { title: string; items: AnalysisDriver[] }) {
+function formatShortMonth(monthStart: string) {
+  return shortMonthFormatter.format(monthDate(monthStart)).replace(".", "");
+}
+
+function formatDate(value: string) {
+  return dateFormatter.format(new Date(`${value}T12:00:00Z`));
+}
+
+function monthEnd(monthStart: string) {
+  const [year, month] = monthStart.slice(0, 7).split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
+}
+
+function rangeLabel(snapshot: AnalysisSnapshot) {
+  if (snapshot.selection.range === "1m") {
+    return formatLongMonth(`${snapshot.selection.month}-01`);
+  }
+  return `${formatDate(snapshot.selection.dateFrom)} – ${formatDate(snapshot.selection.dateTo)}`;
+}
+
+function comparisonLabel(snapshot: AnalysisSnapshot) {
+  return `${formatDate(snapshot.selection.previousDateFrom)} – ${formatDate(snapshot.selection.previousDateTo)}`;
+}
+
+function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "savings" | "rate") {
+  if (trend.direction === "insufficient") return "Aún no hay 6 meses completos para confirmar tendencia";
+  if (trend.direction === "stable") return "Comportamiento estable en los últimos 6 meses";
+  const up = trend.direction === "up";
+  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "ahorro";
+  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${up ? "al alza" : "a la baja"} frente al trimestre previo`;
+}
+
+function deltaText(cents: number) {
+  if (cents === 0) return "Sin cambio";
+  return `${cents > 0 ? "+" : "−"}${formatMoney(Math.abs(cents))}`;
+}
+
+function periodHref(snapshot: AnalysisSnapshot) {
+  const params = new URLSearchParams({
+    dateFrom: snapshot.selection.dateFrom,
+    dateTo: snapshot.selection.dateTo,
+  });
+  if (snapshot.selection.accountId) params.set("accountId", snapshot.selection.accountId);
+  return `/transactions?${params.toString()}`;
+}
+
+function monthHref(snapshot: AnalysisSnapshot, monthStart: string) {
+  const currentPartial = snapshot.selection.partialMonthStart === monthStart;
+  const params = new URLSearchParams({
+    dateFrom: monthStart,
+    dateTo: currentPartial ? snapshot.selection.dateTo : monthEnd(monthStart),
+  });
+  if (snapshot.selection.accountId) params.set("accountId", snapshot.selection.accountId);
+  return `/transactions?${params.toString()}`;
+}
+
+function HistoricalReference({ snapshot, metric }: {
+  snapshot: AnalysisSnapshot;
+  metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps";
+}) {
+  const avg = snapshot.averages.last3Months ?? snapshot.averages.last6Months;
+  if (!avg) return <span>Histórico insuficiente</span>;
+  const value = avg[metric];
+  if (metric === "savingsRateBps") return <span>Media mensual 3–6 m · {formatPercentBps(value)}</span>;
+  return <span>Media mensual 3–6 m · {formatMoney(value ?? 0)}</span>;
+}
+
+function Kpi({
+  label,
+  value,
+  previousBps,
+  trend,
+  historical,
+  tone,
+}: {
+  label: string;
+  value: string;
+  previousBps: number | null;
+  trend: AnalysisTrend;
+  historical: React.ReactNode;
+  tone: "income" | "expense" | "net" | "rate";
+}) {
   return (
-    <section className={styles.panel} aria-labelledby={`${title.replaceAll(" ", "-")}-heading`}>
-      <div className={styles.panelHeading}>
-        <div>
-          <p className={styles.kicker}>DRIVERS DE GASTO</p>
-          <h2 id={`${title.replaceAll(" ", "-")}-heading`}>{title}</h2>
-        </div>
+    <article className={`${styles.kpi} ${styles[`kpi_${tone}`]}`}>
+      <div className={styles.kpiTop}>
+        <span>{label}</span>
+        <span className={styles.kpiDirection}>{formatPercentBps(previousBps, true)} vs. periodo anterior</span>
+      </div>
+      <strong>{value}</strong>
+      <div className={styles.kpiContext}>
+        {historical}
+        <span>{trendLabel(trend, tone === "net" ? "savings" : tone === "rate" ? "rate" : tone)}</span>
+      </div>
+    </article>
+  );
+}
+
+function DriverRanking({
+  title,
+  items,
+  expanded,
+  onToggle,
+  merchant = false,
+}: {
+  title: string;
+  items: Array<AnalysisDriver | AnalysisMerchantDriver>;
+  expanded: boolean;
+  onToggle: () => void;
+  merchant?: boolean;
+}) {
+  const visible = expanded ? items.slice(0, 15) : items.slice(0, 5);
+  return (
+    <section className={styles.ranking} aria-labelledby={`${title.replaceAll(" ", "-")}-heading`}>
+      <div className={styles.sectionHeadingCompact}>
+        <h3 id={`${title.replaceAll(" ", "-")}-heading`}>{title}</h3>
         <span>{items.length.toLocaleString("es-ES")} grupos</span>
       </div>
-      {items.length === 0 ? (
-        <p className={styles.empty}>No hay gastos elegibles en este periodo.</p>
+      {visible.length === 0 ? (
+        <p className={styles.empty}>No hay gastos elegibles en el periodo.</p>
       ) : (
-        <div className={styles.driverList}>
-          {items.slice(0, 8).map((item) => (
-            <article className={styles.driver} key={`${title}-${item.id ?? "none"}`}>
-              <div className={styles.driverTop}>
-                <div>
-                  <strong>{item.name}</strong>
-                  <span>{item.rows.toLocaleString("es-ES")} movimientos</span>
-                </div>
-                <div className={styles.driverAmount}>
-                  <strong>{formatMoney(item.expenseCents)}</strong>
-                  <span>{item.shareBps === null ? "—" : `${percentFormatter.format(item.shareBps / 100)} %`}</span>
-                </div>
+        <ol className={styles.rankingList}>
+          {visible.map((item, index) => (
+            <li key={`${title}-${item.id ?? "none"}-${item.name}`}>
+              <span className={styles.rank}>{index + 1}</span>
+              <div className={styles.rankMain}>
+                <strong>{item.name}</strong>
+                <span>
+                  {item.rows.toLocaleString("es-ES")} mov. · {formatPercentBps(item.shareBps)} del gasto
+                  {merchant && "habitualVariationBps" in item && item.habitualVariationBps !== null
+                    ? ` · ${formatPercentBps(item.habitualVariationBps, true)} vs. importe habitual`
+                    : ""}
+                </span>
               </div>
-              <progress max={10000} value={Math.max(0, item.shareBps ?? 0)} aria-label={`Peso de ${item.name}`} />
-              {item.href ? <Link className={styles.drilldown} href={item.href}>Ver movimientos</Link> : <span className={styles.noDrilldown}>Sin comercio normalizado para filtrar</span>}
-            </article>
+              <div className={styles.rankValue}>
+                <strong>{formatMoney(item.expenseCents)}</strong>
+                <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>
+                  {deltaText(item.deltaCents)}
+                </span>
+              </div>
+              {item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>—</span>}
+            </li>
           ))}
-        </div>
+        </ol>
+      )}
+      {items.length > 5 && (
+        <button className={styles.textButton} type="button" onClick={onToggle} aria-expanded={expanded}>
+          {expanded ? "Ver menos" : "Ver todos"}
+        </button>
       )}
     </section>
   );
 }
 
-function FinancialComparisonVisual({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const [activePoint, setActivePoint] = useState<string | null>(null);
-  const currentMonth = monthLabel(snapshot.month);
-  const previousMonth = monthLabel(snapshot.previous.dateFrom.slice(0, 7));
-  const rows = [
-    { key: "income", label: "Ingresos", current: snapshot.current.incomeCents, previous: snapshot.previous.incomeCents },
-    { key: "expense", label: "Gastos", current: snapshot.current.expenseCents, previous: snapshot.previous.expenseCents },
-    { key: "net", label: "Neto", current: snapshot.current.operatingNetCents, previous: snapshot.previous.operatingNetCents },
-  ];
-  const maximum = Math.max(1, ...rows.flatMap((row) => [Math.abs(row.current), Math.abs(row.previous)]));
-
-  function pointLabel(label: string, period: string, cents: number) {
-    const state = cents < 0 ? "déficit" : cents > 0 ? "superávit" : "equilibrio";
-    return `${label} ${period}: ${formatMoney(cents)} · ${state}`;
-  }
-
+function LoadingSkeleton() {
   return (
-    <section
-      aria-label="Comparativa financiera visual"
-      style={{
-        border: "1px solid var(--border-subtle, rgba(255,255,255,.12))",
-        borderRadius: "24px",
-        padding: "clamp(1rem, 2.2vw, 1.5rem)",
-        background: "linear-gradient(145deg, rgba(255,255,255,.055), rgba(255,255,255,.018))",
-        display: "grid",
-        gap: "1.25rem",
-      }}
-    >
-      <div className={styles.panelHeading}>
-        <div>
-          <p className={styles.kicker}>LECTURA VISUAL</p>
-          <h2>Comparativa financiera</h2>
-        </div>
-        <Link
-          className={styles.drilldown}
-          href={`/transactions?dateFrom=${snapshot.current.dateFrom}&dateTo=${snapshot.current.dateTo}`}
-          aria-label="Ver movimientos del periodo"
-        >
-          Ver movimientos del periodo
-        </Link>
-      </div>
-
-      <div style={{ display: "grid", gap: ".9rem" }}>
-        {rows.map((row) => (
-          <div key={row.key} style={{ display: "grid", gridTemplateColumns: "minmax(5.5rem, .35fr) 1fr", gap: ".75rem", alignItems: "center" }}>
-            <strong style={{ fontSize: ".92rem" }}>{row.label}</strong>
-            <div style={{ display: "grid", gap: ".45rem" }}>
-              {([
-                ["current", currentMonth, row.current],
-                ["previous", previousMonth, row.previous],
-              ] as const).map(([periodKey, period, cents]) => {
-                const id = `${row.key}-${periodKey}`;
-                const label = pointLabel(row.label, period, cents);
-                const width = Math.max(8, (Math.abs(cents) / maximum) * 100);
-                return (
-                  <div key={id} style={{ display: "grid", gridTemplateColumns: "minmax(5.4rem, auto) 1fr", gap: ".6rem", alignItems: "center" }}>
-                    <span style={{ color: "var(--text-muted, #aeb6c6)", fontSize: ".78rem" }}>{periodKey === "current" ? "Actual" : "Anterior"}</span>
-                    <div style={{ position: "relative", minHeight: "2.1rem", display: "flex", alignItems: "center" }}>
-                      <button
-                        type="button"
-                        aria-label={label}
-                        onFocus={() => setActivePoint(id)}
-                        onBlur={() => setActivePoint((current) => current === id ? null : current)}
-                        onMouseEnter={() => setActivePoint(id)}
-                        onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                        style={{
-                          width: `${width}%`,
-                          minWidth: "3rem",
-                          height: "1.65rem",
-                          border: cents < 0 ? "1px solid rgba(255,124,145,.5)" : "1px solid rgba(99,219,180,.42)",
-                          borderRadius: "999px",
-                          background: cents < 0
-                            ? "linear-gradient(90deg, rgba(255,104,132,.30), rgba(255,104,132,.12))"
-                            : "linear-gradient(90deg, rgba(72,211,170,.28), rgba(72,211,170,.10))",
-                          cursor: "default",
-                          position: "relative",
-                        }}
-                      />
-                      <span style={{ marginLeft: ".55rem", whiteSpace: "nowrap", fontVariantNumeric: "tabular-nums", fontSize: ".82rem" }}>{formatMoney(cents)}</span>
-                      {activePoint === id ? (
-                        <div
-                          role="tooltip"
-                          style={{
-                            position: "absolute",
-                            zIndex: 5,
-                            left: "0",
-                            top: "calc(100% + .35rem)",
-                            padding: ".5rem .65rem",
-                            borderRadius: ".65rem",
-                            background: "var(--surface-elevated, #151922)",
-                            border: "1px solid var(--border-subtle, rgba(255,255,255,.15))",
-                            boxShadow: "0 10px 30px rgba(0,0,0,.25)",
-                            fontSize: ".78rem",
-                            whiteSpace: "nowrap",
-                          }}
-                        >
-                          {label}
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div style={{ overflowX: "auto" }}>
-        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", borderCollapse: "collapse", minWidth: "30rem" }}>
-          <thead>
-            <tr>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
-              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{currentMonth}</th>
-              <th scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{previousMonth}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.key}>
-                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{row.label}</th>
-                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.current)}</td>
-                <td style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>{formatMoney(row.previous)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div className={styles.skeletonWrap} role="status" aria-label="Cargando análisis financiero">
+      <div className={styles.skeletonKpis}>{Array.from({ length: 4 }, (_, index) => <span key={index} />)}</div>
+      <div className={styles.skeletonLarge} />
+      <div className={styles.skeletonGrid}><span /><span /></div>
+    </div>
   );
 }
 
-export default function AnalysisClient() {
-  const [month, setMonth] = useState(madridMonth);
-  const [appliedMonth, setAppliedMonth] = useState(madridMonth);
-  const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: AnalysisSnapshot | null }) {
+  const initialMonth = initialSnapshot?.selection.month ?? "";
+  const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
+  const [month, setMonth] = useState(initialMonth);
+  const [range, setRange] = useState<AnalysisRange>(initialSnapshot?.selection.range ?? "1m");
+  const [accountId, setAccountId] = useState(initialSnapshot?.selection.accountId ?? "");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
+  const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
-  useEffect(() => {
+  const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
+  const changeHeadline = useMemo(() => {
+    if (!snapshot) return "Qué ha cambiado";
+    if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
+    return `Tu gasto ${expenseDirection > 0 ? "ha aumentado" : "ha disminuido"} ${formatMoney(Math.abs(expenseDirection))} frente al periodo comparable.`;
+  }, [snapshot, expenseDirection]);
+
+  async function refresh(event?: FormEvent) {
+    event?.preventDefault();
+    if (!month) return;
     const controller = new AbortController();
     setLoading(true);
     setError(null);
-    void fetch(`/api/analysis?month=${encodeURIComponent(appliedMonth)}`, { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
-        return payload as AnalysisSnapshot;
-      })
-      .then((payload) => {
-        if (!controller.signal.aborted) setSnapshot(payload);
-      })
-      .catch((cause) => {
-        if (controller.signal.aborted) return;
-        console.error("analysis-client", cause instanceof Error ? cause.message : String(cause));
-        setSnapshot(null);
-        setError("No se pudo cargar el análisis financiero. Los datos no se han modificado.");
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-    return () => controller.abort();
-  }, [appliedMonth]);
-
-  const previousLabel = useMemo(() => snapshot ? monthLabel(snapshot.previous.dateFrom.slice(0, 7)) : "periodo anterior", [snapshot]);
-
-  function applyMonth(event: FormEvent) {
-    event.preventDefault();
-    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) setAppliedMonth(month);
+    const params = new URLSearchParams({ month, range });
+    if (accountId) params.set("accountId", accountId);
+    try {
+      const response = await fetch(`/api/analysis?${params.toString()}`, { cache: "no-store", signal: controller.signal });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
+      const next = payload as AnalysisSnapshot;
+      setSnapshot(next);
+      setMonth(next.selection.month);
+      setRange(next.selection.range);
+      setAccountId(next.selection.accountId ?? "");
+      setCategoriesExpanded(false);
+      setMerchantsExpanded(false);
+    } catch (cause) {
+      console.error("analysis-client", cause instanceof Error ? cause.message : String(cause));
+      setError("No se pudo actualizar el análisis. Se mantienen visibles los últimos datos cargados.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
     <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
-      <header className={styles.hero}>
-        <div>
-          <p className={styles.eyebrow}>FINANCIAL APP · ANÁLISIS</p>
-          <h1>Análisis</h1>
-          <p>Entiende qué ha cambiado y por qué, usando los mismos motores centrales que alimentan el resto de Financial App. Esta vista es estrictamente de lectura.</p>
+      <header className={styles.header}>
+        <div className={styles.headerTitle}>
+          <p>FINANCIAL APP · INTELIGENCIA FINANCIERA</p>
+          <div>
+            <h1>Análisis</h1>
+            {snapshot?.selection.partial && <span className={styles.partialChip}>Periodo parcial</span>}
+          </div>
+          {snapshot && <span className={styles.periodCaption}>{rangeLabel(snapshot)}</span>}
         </div>
-        <form className={styles.periodForm} onSubmit={applyMonth}>
+
+        <form className={styles.filters} onSubmit={refresh} aria-label="Filtros del análisis">
+          <div className={styles.rangeSelector} aria-label="Rango temporal">
+            {RANGE_OPTIONS.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className={range === option.value ? styles.rangeActive : styles.rangeButton}
+                aria-pressed={range === option.value}
+                onClick={() => setRange(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <label>
-            <span>Mes analizado</span>
-            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} />
+            <span>Mes de referencia</span>
+            <input type="month" value={month} onChange={(event) => setMonth(event.target.value)} required />
           </label>
-          <button type="submit" disabled={loading}>Actualizar análisis</button>
+          <label>
+            <span>Cuenta</span>
+            <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <option value="">Todas las cuentas</option>
+              {(snapshot?.accounts ?? []).map((account) => (
+                <option value={account.id} key={account.id}>{account.name}{account.lifecycle === "archived" ? " · archivada" : ""}</option>
+              ))}
+            </select>
+          </label>
+          <button className={styles.applyButton} type="submit" disabled={loading || !month}>
+            {loading ? "Actualizando…" : "Aplicar"}
+          </button>
         </form>
       </header>
 
       {error && <div className={styles.error} role="alert">{error}</div>}
-      {loading && <div className={styles.loading} role="status">Calculando el análisis desde los contratos financieros centrales…</div>}
+      {!snapshot && <LoadingSkeleton />}
 
-      {!loading && snapshot && (
+      {snapshot && (
         <>
-          <section className={styles.metrics} aria-label="Resumen financiero del periodo">
-            <article><span>Ingresos</span><strong>{formatMoney(snapshot.current.incomeCents)}</strong><small>{formatBps(snapshot.comparison.incomeChangeBps)} vs. {previousLabel}</small></article>
-            <article><span>Gastos</span><strong>{formatMoney(snapshot.current.expenseCents)}</strong><small>{formatBps(snapshot.comparison.expenseChangeBps)} vs. {previousLabel}</small></article>
-            <article><span>Balance neto</span><strong>{formatMoney(snapshot.current.operatingNetCents)}</strong><small>{formatMoney(snapshot.comparison.netDeltaCents)} de diferencia</small></article>
-            <article><span>Tasa de ahorro</span><strong>{snapshot.current.savingsRateBps === null ? "—" : `${percentFormatter.format(snapshot.current.savingsRateBps / 100)} %`}</strong><small>{monthLabel(snapshot.month)}</small></article>
+          {loading && <div className={styles.refreshing} role="status">Actualizando datos sin ocultar la lectura actual…</div>}
+
+          <section className={styles.kpis} aria-label="Indicadores principales del periodo">
+            <Kpi
+              label="Ingresos"
+              value={formatMoney(snapshot.current.incomeCents)}
+              previousBps={snapshot.comparison.incomeChangeBps}
+              trend={snapshot.trends.income}
+              historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
+              tone="income"
+            />
+            <Kpi
+              label="Gastos"
+              value={formatMoney(snapshot.current.expenseCents)}
+              previousBps={snapshot.comparison.expenseChangeBps}
+              trend={snapshot.trends.expense}
+              historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
+              tone="expense"
+            />
+            <Kpi
+              label="Ahorro / neto"
+              value={formatMoney(snapshot.current.savingsCents)}
+              previousBps={snapshot.comparison.savingsChangeBps}
+              trend={snapshot.trends.savings}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
+              tone="net"
+            />
+            <Kpi
+              label="Tasa de ahorro"
+              value={formatPercentBps(snapshot.current.savingsRateBps)}
+              previousBps={snapshot.comparison.savingsRateDeltaBps}
+              trend={snapshot.trends.savingsRate}
+              historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
+              tone="rate"
+            />
           </section>
 
-          <FinancialComparisonVisual snapshot={snapshot} />
-
-          <section className={styles.comparison} aria-labelledby="comparison-heading">
-            <div className={styles.panelHeading}>
-              <div><p className={styles.kicker}>COMPARACIÓN TEMPORAL</p><h2 id="comparison-heading">Frente a {previousLabel}</h2></div>
-              <span>{snapshot.quality.reconciled ? "Reconciliado al céntimo" : "Pendiente"}</span>
+          <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>EVOLUCIÓN</p>
+                <h2 id="evolution-heading">Cómo está cambiando tu dinero</h2>
+                <span>Ingresos, gastos y ahorro sobre una escala común; selecciona cualquier mes para ver el origen.</span>
+              </div>
+              <Link className={styles.secondaryLink} href={periodHref(snapshot)}>Movimientos del periodo</Link>
             </div>
-            <div className={styles.comparisonGrid}>
-              <div><span>Ingresos anteriores</span><strong>{formatMoney(snapshot.previous.incomeCents)}</strong><small>Diferencia {formatMoney(snapshot.comparison.incomeDeltaCents)}</small></div>
-              <div><span>Gastos anteriores</span><strong>{formatMoney(snapshot.previous.expenseCents)}</strong><small>Diferencia {formatMoney(snapshot.comparison.expenseDeltaCents)}</small></div>
-              <div><span>Balance anterior</span><strong>{formatMoney(snapshot.previous.operatingNetCents)}</strong><small>{formatBps(snapshot.comparison.netChangeBps)} de variación</small></div>
-            </div>
+            <FinancialTrendChart
+              rows={snapshot.history}
+              formatMoney={formatMoney}
+              formatMonth={formatShortMonth}
+              partialMonthStart={snapshot.selection.partialMonthStart}
+              hrefForMonth={(monthStart) => monthHref(snapshot, monthStart)}
+            />
           </section>
 
-          <div className={styles.driverGrid}>
-            <DriverList title="Por categoría" items={snapshot.categoryDrivers} />
-            <DriverList title="Por comercio" items={snapshot.merchantDrivers} />
+          <section className={`${styles.section} ${styles.changeSection}`} aria-labelledby="change-heading">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>QUÉ HA CAMBIADO</p>
+                <h2 id="change-heading">{changeHeadline}</h2>
+                <span>Comparación equivalente con {comparisonLabel(snapshot)}. Las barras muestran qué categorías explican el cambio.</span>
+              </div>
+              <span className={expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
+                {deltaText(expenseDirection)}
+              </span>
+            </div>
+            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} />
+          </section>
+
+          <div className={styles.twoColumn}>
+            <section className={styles.section} aria-labelledby="distribution-heading">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p>COMPOSICIÓN</p>
+                  <h2 id="distribution-heading">Dónde se concentra el gasto</h2>
+                </div>
+                <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} en 3 categorías</span>
+              </div>
+              <div className={styles.breakdown} role="list">
+                {snapshot.categoryDrivers.slice(0, 6).map((item) => (
+                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow} role="listitem">
+                    <div>
+                      <strong>{item.name}</strong>
+                      <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
+                    </div>
+                    <div className={styles.breakdownTrack} aria-hidden="true">
+                      <span style={{ width: `${Math.max(2, Math.min(100, (item.shareBps ?? 0) / 100))}%` }} />
+                    </div>
+                    <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>{deltaText(item.deltaCents)}</span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <section className={styles.section} aria-labelledby="flexibility-heading">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p>FLEXIBILIDAD</p>
+                  <h2 id="flexibility-heading">Gasto fijo y variable</h2>
+                </div>
+              </div>
+              {snapshot.fixedVariable.available ? (
+                <div className={styles.fixedVariable}>
+                  <div className={styles.fixedVariableBar} aria-label={`Gasto fijo ${formatPercentBps(snapshot.fixedVariable.fixedShareBps)}; el resto es variable`}>
+                    <span style={{ width: `${Math.max(0, Math.min(100, (snapshot.fixedVariable.fixedShareBps ?? 0) / 100))}%` }} />
+                  </div>
+                  <dl>
+                    <div><dt>Fijo fiable</dt><dd>{formatMoney(snapshot.fixedVariable.fixedExpenseCents)}</dd></div>
+                    <div><dt>Variable</dt><dd>{formatMoney(snapshot.fixedVariable.variableExpenseCents)}</dd></div>
+                    <div><dt>Peso fijo</dt><dd>{formatPercentBps(snapshot.fixedVariable.fixedShareBps)}</dd></div>
+                  </dl>
+                  <p>Clasificación basada únicamente en recurrencias activas con confianza media o alta.</p>
+                </div>
+              ) : (
+                <div className={styles.insufficient}>
+                  <strong>Sin clasificación fiable todavía</strong>
+                  <p>No hay recurrencias activas con suficiente confianza para separar gasto fijo y variable sin hacer suposiciones.</p>
+                  <Link href="/recurrents">Revisar recurrentes</Link>
+                </div>
+              )}
+            </section>
           </div>
 
-          <p className={styles.note}>Los totales proceden de <strong>financial.period</strong>; los drivers se obtienen de Movimientos efectivos, excluyendo duplicados confirmados y filas marcadas fuera de analítica. La suma se reconcilia al céntimo antes de mostrarse. La fuente bancaria permanece estrictamente de solo lectura.</p>
+          <div className={styles.intelligenceGrid}>
+            <section className={styles.section} aria-labelledby="anomalies-heading">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p>ANOMALÍAS</p>
+                  <h2 id="anomalies-heading">Movimientos que merece la pena revisar</h2>
+                </div>
+                <span>{snapshot.anomalies.length.toLocaleString("es-ES")}</span>
+              </div>
+              {snapshot.anomalies.length === 0 ? (
+                <p className={styles.empty}>No se han detectado importes que superen de forma clara el comportamiento histórico disponible.</p>
+              ) : (
+                <div className={styles.anomalyList}>
+                  {snapshot.anomalies.map((item) => (
+                    <Link href={item.href} key={item.transactionId} className={styles.anomaly}>
+                      <div>
+                        <strong>{item.merchantName}</strong>
+                        <span>{formatDate(item.bankDate)} · {item.categoryName}</span>
+                      </div>
+                      <div>
+                        <strong>{formatMoney(item.amountCents)}</strong>
+                        <span>{formatPercentBps(item.variationBps, true)} vs. importe habitual ({item.historyRows} referencias)</span>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className={styles.section} aria-labelledby="concentration-heading">
+              <div className={styles.sectionHeading}>
+                <div>
+                  <p>CONCENTRACIÓN</p>
+                  <h2 id="concentration-heading">Cuánto depende tu gasto de pocos grupos</h2>
+                </div>
+              </div>
+              <div className={styles.concentrationGrid}>
+                <div>
+                  <span>3 categorías principales</span>
+                  <strong>{formatPercentBps(snapshot.concentration.top3CategoryBps)}</strong>
+                  <p>del gasto del periodo</p>
+                </div>
+                <div>
+                  <span>3 comercios principales</span>
+                  <strong>{formatPercentBps(snapshot.concentration.top3MerchantBps)}</strong>
+                  <p>del gasto del periodo</p>
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <div className={styles.contextGrid}>
+            <section className={`${styles.section} ${styles.contextCard}`} aria-labelledby="budget-heading">
+              <div className={styles.sectionHeadingCompact}>
+                <h2 id="budget-heading">Presupuesto</h2>
+                <Link href="/budgets">Abrir Presupuestos</Link>
+              </div>
+              {snapshot.budget?.total ? (
+                <>
+                  <strong className={styles.contextValue}>{formatPercentBps(snapshot.budget.total.progressBps)} consumido</strong>
+                  <p>{formatMoney(snapshot.budget.total.actualExpenseCents)} de {formatMoney(snapshot.budget.total.effectiveAmountCents)}.</p>
+                  {snapshot.budget.overCategories.length > 0 ? (
+                    <ul className={styles.contextAlerts}>
+                      {snapshot.budget.overCategories.slice(0, 3).map((item) => (
+                        <li key={item.categoryId ?? item.categoryName ?? "budget"}>
+                          <span>{item.categoryName ?? "Categoría"}</span>
+                          <strong>{formatMoney(Math.abs(item.remainingCents))} por encima</strong>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : <p className={styles.goodText}>No hay categorías por encima del límite en este momento.</p>}
+                </>
+              ) : (
+                <p className={styles.empty}>{snapshot.selection.accountId ? "El presupuesto es global; no se muestra al filtrar una única cuenta para evitar una comparación engañosa." : "No hay presupuesto disponible para este periodo."}</p>
+              )}
+            </section>
+
+            <section className={`${styles.section} ${styles.contextCard}`} aria-labelledby="forecast-heading">
+              <div className={styles.sectionHeadingCompact}>
+                <h2 id="forecast-heading">Previsión</h2>
+                <Link href="/forecast">Abrir Previsión</Link>
+              </div>
+              {snapshot.forecast ? (
+                <>
+                  <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
+                  <p>
+                    {snapshot.forecast.summary.plannedItems > 0
+                      ? `${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`
+                      : `No hay pagos o ingresos previstos activos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}
+                  </p>
+                  <div className={styles.forecastFigures}>
+                    <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
+                    <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>
+                  </div>
+                </>
+              ) : (
+                <p className={styles.empty}>La previsión sólo se muestra cuando el periodo seleccionado alcanza la fecha actual o futura.</p>
+              )}
+            </section>
+          </div>
+
+          <section className={styles.rankingsSection} aria-labelledby="rankings-heading">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p>DETALLE</p>
+                <h2 id="rankings-heading">Principales categorías y comercios</h2>
+                <span>Rankings secundarios para investigar el origen del gasto, sin duplicar la lectura principal.</span>
+              </div>
+            </div>
+            <div className={styles.rankingsGrid}>
+              <DriverRanking title="Categorías" items={snapshot.categoryDrivers} expanded={categoriesExpanded} onToggle={() => setCategoriesExpanded((value) => !value)} />
+              <DriverRanking title="Comercios" items={snapshot.merchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
+            </div>
+          </section>
+
+          <footer className={styles.qualityNote}>
+            <span>{snapshot.quality.reconciled ? "✓ Totales reconciliados al céntimo" : "Comprobación pendiente"}</span>
+            <span>Fuente bancaria de solo lectura</span>
+            <span>Anomalías deterministas, sin conclusiones generativas</span>
+          </footer>
         </>
       )}
     </main>
