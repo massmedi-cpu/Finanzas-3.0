@@ -8,6 +8,7 @@
   --font-kpi-secondary: clamp(1.02rem, 0.98rem + 0.16vw, 1.18rem);
 }
 
-.scope :where(a, button) {
+/* El scope de Inicio prevalece sobre overrides locales más compactos sin usar !important. */
+.scope.scope :where(a, button) {
   min-height: 2.75rem;
 }

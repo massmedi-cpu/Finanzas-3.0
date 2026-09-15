@@ -16,12 +16,7 @@ async function mockDashboard(page: import("@playwright/test").Page) {
     balances: {
       asOfDate: "2026-09-11",
       activeBalanceCents: 30000,
-      quality: {
-        accounts: 1,
-        explicitBalanceAccounts: 1,
-        reconstructedBalanceAccounts: 0,
-        integrityDeltaAccounts: 0,
-      },
+      quality: { accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0, integrityDeltaAccounts: 0 },
       accounts: [
         {
           id: "a",
@@ -46,18 +41,8 @@ async function mockDashboard(page: import("@playwright/test").Page) {
     dateFrom: "2026-01-01",
     dateTo: "2026-09-11",
     rows: [
-      {
-        monthStart: "2026-08-01",
-        incomeCents: 100000,
-        expenseCents: 40000,
-        operatingNetCents: 60000,
-      },
-      {
-        monthStart: "2026-09-01",
-        incomeCents: 150000,
-        expenseCents: 70000,
-        operatingNetCents: 80000,
-      },
+      { monthStart: "2026-08-01", incomeCents: 100000, expenseCents: 40000, operatingNetCents: 60000 },
+      { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
     ],
   };
 
@@ -90,6 +75,9 @@ async function mockDashboard(page: import("@playwright/test").Page) {
 
   const transactions = { rows: [], totalCount: 0 };
 
+  await page.route("**/api/source/google/sync", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: null }) }),
+  );
   await page.route("**/api/dashboard?*", async (route) => {
     const scope = new URL(route.request().url()).searchParams.get("scope");
     const primary = scope === "primary";
@@ -100,17 +88,18 @@ async function mockDashboard(page: import("@playwright/test").Page) {
         contractVersion: 1,
         scope,
         asOfDate: "2026-09-11",
+        dataThroughDate: null,
         generatedAt: "2026-09-11T12:00:00.000Z",
         requestedSources: primary
-          ? ["financial"]
-          : ["monthly", "budgets", "forecast", "transactions"],
+          ? ["financial", "transactions"]
+          : ["monthly", "budgets", "forecast"],
         failedSources: [],
         data: {
           financial: primary ? financial : null,
           monthly: primary ? null : monthly,
           budgets: primary ? null : budgets,
           forecast: primary ? null : forecast,
-          transactions: primary ? null : transactions,
+          transactions: primary ? transactions : null,
         },
       }),
     });
@@ -122,21 +111,20 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto("/");
 
-  const chart = page.getByRole("group", {
-    name: /Ingresos y gastos por mes/i,
-  });
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/i });
   await expect(chart).toBeVisible();
 
   const september = chart.getByRole("button", {
     name: /ingresos 1\.500,00.*gastos 700,00.*balance neto 800,00/i,
   });
   await expect(september).toBeVisible();
+  await expect(september).toHaveAccessibleName(/mes parcial/i);
   await expect(page.getByRole("status")).toHaveCount(0);
 
   await september.focus();
   await expect(september).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.500,00.*Gastos 700,00.*Balance neto 800,00/i,
+    /Ingresos 1\.500,00.*Gastos 700,00.*Balance 800,00/i,
   );
 
   const august = chart.getByRole("button", {
@@ -145,14 +133,12 @@ test("Premium · la gráfica de Inicio expone valores exactos mediante foco y ta
   await august.click();
   await expect(august).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("status")).toContainText(
-    /Ingresos 1\.000,00.*Gastos 400,00.*Balance neto 600,00/i,
+    /Ingresos 1\.000,00.*Gastos 400,00.*Balance 600,00/i,
   );
 
   expect(
     await page.evaluate(
-      () =>
-        document.documentElement.scrollWidth <=
-        document.documentElement.clientWidth + 1,
+      () => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1,
     ),
   ).toBe(true);
 });
