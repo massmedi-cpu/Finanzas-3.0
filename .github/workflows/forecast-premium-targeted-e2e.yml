@@ -140,14 +140,15 @@ jobs:
           done
           npx playwright install --with-deps chromium
 
-      - name: Run Forecast against exact protected Preview
+      - name: Run Forecast workspace boundary against exact protected Preview
         env:
           VERCEL_PREVIEW_URL: ${{ steps.vercel.outputs.url }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         run: >-
           npm run test:e2e --
-          tests/e2e/forecast.spec.ts
+          tests/e2e/forecast-protected-preview.spec.ts
           --project=chromium-desktop
+          --project=chromium-mobile
 
       - name: Upload protected Preview report on failure
         if: failure()
