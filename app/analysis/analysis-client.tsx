@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import type {
   AnalysisDriver,
   AnalysisMerchantDriver,
@@ -52,6 +52,16 @@ const RANGE_OPTIONS: Array<{ value: AnalysisRange; label: string }> = [
   { value: "ytd", label: "Año actual" },
 ];
 
+function currentMadridMonth() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}`;
+}
+
 function formatMoney(cents: number) {
   return moneyFormatter.format(cents / 100);
 }
@@ -60,6 +70,12 @@ function formatPercentBps(bps: number | null, signed = false) {
   if (bps === null) return "—";
   const sign = signed && bps > 0 ? "+" : "";
   return `${sign}${percentFormatter.format(bps / 100)} %`;
+}
+
+function formatPointDeltaBps(bps: number | null) {
+  if (bps === null) return "—";
+  const sign = bps > 0 ? "+" : bps < 0 ? "−" : "";
+  return `${sign}${percentFormatter.format(Math.abs(bps) / 100)} pp`;
 }
 
 function monthDate(monthStart: string) {
@@ -127,37 +143,50 @@ function monthHref(snapshot: AnalysisSnapshot, monthStart: string) {
   return `/transactions?${params.toString()}`;
 }
 
+function historicalMetric(snapshot: AnalysisSnapshot, metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps") {
+  const value = (months: 3 | 6) => {
+    const average = months === 3 ? snapshot.averages.last3Months : snapshot.averages.last6Months;
+    if (!average) return null;
+    const raw = average[metric];
+    return metric === "savingsRateBps" ? formatPercentBps(raw) : formatMoney(raw ?? 0);
+  };
+  const parts: string[] = [];
+  const three = value(3);
+  const six = value(6);
+  if (three) parts.push(`3 m ${three}`);
+  if (six) parts.push(`6 m ${six}`);
+  return parts;
+}
+
 function HistoricalReference({ snapshot, metric }: {
   snapshot: AnalysisSnapshot;
   metric: "incomeCents" | "expenseCents" | "savingsCents" | "savingsRateBps";
 }) {
-  const avg = snapshot.averages.last3Months ?? snapshot.averages.last6Months;
-  if (!avg) return <span>Histórico insuficiente</span>;
-  const value = avg[metric];
-  if (metric === "savingsRateBps") return <span>Media mensual 3–6 m · {formatPercentBps(value)}</span>;
-  return <span>Media mensual 3–6 m · {formatMoney(value ?? 0)}</span>;
+  const parts = historicalMetric(snapshot, metric);
+  if (parts.length === 0) return <span>Histórico insuficiente</span>;
+  return <span>Media mensual · {parts.join(" · ")}</span>;
 }
 
 function Kpi({
   label,
   value,
-  previousBps,
+  comparison,
   trend,
   historical,
   tone,
 }: {
   label: string;
   value: string;
-  previousBps: number | null;
+  comparison: string;
   trend: AnalysisTrend;
-  historical: React.ReactNode;
+  historical: ReactNode;
   tone: "income" | "expense" | "net" | "rate";
 }) {
   return (
     <article className={`${styles.kpi} ${styles[`kpi_${tone}`]}`}>
       <div className={styles.kpiTop}>
         <span>{label}</span>
-        <span className={styles.kpiDirection}>{formatPercentBps(previousBps, true)} vs. periodo anterior</span>
+        <span className={styles.kpiDirection}>{comparison} vs. periodo anterior</span>
       </div>
       <strong>{value}</strong>
       <div className={styles.kpiContext}>
@@ -182,10 +211,11 @@ function DriverRanking({
   merchant?: boolean;
 }) {
   const visible = expanded ? items.slice(0, 15) : items.slice(0, 5);
+  const headingId = `${title.toLocaleLowerCase("es-ES").replaceAll(" ", "-")}-heading`;
   return (
-    <section className={styles.ranking} aria-labelledby={`${title.replaceAll(" ", "-")}-heading`}>
+    <section className={styles.ranking} aria-labelledby={headingId}>
       <div className={styles.sectionHeadingCompact}>
-        <h3 id={`${title.replaceAll(" ", "-")}-heading`}>{title}</h3>
+        <h3 id={headingId}>{title}</h3>
         <span>{items.length.toLocaleString("es-ES")} grupos</span>
       </div>
       {visible.length === 0 ? (
@@ -235,7 +265,8 @@ function LoadingSkeleton() {
 }
 
 export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: AnalysisSnapshot | null }) {
-  const initialMonth = initialSnapshot?.selection.month ?? "";
+  const requestRef = useRef<AbortController | null>(null);
+  const initialMonth = initialSnapshot?.selection.month ?? currentMadridMonth();
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
   const [month, setMonth] = useState(initialMonth);
   const [range, setRange] = useState<AnalysisRange>(initialSnapshot?.selection.range ?? "1m");
@@ -255,15 +286,25 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   async function refresh(event?: FormEvent) {
     event?.preventDefault();
     if (!month) return;
+
+    requestRef.current?.abort();
     const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError(null);
+
     const params = new URLSearchParams({ month, range });
     if (accountId) params.set("accountId", accountId);
+
     try {
-      const response = await fetch(`/api/analysis?${params.toString()}`, { cache: "no-store", signal: controller.signal });
+      const response = await fetch(`/api/analysis?${params.toString()}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
+      if (requestRef.current !== controller) return;
+
       const next = payload as AnalysisSnapshot;
       setSnapshot(next);
       setMonth(next.selection.month);
@@ -272,10 +313,16 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       setCategoriesExpanded(false);
       setMerchantsExpanded(false);
     } catch (cause) {
+      if (cause instanceof DOMException && cause.name === "AbortError") return;
       console.error("analysis-client", cause instanceof Error ? cause.message : String(cause));
-      setError("No se pudo actualizar el análisis. Se mantienen visibles los últimos datos cargados.");
+      if (requestRef.current === controller) {
+        setError("No se pudo actualizar el análisis. Se mantienen visibles los últimos datos cargados.");
+      }
     } finally {
-      setLoading(false);
+      if (requestRef.current === controller) {
+        requestRef.current = null;
+        setLoading(false);
+      }
     }
   }
 
@@ -335,7 +382,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ingresos"
               value={formatMoney(snapshot.current.incomeCents)}
-              previousBps={snapshot.comparison.incomeChangeBps}
+              comparison={formatPercentBps(snapshot.comparison.incomeChangeBps, true)}
               trend={snapshot.trends.income}
               historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
               tone="income"
@@ -343,7 +390,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Gastos"
               value={formatMoney(snapshot.current.expenseCents)}
-              previousBps={snapshot.comparison.expenseChangeBps}
+              comparison={formatPercentBps(snapshot.comparison.expenseChangeBps, true)}
               trend={snapshot.trends.expense}
               historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
               tone="expense"
@@ -351,7 +398,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ahorro / neto"
               value={formatMoney(snapshot.current.savingsCents)}
-              previousBps={snapshot.comparison.savingsChangeBps}
+              comparison={formatPercentBps(snapshot.comparison.savingsChangeBps, true)}
               trend={snapshot.trends.savings}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
@@ -359,7 +406,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Tasa de ahorro"
               value={formatPercentBps(snapshot.current.savingsRateBps)}
-              previousBps={snapshot.comparison.savingsRateDeltaBps}
+              comparison={formatPointDeltaBps(snapshot.comparison.savingsRateDeltaBps)}
               trend={snapshot.trends.savingsRate}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
               tone="rate"
@@ -446,7 +493,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <div className={styles.insufficient}>
                   <strong>Sin clasificación fiable todavía</strong>
                   <p>No hay recurrencias activas con suficiente confianza para separar gasto fijo y variable sin hacer suposiciones.</p>
-                  <Link href="/recurrents">Revisar recurrentes</Link>
+                  <Link href="/recurrences">Revisar recurrentes</Link>
                 </div>
               )}
             </section>
