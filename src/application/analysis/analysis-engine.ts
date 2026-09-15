@@ -129,6 +129,7 @@ export type AnalysisGatewaySnapshot = {
       progressBps: number | null;
       status: string;
     }>;
+    categoryDetailDeferred?: boolean;
   };
   forecast: null | {
     period: { dateFrom: string; dateTo: string; accountId: string | null };
@@ -137,9 +138,10 @@ export type AnalysisGatewaySnapshot = {
       projectedNetCents: number;
       projectedIncomeCents: number;
       projectedExpenseCents: number;
-      projectedClosingBalanceCents: number;
-      openingBalanceCents: number;
+      projectedClosingBalanceCents: number | null;
+      openingBalanceCents: number | null;
     };
+    detailDeferred?: boolean;
   };
 };
 
