@@ -175,7 +175,6 @@
 }
 
 .inlineLink {
-  min-height: 2.1rem;
   width: fit-content;
   justify-content: flex-start;
   color: var(--color-primary);
@@ -230,7 +229,6 @@
 
 .attentionItem a {
   flex: 0 0 auto;
-  min-height: 2.3rem;
   padding: 0 var(--space-2);
   color: var(--color-primary);
 }
@@ -274,7 +272,6 @@
 
 .panelAction {
   flex: 0 0 auto;
-  min-height: 2.5rem;
 }
 
 .comparison {
