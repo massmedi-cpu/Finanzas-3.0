@@ -6,6 +6,7 @@ type AnalysisQueryInput = {
   historyDateFrom: string;
   accountId: string | null;
   budgetMonth: string;
+  today: string;
 };
 
 export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
@@ -17,17 +18,28 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         ${input.previousDateFrom}::date as previous_from,
         ${input.previousDateTo}::date as previous_to,
         ${input.historyDateFrom}::date as history_from,
-        least(${input.historyDateFrom}::date, ${input.previousDateFrom}::date) as facts_from,
-        (date_trunc('month', ${input.dateTo}::date) + interval '1 month - 1 day')::date as forecast_date_to,
         ${input.accountId}::uuid as account_id,
-        ${input.budgetMonth}::text as budget_month
+        ${input.budgetMonth}::text as budget_month,
+        to_date(${input.budgetMonth} || '-01', 'YYYY-MM-DD') as budget_start,
+        (to_date(${input.budgetMonth} || '-01', 'YYYY-MM-DD') + interval '1 month - 1 day')::date as budget_end,
+        ${input.today}::date as today,
+        (date_trunc('month', ${input.dateTo}::date) + interval '1 month - 1 day')::date as forecast_date_to
+    ),
+    bounds as (
+      select p.*,
+        least(
+          p.history_from,
+          p.previous_from,
+          (p.budget_start - interval '3 months')::date
+        ) as facts_from
+      from p
     ),
     facts as materialized (
       select f.*
-      from p
+      from bounds p
       cross join lateral financial_app.financial_transaction_facts(p.facts_from, p.date_to, p.account_id) f
     ),
-    expenses as (
+    expenses as materialized (
       select
         f.*,
         c.name as category_name,
@@ -48,7 +60,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         count(*) filter (where e.bank_date between p.date_from and p.date_to)::int as current_rows,
         count(*) filter (where e.bank_date between p.previous_from and p.previous_to)::int as previous_rows
       from expenses e
-      cross join p
+      cross join bounds p
       where e.bank_date between p.previous_from and p.date_to
       group by e.effective_category_id
     ),
@@ -59,7 +71,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         round(avg((-e.amount_cents)::numeric))::bigint as habitual_cents,
         coalesce(stddev_pop((-e.amount_cents)::numeric), 0) as stddev_cents
       from expenses e
-      cross join p
+      cross join bounds p
       where e.effective_merchant_id is not null
         and e.bank_date >= p.history_from
         and e.bank_date < p.date_from
@@ -75,14 +87,14 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         count(*) filter (where e.bank_date between p.previous_from and p.previous_to)::int as previous_rows,
         round(avg((-e.amount_cents)::numeric) filter (where e.bank_date between p.date_from and p.date_to))::bigint as current_average_cents
       from expenses e
-      cross join p
+      cross join bounds p
       where e.bank_date between p.previous_from and p.date_to
       group by e.effective_merchant_id
     ),
     current_total as (
       select coalesce(sum(-e.amount_cents), 0)::bigint as expense_cents
       from expenses e
-      cross join p
+      cross join bounds p
       where e.bank_date between p.date_from and p.date_to
     ),
     anomalies as (
@@ -102,7 +114,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
           else null
         end as variation_bps
       from expenses e
-      cross join p
+      cross join bounds p
       join merchant_history h on h.id = e.effective_merchant_id
       where e.bank_date between p.date_from and p.date_to
         and h.history_rows >= 4
@@ -113,7 +125,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
     reliable_recurrences as (
       select r.*
       from financial_app.recurrences r
-      cross join p
+      cross join bounds p
       where r.status = 'active'
         and r.confidence in ('high', 'medium')
         and r.merchant_id is not null
@@ -131,23 +143,72 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
           )
         ), 0)::bigint as fixed_expense_cents
       from expenses e
-      cross join p
+      cross join bounds p
       where e.bank_date between p.date_from and p.date_to
     ),
-    budget_raw as (
-      select case
-        when p.account_id is null then financial_app.budget_month_snapshot(p.budget_month)
-        else null
-      end as j
-      from p
+    budget_months as (
+      select (p.budget_start - (g.n || ' months')::interval)::date as month_start
+      from bounds p
+      cross join generate_series(3, 1, -1) as g(n)
     ),
-    forecast_raw as (
-      select case
-        when p.date_to >= current_date
-          then financial_app.forecast_snapshot(greatest(current_date, p.date_from), p.forecast_date_to, p.account_id)
-        else null
-      end as j
-      from p
+    budget_history as (
+      select
+        m.month_start,
+        coalesce(sum(-e.amount_cents), 0)::bigint as expense_cents
+      from budget_months m
+      left join expenses e
+        on e.bank_date >= m.month_start
+       and e.bank_date < (m.month_start + interval '1 month')::date
+      group by m.month_start
+    ),
+    budget_automatic as (
+      select coalesce(round(avg(expense_cents::numeric)), 0)::bigint as amount_cents
+      from budget_history
+    ),
+    budget_override as (
+      select b.manual_amount_cents
+      from financial_app.budgets b
+      cross join bounds p
+      where b.month = p.budget_month and b.category_id is null
+      order by b.updated_at desc, b.id
+      limit 1
+    ),
+    budget_actual as (
+      select coalesce(sum(-e.amount_cents), 0)::bigint as amount_cents
+      from expenses e
+      cross join bounds p
+      where e.bank_date between p.budget_start and least(p.budget_end, p.date_to)
+    ),
+    budget_light as (
+      select
+        a.amount_cents as automatic_cents,
+        o.manual_amount_cents,
+        coalesce(o.manual_amount_cents, a.amount_cents) as effective_cents,
+        x.amount_cents as actual_cents
+      from budget_automatic a
+      cross join budget_actual x
+      left join budget_override o on true
+    ),
+    forecast_light as (
+      select
+        count(*) filter (where fi.confirmed_transaction_id is null and not fi.excluded)::int as planned_items,
+        coalesce(sum(case
+          when fi.confirmed_transaction_id is null and not fi.excluded and fi.amount_cents > 0 then fi.amount_cents
+          else 0
+        end), 0)::bigint as income_cents,
+        coalesce(sum(case
+          when fi.confirmed_transaction_id is null and not fi.excluded and fi.amount_cents < 0 then -fi.amount_cents
+          else 0
+        end), 0)::bigint as expense_cents,
+        coalesce(sum(case
+          when fi.confirmed_transaction_id is null and not fi.excluded then fi.amount_cents
+          else 0
+        end), 0)::bigint as net_cents
+      from financial_app.forecast_items fi
+      cross join bounds p
+      where p.date_to >= p.today
+        and fi.date between greatest(p.today, p.date_from) and p.forecast_date_to
+        and (p.account_id is null or fi.account_id = p.account_id)
     )
     select jsonb_build_object(
       'current', financial_app.financial_period_summary(p.date_from, p.date_to, p.account_id),
@@ -242,40 +303,47 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         )
         from fixed_stats s cross join current_total t
       ),
-      'budget', (
-        select case when b.j is null then null else jsonb_build_object(
+      'budget', case when p.account_id is not null then null else (
+        select jsonb_build_object(
           'month', p.budget_month,
-          'total', case when b.j->'total' is null then null else jsonb_build_object(
-            'effectiveAmountCents', (b.j->'total'->>'effectiveAmountCents')::bigint,
-            'actualExpenseCents', (b.j->'total'->>'actualExpenseCents')::bigint,
-            'remainingCents', (b.j->'total'->>'remainingCents')::bigint,
-            'progressBps', (b.j->'total'->>'progressBps')::int,
-            'status', b.j->'total'->>'status'
-          ) end,
-          'overCategories', coalesce((
-            select jsonb_agg(jsonb_build_object(
-              'categoryId', c->>'categoryId',
-              'categoryName', c->>'categoryName',
-              'effectiveAmountCents', (c->>'effectiveAmountCents')::bigint,
-              'actualExpenseCents', (c->>'actualExpenseCents')::bigint,
-              'remainingCents', (c->>'remainingCents')::bigint,
-              'progressBps', (c->>'progressBps')::int,
-              'status', c->>'status'
-            ) order by (c->>'remainingCents')::bigint)
-            from jsonb_array_elements(b.j->'categories') c
-            where c->>'status' in ('over', 'unfunded')
-          ), '[]'::jsonb)
-        ) end
-        from budget_raw b
-      ),
-      'forecast', (
-        select case when f.j is null then null else jsonb_build_object(
-          'period', f.j->'period',
-          'summary', f.j->'summary'
-        ) end
-        from forecast_raw f
-      )
+          'total', jsonb_build_object(
+            'effectiveAmountCents', b.effective_cents,
+            'actualExpenseCents', b.actual_cents,
+            'remainingCents', b.effective_cents - b.actual_cents,
+            'progressBps', case when b.effective_cents > 0
+              then round((b.actual_cents::numeric * 10000) / b.effective_cents)::int
+              else null
+            end,
+            'status', case
+              when b.effective_cents = 0 and b.actual_cents = 0 then 'empty'
+              when b.effective_cents = 0 and b.actual_cents > 0 then 'unfunded'
+              when b.actual_cents > b.effective_cents then 'over'
+              else 'on_track'
+            end
+          ),
+          'overCategories', null,
+          'categoryDetailDeferred', true
+        )
+        from budget_light b
+      ) end,
+      'forecast', case when p.date_to < p.today then null else (
+        select jsonb_build_object(
+          'period', jsonb_build_object(
+            'dateFrom', greatest(p.today, p.date_from),
+            'dateTo', p.forecast_date_to,
+            'accountId', p.account_id
+          ),
+          'summary', jsonb_build_object(
+            'plannedItems', f.planned_items,
+            'projectedNetCents', f.net_cents,
+            'projectedIncomeCents', f.income_cents,
+            'projectedExpenseCents', f.expense_cents
+          ),
+          'detailDeferred', true
+        )
+        from forecast_light f
+      ) end
     ) as result
-    from p
+    from bounds p
   `;
 }
