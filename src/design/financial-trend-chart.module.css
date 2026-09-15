@@ -1,0 +1,214 @@
+.wrapper {
+  min-width: 0;
+  display: grid;
+  gap: var(--space-4);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  color: var(--color-text-secondary);
+  font-size: var(--font-helper);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.incomeDot,
+.expenseDot,
+.netDot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+}
+
+.incomeDot { background: var(--color-success); }
+.expenseDot { background: var(--color-danger); }
+.netDot { background: var(--color-cyan); }
+
+.viewport,
+.monthViewport {
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  min-width: 42rem;
+  min-height: 17rem;
+}
+
+.gridLine line {
+  stroke: rgba(137, 173, 255, 0.1);
+  stroke-width: 1;
+}
+
+.gridLine text {
+  fill: var(--color-text-muted);
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+}
+
+.zeroLine {
+  stroke: rgba(247, 249, 255, 0.24);
+  stroke-width: 1.5;
+}
+
+.incomeBar {
+  fill: color-mix(in srgb, var(--color-success) 78%, transparent);
+}
+
+.expenseBar {
+  fill: color-mix(in srgb, var(--color-danger) 74%, transparent);
+}
+
+.activeGroup .incomeBar,
+.activeGroup .expenseBar {
+  filter: brightness(1.18);
+}
+
+.netLine {
+  fill: none;
+  stroke: var(--color-cyan);
+  stroke-width: 4;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.netPoint,
+.netPointActive {
+  fill: var(--color-bg-elevated);
+  stroke: var(--color-cyan);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.netPointActive {
+  fill: var(--color-cyan);
+  stroke: #d9f9ff;
+}
+
+.monthRail {
+  min-width: 42rem;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.monthButton,
+.monthButtonActive {
+  min-height: 2.75rem;
+  padding: 0.45rem 0.3rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.monthButton span,
+.monthButtonActive span {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.monthButton small,
+.monthButtonActive small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--color-warning);
+  font-size: 0.62rem;
+}
+
+.monthButton:hover,
+.monthButtonActive {
+  border-color: var(--color-border-strong);
+  background: rgba(77, 141, 255, 0.09);
+  color: var(--color-text);
+}
+
+.readout {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: rgba(5, 9, 20, 0.48);
+}
+
+.readout > div:first-child {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.readout dl {
+  min-width: 0;
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-3);
+}
+
+.readout dl div { min-width: 0; }
+.readout dt { color: var(--color-text-muted); font-size: var(--font-helper); }
+.readout dd { margin: 0.15rem 0 0; overflow-wrap: anywhere; font-weight: 750; font-variant-numeric: tabular-nums; }
+.readout a { color: #bcd0f8; font-size: var(--font-helper); font-weight: 750; text-decoration: none; }
+.readout a:hover { color: white; }
+
+.partialBadge {
+  padding: 0.16rem 0.42rem;
+  border-radius: var(--radius-pill);
+  background: rgba(255, 191, 71, 0.1);
+  color: var(--color-warning);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.positive { color: #8ee7b3; }
+.negative { color: #ff9bab; }
+.empty { margin: 0; color: var(--color-text-secondary); }
+
+@media (max-width: 52rem) {
+  .readout {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .readout dl {
+    grid-template-columns: repeat(3, minmax(7rem, 1fr));
+    overflow-x: auto;
+  }
+
+  .readout a {
+    min-height: 2.75rem;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (max-width: 30rem) {
+  .legend { gap: var(--space-3); }
+  .chart,
+  .monthRail { min-width: 36rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .monthButton,
+  .monthButtonActive { transition: none; }
+}

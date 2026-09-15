@@ -1,10 +1,21 @@
 import AppShell from "../app-shell";
-import AnalysisClient from "./analysis-client";
+import { loadAnalysisSnapshot } from "../../src/application/analysis/analysis-loader";
+import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import AnalysisPageClient from "./analysis-page-client";
 
-export default function AnalysisPage() {
+export const dynamic = "force-dynamic";
+
+export default async function AnalysisPage() {
+  let initialSnapshot: AnalysisSnapshot | null = null;
+  try {
+    initialSnapshot = await loadAnalysisSnapshot();
+  } catch (error) {
+    console.error("analysis-initial-snapshot", error instanceof Error ? error.message : String(error));
+  }
+
   return (
     <AppShell>
-      <AnalysisClient />
+      <AnalysisPageClient initialSnapshot={initialSnapshot} />
     </AppShell>
   );
 }

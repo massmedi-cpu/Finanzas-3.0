@@ -1,70 +1,18 @@
 import {
-  callPersistenceGateway,
+  loadAnalysisSnapshot,
+  type AnalysisSelectionInput,
+} from "../../../src/application/analysis/analysis-loader";
+import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
-import {
-  buildAnalysisSnapshot,
-  type AnalysisPeriod,
-  type AnalysisTransactionRow,
-} from "../../../src/application/analysis/analysis-engine";
 
 export const dynamic = "force-dynamic";
 
-const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
-const MAX_DRIVER_PAGES = 50;
-
-function madridMonth() {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Madrid",
-    year: "numeric",
-    month: "2-digit",
-  }).formatToParts(new Date());
-  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${map.year}-${map.month}`;
-}
-
-function monthBounds(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const lastDay = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
-  return {
-    dateFrom: `${month}-01`,
-    dateTo: `${month}-${String(lastDay).padStart(2, "0")}`,
-  };
-}
-
-function previousMonth(month: string) {
-  const [year, monthNumber] = month.split("-").map(Number);
-  const previous = monthNumber === 1 ? { year: year - 1, month: 12 } : { year, month: monthNumber - 1 };
-  return `${previous.year}-${String(previous.month).padStart(2, "0")}`;
-}
-
-type TransactionPage = {
-  rows?: AnalysisTransactionRow[];
-  hasMore?: boolean;
-  nextCursor?: { bankDate?: string; id?: string } | null;
+const HEADERS = {
+  "cache-control": "private, no-store",
+  "x-robots-tag": "noindex",
+  "x-analysis-contract": "2",
 };
-
-async function readExpenseRows(dateFrom: string, dateTo: string) {
-  const rows: AnalysisTransactionRow[] = [];
-  let cursor: { bankDate: string; id: string } | null = null;
-
-  for (let page = 0; page < MAX_DRIVER_PAGES; page += 1) {
-    const result: TransactionPage = await callPersistenceGateway<TransactionPage>("transaction.query", {
-      kind: "expense",
-      dateFrom,
-      dateTo,
-      limit: 100,
-      cursorBankDate: cursor?.bankDate ?? null,
-      cursorId: cursor?.id ?? null,
-    });
-    if (Array.isArray(result.rows)) rows.push(...result.rows);
-    if (result.hasMore !== true) return rows;
-    if (!result.nextCursor?.bankDate || !result.nextCursor?.id) throw new Error("analysis_invalid_cursor");
-    cursor = { bankDate: result.nextCursor.bankDate, id: result.nextCursor.id };
-  }
-
-  throw new Error("analysis_driver_page_limit_exceeded");
-}
 
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
@@ -72,47 +20,43 @@ function apiError(error: unknown) {
       { error: "analysis_unavailable", code: error.code ?? null },
       {
         status: error.status >= 400 && error.status < 600 ? error.status : 503,
-        headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+        headers: HEADERS,
       },
     );
   }
+
   const code = error instanceof Error ? error.message : "analysis_invalid_request";
-  const status = code === "analysis_reconciliation_failed" ? 503 : 400;
+  const invalid = code.startsWith("invalid_analysis_") || code.startsWith("invalid_financial_analysis_");
+  const status = code === "analysis_reconciliation_failed" ? 503 : invalid ? 400 : 500;
   console.error("analysis-api", code);
   return Response.json(
-    { error: status === 503 ? "analysis_unavailable" : "invalid_request", code },
-    { status, headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
+    { error: status === 400 ? "invalid_request" : "analysis_unavailable", code },
+    { status, headers: HEADERS },
   );
 }
 
 export async function GET(request: Request) {
+  const started = performance.now();
   try {
     const { searchParams } = new URL(request.url);
     for (const key of searchParams.keys()) {
-      if (key !== "month") throw new Error("invalid_analysis_parameter");
+      if (!new Set(["month", "range", "accountId"]).has(key)) throw new Error("invalid_analysis_parameter");
     }
-    const month = searchParams.get("month")?.trim() || madridMonth();
-    if (!MONTH.test(month)) throw new Error("invalid_analysis_month");
 
-    const currentBounds = monthBounds(month);
-    const previous = previousMonth(month);
-    const previousBounds = monthBounds(previous);
-
-    const [currentPeriod, previousPeriod, expenseRows] = await Promise.all([
-      callPersistenceGateway<AnalysisPeriod>("financial.period", currentBounds),
-      callPersistenceGateway<AnalysisPeriod>("financial.period", previousBounds),
-      readExpenseRows(currentBounds.dateFrom, currentBounds.dateTo),
-    ]);
-
-    const snapshot = buildAnalysisSnapshot({
-      month,
-      current: currentPeriod,
-      previous: previousPeriod,
-      expenseRows,
-    });
+    const input: AnalysisSelectionInput = {
+      month: searchParams.get("month"),
+      range: searchParams.get("range"),
+      accountId: searchParams.get("accountId"),
+    };
+    const snapshot = await loadAnalysisSnapshot(input);
+    const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
 
     return Response.json(snapshot, {
-      headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+      headers: {
+        ...HEADERS,
+        "server-timing": `analysis;dur=${durationMs}`,
+        "x-analysis-data-operations": "1",
+      },
     });
   } catch (error) {
     return apiError(error);
