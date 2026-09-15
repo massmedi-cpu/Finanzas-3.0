@@ -46,6 +46,14 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
   const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
   const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
   const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
+  const minimumPoint = points.reduce((current, point) => point.balanceCents < current.balanceCents ? point : current, points[0]);
+  const firstNegative = points.find((point) => point.balanceCents < 0) ?? null;
+  const largestOutflow = snapshot.items
+    .filter((item) => item.affectsProjection && item.projectionEffectCents < 0)
+    .reduce<(typeof snapshot.items)[number] | null>((current, item) => {
+      if (!current || item.projectionEffectCents < current.projectionEffectCents) return item;
+      return current;
+    }, null);
 
   return (
     <section className={styles.panel} aria-label="Curva de saldo prevista">
@@ -55,6 +63,28 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
           <h2>Curva de saldo prevista</h2>
         </div>
         <span className={styles.meta}>Valores del motor de previsión · sin recálculo visual</span>
+      </div>
+
+      <div className={styles.insights} aria-label="Radar de previsión">
+        <article>
+          <span>Saldo mínimo previsto</span>
+          <strong className={minimumPoint.balanceCents < 0 ? styles.riskValue : undefined}>
+            {money.format(minimumPoint.balanceCents / 100)}
+          </strong>
+          <small>{formatDate(minimumPoint.date)}</small>
+        </article>
+        <article>
+          <span>Primera tensión de saldo</span>
+          <strong className={firstNegative ? styles.riskValue : styles.safeValue}>
+            {firstNegative ? formatDate(firstNegative.date) : "No prevista"}
+          </strong>
+          <small>{firstNegative ? money.format(firstNegative.balanceCents / 100) : "El saldo no baja de cero en el periodo"}</small>
+        </article>
+        <article>
+          <span>Mayor salida prevista</span>
+          <strong>{largestOutflow ? money.format(Math.abs(largestOutflow.projectionEffectCents) / 100) : "Sin salidas"}</strong>
+          <small>{largestOutflow ? `${largestOutflow.concept} · ${formatDate(largestOutflow.date)}` : "No hay cargos que afecten a la proyección"}</small>
+        </article>
       </div>
 
       <div className={styles.plotScroller}>
