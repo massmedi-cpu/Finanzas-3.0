@@ -90,7 +90,7 @@ const SNAPSHOT = buildAnalysisSnapshot({
 });
 
 for (const width of WIDTHS) {
-  test(`Premium Análisis · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }) => {
+  test(`Premium Análisis v4 final · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }) => {
     await page.route("**/api/analysis**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
     });
@@ -103,6 +103,8 @@ for (const width of WIDTHS) {
 
     await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
     await expect(page.getByLabel("Indicadores principales del periodo")).toBeVisible();
+    await expect(page.getByLabel("Lectura rápida")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Tu gasto (ha aumentado|ha disminuido|se mantiene)/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Dónde se concentra el gasto" })).toBeVisible();
@@ -110,7 +112,7 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Movimientos que merece la pena revisar" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Presupuesto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
-    await expect(page.getByText(/detalle por categorías se consulta en Presupuestos/i)).toBeVisible();
+    await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),

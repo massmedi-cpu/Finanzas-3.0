@@ -255,6 +255,50 @@ function DriverRanking({
   );
 }
 
+function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
+  const strongest = snapshot.changeDrivers[0] ?? null;
+  const forecast = snapshot.forecast;
+  const anomalyCount = snapshot.anomalies.length;
+  const anomalyLabel = anomalyCount === 1 ? "movimiento a revisar" : "movimientos a revisar";
+
+  return (
+    <section className={styles.quickRead} aria-label="Lectura rápida">
+      <div className={styles.quickReadIntro}>
+        <span>LECTURA RÁPIDA</span>
+        <strong>Lo importante del periodo</strong>
+      </div>
+      {strongest ? (
+        <Link className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
+          <span>Mayor cambio</span>
+          <strong>{strongest.name}</strong>
+          <small className={strongest.deltaCents > 0 ? styles.badDelta : styles.goodDelta}>{deltaText(strongest.deltaCents)}</small>
+        </Link>
+      ) : (
+        <div className={styles.quickReadItem}>
+          <span>Mayor cambio</span>
+          <strong>Sin variaciones</strong>
+          <small>frente al periodo comparable</small>
+        </div>
+      )}
+      <Link className={styles.quickReadItem} href="#anomalies-heading">
+        <span>Anomalías</span>
+        <strong>{anomalyCount.toLocaleString("es-ES")}</strong>
+        <small>{anomalyLabel}</small>
+      </Link>
+      <Link className={styles.quickReadItem} href="/forecast">
+        <span>Previsión neta</span>
+        <strong>{forecast ? formatMoney(forecast.summary.projectedNetCents) : "—"}</strong>
+        <small>{forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : "fuera del periodo"}</small>
+      </Link>
+      <Link className={styles.quickReadItem} href="#comercios-heading">
+        <span>Concentración comercial</span>
+        <strong>{formatPercentBps(snapshot.concentration.top3MerchantBps)}</strong>
+        <small>del gasto en 3 comercios</small>
+      </Link>
+    </section>
+  );
+}
+
 function LoadingSkeleton() {
   return (
     <div className={styles.skeletonWrap} role="status" aria-label="Cargando análisis financiero">
@@ -274,7 +318,6 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const [accountId, setAccountId] = useState(initialSnapshot?.selection.accountId ?? "");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
-  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
@@ -313,7 +356,6 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       setMonth(next.selection.month);
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
-      setCategoriesExpanded(false);
       setMerchantsExpanded(false);
 
       const nextParams = new URLSearchParams({
@@ -423,12 +465,13 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             />
           </section>
 
+          <QuickRead snapshot={snapshot} />
+
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
               <div>
                 <p>EVOLUCIÓN</p>
                 <h2 id="evolution-heading">Cómo está cambiando tu dinero</h2>
-                <span>Ingresos, gastos y ahorro sobre una escala común; selecciona cualquier mes para ver el origen.</span>
               </div>
               <Link className={styles.secondaryLink} href={periodHref(snapshot)}>Movimientos del periodo</Link>
             </div>
@@ -446,7 +489,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               <div>
                 <p>QUÉ HA CAMBIADO</p>
                 <h2 id="change-heading">{changeHeadline}</h2>
-                <span>Comparación equivalente con {comparisonLabel(snapshot)}. Las barras muestran qué categorías explican el cambio.</span>
+                <span>vs. {comparisonLabel(snapshot)}</span>
               </div>
               <span className={expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
                 {deltaText(expenseDirection)}
@@ -464,9 +507,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 </div>
                 <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} en 3 categorías</span>
               </div>
-              <div className={styles.breakdown} role="list">
+              <div className={styles.breakdown}>
                 {snapshot.categoryDrivers.slice(0, 6).map((item) => (
-                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow} role="listitem">
+                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                     <div>
                       <strong>{item.name}</strong>
                       <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
@@ -538,26 +581,6 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               )}
             </section>
 
-            <section className={styles.section} aria-labelledby="concentration-heading">
-              <div className={styles.sectionHeading}>
-                <div>
-                  <p>CONCENTRACIÓN</p>
-                  <h2 id="concentration-heading">Cuánto depende tu gasto de pocos grupos</h2>
-                </div>
-              </div>
-              <div className={styles.concentrationGrid}>
-                <div>
-                  <span>3 categorías principales</span>
-                  <strong>{formatPercentBps(snapshot.concentration.top3CategoryBps)}</strong>
-                  <p>del gasto del periodo</p>
-                </div>
-                <div>
-                  <span>3 comercios principales</span>
-                  <strong>{formatPercentBps(snapshot.concentration.top3MerchantBps)}</strong>
-                  <p>del gasto del periodo</p>
-                </div>
-              </div>
-            </section>
           </div>
 
           <div className={styles.contextGrid}>
@@ -571,7 +594,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   <strong className={styles.contextValue}>{formatPercentBps(snapshot.budget.total.progressBps)} consumido</strong>
                   <p>{formatMoney(snapshot.budget.total.actualExpenseCents)} de {formatMoney(snapshot.budget.total.effectiveAmountCents)}.</p>
                   {snapshot.budget.categoryDetailDeferred ? (
-                    <p className={styles.empty}>El estado global está actualizado. El detalle por categorías se consulta en Presupuestos para no ralentizar Análisis.</p>
+                    <p className={styles.empty}>Detalle por categorías disponible en Presupuestos.</p>
                   ) : snapshot.budget.overCategories.length > 0 ? (
                     <ul className={styles.contextAlerts}>
                       {snapshot.budget.overCategories.slice(0, 3).map((item) => (
@@ -616,12 +639,11 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <div className={styles.sectionHeading}>
               <div>
                 <p>DETALLE</p>
-                <h2 id="rankings-heading">Principales categorías y comercios</h2>
-                <span>Rankings secundarios para investigar el origen del gasto, sin duplicar la lectura principal.</span>
+                <h2 id="rankings-heading">Comercios principales</h2>
               </div>
+              <span>{formatPercentBps(snapshot.concentration.top3MerchantBps)} en los 3 primeros</span>
             </div>
             <div className={styles.rankingsGrid}>
-              <DriverRanking title="Categorías" items={snapshot.categoryDrivers} expanded={categoriesExpanded} onToggle={() => setCategoriesExpanded((value) => !value)} />
               <DriverRanking title="Comercios" items={snapshot.merchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
           </section>
