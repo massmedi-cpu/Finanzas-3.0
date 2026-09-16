@@ -353,6 +353,11 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
+  const filtersDirty = snapshot
+    ? month !== snapshot.selection.month
+      || range !== snapshot.selection.range
+      || accountId !== (snapshot.selection.accountId ?? "")
+    : true;
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
@@ -460,8 +465,13 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               ))}
             </select>
           </label>
-          <button className={styles.applyButton} type="submit" disabled={loading || !month}>
-            {loading ? "Actualizando…" : "Aplicar"}
+          <button
+            className={styles.applyButton}
+            type="submit"
+            disabled={loading || !month}
+            title={filtersDirty ? "Hay cambios de filtros pendientes" : "Actualizar el análisis con estos filtros"}
+          >
+            {loading ? "Actualizando…" : filtersDirty ? "Aplicar cambios" : "Aplicar"}
           </button>
         </form>
       </header>
@@ -469,11 +479,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       {error && (
         <div className={styles.error} role="alert">
           <span>{error}</span>
-          {!snapshot && (
-            <button className={styles.textButton} type="button" onClick={() => void refresh()} disabled={loading || !month}>
-              {loading ? "Reintentando…" : "Reintentar"}
-            </button>
-          )}
+          <button className={styles.textButton} type="button" onClick={() => void refresh()} disabled={loading || !month}>
+            {loading ? "Reintentando…" : "Reintentar"}
+          </button>
         </div>
       )}
       {!snapshot && loading && <LoadingSkeleton />}
