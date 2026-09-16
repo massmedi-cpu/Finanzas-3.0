@@ -2,6 +2,8 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { analysisSelectionFromSearchParams } from "../../src/application/analysis/analysis-query-state";
 
 const VALID_SNAPSHOT = {
@@ -112,4 +114,60 @@ test("Análisis v5 · el shell queda fuera de la espera del snapshot financiero"
   expect(shellIndex).toBeGreaterThanOrEqual(0);
   expect(suspenseIndex).toBeGreaterThan(shellIndex);
   expect(dataIndex).toBeGreaterThan(suspenseIndex);
+});
+
+test("Análisis v5 · un ingreso residual no convierte un mes parcial en una tasa de ahorro absurda", () => {
+  const snapshot = {
+    ...VALID_SNAPSHOT,
+    selection: {
+      ...VALID_SNAPSHOT.selection,
+      range: "1m",
+      month: "2026-09",
+      dateFrom: "2026-09-01",
+      dateTo: "2026-09-16",
+      previousDateFrom: "2026-08-01",
+      previousDateTo: "2026-08-16",
+      partial: true,
+      partialMonthStart: "2026-09-01",
+    },
+    current: {
+      ...VALID_SNAPSHOT.current,
+      dateFrom: "2026-09-01",
+      dateTo: "2026-09-16",
+      incomeCents: 38,
+      expenseCents: 14121,
+      operatingNetCents: -14083,
+      savingsCents: -14083,
+      savingsRateBps: -3706053,
+    },
+    comparison: {
+      incomeDeltaCents: -1295,
+      incomeChangeBps: -9715,
+      expenseDeltaCents: -14117,
+      expenseChangeBps: -5000,
+      netDeltaCents: 12822,
+      netChangeBps: 4766,
+      savingsDeltaCents: 12822,
+      savingsChangeBps: 4766,
+      savingsRateDeltaBps: -3504215,
+    },
+    averages: {
+      last3Months: {
+        months: 3,
+        incomeCents: 217277,
+        expenseCents: 128633,
+        operatingNetCents: 88644,
+        savingsCents: 88644,
+        savingsRateBps: 3011,
+      },
+      last6Months: null,
+    },
+  } as unknown as AnalysisSnapshot;
+
+  expect(resolveSavingsRatePresentation(snapshot)).toEqual({
+    representative: false,
+    valueBps: null,
+    deltaBps: null,
+    reason: "partial_income_pending",
+  });
 });
