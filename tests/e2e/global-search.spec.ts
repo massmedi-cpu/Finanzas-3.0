@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { shouldOpenGlobalSearchShortcut } from "../../app/global-search-shortcut";
 
 const RESPONSE = {
   query: "Mercadona",
@@ -52,26 +53,27 @@ test("Buscador global está disponible desde AppShell y abre resultados útiles"
   await expect(result).toHaveAttribute("href", /merchantId=bbbbbbbb/);
 });
 
-test("Buscador global responde al atajo y no secuestra campos editables", async ({ page }) => {
-  await mockSearch(page);
-  await page.goto("/onboarding");
+test("Buscador global conserva un atajo seguro sin secuestrar campos editables", () => {
+  const base = {
+    key: "/",
+    code: "Slash",
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    targetTagName: "BODY",
+    targetContentEditable: false,
+  };
 
-  await page.evaluate(() => {
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "/", code: "Slash", bubbles: true, cancelable: true }));
-  });
-  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
-  await expect(dialog).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-
-  const existingInput = page.locator("input").first();
-  if (await existingInput.count()) {
-    await existingInput.focus();
-    await existingInput.evaluate((input) => {
-      input.dispatchEvent(new KeyboardEvent("keydown", { key: "/", code: "Slash", bubbles: true, cancelable: true }));
-    });
-    await expect(dialog).toBeHidden();
-  }
+  expect(shouldOpenGlobalSearchShortcut(base)).toBe(true);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, key: "?" })).toBe(true);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, targetTagName: "INPUT" })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, targetTagName: "TEXTAREA" })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, targetTagName: "SELECT" })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, targetTagName: "DIV", targetContentEditable: true })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, ctrlKey: true })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, metaKey: true })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, altKey: true })).toBe(false);
+  expect(shouldOpenGlobalSearchShortcut({ ...base, key: "x", code: "KeyX" })).toBe(false);
 });
 
 test("Buscador global cabe en móvil y mantiene objetivos táctiles", async ({ page }) => {

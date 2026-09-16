@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { shouldOpenGlobalSearchShortcut } from "./global-search-shortcut";
 import styles from "./global-search.module.css";
 
 type SearchKind = "transaction" | "document" | "merchant" | "category" | "account" | "section";
@@ -50,9 +51,15 @@ export default function GlobalSearch() {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
-      const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
-      const slashShortcut = event.key === "/" || event.code === "Slash";
-      if (!typing && slashShortcut && !event.metaKey && !event.ctrlKey && !event.altKey) {
+      if (shouldOpenGlobalSearchShortcut({
+        key: event.key,
+        code: event.code,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        altKey: event.altKey,
+        targetTagName: target?.tagName ?? null,
+        targetContentEditable: target?.isContentEditable ?? false,
+      })) {
         event.preventDefault();
         setOpen(true);
       }
