@@ -125,12 +125,14 @@ test("Análisis v6 · un ingreso parcial ya representativo conserva su comparaci
   expect(presented.comparison.incomeChangeBps).toBe(snapshot.comparison.incomeChangeBps);
 });
 
-test("Análisis v7 · la concentración visible no presupone siempre tres categorías o comercios", () => {
+test("Análisis v7 · la concentración visible usa sólo grupos con gasto actual y no presupone siempre tres", () => {
   const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
 
   expect(source).toContain("function topConcentrationContext");
-  expect(source).toContain('topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")');
-  expect(source).toContain('topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")');
+  expect(source).toContain("currentExpenseDrivers(snapshot.merchantDrivers)");
+  expect(source).toContain("currentExpenseDrivers(snapshot.categoryDrivers)");
+  expect(source).toContain('topConcentrationContext(merchantConcentration.count, "comercio", "comercios")');
+  expect(source).toContain('topConcentrationContext(categoryConcentrationPresentation.count, "categoría", "categorías")');
   expect(source).toContain('href="#comercios-heading"');
   expect(source).not.toContain("del gasto en 3 comercios");
   expect(source).not.toContain("en 3 categorías</span>");
