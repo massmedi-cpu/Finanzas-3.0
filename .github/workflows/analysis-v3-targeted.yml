@@ -1,19 +1,39 @@
-name: Analysis Premium V3 Targeted
+name: Analysis Regression
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/analysis/**"
+      - "src/application/analysis/**"
+      - "src/design/contribution-chart.tsx"
+      - "src/design/financial-trend-chart.tsx"
+      - "tests/e2e/analysis*.spec.ts"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - ".github/workflows/analysis-v3-targeted.yml"
   push:
     branches:
-      - work/analysis-premium-v3
+      - main
+    paths:
+      - "app/analysis/**"
+      - "src/application/analysis/**"
+      - "src/design/contribution-chart.tsx"
+      - "src/design/financial-trend-chart.tsx"
+      - "tests/e2e/analysis*.spec.ts"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - ".github/workflows/analysis-v3-targeted.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  analysis-v3:
+  analysis-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
-      - name: Checkout exact branch commit
+      - name: Checkout exact commit
         uses: actions/checkout@v6
 
       - name: Setup Node.js 24
@@ -47,6 +67,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: analysis-v3-targeted-${{ github.sha }}
+          name: analysis-regression-${{ github.sha }}
           path: playwright-report/
           retention-days: 7
