@@ -28,51 +28,43 @@ jobs:
           path = Path("app/analysis/analysis-client.tsx")
           text = path.read_text()
 
-          import_old = '''import { ContributionChart } from "../../src/design/contribution-chart";
-          import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
-          import styles from "./analysis.module.css";'''
-          import_new = '''import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
-          import { ContributionChart } from "../../src/design/contribution-chart";
-          import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
-          import styles from "./analysis.module.css";'''
-          if text.count(import_old) != 1:
-              raise SystemExit("analysis client import anchor changed")
-          text = text.replace(import_old, import_new, 1)
+          import_marker = 'import { ContributionChart } from "../../src/design/contribution-chart";'
+          import_line = 'import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";\n'
+          if import_line.strip() not in text:
+              if text.count(import_marker) != 1:
+                  raise SystemExit("analysis client import anchor changed")
+              text = text.replace(import_marker, import_line + import_marker, 1)
 
-          refresh_old = '''      if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
-          if (requestRef.current !== controller) return;
+          cast_marker = 'const next = payload as AnalysisSnapshot;'
+          cast_replacement = 'if (!isAnalysisSnapshot(payload)) throw new Error("analysis_contract_invalid");\n\n      const next = payload;'
+          if text.count(cast_marker) != 1:
+              raise SystemExit("analysis client snapshot cast anchor changed")
+          cast_index = text.index(cast_marker)
+          text = text[:cast_index] + cast_replacement + text[cast_index + len(cast_marker):]
 
-          const next = payload as AnalysisSnapshot;
-          setSnapshot(next);
-          setMonth(next.selection.month);
-          setRange(next.selection.range);
-          setAccountId(next.selection.accountId ?? "");
-          setCategoriesExpanded(false);
-          setMerchantsExpanded(false);'''
-          refresh_new = '''      if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
-          if (requestRef.current !== controller) return;
-          if (!isAnalysisSnapshot(payload)) throw new Error("analysis_contract_invalid");
+          tail_marker = '      setMerchantsExpanded(false);'
+          tail_index = text.find(tail_marker, cast_index)
+          if tail_index < 0:
+              raise SystemExit("analysis client refresh tail anchor changed")
+          tail_end = tail_index + len(tail_marker)
+          url_sync = '''
 
-          const next = payload;
-          setSnapshot(next);
-          setMonth(next.selection.month);
-          setRange(next.selection.range);
-          setAccountId(next.selection.accountId ?? "");
-          setCategoriesExpanded(false);
-          setMerchantsExpanded(false);
-
-          const nextParams = new URLSearchParams({
-            month: next.selection.month,
-            range: next.selection.range,
-          });
-          if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);
-          window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);'''
-          if text.count(refresh_old) != 1:
-              raise SystemExit("analysis client refresh anchor changed")
-          text = text.replace(refresh_old, refresh_new, 1)
+      const nextParams = new URLSearchParams({
+        month: next.selection.month,
+        range: next.selection.range,
+      });
+      if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);
+      window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);'''
+          text = text[:tail_end] + url_sync + text[tail_end:]
 
           path.write_text(text)
           PY
+
+      - name: Verify patch shape
+        run: |
+          grep -F 'isAnalysisSnapshot(payload)' app/analysis/analysis-client.tsx
+          grep -F 'window.history.replaceState' app/analysis/analysis-client.tsx
+          test "$(grep -c 'analysis_contract_invalid' app/analysis/analysis-client.tsx)" -eq 1
 
       - name: Commit isolated change
         run: |
