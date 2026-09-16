@@ -113,11 +113,11 @@ function comparisonLabel(snapshot: AnalysisSnapshot) {
   return `${formatDate(snapshot.selection.previousDateFrom)} – ${formatDate(snapshot.selection.previousDateTo)}`;
 }
 
-function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "savings" | "rate") {
+function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "net" | "rate") {
   if (trend.direction === "insufficient") return "Aún no hay 6 meses completos para confirmar tendencia";
   if (trend.direction === "stable") return "Comportamiento estable en los últimos 6 meses";
   const up = trend.direction === "up";
-  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "ahorro";
+  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "neto";
   return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${up ? "al alza" : "a la baja"} frente al trimestre previo`;
 }
 
@@ -193,7 +193,7 @@ function Kpi({
       <strong>{value}</strong>
       <div className={styles.kpiContext}>
         {historical}
-        <span>{trendLabel(trend, tone === "net" ? "savings" : tone === "rate" ? "rate" : tone)}</span>
+        <span>{trendLabel(trend, tone === "net" ? "net" : tone === "rate" ? "rate" : tone)}</span>
       </div>
     </article>
   );
@@ -259,6 +259,7 @@ function DriverRanking({
 function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const strongest = snapshot.changeDrivers[0] ?? null;
   const forecast = snapshot.forecast;
+  const hasForecastItems = Boolean(forecast && forecast.summary.plannedItems > 0);
   const anomalyCount = snapshot.anomalies.length;
   const anomalyLabel = anomalyCount === 1 ? "movimiento a revisar" : "movimientos a revisar";
 
@@ -288,8 +289,8 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
-        <strong>{forecast ? formatMoney(forecast.summary.projectedNetCents) : "—"}</strong>
-        <small>{forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : "fuera del periodo"}</small>
+        <strong>{hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"}</strong>
+        <small>{hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "fuera del periodo"}</small>
       </Link>
       <Link className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
@@ -450,10 +451,10 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               tone="expense"
             />
             <Kpi
-              label="Ahorro / neto"
-              value={formatMoney(snapshot.current.savingsCents)}
-              comparison={`${formatPercentBps(snapshot.comparison.savingsChangeBps, true)} vs. periodo anterior`}
-              trend={snapshot.trends.savings}
+              label="Neto del periodo"
+              value={formatMoney(snapshot.current.operatingNetCents)}
+              comparison={`${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
+              trend={snapshot.trends.net}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
             />
@@ -623,18 +624,21 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <Link href="/forecast">Abrir Previsión</Link>
               </div>
               {snapshot.forecast ? (
-                <>
-                  <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
-                  <p>
-                    {snapshot.forecast.summary.plannedItems > 0
-                      ? `${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`
-                      : `No hay pagos o ingresos previstos activos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}
-                  </p>
-                  <div className={styles.forecastFigures}>
-                    <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
-                    <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>
-                  </div>
-                </>
+                snapshot.forecast.summary.plannedItems > 0 ? (
+                  <>
+                    <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
+                    <p>{`${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
+                    <div className={styles.forecastFigures}>
+                      <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
+                      <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <strong className={styles.contextValue}>Sin previsiones activas</strong>
+                    <p>{`No hay pagos o ingresos previstos activos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
+                  </>
+                )
               ) : (
                 <p className={styles.empty}>La previsión sólo se muestra cuando el periodo seleccionado alcanza la fecha actual o futura.</p>
               )}
