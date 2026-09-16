@@ -1,8 +1,6 @@
 .shell {
-  width: min(var(--content-max), 100%);
   min-width: 0;
-  margin: 0 auto;
-  padding: 0 clamp(var(--space-4), 2.2vw, var(--space-8)) clamp(var(--space-6), 3vw, var(--space-9));
+  margin-top: var(--space-4);
 }
 
 .heading {
@@ -11,7 +9,6 @@
   align-items: flex-end;
   justify-content: space-between;
   gap: var(--space-4);
-  margin-top: var(--space-4);
   padding: clamp(1rem, 1.5vw, 1.35rem);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
@@ -318,7 +315,6 @@
 }
 
 @media (max-width: 48rem) {
-  .shell { padding-inline: var(--space-3); }
   .heading { display: grid; align-items: stretch; }
   .heading > a { width: fit-content; }
   .bandRow { grid-template-columns: 5.4rem minmax(0, 1fr) 2.2rem; }
@@ -328,7 +324,6 @@
 }
 
 @media (max-width: 30rem) {
-  .shell { padding-inline: 0.65rem; }
   .chartCard,
   .detailCard,
   .heading { padding: 0.9rem; border-radius: var(--radius-md); }
