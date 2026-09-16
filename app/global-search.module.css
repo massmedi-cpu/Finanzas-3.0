@@ -1,0 +1,309 @@
+.trigger {
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid rgba(77, 141, 255, 0.24);
+  border-radius: 0.8rem;
+  background: rgba(77, 141, 255, 0.06);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-button);
+  font-weight: 750;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.trigger:hover,
+.trigger:focus-visible {
+  color: var(--color-text);
+  border-color: rgba(77, 141, 255, 0.42);
+  background: rgba(77, 141, 255, 0.11);
+}
+
+.trigger svg,
+.searchBox svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.trigger kbd {
+  padding: 0.12rem 0.32rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.35rem;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: start center;
+  padding: clamp(4.5rem, 12vh, 8rem) 1rem 1rem;
+  background: rgba(2, 5, 12, 0.72);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.dialog {
+  width: min(44rem, 100%);
+  max-height: min(72vh, 46rem);
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-bg-elevated) 96%, #050914);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.46);
+}
+
+.topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) var(--space-2);
+}
+
+.topline > div span,
+.kind {
+  display: block;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.topline > div strong {
+  display: block;
+  margin-top: 0.16rem;
+  font-size: var(--font-section-title);
+}
+
+.topline > button {
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.searchBox {
+  min-width: 0;
+  margin: var(--space-2) var(--space-4) var(--space-3);
+  min-height: 3.25rem;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0 0.9rem;
+  border: 1px solid rgba(77, 141, 255, 0.34);
+  border-radius: var(--radius-md);
+  background: rgba(77, 141, 255, 0.055);
+  color: var(--color-text-muted);
+}
+
+.searchBox:focus-within {
+  border-color: var(--color-primary-bright);
+  box-shadow: 0 0 0 3px rgba(77, 141, 255, 0.1);
+}
+
+.searchBox input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.searchBox input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.loading {
+  flex: 0 0 auto;
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+}
+
+.results {
+  min-height: 9rem;
+  overflow-y: auto;
+  padding: 0 var(--space-3) var(--space-3);
+  scrollbar-width: thin;
+}
+
+.result {
+  min-height: 3.7rem;
+  display: grid;
+  grid-template-columns: 5.3rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0.7rem 0.8rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: inherit;
+  text-decoration: none;
+}
+
+.result:hover,
+.result:focus-visible,
+.active {
+  border-color: rgba(77, 141, 255, 0.22);
+  background: rgba(77, 141, 255, 0.075);
+  outline: none;
+}
+
+.copy,
+.meta {
+  min-width: 0;
+}
+
+.copy strong,
+.copy small,
+.meta b,
+.meta small {
+  display: block;
+}
+
+.copy strong {
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: var(--font-body-strong);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy small {
+  margin-top: 0.12rem;
+  overflow: hidden;
+  color: var(--color-text-secondary);
+  font-size: var(--font-helper);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.meta {
+  text-align: right;
+}
+
+.meta b {
+  color: var(--color-text);
+  font-size: var(--font-helper);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.meta small {
+  margin-top: 0.12rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  white-space: nowrap;
+}
+
+.hint {
+  min-height: 10rem;
+  display: grid;
+  place-content: center;
+  gap: 0.3rem;
+  padding: var(--space-4);
+  text-align: center;
+}
+
+.hint strong {
+  color: var(--color-text);
+  font-size: var(--font-body-strong);
+}
+
+.hint span {
+  color: var(--color-text-muted);
+  font-size: var(--font-helper);
+}
+
+.footer {
+  min-height: 2.8rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: 0.65rem var(--space-4);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+}
+
+@media (max-width: 48rem) {
+  .trigger kbd {
+    display: none;
+  }
+
+  .backdrop {
+    align-items: end;
+    padding: 0.75rem;
+  }
+
+  .dialog {
+    width: 100%;
+    max-height: min(82dvh, 44rem);
+    border-radius: 1rem;
+  }
+
+  .topline {
+    padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+
+  .searchBox {
+    margin: var(--space-2) var(--space-3) var(--space-3);
+  }
+
+  .result {
+    min-height: 4.2rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-2);
+  }
+
+  .kind {
+    grid-column: 1 / -1;
+  }
+
+  .footer {
+    display: none;
+  }
+}
+
+@media (max-width: 25rem) {
+  .trigger span {
+    display: none;
+  }
+
+  .trigger {
+    width: 2.75rem;
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .backdrop {
+    backdrop-filter: none;
+  }
+}
