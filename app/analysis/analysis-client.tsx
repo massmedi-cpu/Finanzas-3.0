@@ -10,6 +10,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -112,17 +113,23 @@ function comparisonLabel(snapshot: AnalysisSnapshot) {
   return `${formatDate(snapshot.selection.previousDateFrom)} – ${formatDate(snapshot.selection.previousDateTo)}`;
 }
 
-function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "savings" | "rate") {
+function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "net" | "rate") {
   if (trend.direction === "insufficient") return "Aún no hay 6 meses completos para confirmar tendencia";
   if (trend.direction === "stable") return "Comportamiento estable en los últimos 6 meses";
   const up = trend.direction === "up";
-  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "ahorro";
+  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "neto";
   return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${up ? "al alza" : "a la baja"} frente al trimestre previo`;
 }
 
 function deltaText(cents: number) {
   if (cents === 0) return "Sin cambio";
   return `${cents > 0 ? "+" : "−"}${formatMoney(Math.abs(cents))}`;
+}
+
+function topConcentrationContext(count: number, singular: string, plural: string) {
+  const visible = Math.min(3, Math.max(0, count));
+  if (visible === 0) return `sin ${plural} elegibles`;
+  return `en ${visible.toLocaleString("es-ES")} ${visible === 1 ? singular : plural}`;
 }
 
 function periodHref(snapshot: AnalysisSnapshot) {
@@ -187,12 +194,12 @@ function Kpi({
     <article className={`${styles.kpi} ${styles[`kpi_${tone}`]}`}>
       <div className={styles.kpiTop}>
         <span>{label}</span>
-        <span className={styles.kpiDirection}>{comparison} vs. periodo anterior</span>
+        <span className={styles.kpiDirection}>{comparison}</span>
       </div>
       <strong>{value}</strong>
       <div className={styles.kpiContext}>
         {historical}
-        <span>{trendLabel(trend, tone === "net" ? "savings" : tone === "rate" ? "rate" : tone)}</span>
+        <span>{trendLabel(trend, tone === "net" ? "net" : tone === "rate" ? "rate" : tone)}</span>
       </div>
     </article>
   );
@@ -258,6 +265,7 @@ function DriverRanking({
 function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const strongest = snapshot.changeDrivers[0] ?? null;
   const forecast = snapshot.forecast;
+  const hasForecastItems = Boolean(forecast && forecast.summary.plannedItems > 0);
   const anomalyCount = snapshot.anomalies.length;
   const anomalyLabel = anomalyCount === 1 ? "movimiento a revisar" : "movimientos a revisar";
 
@@ -287,13 +295,13 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
-        <strong>{forecast ? formatMoney(forecast.summary.projectedNetCents) : "—"}</strong>
-        <small>{forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : "fuera del periodo"}</small>
+        <strong>{hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"}</strong>
+        <small>{hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "fuera del periodo"}</small>
       </Link>
       <Link className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
         <strong>{formatPercentBps(snapshot.concentration.top3MerchantBps)}</strong>
-        <small>del gasto en 3 comercios</small>
+        <small>del gasto {topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}</small>
       </Link>
     </section>
   );
@@ -321,6 +329,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
+  const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
@@ -423,8 +432,17 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
         </form>
       </header>
 
-      {error && <div className={styles.error} role="alert">{error}</div>}
-      {!snapshot && <LoadingSkeleton />}
+      {error && (
+        <div className={styles.error} role="alert">
+          <span>{error}</span>
+          {!snapshot && (
+            <button className={styles.textButton} type="button" onClick={() => void refresh()} disabled={loading || !month}>
+              {loading ? "Reintentando…" : "Reintentar"}
+            </button>
+          )}
+        </div>
+      )}
+      {!snapshot && loading && <LoadingSkeleton />}
 
       {snapshot && (
         <>
@@ -434,7 +452,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ingresos"
               value={formatMoney(snapshot.current.incomeCents)}
-              comparison={formatPercentBps(snapshot.comparison.incomeChangeBps, true)}
+              comparison={`${formatPercentBps(snapshot.comparison.incomeChangeBps, true)} vs. periodo anterior`}
               trend={snapshot.trends.income}
               historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
               tone="income"
@@ -442,23 +460,27 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Gastos"
               value={formatMoney(snapshot.current.expenseCents)}
-              comparison={formatPercentBps(snapshot.comparison.expenseChangeBps, true)}
+              comparison={`${formatPercentBps(snapshot.comparison.expenseChangeBps, true)} vs. periodo anterior`}
               trend={snapshot.trends.expense}
               historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
               tone="expense"
             />
             <Kpi
-              label="Ahorro / neto"
-              value={formatMoney(snapshot.current.savingsCents)}
-              comparison={formatPercentBps(snapshot.comparison.savingsChangeBps, true)}
-              trend={snapshot.trends.savings}
+              label="Neto del periodo"
+              value={formatMoney(snapshot.current.operatingNetCents)}
+              comparison={`${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
+              trend={snapshot.trends.net}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
             />
             <Kpi
               label="Tasa de ahorro"
-              value={formatPercentBps(snapshot.current.savingsRateBps)}
-              comparison={formatPointDeltaBps(snapshot.comparison.savingsRateDeltaBps)}
+              value={savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
+              comparison={savingsRatePresentation?.representative
+                ? `${formatPointDeltaBps(savingsRatePresentation.deltaBps)} vs. periodo anterior`
+                : savingsRatePresentation?.reason === "partial_income_pending"
+                  ? "Ingresos del mes aún no representativos"
+                  : "Sin tasa disponible"}
               trend={snapshot.trends.savingsRate}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
               tone="rate"
@@ -505,7 +527,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   <p>COMPOSICIÓN</p>
                   <h2 id="distribution-heading">Dónde se concentra el gasto</h2>
                 </div>
-                <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} en 3 categorías</span>
+                <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} {topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")}</span>
               </div>
               <div className={styles.breakdown}>
                 {snapshot.categoryDrivers.slice(0, 6).map((item) => (
@@ -557,7 +579,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               <div className={styles.sectionHeading}>
                 <div>
                   <p>ANOMALÍAS</p>
-                  <h2 id="anomalies-heading">Movimientos que merece la pena revisar</h2>
+                  <h2 id="anomalies-heading">Movimientos que merecen la pena revisar</h2>
                 </div>
                 <span>{snapshot.anomalies.length.toLocaleString("es-ES")}</span>
               </div>
@@ -617,18 +639,21 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <Link href="/forecast">Abrir Previsión</Link>
               </div>
               {snapshot.forecast ? (
-                <>
-                  <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
-                  <p>
-                    {snapshot.forecast.summary.plannedItems > 0
-                      ? `${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`
-                      : `No hay pagos o ingresos previstos activos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}
-                  </p>
-                  <div className={styles.forecastFigures}>
-                    <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
-                    <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>
-                  </div>
-                </>
+                snapshot.forecast.summary.plannedItems > 0 ? (
+                  <>
+                    <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
+                    <p>{`${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
+                    <div className={styles.forecastFigures}>
+                      <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
+                      <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <strong className={styles.contextValue}>Sin previsiones activas</strong>
+                    <p>{`No hay pagos o ingresos previstos activos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
+                  </>
+                )
               ) : (
                 <p className={styles.empty}>La previsión sólo se muestra cuando el periodo seleccionado alcanza la fecha actual o futura.</p>
               )}
@@ -641,7 +666,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <p>DETALLE</p>
                 <h2 id="rankings-heading">Comercios principales</h2>
               </div>
-              <span>{formatPercentBps(snapshot.concentration.top3MerchantBps)} en los 3 primeros</span>
+              <span>{formatPercentBps(snapshot.concentration.top3MerchantBps)} {topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}</span>
             </div>
             <div className={styles.rankingsGrid}>
               <DriverRanking title="Comercios" items={snapshot.merchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
