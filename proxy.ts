@@ -69,10 +69,33 @@ function applyContentSecurityPolicy<T extends NextResponse>(
   return response;
 }
 
-function nextResponse(context: ContentSecurityPolicyContext | null) {
-  if (!context) return NextResponse.next();
-  const response = NextResponse.next({ request: { headers: context.requestHeaders } });
+function nextResponse(
+  context: ContentSecurityPolicyContext | null,
+  downstreamRequestHeaders?: Headers,
+) {
+  const headers = downstreamRequestHeaders ?? context?.requestHeaders;
+  if (!headers) return NextResponse.next();
+  const response = NextResponse.next({ request: { headers } });
   return applyContentSecurityPolicy(response, context);
+}
+
+function refreshedRequestHeaders(
+  request: NextRequest,
+  context: ContentSecurityPolicyContext | null,
+  accessToken: string,
+  refreshToken: string,
+) {
+  request.cookies.set(AUTH_ACCESS_COOKIE, accessToken);
+  request.cookies.set(AUTH_REFRESH_COOKIE, refreshToken);
+
+  const headers = new Headers(request.headers);
+  if (context) {
+    const nonce = context.requestHeaders.get("x-nonce");
+    const policy = context.requestHeaders.get("Content-Security-Policy");
+    if (nonce) headers.set("x-nonce", nonce);
+    if (policy) headers.set("Content-Security-Policy", policy);
+  }
+  return headers;
 }
 
 function unauthorizedResponse(request: NextRequest, context: ContentSecurityPolicyContext | null) {
@@ -173,7 +196,13 @@ export async function proxy(request: NextRequest) {
     if (refreshed.status === "ok") {
       const authorization = await validateAccessToken(refreshed.session.access_token);
       if (authorization === "valid") {
-        const response = nextResponse(csp);
+        const downstreamHeaders = refreshedRequestHeaders(
+          request,
+          csp,
+          refreshed.session.access_token,
+          refreshed.session.refresh_token,
+        );
+        const response = nextResponse(csp, downstreamHeaders);
         setSessionCookies(response, refreshed.session);
         return response;
       }

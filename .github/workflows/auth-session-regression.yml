@@ -1,0 +1,66 @@
+name: Auth Session Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "proxy.ts"
+      - "src/infrastructure/auth/**"
+      - "tests/e2e/production-auth.spec.ts"
+      - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - ".github/workflows/auth-session-regression.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "proxy.ts"
+      - "src/infrastructure/auth/**"
+      - "tests/e2e/production-auth.spec.ts"
+      - "tests/e2e/auth-refresh-request-propagation.spec.ts"
+      - ".github/workflows/auth-session-regression.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auth-session-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run auth session regression suite
+        run: >-
+          npm run test:e2e --
+          tests/e2e/production-auth.spec.ts
+          tests/e2e/auth-refresh-request-propagation.spec.ts
+          --project=chromium-desktop
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: auth-session-regression-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7
