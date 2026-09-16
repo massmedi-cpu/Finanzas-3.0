@@ -10,7 +10,13 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
-import { resolveBudgetSourcePresentation, resolveIncomeComparisonPresentation, resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
+import {
+  resolveBudgetSourcePresentation,
+  resolveConcentrationPresentation,
+  resolveExpenseComparisonPresentation,
+  resolveIncomeComparisonPresentation,
+  resolveSavingsRatePresentation,
+} from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -280,6 +286,7 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const hasForecastItems = Boolean(forecast && forecast.summary.plannedItems > 0);
   const anomalyCount = snapshot.anomalies.length;
   const anomalyLabel = anomalyCount === 1 ? "movimiento a revisar" : "movimientos a revisar";
+  const merchantConcentration = resolveConcentrationPresentation(snapshot, "merchant");
 
   return (
     <section className={styles.quickRead} aria-label="Lectura rápida">
@@ -312,8 +319,12 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
-        <strong>{formatPercentBps(snapshot.concentration.top3MerchantBps)}</strong>
-        <small>del gasto {topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}</small>
+        <strong>{merchantConcentration.available
+          ? formatPercentBps(merchantConcentration.valueBps)
+          : merchantConcentration.label ?? "Sin gasto elegible"}</strong>
+        <small>{merchantConcentration.available
+          ? `del gasto ${topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}`
+          : merchantConcentration.detail ?? "concentración no disponible"}</small>
       </Link>
     </section>
   );
@@ -342,7 +353,10 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
 
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
+  const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
+  const categoryConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "category") : null;
+  const merchantConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "merchant") : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
@@ -477,7 +491,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Gastos"
               value={formatMoney(snapshot.current.expenseCents)}
-              comparison={`${formatPercentBps(snapshot.comparison.expenseChangeBps, true)} vs. periodo anterior`}
+              comparison={expenseComparisonPresentation?.representative
+                ? `${formatPercentBps(expenseComparisonPresentation.changeBps, true)} vs. periodo anterior`
+                : expenseComparisonPresentation?.label ?? "Comparación no disponible"}
               trend={snapshot.trends.expense}
               historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
               tone="expense"
@@ -544,7 +560,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   <p>COMPOSICIÓN</p>
                   <h2 id="distribution-heading">Dónde se concentra el gasto</h2>
                 </div>
-                <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} {topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")}</span>
+                <span>{categoryConcentrationPresentation?.available
+                  ? `${formatPercentBps(categoryConcentrationPresentation.valueBps)} ${topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")}`
+                  : categoryConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
               </div>
               <div className={styles.breakdown}>
                 {snapshot.categoryDrivers.slice(0, 6).map((item) => (
@@ -683,7 +701,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <p>DETALLE</p>
                 <h2 id="rankings-heading">Comercios principales</h2>
               </div>
-              <span>{formatPercentBps(snapshot.concentration.top3MerchantBps)} {topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}</span>
+              <span>{merchantConcentrationPresentation?.available
+                ? `${formatPercentBps(merchantConcentrationPresentation.valueBps)} ${topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}`
+                : merchantConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
             </div>
             <div className={styles.rankingsGrid}>
               <DriverRanking title="Comercios" items={snapshot.merchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
