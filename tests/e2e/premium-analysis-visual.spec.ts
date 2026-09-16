@@ -121,6 +121,11 @@ for (const width of WIDTHS) {
     await expect(accessibleTrendTable).toBeAttached();
     await expect(accessibleTrendTable).toContainText("Ingresos");
     await expect(accessibleTrendTable).toContainText("Gastos");
+    expect(await accessibleTrendTable.evaluate((element) => {
+      const style = window.getComputedStyle(element);
+      const rect = element.getBoundingClientRect();
+      return style.display !== "none" && rect.width <= 2 && rect.height <= 2;
+    })).toBe(true);
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
