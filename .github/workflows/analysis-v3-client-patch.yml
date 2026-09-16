@@ -1,0 +1,87 @@
+name: Analysis V3 Client Patch
+
+on:
+  push:
+    branches:
+      - work/analysis-premium-v3
+    paths:
+      - .github/workflows/analysis-v3-client-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: work/analysis-premium-v3
+          fetch-depth: 0
+
+      - name: Apply exact client hardening patch
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/analysis/analysis-client.tsx")
+          text = path.read_text()
+
+          import_old = '''import { ContributionChart } from "../../src/design/contribution-chart";
+          import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+          import styles from "./analysis.module.css";'''
+          import_new = '''import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+          import { ContributionChart } from "../../src/design/contribution-chart";
+          import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+          import styles from "./analysis.module.css";'''
+          if text.count(import_old) != 1:
+              raise SystemExit("analysis client import anchor changed")
+          text = text.replace(import_old, import_new, 1)
+
+          refresh_old = '''      if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
+          if (requestRef.current !== controller) return;
+
+          const next = payload as AnalysisSnapshot;
+          setSnapshot(next);
+          setMonth(next.selection.month);
+          setRange(next.selection.range);
+          setAccountId(next.selection.accountId ?? "");
+          setCategoriesExpanded(false);
+          setMerchantsExpanded(false);'''
+          refresh_new = '''      if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
+          if (requestRef.current !== controller) return;
+          if (!isAnalysisSnapshot(payload)) throw new Error("analysis_contract_invalid");
+
+          const next = payload;
+          setSnapshot(next);
+          setMonth(next.selection.month);
+          setRange(next.selection.range);
+          setAccountId(next.selection.accountId ?? "");
+          setCategoriesExpanded(false);
+          setMerchantsExpanded(false);
+
+          const nextParams = new URLSearchParams({
+            month: next.selection.month,
+            range: next.selection.range,
+          });
+          if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);
+          window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);'''
+          if text.count(refresh_old) != 1:
+              raise SystemExit("analysis client refresh anchor changed")
+          text = text.replace(refresh_old, refresh_new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Commit isolated change
+        run: |
+          if git diff --quiet -- app/analysis/analysis-client.tsx; then
+            echo "No changes produced"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/analysis/analysis-client.tsx
+          git commit -m "feat(analysis): persist and validate applied filters"
+          git push origin HEAD:work/analysis-premium-v3
