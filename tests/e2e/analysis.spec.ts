@@ -169,7 +169,7 @@ function mockSnapshot(): AnalysisSnapshot {
 }
 
 async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
-  await page.route("**/api/analysis**", async (route: any) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
     const url = new URL(route.request().url());
     expect(url.pathname).toBe("/api/analysis");
     expect(url.searchParams.get("month")).toBe("2026-09");
