@@ -11,6 +11,7 @@ import type {
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import {
+  resolveBudgetProgressPresentation,
   resolveBudgetSourcePresentation,
   resolveConcentrationPresentation,
   resolveExpenseComparisonPresentation,
@@ -357,6 +358,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
   const categoryConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "category") : null;
   const merchantConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "merchant") : null;
+  const budgetProgressPresentation = snapshot?.budget?.total
+    ? resolveBudgetProgressPresentation(snapshot.budget.total)
+    : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
@@ -564,20 +568,24 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   ? `${formatPercentBps(categoryConcentrationPresentation.valueBps)} ${topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")}`
                   : categoryConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
               </div>
-              <div className={styles.breakdown}>
-                {snapshot.categoryDrivers.slice(0, 6).map((item) => (
-                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
-                    <div>
-                      <strong>{item.name}</strong>
-                      <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
-                    </div>
-                    <div className={styles.breakdownTrack} aria-hidden="true">
-                      <span style={{ width: `${Math.max(2, Math.min(100, (item.shareBps ?? 0) / 100))}%` }} />
-                    </div>
-                    <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>{deltaText(item.deltaCents)}</span>
-                  </Link>
-                ))}
-              </div>
+              {snapshot.categoryDrivers.length === 0 ? (
+                <p className={styles.empty}>No hay categorías con gasto elegible en el periodo.</p>
+              ) : (
+                <div className={styles.breakdown}>
+                  {snapshot.categoryDrivers.slice(0, 6).map((item) => (
+                    <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
+                      <div>
+                        <strong>{item.name}</strong>
+                        <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
+                      </div>
+                      <div className={styles.breakdownTrack} aria-hidden="true">
+                        <span style={{ width: `${Math.max(2, Math.min(100, (item.shareBps ?? 0) / 100))}%` }} />
+                      </div>
+                      <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>{deltaText(item.deltaCents)}</span>
+                    </Link>
+                  ))}
+                </div>
+              )}
             </section>
 
             <section className={styles.section} aria-labelledby="flexibility-heading">
@@ -648,7 +656,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               </div>
               {snapshot.budget?.total ? (
                 <>
-                  <strong className={styles.contextValue}>{formatPercentBps(snapshot.budget.total.progressBps)} consumido</strong>
+                  <strong className={styles.contextValue}>{budgetProgressPresentation?.available
+                    ? `${formatPercentBps(budgetProgressPresentation.valueBps)} ${budgetProgressPresentation.label}`
+                    : budgetProgressPresentation?.label ?? "Progreso no disponible"}</strong>
                   <BudgetContext total={snapshot.budget.total} />
                   {snapshot.budget.categoryDetailDeferred ? (
                     <p className={styles.empty}>Detalle por categorías disponible en Presupuestos.</p>
