@@ -132,7 +132,7 @@ test("E2 · grupos presentes sólo en el periodo anterior no contaminan composic
   });
 });
 
-test("E2 · presupuesto con límite cero explica empty y unfunded sin mostrar un porcentaje indefinido", () => {
+test("E2 · presupuesto automático con referencia cero explica empty y unfunded sin mostrar un porcentaje indefinido", () => {
   const base = {
     automaticAmountCents: 0,
     manualAmountCents: null,
@@ -175,5 +175,36 @@ test("E2 · presupuesto con límite cero explica empty y unfunded sin mostrar un
     valueBps: 2500,
     reason: "available",
     label: "consumido",
+  });
+});
+
+test("E2 · un límite manual explícito de cero no se confunde con ausencia de presupuesto", () => {
+  const manualZero = {
+    automaticAmountCents: 75000,
+    manualAmountCents: 0,
+    effectiveAmountCents: 0,
+    actualExpenseCents: 0,
+    remainingCents: 0,
+    progressBps: null,
+    status: "empty",
+  };
+
+  expect(resolveBudgetProgressPresentation(manualZero)).toEqual({
+    available: false,
+    valueBps: null,
+    reason: "empty",
+    label: "Límite manual a cero · sin gasto",
+  });
+
+  expect(resolveBudgetProgressPresentation({
+    ...manualZero,
+    actualExpenseCents: 12500,
+    remainingCents: -12500,
+    status: "unfunded",
+  })).toEqual({
+    available: false,
+    valueBps: null,
+    reason: "unfunded",
+    label: "Límite manual a cero superado",
   });
 });
