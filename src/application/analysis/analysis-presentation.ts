@@ -33,6 +33,13 @@ export type ConcentrationPresentation = {
   detail: string | null;
 };
 
+export type BudgetProgressPresentation = {
+  available: boolean;
+  valueBps: number | null;
+  reason: "available" | "empty" | "unfunded" | "unavailable";
+  label: string;
+};
+
 function referenceIncomeCents(snapshot: AnalysisSnapshot) {
   const last3 = snapshot.averages.last3Months?.incomeCents ?? null;
   if (last3 !== null && last3 > 0) return last3;
@@ -215,4 +222,42 @@ export function resolveBudgetSourcePresentation(
   }
 
   return { kind: "unknown", label: null };
+}
+
+export function resolveBudgetProgressPresentation(
+  total: NonNullable<NonNullable<AnalysisSnapshot["budget"]>["total"]>,
+): BudgetProgressPresentation {
+  if (total.progressBps !== null) {
+    return {
+      available: true,
+      valueBps: total.progressBps,
+      reason: "available",
+      label: "consumido",
+    };
+  }
+
+  if (total.status === "empty") {
+    return {
+      available: false,
+      valueBps: null,
+      reason: "empty",
+      label: "Sin límite ni gasto",
+    };
+  }
+
+  if (total.status === "unfunded") {
+    return {
+      available: false,
+      valueBps: null,
+      reason: "unfunded",
+      label: "Gasto sin límite configurado",
+    };
+  }
+
+  return {
+    available: false,
+    valueBps: null,
+    reason: "unavailable",
+    label: "Progreso no disponible",
+  };
 }
