@@ -51,7 +51,8 @@ export default function GlobalSearch() {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
-      if (!typing && event.key === "/") {
+      const slashShortcut = event.key === "/" || event.code === "Slash";
+      if (!typing && slashShortcut && !event.metaKey && !event.ctrlKey && !event.altKey) {
         event.preventDefault();
         setOpen(true);
       }
