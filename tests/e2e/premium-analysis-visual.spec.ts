@@ -90,7 +90,7 @@ const SNAPSHOT = buildAnalysisSnapshot({
 });
 
 for (const width of WIDTHS) {
-  test(`Premium Análisis v4 final · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }) => {
+  test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }) => {
     await page.route("**/api/analysis**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
     });
@@ -109,7 +109,7 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("heading", { name: /Tu gasto (ha aumentado|ha disminuido|se mantiene)/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Dónde se concentra el gasto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Gasto fijo y variable" })).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Movimientos que merece la pena revisar" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Movimientos que merecen la pena revisar" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Presupuesto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
     await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
