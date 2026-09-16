@@ -10,6 +10,7 @@ import {
   analysisSelectionFromSearchParams,
   type AnalysisSearchParams,
 } from "../../src/application/analysis/analysis-query-state";
+import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
 
@@ -25,6 +26,18 @@ function safeSelection(requested: AnalysisSelectionInput): AnalysisSelectionInpu
   }
 }
 
+function logInitialSnapshotError(error: unknown) {
+  if (error instanceof PersistenceGatewayError) {
+    console.error("analysis-initial-snapshot", {
+      status: error.status,
+      code: error.code ?? null,
+    });
+    return;
+  }
+
+  console.error("analysis-initial-snapshot", error instanceof Error ? error.message : String(error));
+}
+
 async function AnalysisData({
   searchParams,
 }: {
@@ -38,7 +51,7 @@ async function AnalysisData({
   try {
     initialSnapshot = await loadAnalysisSnapshot(fallbackSelection);
   } catch (error) {
-    console.error("analysis-initial-snapshot", error instanceof Error ? error.message : String(error));
+    logInitialSnapshotError(error);
   } finally {
     const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
     console.info("analysis-ssr-timing", {
