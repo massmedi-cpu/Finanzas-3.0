@@ -37,6 +37,16 @@ function formatDate(value: string) {
   return shortDateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
 }
 
+function periodHref(snapshot: AnalysisSnapshot) {
+  const params = new URLSearchParams({
+    dateFrom: snapshot.selection.dateFrom,
+    dateTo: snapshot.selection.dateTo,
+    kind: "expense",
+  });
+  if (snapshot.selection.accountId) params.set("accountId", snapshot.selection.accountId);
+  return `/transactions?${params.toString()}`;
+}
+
 function transactionHref(snapshot: AnalysisSnapshot, row: AnalysisSnapshot["topTransactions"][number]) {
   const params = new URLSearchParams({
     dateFrom: row.bankDate,
@@ -269,7 +279,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
           <h2 id="movement-insights-heading">Patrones que no se ven en un simple total</h2>
           <span>Las gráficas se calculan con los mismos movimientos elegibles del periodo y conservan filtros, exclusiones y correcciones.</span>
         </div>
-        <Link href={`/transactions?dateFrom=${snapshot.selection.dateFrom}&dateTo=${snapshot.selection.dateTo}`}>Ver todos los movimientos</Link>
+        <Link href={periodHref(snapshot)}>Ver todos los movimientos</Link>
       </div>
 
       <div className={styles.heroGrid}>
