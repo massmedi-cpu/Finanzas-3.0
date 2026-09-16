@@ -146,7 +146,8 @@ for (const width of WIDTHS) {
     expect(rangeBox).not.toBeNull();
     expect(rangeBox!.height).toBeGreaterThanOrEqual(44);
 
-    const chartMonth = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i }).last();
+    const chartMonths = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i });
+    const chartMonth = chartMonths.last();
     await expect(chartMonth).toBeVisible();
     const chartMonthBox = await chartMonth.boundingBox();
     expect(chartMonthBox).not.toBeNull();
@@ -154,7 +155,15 @@ for (const width of WIDTHS) {
 
     await chartMonth.focus();
     await expect(chartMonth).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("tooltip").filter({ hasText: /Ingresos/ })).toBeVisible();
+    const tooltip = page.getByRole("tooltip").filter({ hasText: /Ingresos/ });
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).not.toContainText("frente al mes anterior");
+
+    const chartMonthCount = await chartMonths.count();
+    if (chartMonthCount > 1) {
+      await chartMonths.nth(chartMonthCount - 2).focus();
+      await expect(tooltip).toContainText(/Neto (sin cambios|[+−].*) frente al mes anterior/);
+    }
 
     const sectionBoxes = await page.locator("main section").evaluateAll((sections) =>
       sections.map((section) => {
