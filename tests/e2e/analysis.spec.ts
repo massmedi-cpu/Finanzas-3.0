@@ -316,6 +316,20 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
   }
 });
 
+test("E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente", async ({ page }) => {
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
+  const snapshot = mockSnapshot();
+  snapshot.current = { ...snapshot.current, incomeCents: 38 };
+  snapshot.comparison = { ...snapshot.comparison, incomeChangeBps: null };
+
+  await loadMockAnalysis(page, snapshot);
+
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis).toContainText("0,38");
+  await expect(kpis).toContainText("Comparación pendiente · ingresos aún no representativos");
+  await expect(kpis).not.toContainText("— vs. periodo anterior");
+});
+
 test("E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px", async ({ page }, testInfo) => {
   test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
   test.skip(testInfo.project.name !== "chromium-desktop", "la matriz de anchos se ejecuta una vez sobre Chromium");

@@ -10,7 +10,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
-import { resolveBudgetSourcePresentation, resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
+import { resolveBudgetSourcePresentation, resolveIncomeComparisonPresentation, resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -341,6 +341,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
+  const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
@@ -464,7 +465,11 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ingresos"
               value={formatMoney(snapshot.current.incomeCents)}
-              comparison={`${formatPercentBps(snapshot.comparison.incomeChangeBps, true)} vs. periodo anterior`}
+              comparison={incomeComparisonPresentation?.representative
+                ? `${formatPercentBps(incomeComparisonPresentation.changeBps, true)} vs. periodo anterior`
+                : incomeComparisonPresentation?.reason === "partial_income_pending"
+                  ? "Comparación pendiente · ingresos aún no representativos"
+                  : "Comparación no disponible"}
               trend={snapshot.trends.income}
               historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
               tone="income"
