@@ -37,7 +37,6 @@ function formatDate(value: string | null | undefined) {
 export default function GlobalSearch() {
   const pathname = usePathname();
   const inputId = useId();
-  const dialogRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef<AbortController | null>(null);
   const [open, setOpen] = useState(false);
@@ -52,11 +51,6 @@ export default function GlobalSearch() {
     function onKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const typing = target?.tagName === "INPUT" || target?.tagName === "TEXTAREA" || target?.isContentEditable;
-      if ((event.metaKey || event.ctrlKey) && event.key.toLocaleLowerCase() === "k") {
-        event.preventDefault();
-        setOpen(true);
-        return;
-      }
       if (!typing && event.key === "/") {
         event.preventDefault();
         setOpen(true);
@@ -147,11 +141,11 @@ export default function GlobalSearch() {
     <>
       <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-label="Buscar en Financial App">
         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
-        <span>Buscar</span><kbd>⌘K</kbd>
+        <span>Buscar</span><kbd>/</kbd>
       </button>
       {open && (
         <div className={styles.backdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`}>
+          <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`}>
             <div className={styles.topline}>
               <div><span>BUSCADOR GLOBAL</span><strong id={`${inputId}-title`}>Encuentra cualquier cosa</strong></div>
               <button type="button" onClick={close} aria-label="Cerrar buscador">Esc</button>
