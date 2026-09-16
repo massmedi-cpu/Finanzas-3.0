@@ -507,9 +507,9 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 </div>
                 <span>{formatPercentBps(snapshot.concentration.top3CategoryBps)} en 3 categorías</span>
               </div>
-              <div className={styles.breakdown} role="list">
+              <div className={styles.breakdown}>
                 {snapshot.categoryDrivers.slice(0, 6).map((item) => (
-                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow} role="listitem">
+                  <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                     <div>
                       <strong>{item.name}</strong>
                       <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
