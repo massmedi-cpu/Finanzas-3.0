@@ -66,7 +66,7 @@ const SECTIONS = [
   { id: "configuration", title: "Configuración", keywords: "configuracion ajustes fuente drive", href: "/configuration" },
 ] as const;
 
-function sectionResults(query: string, normalizedQuery: string): SearchItem[] {
+function sectionResults(normalizedQuery: string): SearchItem[] {
   return SECTIONS
     .filter((section) => normalize(`${section.title} ${section.keywords}`).includes(normalizedQuery))
     .slice(0, 4)
@@ -75,15 +75,31 @@ function sectionResults(query: string, normalizedQuery: string): SearchItem[] {
       kind: "section" as const,
       title: section.title,
       subtitle: "Abrir sección",
-      href: section.id === "transactions"
-        ? `/transactions?q=${encodeURIComponent(query)}`
-        : section.id === "documents"
-          ? `/documents?q=${encodeURIComponent(query)}`
-          : section.href,
+      href: section.href,
     }));
 }
 
-function transactionResults(payload: unknown, query: string): SearchItem[] {
+function transactionHref(row: RecordValue) {
+  const account = record(row.account);
+  const merchant = record(row.merchant);
+  const category = record(row.category);
+  const bankDate = text(row.bankDate);
+  const params = new URLSearchParams();
+  if (bankDate) {
+    params.set("dateFrom", bankDate);
+    params.set("dateTo", bankDate);
+  }
+  const accountId = text(account?.id);
+  const merchantId = text(merchant?.effectiveId);
+  const categoryId = text(category?.effectiveId);
+  if (accountId) params.set("accountId", accountId);
+  if (merchantId) params.set("merchantId", merchantId);
+  else if (categoryId) params.set("categoryId", categoryId);
+  const query = params.toString();
+  return query ? `/transactions?${query}` : "/transactions";
+}
+
+function transactionResults(payload: unknown): SearchItem[] {
   return safeRows(payload).slice(0, 6).flatMap((raw) => {
     const row = record(raw);
     if (!row) return [];
@@ -101,7 +117,7 @@ function transactionResults(payload: unknown, query: string): SearchItem[] {
       kind: "transaction" as const,
       title,
       subtitle: conceptText && conceptText !== title ? `${conceptText}${details ? ` · ${details}` : ""}` : details || null,
-      href: `/transactions?q=${encodeURIComponent(query)}`,
+      href: transactionHref(row),
       amountCents: finiteNumber(row.amountCents),
       date: text(row.bankDate),
     }];
@@ -188,8 +204,8 @@ export async function GET(request: Request) {
     ]);
 
     const items = [
-      ...sectionResults(query, normalizedQuery),
-      ...(transactions.status === "fulfilled" ? transactionResults(transactions.value, query) : []),
+      ...sectionResults(normalizedQuery),
+      ...(transactions.status === "fulfilled" ? transactionResults(transactions.value) : []),
       ...(documents.status === "fulfilled" ? documentResults(documents.value, query) : []),
       ...(facets.status === "fulfilled" ? facetResults(facets.value, normalizedQuery) : []),
     ].slice(0, MAX_RESULTS);
