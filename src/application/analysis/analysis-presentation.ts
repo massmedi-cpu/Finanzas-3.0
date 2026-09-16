@@ -241,12 +241,14 @@ export function resolveBudgetProgressPresentation(
     };
   }
 
+  const hasManualZeroLimit = total.manualAmountCents === 0;
+
   if (total.status === "empty") {
     return {
       available: false,
       valueBps: null,
       reason: "empty",
-      label: "Sin límite ni gasto",
+      label: hasManualZeroLimit ? "Límite manual a cero · sin gasto" : "Sin límite ni gasto",
     };
   }
 
@@ -255,7 +257,7 @@ export function resolveBudgetProgressPresentation(
       available: false,
       valueBps: null,
       reason: "unfunded",
-      label: "Gasto sin límite configurado",
+      label: hasManualZeroLimit ? "Límite manual a cero superado" : "Gasto sin límite configurado",
     };
   }
 
