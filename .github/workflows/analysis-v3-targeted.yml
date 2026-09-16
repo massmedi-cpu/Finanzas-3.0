@@ -1,0 +1,72 @@
+name: Analysis Regression
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/analysis/**"
+      - "src/application/analysis/**"
+      - "src/design/contribution-chart.tsx"
+      - "src/design/financial-trend-chart.tsx"
+      - "tests/e2e/analysis*.spec.ts"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - ".github/workflows/analysis-v3-targeted.yml"
+  push:
+    branches:
+      - main
+    paths:
+      - "app/analysis/**"
+      - "src/application/analysis/**"
+      - "src/design/contribution-chart.tsx"
+      - "src/design/financial-trend-chart.tsx"
+      - "tests/e2e/analysis*.spec.ts"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - ".github/workflows/analysis-v3-targeted.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Analysis regression suite
+        run: >-
+          npm run test:e2e --
+          tests/e2e/analysis.spec.ts
+          tests/e2e/analysis-contract-navigation.spec.ts
+          tests/e2e/premium-analysis-visual.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-regression-${{ github.sha }}
+          path: playwright-report/
+          retention-days: 7

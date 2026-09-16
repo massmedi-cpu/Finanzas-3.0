@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import type { AnalysisSelectionInput } from "../../src/application/analysis/analysis-loader";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import AnalysisClient from "./analysis-client";
 import styles from "./analysis.module.css";
 
@@ -15,22 +17,32 @@ function currentMadridMonth() {
   return `${values.year}-${values.month}`;
 }
 
-function isAnalysisSnapshot(value: unknown): value is AnalysisSnapshot {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Partial<AnalysisSnapshot>;
-  return candidate.contractVersion === 2
-    && Boolean(candidate.selection)
-    && Boolean(candidate.current)
-    && Boolean(candidate.previous)
-    && Array.isArray(candidate.history)
-    && Array.isArray(candidate.categoryDrivers)
-    && Array.isArray(candidate.merchantDrivers)
-    && candidate.quality?.reconciled === true
-    && candidate.principles?.bankSource === "read_only"
-    && candidate.principles?.generativeAi === false;
+function AnalysisRecoverySkeleton() {
+  return (
+    <main className={styles.shell} aria-busy="true">
+      <header className={styles.header}>
+        <div className={styles.headerTitle}>
+          <p>FINANCIAL APP · INTELIGENCIA FINANCIERA</p>
+          <div><h1>Análisis</h1></div>
+          <span className={styles.periodCaption}>Recuperando el análisis con los filtros solicitados…</span>
+        </div>
+      </header>
+      <div className={styles.skeletonWrap} role="status" aria-label="Cargando análisis financiero">
+        <div className={styles.skeletonKpis}>{Array.from({ length: 4 }, (_, index) => <span key={index} />)}</div>
+        <div className={styles.skeletonLarge} />
+        <div className={styles.skeletonGrid}><span /><span /></div>
+      </div>
+    </main>
+  );
 }
 
-export default function AnalysisPageClient({ initialSnapshot }: { initialSnapshot: AnalysisSnapshot | null }) {
+export default function AnalysisPageClient({
+  initialSnapshot,
+  fallbackSelection = {},
+}: {
+  initialSnapshot: AnalysisSnapshot | null;
+  fallbackSelection?: AnalysisSelectionInput;
+}) {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
 
@@ -38,9 +50,14 @@ export default function AnalysisPageClient({ initialSnapshot }: { initialSnapsho
     if (initialSnapshot) return;
 
     const controller = new AbortController();
-    const month = currentMadridMonth();
+    const params = new URLSearchParams({
+      month: fallbackSelection.month?.trim() || currentMadridMonth(),
+      range: fallbackSelection.range?.trim() || "1m",
+    });
+    const accountId = fallbackSelection.accountId?.trim();
+    if (accountId) params.set("accountId", accountId);
 
-    void fetch(`/api/analysis?month=${encodeURIComponent(month)}&range=1m`, {
+    void fetch(`/api/analysis?${params.toString()}`, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -62,16 +79,14 @@ export default function AnalysisPageClient({ initialSnapshot }: { initialSnapsho
       });
 
     return () => controller.abort();
-  }, [initialSnapshot]);
+  }, [
+    initialSnapshot,
+    fallbackSelection.month,
+    fallbackSelection.range,
+    fallbackSelection.accountId,
+  ]);
 
-  if (!resolved) {
-    return (
-      <main className={styles.shell} aria-busy="true">
-        <h1>Análisis</h1>
-        <div role="status" aria-label="Cargando análisis financiero">Preparando el análisis financiero…</div>
-      </main>
-    );
-  }
+  if (!resolved) return <AnalysisRecoverySkeleton />;
 
   return <AnalysisClient initialSnapshot={snapshot} />;
 }
