@@ -34,6 +34,14 @@ const BAND_LABELS: Record<string, string> = {
 };
 const BAND_ORDER = ["lt10", "10to25", "25to50", "50to100", "100to250", "gte250"] as const;
 
+type DetailedTopTransaction = AnalysisSnapshot["topTransactions"][number] & {
+  conceptOriginal?: string | null;
+  balanceAfterCents?: number | null;
+  reviewState?: string | null;
+  duplicateState?: string | null;
+  hasManualOverride?: boolean;
+};
+
 function formatMoney(cents: number) {
   return moneyFormatter.format(cents / 100);
 }
@@ -44,6 +52,10 @@ function formatPercent(ratio: number) {
 
 function formatDate(value: string) {
   return shortDateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+}
+
+function comparableConcept(value: string) {
+  return value.trim().toLocaleLowerCase("es-ES").replace(/\s+/g, " ");
 }
 
 function periodHref(snapshot: AnalysisSnapshot) {
@@ -381,20 +393,35 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
   return (
     <div className={styles.detailCard}>
       <div className={styles.cardHeading}>
-        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle enlazado con el movimiento original</strong></div>
+        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle del movimiento original cuando aporta información</strong></div>
         <small>Top {rows.length.toLocaleString("es-ES")}</small>
       </div>
       <div className={styles.transactionList}>
-        {rows.map((row) => (
-          <Link key={row.transactionId} href={transactionHref(snapshot, row)} className={styles.transactionRow}>
-            <div className={styles.transactionMain}>
-              <strong>{row.conceptNormalized}</strong>
-              <span>{formatDate(row.bankDate)} · {row.merchantName} · {row.categoryName}</span>
-              <small>{row.accountName}</small>
-            </div>
-            <b>{formatMoney(row.amountCents)}</b>
-          </Link>
-        ))}
+        {rows.map((baseRow) => {
+          const row = baseRow as DetailedTopTransaction;
+          const originalConcept = row.conceptOriginal?.trim() ?? "";
+          const showOriginalConcept = originalConcept.length > 0
+            && comparableConcept(originalConcept) !== comparableConcept(row.conceptNormalized);
+          const hasBalance = typeof row.balanceAfterCents === "number" && Number.isFinite(row.balanceAfterCents);
+          const requiresReview = row.reviewState === "needs_review";
+          const suspectedDuplicate = row.duplicateState === "suspected";
+
+          return (
+            <Link key={row.transactionId} href={transactionHref(snapshot, row)} className={styles.transactionRow}>
+              <div className={styles.transactionMain}>
+                <strong>{row.conceptNormalized}</strong>
+                <span>{formatDate(row.bankDate)} · {row.merchantName} · {row.categoryName}</span>
+                <small>{row.accountName}</small>
+                {showOriginalConcept && <small>Concepto bancario: {originalConcept}</small>}
+                {hasBalance && <small>Saldo tras movimiento: {formatMoney(row.balanceAfterCents as number)}</small>}
+                {row.hasManualOverride && <small>Ajuste manual aplicado</small>}
+                {requiresReview && <small>Requiere revisión</small>}
+                {suspectedDuplicate && <small>Posible duplicado</small>}
+              </div>
+              <b>{formatMoney(row.amountCents)}</b>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
