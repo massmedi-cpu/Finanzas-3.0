@@ -10,7 +10,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
-import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
+import { resolveBudgetSourcePresentation, resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -173,6 +173,18 @@ function HistoricalReference({ snapshot, metric }: {
   const parts = historicalMetric(snapshot, metric);
   if (parts.length === 0) return <span>Histórico insuficiente</span>;
   return <span>Media mensual · {parts.join(" · ")}</span>;
+}
+
+type AnalysisBudgetTotal = NonNullable<NonNullable<AnalysisSnapshot["budget"]>["total"]>;
+
+function BudgetContext({ total }: { total: AnalysisBudgetTotal }) {
+  const source = resolveBudgetSourcePresentation(total);
+  return (
+    <p>
+      {formatMoney(total.actualExpenseCents)} de {formatMoney(total.effectiveAmountCents)}
+      {source.label ? ` · ${source.label}` : ""}.
+    </p>
+  );
 }
 
 function Kpi({
@@ -614,7 +626,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               {snapshot.budget?.total ? (
                 <>
                   <strong className={styles.contextValue}>{formatPercentBps(snapshot.budget.total.progressBps)} consumido</strong>
-                  <p>{formatMoney(snapshot.budget.total.actualExpenseCents)} de {formatMoney(snapshot.budget.total.effectiveAmountCents)}.</p>
+                  <BudgetContext total={snapshot.budget.total} />
                   {snapshot.budget.categoryDetailDeferred ? (
                     <p className={styles.empty}>Detalle por categorías disponible en Presupuestos.</p>
                   ) : snapshot.budget.overCategories.length > 0 ? (

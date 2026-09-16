@@ -313,6 +313,8 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         select jsonb_build_object(
           'month', p.budget_month,
           'total', jsonb_build_object(
+            'automaticAmountCents', b.automatic_cents,
+            'manualAmountCents', b.manual_amount_cents,
             'effectiveAmountCents', b.effective_cents,
             'actualExpenseCents', b.actual_cents,
             'remainingCents', b.effective_cents - b.actual_cents,

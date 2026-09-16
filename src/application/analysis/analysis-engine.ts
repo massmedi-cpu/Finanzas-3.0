@@ -114,6 +114,8 @@ export type AnalysisGatewaySnapshot = {
   budget: null | {
     month: string;
     total: null | {
+      automaticAmountCents?: number;
+      manualAmountCents?: number | null;
       effectiveAmountCents: number;
       actualExpenseCents: number;
       remainingCents: number;

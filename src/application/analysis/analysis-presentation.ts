@@ -104,3 +104,22 @@ export function resolveSavingsRatePresentation(snapshot: AnalysisSnapshot): Savi
     reason: "available",
   };
 }
+
+export type BudgetSourcePresentation = {
+  kind: "manual" | "automatic" | "unknown";
+  label: string | null;
+};
+
+export function resolveBudgetSourcePresentation(
+  total: NonNullable<NonNullable<AnalysisSnapshot["budget"]>["total"]>,
+): BudgetSourcePresentation {
+  if (total.manualAmountCents !== undefined && total.manualAmountCents !== null) {
+    return { kind: "manual", label: "Límite manual" };
+  }
+
+  if (total.automaticAmountCents !== undefined) {
+    return { kind: "automatic", label: "Referencia automática · media de 3 meses" };
+  }
+
+  return { kind: "unknown", label: null };
+}
