@@ -40,6 +40,10 @@ export type BudgetProgressPresentation = {
   label: string;
 };
 
+export function currentExpenseDrivers<T extends { expenseCents: number }>(items: readonly T[]): T[] {
+  return items.filter((item) => item.expenseCents > 0);
+}
+
 function referenceIncomeCents(snapshot: AnalysisSnapshot) {
   const last3 = snapshot.averages.last3Months?.incomeCents ?? null;
   if (last3 !== null && last3 > 0) return last3;
@@ -122,10 +126,11 @@ export function resolveConcentrationPresentation(
   kind: ConcentrationKind,
 ): ConcentrationPresentation {
   const items = kind === "merchant" ? snapshot.merchantDrivers : snapshot.categoryDrivers;
+  const currentItems = currentExpenseDrivers(items);
   const valueBps = kind === "merchant"
     ? snapshot.concentration.top3MerchantBps
     : snapshot.concentration.top3CategoryBps;
-  const count = Math.min(3, Math.max(0, items.length));
+  const count = Math.min(3, currentItems.length);
 
   if (snapshot.current.expenseCents === 0 || count === 0) {
     return {
