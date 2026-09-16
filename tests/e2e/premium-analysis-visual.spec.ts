@@ -99,6 +99,7 @@ for (const width of WIDTHS) {
     await page.goto("/analysis", { waitUntil: "domcontentloaded" });
     await page.getByLabel("Mes de referencia").fill("2026-09");
     await page.getByRole("button", { name: "Aplicar" }).click();
+    await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m$/);
 
     await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
     await expect(page.getByLabel("Indicadores principales del periodo")).toBeVisible();
@@ -125,7 +126,7 @@ for (const width of WIDTHS) {
     expect(rangeBox).not.toBeNull();
     expect(rangeBox!.height).toBeGreaterThanOrEqual(44);
 
-    const chartMonth = page.locator('button[aria-label*="ingresos"][aria-label*="gastos"]').last();
+    const chartMonth = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i }).last();
     await expect(chartMonth).toBeVisible();
     const chartMonthBox = await chartMonth.boundingBox();
     expect(chartMonthBox).not.toBeNull();
@@ -133,7 +134,7 @@ for (const width of WIDTHS) {
 
     await chartMonth.focus();
     await expect(chartMonth).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("status").filter({ hasText: /Ingresos/ })).toBeVisible();
+    await expect(page.getByRole("tooltip").filter({ hasText: /Ingresos/ })).toBeVisible();
 
     const sectionBoxes = await page.locator("main section").evaluateAll((sections) =>
       sections.map((section) => {
