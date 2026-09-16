@@ -117,6 +117,11 @@ for (const width of WIDTHS) {
     await expect(page.getByText("Sin previsiones activas")).toBeVisible();
     await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
 
+    const accessibleTrendTable = page.getByRole("table", { name: "Datos de la comparativa financiera" });
+    await expect(accessibleTrendTable).toBeAttached();
+    await expect(accessibleTrendTable).toContainText("Ingresos");
+    await expect(accessibleTrendTable).toContainText("Gastos");
+
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
     ).toBe(true);
