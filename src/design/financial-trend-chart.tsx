@@ -45,6 +45,12 @@ export function FinancialTrendChart({
   const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
   const active = rows.find((row) => row.monthStart === activeMonth) ?? rows.at(-1) ?? null;
+  const activeIndex = active ? rows.findIndex((row) => row.monthStart === active.monthStart) : -1;
+  const previous = activeIndex > 0 ? rows[activeIndex - 1] : null;
+  const comparablePrevious = active?.monthStart !== partialMonthStart ? previous : null;
+  const netMonthDelta = active && comparablePrevious
+    ? active.operatingNetCents - comparablePrevious.operatingNetCents
+    : null;
 
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
@@ -79,6 +85,9 @@ export function FinancialTrendChart({
 
   const path = chart.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   const netPointLabel = (row: FinancialTrendPoint) => `Neto ${longMonthLabel(row.monthStart)}: ${formatMoney(row.operatingNetCents)} · ${netState(row.operatingNetCents)}`;
+  const netMonthDeltaLabel = (cents: number) => cents === 0
+    ? "Neto sin cambios frente al mes anterior"
+    : `Neto ${cents > 0 ? "+" : "−"}${formatMoney(Math.abs(cents))} frente al mes anterior`;
   const tableRows = [
     { key: "income", label: "Ingresos", value: (row: FinancialTrendPoint) => row.incomeCents },
     { key: "expense", label: "Gastos", value: (row: FinancialTrendPoint) => row.expenseCents },
@@ -206,13 +215,14 @@ export function FinancialTrendChart({
             <strong>{formatMonth(active.monthStart)}</strong>
             {active.monthStart === partialMonthStart && <span className={styles.partialBadge}>Parcial</span>}
             <span>{netPointLabel(active)}</span>
+            {netMonthDelta !== null && <span>{netMonthDeltaLabel(netMonthDelta)}</span>}
           </div>
           <dl>
             <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
             <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
             <div><dt>Neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
           </dl>
-          <Link href={hrefForMonth(active.monthStart)} aria-label="Ver movimientos del periodo">Ver movimientos del periodo</Link>
+          <Link href={hrefForMonth(active.monthStart)} aria-label={`Ver movimientos de ${longMonthLabel(active.monthStart)}`}>Ver movimientos del periodo</Link>
         </div>
       )}
     </section>
