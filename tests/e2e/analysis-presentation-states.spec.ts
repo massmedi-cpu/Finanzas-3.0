@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import {
+  currentExpenseDrivers,
   resolveBudgetProgressPresentation,
   resolveConcentrationPresentation,
   resolveExpenseComparisonPresentation,
@@ -22,8 +23,8 @@ function presentationSnapshot(input: {
     current: { expenseCents: input.currentExpenseCents },
     previous: { expenseCents: input.previousExpenseCents },
     comparison: { expenseChangeBps: input.expenseChangeBps },
-    merchantDrivers: Array.from({ length: merchantCount }, (_, index) => ({ id: `merchant-${index}` })),
-    categoryDrivers: Array.from({ length: categoryCount }, (_, index) => ({ id: `category-${index}` })),
+    merchantDrivers: Array.from({ length: merchantCount }, (_, index) => ({ id: `merchant-${index}`, expenseCents: 100 })),
+    categoryDrivers: Array.from({ length: categoryCount }, (_, index) => ({ id: `category-${index}`, expenseCents: 100 })),
     concentration: {
       top3MerchantBps: input.top3MerchantBps ?? null,
       top3CategoryBps: input.top3CategoryBps ?? null,
@@ -106,6 +107,28 @@ test("E2 · concentración conserva porcentaje y número real de grupos cuando h
     valueBps: 8200,
     count: 3,
     reason: "available",
+  });
+});
+
+test("E2 · grupos presentes sólo en el periodo anterior no contaminan composición ni rankings actuales", () => {
+  const rows = [
+    { id: "current", expenseCents: 12000, previousExpenseCents: 9000 },
+    { id: "previous-only", expenseCents: 0, previousExpenseCents: 7000 },
+  ];
+  expect(currentExpenseDrivers(rows)).toEqual([rows[0]]);
+
+  const snapshot = presentationSnapshot({
+    currentExpenseCents: 12000,
+    previousExpenseCents: 16000,
+    expenseChangeBps: -2500,
+    merchantCount: 2,
+    top3MerchantBps: 10000,
+  });
+  snapshot.merchantDrivers = rows as unknown as AnalysisSnapshot["merchantDrivers"];
+  expect(resolveConcentrationPresentation(snapshot, "merchant")).toMatchObject({
+    available: true,
+    valueBps: 10000,
+    count: 1,
   });
 });
 
