@@ -17,6 +17,14 @@ function currentMadridMonth() {
   return `${values.year}-${values.month}`;
 }
 
+function responseErrorCode(payload: unknown, status: number) {
+  if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+    const code = (payload as { code?: unknown }).code;
+    if (typeof code === "string" && code) return code;
+  }
+  return `analysis_http_${status}`;
+}
+
 export default function AnalysisPageClient({
   initialSnapshot,
   fallbackSelection = {},
@@ -44,7 +52,8 @@ export default function AnalysisPageClient({
     })
       .then(async (response) => {
         const payload: unknown = await response.json().catch(() => null);
-        if (!response.ok || !isAnalysisSnapshot(payload)) throw new Error("analysis_unavailable");
+        if (!response.ok) throw new Error(responseErrorCode(payload, response.status));
+        if (!isAnalysisSnapshot(payload)) throw new Error("analysis_contract_invalid");
         return payload;
       })
       .then((next) => {
