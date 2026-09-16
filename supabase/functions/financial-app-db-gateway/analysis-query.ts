@@ -176,6 +176,11 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         e.bank_date,
         -e.amount_cents as amount_cents,
         coalesce(nullif(btrim(e.concept_normalized), ''), 'Sin concepto') as concept_normalized,
+        nullif(btrim(sr.concept_original), '') as concept_original,
+        tx.balance_after_cents,
+        coalesce(o.review_state_override, tx.review_state) as review_state,
+        e.duplicate_state,
+        (o.id is not null) as has_manual_override,
         e.effective_merchant_id as merchant_id,
         coalesce(e.merchant_name, 'Sin comercio') as merchant_name,
         e.effective_category_id as category_id,
@@ -183,6 +188,9 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         e.account_id,
         coalesce(a.name, 'Cuenta') as account_name
       from current_expenses e
+      join financial_app.transactions tx on tx.id = e.transaction_id
+      join financial_app.transaction_source_records sr on sr.id = tx.source_record_id
+      left join financial_app.transaction_overrides o on o.transaction_id = e.transaction_id
       left join financial_app.accounts a on a.id = e.account_id
       order by -e.amount_cents desc, e.bank_date desc, e.transaction_id
       limit 10
@@ -393,6 +401,11 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
           'bankDate', t.bank_date,
           'amountCents', t.amount_cents,
           'conceptNormalized', t.concept_normalized,
+          'conceptOriginal', t.concept_original,
+          'balanceAfterCents', t.balance_after_cents,
+          'reviewState', t.review_state,
+          'duplicateState', t.duplicate_state,
+          'hasManualOverride', t.has_manual_override,
           'merchantId', t.merchant_id,
           'merchantName', t.merchant_name,
           'categoryId', t.category_id,
