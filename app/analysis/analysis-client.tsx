@@ -426,8 +426,17 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
         </form>
       </header>
 
-      {error && <div className={styles.error} role="alert">{error}</div>}
-      {!snapshot && <LoadingSkeleton />}
+      {error && (
+        <div className={styles.error} role="alert">
+          <span>{error}</span>
+          {!snapshot && (
+            <button className={styles.textButton} type="button" onClick={() => void refresh()} disabled={loading || !month}>
+              {loading ? "Reintentando…" : "Reintentar"}
+            </button>
+          )}
+        </div>
+      )}
+      {!snapshot && loading && <LoadingSkeleton />}
 
       {snapshot && (
         <>
