@@ -11,6 +11,7 @@ import type {
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import {
+  currentExpenseDrivers,
   resolveBudgetProgressPresentation,
   resolveBudgetSourcePresentation,
   resolveConcentrationPresentation,
@@ -324,7 +325,7 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
           ? formatPercentBps(merchantConcentration.valueBps)
           : merchantConcentration.label ?? "Sin gasto elegible"}</strong>
         <small>{merchantConcentration.available
-          ? `del gasto ${topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}`
+          ? `del gasto ${topConcentrationContext(merchantConcentration.count, "comercio", "comercios")}`
           : merchantConcentration.detail ?? "concentración no disponible"}</small>
       </Link>
     </section>
@@ -356,6 +357,8 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
+  const currentCategoryDrivers = snapshot ? currentExpenseDrivers(snapshot.categoryDrivers) : [];
+  const currentMerchantDrivers = snapshot ? currentExpenseDrivers(snapshot.merchantDrivers) : [];
   const categoryConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "category") : null;
   const merchantConcentrationPresentation = snapshot ? resolveConcentrationPresentation(snapshot, "merchant") : null;
   const budgetProgressPresentation = snapshot?.budget?.total
@@ -565,14 +568,14 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   <h2 id="distribution-heading">Dónde se concentra el gasto</h2>
                 </div>
                 <span>{categoryConcentrationPresentation?.available
-                  ? `${formatPercentBps(categoryConcentrationPresentation.valueBps)} ${topConcentrationContext(snapshot.categoryDrivers.length, "categoría", "categorías")}`
+                  ? `${formatPercentBps(categoryConcentrationPresentation.valueBps)} ${topConcentrationContext(categoryConcentrationPresentation.count, "categoría", "categorías")}`
                   : categoryConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
               </div>
-              {snapshot.categoryDrivers.length === 0 ? (
+              {currentCategoryDrivers.length === 0 ? (
                 <p className={styles.empty}>No hay categorías con gasto elegible en el periodo.</p>
               ) : (
                 <div className={styles.breakdown}>
-                  {snapshot.categoryDrivers.slice(0, 6).map((item) => (
+                  {currentCategoryDrivers.slice(0, 6).map((item) => (
                     <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                       <div>
                         <strong>{item.name}</strong>
@@ -712,11 +715,11 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <h2 id="rankings-heading">Comercios principales</h2>
               </div>
               <span>{merchantConcentrationPresentation?.available
-                ? `${formatPercentBps(merchantConcentrationPresentation.valueBps)} ${topConcentrationContext(snapshot.merchantDrivers.length, "comercio", "comercios")}`
+                ? `${formatPercentBps(merchantConcentrationPresentation.valueBps)} ${topConcentrationContext(merchantConcentrationPresentation.count, "comercio", "comercios")}`
                 : merchantConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
             </div>
             <div className={styles.rankingsGrid}>
-              <DriverRanking title="Comercios" items={snapshot.merchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
+              <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
           </section>
 
