@@ -21,6 +21,11 @@ type Props = {
 
 type ViewMode = "change" | "compare";
 
+function comparisonBarWidth(value: number, maximum: number) {
+  if (value <= 0) return 0;
+  return Math.max(2, Math.round((value / maximum) * 100));
+}
+
 export function ContributionChart({ rows, formatMoney, limit = 6 }: Props) {
   const [view, setView] = useState<ViewMode>("change");
   const visible = useMemo(
@@ -59,8 +64,8 @@ export function ContributionChart({ rows, formatMoney, limit = 6 }: Props) {
         {visible.map((row) => {
           const increased = row.deltaCents > 0;
           const changeWidth = Math.max(5, Math.round((Math.abs(row.deltaCents) / changeMaximum) * 50));
-          const currentWidth = Math.max(2, Math.round((row.expenseCents / compareMaximum) * 100));
-          const previousWidth = Math.max(2, Math.round((row.previousExpenseCents / compareMaximum) * 100));
+          const currentWidth = comparisonBarWidth(row.expenseCents, compareMaximum);
+          const previousWidth = comparisonBarWidth(row.previousExpenseCents, compareMaximum);
           const accessible = `${row.name}: gasto actual ${formatMoney(row.expenseCents)}; periodo comparable ${formatMoney(row.previousExpenseCents)}; ${increased ? "aumenta" : row.deltaCents < 0 ? "disminuye" : "sin cambio"} ${formatMoney(Math.abs(row.deltaCents))}`;
 
           return (
