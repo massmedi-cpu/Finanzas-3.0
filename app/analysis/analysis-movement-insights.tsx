@@ -12,6 +12,11 @@ const moneyFormatter = new Intl.NumberFormat("es-ES", {
   maximumFractionDigits: 2,
 });
 
+const percentFormatter = new Intl.NumberFormat("es-ES", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 1,
+});
+
 const shortDateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -31,6 +36,10 @@ const BAND_ORDER = ["lt10", "10to25", "25to50", "50to100", "100to250", "gte250"]
 
 function formatMoney(cents: number) {
   return moneyFormatter.format(cents / 100);
+}
+
+function formatPercent(ratio: number) {
+  return `${percentFormatter.format(ratio * 100)} %`;
 }
 
 function formatDate(value: string) {
@@ -287,6 +296,61 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
   );
 }
 
+function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }) {
+  const rows = snapshot.merchantDrivers.filter((row) => row.expenseCents > 0).slice(0, 30);
+  const chart = useMemo(() => {
+    if (rows.length === 0 || snapshot.current.expenseCents <= 0) return null;
+    const width = 520;
+    const height = 250;
+    const left = 42;
+    const right = 20;
+    const top = 18;
+    const bottom = 34;
+    const innerWidth = width - left - right;
+    const innerHeight = height - top - bottom;
+    let cumulative = 0;
+    const points = rows.map((row, index) => {
+      cumulative += row.expenseCents;
+      const ratio = Math.min(1, cumulative / snapshot.current.expenseCents);
+      return {
+        row,
+        ratio,
+        x: left + ((index + 1) / rows.length) * innerWidth,
+        y: top + (1 - ratio) * innerHeight,
+      };
+    });
+    const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    return { width, height, left, right, top, bottom, points, path, innerHeight };
+  }, [rows, snapshot.current.expenseCents]);
+
+  if (!chart) return <p className={styles.empty}>No hay comercios suficientes para calcular concentración.</p>;
+
+  const eightyY = chart.top + 0.2 * chart.innerHeight;
+
+  return (
+    <div className={styles.chartCard}>
+      <div className={styles.cardHeading}>
+        <div><span>CONCENTRACIÓN</span><strong>Cuánto gasto acumulan los primeros comercios</strong></div>
+      </div>
+      <div className={styles.svgViewport}>
+        <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio">
+          <line className={styles.scatterAxis} x1={chart.left} x2={chart.left} y1={chart.top} y2={chart.height - chart.bottom} />
+          <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
+          <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} opacity="0.35" />
+          <text className={styles.axisLabel} x={chart.left - 6} y={eightyY + 4} textAnchor="end">80 %</text>
+          <text className={styles.axisLabel} x={chart.width / 2} y={chart.height - 6} textAnchor="middle">Comercios ordenados por gasto</text>
+          <path className={styles.dailyLine} d={chart.path} />
+          {chart.points.map((point, index) => (
+            <circle key={`${point.row.id ?? "none"}-${point.row.name}`} className={styles.dailyPoint} cx={point.x} cy={point.y} r={index < 5 ? 4 : 3}>
+              <title>{`${index + 1}. ${point.row.name} · acumulado ${formatPercent(point.ratio)} · ${formatMoney(point.row.expenseCents)}`}</title>
+            </circle>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function Concepts({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.concepts.slice(0, 8);
   const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));
@@ -365,6 +429,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
         <SpendingCalendar snapshot={snapshot} />
         <AmountBandsChart snapshot={snapshot} />
         <MerchantScatter snapshot={snapshot} />
+        <MerchantConcentrationCurve snapshot={snapshot} />
       </div>
 
       {snapshot.accountSpend.length > 1 && (
