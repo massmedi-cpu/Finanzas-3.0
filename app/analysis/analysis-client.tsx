@@ -21,6 +21,7 @@ import {
 } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+import AnalysisMovementInsights from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
 
 const moneyFormatter = new Intl.NumberFormat("es-ES", {
@@ -536,6 +537,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
           </section>
 
           <QuickRead snapshot={snapshot} />
+          <AnalysisMovementInsights snapshot={snapshot} />
 
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
