@@ -122,7 +122,9 @@ for (const width of WIDTHS) {
     await expect(accessibleTrendTable).toContainText("Ingresos");
     await expect(accessibleTrendTable).toContainText("Gastos");
     expect(await accessibleTrendTable.evaluate((element) => {
-      const style = window.getComputedStyle(element);
+      const container = element.parentElement;
+      if (!container) return false;
+      const style = window.getComputedStyle(container);
       return style.display !== "none"
         && style.position === "absolute"
         && style.overflow === "hidden"
