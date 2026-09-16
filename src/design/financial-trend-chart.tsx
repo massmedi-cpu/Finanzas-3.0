@@ -151,22 +151,22 @@ export function FinancialTrendChart({
         </svg>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", minWidth: "32rem", borderCollapse: "collapse" }}>
+      <div className={styles.accessibleTable}>
+        <table aria-label="Datos de la comparativa financiera">
           <thead>
             <tr>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
+              <th scope="col">Métrica</th>
               {rows.map((row) => (
-                <th key={row.monthStart} scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{longMonthLabel(row.monthStart)}</th>
+                <th key={row.monthStart} scope="col">{longMonthLabel(row.monthStart)}</th>
               ))}
             </tr>
           </thead>
           <tbody>
             {tableRows.map((metric) => (
               <tr key={metric.key}>
-                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{metric.label}</th>
+                <th scope="row">{metric.label}</th>
                 {rows.map((row) => (
-                  <td key={`${metric.key}-${row.monthStart}`} style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>
+                  <td key={`${metric.key}-${row.monthStart}`}>
                     {formatMoney(metric.value(row))}
                   </td>
                 ))}
