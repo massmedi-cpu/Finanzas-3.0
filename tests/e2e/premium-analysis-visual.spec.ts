@@ -146,6 +146,11 @@ for (const width of WIDTHS) {
     expect(rangeBox).not.toBeNull();
     expect(rangeBox!.height).toBeGreaterThanOrEqual(44);
 
+    await page.getByRole("button", { name: "3 meses" }).click();
+    await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+    await range.click();
+    await expect(page.getByRole("button", { name: "Aplicar" })).toBeVisible();
+
     const chartMonths = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i });
     const chartMonth = chartMonths.last();
     await expect(chartMonth).toBeVisible();
