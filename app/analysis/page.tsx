@@ -6,6 +6,7 @@ import {
   type AnalysisSelectionInput,
 } from "../../src/application/analysis/analysis-loader";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { prepareAnalysisPresentationSnapshot } from "../../src/application/analysis/analysis-presentation";
 import {
   analysisSelectionFromSearchParams,
   type AnalysisSearchParams,
@@ -49,7 +50,9 @@ async function AnalysisData({
   let initialSnapshot: AnalysisSnapshot | null = null;
 
   try {
-    initialSnapshot = await loadAnalysisSnapshot(fallbackSelection);
+    initialSnapshot = prepareAnalysisPresentationSnapshot(
+      await loadAnalysisSnapshot(fallbackSelection),
+    );
   } catch (error) {
     logInitialSnapshotError(error);
   } finally {
