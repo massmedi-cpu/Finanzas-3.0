@@ -24,7 +24,7 @@ function text(value: unknown) {
 }
 
 function integer(value: unknown) {
-  return typeof value === "number" && Number.isSafeInteger(value) ? value : null;
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : null;
 }
 
 function transactionDate(payload: unknown) {
@@ -44,7 +44,7 @@ function syncSummary(payload: unknown) {
   if (!run) return null;
 
   const status = text(run.status);
-  if (status !== "success" && status !== "failed" && status !== "started") return null;
+  if (status !== "success" && status !== "failed" && status !== "started" && status !== "partial") return null;
 
   return {
     status,
@@ -86,7 +86,7 @@ export async function GET() {
         logGatewayFailure("analysis-source-freshness-connection", connectionResult.reason);
       }
       return Response.json(
-        { available: false, latestMovementDate, sync: null },
+        { available: Boolean(latestMovementDate), latestMovementDate, sync: null },
         { headers: HEADERS },
       );
     }
@@ -94,7 +94,7 @@ export async function GET() {
     const sourceFileId = connectionSourceFileId(connectionResult.value);
     if (!sourceFileId) {
       return Response.json(
-        { available: false, latestMovementDate, sync: null },
+        { available: Boolean(latestMovementDate), latestMovementDate, sync: null },
         { headers: HEADERS },
       );
     }
