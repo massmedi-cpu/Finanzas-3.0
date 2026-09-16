@@ -18,6 +18,15 @@ type SourceFreshness = {
   };
 };
 
+type FreshnessTone = "ok" | "warning" | "danger";
+
+type FreshnessSummary = {
+  label: string;
+  detail: string | null;
+  incidentDetail: string | null;
+  tone: FreshnessTone;
+};
+
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -114,6 +123,74 @@ function statusText(freshness: SourceFreshness) {
   return `Última sincronización con incidencias${when}${rows}${health.detail}${movement}`;
 }
 
+function userSummary(freshness: SourceFreshness): FreshnessSummary {
+  const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
+  const movement = movementLabel ? `Último movimiento ${movementLabel}` : null;
+  const sync = freshness.sync;
+
+  if (!sync) {
+    return {
+      label: "Datos bancarios disponibles",
+      detail: movement,
+      incidentDetail: null,
+      tone: "ok",
+    };
+  }
+
+  const timestamp = sync.finishedAt ?? sync.startedAt;
+  const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
+  const timeDetail = timestampLabel
+    ? sync.status === "started"
+      ? `Actualización iniciada ${timestampLabel}`
+      : `Sincronizado ${timestampLabel}`
+    : null;
+  const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
+  const failedRows = sync.rowsFailed ?? 0;
+  const warnings = sync.warningsCount ?? 0;
+  const incidentParts: string[] = [];
+
+  if (failedRows > 0) {
+    incidentParts.push(`${failedRows.toLocaleString("es-ES")} ${failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
+  }
+  if (warnings > 0) {
+    incidentParts.push(`${warnings.toLocaleString("es-ES")} ${warnings === 1 ? "aviso" : "avisos"}`);
+  }
+
+  if (sync.status === "started") {
+    return {
+      label: "Actualizando datos",
+      detail,
+      incidentDetail: null,
+      tone: "warning",
+    };
+  }
+
+  if (sync.status === "failed" || failedRows > 0) {
+    return {
+      label: "Sincronización con incidencias",
+      detail,
+      incidentDetail: incidentParts.length ? incidentParts.join(" · ") : "La última actualización no terminó correctamente",
+      tone: "danger",
+    };
+  }
+
+  if (warnings > 0) {
+    return {
+      label: "Datos sincronizados con avisos",
+      detail,
+      incidentDetail: incidentParts.join(" · "),
+      tone: "warning",
+    };
+  }
+
+  return {
+    label: "Datos al día",
+    detail,
+    incidentDetail: null,
+    tone: "ok",
+  };
+}
+
 export default function AnalysisSourceFreshness() {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
 
@@ -142,6 +219,7 @@ export default function AnalysisSourceFreshness() {
   if (!freshness) return null;
   const text = statusText(freshness);
   if (!text) return null;
+  const summary = userSummary(freshness);
   const warning = freshness.sync
     ? freshness.sync.status === "failed" || freshness.sync.status === "started" || syncHasIncidents(freshness.sync)
     : false;
@@ -149,13 +227,17 @@ export default function AnalysisSourceFreshness() {
   return (
     <div className={styles.wrap}>
       <div
-        className={`${styles.status} ${warning ? styles.warning : ""}`}
+        className={`${styles.status} ${styles[summary.tone]} ${warning ? styles.warning : ""}`}
         role="status"
         aria-live="polite"
-        aria-label="Estado de actualización de los datos"
+        aria-label={text}
       >
         <span className={styles.dot} aria-hidden="true" />
-        <span>{text}</span>
+        <span className={styles.copy}>
+          <strong>{summary.label}</strong>
+          {summary.detail && <span>{summary.detail}</span>}
+          {summary.incidentDetail && <small>{summary.incidentDetail}</small>}
+        </span>
       </div>
     </div>
   );
