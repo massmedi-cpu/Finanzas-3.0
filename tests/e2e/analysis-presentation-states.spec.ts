@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import {
+  resolveBudgetProgressPresentation,
   resolveConcentrationPresentation,
   resolveExpenseComparisonPresentation,
 } from "../../src/application/analysis/analysis-presentation";
@@ -105,5 +106,51 @@ test("E2 · concentración conserva porcentaje y número real de grupos cuando h
     valueBps: 8200,
     count: 3,
     reason: "available",
+  });
+});
+
+test("E2 · presupuesto con límite cero explica empty y unfunded sin mostrar un porcentaje indefinido", () => {
+  const base = {
+    automaticAmountCents: 0,
+    manualAmountCents: null,
+    effectiveAmountCents: 0,
+    actualExpenseCents: 0,
+    remainingCents: 0,
+    progressBps: null,
+    status: "empty",
+  };
+
+  expect(resolveBudgetProgressPresentation(base)).toEqual({
+    available: false,
+    valueBps: null,
+    reason: "empty",
+    label: "Sin límite ni gasto",
+  });
+
+  expect(resolveBudgetProgressPresentation({
+    ...base,
+    actualExpenseCents: 12500,
+    remainingCents: -12500,
+    status: "unfunded",
+  })).toEqual({
+    available: false,
+    valueBps: null,
+    reason: "unfunded",
+    label: "Gasto sin límite configurado",
+  });
+
+  expect(resolveBudgetProgressPresentation({
+    ...base,
+    automaticAmountCents: 100000,
+    effectiveAmountCents: 100000,
+    actualExpenseCents: 25000,
+    remainingCents: 75000,
+    progressBps: 2500,
+    status: "on_track",
+  })).toEqual({
+    available: true,
+    valueBps: 2500,
+    reason: "available",
+    label: "consumido",
   });
 });
