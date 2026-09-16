@@ -57,6 +57,7 @@ jobs:
       - name: Run current user-value regression suite
         run: >-
           npm run test:e2e --
+          tests/e2e/global-search.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-visual-restraint.spec.ts
