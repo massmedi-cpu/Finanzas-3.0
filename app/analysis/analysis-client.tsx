@@ -9,6 +9,7 @@ import type {
   AnalysisSnapshot,
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -305,13 +306,22 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       if (!response.ok) throw new Error(typeof payload?.code === "string" ? payload.code : "analysis_unavailable");
       if (requestRef.current !== controller) return;
 
-      const next = payload as AnalysisSnapshot;
+      if (!isAnalysisSnapshot(payload)) throw new Error("analysis_contract_invalid");
+
+      const next = payload;
       setSnapshot(next);
       setMonth(next.selection.month);
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
       setCategoriesExpanded(false);
       setMerchantsExpanded(false);
+
+      const nextParams = new URLSearchParams({
+        month: next.selection.month,
+        range: next.selection.range,
+      });
+      if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);
+      window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);
     } catch (cause) {
       if (cause instanceof DOMException && cause.name === "AbortError") return;
       console.error("analysis-client", cause instanceof Error ? cause.message : String(cause));
