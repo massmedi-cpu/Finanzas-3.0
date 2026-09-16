@@ -20,25 +20,22 @@ jobs:
           ref: work/analysis-premium-v4
           fetch-depth: 0
 
-      - name: Apply patch
-        run: python scripts/patch-analysis-v4.py
+      - name: Apply cleanup fix
+        run: python scripts/fix-analysis-v4.py
 
-      - name: Verify patch shape
+      - name: Verify cleanup
         run: |
+          test "$(grep -c 'setCategoriesExpanded' app/analysis/analysis-client.tsx || true)" -eq 0
           grep -F 'aria-label="Lectura rápida"' app/analysis/analysis-client.tsx
-          grep -F 'Comercios principales' app/analysis/analysis-client.tsx
-          test "$(grep -c 'DriverRanking title="Categorías"' app/analysis/analysis-client.tsx || true)" -eq 0
-          test "$(grep -c 'concentrationGrid' app/analysis/analysis-client.tsx || true)" -eq 0
-          test "$(grep -c 'concentrationGrid' app/analysis/analysis.module.css || true)" -eq 0
 
-      - name: Commit Analysis v4 patch
+      - name: Commit cleanup
         run: |
-          if git diff --quiet -- app/analysis/analysis-client.tsx app/analysis/analysis.module.css tests/e2e/analysis.spec.ts tests/e2e/premium-analysis-visual.spec.ts; then
+          if git diff --quiet -- app/analysis/analysis-client.tsx; then
             echo "No changes produced"
             exit 1
           fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/analysis/analysis-client.tsx app/analysis/analysis.module.css tests/e2e/analysis.spec.ts tests/e2e/premium-analysis-visual.spec.ts
-          git commit -m "feat(analysis): tighten premium information density"
+          git add app/analysis/analysis-client.tsx
+          git commit -m "fix(analysis): remove stale category ranking reset"
           git push origin HEAD:work/analysis-premium-v4
