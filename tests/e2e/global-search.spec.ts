@@ -56,7 +56,10 @@ test("Buscador global responde a teclado y no secuestra la barra cuando se está
   await mockSearch(page);
   await page.goto("/onboarding");
 
-  await page.keyboard.press("/");
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+  });
+  await page.keyboard.press("Slash");
   const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
@@ -65,7 +68,7 @@ test("Buscador global responde a teclado y no secuestra la barra cuando se está
   const existingInput = page.locator("input").first();
   if (await existingInput.count()) {
     await existingInput.focus();
-    await page.keyboard.type("/");
+    await page.keyboard.press("Slash");
     await expect(dialog).toBeHidden();
   }
 });
