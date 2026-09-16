@@ -1,0 +1,111 @@
+name: Stage Analysis Budget Provenance
+
+on:
+  push:
+    branches:
+      - rebuild/phase-analysis-budget-provenance
+    paths:
+      - ".github/workflows/stage-analysis-budget-provenance.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  stage-budget-provenance:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v6
+        with:
+          ref: rebuild/phase-analysis-budget-provenance
+          fetch-depth: 0
+
+      - name: Apply exact budget provenance patch
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              target = Path(path)
+              text = target.read_text()
+              if old not in text:
+                  raise SystemExit(f"anchor not found in {path}: {old[:80]!r}")
+              target.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "supabase/functions/financial-app-db-gateway/analysis-query.ts",
+              """          'total', jsonb_build_object(\n            'effectiveAmountCents', b.effective_cents,""",
+              """          'total', jsonb_build_object(\n            'automaticAmountCents', b.automatic_cents,\n            'manualAmountCents', b.manual_amount_cents,\n            'effectiveAmountCents', b.effective_cents,""",
+          )
+
+          replace_once(
+              "src/application/analysis/analysis-engine.ts",
+              """    total: null | {\n      effectiveAmountCents: number;""",
+              """    total: null | {\n      automaticAmountCents?: number;\n      manualAmountCents?: number | null;\n      effectiveAmountCents: number;""",
+          )
+
+          presentation = Path("src/application/analysis/analysis-presentation.ts")
+          presentation_text = presentation.read_text()
+          append = '''\n\nexport type BudgetSourcePresentation = {\n  kind: "manual" | "automatic" | "unknown";\n  label: string | null;\n};\n\nexport function resolveBudgetSourcePresentation(\n  total: NonNullable<NonNullable<AnalysisSnapshot["budget"]>["total"]>,\n): BudgetSourcePresentation {\n  if (total.manualAmountCents !== undefined && total.manualAmountCents !== null) {\n    return { kind: "manual", label: "Límite manual" };\n  }\n\n  if (total.automaticAmountCents !== undefined) {\n    return { kind: "automatic", label: "Referencia automática · media de 3 meses" };\n  }\n\n  return { kind: "unknown", label: null };\n}\n'''
+          if "resolveBudgetSourcePresentation" in presentation_text:
+              raise SystemExit("budget source presentation already exists")
+          presentation.write_text(presentation_text.rstrip() + append)
+
+          replace_once(
+              "app/analysis/analysis-client.tsx",
+              'import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";',
+              'import { resolveBudgetSourcePresentation, resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";',
+          )
+
+          replace_once(
+              "app/analysis/analysis-client.tsx",
+              """function Kpi({\n""",
+              """type AnalysisBudgetTotal = NonNullable<NonNullable<AnalysisSnapshot[\"budget\"]>[\"total\"]>;\n\nfunction BudgetContext({ total }: { total: AnalysisBudgetTotal }) {\n  const source = resolveBudgetSourcePresentation(total);\n  return (\n    <p>\n      {formatMoney(total.actualExpenseCents)} de {formatMoney(total.effectiveAmountCents)}\n      {source.label ? ` · ${source.label}` : \"\"}.\n    </p>\n  );\n}\n\nfunction Kpi({\n""",
+          )
+
+          replace_once(
+              "app/analysis/analysis-client.tsx",
+              """                  <p>{formatMoney(snapshot.budget.total.actualExpenseCents)} de {formatMoney(snapshot.budget.total.effectiveAmountCents)}.</p>""",
+              """                  <BudgetContext total={snapshot.budget.total} />""",
+          )
+
+          replace_once(
+              "tests/e2e/analysis.spec.ts",
+              'import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";',
+              'import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";\nimport { resolveBudgetSourcePresentation } from "../../src/application/analysis/analysis-presentation";\nimport { runAnalysisSnapshotQuery } from "../../supabase/functions/financial-app-db-gateway/analysis-query";',
+          )
+
+          replace_once(
+              "tests/e2e/analysis.spec.ts",
+              """    total: {\n      effectiveAmountCents: 100000,""",
+              """    total: {\n      automaticAmountCents: 100000,\n      manualAmountCents: null,\n      effectiveAmountCents: 100000,""",
+          )
+
+          marker = 'test("E2 · el motor v2 falla cerrado si los drivers no reconcilian con el motor financiero", () => {'
+          extra_tests = '''test("E2 · el presupuesto conserva y presenta su procedencia sin recalcular", () => {\n  const total = GATEWAY.budget?.total;\n  expect(total).not.toBeNull();\n  expect(total).toBeDefined();\n  if (!total) throw new Error("budget_fixture_missing");\n\n  expect(resolveBudgetSourcePresentation(total)).toEqual({\n    kind: "automatic",\n    label: "Referencia automática · media de 3 meses",\n  });\n  expect(resolveBudgetSourcePresentation({\n    ...total,\n    manualAmountCents: 120000,\n    effectiveAmountCents: 120000,\n  })).toEqual({ kind: "manual", label: "Límite manual" });\n\n  const { automaticAmountCents: _automatic, manualAmountCents: _manual, ...legacyTotal } = total;\n  expect(resolveBudgetSourcePresentation(legacyTotal)).toEqual({ kind: "unknown", label: null });\n\n  const snapshot = mockSnapshot();\n  expect(snapshot.budget?.total).toMatchObject({\n    automaticAmountCents: 100000,\n    manualAmountCents: null,\n    effectiveAmountCents: 100000,\n  });\n});\n\ntest("E2 · la consulta del gateway expone la procedencia presupuestaria ya calculada", () => {\n  const sqlText = runAnalysisSnapshotQuery(\n    (strings: TemplateStringsArray) => strings.join("?"),\n    {\n      dateFrom: "2026-09-01",\n      dateTo: "2026-09-15",\n      previousDateFrom: "2026-08-01",\n      previousDateTo: "2026-08-15",\n      historyDateFrom: "2025-10-01",\n      accountId: null,\n      budgetMonth: "2026-09",\n    },\n  );\n\n  expect(sqlText).toContain("'automaticAmountCents', b.automatic_cents");\n  expect(sqlText).toContain("'manualAmountCents', b.manual_amount_cents");\n});\n\n'''
+          replace_once("tests/e2e/analysis.spec.ts", marker, extra_tests + marker)
+
+          replace_once(
+              "tests/e2e/analysis.spec.ts",
+              """  await expect(page.getByText(/Totales reconciliados al céntimo/)).toBeVisible();\n""",
+              """  await expect(page.getByText(/Totales reconciliados al céntimo/)).toBeVisible();\n  const budget = page.locator('section[aria-labelledby="budget-heading"]');\n  await expect(budget).toContainText("Referencia automática · media de 3 meses");\n""",
+          )
+
+          Path(".github/workflows/stage-analysis-budget-provenance.yml").unlink()
+          PY
+
+      - name: Verify focused diff
+        run: |
+          git status --short
+          git diff --check
+          git diff --stat
+
+      - name: Commit staged patch without Vercel Preview
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/analysis/analysis-client.tsx src/application/analysis/analysis-engine.ts src/application/analysis/analysis-presentation.ts supabase/functions/financial-app-db-gateway/analysis-query.ts tests/e2e/analysis.spec.ts .github/workflows/stage-analysis-budget-provenance.yml
+          git commit -m "fix(analysis): preserve budget provenance in presentation"
+          git push origin HEAD:rebuild/phase-analysis-budget-provenance
