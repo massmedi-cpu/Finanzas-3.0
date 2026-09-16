@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { analysisSelectionFromSearchParams } from "../../src/application/analysis/analysis-query-state";
@@ -96,4 +98,18 @@ test("Análisis v3 · el cliente acepta sólo snapshots reconciliados y con prin
     ...VALID_SNAPSHOT,
     principles: { ...VALID_SNAPSHOT.principles, generativeAi: true },
   })).toBe(false);
+});
+
+test("Análisis v5 · el shell queda fuera de la espera del snapshot financiero", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
+
+  expect(source).toMatch(/async function AnalysisData[\s\S]*loadAnalysisSnapshot\(fallbackSelection\)/);
+  expect(source).toMatch(/<AppShell>[\s\S]*<Suspense fallback=\{<AnalysisLoadingFrame \/>}?>[\s\S]*<AnalysisData searchParams=\{searchParams\} \/>/);
+
+  const shellIndex = source.indexOf("<AppShell>");
+  const suspenseIndex = source.indexOf("<Suspense");
+  const dataIndex = source.indexOf("<AnalysisData");
+  expect(shellIndex).toBeGreaterThanOrEqual(0);
+  expect(suspenseIndex).toBeGreaterThan(shellIndex);
+  expect(dataIndex).toBeGreaterThan(suspenseIndex);
 });
