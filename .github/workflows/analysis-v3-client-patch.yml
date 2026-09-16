@@ -47,14 +47,7 @@ jobs:
           if tail_index < 0:
               raise SystemExit("analysis client refresh tail anchor changed")
           tail_end = tail_index + len(tail_marker)
-          url_sync = '''
-
-      const nextParams = new URLSearchParams({
-        month: next.selection.month,
-        range: next.selection.range,
-      });
-      if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);
-      window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);'''
+          url_sync = '\n\n      const nextParams = new URLSearchParams({\n        month: next.selection.month,\n        range: next.selection.range,\n      });\n      if (next.selection.accountId) nextParams.set("accountId", next.selection.accountId);\n      window.history.replaceState(window.history.state, "", `/analysis?${nextParams.toString()}`);'
           text = text[:tail_end] + url_sync + text[tail_end:]
 
           path.write_text(text)
