@@ -124,6 +124,22 @@ test("Análisis v5 · un fallo de recuperación no deja un esqueleto infinito", 
   expect(source).not.toMatch(/!snapshot && <LoadingSkeleton \/>/);
 });
 
+test("Análisis v6 · los fallos del gateway conservan status y código hasta los logs de diagnóstico", () => {
+  const pageSource = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
+  const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/route.ts"), "utf8");
+  const recoverySource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
+
+  expect(pageSource).toContain("PersistenceGatewayError");
+  expect(pageSource).toContain("status: error.status");
+  expect(pageSource).toContain("code: error.code ?? null");
+  expect(routeSource).toContain("analysis-api-gateway");
+  expect(routeSource).toContain("status: error.status");
+  expect(routeSource).toContain("code: error.code ?? null");
+  expect(recoverySource).toContain("responseErrorCode");
+  expect(recoverySource).toContain("analysis_contract_invalid");
+  expect(recoverySource).not.toMatch(/!response\.ok \|\| !isAnalysisSnapshot\(payload\)/);
+});
+
 test("Análisis v5 · un ingreso residual o todavía inexistente no fabrica una tasa parcial", () => {
   const snapshot = {
     ...VALID_SNAPSHOT,
