@@ -84,14 +84,14 @@ function statusText(freshness: SourceFreshness) {
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const when = timestamp ? ` ${formatSyncDate(timestamp)}` : "";
+  const rows = sync.rowsSeen !== null ? ` · ${sync.rowsSeen.toLocaleString("es-ES")} filas revisadas` : "";
+  const health = syncHealth(sync);
 
   if (sync.status === "success") {
-    const rows = sync.rowsSeen !== null ? ` · ${sync.rowsSeen.toLocaleString("es-ES")} filas revisadas` : "";
-    const health = syncHealth(sync);
     return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
   if (sync.status === "started") return `Actualización de fuente en curso${when}${movement}`;
-  return `Última sincronización con incidencias${when}${movement}`;
+  return `Última sincronización con incidencias${when}${rows}${health.detail}${movement}`;
 }
 
 export default function AnalysisSourceFreshness() {
