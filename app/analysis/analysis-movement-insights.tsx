@@ -393,7 +393,7 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
   return (
     <div className={styles.detailCard}>
       <div className={styles.cardHeading}>
-        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle del movimiento original cuando aporta información</strong></div>
+        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle procedente del movimiento original</strong></div>
         <small>Top {rows.length.toLocaleString("es-ES")}</small>
       </div>
       <div className={styles.transactionList}>
