@@ -36,20 +36,40 @@ function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
+function nullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function nullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === "number" && Number.isFinite(value));
+}
+
 function isFreshness(value: unknown): value is SourceFreshness {
   if (!record(value) || typeof value.available !== "boolean") return false;
-  if (value.latestMovementDate !== null && typeof value.latestMovementDate !== "string") return false;
+  if (!nullableString(value.latestMovementDate)) return false;
   if (value.sync === null) return true;
   if (!record(value.sync)) return false;
-  return value.sync.status === "success" || value.sync.status === "failed" || value.sync.status === "started";
+
+  const statusValid = value.sync.status === "success" || value.sync.status === "failed" || value.sync.status === "started";
+  if (!statusValid) return false;
+
+  return nullableString(value.sync.finishedAt)
+    && nullableString(value.sync.startedAt)
+    && nullableFiniteNumber(value.sync.rowsSeen)
+    && nullableFiniteNumber(value.sync.rowsFailed)
+    && nullableFiniteNumber(value.sync.warningsCount);
 }
 
 function formatBankDate(value: string) {
-  return dateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime())) return null;
+  return dateFormatter.format(date).replace(".", "");
 }
 
 function formatSyncDate(value: string) {
-  return dateTimeFormatter.format(new Date(value)).replace(".", "");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return dateTimeFormatter.format(date).replace(".", "");
 }
 
 function syncHasIncidents(sync: NonNullable<SourceFreshness["sync"]>) {
@@ -76,14 +96,14 @@ function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
 
 function statusText(freshness: SourceFreshness) {
   const sync = freshness.sync;
-  const movement = freshness.latestMovementDate
-    ? ` · último movimiento ${formatBankDate(freshness.latestMovementDate)}`
-    : "";
+  const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
+  const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
 
-  if (!sync) return freshness.latestMovementDate ? `Datos ·${movement.slice(2)}` : null;
+  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : null;
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
-  const when = timestamp ? ` ${formatSyncDate(timestamp)}` : "";
+  const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
+  const when = timestampLabel ? ` ${timestampLabel}` : "";
   const rows = sync.rowsSeen !== null ? ` · ${sync.rowsSeen.toLocaleString("es-ES")} filas revisadas` : "";
   const health = syncHealth(sync);
 
