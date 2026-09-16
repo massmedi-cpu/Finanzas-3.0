@@ -101,6 +101,11 @@ export type AnalysisTopTransaction = {
   bankDate: string;
   amountCents: number;
   conceptNormalized: string;
+  conceptOriginal?: string | null;
+  balanceAfterCents?: number | null;
+  reviewState?: "confirmed" | "pending" | "needs_review" | null;
+  duplicateState?: "none" | "suspected" | "confirmed" | null;
+  hasManualOverride?: boolean;
   merchantId: string | null;
   merchantName: string;
   categoryId: string | null;
@@ -299,22 +304,29 @@ function periodAverage(rows: AnalysisMonthlyRow[], months: number): AnalysisPeri
     expenseCents: average(sample.map((row) => row.expenseCents)) ?? 0,
     operatingNetCents: average(sample.map((row) => row.operatingNetCents)) ?? 0,
     savingsCents: average(sample.map((row) => row.savingsCents)) ?? 0,
-    savingsRateBps: average(rates),
+    savingsRateBps: rates.length === months ? average(rates) : null,
   };
 }
 
 function trend(rows: AnalysisMonthlyRow[], selector: (row: AnalysisMonthlyRow) => number | null): AnalysisTrend {
-  const values = rows
-    .map(selector)
-    .filter((value): value is number => value !== null);
-  if (values.length < 6) {
-    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: values.length };
+  const sampleRows = rows.slice(-6);
+  const selected = sampleRows.map(selector);
+  const validValues = selected.filter((value): value is number => value !== null);
+  if (sampleRows.length < 6 || validValues.length < 6) {
+    return {
+      direction: "insufficient",
+      delta: null,
+      recentAverage: null,
+      previousAverage: null,
+      sampleMonths: validValues.length,
+    };
   }
-  const sample = values.slice(-6);
-  const previousAverage = average(sample.slice(0, 3));
-  const recentAverage = average(sample.slice(3));
+
+  const values = selected as number[];
+  const previousAverage = average(values.slice(0, 3));
+  const recentAverage = average(values.slice(3));
   if (previousAverage === null || recentAverage === null) {
-    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: sample.length };
+    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: values.length };
   }
   const delta = recentAverage - previousAverage;
   return {
@@ -322,7 +334,7 @@ function trend(rows: AnalysisMonthlyRow[], selector: (row: AnalysisMonthlyRow) =
     delta,
     recentAverage,
     previousAverage,
-    sampleMonths: sample.length,
+    sampleMonths: values.length,
   };
 }
 
