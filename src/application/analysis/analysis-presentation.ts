@@ -20,41 +20,27 @@ function referenceIncomeCents(snapshot: AnalysisSnapshot) {
 }
 
 export function resolveSavingsRatePresentation(snapshot: AnalysisSnapshot): SavingsRatePresentation {
+  if (snapshot.selection.partial) {
+    const referenceIncome = referenceIncomeCents(snapshot);
+    if (referenceIncome !== null) {
+      const coverageBps = Math.round((snapshot.current.incomeCents * 10_000) / referenceIncome);
+      if (coverageBps < MIN_PARTIAL_INCOME_COVERAGE_BPS) {
+        return {
+          representative: false,
+          valueBps: null,
+          deltaBps: null,
+          reason: "partial_income_pending",
+        };
+      }
+    }
+  }
+
   if (snapshot.current.savingsRateBps === null) {
     return {
       representative: false,
       valueBps: null,
       deltaBps: null,
       reason: "unavailable",
-    };
-  }
-
-  if (!snapshot.selection.partial) {
-    return {
-      representative: true,
-      valueBps: snapshot.current.savingsRateBps,
-      deltaBps: snapshot.comparison.savingsRateDeltaBps,
-      reason: "available",
-    };
-  }
-
-  const referenceIncome = referenceIncomeCents(snapshot);
-  if (referenceIncome === null) {
-    return {
-      representative: true,
-      valueBps: snapshot.current.savingsRateBps,
-      deltaBps: snapshot.comparison.savingsRateDeltaBps,
-      reason: "available",
-    };
-  }
-
-  const coverageBps = Math.round((snapshot.current.incomeCents * 10_000) / referenceIncome);
-  if (coverageBps < MIN_PARTIAL_INCOME_COVERAGE_BPS) {
-    return {
-      representative: false,
-      valueBps: null,
-      deltaBps: null,
-      reason: "partial_income_pending",
     };
   }
 
