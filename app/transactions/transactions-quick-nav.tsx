@@ -32,6 +32,11 @@ const presets: Preset[] = [
     matches: (params) => params.get("kind") === "transfer" && params.size === 1,
   },
   {
+    label: "Por revisar",
+    href: "/transactions?reviewState=needs_review",
+    matches: (params) => params.get("reviewState") === "needs_review" && params.size === 1,
+  },
+  {
     label: "Sin categoría",
     href: "/transactions?categoryId=__uncategorized__",
     matches: (params) => params.get("categoryId") === "__uncategorized__" && params.size === 1,
