@@ -103,7 +103,9 @@ for (const width of WIDTHS) {
 
     await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
     await expect(page.getByLabel("Indicadores principales del periodo")).toBeVisible();
+    await expect(page.getByLabel("Indicadores principales del periodo")).toContainText("Neto del periodo");
     await expect(page.getByLabel("Lectura rápida")).toBeVisible();
+    await expect(page.getByLabel("Lectura rápida")).toContainText("Sin previsiones");
     await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Tu gasto (ha aumentado|ha disminuido|se mantiene)/ })).toBeVisible();
@@ -112,6 +114,7 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Movimientos que merecen la pena revisar" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Presupuesto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
+    await expect(page.getByText("Sin previsiones activas")).toBeVisible();
     await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
 
     expect(
