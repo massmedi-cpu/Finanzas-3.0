@@ -175,7 +175,7 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
     await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
     await expect(page.getByText("Detalle procedente del movimiento original")).toBeVisible();
-    await expect(page.getByText("Cuenta secundaria")).toBeVisible();
+    await expect(page.getByLabel("Gasto por cuenta").getByText("Cuenta secundaria")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Tu gasto (ha aumentado|ha disminuido|se mantiene)/ })).toBeVisible();
