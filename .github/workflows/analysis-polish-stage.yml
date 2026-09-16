@@ -1,0 +1,89 @@
+name: Stage Analysis readability polish
+
+on:
+  push:
+    branches:
+      - rebuild/phase-analysis-budget-provenance
+    paths:
+      - .github/workflows/analysis-polish-stage.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout staging branch
+        uses: actions/checkout@v4
+        with:
+          ref: rebuild/phase-analysis-budget-provenance
+          fetch-depth: 0
+
+      - name: Apply Analysis polish
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: str, old: str, new: str) -> None:
+              file = Path(path)
+              text = file.read_text()
+              if old not in text:
+                  raise SystemExit(f"Expected text not found in {path}: {old[:80]!r}")
+              file.write_text(text.replace(old, new, 1))
+
+          client = "app/analysis/analysis-client.tsx"
+          replace_once(
+              client,
+              '<span>{items.length.toLocaleString("es-ES")} grupos</span>',
+              '<span>{items.length.toLocaleString("es-ES")} {merchant ? (items.length === 1 ? "comercio" : "comercios") : (items.length === 1 ? "grupo" : "grupos")}</span>',
+          )
+          replace_once(
+              client,
+              'hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"',
+              'hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "Fuera del periodo"',
+          )
+          replace_once(
+              client,
+              'hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "fuera del periodo"',
+              'hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "previsión no aplicable al periodo"',
+          )
+          replace_once(
+              client,
+              '{item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>—</span>}',
+              '{item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>Sin filtro</span>}',
+          )
+
+          css = "app/analysis/analysis.module.css"
+          replacements = [
+              ("font-size: 0.68rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.7rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.7rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.67rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.67rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.66rem;", "font-size: 0.75rem;"),
+              ("font-size: 0.67rem;", "font-size: 0.75rem;"),
+          ]
+          for old, new in replacements:
+              replace_once(css, old, new)
+
+          test_file = Path("tests/e2e/analysis-presentation-v6.spec.ts")
+          test_text = test_file.read_text()
+          marker = 'test("Análisis v7 · la UI explica por qué la comparación de ingresos parciales está pendiente", () => {'
+          if marker not in test_text:
+              raise SystemExit("Expected Analysis v7 test marker not found")
+          addition = '''\n\ntest("Análisis · los estados auxiliares evitan guiones ambiguos y usan lenguaje de comercios", () => {\n  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");\n\n  expect(source).toContain('forecast ? "Sin previsiones" : "Fuera del periodo"');\n  expect(source).toContain('"previsión no aplicable al periodo"');\n  expect(source).toContain('items.length === 1 ? "comercio" : "comercios"');\n  expect(source).toContain('>Sin filtro</span>');\n  expect(source).not.toContain('forecast ? "Sin previsiones" : "—"');\n});\n'''
+          if "los estados auxiliares evitan guiones ambiguos" not in test_text:
+              test_file.write_text(test_text.rstrip() + addition + "\n")
+          PY
+
+      - name: Remove temporary workflow and commit
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm .github/workflows/analysis-polish-stage.yml
+          git add app/analysis/analysis-client.tsx app/analysis/analysis.module.css tests/e2e/analysis-presentation-v6.spec.ts
+          git commit -m "polish(analysis): clarify compact states and readability"
+          git push origin HEAD:rebuild/phase-analysis-budget-provenance
