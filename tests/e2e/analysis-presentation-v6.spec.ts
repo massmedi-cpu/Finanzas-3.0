@@ -155,5 +155,5 @@ test("Análisis · los estados auxiliares evitan guiones ambiguos y usan lenguaj
   expect(source).toContain('items.length === 1 ? "comercio" : "comercios"');
   expect(source).toContain('>Sin filtro</span>');
   expect(source).not.toContain('forecast ? "Sin previsiones" : "—"');
+  expect(source).not.toContain('<span className={styles.noLink}>—</span>');
 });
-
