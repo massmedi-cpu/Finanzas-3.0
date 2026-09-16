@@ -124,7 +124,7 @@ test("Análisis v5 · un fallo de recuperación no deja un esqueleto infinito", 
   expect(source).not.toMatch(/!snapshot && <LoadingSkeleton \/>/);
 });
 
-test("Análisis v5 · un ingreso residual no convierte un mes parcial en una tasa de ahorro absurda", () => {
+test("Análisis v5 · un ingreso residual o todavía inexistente no fabrica una tasa parcial", () => {
   const snapshot = {
     ...VALID_SNAPSHOT,
     selection: {
@@ -172,10 +172,20 @@ test("Análisis v5 · un ingreso residual no convierte un mes parcial en una tas
     },
   } as unknown as AnalysisSnapshot;
 
-  expect(resolveSavingsRatePresentation(snapshot)).toEqual({
+  const pending = {
     representative: false,
     valueBps: null,
     deltaBps: null,
     reason: "partial_income_pending",
-  });
+  } as const;
+
+  expect(resolveSavingsRatePresentation(snapshot)).toEqual(pending);
+  expect(resolveSavingsRatePresentation({
+    ...snapshot,
+    current: {
+      ...snapshot.current,
+      incomeCents: 0,
+      savingsRateBps: null,
+    },
+  })).toEqual(pending);
 });
