@@ -158,6 +158,7 @@ test("Análisis v6 · la frescura de fuente es auxiliar y no bloquea el snapshot
   expect(freshnessSource).toContain('warnings > 0 ? " con avisos"');
   expect(freshnessSource).toContain('failedRows > 0 ? " con incidencias"');
   expect(freshnessSource).toContain("syncHasIncidents(freshness.sync)");
+  expect(freshnessSource).toContain("Última sincronización con incidencias${when}${rows}${health.detail}${movement}");
   expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness \/>[\s\S]*<AnalysisClient/);
   expect(loaderSource).not.toContain("source.google_connection_status");
   expect(loaderSource).not.toContain("source.status");
