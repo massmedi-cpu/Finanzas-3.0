@@ -56,7 +56,7 @@ test("Buscador global responde a teclado y no secuestra la barra cuando se está
   await mockSearch(page);
   await page.goto("/onboarding");
 
-  await page.keyboard.press("Control+K");
+  await page.keyboard.press("/");
   const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
