@@ -8,11 +8,29 @@ export type IncomeComparisonPresentation = {
   reason: "available" | "partial_income_pending" | "unavailable";
 };
 
+export type ExpenseComparisonPresentation = {
+  representative: boolean;
+  changeBps: number | null;
+  reason: "available" | "no_previous_expense" | "unavailable";
+  label: string | null;
+};
+
 export type SavingsRatePresentation = {
   representative: boolean;
   valueBps: number | null;
   deltaBps: number | null;
   reason: "available" | "partial_income_pending" | "unavailable";
+};
+
+export type ConcentrationKind = "category" | "merchant";
+
+export type ConcentrationPresentation = {
+  available: boolean;
+  valueBps: number | null;
+  count: number;
+  reason: "available" | "no_eligible_spend" | "unavailable";
+  label: string | null;
+  detail: string | null;
 };
 
 function referenceIncomeCents(snapshot: AnalysisSnapshot) {
@@ -58,6 +76,81 @@ export function resolveIncomeComparisonPresentation(
     representative: true,
     changeBps: snapshot.comparison.incomeChangeBps,
     reason: "available",
+  };
+}
+
+export function resolveExpenseComparisonPresentation(
+  snapshot: AnalysisSnapshot,
+): ExpenseComparisonPresentation {
+  if (snapshot.previous.expenseCents === 0) {
+    return {
+      representative: false,
+      changeBps: null,
+      reason: "no_previous_expense",
+      label: snapshot.current.expenseCents === 0
+        ? "Sin gasto en ambos periodos"
+        : "Sin base comparable · periodo anterior sin gasto",
+    };
+  }
+
+  if (snapshot.comparison.expenseChangeBps === null) {
+    return {
+      representative: false,
+      changeBps: null,
+      reason: "unavailable",
+      label: "Comparación no disponible",
+    };
+  }
+
+  return {
+    representative: true,
+    changeBps: snapshot.comparison.expenseChangeBps,
+    reason: "available",
+    label: null,
+  };
+}
+
+export function resolveConcentrationPresentation(
+  snapshot: AnalysisSnapshot,
+  kind: ConcentrationKind,
+): ConcentrationPresentation {
+  const items = kind === "merchant" ? snapshot.merchantDrivers : snapshot.categoryDrivers;
+  const valueBps = kind === "merchant"
+    ? snapshot.concentration.top3MerchantBps
+    : snapshot.concentration.top3CategoryBps;
+  const count = Math.min(3, Math.max(0, items.length));
+
+  if (snapshot.current.expenseCents === 0 || count === 0) {
+    return {
+      available: false,
+      valueBps: null,
+      count,
+      reason: "no_eligible_spend",
+      label: "Sin gasto elegible",
+      detail: kind === "merchant"
+        ? "no hay comercios con gasto en el periodo"
+        : "no hay categorías con gasto en el periodo",
+    };
+  }
+
+  if (valueBps === null) {
+    return {
+      available: false,
+      valueBps: null,
+      count,
+      reason: "unavailable",
+      label: "Concentración no disponible",
+      detail: null,
+    };
+  }
+
+  return {
+    available: true,
+    valueBps,
+    count,
+    reason: "available",
+    label: null,
+    detail: null,
   };
 }
 
