@@ -54,6 +54,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      # Keep every deterministic Analysis presentation-state regression in the permanent gate.
       - name: Run Analysis regression suite
         run: >-
           npm run test:e2e --
