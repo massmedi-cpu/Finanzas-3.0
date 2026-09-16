@@ -221,9 +221,10 @@ for (const width of WIDTHS) {
     await range.click();
     await expect(page.getByRole("button", { name: "Aplicar" })).toBeVisible();
 
-    const trendAll = page.getByRole("button", { name: "Conjunto" });
-    const trendFlow = page.getByRole("button", { name: "Ingresos y gastos" });
-    const trendNet = page.getByRole("button", { name: "Neto" });
+    const trendViews = page.getByRole("group", { name: "Vista de la evolución financiera" });
+    const trendAll = trendViews.getByRole("button", { name: "Conjunto", exact: true });
+    const trendFlow = trendViews.getByRole("button", { name: "Ingresos y gastos", exact: true });
+    const trendNet = trendViews.getByRole("button", { name: "Neto", exact: true });
     await expect(trendAll).toHaveAttribute("aria-pressed", "true");
     await trendFlow.click();
     await expect(trendFlow).toHaveAttribute("aria-pressed", "true");
@@ -231,10 +232,10 @@ for (const width of WIDTHS) {
     await expect(trendNet).toHaveAttribute("aria-pressed", "true");
     await trendAll.click();
 
-    const compareMode = page.getByRole("button", { name: "Actual vs anterior" });
+    const compareMode = page.getByRole("button", { name: "Actual vs anterior", exact: true });
     await compareMode.click();
     await expect(compareMode).toHaveAttribute("aria-pressed", "true");
-    await page.getByRole("button", { name: "Variación" }).click();
+    await page.getByRole("button", { name: "Variación", exact: true }).click();
 
     const chartMonths = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i });
     const chartMonth = chartMonths.last();
