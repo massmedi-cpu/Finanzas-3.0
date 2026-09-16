@@ -136,3 +136,11 @@ test("Análisis v7 · la concentración visible no presupone siempre tres catego
   expect(source).not.toContain("en 3 categorías</span>");
   expect(source).not.toContain("en los 3 primeros</span>");
 });
+
+test("Análisis v7 · la UI explica por qué la comparación de ingresos parciales está pendiente", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
+
+  expect(source).toContain("resolveIncomeComparisonPresentation(snapshot)");
+  expect(source).toContain("Comparación pendiente · ingresos aún no representativos");
+  expect(source).not.toContain('comparison={`${formatPercentBps(snapshot.comparison.incomeChangeBps, true)} vs. periodo anterior`}');
+});
