@@ -62,6 +62,53 @@ export type AnalysisTrend = {
   sampleMonths: number;
 };
 
+export type AnalysisDailySpend = {
+  date: string;
+  expenseCents: number;
+  rows: number;
+};
+
+export type AnalysisWeekdaySpend = {
+  weekday: number;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisAmountBand = {
+  band: "lt10" | "10to25" | "25to50" | "50to100" | "100to250" | "gte250";
+  expenseCents: number;
+  rows: number;
+};
+
+export type AnalysisConceptSummary = {
+  concept: string;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisAccountSpend = {
+  accountId: string;
+  accountName: string;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisTopTransaction = {
+  transactionId: string;
+  bankDate: string;
+  amountCents: number;
+  conceptNormalized: string;
+  merchantId: string | null;
+  merchantName: string;
+  categoryId: string | null;
+  categoryName: string;
+  accountId: string;
+  accountName: string;
+};
+
 export type AnalysisGatewaySnapshot = {
   current: AnalysisPeriod;
   previous: AnalysisPeriod;
@@ -88,6 +135,12 @@ export type AnalysisGatewaySnapshot = {
     habitualAverageCents: number | null;
     historyRows: number | null;
   }>;
+  dailySpend?: AnalysisDailySpend[];
+  weekdaySpend?: AnalysisWeekdaySpend[];
+  amountBands?: AnalysisAmountBand[];
+  concepts?: AnalysisConceptSummary[];
+  accountSpend?: AnalysisAccountSpend[];
+  topTransactions?: AnalysisTopTransaction[];
   concentration: {
     top3CategoryBps: number | null;
     top3MerchantBps: number | null;
@@ -178,6 +231,12 @@ export type AnalysisSnapshot = {
     last6Months: AnalysisPeriodAverage | null;
   };
   history: AnalysisMonthlyRow[];
+  dailySpend: AnalysisDailySpend[];
+  weekdaySpend: AnalysisWeekdaySpend[];
+  amountBands: AnalysisAmountBand[];
+  concepts: AnalysisConceptSummary[];
+  accountSpend: AnalysisAccountSpend[];
+  topTransactions: AnalysisTopTransaction[];
   trends: {
     income: AnalysisTrend;
     expense: AnalysisTrend;
@@ -416,6 +475,12 @@ export function buildAnalysisSnapshot(input: {
       last6Months: periodAverage(completeHistory, 6),
     },
     history,
+    dailySpend: input.gateway.dailySpend ?? [],
+    weekdaySpend: input.gateway.weekdaySpend ?? [],
+    amountBands: input.gateway.amountBands ?? [],
+    concepts: input.gateway.concepts ?? [],
+    accountSpend: input.gateway.accountSpend ?? [],
+    topTransactions: input.gateway.topTransactions ?? [],
     trends: {
       income: trend(completeHistory, (row) => row.incomeCents),
       expense: trend(completeHistory, (row) => row.expenseCents),
