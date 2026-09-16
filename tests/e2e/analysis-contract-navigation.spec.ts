@@ -154,6 +154,9 @@ test("Análisis v6 · la frescura de fuente es auxiliar y no bloquea el snapshot
   expect(routeSource).toContain("warningsCount: integer(run.warnings_count)");
   expect(freshnessSource).toContain('fetch("/api/analysis/source-freshness"');
   expect(freshnessSource).toContain("if (!freshness) return null");
+  expect(freshnessSource).toContain("function nullableFiniteNumber");
+  expect(freshnessSource).toContain("Number.isFinite(value)");
+  expect(freshnessSource).toContain("Number.isNaN(date.getTime())");
   expect(freshnessSource).toContain("function syncHasIncidents");
   expect(freshnessSource).toContain('warnings > 0 ? " con avisos"');
   expect(freshnessSource).toContain('failedRows > 0 ? " con incidencias"');
