@@ -59,6 +59,9 @@ jobs:
         run: >-
           npm run test:e2e --
           tests/e2e/global-search.spec.ts
+          tests/e2e/transactions-ux-comfort.spec.ts
+          tests/e2e/transactions-deeplink.spec.ts
+          tests/e2e/transactions-accessibility.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-visual-restraint.spec.ts
