@@ -32,9 +32,16 @@ jobs:
   analysis-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      VALIDATION_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.VALIDATION_SHA }}
+
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$VALIDATION_SHA"
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -70,6 +77,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: analysis-regression-${{ github.sha }}
+          name: analysis-regression-${{ env.VALIDATION_SHA }}
           path: playwright-report/
           retention-days: 7
