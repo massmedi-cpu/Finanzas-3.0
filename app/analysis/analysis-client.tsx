@@ -356,7 +356,6 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       setMonth(next.selection.month);
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
-      setCategoriesExpanded(false);
       setMerchantsExpanded(false);
 
       const nextParams = new URLSearchParams({
