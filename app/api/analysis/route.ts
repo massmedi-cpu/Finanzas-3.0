@@ -2,6 +2,7 @@ import {
   loadAnalysisSnapshot,
   type AnalysisSelectionInput,
 } from "../../../src/application/analysis/analysis-loader";
+import { prepareAnalysisPresentationSnapshot } from "../../../src/application/analysis/analysis-presentation";
 import {
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
@@ -56,7 +57,7 @@ export async function GET(request: Request) {
       range: searchParams.get("range"),
       accountId: searchParams.get("accountId"),
     };
-    const snapshot = await loadAnalysisSnapshot(input);
+    const snapshot = prepareAnalysisPresentationSnapshot(await loadAnalysisSnapshot(input));
     const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
 
     return Response.json(snapshot, {
