@@ -52,6 +52,28 @@ function formatSyncDate(value: string) {
   return dateTimeFormatter.format(new Date(value)).replace(".", "");
 }
 
+function syncHasIncidents(sync: NonNullable<SourceFreshness["sync"]>) {
+  return (sync.rowsFailed ?? 0) > 0 || (sync.warningsCount ?? 0) > 0;
+}
+
+function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
+  const failedRows = sync.rowsFailed ?? 0;
+  const warnings = sync.warningsCount ?? 0;
+  const parts: string[] = [];
+
+  if (failedRows > 0) {
+    parts.push(`${failedRows.toLocaleString("es-ES")} ${failedRows === 1 ? "fila fallida" : "filas fallidas"}`);
+  }
+  if (warnings > 0) {
+    parts.push(`${warnings.toLocaleString("es-ES")} ${warnings === 1 ? "aviso" : "avisos"}`);
+  }
+
+  return {
+    labelSuffix: failedRows > 0 ? " con incidencias" : warnings > 0 ? " con avisos" : "",
+    detail: parts.length ? ` · ${parts.join(" · ")}` : "",
+  };
+}
+
 function statusText(freshness: SourceFreshness) {
   const sync = freshness.sync;
   const movement = freshness.latestMovementDate
@@ -65,7 +87,8 @@ function statusText(freshness: SourceFreshness) {
 
   if (sync.status === "success") {
     const rows = sync.rowsSeen !== null ? ` · ${sync.rowsSeen.toLocaleString("es-ES")} filas revisadas` : "";
-    return `Fuente sincronizada${when}${rows}${movement}`;
+    const health = syncHealth(sync);
+    return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
   if (sync.status === "started") return `Actualización de fuente en curso${when}${movement}`;
   return `Última sincronización con incidencias${when}${movement}`;
@@ -99,7 +122,9 @@ export default function AnalysisSourceFreshness() {
   if (!freshness) return null;
   const text = statusText(freshness);
   if (!text) return null;
-  const warning = freshness.sync?.status === "failed" || freshness.sync?.status === "started";
+  const warning = freshness.sync
+    ? freshness.sync.status === "failed" || freshness.sync.status === "started" || syncHasIncidents(freshness.sync)
+    : false;
 
   return (
     <div className={styles.wrap}>
