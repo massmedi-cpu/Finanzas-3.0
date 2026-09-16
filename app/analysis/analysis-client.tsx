@@ -10,6 +10,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import styles from "./analysis.module.css";
@@ -187,7 +188,7 @@ function Kpi({
     <article className={`${styles.kpi} ${styles[`kpi_${tone}`]}`}>
       <div className={styles.kpiTop}>
         <span>{label}</span>
-        <span className={styles.kpiDirection}>{comparison} vs. periodo anterior</span>
+        <span className={styles.kpiDirection}>{comparison}</span>
       </div>
       <strong>{value}</strong>
       <div className={styles.kpiContext}>
@@ -321,6 +322,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
 
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
+  const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
@@ -434,7 +436,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ingresos"
               value={formatMoney(snapshot.current.incomeCents)}
-              comparison={formatPercentBps(snapshot.comparison.incomeChangeBps, true)}
+              comparison={`${formatPercentBps(snapshot.comparison.incomeChangeBps, true)} vs. periodo anterior`}
               trend={snapshot.trends.income}
               historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
               tone="income"
@@ -442,7 +444,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Gastos"
               value={formatMoney(snapshot.current.expenseCents)}
-              comparison={formatPercentBps(snapshot.comparison.expenseChangeBps, true)}
+              comparison={`${formatPercentBps(snapshot.comparison.expenseChangeBps, true)} vs. periodo anterior`}
               trend={snapshot.trends.expense}
               historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
               tone="expense"
@@ -450,15 +452,19 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <Kpi
               label="Ahorro / neto"
               value={formatMoney(snapshot.current.savingsCents)}
-              comparison={formatPercentBps(snapshot.comparison.savingsChangeBps, true)}
+              comparison={`${formatPercentBps(snapshot.comparison.savingsChangeBps, true)} vs. periodo anterior`}
               trend={snapshot.trends.savings}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
             />
             <Kpi
               label="Tasa de ahorro"
-              value={formatPercentBps(snapshot.current.savingsRateBps)}
-              comparison={formatPointDeltaBps(snapshot.comparison.savingsRateDeltaBps)}
+              value={savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
+              comparison={savingsRatePresentation?.representative
+                ? `${formatPointDeltaBps(savingsRatePresentation.deltaBps)} vs. periodo anterior`
+                : savingsRatePresentation?.reason === "partial_income_pending"
+                  ? "Ingresos del mes aún no representativos"
+                  : "Sin tasa disponible"}
               trend={snapshot.trends.savingsRate}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
               tone="rate"
@@ -557,7 +563,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               <div className={styles.sectionHeading}>
                 <div>
                   <p>ANOMALÍAS</p>
-                  <h2 id="anomalies-heading">Movimientos que merece la pena revisar</h2>
+                  <h2 id="anomalies-heading">Movimientos que merecen la pena revisar</h2>
                 </div>
                 <span>{snapshot.anomalies.length.toLocaleString("es-ES")}</span>
               </div>
