@@ -6,6 +6,7 @@ import type { AnalysisSelectionInput } from "../../src/application/analysis/anal
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import AnalysisClient from "./analysis-client";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
+import AnalysisSourceFreshness from "./analysis-source-freshness";
 
 function currentMadridMonth() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -80,5 +81,10 @@ export default function AnalysisPageClient({
     return <AnalysisLoadingFrame message="Recuperando el análisis con los filtros solicitados…" />;
   }
 
-  return <AnalysisClient initialSnapshot={snapshot} />;
+  return (
+    <>
+      <AnalysisSourceFreshness />
+      <AnalysisClient initialSnapshot={snapshot} />
+    </>
+  );
 }
