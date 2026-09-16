@@ -135,75 +135,137 @@ export default function ReviewClient() {
       name: "Movimientos por revisar",
       href: "/transactions?reviewState=needs_review",
       count: counts[0],
-      description: "Movimientos cuyo estado actual requiere una revisión explícita.",
+      description: "Movimientos que requieren una decisión explícita.",
     },
     {
       name: "Posibles duplicados",
       href: "/transactions?duplicateState=suspected",
       count: counts[1],
-      description: "Posibles duplicados detectados por el motor de Movimientos.",
+      description: "Coincidencias que conviene confirmar o descartar.",
     },
     {
       name: "Recurrentes sin decidir",
       href: "/recurrences",
       count: counts[2],
-      description: "Patrones recurrentes detectados que todavía no tienen una decisión guardada.",
+      description: "Patrones detectados que aún no tienen una decisión guardada.",
     },
     {
       name: "Documentos pendientes",
       href: "/documents",
       count: counts[3],
-      description: "Documentos cuyo estado real sigue siendo pendiente de revisión.",
+      description: "Documentos que siguen esperando revisión.",
     },
     {
       name: "Presupuestos excedidos",
       href: "/budgets",
       count: counts[4],
-      description: "Categorías del mes actual cuyo presupuesto ya se ha superado.",
+      description: "Categorías del mes actual que ya superaron su límite.",
     },
     {
       name: "Previsiones con baja confianza",
       href: "/forecast",
       count: counts[5],
-      description: "Elementos planificados que el motor mantiene con confianza baja.",
+      description: "Elementos planificados cuya estimación merece revisión.",
     },
     {
       name: "Sincronización bancaria",
       href: "/configuration/source",
       count: counts[6],
-      description: "Incidencias, avisos o falta de conexión en la fuente bancaria de solo lectura.",
+      description: "Conexión, avisos o incidencias de la fuente bancaria.",
     },
   ], [counts]);
+
+  const actionItems = useMemo(() => items.filter((item) => typeof item.count === "number" && item.count > 0), [items]);
+  const clearItems = useMemo(() => items.filter((item) => item.count === 0), [items]);
+  const unavailableItems = useMemo(() => loading ? [] : items.filter((item) => item.count === null), [items, loading]);
+  const actionableCount = actionItems.reduce((sum, item) => sum + (item.count ?? 0), 0);
 
   return (
     <main className={styles.shell}>
       <header className={styles.hero}>
-        <p className={styles.eyebrow}>CENTRO DE ACCIÓN</p>
-        <h1>Para revisar</h1>
-        <p>
-          Reúne referencias vivas de los módulos que ya poseen cada estado. Resolver una tarea siempre te lleva a su sección original: esta vista no guarda ni duplica información financiera.
-        </p>
+        <div>
+          <p className={styles.eyebrow}>CENTRO DE ACCIÓN</p>
+          <h1>Para revisar</h1>
+        </div>
+        <div className={styles.heroStatus} aria-live="polite">
+          <strong>{loading ? "…" : actionableCount.toLocaleString("es-ES")}</strong>
+          <span>{loading ? "Comprobando" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
+        </div>
       </header>
 
-      <section className={styles.grid} aria-label="Elementos para revisar">
-        {items.map((item) => (
-          <article key={item.name} className={styles.card} aria-label={item.name}>
-            <div className={styles.cardBody}>
-              <div className={styles.cardHeader}>
-                <h2>{item.name}</h2>
-                <strong aria-label={item.count === null ? "Dato no disponible" : `${item.count} elementos`}>
-                  {loading && item.count === null ? "…" : item.count === null ? "—" : item.count.toLocaleString("es-ES")}
-                </strong>
+      {loading ? (
+        <section className={styles.loadingPanel} role="status">Comprobando qué necesita tu atención…</section>
+      ) : (
+        <>
+          <section className={styles.section} aria-labelledby="review-actions-heading">
+            <div className={styles.sectionHeading}>
+              <div>
+                <p className={styles.kicker}>PRIORIDAD</p>
+                <h2 id="review-actions-heading">Requiere atención</h2>
               </div>
-              <p>{item.description}</p>
+              <span>{actionItems.length.toLocaleString("es-ES")} áreas</span>
             </div>
-            <Link className={styles.action} href={item.href}>Abrir sección</Link>
-          </article>
-        ))}
-      </section>
+
+            {actionItems.length > 0 ? (
+              <div className={styles.actionList}>
+                {actionItems.map((item) => (
+                  <article key={item.name} className={styles.actionCard} aria-label={item.name}>
+                    <div className={styles.count} aria-label={`${item.count} elementos`}>{item.count!.toLocaleString("es-ES")}</div>
+                    <div className={styles.cardCopy}>
+                      <h3>{item.name}</h3>
+                      <p>{item.description}</p>
+                    </div>
+                    <Link className={styles.action} href={item.href}>Revisar</Link>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className={styles.allClear} role="status">
+                <strong>No hay acciones confirmadas pendientes</strong>
+                <span>Las fuentes disponibles no han detectado nada que requiera intervención.</span>
+              </div>
+            )}
+          </section>
+
+          {clearItems.length > 0 && (
+            <section className={styles.compactPanel} aria-labelledby="review-clear-heading">
+              <div className={styles.compactHeading}>
+                <div>
+                  <p className={styles.kicker}>SIN INCIDENCIAS</p>
+                  <h2 id="review-clear-heading">Todo en orden</h2>
+                </div>
+                <strong>{clearItems.length.toLocaleString("es-ES")}</strong>
+              </div>
+              <ul className={styles.compactList}>
+                {clearItems.map((item) => <li key={item.name}><span aria-hidden="true">✓</span><span>{item.name}</span></li>)}
+              </ul>
+            </section>
+          )}
+
+          {unavailableItems.length > 0 && (
+            <section className={`${styles.compactPanel} ${styles.unavailable}`} aria-labelledby="review-unavailable-heading">
+              <div className={styles.compactHeading}>
+                <div>
+                  <p className={styles.kicker}>SIN CONFIRMAR</p>
+                  <h2 id="review-unavailable-heading">No se pudo comprobar</h2>
+                </div>
+                <strong>{unavailableItems.length.toLocaleString("es-ES")}</strong>
+              </div>
+              <ul className={styles.unavailableList}>
+                {unavailableItems.map((item) => (
+                  <li key={item.name}>
+                    <span>{item.name}</span>
+                    <Link href={item.href}>Abrir sección</Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
 
       <p className={styles.note}>
-        Los cambios se realizan únicamente en el módulo propietario de cada dato. La fuente bancaria continúa siendo estrictamente de solo lectura.
+        Las acciones se resuelven en su módulo propietario. La fuente bancaria sigue siendo estrictamente de solo lectura.
       </p>
     </main>
   );
