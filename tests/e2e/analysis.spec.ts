@@ -249,7 +249,8 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
   await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
   await expect(page.getByText(/\+3,8 pp vs\. periodo anterior/)).toBeVisible();
   await expect(page.getByText(/Totales reconciliados al céntimo/)).toBeVisible();
-  await expect(page.getByRole("link", { name: /Alimentación/ }).first()).toHaveAttribute("href", new RegExp(`categoryId=${CATEGORY_FOOD}`));
+  const composition = page.locator('section[aria-labelledby="distribution-heading"]');
+  await expect(composition.getByRole("link", { name: /Alimentación/ })).toHaveAttribute("href", new RegExp(`categoryId=${CATEGORY_FOOD}`));
 
   if (testInfo.project.name === "chromium-mobile") {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);

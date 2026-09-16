@@ -112,7 +112,7 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Movimientos que merece la pena revisar" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Presupuesto" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
-    await expect(page.getByText(/detalle por categorías se consulta en Presupuestos/i)).toBeVisible();
+    await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
