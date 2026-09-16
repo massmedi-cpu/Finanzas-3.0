@@ -116,6 +116,14 @@ test("Análisis v5 · el shell queda fuera de la espera del snapshot financiero"
   expect(dataIndex).toBeGreaterThan(suspenseIndex);
 });
 
+test("Análisis v5 · un fallo de recuperación no deja un esqueleto infinito", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
+
+  expect(source).toContain("Reintentar");
+  expect(source).toMatch(/!snapshot && loading && <LoadingSkeleton \/>/);
+  expect(source).not.toMatch(/!snapshot && <LoadingSkeleton \/>/);
+});
+
 test("Análisis v5 · un ingreso residual no convierte un mes parcial en una tasa de ahorro absurda", () => {
   const snapshot = {
     ...VALID_SNAPSHOT,
