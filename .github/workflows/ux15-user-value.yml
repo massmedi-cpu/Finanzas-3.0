@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - rebuild/phase-analysis-budget-provenance
     paths:
       - "app/**"
       - "src/**"
