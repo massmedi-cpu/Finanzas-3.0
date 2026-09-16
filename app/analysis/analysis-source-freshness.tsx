@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import styles from "./analysis-source-freshness.module.css";
 
-type SyncStatus = "success" | "failed" | "started";
+type SyncStatus = "success" | "partial" | "failed" | "started";
 
 type SourceFreshness = {
   available: boolean;
@@ -50,7 +50,7 @@ function nullableString(value: unknown): value is string | null {
 }
 
 function nullableFiniteNumber(value: unknown): value is number | null {
-  return value === null || (typeof value === "number" && Number.isFinite(value));
+  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
 }
 
 function isFreshness(value: unknown): value is SourceFreshness {
@@ -59,7 +59,10 @@ function isFreshness(value: unknown): value is SourceFreshness {
   if (value.sync === null) return true;
   if (!record(value.sync)) return false;
 
-  const statusValid = value.sync.status === "success" || value.sync.status === "failed" || value.sync.status === "started";
+  const statusValid = value.sync.status === "success"
+    || value.sync.status === "partial"
+    || value.sync.status === "failed"
+    || value.sync.status === "started";
   if (!statusValid) return false;
 
   return nullableString(value.sync.finishedAt)
@@ -82,7 +85,9 @@ function formatSyncDate(value: string) {
 }
 
 function syncHasIncidents(sync: NonNullable<SourceFreshness["sync"]>) {
-  return (sync.rowsFailed ?? 0) > 0 || (sync.warningsCount ?? 0) > 0;
+  return sync.status === "partial"
+    || (sync.rowsFailed ?? 0) > 0
+    || (sync.warningsCount ?? 0) > 0;
 }
 
 function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
@@ -119,6 +124,9 @@ function statusText(freshness: SourceFreshness) {
   if (sync.status === "success") {
     return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
+  if (sync.status === "partial") {
+    return `Fuente sincronizada parcialmente${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
+  }
   if (sync.status === "started") return `Actualización de fuente en curso${when}${movement}`;
   return `Última sincronización con incidencias${when}${rows}${health.detail}${movement}`;
 }
@@ -142,7 +150,11 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const timeDetail = timestampLabel
     ? sync.status === "started"
       ? `Actualización iniciada ${timestampLabel}`
-      : `Sincronizado ${timestampLabel}`
+      : sync.status === "failed"
+        ? `Último intento ${timestampLabel}`
+        : sync.status === "partial"
+          ? `Sincronización parcial ${timestampLabel}`
+          : `Sincronizado ${timestampLabel}`
     : null;
   const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
   const failedRows = sync.rowsFailed ?? 0;
@@ -165,11 +177,29 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
-  if (sync.status === "failed" || failedRows > 0) {
+  if (sync.status === "failed") {
     return {
       label: "Sincronización con incidencias",
       detail,
       incidentDetail: incidentParts.length ? incidentParts.join(" · ") : "La última actualización no terminó correctamente",
+      tone: "danger",
+    };
+  }
+
+  if (sync.status === "partial") {
+    return {
+      label: failedRows > 0 ? "Sincronización parcial con incidencias" : "Datos sincronizados parcialmente",
+      detail,
+      incidentDetail: incidentParts.length ? incidentParts.join(" · ") : "La última actualización terminó de forma parcial",
+      tone: failedRows > 0 ? "danger" : "warning",
+    };
+  }
+
+  if (failedRows > 0) {
+    return {
+      label: "Sincronización con incidencias",
+      detail,
+      incidentDetail: incidentParts.join(" · "),
       tone: "danger",
     };
   }
@@ -221,7 +251,10 @@ export default function AnalysisSourceFreshness() {
   if (!text) return null;
   const summary = userSummary(freshness);
   const warning = freshness.sync
-    ? freshness.sync.status === "failed" || freshness.sync.status === "started" || syncHasIncidents(freshness.sync)
+    ? freshness.sync.status === "failed"
+      || freshness.sync.status === "partial"
+      || freshness.sync.status === "started"
+      || syncHasIncidents(freshness.sync)
     : false;
 
   return (
