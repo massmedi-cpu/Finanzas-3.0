@@ -118,6 +118,80 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   );
 }
 
+function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
+  const chart = useMemo(() => {
+    const start = new Date(`${snapshot.selection.dateFrom}T12:00:00Z`);
+    const end = new Date(`${snapshot.selection.dateTo}T12:00:00Z`);
+    const totalDays = Math.max(1, Math.floor((end.getTime() - start.getTime()) / 86_400_000) + 1);
+    const firstWeekday = (start.getUTCDay() + 6) % 7;
+    const byDate = new Map(snapshot.dailySpend.map((row) => [row.date, row]));
+    const maximum = Math.max(1, ...snapshot.dailySpend.map((row) => row.expenseCents));
+    const cell = 12;
+    const gap = 3;
+    const left = 22;
+    const top = 16;
+    const weeks = Math.ceil((firstWeekday + totalDays) / 7);
+    const days = Array.from({ length: totalDays }, (_, index) => {
+      const date = new Date(start);
+      date.setUTCDate(start.getUTCDate() + index);
+      const key = date.toISOString().slice(0, 10);
+      const offset = firstWeekday + index;
+      const week = Math.floor(offset / 7);
+      const weekday = offset % 7;
+      const row = byDate.get(key);
+      return {
+        key,
+        week,
+        weekday,
+        expenseCents: row?.expenseCents ?? 0,
+        rows: row?.rows ?? 0,
+      };
+    });
+    return {
+      days,
+      maximum,
+      cell,
+      gap,
+      left,
+      top,
+      width: Math.max(220, left + weeks * (cell + gap) + 12),
+      height: top + 7 * (cell + gap) + 18,
+    };
+  }, [snapshot.dailySpend, snapshot.selection.dateFrom, snapshot.selection.dateTo]);
+
+  return (
+    <div className={styles.chartCard}>
+      <div className={styles.cardHeading}>
+        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
+      </div>
+      <div className={styles.svgViewport}>
+        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">
+          {WEEKDAYS.map((label, index) => (
+            <text key={label} className={styles.axisLabel} x={7} y={chart.top + index * (chart.cell + chart.gap) + chart.cell - 2}>{label}</text>
+          ))}
+          {chart.days.map((day) => {
+            const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;
+            return (
+              <rect
+                key={day.key}
+                className={styles.dailyPoint}
+                x={chart.left + day.week * (chart.cell + chart.gap)}
+                y={chart.top + day.weekday * (chart.cell + chart.gap)}
+                width={chart.cell}
+                height={chart.cell}
+                rx="2"
+                style={{ opacity: intensity }}
+              >
+                <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>
+              </rect>
+            );
+          })}
+        </svg>
+      </div>
+    </div>
+  );
+}
+
 function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const byDay = new Map(snapshot.weekdaySpend.map((row) => [row.weekday, row]));
   const rows = WEEKDAYS.map((label, index) => ({
@@ -243,7 +317,7 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
   return (
     <div className={styles.detailCard}>
       <div className={styles.cardHeading}>
-        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle procedente del movimiento original</strong></div>
+        <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle enlazado con el movimiento original</strong></div>
         <small>Top {rows.length.toLocaleString("es-ES")}</small>
       </div>
       <div className={styles.transactionList}>
@@ -288,6 +362,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
       </div>
 
       <div className={styles.chartGrid}>
+        <SpendingCalendar snapshot={snapshot} />
         <AmountBandsChart snapshot={snapshot} />
         <MerchantScatter snapshot={snapshot} />
       </div>
