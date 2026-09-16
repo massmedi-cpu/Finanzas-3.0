@@ -140,6 +140,23 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
   expect(recoverySource).not.toMatch(/!response\.ok \|\| !isAnalysisSnapshot\(payload\)/);
 });
 
+test("Análisis v6 · la frescura de fuente es auxiliar y no bloquea el snapshot principal", () => {
+  const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/source-freshness/route.ts"), "utf8");
+  const freshnessSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-source-freshness.tsx"), "utf8");
+  const pageClientSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
+  const loaderSource = readFileSync(resolve(process.cwd(), "src/application/analysis/analysis-loader.ts"), "utf8");
+
+  expect(routeSource).toContain("callPersistenceGatewayBatch");
+  expect(routeSource).toContain('action: "source.google_connection_status"');
+  expect(routeSource).toContain('action: "transaction.query", payload: { limit: 1 }');
+  expect(routeSource).toContain('"source.status"');
+  expect(freshnessSource).toContain('fetch("/api/analysis/source-freshness"');
+  expect(freshnessSource).toContain("if (!freshness) return null");
+  expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness \/>[\s\S]*<AnalysisClient/);
+  expect(loaderSource).not.toContain("source.google_connection_status");
+  expect(loaderSource).not.toContain("source.status");
+});
+
 test("Análisis v5 · un ingreso residual o todavía inexistente no fabrica una tasa parcial", () => {
   const snapshot = {
     ...VALID_SNAPSHOT,
