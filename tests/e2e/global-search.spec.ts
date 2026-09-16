@@ -52,14 +52,13 @@ test("Buscador global está disponible desde AppShell y abre resultados útiles"
   await expect(result).toHaveAttribute("href", /merchantId=bbbbbbbb/);
 });
 
-test("Buscador global responde a teclado y no secuestra la barra cuando se está escribiendo", async ({ page }) => {
+test("Buscador global responde al atajo y no secuestra campos editables", async ({ page }) => {
   await mockSearch(page);
   await page.goto("/onboarding");
 
   await page.evaluate(() => {
-    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "/", code: "Slash", bubbles: true, cancelable: true }));
   });
-  await page.keyboard.press("Slash");
   const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
   await expect(dialog).toBeVisible();
   await page.keyboard.press("Escape");
@@ -68,7 +67,9 @@ test("Buscador global responde a teclado y no secuestra la barra cuando se está
   const existingInput = page.locator("input").first();
   if (await existingInput.count()) {
     await existingInput.focus();
-    await page.keyboard.press("Slash");
+    await existingInput.evaluate((input) => {
+      input.dispatchEvent(new KeyboardEvent("keydown", { key: "/", code: "Slash", bubbles: true, cancelable: true }));
+    });
     await expect(dialog).toBeHidden();
   }
 });

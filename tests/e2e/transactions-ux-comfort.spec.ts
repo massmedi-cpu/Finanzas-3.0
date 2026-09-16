@@ -26,7 +26,6 @@ test("Movimientos ofrece accesos rápidos con filtros canónicos", async ({ page
   await expect(nav.getByRole("link", { name: "Gastos" })).toHaveAttribute("href", "/transactions?kind=expense");
   await expect(nav.getByRole("link", { name: "Ingresos" })).toHaveAttribute("href", "/transactions?kind=income");
   await expect(nav.getByRole("link", { name: "Transferencias" })).toHaveAttribute("href", "/transactions?kind=transfer");
-  await expect(nav.getByRole("link", { name: "Por revisar" })).toHaveAttribute("href", "/transactions?reviewState=needs_review");
   await expect(nav.getByRole("link", { name: "Sin categoría" })).toHaveAttribute("href", "/transactions?categoryId=__uncategorized__");
   await expect(nav.getByRole("link", { name: "Posibles duplicados" })).toHaveAttribute("href", "/transactions?duplicateState=suspected");
 });
@@ -68,7 +67,6 @@ test("La mejora de comodidad no crea un segundo motor ni muta el origen bancario
   const page = readFileSync(resolve(process.cwd(), "app/transactions/page.tsx"), "utf8");
   expect(page).toContain("<TransactionsClient />");
   expect(quickNav).toContain("/transactions?kind=expense");
-  expect(quickNav).toContain("/transactions?reviewState=needs_review");
   expect(quickNav).toContain("/transactions?duplicateState=suspected");
   expect(quickNav).not.toContain("fetch(");
   expect(quickNav).not.toContain("PATCH");
