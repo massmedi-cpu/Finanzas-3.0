@@ -14,8 +14,16 @@ const HEADERS = {
   "x-analysis-contract": "2",
 };
 
+function logGatewayError(scope: string, error: PersistenceGatewayError) {
+  console.error(scope, {
+    status: error.status,
+    code: error.code ?? null,
+  });
+}
+
 function apiError(error: unknown) {
   if (error instanceof PersistenceGatewayError) {
+    logGatewayError("analysis-api-gateway", error);
     return Response.json(
       { error: "analysis_unavailable", code: error.code ?? null },
       {
