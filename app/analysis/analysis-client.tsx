@@ -244,7 +244,7 @@ function DriverRanking({
     <section className={styles.ranking} aria-labelledby={headingId}>
       <div className={styles.sectionHeadingCompact}>
         <h3 id={headingId}>{title}</h3>
-        <span>{items.length.toLocaleString("es-ES")} grupos</span>
+        <span>{items.length.toLocaleString("es-ES")} {merchant ? (items.length === 1 ? "comercio" : "comercios") : (items.length === 1 ? "grupo" : "grupos")}</span>
       </div>
       {visible.length === 0 ? (
         <p className={styles.empty}>No hay gastos elegibles en el periodo.</p>
@@ -268,7 +268,7 @@ function DriverRanking({
                   {deltaText(item.deltaCents)}
                 </span>
               </div>
-              {item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>—</span>}
+              {item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>Sin filtro</span>}
             </li>
           ))}
         </ol>
@@ -316,8 +316,8 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
-        <strong>{hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"}</strong>
-        <small>{hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "fuera del periodo"}</small>
+        <strong>{hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "Fuera del periodo"}</strong>
+        <small>{hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "previsión no aplicable al periodo"}</small>
       </Link>
       <Link className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>

@@ -146,3 +146,14 @@ test("Análisis v7 · la UI explica por qué la comparación de ingresos parcial
   expect(source).toContain("Comparación pendiente · ingresos aún no representativos");
   expect(source).not.toContain('comparison={`${formatPercentBps(snapshot.comparison.incomeChangeBps, true)} vs. periodo anterior`}');
 });
+
+test("Análisis · los estados auxiliares evitan guiones ambiguos y usan lenguaje de comercios", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
+
+  expect(source).toContain('forecast ? "Sin previsiones" : "Fuera del periodo"');
+  expect(source).toContain('"previsión no aplicable al periodo"');
+  expect(source).toContain('items.length === 1 ? "comercio" : "comercios"');
+  expect(source).toContain('>Sin filtro</span>');
+  expect(source).not.toContain('forecast ? "Sin previsiones" : "—"');
+});
+
