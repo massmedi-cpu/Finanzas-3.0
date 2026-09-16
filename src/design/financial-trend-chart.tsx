@@ -90,7 +90,7 @@ export function FinancialTrendChart({
       <div className={styles.legend} aria-hidden="true">
         <span><i className={styles.incomeDot} />Ingresos</span>
         <span><i className={styles.expenseDot} />Gastos</span>
-        <span><i className={styles.netDot} />Ahorro / neto</span>
+        <span><i className={styles.netDot} />Neto</span>
       </div>
 
       <div className={styles.viewport}>
@@ -98,7 +98,7 @@ export function FinancialTrendChart({
           className={styles.chart}
           viewBox={`0 0 ${chart.width} ${chart.height}`}
           role="img"
-          aria-label="Evolución mensual de ingresos, gastos y ahorro. Los valores exactos están disponibles en la tabla alternativa y mediante los controles situados bajo la gráfica."
+          aria-label="Evolución mensual de ingresos, gastos y neto. Los valores exactos están disponibles en la tabla alternativa y mediante los controles situados bajo la gráfica."
         >
           {chart.ticks.map((tick) => {
             const y = chart.y(tick);
@@ -210,7 +210,7 @@ export function FinancialTrendChart({
           <dl>
             <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
             <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
-            <div><dt>Ahorro / neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
+            <div><dt>Neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
           </dl>
           <Link href={hrefForMonth(active.monthStart)} aria-label="Ver movimientos del periodo">Ver movimientos del periodo</Link>
         </div>
