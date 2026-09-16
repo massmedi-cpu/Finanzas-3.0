@@ -6,29 +6,64 @@
 
 .status {
   width: fit-content;
-  max-width: 100%;
+  max-width: min(100%, 42rem);
   margin-left: auto;
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
-  min-height: 1.8rem;
-  padding: 0.3rem 0.6rem;
+  align-items: flex-start;
+  gap: 0.6rem;
+  min-height: 2.65rem;
+  padding: 0.55rem 0.75rem;
   border: 1px solid rgba(148, 178, 255, 0.16);
-  border-radius: var(--radius-pill);
-  background: rgba(8, 16, 32, 0.46);
+  border-radius: var(--radius-md);
+  background: rgba(8, 16, 32, 0.54);
   color: var(--color-text-muted);
-  font-size: 0.75rem;
-  line-height: 1.3;
   font-variant-numeric: tabular-nums;
+  backdrop-filter: blur(10px);
+}
+
+.copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.12rem;
+}
+
+.copy strong {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.copy > span {
+  color: var(--color-text-muted);
+  font-size: 0.72rem;
+  line-height: 1.35;
+}
+
+.copy small {
+  color: var(--color-warning);
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.35;
 }
 
 .dot {
-  width: 0.42rem;
-  height: 0.42rem;
+  width: 0.45rem;
+  height: 0.45rem;
   flex: 0 0 auto;
+  margin-top: 0.28rem;
   border-radius: 999px;
   background: var(--color-success);
   box-shadow: 0 0 0 0.18rem rgba(72, 211, 142, 0.08);
+}
+
+.ok {
+  border-color: rgba(72, 211, 142, 0.14);
+  background: linear-gradient(135deg, rgba(72, 211, 142, 0.045), rgba(8, 16, 32, 0.54));
+}
+
+.warning {
+  border-color: rgba(255, 191, 71, 0.2);
+  background: linear-gradient(135deg, rgba(255, 191, 71, 0.05), rgba(8, 16, 32, 0.54));
 }
 
 .warning .dot {
@@ -36,12 +71,39 @@
   box-shadow: 0 0 0 0.18rem rgba(255, 191, 71, 0.08);
 }
 
+.danger {
+  border-color: rgba(255, 93, 115, 0.24);
+  background: linear-gradient(135deg, rgba(255, 93, 115, 0.055), rgba(8, 16, 32, 0.54));
+}
+
+.danger .dot {
+  background: var(--color-danger);
+  box-shadow: 0 0 0 0.18rem rgba(255, 93, 115, 0.08);
+}
+
+.danger .copy small {
+  color: #ff9bab;
+}
+
 @media (max-width: 48rem) {
   .wrap {
     margin-bottom: -0.4rem;
+    padding-inline: var(--space-3);
   }
 
   .status {
+    width: 100%;
+    max-width: none;
     margin-left: 0;
+  }
+}
+
+@media (max-width: 22.5rem) {
+  .wrap {
+    padding-inline: 0.65rem;
+  }
+
+  .status {
+    padding: 0.5rem 0.65rem;
   }
 }
