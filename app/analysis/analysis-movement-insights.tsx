@@ -169,7 +169,7 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
     const left = 22;
     const top = 16;
     const weeks = Math.ceil((firstWeekday + totalDays) / 7);
-    const width = Math.max(220, left + weeks * (cell + gap) + 12);
+    const width = Math.max(300, left + weeks * (cell + gap) + 12);
     const weekStep = weeks > 1 && weeks <= 6
       ? (width - left - 12 - cell) / (weeks - 1)
       : cell + gap;
