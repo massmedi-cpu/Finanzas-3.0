@@ -66,6 +66,7 @@ jobs:
           tests/e2e/module-context-navigation.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts
           tests/e2e/mobile-direct-navigation.spec.ts
+          tests/e2e/mobile-personalization.spec.ts
           tests/e2e/pwa-installability.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-visual-restraint.spec.ts
