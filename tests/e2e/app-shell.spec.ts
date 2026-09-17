@@ -21,6 +21,8 @@ const secondWaveRoutes = [
 ] as const;
 
 const primaryLinks = ["Inicio", "Primeros pasos", "Para revisar", "Movimientos", "Análisis", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"] as const;
+const mobilePrimary = ["Inicio", "Movs.", "Análisis", "Revisar"] as const;
+const mobileSecondary = ["Primeros pasos", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"] as const;
 
 async function isolateShellFromData(page: Page) {
   await page.route("**/api/**", async (route) => {
@@ -42,6 +44,38 @@ async function expectSharedNavigation(page: Page, current: string) {
   await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
 }
 
+async function expectMobileNavigation(page: Page, current: string, width: number) {
+  const desktopNav = page.getByRole("navigation", { name: "Navegación principal" });
+  await expect(desktopNav).toBeHidden();
+
+  const dock = page.getByRole("navigation", { name: "Navegación móvil" });
+  await expect(dock).toBeVisible();
+  for (const name of mobilePrimary) {
+    const control = dock.getByRole("link", { name, exact: true });
+    await expect(control).toBeVisible();
+    const box = await control.boundingBox();
+    expect(box, `${name} debe tener target táctil en ${width}px`).not.toBeNull();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+  }
+  const more = dock.getByRole("button", { name: "Más", exact: true });
+  const moreBox = await more.boundingBox();
+  expect(moreBox).not.toBeNull();
+  expect(moreBox!.height).toBeGreaterThanOrEqual(44);
+
+  const primaryName = current === "Movimientos" ? "Movs." : current === "Para revisar" ? "Revisar" : current;
+  if ((mobilePrimary as readonly string[]).includes(primaryName)) {
+    await expect(dock.getByRole("link", { name: primaryName, exact: true })).toHaveAttribute("aria-current", "page");
+  } else {
+    await more.click();
+    const extra = page.getByRole("navigation", { name: "Más secciones" });
+    await expect(extra).toBeVisible();
+    for (const name of mobileSecondary) await expect(extra.getByRole("link", { name, exact: true })).toBeVisible();
+    await expect(extra.getByRole("link", { name: current, exact: true })).toHaveAttribute("aria-current", "page");
+  }
+
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
+}
+
 test("D2 · Inicio, Primeros pasos, Para revisar, Movimientos, Análisis y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
   await isolateShellFromData(page);
   for (const route of firstWaveRoutes) {
@@ -50,22 +84,14 @@ test("D2 · Inicio, Primeros pasos, Para revisar, Movimientos, Análisis y Previ
   }
 });
 
-test("D2 · el AppShell móvil conserva la navegación completa, targets táctiles y cero overflow", async ({ page }) => {
+test("D2 · el AppShell móvil prioriza cuatro destinos y deja el resto a un toque, sin overflow", async ({ page }) => {
+  test.setTimeout(60_000);
   await isolateShellFromData(page);
   for (const width of [360, 430, 480]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of firstWaveRoutes) {
       await page.goto(route.path);
-      const nav = page.getByRole("navigation", { name: "Navegación principal" });
-      await expect(nav).toBeVisible();
-      await expect(nav.getByRole("link", { name: "Recurrentes", exact: true })).toBeVisible();
-      await expect(nav.getByRole("link", { name: route.current, exact: true })).toHaveAttribute("aria-current", "page");
-      for (const name of primaryLinks) {
-        const box = await nav.getByRole("link", { name, exact: true }).boundingBox();
-        expect(box, `${name} debe conservar un target táctil medible en ${width}px`).not.toBeNull();
-        expect(box!.height, `${name} debe medir al menos 44px de alto en ${width}px`).toBeGreaterThanOrEqual(44);
-      }
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), `${route.path} no debe introducir overflow horizontal a ${width}px`).toBe(true);
+      await expectMobileNavigation(page, route.current, width);
     }
   }
 });
@@ -78,22 +104,14 @@ test("D2 · Cuentas, Presupuestos, Recurrentes, Documentos y Configuración comp
   }
 });
 
-test("D2 · la segunda ola mantiene navegación móvil usable en 360, 430 y 480", async ({ page }) => {
+test("D2 · la segunda ola sigue accesible en móvil desde Más con targets táctiles", async ({ page }) => {
   test.setTimeout(60_000);
   await isolateShellFromData(page);
   for (const width of [360, 430, 480]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of secondWaveRoutes) {
       await page.goto(route.path);
-      const nav = page.getByRole("navigation", { name: "Navegación principal" });
-      await expect(nav).toBeVisible();
-      await expect(nav.getByRole("link", { name: route.current, exact: true })).toHaveAttribute("aria-current", "page");
-      for (const name of primaryLinks) {
-        const box = await nav.getByRole("link", { name, exact: true }).boundingBox();
-        expect(box, `${name} debe conservar un target táctil medible en ${width}px`).not.toBeNull();
-        expect(box!.height, `${name} debe medir al menos 44px de alto en ${width}px`).toBeGreaterThanOrEqual(44);
-      }
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1), `${route.path} no debe introducir overflow horizontal a ${width}px`).toBe(true);
+      await expectMobileNavigation(page, route.current, width);
     }
   }
 });
@@ -101,4 +119,5 @@ test("D2 · la segunda ola mantiene navegación móvil usable en 360, 430 y 480"
 test("D2 · Login permanece fuera del AppShell de la aplicación autenticada", async ({ page }) => {
   await page.goto("/login");
   await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Navegación móvil" })).toHaveCount(0);
 });
