@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import NumberExplanation from "./number-explanation";
 import styles from "./home-smart-brief.module.css";
 
 type BudgetStatus = "empty" | "unfunded" | "on_track" | "over";
@@ -362,6 +363,9 @@ export default function HomeSmartBrief({
     return items.slice(0, 4);
   }, [currentVisit, displayMoney, previousVisit]);
 
+  const monthStart = `${month}-01`;
+  const canDrillIntoCurrentMonth = Boolean(latestTransactionDate?.startsWith(month));
+
   return (
     <section className={styles.shell} aria-label="Resumen inteligente">
       <div className={styles.heading}>
@@ -381,6 +385,24 @@ export default function HomeSmartBrief({
           </Link>
         ))}
       </div>
+
+      <NumberExplanation
+        rows={[
+          { label: "Disponible", text: "Saldo agregado de las cuentas activas. El detalle y la procedencia de cada saldo se conservan en Cuentas." },
+          { label: "Este mes", text: "Ingresos, gastos y neto proceden del resumen financiero canónico del mes. Inicio no recalcula esas cifras." },
+          { label: "Presupuesto", text: "Estado y porcentaje proceden del motor central de presupuestos para el mes seleccionado." },
+          { label: "Previsión", text: "Neto y cierre de los próximos 30 días proceden del motor de previsión y de las partidas que afectan a la proyección." },
+        ]}
+        links={[
+          { href: "/accounts", label: "Ver cuentas" },
+          ...(canDrillIntoCurrentMonth && latestTransactionDate ? [
+            { href: `/transactions?dateFrom=${monthStart}&dateTo=${latestTransactionDate}&kind=income`, label: "Ver ingresos del mes" },
+            { href: `/transactions?dateFrom=${monthStart}&dateTo=${latestTransactionDate}&kind=expense`, label: "Ver gastos del mes" },
+          ] : [{ href: "/analysis", label: "Abrir análisis" }]),
+          { href: "/budgets", label: "Ver presupuestos" },
+          { href: "/forecast", label: "Ver previsión" },
+        ]}
+      />
 
       <div className={styles.visitBlock} aria-live="polite">
         <div className={styles.visitHeading}>
