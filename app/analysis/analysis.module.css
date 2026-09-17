@@ -92,7 +92,7 @@
 .rangeButton,
 .rangeActive,
 .textButton {
-  min-height: 2.55rem;
+  min-height: 2.75rem;
   font: inherit;
 }
 
@@ -345,7 +345,7 @@
   text-decoration: none;
 }
 .secondaryLink {
-  min-height: 2.35rem;
+  min-height: 2.75rem;
   display: inline-flex;
   align-items: center;
   flex: 0 0 auto;
@@ -463,7 +463,7 @@
 .rankValue { min-width: 6.5rem; text-align: right; }
 .rankValue strong { display: block; font-size: max(var(--font-label), 0.8rem); font-variant-numeric: tabular-nums; }
 .rankValue span { display: block; margin-top: 0.08rem; color: var(--color-text-muted); font-size: 0.69rem; }
-.rankingList a { min-width: 3rem; min-height: 2.35rem; display: inline-flex; align-items: center; justify-content: center; color: #bcd0f8; font-size: 0.7rem; font-weight: 750; text-decoration: none; }
+.rankingList a { min-width: 3rem; min-height: 2.75rem; display: inline-flex; align-items: center; justify-content: center; color: #bcd0f8; font-size: 0.7rem; font-weight: 750; text-decoration: none; }
 .noLink { color: var(--color-text-muted); text-align: center; }
 .textButton { width: 100%; margin-top: 0.45rem; border: 0; border-radius: 0.55rem; background: transparent; color: #bcd0f8; cursor: pointer; font-size: max(var(--font-helper), 0.74rem); font-weight: 750; }
 .textButton:hover { background: rgba(77, 141, 255, 0.06); color: white; }
@@ -522,7 +522,7 @@
   .filters { grid-template-columns: 1fr; }
   .rangeSelector { grid-column: auto; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .rangeButton,
-  .rangeActive { white-space: normal; min-height: 2.4rem; }
+  .rangeActive { white-space: normal; min-height: 2.75rem; }
   .kpis { grid-template-columns: 1fr 1fr; gap: 0.5rem; }
   .kpi { padding: 0.72rem; }
   .kpiTop { display: grid; }
