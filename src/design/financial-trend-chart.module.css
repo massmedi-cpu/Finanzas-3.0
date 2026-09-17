@@ -1,7 +1,7 @@
 .wrapper {
   min-width: 0;
   display: grid;
-  gap: var(--space-4);
+  gap: clamp(0.75rem, 1.2vw, 1rem);
 }
 
 .toolbar {
@@ -9,33 +9,31 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-3);
+  gap: 0.75rem 1rem;
   flex-wrap: wrap;
 }
 
 .viewSwitch {
   max-width: 100%;
   display: inline-flex;
-  gap: 0.2rem;
-  padding: 0.2rem;
-  overflow-x: auto;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: rgba(5, 9, 20, 0.42);
-  scrollbar-width: thin;
+  gap: 0.18rem;
+  padding: 0.18rem;
+  border: 1px solid rgba(137, 173, 255, 0.14);
+  border-radius: 0.72rem;
+  background: rgba(5, 9, 20, 0.28);
 }
 
 .viewButton,
 .viewActive {
-  min-height: 2.75rem;
-  padding: 0.5rem 0.72rem;
+  min-height: 2.5rem;
+  padding: 0.45rem 0.72rem;
   border: 1px solid transparent;
-  border-radius: 0.62rem;
+  border-radius: 0.56rem;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
   font: inherit;
-  font-size: var(--font-helper);
+  font-size: max(var(--font-helper), 0.76rem);
   font-weight: 760;
   white-space: nowrap;
 }
@@ -46,8 +44,8 @@
 }
 
 .viewActive {
-  border-color: rgba(77, 141, 255, 0.25);
-  background: rgba(77, 141, 255, 0.13);
+  border-color: rgba(77, 141, 255, 0.24);
+  background: rgba(77, 141, 255, 0.12);
   color: #eef4ff;
 }
 
@@ -60,22 +58,22 @@
 .legend {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: 0.55rem 1rem;
   color: var(--color-text-secondary);
-  font-size: var(--font-helper);
+  font-size: max(var(--font-helper), 0.75rem);
 }
 
 .legend span {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.42rem;
 }
 
 .incomeDot,
 .expenseDot,
 .netDot {
-  width: 0.65rem;
-  height: 0.65rem;
+  width: 0.56rem;
+  height: 0.56rem;
   border-radius: 999px;
 }
 
@@ -86,10 +84,8 @@
 .viewport,
 .monthViewport {
   min-width: 0;
-  overflow-x: auto;
-  overscroll-behavior-inline: contain;
-  scrollbar-width: thin;
-  scrollbar-gutter: stable;
+  width: 100%;
+  overflow: hidden;
 }
 
 .accessibleTable {
@@ -107,43 +103,45 @@
 .chart {
   display: block;
   width: 100%;
-  min-width: 42rem;
-  min-height: 17rem;
+  min-width: 0;
+  height: auto;
+  max-height: 22rem;
+  aspect-ratio: 15 / 4;
 }
 
 .gridLine line {
-  stroke: rgba(137, 173, 255, 0.1);
+  stroke: rgba(137, 173, 255, 0.09);
   stroke-width: 1;
 }
 
 .gridLine text {
   fill: var(--color-text-muted);
-  font-size: 17px;
+  font-size: 16px;
   font-variant-numeric: tabular-nums;
 }
 
 .zeroLine {
-  stroke: rgba(247, 249, 255, 0.24);
-  stroke-width: 1.5;
+  stroke: rgba(247, 249, 255, 0.22);
+  stroke-width: 1.4;
 }
 
 .incomeBar {
-  fill: color-mix(in srgb, var(--color-success) 78%, transparent);
+  fill: color-mix(in srgb, var(--color-success) 82%, transparent);
 }
 
 .expenseBar {
-  fill: color-mix(in srgb, var(--color-danger) 74%, transparent);
+  fill: color-mix(in srgb, var(--color-danger) 78%, transparent);
 }
 
 .activeGroup .incomeBar,
 .activeGroup .expenseBar {
-  filter: brightness(1.18);
+  filter: brightness(1.15);
 }
 
 .netLine {
   fill: none;
   stroke: var(--color-cyan);
-  stroke-width: 4;
+  stroke-width: 3.25;
   stroke-linejoin: round;
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
@@ -153,7 +151,7 @@
 .netPointActive {
   fill: var(--color-bg-elevated);
   stroke: var(--color-cyan);
-  stroke-width: 3;
+  stroke-width: 2.5;
   vector-effect: non-scaling-stroke;
 }
 
@@ -163,23 +161,25 @@
 }
 
 .monthRail {
-  min-width: 42rem;
+  min-width: 0;
+  width: 100%;
   display: grid;
-  gap: 0.2rem;
+  gap: 0.16rem;
 }
 
 .monthButton,
 .monthButtonActive {
-  min-height: 2.75rem;
-  padding: 0.45rem 0.3rem;
+  min-width: 0;
+  min-height: 2.35rem;
+  padding: 0.4rem 0.22rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: 0.5rem;
   background: transparent;
   color: var(--color-text-muted);
   cursor: pointer;
-  font-size: 0.75rem;
+  font-size: 0.74rem;
   font-weight: 700;
-  line-height: 1.2;
+  line-height: 1.15;
 }
 
 .monthButton span,
@@ -193,20 +193,20 @@
 .monthButton small,
 .monthButtonActive small {
   display: block;
-  margin-top: 0.2rem;
+  margin-top: 0.14rem;
   color: var(--color-warning);
-  font-size: 0.7rem;
+  font-size: 0.68rem;
 }
 
 .monthButton:hover,
 .monthButtonActive {
-  border-color: var(--color-border-strong);
-  background: rgba(77, 141, 255, 0.09);
+  border-color: rgba(137, 173, 255, 0.18);
+  background: rgba(77, 141, 255, 0.07);
   color: var(--color-text);
 }
 
 .monthButtonActive {
-  box-shadow: inset 0 -2px 0 rgba(77, 141, 255, 0.72);
+  box-shadow: inset 0 -2px 0 rgba(77, 141, 255, 0.68);
 }
 
 .monthButton:focus-visible,
@@ -219,13 +219,12 @@
 .readout {
   min-width: 0;
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(10rem, 0.8fr) minmax(16rem, 1.4fr) auto;
   align-items: center;
-  gap: var(--space-4);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: linear-gradient(135deg, rgba(77, 141, 255, 0.045), rgba(5, 9, 20, 0.5));
+  gap: 0.75rem 1rem;
+  padding: 0.82rem 0.95rem;
+  border-top: 1px solid rgba(137, 173, 255, 0.12);
+  background: rgba(5, 9, 20, 0.16);
 }
 
 .readout > div:first-child {
@@ -233,13 +232,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.18rem var(--space-2);
+  gap: 0.14rem 0.5rem;
 }
 
 .readout > div:first-child > span:not(.partialBadge) {
   flex-basis: 100%;
   color: var(--color-text-muted);
-  font-size: 0.72rem;
+  font-size: max(var(--font-helper), 0.74rem);
   line-height: 1.35;
 }
 
@@ -248,41 +247,43 @@
   margin: 0;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--space-3);
+  gap: 0.65rem;
 }
 
 .readout dl div { min-width: 0; }
-.readout dt { color: var(--color-text-muted); font-size: var(--font-helper); }
+.readout dt { color: var(--color-text-muted); font-size: max(var(--font-helper), 0.72rem); }
 .readout dd {
-  margin: 0.15rem 0 0;
+  margin: 0.12rem 0 0;
   overflow-wrap: anywhere;
-  font-size: 1.02rem;
+  font-size: 0.98rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
+
 .readout a {
-  min-height: 2.75rem;
+  min-height: 2.5rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0.45rem 0.75rem;
-  border: 1px solid rgba(77, 141, 255, 0.22);
-  border-radius: var(--radius-sm);
-  background: rgba(77, 141, 255, 0.06);
+  padding: 0.42rem 0.72rem;
+  border: 1px solid rgba(77, 141, 255, 0.18);
+  border-radius: 0.55rem;
+  background: rgba(77, 141, 255, 0.05);
   color: #c8d9fb;
-  font-size: var(--font-helper);
+  font-size: max(var(--font-helper), 0.74rem);
   font-weight: 800;
   text-decoration: none;
   white-space: nowrap;
 }
+
 .readout a:hover {
-  border-color: rgba(77, 141, 255, 0.38);
-  background: rgba(77, 141, 255, 0.11);
+  border-color: rgba(77, 141, 255, 0.34);
+  background: rgba(77, 141, 255, 0.09);
   color: white;
 }
 
 .partialBadge {
-  padding: 0.16rem 0.42rem;
+  padding: 0.14rem 0.4rem;
   border-radius: var(--radius-pill);
   background: rgba(255, 191, 71, 0.1);
   color: var(--color-warning);
@@ -292,11 +293,45 @@
 
 .positive { color: #8ee7b3; }
 .negative { color: #ff9bab; }
-.empty { margin: 0; color: var(--color-text-secondary); }
+.empty {
+  margin: 0;
+  padding: 0.85rem 0;
+  color: var(--color-text-secondary);
+  font-size: max(var(--font-helper), 0.76rem);
+}
 
-@media (max-width: 52rem) {
+@media (max-width: 64rem) {
+  .readout {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .readout dl {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+@media (max-width: 48rem) {
   .toolbar {
     align-items: stretch;
+  }
+
+  .viewSwitch {
+    width: 100%;
+  }
+
+  .viewButton,
+  .viewActive {
+    flex: 1 1 0;
+  }
+
+  .chart {
+    aspect-ratio: 4 / 2;
+    max-height: 18rem;
+  }
+
+  .gridLine text {
+    display: none;
   }
 
   .readout {
@@ -305,9 +340,9 @@
   }
 
   .readout dl {
-    grid-template-columns: repeat(3, minmax(7rem, 1fr));
-    overflow-x: auto;
-    padding-bottom: 0.15rem;
+    grid-column: auto;
+    grid-row: auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .readout a {
@@ -321,17 +356,41 @@
   }
 
   .viewSwitch {
-    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .viewButton,
   .viewActive {
-    flex: 1 0 auto;
+    min-height: 2.35rem;
+    padding-inline: 0.35rem;
+    white-space: normal;
   }
 
-  .legend { gap: var(--space-3); }
-  .chart,
-  .monthRail { min-width: 36rem; }
+  .legend {
+    gap: 0.45rem 0.8rem;
+  }
+
+  .chart {
+    aspect-ratio: 1.55 / 1;
+  }
+
+  .monthRail {
+    grid-auto-flow: row;
+  }
+
+  .monthButton,
+  .monthButtonActive {
+    font-size: 0.7rem;
+  }
+
+  .readout dl {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .readout dl div:last-child {
+    grid-column: 1 / -1;
+  }
 
   .readout a {
     width: 100%;
