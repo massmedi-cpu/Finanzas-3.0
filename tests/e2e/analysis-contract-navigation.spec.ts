@@ -6,6 +6,14 @@ import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-e
 import { resolveSavingsRatePresentation } from "../../src/application/analysis/analysis-presentation";
 import { analysisSelectionFromSearchParams } from "../../src/application/analysis/analysis-query-state";
 
+const EMPTY_TREND = {
+  direction: "insufficient",
+  delta: null,
+  recentAverage: null,
+  previousAverage: null,
+  sampleMonths: 0,
+} as const;
+
 const VALID_SNAPSHOT = {
   contractVersion: 2,
   selection: {
@@ -37,10 +45,32 @@ const VALID_SNAPSHOT = {
     savingsCents: 740000,
     savingsRateBps: 6271,
   },
-  comparison: {},
+  comparison: {
+    incomeDeltaCents: 20000,
+    incomeChangeBps: 169,
+    expenseDeltaCents: -20000,
+    expenseChangeBps: -455,
+    netDeltaCents: 40000,
+    netChangeBps: 541,
+    savingsDeltaCents: 40000,
+    savingsChangeBps: 541,
+    savingsRateDeltaBps: 229,
+  },
   averages: { last3Months: null, last6Months: null },
   history: [],
-  trends: {},
+  dailySpend: [],
+  weekdaySpend: [],
+  amountBands: [],
+  concepts: [],
+  accountSpend: [],
+  topTransactions: [],
+  trends: {
+    income: EMPTY_TREND,
+    expense: EMPTY_TREND,
+    savings: EMPTY_TREND,
+    net: EMPTY_TREND,
+    savingsRate: EMPTY_TREND,
+  },
   categoryDrivers: [],
   merchantDrivers: [],
   changeDrivers: [],
@@ -85,9 +115,31 @@ test("Análisis v3 · el estado de URL conserva mes, rango y cuenta sin mezclar 
   });
 });
 
-test("Análisis v3 · el cliente acepta sólo snapshots reconciliados y con principios financieros intactos", () => {
+test("Análisis · el cliente acepta sólo snapshots completos, reconciliados y con principios intactos", () => {
   expect(isAnalysisSnapshot(VALID_SNAPSHOT)).toBe(true);
   expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, contractVersion: 1 })).toBe(false);
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, dailySpend: undefined })).toBe(false);
+  expect(isAnalysisSnapshot({ ...VALID_SNAPSHOT, trends: {} })).toBe(false);
+  expect(isAnalysisSnapshot({
+    ...VALID_SNAPSHOT,
+    comparison: { ...VALID_SNAPSHOT.comparison, netDeltaCents: null },
+  })).toBe(false);
+  expect(isAnalysisSnapshot({
+    ...VALID_SNAPSHOT,
+    topTransactions: [{
+      transactionId: "tx-1",
+      bankDate: "2026-08-10",
+      amountCents: 1200,
+      conceptNormalized: "Compra",
+      merchantId: null,
+      merchantName: "Sin comercio",
+      categoryId: null,
+      categoryName: "Sin categoría",
+      accountId: "account-1",
+      accountName: "Cuenta",
+      balanceAfterCents: "no-es-un-numero",
+    }],
+  })).toBe(false);
   expect(isAnalysisSnapshot({
     ...VALID_SNAPSHOT,
     quality: { ...VALID_SNAPSHOT.quality, reconciled: false },
@@ -140,7 +192,7 @@ test("Análisis v6 · los fallos del gateway conservan status y código hasta lo
   expect(recoverySource).not.toMatch(/!response\.ok \|\| !isAnalysisSnapshot\(payload\)/);
 });
 
-test("Análisis v6 · la frescura de fuente es auxiliar y no bloquea el snapshot principal", () => {
+test("Análisis · la frescura de fuente admite sincronización parcial y conserva la fecha bancaria útil", () => {
   const routeSource = readFileSync(resolve(process.cwd(), "app/api/analysis/source-freshness/route.ts"), "utf8");
   const freshnessSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-source-freshness.tsx"), "utf8");
   const pageClientSource = readFileSync(resolve(process.cwd(), "app/analysis/analysis-page-client.tsx"), "utf8");
@@ -150,8 +202,22 @@ test("Análisis v6 · la frescura de fuente es auxiliar y no bloquea el snapshot
   expect(routeSource).toContain('action: "source.google_connection_status"');
   expect(routeSource).toContain('action: "transaction.query", payload: { limit: 1 }');
   expect(routeSource).toContain('"source.status"');
+  expect(routeSource).toContain('status !== "partial"');
+  expect(routeSource).toContain("value >= 0");
+  expect(routeSource).toContain("available: Boolean(latestMovementDate)");
+  expect(routeSource).toContain("rowsFailed: integer(run.rows_failed)");
+  expect(routeSource).toContain("warningsCount: integer(run.warnings_count)");
+  expect(freshnessSource).toContain('type SyncStatus = "success" | "partial" | "failed" | "started"');
+  expect(freshnessSource).toContain('value.sync.status === "partial"');
+  expect(freshnessSource).toContain("Datos sincronizados parcialmente");
+  expect(freshnessSource).toContain("Sincronización parcial");
+  expect(freshnessSource).toContain("Último intento");
   expect(freshnessSource).toContain('fetch("/api/analysis/source-freshness"');
-  expect(freshnessSource).toContain("if (!freshness) return null");
+  expect(freshnessSource).toContain("function nullableFiniteNumber");
+  expect(freshnessSource).toContain("Number.isFinite(value)");
+  expect(freshnessSource).toContain("Number.isNaN(date.getTime())");
+  expect(freshnessSource).toContain("function syncHasIncidents");
+  expect(freshnessSource).toContain("syncHasIncidents(freshness.sync)");
   expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness \/>[\s\S]*<AnalysisClient/);
   expect(loaderSource).not.toContain("source.google_connection_status");
   expect(loaderSource).not.toContain("source.status");

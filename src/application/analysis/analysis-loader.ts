@@ -1,4 +1,5 @@
 import { callPersistenceGateway } from "../../infrastructure/persistence/vercel-supabase-gateway";
+import { isAnalysisSnapshot } from "./analysis-contract";
 import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
@@ -145,7 +146,7 @@ export async function loadAnalysisSnapshot(input: AnalysisSelectionInput = {}): 
     accountId: selection.accountId,
   });
 
-  return buildAnalysisSnapshot({
+  const snapshot = buildAnalysisSnapshot({
     range: selection.range,
     month: selection.month,
     accountId: selection.accountId,
@@ -157,4 +158,10 @@ export async function loadAnalysisSnapshot(input: AnalysisSelectionInput = {}): 
     partialMonthStart: selection.partialMonthStart,
     gateway,
   });
+
+  if (!isAnalysisSnapshot(snapshot)) {
+    throw new Error("analysis_contract_invalid");
+  }
+
+  return snapshot;
 }

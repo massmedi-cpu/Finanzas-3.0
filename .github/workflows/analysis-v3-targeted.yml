@@ -8,7 +8,9 @@ on:
       - "app/analysis/**"
       - "src/application/analysis/**"
       - "src/design/contribution-chart.tsx"
+      - "src/design/contribution-chart.module.css"
       - "src/design/financial-trend-chart.tsx"
+      - "src/design/financial-trend-chart.module.css"
       - "tests/e2e/analysis*.spec.ts"
       - "tests/e2e/premium-analysis-visual.spec.ts"
       - ".github/workflows/analysis-v3-targeted.yml"
@@ -19,7 +21,9 @@ on:
       - "app/analysis/**"
       - "src/application/analysis/**"
       - "src/design/contribution-chart.tsx"
+      - "src/design/contribution-chart.module.css"
       - "src/design/financial-trend-chart.tsx"
+      - "src/design/financial-trend-chart.module.css"
       - "tests/e2e/analysis*.spec.ts"
       - "tests/e2e/premium-analysis-visual.spec.ts"
       - ".github/workflows/analysis-v3-targeted.yml"
@@ -32,9 +36,16 @@ jobs:
   analysis-regression:
     runs-on: ubuntu-latest
     timeout-minutes: 12
+    env:
+      VALIDATION_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.VALIDATION_SHA }}
+
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$VALIDATION_SHA"
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -54,11 +65,14 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
+      # Keep every deterministic Analysis presentation-state regression in the permanent gate.
       - name: Run Analysis regression suite
         run: >-
           npm run test:e2e --
           tests/e2e/analysis.spec.ts
           tests/e2e/analysis-contract-navigation.spec.ts
+          tests/e2e/analysis-history-integrity.spec.ts
+          tests/e2e/analysis-presentation-states.spec.ts
           tests/e2e/analysis-presentation-v6.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
           --project=chromium-desktop
@@ -68,6 +82,6 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: analysis-regression-${{ github.sha }}
+          name: analysis-regression-${{ env.VALIDATION_SHA }}
           path: playwright-report/
           retention-days: 7

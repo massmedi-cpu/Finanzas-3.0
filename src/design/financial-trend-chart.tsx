@@ -19,6 +19,8 @@ type Props = {
   partialMonthStart?: string | null;
 };
 
+type TrendView = "all" | "flow" | "net";
+
 const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
   year: "numeric",
@@ -44,7 +46,14 @@ export function FinancialTrendChart({
 }: Props) {
   const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
+  const [view, setView] = useState<TrendView>("all");
   const active = rows.find((row) => row.monthStart === activeMonth) ?? rows.at(-1) ?? null;
+  const activeIndex = active ? rows.findIndex((row) => row.monthStart === active.monthStart) : -1;
+  const previous = activeIndex > 0 ? rows[activeIndex - 1] : null;
+  const comparablePrevious = active?.monthStart !== partialMonthStart ? previous : null;
+  const netMonthDelta = active && comparablePrevious
+    ? active.operatingNetCents - comparablePrevious.operatingNetCents
+    : null;
 
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
@@ -79,6 +88,9 @@ export function FinancialTrendChart({
 
   const path = chart.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
   const netPointLabel = (row: FinancialTrendPoint) => `Neto ${longMonthLabel(row.monthStart)}: ${formatMoney(row.operatingNetCents)} · ${netState(row.operatingNetCents)}`;
+  const netMonthDeltaLabel = (cents: number) => cents === 0
+    ? "Neto sin cambios frente al mes anterior"
+    : `Neto ${cents > 0 ? "+" : "−"}${formatMoney(Math.abs(cents))} frente al mes anterior`;
   const tableRows = [
     { key: "income", label: "Ingresos", value: (row: FinancialTrendPoint) => row.incomeCents },
     { key: "expense", label: "Gastos", value: (row: FinancialTrendPoint) => row.expenseCents },
@@ -87,10 +99,18 @@ export function FinancialTrendChart({
 
   return (
     <section className={styles.wrapper} aria-label="Comparativa financiera visual">
-      <div className={styles.legend} aria-hidden="true">
-        <span><i className={styles.incomeDot} />Ingresos</span>
-        <span><i className={styles.expenseDot} />Gastos</span>
-        <span><i className={styles.netDot} />Neto</span>
+      <div className={styles.toolbar}>
+        <div className={styles.viewSwitch} role="group" aria-label="Vista de la evolución financiera">
+          <button type="button" className={view === "all" ? styles.viewActive : styles.viewButton} aria-pressed={view === "all"} onClick={() => setView("all")}>Conjunto</button>
+          <button type="button" className={view === "flow" ? styles.viewActive : styles.viewButton} aria-pressed={view === "flow"} onClick={() => setView("flow")}>Ingresos y gastos</button>
+          <button type="button" className={view === "net" ? styles.viewActive : styles.viewButton} aria-pressed={view === "net"} onClick={() => setView("net")}>Neto</button>
+        </div>
+
+        <div className={styles.legend} aria-hidden="true">
+          {view !== "net" && <span><i className={styles.incomeDot} />Ingresos</span>}
+          {view !== "net" && <span><i className={styles.expenseDot} />Gastos</span>}
+          {view !== "flow" && <span><i className={styles.netDot} />Neto</span>}
+        </div>
       </div>
 
       <div className={styles.viewport}>
@@ -98,7 +118,11 @@ export function FinancialTrendChart({
           className={styles.chart}
           viewBox={`0 0 ${chart.width} ${chart.height}`}
           role="img"
-          aria-label="Evolución mensual de ingresos, gastos y neto. Los valores exactos están disponibles en la tabla alternativa y mediante los controles situados bajo la gráfica."
+          aria-label={view === "all"
+            ? "Evolución mensual de ingresos, gastos y neto."
+            : view === "flow"
+              ? "Comparación mensual de ingresos y gastos."
+              : "Evolución mensual del neto."}
         >
           {chart.ticks.map((tick) => {
             const y = chart.y(tick);
@@ -111,35 +135,21 @@ export function FinancialTrendChart({
           })}
           <line className={styles.zeroLine} x1={chart.left} x2={chart.width - chart.right} y1={chart.baseline} y2={chart.baseline} />
 
-          {rows.map((row, index) => {
+          {view !== "net" && rows.map((row, index) => {
             const center = chart.left + chart.step * index + chart.step / 2;
             const incomeY = chart.y(row.incomeCents);
             const expenseY = chart.y(row.expenseCents);
             const activePoint = row.monthStart === active?.monthStart;
             return (
               <g key={row.monthStart} className={activePoint ? styles.activeGroup : undefined}>
-                <rect
-                  className={styles.incomeBar}
-                  x={center - chart.barWidth - 3}
-                  y={incomeY}
-                  width={chart.barWidth}
-                  height={Math.max(1, chart.baseline - incomeY)}
-                  rx="7"
-                />
-                <rect
-                  className={styles.expenseBar}
-                  x={center + 3}
-                  y={expenseY}
-                  width={chart.barWidth}
-                  height={Math.max(1, chart.baseline - expenseY)}
-                  rx="7"
-                />
+                <rect className={styles.incomeBar} x={center - chart.barWidth - 3} y={incomeY} width={chart.barWidth} height={Math.max(1, chart.baseline - incomeY)} rx="7" />
+                <rect className={styles.expenseBar} x={center + 3} y={expenseY} width={chart.barWidth} height={Math.max(1, chart.baseline - expenseY)} rx="7" />
               </g>
             );
           })}
 
-          <path className={styles.netLine} d={path} />
-          {chart.points.map((point, index) => (
+          {view !== "flow" && <path className={styles.netLine} d={path} />}
+          {view !== "flow" && chart.points.map((point, index) => (
             <circle
               key={rows[index].monthStart}
               className={rows[index].monthStart === active?.monthStart ? styles.netPointActive : styles.netPoint}
@@ -151,25 +161,19 @@ export function FinancialTrendChart({
         </svg>
       </div>
 
-      <div style={{ overflowX: "auto" }}>
-        <table aria-label="Datos de la comparativa financiera" style={{ width: "100%", minWidth: "32rem", borderCollapse: "collapse" }}>
+      <div className={styles.accessibleTable}>
+        <table aria-label="Datos de la comparativa financiera">
           <thead>
             <tr>
-              <th scope="col" style={{ textAlign: "left", padding: ".65rem" }}>Métrica</th>
-              {rows.map((row) => (
-                <th key={row.monthStart} scope="col" style={{ textAlign: "right", padding: ".65rem" }}>{longMonthLabel(row.monthStart)}</th>
-              ))}
+              <th scope="col">Métrica</th>
+              {rows.map((row) => <th key={row.monthStart} scope="col">{longMonthLabel(row.monthStart)}</th>)}
             </tr>
           </thead>
           <tbody>
             {tableRows.map((metric) => (
               <tr key={metric.key}>
-                <th scope="row" style={{ textAlign: "left", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)" }}>{metric.label}</th>
-                {rows.map((row) => (
-                  <td key={`${metric.key}-${row.monthStart}`} style={{ textAlign: "right", padding: ".65rem", borderTop: "1px solid rgba(255,255,255,.08)", fontVariantNumeric: "tabular-nums" }}>
-                    {formatMoney(metric.value(row))}
-                  </td>
-                ))}
+                <th scope="row">{metric.label}</th>
+                {rows.map((row) => <td key={`${metric.key}-${row.monthStart}`}>{formatMoney(metric.value(row))}</td>)}
               </tr>
             ))}
           </tbody>
@@ -206,13 +210,14 @@ export function FinancialTrendChart({
             <strong>{formatMonth(active.monthStart)}</strong>
             {active.monthStart === partialMonthStart && <span className={styles.partialBadge}>Parcial</span>}
             <span>{netPointLabel(active)}</span>
+            {netMonthDelta !== null && <span>{netMonthDeltaLabel(netMonthDelta)}</span>}
           </div>
           <dl>
             <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
             <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
             <div><dt>Neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
           </dl>
-          <Link href={hrefForMonth(active.monthStart)} aria-label="Ver movimientos del periodo">Ver movimientos del periodo</Link>
+          <Link href={hrefForMonth(active.monthStart)} aria-label={`Ver movimientos de ${longMonthLabel(active.monthStart)}`}>Ver movimientos del periodo</Link>
         </div>
       )}
     </section>

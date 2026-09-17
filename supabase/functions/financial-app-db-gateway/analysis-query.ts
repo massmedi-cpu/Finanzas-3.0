@@ -54,6 +54,12 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
       left join financial_app.merchants m on m.id = f.effective_merchant_id
       where f.analytics_eligible and f.effective_kind = 'expense'
     ),
+    current_expenses as materialized (
+      select e.*
+      from expenses e
+      cross join bounds p
+      where e.bank_date between p.date_from and p.date_to
+    ),
     category_rollup as (
       select
         e.effective_category_id as id,
@@ -96,9 +102,98 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
     ),
     current_total as (
       select coalesce(sum(-e.amount_cents), 0)::bigint as expense_cents
-      from expenses e
-      cross join bounds p
-      where e.bank_date between p.date_from and p.date_to
+      from current_expenses e
+    ),
+    daily_spend as (
+      select
+        e.bank_date,
+        sum(-e.amount_cents)::bigint as expense_cents,
+        count(*)::int as rows
+      from current_expenses e
+      group by e.bank_date
+      order by e.bank_date
+    ),
+    weekday_spend as (
+      select
+        extract(isodow from e.bank_date)::int as weekday,
+        sum(-e.amount_cents)::bigint as expense_cents,
+        count(*)::int as rows,
+        round(avg((-e.amount_cents)::numeric))::bigint as average_cents
+      from current_expenses e
+      group by extract(isodow from e.bank_date)
+      order by weekday
+    ),
+    amount_bands as (
+      select
+        case
+          when -e.amount_cents < 1000 then 'lt10'
+          when -e.amount_cents < 2500 then '10to25'
+          when -e.amount_cents < 5000 then '25to50'
+          when -e.amount_cents < 10000 then '50to100'
+          when -e.amount_cents < 25000 then '100to250'
+          else 'gte250'
+        end as band,
+        case
+          when -e.amount_cents < 1000 then 1
+          when -e.amount_cents < 2500 then 2
+          when -e.amount_cents < 5000 then 3
+          when -e.amount_cents < 10000 then 4
+          when -e.amount_cents < 25000 then 5
+          else 6
+        end as band_order,
+        sum(-e.amount_cents)::bigint as expense_cents,
+        count(*)::int as rows
+      from current_expenses e
+      group by band, band_order
+      order by band_order
+    ),
+    concept_rollup as (
+      select
+        coalesce(nullif(btrim(e.concept_normalized), ''), 'Sin concepto') as concept,
+        sum(-e.amount_cents)::bigint as expense_cents,
+        count(*)::int as rows,
+        round(avg((-e.amount_cents)::numeric))::bigint as average_cents
+      from current_expenses e
+      group by coalesce(nullif(btrim(e.concept_normalized), ''), 'Sin concepto')
+      order by expense_cents desc, rows desc, concept
+      limit 15
+    ),
+    account_rollup as (
+      select
+        e.account_id,
+        coalesce(max(a.name), 'Cuenta') as account_name,
+        sum(-e.amount_cents)::bigint as expense_cents,
+        count(*)::int as rows,
+        round(avg((-e.amount_cents)::numeric))::bigint as average_cents
+      from current_expenses e
+      left join financial_app.accounts a on a.id = e.account_id
+      group by e.account_id
+      order by expense_cents desc, account_name
+    ),
+    top_transactions as (
+      select
+        e.transaction_id,
+        e.bank_date,
+        -e.amount_cents as amount_cents,
+        coalesce(nullif(btrim(e.concept_normalized), ''), 'Sin concepto') as concept_normalized,
+        nullif(btrim(sr.concept_original), '') as concept_original,
+        tx.balance_after_cents,
+        coalesce(o.review_state_override, tx.review_state) as review_state,
+        e.duplicate_state,
+        (o.id is not null) as has_manual_override,
+        e.effective_merchant_id as merchant_id,
+        coalesce(e.merchant_name, 'Sin comercio') as merchant_name,
+        e.effective_category_id as category_id,
+        coalesce(e.category_name, 'Sin categoría') as category_name,
+        e.account_id,
+        coalesce(a.name, 'Cuenta') as account_name
+      from current_expenses e
+      join financial_app.transactions tx on tx.id = e.transaction_id
+      join financial_app.transaction_source_records sr on sr.id = tx.source_record_id
+      left join financial_app.transaction_overrides o on o.transaction_id = e.transaction_id
+      left join financial_app.accounts a on a.id = e.account_id
+      order by -e.amount_cents desc, e.bank_date desc, e.transaction_id
+      limit 10
     ),
     anomalies as (
       select
@@ -116,11 +211,9 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
           then round(((-e.amount_cents - h.habitual_cents)::numeric * 10000) / h.habitual_cents)::int
           else null
         end as variation_bps
-      from expenses e
-      cross join bounds p
+      from current_expenses e
       join merchant_history h on h.id = e.effective_merchant_id
-      where e.bank_date between p.date_from and p.date_to
-        and h.history_rows >= 4
+      where h.history_rows >= 4
         and (-e.amount_cents)::numeric > h.habitual_cents + (2 * h.stddev_cents)
       order by (-e.amount_cents - h.habitual_cents) desc, e.bank_date desc, e.transaction_id
       limit 8
@@ -148,9 +241,7 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
               and abs(e.amount_cents - r.usual_amount_cents) <= r.amount_tolerance_cents
           )
         ), 0)::bigint as fixed_expense_cents
-      from expenses e
-      cross join bounds p
-      where e.bank_date between p.date_from and p.date_to
+      from current_expenses e
     ),
     budget_months as (
       select (p.budget_start - (g.n || ' months')::interval)::date as month_start
@@ -260,6 +351,70 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
           limit 30
         ) x
       ),
+      'dailySpend', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'date', d.bank_date,
+          'expenseCents', d.expense_cents,
+          'rows', d.rows
+        ) order by d.bank_date), '[]'::jsonb)
+        from daily_spend d
+      ),
+      'weekdaySpend', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'weekday', w.weekday,
+          'expenseCents', w.expense_cents,
+          'rows', w.rows,
+          'averageCents', w.average_cents
+        ) order by w.weekday), '[]'::jsonb)
+        from weekday_spend w
+      ),
+      'amountBands', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'band', b.band,
+          'expenseCents', b.expense_cents,
+          'rows', b.rows
+        ) order by b.band_order), '[]'::jsonb)
+        from amount_bands b
+      ),
+      'concepts', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'concept', c.concept,
+          'expenseCents', c.expense_cents,
+          'rows', c.rows,
+          'averageCents', c.average_cents
+        ) order by c.expense_cents desc, c.rows desc, c.concept), '[]'::jsonb)
+        from concept_rollup c
+      ),
+      'accountSpend', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'accountId', a.account_id,
+          'accountName', a.account_name,
+          'expenseCents', a.expense_cents,
+          'rows', a.rows,
+          'averageCents', a.average_cents
+        ) order by a.expense_cents desc, a.account_name), '[]'::jsonb)
+        from account_rollup a
+      ),
+      'topTransactions', (
+        select coalesce(jsonb_agg(jsonb_build_object(
+          'transactionId', t.transaction_id,
+          'bankDate', t.bank_date,
+          'amountCents', t.amount_cents,
+          'conceptNormalized', t.concept_normalized,
+          'conceptOriginal', t.concept_original,
+          'balanceAfterCents', t.balance_after_cents,
+          'reviewState', t.review_state,
+          'duplicateState', t.duplicate_state,
+          'hasManualOverride', t.has_manual_override,
+          'merchantId', t.merchant_id,
+          'merchantName', t.merchant_name,
+          'categoryId', t.category_id,
+          'categoryName', t.category_name,
+          'accountId', t.account_id,
+          'accountName', t.account_name
+        ) order by t.amount_cents desc, t.bank_date desc, t.transaction_id), '[]'::jsonb)
+        from top_transactions t
+      ),
       'concentration', jsonb_build_object(
         'top3CategoryBps', (
           select case when t.expense_cents > 0
@@ -313,6 +468,8 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         select jsonb_build_object(
           'month', p.budget_month,
           'total', jsonb_build_object(
+            'automaticAmountCents', b.automatic_cents,
+            'manualAmountCents', b.manual_amount_cents,
             'effectiveAmountCents', b.effective_cents,
             'actualExpenseCents', b.actual_cents,
             'remainingCents', b.effective_cents - b.actual_cents,

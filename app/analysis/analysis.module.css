@@ -21,7 +21,7 @@
 .sectionHeading p {
   margin: 0;
   color: #94b2ff;
-  font-size: 0.68rem;
+  font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.12em;
 }
@@ -50,7 +50,7 @@
   min-height: 1.7rem;
   padding: 0.2rem 0.55rem;
   border-radius: var(--radius-pill);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 800;
   white-space: nowrap;
 }
@@ -81,7 +81,7 @@
   display: grid;
   gap: 0.3rem;
   color: var(--color-text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 750;
 }
 
@@ -228,7 +228,7 @@
 
 .kpiDirection {
   color: var(--color-text-muted);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   font-weight: 650;
   text-align: right;
 }
@@ -248,7 +248,7 @@
   gap: 0.2rem;
   margin-top: 0.75rem;
   color: var(--color-text-muted);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   line-height: 1.4;
 }
 
@@ -280,7 +280,7 @@
 .quickReadIntro span,
 .quickReadItem > span {
   color: var(--color-text-muted);
-  font-size: 0.66rem;
+  font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -320,7 +320,7 @@
 
 .quickReadItem small {
   color: var(--color-text-muted);
-  font-size: 0.67rem;
+  font-size: 0.75rem;
   line-height: 1.25;
 }
 

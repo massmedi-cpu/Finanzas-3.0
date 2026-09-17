@@ -62,6 +62,58 @@ export type AnalysisTrend = {
   sampleMonths: number;
 };
 
+export type AnalysisDailySpend = {
+  date: string;
+  expenseCents: number;
+  rows: number;
+};
+
+export type AnalysisWeekdaySpend = {
+  weekday: number;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisAmountBand = {
+  band: "lt10" | "10to25" | "25to50" | "50to100" | "100to250" | "gte250";
+  expenseCents: number;
+  rows: number;
+};
+
+export type AnalysisConceptSummary = {
+  concept: string;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisAccountSpend = {
+  accountId: string;
+  accountName: string;
+  expenseCents: number;
+  rows: number;
+  averageCents: number;
+};
+
+export type AnalysisTopTransaction = {
+  transactionId: string;
+  bankDate: string;
+  amountCents: number;
+  conceptNormalized: string;
+  conceptOriginal?: string | null;
+  balanceAfterCents?: number | null;
+  reviewState?: "confirmed" | "pending" | "needs_review" | null;
+  duplicateState?: "none" | "suspected" | "confirmed" | null;
+  hasManualOverride?: boolean;
+  merchantId: string | null;
+  merchantName: string;
+  categoryId: string | null;
+  categoryName: string;
+  accountId: string;
+  accountName: string;
+};
+
 export type AnalysisGatewaySnapshot = {
   current: AnalysisPeriod;
   previous: AnalysisPeriod;
@@ -88,6 +140,12 @@ export type AnalysisGatewaySnapshot = {
     habitualAverageCents: number | null;
     historyRows: number | null;
   }>;
+  dailySpend?: AnalysisDailySpend[];
+  weekdaySpend?: AnalysisWeekdaySpend[];
+  amountBands?: AnalysisAmountBand[];
+  concepts?: AnalysisConceptSummary[];
+  accountSpend?: AnalysisAccountSpend[];
+  topTransactions?: AnalysisTopTransaction[];
   concentration: {
     top3CategoryBps: number | null;
     top3MerchantBps: number | null;
@@ -114,6 +172,8 @@ export type AnalysisGatewaySnapshot = {
   budget: null | {
     month: string;
     total: null | {
+      automaticAmountCents?: number;
+      manualAmountCents?: number | null;
       effectiveAmountCents: number;
       actualExpenseCents: number;
       remainingCents: number;
@@ -176,6 +236,12 @@ export type AnalysisSnapshot = {
     last6Months: AnalysisPeriodAverage | null;
   };
   history: AnalysisMonthlyRow[];
+  dailySpend: AnalysisDailySpend[];
+  weekdaySpend: AnalysisWeekdaySpend[];
+  amountBands: AnalysisAmountBand[];
+  concepts: AnalysisConceptSummary[];
+  accountSpend: AnalysisAccountSpend[];
+  topTransactions: AnalysisTopTransaction[];
   trends: {
     income: AnalysisTrend;
     expense: AnalysisTrend;
@@ -238,22 +304,29 @@ function periodAverage(rows: AnalysisMonthlyRow[], months: number): AnalysisPeri
     expenseCents: average(sample.map((row) => row.expenseCents)) ?? 0,
     operatingNetCents: average(sample.map((row) => row.operatingNetCents)) ?? 0,
     savingsCents: average(sample.map((row) => row.savingsCents)) ?? 0,
-    savingsRateBps: average(rates),
+    savingsRateBps: rates.length === months ? average(rates) : null,
   };
 }
 
 function trend(rows: AnalysisMonthlyRow[], selector: (row: AnalysisMonthlyRow) => number | null): AnalysisTrend {
-  const values = rows
-    .map(selector)
-    .filter((value): value is number => value !== null);
-  if (values.length < 6) {
-    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: values.length };
+  const sampleRows = rows.slice(-6);
+  const selected = sampleRows.map(selector);
+  const validValues = selected.filter((value): value is number => value !== null);
+  if (sampleRows.length < 6 || validValues.length < 6) {
+    return {
+      direction: "insufficient",
+      delta: null,
+      recentAverage: null,
+      previousAverage: null,
+      sampleMonths: validValues.length,
+    };
   }
-  const sample = values.slice(-6);
-  const previousAverage = average(sample.slice(0, 3));
-  const recentAverage = average(sample.slice(3));
+
+  const values = selected as number[];
+  const previousAverage = average(values.slice(0, 3));
+  const recentAverage = average(values.slice(3));
   if (previousAverage === null || recentAverage === null) {
-    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: sample.length };
+    return { direction: "insufficient", delta: null, recentAverage: null, previousAverage: null, sampleMonths: values.length };
   }
   const delta = recentAverage - previousAverage;
   return {
@@ -261,7 +334,7 @@ function trend(rows: AnalysisMonthlyRow[], selector: (row: AnalysisMonthlyRow) =
     delta,
     recentAverage,
     previousAverage,
-    sampleMonths: sample.length,
+    sampleMonths: values.length,
   };
 }
 
@@ -414,6 +487,12 @@ export function buildAnalysisSnapshot(input: {
       last6Months: periodAverage(completeHistory, 6),
     },
     history,
+    dailySpend: input.gateway.dailySpend ?? [],
+    weekdaySpend: input.gateway.weekdaySpend ?? [],
+    amountBands: input.gateway.amountBands ?? [],
+    concepts: input.gateway.concepts ?? [],
+    accountSpend: input.gateway.accountSpend ?? [],
+    topTransactions: input.gateway.topTransactions ?? [],
     trends: {
       income: trend(completeHistory, (row) => row.incomeCents),
       expense: trend(completeHistory, (row) => row.expenseCents),

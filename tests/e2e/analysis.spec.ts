@@ -5,6 +5,8 @@ import {
   type AnalysisSnapshot,
 } from "../../src/application/analysis/analysis-engine";
 import { resolveAnalysisSelection } from "../../src/application/analysis/analysis-loader";
+import { resolveBudgetSourcePresentation } from "../../src/application/analysis/analysis-presentation";
+import { runAnalysisSnapshotQuery } from "../../supabase/functions/financial-app-db-gateway/analysis-query";
 
 const CATEGORY_FOOD = "11111111-1111-4111-8111-111111111111";
 const CATEGORY_TRANSPORT = "33333333-3333-4333-8333-333333333333";
@@ -132,6 +134,8 @@ const GATEWAY: AnalysisGatewaySnapshot = {
   budget: {
     month: "2026-09",
     total: {
+      automaticAmountCents: 100000,
+      manualAmountCents: null,
       effectiveAmountCents: 100000,
       actualExpenseCents: 55000,
       remainingCents: 45000,
@@ -204,6 +208,51 @@ test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias
   expect(snapshot.principles.generativeAi).toBe(false);
 });
 
+test("E2 · el presupuesto conserva y presenta su procedencia sin recalcular", () => {
+  const total = GATEWAY.budget?.total;
+  expect(total).not.toBeNull();
+  expect(total).toBeDefined();
+  if (!total) throw new Error("budget_fixture_missing");
+
+  expect(resolveBudgetSourcePresentation(total)).toEqual({
+    kind: "automatic",
+    label: "Referencia automática · media de 3 meses",
+  });
+  expect(resolveBudgetSourcePresentation({
+    ...total,
+    manualAmountCents: 120000,
+    effectiveAmountCents: 120000,
+  })).toEqual({ kind: "manual", label: "Límite manual" });
+
+  const { automaticAmountCents: _automatic, manualAmountCents: _manual, ...legacyTotal } = total;
+  expect(resolveBudgetSourcePresentation(legacyTotal)).toEqual({ kind: "unknown", label: null });
+
+  const snapshot = mockSnapshot();
+  expect(snapshot.budget?.total).toMatchObject({
+    automaticAmountCents: 100000,
+    manualAmountCents: null,
+    effectiveAmountCents: 100000,
+  });
+});
+
+test("E2 · la consulta del gateway expone la procedencia presupuestaria ya calculada", () => {
+  const sqlText = runAnalysisSnapshotQuery(
+    (strings: TemplateStringsArray) => strings.join("?"),
+    {
+      dateFrom: "2026-09-01",
+      dateTo: "2026-09-15",
+      previousDateFrom: "2026-08-01",
+      previousDateTo: "2026-08-15",
+      historyDateFrom: "2025-10-01",
+      accountId: null,
+      budgetMonth: "2026-09",
+    },
+  );
+
+  expect(sqlText).toContain("'automaticAmountCents', b.automatic_cents");
+  expect(sqlText).toContain("'manualAmountCents', b.manual_amount_cents");
+});
+
 test("E2 · el motor v2 falla cerrado si los drivers no reconcilian con el motor financiero", () => {
   expect(() => buildAnalysisSnapshot({
     range: "1m",
@@ -249,6 +298,8 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
   await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
   await expect(page.getByText(/\+3,8 pp vs\. periodo anterior/)).toBeVisible();
   await expect(page.getByText(/Totales reconciliados al céntimo/)).toBeVisible();
+  const budget = page.locator('section[aria-labelledby="budget-heading"]');
+  await expect(budget).toContainText("Referencia automática · media de 3 meses");
   const composition = page.locator('section[aria-labelledby="distribution-heading"]');
   await expect(composition.getByRole("link", { name: /Alimentación/ })).toHaveAttribute("href", new RegExp(`categoryId=${CATEGORY_FOOD}`));
 
@@ -263,6 +314,20 @@ test("E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recal
     expect(monthBox).not.toBeNull();
     expect(monthBox!.height).toBeGreaterThanOrEqual(44);
   }
+});
+
+test("E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente", async ({ page }) => {
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
+  const snapshot = mockSnapshot();
+  snapshot.current = { ...snapshot.current, incomeCents: 38 };
+  snapshot.comparison = { ...snapshot.comparison, incomeChangeBps: null };
+
+  await loadMockAnalysis(page, snapshot);
+
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis).toContainText("0,38");
+  await expect(kpis).toContainText("Comparación pendiente · ingresos aún no representativos");
+  await expect(kpis).not.toContainText("— vs. periodo anterior");
 });
 
 test("E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px", async ({ page }, testInfo) => {

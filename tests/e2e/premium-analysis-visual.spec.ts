@@ -44,7 +44,10 @@ const GATEWAY: AnalysisGatewaySnapshot = {
     savingsRateBps: 7000,
   },
   history: { rows: HISTORY },
-  accounts: [{ id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Cuenta principal", lifecycle: "active" }],
+  accounts: [
+    { id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", name: "Cuenta principal", lifecycle: "active" },
+    { id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", name: "Cuenta secundaria", lifecycle: "active" },
+  ],
   categories: [
     { id: "11111111-1111-4111-8111-111111111111", name: "Alimentación", currentExpenseCents: 35000, previousExpenseCents: 30000, currentRows: 7, previousRows: 6 },
     { id: "33333333-3333-4333-8333-333333333333", name: "Transporte", currentExpenseCents: 20000, previousExpenseCents: 30000, currentRows: 5, previousRows: 6 },
@@ -52,6 +55,65 @@ const GATEWAY: AnalysisGatewaySnapshot = {
   merchants: [
     { id: "22222222-2222-4222-8222-222222222222", name: "Mercado Central", currentExpenseCents: 35000, previousExpenseCents: 32000, currentRows: 7, previousRows: 7, currentAverageCents: 5000, habitualAverageCents: 4500, historyRows: 12 },
     { id: "44444444-4444-4444-8444-444444444444", name: "Gasolinera", currentExpenseCents: 20000, previousExpenseCents: 28000, currentRows: 5, previousRows: 5, currentAverageCents: 4000, habitualAverageCents: 5200, historyRows: 10 },
+  ],
+  dailySpend: [
+    { date: "2026-09-01", expenseCents: 5000, rows: 2 },
+    { date: "2026-09-03", expenseCents: 12000, rows: 2 },
+    { date: "2026-09-05", expenseCents: 7000, rows: 1 },
+    { date: "2026-09-08", expenseCents: 9000, rows: 2 },
+    { date: "2026-09-11", expenseCents: 10000, rows: 2 },
+    { date: "2026-09-15", expenseCents: 12000, rows: 3 },
+  ],
+  weekdaySpend: [
+    { weekday: 1, expenseCents: 14000, rows: 3, averageCents: 4667 },
+    { weekday: 2, expenseCents: 5000, rows: 1, averageCents: 5000 },
+    { weekday: 3, expenseCents: 12000, rows: 2, averageCents: 6000 },
+    { weekday: 4, expenseCents: 10000, rows: 2, averageCents: 5000 },
+    { weekday: 5, expenseCents: 7000, rows: 2, averageCents: 3500 },
+    { weekday: 6, expenseCents: 4000, rows: 1, averageCents: 4000 },
+    { weekday: 7, expenseCents: 3000, rows: 1, averageCents: 3000 },
+  ],
+  amountBands: [
+    { band: "lt10", expenseCents: 2500, rows: 4 },
+    { band: "10to25", expenseCents: 6500, rows: 3 },
+    { band: "25to50", expenseCents: 10000, rows: 2 },
+    { band: "50to100", expenseCents: 16000, rows: 2 },
+    { band: "100to250", expenseCents: 20000, rows: 1 },
+  ],
+  concepts: [
+    { concept: "Compra supermercado", expenseCents: 24000, rows: 5, averageCents: 4800 },
+    { concept: "Combustible", expenseCents: 16000, rows: 3, averageCents: 5333 },
+    { concept: "Restauración", expenseCents: 9000, rows: 2, averageCents: 4500 },
+  ],
+  accountSpend: [
+    { accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", accountName: "Cuenta principal", expenseCents: 40000, rows: 8, averageCents: 5000 },
+    { accountId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", accountName: "Cuenta secundaria", expenseCents: 15000, rows: 4, averageCents: 3750 },
+  ],
+  topTransactions: [
+    {
+      transactionId: "99999999-9999-4999-8999-999999999991",
+      bankDate: "2026-09-15",
+      amountCents: 12000,
+      conceptNormalized: "Compra supermercado",
+      merchantId: "22222222-2222-4222-8222-222222222222",
+      merchantName: "Mercado Central",
+      categoryId: "11111111-1111-4111-8111-111111111111",
+      categoryName: "Alimentación",
+      accountId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      accountName: "Cuenta principal",
+    },
+    {
+      transactionId: "99999999-9999-4999-8999-999999999992",
+      bankDate: "2026-09-11",
+      amountCents: 10000,
+      conceptNormalized: "Combustible",
+      merchantId: "44444444-4444-4444-8444-444444444444",
+      merchantName: "Gasolinera",
+      categoryId: "33333333-3333-4333-8333-333333333333",
+      categoryName: "Transporte",
+      accountId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      accountName: "Cuenta secundaria",
+    },
   ],
   concentration: { top3CategoryBps: 10000, top3MerchantBps: 10000 },
   anomalies: [],
@@ -106,6 +168,14 @@ for (const width of WIDTHS) {
     await expect(page.getByLabel("Indicadores principales del periodo")).toContainText("Neto del periodo");
     await expect(page.getByLabel("Lectura rápida")).toBeVisible();
     await expect(page.getByLabel("Lectura rápida")).toContainText("Sin previsiones");
+    await expect(page.getByRole("heading", { name: "Patrones que no se ven en un simple total" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
+    await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+    await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
+    await expect(page.getByText("Detalle procedente del movimiento original")).toBeVisible();
+    await expect(page.getByLabel("Gasto por cuenta").getByText("Cuenta secundaria")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Comercios principales" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Cómo está cambiando tu dinero" })).toBeVisible();
     await expect(page.getByRole("heading", { name: /Tu gasto (ha aumentado|ha disminuido|se mantiene)/ })).toBeVisible();
@@ -116,6 +186,21 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("heading", { name: "Previsión" })).toBeVisible();
     await expect(page.getByText("Sin previsiones activas")).toBeVisible();
     await expect(page.getByText(/Detalle por categorías disponible en Presupuestos/i)).toBeVisible();
+
+    const accessibleTrendTable = page.getByRole("table", { name: "Datos de la comparativa financiera" });
+    await expect(accessibleTrendTable).toBeAttached();
+    await expect(accessibleTrendTable).toContainText("Ingresos");
+    await expect(accessibleTrendTable).toContainText("Gastos");
+    expect(await accessibleTrendTable.evaluate((element) => {
+      const container = element.parentElement;
+      if (!container) return false;
+      const style = window.getComputedStyle(container);
+      return style.display !== "none"
+        && style.position === "absolute"
+        && style.overflow === "hidden"
+        && style.whiteSpace === "nowrap"
+        && style.clip !== "auto";
+    })).toBe(true);
 
     expect(
       await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
@@ -131,7 +216,29 @@ for (const width of WIDTHS) {
     expect(rangeBox).not.toBeNull();
     expect(rangeBox!.height).toBeGreaterThanOrEqual(44);
 
-    const chartMonth = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i }).last();
+    await page.getByRole("button", { name: "3 meses" }).click();
+    await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+    await range.click();
+    await expect(page.getByRole("button", { name: "Aplicar" })).toBeVisible();
+
+    const trendViews = page.getByRole("group", { name: "Vista de la evolución financiera" });
+    const trendAll = trendViews.getByRole("button", { name: "Conjunto", exact: true });
+    const trendFlow = trendViews.getByRole("button", { name: "Ingresos y gastos", exact: true });
+    const trendNet = trendViews.getByRole("button", { name: "Neto", exact: true });
+    await expect(trendAll).toHaveAttribute("aria-pressed", "true");
+    await trendFlow.click();
+    await expect(trendFlow).toHaveAttribute("aria-pressed", "true");
+    await trendNet.click();
+    await expect(trendNet).toHaveAttribute("aria-pressed", "true");
+    await trendAll.click();
+
+    const compareMode = page.getByRole("button", { name: "Actual vs anterior", exact: true });
+    await compareMode.click();
+    await expect(compareMode).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Variación", exact: true }).click();
+
+    const chartMonths = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i });
+    const chartMonth = chartMonths.last();
     await expect(chartMonth).toBeVisible();
     const chartMonthBox = await chartMonth.boundingBox();
     expect(chartMonthBox).not.toBeNull();
@@ -139,7 +246,15 @@ for (const width of WIDTHS) {
 
     await chartMonth.focus();
     await expect(chartMonth).toHaveAttribute("aria-pressed", "true");
-    await expect(page.getByRole("tooltip").filter({ hasText: /Ingresos/ })).toBeVisible();
+    const tooltip = page.getByRole("tooltip").filter({ hasText: /Ingresos/ });
+    await expect(tooltip).toBeVisible();
+    await expect(tooltip).not.toContainText("frente al mes anterior");
+
+    const chartMonthCount = await chartMonths.count();
+    if (chartMonthCount > 1) {
+      await chartMonths.nth(chartMonthCount - 2).focus();
+      await expect(tooltip).toContainText(/Neto (sin cambios|[+−].*) frente al mes anterior/);
+    }
 
     const sectionBoxes = await page.locator("main section").evaluateAll((sections) =>
       sections.map((section) => {
