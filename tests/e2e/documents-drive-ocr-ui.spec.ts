@@ -73,7 +73,7 @@ test("Documentos keeps Drive OCR manual, fail-closed and write-free when reader 
   await page.getByRole("button", { name: /factura-drive.pdf/i }).click();
 
   await expect(page.getByText(/Financial App Reader con permiso de solo lectura/)).toBeVisible();
-  const analyze = page.getByRole("button", { name: "Analizar con OCR" });
+  const analyze = page.getByRole("button", { name: /Analizar/ });
   await expect(analyze).toBeEnabled();
   expect(ocrReads).toHaveLength(0);
   expect(writes).toHaveLength(0);
