@@ -8,7 +8,6 @@ import ocrStyles from "./ocr-review.module.css";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = DocumentOcrResult["status"];
-
 type OcrResult = DocumentOcrResult;
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
@@ -83,17 +82,14 @@ export function OcrReviewPanel({
   documentId,
   storageProvider,
   mimeType,
-  onOpenOriginal,
-  openingOriginal = false,
 }: {
   documentId: string;
   storageProvider: StorageProvider;
   mimeType: string;
-  onOpenOriginal?: () => void | Promise<void>;
-  openingOriginal?: boolean;
 }) {
   const [result, setResult] = useState<OcrResult | null>(null);
   const [busy, setBusy] = useState(false);
+  const [openingOriginal, setOpeningOriginal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
@@ -101,6 +97,7 @@ export function OcrReviewPanel({
     setResult(null);
     setError(null);
     setBusy(false);
+    setOpeningOriginal(false);
     setCopyState("idle");
   }, [documentId]);
 
@@ -120,6 +117,21 @@ export function OcrReviewPanel({
       setError(errorLabel(code));
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function openOriginal() {
+    if (openingOriginal) return;
+    setOpeningOriginal(true);
+    setError(null);
+    try {
+      const opened = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=open`, { cache: "no-store" }));
+      if (typeof opened?.url !== "string") throw new Error("document_open_failed");
+      window.open(opened.url, "_blank", "noopener,noreferrer");
+    } catch {
+      setError("No se ha podido abrir el documento original.");
+    } finally {
+      setOpeningOriginal(false);
     }
   }
 
@@ -149,7 +161,7 @@ export function OcrReviewPanel({
       <ol className={ocrStyles.flow} aria-label="Proceso de revisión OCR">
         <li className={ocrStyles.flowItem}>
           <span>1</span><div><strong>Original</strong><small>Comprueba que el archivo se ve bien.</small></div>
-          {onOpenOriginal ? <button type="button" onClick={() => void onOpenOriginal()} disabled={openingOriginal}>{openingOriginal ? "Abriendo…" : "Abrir"}</button> : null}
+          <button type="button" onClick={() => void openOriginal()} disabled={openingOriginal}>{openingOriginal ? "Abriendo…" : "Abrir"}</button>
         </li>
         <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
           <span>2</span><div><strong>Lectura</strong><small>{result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
@@ -158,8 +170,7 @@ export function OcrReviewPanel({
           <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura con el original."}</small></div>
         </li>
         <li className={ocrStyles.flowItem}>
-          <span>4</span><div><strong>Datos</strong><small>Corrige y guarda sólo lo que hayas comprobado.</small></div>
-          <a href="#document-metadata-editor">Revisar</a>
+          <span>4</span><div><strong>Datos</strong><small>Corrige y guarda sólo lo comprobado en el formulario superior.</small></div>
         </li>
       </ol>
 
@@ -196,7 +207,7 @@ export function OcrReviewPanel({
             <button className={styles.secondaryButton} type="button" onClick={() => void copyReading()} disabled={!result.plainText.trim()}>
               {copyState === "copied" ? "Texto copiado ✓" : "Copiar texto leído"}
             </button>
-            <a className={styles.primaryButton} href="#document-metadata-editor">Revisar datos del documento</a>
+            <span>Los datos editables siguen arriba y requieren guardado explícito.</span>
             {copyState === "error" ? <span role="status">No se pudo copiar. Puedes seleccionar el texto por página.</span> : null}
           </div>
 
