@@ -80,6 +80,17 @@ function transactionHref(snapshot: AnalysisSnapshot, row: AnalysisSnapshot["topT
   return `/transactions?${params.toString()}`;
 }
 
+function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {
+  return (
+    <div className={styles.chartCard}>
+      <div className={styles.cardHeading}>
+        <div><span>{eyebrow}</span><strong>{title}</strong></div>
+      </div>
+      <p className={styles.empty}>{message}</p>
+    </div>
+  );
+}
+
 function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.dailySpend;
   const chart = useMemo(() => {
@@ -103,7 +114,9 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     return { width, height, left, right, top, bottom, maximum, points, path };
   }, [rows]);
 
-  if (!chart) return <p className={styles.empty}>No hay gasto diario disponible en este periodo.</p>;
+  if (!chart) {
+    return <EmptyChartCard eyebrow="RITMO DIARIO" title="Cuándo se está concentrando el gasto" message="No hay gasto diario disponible en este periodo." />;
+  }
 
   return (
     <div className={styles.chartCard}>
@@ -123,11 +136,15 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
               </g>
             );
           })}
-          <path className={styles.dailyArea} d={`${chart.path} L ${chart.points.at(-1)?.x} ${chart.height - chart.bottom} L ${chart.points[0].x} ${chart.height - chart.bottom} Z`} />
+          {chart.points.length > 1 && (
+            <path className={styles.dailyArea} d={`${chart.path} L ${chart.points.at(-1)?.x} ${chart.height - chart.bottom} L ${chart.points[0].x} ${chart.height - chart.bottom} Z`} />
+          )}
           <path className={styles.dailyLine} d={chart.path} />
           {chart.points.map(({ x, y, row }, index) => (
             <g key={row.date}>
-              <circle className={styles.dailyPoint} cx={x} cy={y} r="4"><title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title></circle>
+              <circle className={styles.dailyPoint} cx={x} cy={y} r={rows.length <= 5 ? "5" : "4"}>
+                <title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title>
+              </circle>
               {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (
                 <text className={styles.axisLabel} x={x} y={chart.height - 8} textAnchor="middle">{formatDate(row.date)}</text>
               )}
@@ -152,6 +169,10 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
     const left = 22;
     const top = 16;
     const weeks = Math.ceil((firstWeekday + totalDays) / 7);
+    const width = Math.max(300, left + weeks * (cell + gap) + 12);
+    const weekStep = weeks > 1 && weeks <= 6
+      ? (width - left - 12 - cell) / (weeks - 1)
+      : cell + gap;
     const days = Array.from({ length: totalDays }, (_, index) => {
       const date = new Date(start);
       date.setUTCDate(start.getUTCDate() + index);
@@ -175,10 +196,15 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
       gap,
       left,
       top,
-      width: Math.max(220, left + weeks * (cell + gap) + 12),
+      weekStep,
+      width,
       height: top + 7 * (cell + gap) + 18,
     };
   }, [snapshot.dailySpend, snapshot.selection.dateFrom, snapshot.selection.dateTo]);
+
+  if (snapshot.dailySpend.length === 0) {
+    return <EmptyChartCard eyebrow="MAPA DE CALOR" title="Qué días concentran más intensidad de gasto" message="No hay días con gasto elegible en el periodo seleccionado." />;
+  }
 
   return (
     <div className={styles.chartCard}>
@@ -186,7 +212,7 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
       </div>
       <div className={styles.svgViewport}>
-        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">
+        <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">
           {WEEKDAYS.map((label, index) => (
             <text key={label} className={styles.axisLabel} x={7} y={chart.top + index * (chart.cell + chart.gap) + chart.cell - 2}>{label}</text>
           ))}
@@ -195,8 +221,8 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
             return (
               <rect
                 key={day.key}
-                className={styles.dailyPoint}
-                x={chart.left + day.week * (chart.cell + chart.gap)}
+                className={styles.heatCell}
+                x={chart.left + day.week * chart.weekStep}
                 y={chart.top + day.weekday * (chart.cell + chart.gap)}
                 width={chart.cell}
                 height={chart.cell}
@@ -208,6 +234,11 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
             );
           })}
         </svg>
+      </div>
+      <div className={styles.heatLegend} aria-hidden="true">
+        <span>Menor gasto</span>
+        <i /><i /><i /><i />
+        <span>Mayor gasto</span>
       </div>
     </div>
   );
@@ -223,15 +254,25 @@ function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     averageCents: byDay.get(index + 1)?.averageCents ?? 0,
   }));
   const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));
+  const peakWeekday = rows.reduce((best, row) => row.expenseCents > best.expenseCents ? row : best, rows[0]);
+
+  if (snapshot.weekdaySpend.length === 0 || maximum <= 1) {
+    return <EmptyChartCard eyebrow="DÍA DE LA SEMANA" title="Qué días pesan más en el gasto" message="Todavía no hay gasto suficiente para comparar los días de la semana." />;
+  }
 
   return (
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>DÍA DE LA SEMANA</span><strong>Qué días pesan más en el gasto</strong></div>
+        <small>Máximo: {peakWeekday.label}</small>
       </div>
       <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana">
         {rows.map((row) => (
-          <div key={row.weekday} className={styles.weekdayColumn} title={`${row.label}: ${formatMoney(row.expenseCents)} · ${row.rows} movimientos · media ${formatMoney(row.averageCents)}`}>
+          <div
+            key={row.weekday}
+            className={`${styles.weekdayColumn} ${row.weekday === peakWeekday.weekday ? styles.weekdayPeak : ""}`}
+            title={`${row.label}: ${formatMoney(row.expenseCents)} · ${row.rows} movimientos · media ${formatMoney(row.averageCents)}`}
+          >
             <div><i style={{ height: `${Math.max(row.expenseCents > 0 ? 5 : 0, (row.expenseCents / maximum) * 100)}%` }} /></div>
             <strong>{row.label}</strong>
             <small>{row.rows}</small>
@@ -246,6 +287,11 @@ function AmountBandsChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const source = new Map(snapshot.amountBands.map((row) => [row.band, row]));
   const rows = BAND_ORDER.map((band) => ({ band, ...(source.get(band) ?? { expenseCents: 0, rows: 0 }) }));
   const maximum = Math.max(1, ...rows.map((row) => row.rows));
+  const hasData = rows.some((row) => row.rows > 0);
+
+  if (!hasData) {
+    return <EmptyChartCard eyebrow="TRAMOS DE IMPORTE" title="Cómo son tus compras" message="No hay movimientos de gasto para distribuir por tramos de importe." />;
+  }
 
   return (
     <div className={styles.chartCard}>
@@ -270,31 +316,66 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.merchantDrivers
     .filter((row) => row.rows > 0 && (row.averageCents ?? 0) > 0)
     .slice(0, 18);
-  if (rows.length === 0) return <p className={styles.empty}>No hay comercios suficientes para esta lectura.</p>;
+
+  if (rows.length === 0) {
+    return <EmptyChartCard eyebrow="FRECUENCIA × IMPORTE" title="Comercios frecuentes frente a compras grandes" message="No hay comercios suficientes para relacionar frecuencia e importe medio." />;
+  }
 
   const width = 520;
   const height = 250;
-  const left = 42;
-  const right = 20;
-  const top = 18;
-  const bottom = 34;
-  const maxRows = Math.max(1, ...rows.map((row) => row.rows));
-  const maxAverage = Math.max(1, ...rows.map((row) => row.averageCents ?? 0));
+  const left = 50;
+  const right = 22;
+  const top = 22;
+  const bottom = 38;
+  const innerWidth = width - left - right;
+  const innerHeight = height - top - bottom;
+  const frequencies = rows.map((row) => row.rows);
+  const averages = rows.map((row) => row.averageCents ?? 0);
+  const minRows = Math.min(...frequencies);
+  const maxRows = Math.max(...frequencies);
+  const minAverage = Math.min(...averages);
+  const maxAverage = Math.max(...averages);
+  const rowSpan = maxRows - minRows;
+  const averageSpan = maxAverage - minAverage;
+  const rowPadding = rowSpan > 0 ? Math.max(0.5, rowSpan * 0.1) : 1;
+  const averagePadding = averageSpan > 0 ? Math.max(100, averageSpan * 0.1) : Math.max(100, maxAverage * 0.12);
+  const xMin = Math.max(0, minRows - rowPadding);
+  const xMax = maxRows + rowPadding;
+  const yMin = Math.max(0, minAverage - averagePadding);
+  const yMax = maxAverage + averagePadding;
+  const xSpan = Math.max(1, xMax - xMin);
+  const ySpan = Math.max(1, yMax - yMin);
+  const gridRatios = [0.25, 0.5, 0.75];
 
   return (
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>FRECUENCIA × IMPORTE</span><strong>Comercios frecuentes frente a compras grandes</strong></div>
+        <small>{rows.length.toLocaleString("es-ES")} comercios</small>
       </div>
       <div className={styles.svgViewport}>
         <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio">
+          {gridRatios.map((ratio) => {
+            const x = left + ratio * innerWidth;
+            const y = top + ratio * innerHeight;
+            return (
+              <g key={ratio} className={styles.gridLine}>
+                <line x1={x} x2={x} y1={top} y2={height - bottom} />
+                <line x1={left} x2={width - right} y1={y} y2={y} />
+              </g>
+            );
+          })}
           <line className={styles.scatterAxis} x1={left} x2={left} y1={top} y2={height - bottom} />
           <line className={styles.scatterAxis} x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
-          <text className={styles.axisLabel} x={width / 2} y={height - 6} textAnchor="middle">Frecuencia de compra</text>
-          <text className={styles.axisLabel} x={8} y={top + 8}>Importe medio</text>
+          <text className={styles.axisLabel} x={width / 2} y={height - 7} textAnchor="middle">Más frecuencia →</text>
+          <text className={styles.axisLabel} x={left + 8} y={top + 12}>Mayor importe ↑</text>
+          <text className={styles.axisLabel} x={left} y={height - bottom + 15}>{Math.round(xMin)}</text>
+          <text className={styles.axisLabel} x={width - right} y={height - bottom + 15} textAnchor="end">{Math.round(xMax)}</text>
+          <text className={styles.axisLabel} x={left - 6} y={top + 4} textAnchor="end">{formatMoney(Math.round(yMax))}</text>
+          <text className={styles.axisLabel} x={left - 6} y={height - bottom + 4} textAnchor="end">{formatMoney(Math.round(yMin))}</text>
           {rows.map((row) => {
-            const x = left + (row.rows / maxRows) * (width - left - right);
-            const y = top + (1 - (row.averageCents ?? 0) / maxAverage) * (height - top - bottom);
+            const x = left + ((row.rows - xMin) / xSpan) * innerWidth;
+            const y = top + (1 - ((row.averageCents ?? 0) - yMin) / ySpan) * innerHeight;
             const radius = 5 + Math.min(7, ((row.shareBps ?? 0) / 10000) * 18);
             return (
               <circle key={`${row.id ?? "none"}-${row.name}`} className={styles.scatterPoint} cx={x} cy={y} r={radius}>
@@ -304,6 +385,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
           })}
         </svg>
       </div>
+      <div className={styles.bubbleLegend}>Tamaño de burbuja = peso del comercio en el gasto</div>
     </div>
   );
 }
@@ -332,10 +414,24 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
       };
     });
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-    return { width, height, left, right, top, bottom, points, path, innerHeight };
+    const eightyIndex = points.findIndex((point) => point.ratio >= 0.8);
+    return {
+      width,
+      height,
+      left,
+      right,
+      top,
+      bottom,
+      points,
+      path,
+      innerHeight,
+      eightyCount: eightyIndex >= 0 ? eightyIndex + 1 : null,
+    };
   }, [rows, snapshot.current.expenseCents]);
 
-  if (!chart) return <p className={styles.empty}>No hay comercios suficientes para calcular concentración.</p>;
+  if (!chart) {
+    return <EmptyChartCard eyebrow="CONCENTRACIÓN" title="Cuánto gasto acumulan los primeros comercios" message="No hay gasto comercial suficiente para calcular una curva de concentración." />;
+  }
 
   const eightyY = chart.top + 0.2 * chart.innerHeight;
 
@@ -343,13 +439,16 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>CONCENTRACIÓN</span><strong>Cuánto gasto acumulan los primeros comercios</strong></div>
+        {chart.eightyCount !== null && <small>{chart.eightyCount} para alcanzar 80 %</small>}
       </div>
       <div className={styles.svgViewport}>
         <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio">
           <line className={styles.scatterAxis} x1={chart.left} x2={chart.left} y1={chart.top} y2={chart.height - chart.bottom} />
           <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
-          <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} opacity="0.35" />
+          <line className={styles.concentrationReference} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} />
+          <text className={styles.axisLabel} x={chart.left - 6} y={chart.top + 4} textAnchor="end">100 %</text>
           <text className={styles.axisLabel} x={chart.left - 6} y={eightyY + 4} textAnchor="end">80 %</text>
+          <text className={styles.axisLabel} x={chart.left - 6} y={chart.height - chart.bottom + 4} textAnchor="end">0 %</text>
           <text className={styles.axisLabel} x={chart.width / 2} y={chart.height - 6} textAnchor="middle">Comercios ordenados por gasto</text>
           <path className={styles.dailyLine} d={chart.path} />
           {chart.points.map((point, index) => (
@@ -366,7 +465,17 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
 function Concepts({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.concepts.slice(0, 8);
   const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));
-  if (rows.length === 0) return <p className={styles.empty}>No hay conceptos de gasto disponibles.</p>;
+
+  if (rows.length === 0) {
+    return (
+      <div className={styles.detailCard}>
+        <div className={styles.cardHeading}>
+          <div><span>CONCEPTOS</span><strong>Qué descripciones concentran más gasto</strong></div>
+        </div>
+        <p className={styles.empty}>No hay conceptos de gasto disponibles.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.detailCard}>
@@ -388,7 +497,17 @@ function Concepts({ snapshot }: { snapshot: AnalysisSnapshot }) {
 
 function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.topTransactions;
-  if (rows.length === 0) return <p className={styles.empty}>No hay movimientos destacados disponibles.</p>;
+
+  if (rows.length === 0) {
+    return (
+      <div className={styles.detailCard}>
+        <div className={styles.cardHeading}>
+          <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle procedente del movimiento original</strong></div>
+        </div>
+        <p className={styles.empty}>No hay movimientos destacados disponibles.</p>
+      </div>
+    );
+  }
 
   return (
     <div className={styles.detailCard}>
@@ -440,9 +559,9 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
     <section className={styles.shell} aria-labelledby="movement-insights-heading">
       <div className={styles.heading}>
         <div>
-          <p>DETALLE DE LOS MOVIMIENTOS</p>
+          <p>PATRONES DEL PERIODO</p>
           <h2 id="movement-insights-heading">Patrones que no se ven en un simple total</h2>
-          <span>Las gráficas se calculan con los mismos movimientos elegibles del periodo y conservan filtros, exclusiones y correcciones.</span>
+          <span>Las gráficas usan los mismos movimientos elegibles del periodo y conservan filtros, exclusiones y correcciones.</span>
         </div>
         <Link href={periodHref(snapshot)}>Ver todos los movimientos</Link>
       </div>

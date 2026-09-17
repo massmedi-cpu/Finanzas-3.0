@@ -74,9 +74,20 @@ jobs:
           tests/e2e/analysis-history-integrity.spec.ts
           tests/e2e/analysis-presentation-states.spec.ts
           tests/e2e/analysis-presentation-v6.spec.ts
+          tests/e2e/analysis-redesign-gates.spec.ts
+          tests/e2e/analysis-redesign-cardinality.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
           --project=chromium-desktop
           --project=chromium-mobile
+
+      - name: Upload visual evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analysis-visual-evidence-${{ env.VALIDATION_SHA }}
+          path: test-results/**/analysis-*.png
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Upload Playwright report on failure
         if: failure()
