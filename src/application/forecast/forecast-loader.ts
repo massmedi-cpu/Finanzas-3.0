@@ -2,6 +2,7 @@ import { callPersistenceGateway } from "../../infrastructure/persistence/vercel-
 import { isForecastSnapshot, type ForecastSnapshot } from "./forecast-contract";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -20,7 +21,16 @@ function addDays(date: string, days: number) {
   return parsed.toISOString().slice(0, 10);
 }
 
+function validDate(value: string, code: string) {
+  if (!DATE.test(value)) throw new Error(code);
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new Error(code);
+  return value;
+}
+
 export type ForecastSelectionInput = {
+  dateFrom?: string | null;
+  dateTo?: string | null;
   accountId?: string | null;
 };
 
@@ -32,14 +42,20 @@ export type ResolvedForecastSelection = {
 
 export function resolveForecastSelection(input: ForecastSelectionInput = {}): ResolvedForecastSelection {
   const today = madridToday();
+  const dateFromCandidate = input.dateFrom?.trim() || addDays(today, 1);
+  const dateToCandidate = input.dateTo?.trim() || addDays(today, 90);
+  const dateFrom = validDate(dateFromCandidate, "invalid_forecast_date_from");
+  const dateTo = validDate(dateToCandidate, "invalid_forecast_date_to");
+  if (dateFrom > dateTo) throw new Error("invalid_forecast_date_range");
+
   const accountCandidate = input.accountId?.trim() || null;
   if (accountCandidate !== null && !UUID.test(accountCandidate)) {
     throw new Error("invalid_forecast_account_id");
   }
 
   return {
-    dateFrom: addDays(today, 1),
-    dateTo: addDays(today, 90),
+    dateFrom,
+    dateTo,
     accountId: accountCandidate,
   };
 }
