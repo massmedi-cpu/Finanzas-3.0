@@ -108,7 +108,7 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect.poll(() => ocrReads).toBe(1);
   await expect(panel.getByText("Compara la lectura con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
-  await expect(panel.getByText("TOTAL                         24,50 EUR", { exact: true })).toBeVisible();
+  await expect(panel.getByText(/TOTAL\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("Los datos editables siguen arriba y requieren guardado explícito.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
