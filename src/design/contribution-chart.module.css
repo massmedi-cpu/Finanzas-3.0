@@ -17,7 +17,7 @@
 
 .viewButton,
 .viewActive {
-  min-height: 2.45rem;
+  min-height: 2.75rem;
   padding: 0.44rem 0.7rem;
   border: 1px solid transparent;
   border-radius: 0.55rem;
@@ -165,7 +165,7 @@
 }
 
 .meta a {
-  min-height: 2.35rem;
+  min-height: 2.75rem;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
