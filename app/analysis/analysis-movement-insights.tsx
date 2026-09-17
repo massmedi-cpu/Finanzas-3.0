@@ -169,6 +169,10 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
     const left = 22;
     const top = 16;
     const weeks = Math.ceil((firstWeekday + totalDays) / 7);
+    const width = Math.max(220, left + weeks * (cell + gap) + 12);
+    const weekStep = weeks > 1 && weeks <= 6
+      ? (width - left - 12 - cell) / (weeks - 1)
+      : cell + gap;
     const days = Array.from({ length: totalDays }, (_, index) => {
       const date = new Date(start);
       date.setUTCDate(start.getUTCDate() + index);
@@ -192,7 +196,8 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
       gap,
       left,
       top,
-      width: Math.max(220, left + weeks * (cell + gap) + 12),
+      weekStep,
+      width,
       height: top + 7 * (cell + gap) + 18,
     };
   }, [snapshot.dailySpend, snapshot.selection.dateFrom, snapshot.selection.dateTo]);
@@ -217,7 +222,7 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
               <rect
                 key={day.key}
                 className={styles.heatCell}
-                x={chart.left + day.week * (chart.cell + chart.gap)}
+                x={chart.left + day.week * chart.weekStep}
                 y={chart.top + day.weekday * (chart.cell + chart.gap)}
                 width={chart.cell}
                 height={chart.cell}
@@ -363,7 +368,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
           <line className={styles.scatterAxis} x1={left} x2={left} y1={top} y2={height - bottom} />
           <line className={styles.scatterAxis} x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
           <text className={styles.axisLabel} x={width / 2} y={height - 7} textAnchor="middle">Más frecuencia →</text>
-          <text className={styles.axisLabel} x={8} y={top + 8}>Mayor importe ↑</text>
+          <text className={styles.axisLabel} x={left + 8} y={top + 12}>Mayor importe ↑</text>
           <text className={styles.axisLabel} x={left} y={height - bottom + 15}>{Math.round(xMin)}</text>
           <text className={styles.axisLabel} x={width - right} y={height - bottom + 15} textAnchor="end">{Math.round(xMax)}</text>
           <text className={styles.axisLabel} x={left - 6} y={top + 4} textAnchor="end">{formatMoney(Math.round(yMax))}</text>
