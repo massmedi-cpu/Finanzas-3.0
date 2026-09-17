@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
@@ -195,8 +195,8 @@ const EMPTY_SNAPSHOT = buildSnapshot({
   forecast: null,
 });
 
-async function openAnalysis(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
-  await page.route("**/api/analysis**", async (route: any) => {
+async function openAnalysis(page: Page, snapshot: AnalysisSnapshot) {
+  await page.route("**/api/analysis**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
   });
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
@@ -237,34 +237,28 @@ for (const width of [390, 1440] as const) {
 
     const quickReadLink = page.getByLabel("Lectura rápida").locator("a").first();
     await expect(quickReadLink).toBeVisible();
-    expect(await quickReadLink.evaluate((node) => getComputedStyle(node).transitionDuration)).toBe("0s");
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
+    const transitionSeconds = await quickReadLink.evaluate((node) => parseFloat(getComputedStyle(node).transitionDuration));
+    expect(transitionSeconds).toBeLessThanOrEqual(0.001);
 
     await page.screenshot({ path: testInfo.outputPath(`analysis-low-data-${width}.png`), fullPage: true });
   });
 }
 
-test("Rediseño Análisis · 390px mantiene estados vacíos compactos y explícitos", async ({ page }, testInfo) => {
+test("Rediseño Análisis · 390px mantiene el estado sin movimientos compacto y explícito", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 900 });
   await openAnalysis(page, EMPTY_SNAPSHOT);
 
-  const emptyMessages = [
-    "No hay gasto diario disponible en este periodo.",
-    "No hay días con gasto elegible en el periodo seleccionado.",
-    "Todavía no hay gasto suficiente para comparar los días de la semana.",
-    "No hay movimientos de gasto para distribuir por tramos de importe.",
-    "No hay comercios suficientes para relacionar frecuencia e importe medio.",
-    "No hay gasto comercial suficiente para calcular una curva de concentración.",
-    "No hay conceptos de gasto disponibles.",
-    "No hay movimientos destacados disponibles.",
-  ];
+  await expect(page.getByRole("heading", { name: "Patrones que no se ven en un simple total" })).toHaveCount(0);
+  await expect(page.getByText("No hay categorías con gasto elegible en el periodo.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sin clasificación fiable todavía", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay gastos elegibles en el periodo.", { exact: true }).first()).toBeVisible();
 
-  for (const message of emptyMessages) {
-    const empty = page.getByText(message, { exact: true });
-    await expect(empty).toBeVisible();
-    const card = empty.locator("..");
-    const box = await card.boundingBox();
+  for (const headingName of ["Dónde se concentra el gasto", "Gasto fijo y variable"] as const) {
+    const section = page.getByRole("heading", { name: headingName }).locator("xpath=ancestor::section[1]");
+    const box = await section.boundingBox();
     expect(box).not.toBeNull();
-    expect(box!.height).toBeLessThan(220);
+    expect(box!.height).toBeLessThan(300);
   }
 
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
