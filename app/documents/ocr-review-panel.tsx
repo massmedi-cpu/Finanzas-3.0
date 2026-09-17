@@ -1,42 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
+import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
 import ocrStyles from "./ocr-review.module.css";
 
 type StorageProvider = "supabase" | "google_drive";
-type OcrStatus = "ready" | "needs_review" | "empty";
+type OcrStatus = DocumentOcrResult["status"];
 
-type OcrPage = {
-  pageNumber: number;
-  plainText: string;
-  layoutText: string;
-  lines: Array<{
-    id: string;
-    text: string;
-    confidence: number;
-    alignment: "left" | "center" | "right";
-  }>;
-};
-
-type OcrResult = {
-  contractVersion: 1;
-  documentId: string;
-  status: OcrStatus;
-  source: "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
-  extractor: string;
-  extractedAt: string;
-  confidence: number | null;
-  plainText: string;
-  pages: OcrPage[];
-  warnings: string[];
-  principles: {
-    bankSource: "read_only";
-    financialWrites: false;
-    requiresHumanReview: true;
-    preservesGeometry: true;
-  };
-};
+type OcrResult = DocumentOcrResult;
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
   ready: "Lectura disponible",
@@ -110,27 +83,35 @@ export function OcrReviewPanel({
   documentId,
   storageProvider,
   mimeType,
+  onOpenOriginal,
+  openingOriginal = false,
 }: {
   documentId: string;
   storageProvider: StorageProvider;
   mimeType: string;
+  onOpenOriginal?: () => void | Promise<void>;
+  openingOriginal?: boolean;
 }) {
   const [result, setResult] = useState<OcrResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
 
   useEffect(() => {
     setResult(null);
     setError(null);
     setBusy(false);
+    setCopyState("idle");
   }, [documentId]);
 
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
+  const review = useMemo(() => result ? summarizeDocumentOcrReview(result) : null, [result]);
 
   async function runOcr() {
     if (!supported || busy) return;
     setBusy(true);
     setError(null);
+    setCopyState("idle");
     try {
       const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })) as OcrResult;
       setResult(data);
@@ -142,25 +123,61 @@ export function OcrReviewPanel({
     }
   }
 
+  async function copyReading() {
+    if (!result?.plainText.trim()) return;
+    try {
+      await navigator.clipboard.writeText(result.plainText);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+  }
+
   return (
     <section className={`${styles.subsection} ${ocrStyles.section}`} aria-labelledby="ocr-review-title" data-testid="ocr-review-panel">
       <div className={styles.subsectionHeading}>
         <div>
-          <p className={styles.sectionEyebrow}>EVIDENCIA OCR · F11</p>
-          <h3 id="ocr-review-title">Lectura y reconstrucción</h3>
-          <p>El análisis es temporal y de solo lectura. Nunca cambia fecha, emisor, importe ni movimientos automáticamente.</p>
+          <p className={styles.sectionEyebrow}>LECTURA DEL DOCUMENTO</p>
+          <h3 id="ocr-review-title">Revisar con OCR</h3>
+          <p>Lee el original, reconstruye su texto y te señala qué necesita revisión. No guarda importes, fechas ni emisores por su cuenta.</p>
         </div>
         <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
-          {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar con OCR"}
+          {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
         </button>
       </div>
+
+      <ol className={ocrStyles.flow} aria-label="Proceso de revisión OCR">
+        <li className={ocrStyles.flowItem}>
+          <span>1</span><div><strong>Original</strong><small>Comprueba que el archivo se ve bien.</small></div>
+          {onOpenOriginal ? <button type="button" onClick={() => void onOpenOriginal()} disabled={openingOriginal}>{openingOriginal ? "Abriendo…" : "Abrir"}</button> : null}
+        </li>
+        <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
+          <span>2</span><div><strong>Lectura</strong><small>{result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
+        </li>
+        <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
+          <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura con el original."}</small></div>
+        </li>
+        <li className={ocrStyles.flowItem}>
+          <span>4</span><div><strong>Datos</strong><small>Corrige y guarda sólo lo que hayas comprobado.</small></div>
+          <a href="#document-metadata-editor">Revisar</a>
+        </li>
+      </ol>
 
       {!supported ? <p className={styles.muted}>Este formato no admite OCR.</p> : null}
       {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>Drive se lee mediante Financial App Reader con permiso de solo lectura sobre el archivo original. Si la carpeta Documentos aún no está compartida con esa identidad, el análisis se detendrá sin usar vistas previas ni ampliar permisos.</div> : null}
       {error ? <div className={ocrStyles.error} role="alert">{error}</div> : null}
 
-      {result ? (
+      {result && review ? (
         <div className={ocrStyles.result} aria-live="polite">
+          <div className={`${ocrStyles.nextAction} ${ocrStyles[`next_${review.nextAction}`]}`}>
+            <div><span>Siguiente paso</span><strong>{review.nextActionLabel}</strong><p>{review.nextActionDetail}</p></div>
+            <div className={ocrStyles.reviewStats}>
+              <span>{review.totalLines} líneas</span>
+              <span>{review.lowConfidenceLines} a revisar</span>
+              {review.emptyPages ? <span>{review.emptyPages} páginas vacías</span> : null}
+            </div>
+          </div>
+
           <div className={ocrStyles.metrics}>
             <div><span>Estado</span><strong>{STATUS_LABELS[result.status]}</strong></div>
             <div><span>Confianza</span><strong>{confidenceLabel(result.confidence)}</strong></div>
@@ -175,16 +192,27 @@ export function OcrReviewPanel({
             </div>
           ) : <div className={ocrStyles.success}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de guardar datos.</div>}
 
+          <div className={ocrStyles.readingActions}>
+            <button className={styles.secondaryButton} type="button" onClick={() => void copyReading()} disabled={!result.plainText.trim()}>
+              {copyState === "copied" ? "Texto copiado ✓" : "Copiar texto leído"}
+            </button>
+            <a className={styles.primaryButton} href="#document-metadata-editor">Revisar datos del documento</a>
+            {copyState === "error" ? <span role="status">No se pudo copiar. Puedes seleccionar el texto por página.</span> : null}
+          </div>
+
           <div className={ocrStyles.pages}>
-            {result.pages.map((page) => (
-              <article className={ocrStyles.page} key={page.pageNumber}>
-                <div className={ocrStyles.pageHeader}>
-                  <strong>Página {page.pageNumber}</strong>
-                  <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}</span>
-                </div>
-                {page.layoutText ? <pre className={ocrStyles.layout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
-              </article>
-            ))}
+            {result.pages.map((page, index) => {
+              const lowConfidence = page.lines.filter((line) => line.confidence < 0.65).length;
+              return (
+                <details className={ocrStyles.page} key={page.pageNumber} open={index === 0}>
+                  <summary className={ocrStyles.pageHeader}>
+                    <strong>Página {page.pageNumber}</strong>
+                    <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}{lowConfidence ? ` · ${lowConfidence} a revisar` : ""}</span>
+                  </summary>
+                  {page.layoutText ? <pre className={ocrStyles.layout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
+                </details>
+              );
+            })}
           </div>
 
           <div className={ocrStyles.principles}>
