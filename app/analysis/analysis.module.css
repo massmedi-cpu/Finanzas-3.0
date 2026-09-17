@@ -4,6 +4,8 @@
   min-height: 100vh;
   margin: 0 auto;
   padding: clamp(0.9rem, 1.7vw, 1.6rem);
+  display: flex;
+  flex-direction: column;
   color: var(--color-text);
 }
 
@@ -183,6 +185,7 @@
 }
 
 .kpis {
+  order: 1;
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: clamp(0.65rem, 1vw, 0.9rem);
@@ -247,6 +250,7 @@
 }
 
 .quickRead {
+  order: 2;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(9.5rem, 0.72fr) repeat(4, minmax(0, 1fr));
@@ -296,8 +300,9 @@
   background: linear-gradient(145deg, rgba(14, 25, 48, 0.6), rgba(7, 14, 29, 0.52));
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
-.trendSection { padding-bottom: clamp(0.8rem, 1.2vw, 1rem); }
+.trendSection { order: 3; padding-bottom: clamp(0.8rem, 1.2vw, 1rem); }
 .changeSection {
+  order: 4;
   background:
     radial-gradient(circle at 100% 0%, rgba(77, 141, 255, 0.055), transparent 24rem),
     linear-gradient(145deg, rgba(14, 25, 48, 0.62), rgba(7, 14, 29, 0.52));
@@ -367,10 +372,11 @@
   gap: clamp(0.8rem, 1.2vw, 1rem);
   align-items: start;
 }
-.twoColumn { grid-template-columns: minmax(0, 1.34fr) minmax(18rem, 0.66fr); }
-.intelligenceGrid { grid-template-columns: 1fr; }
-.contextGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.twoColumn { order: 5; grid-template-columns: minmax(0, 1.34fr) minmax(18rem, 0.66fr); }
+.intelligenceGrid { order: 7; grid-template-columns: 1fr; }
+.contextGrid { order: 8; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .rankingsGrid { grid-template-columns: 1fr; }
+.shell > section[aria-labelledby="movement-insights-heading"] { order: 6; }
 
 .breakdown { display: grid; }
 .breakdownRow {
@@ -444,7 +450,7 @@
 .forecastFigures { display: flex; flex-wrap: wrap; gap: 0.5rem 0.9rem; margin-top: 0.65rem; color: var(--color-text-muted); font-size: max(var(--font-helper), 0.73rem); }
 .forecastFigures strong { color: var(--color-text); font-variant-numeric: tabular-nums; }
 
-.rankingsSection { margin-top: clamp(0.8rem, 1.2vw, 1rem); }
+.rankingsSection { order: 9; margin-top: clamp(0.8rem, 1.2vw, 1rem); }
 .ranking { min-width: 0; padding-top: 0.68rem; border-top: 1px solid rgba(137, 173, 255, 0.1); }
 .rankingList { margin: 0; padding: 0; display: grid; list-style: none; }
 .rankingList li {
@@ -469,7 +475,7 @@
 .textButton:hover { background: rgba(77, 141, 255, 0.06); color: white; }
 
 .empty { margin: 0; padding: 0.48rem 0; color: var(--color-text-muted); font-size: max(var(--font-helper), 0.76rem); line-height: 1.45; }
-.qualityNote { display: flex; flex-wrap: wrap; gap: 0.5rem 1.3rem; margin-top: 0.85rem; padding: 0.7rem 0; border-top: 1px solid rgba(137, 173, 255, 0.12); color: var(--color-text-muted); font-size: 0.7rem; }
+.qualityNote { order: 10; display: flex; flex-wrap: wrap; gap: 0.5rem 1.3rem; margin-top: 0.85rem; padding: 0.7rem 0; border-top: 1px solid rgba(137, 173, 255, 0.12); color: var(--color-text-muted); font-size: 0.7rem; }
 
 .skeletonWrap { display: grid; gap: 0.8rem; margin-top: 0.9rem; }
 .skeletonKpis,
