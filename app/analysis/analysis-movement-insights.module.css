@@ -65,17 +65,24 @@
 }
 
 .heroGrid,
-.chartGrid,
+.chartColumns,
 .detailGrid {
   min-width: 0;
   display: grid;
+  align-items: start;
   gap: var(--space-4);
   margin-top: var(--space-4);
 }
 
 .heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
-.chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .detailGrid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+.chartColumn {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+}
 
 .chartCard,
 .detailCard,
@@ -88,7 +95,10 @@
 }
 
 .chartCard,
-.detailCard { padding: clamp(0.95rem, 1.4vw, 1.25rem); }
+.detailCard {
+  align-self: start;
+  padding: clamp(0.95rem, 1.4vw, 1.25rem);
+}
 
 .cardHeading {
   min-width: 0;
@@ -110,32 +120,76 @@
   flex: 0 0 auto;
   color: var(--color-text-muted);
   font-size: var(--font-helper);
+  text-align: right;
 }
 
-.svgViewport {
+.svgViewport,
+.heatmapViewport {
   min-width: 0;
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: thin;
 }
 
 .dailyChart,
-.scatterChart {
+.scatterChart,
+.heatmapChart {
   display: block;
+  height: auto;
+}
+.dailyChart {
   width: 100%;
   min-width: 34rem;
 }
-.dailyChart { min-height: 13rem; }
-.scatterChart { min-height: 14rem; }
+.scatterChart {
+  width: 100%;
+  min-width: 34rem;
+}
+.heatmapChart {
+  width: min(100%, 25rem);
+  min-width: 15rem;
+  margin-inline: auto;
+}
 
 .gridLine line {
-  stroke: rgba(137, 173, 255, 0.09);
+  stroke: rgba(137, 173, 255, 0.1);
   stroke-width: 1;
+}
+.gridLine text,
+.axisLabel,
+.axisTitle,
+.valueLabel,
+.pointLabel,
+.heatmapDayLabel {
+  font-variant-numeric: tabular-nums;
 }
 .gridLine text,
 .axisLabel {
   fill: var(--color-text-muted);
   font-size: 11px;
-  font-variant-numeric: tabular-nums;
+}
+.axisTitle {
+  fill: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+}
+.valueLabel {
+  fill: #c8d9fb;
+  font-size: 10px;
+  font-weight: 750;
+  paint-order: stroke;
+  stroke: rgba(5, 9, 20, 0.92);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.pointLabel {
+  fill: #c8d9fb;
+  font-size: 10px;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(5, 9, 20, 0.92);
+  stroke-width: 3px;
+  stroke-linejoin: round;
 }
 .dailyArea { fill: rgba(77, 141, 255, 0.08); }
 .dailyLine {
@@ -153,23 +207,55 @@
   vector-effect: non-scaling-stroke;
 }
 
+.heatmapCell {
+  fill: var(--color-cyan);
+  stroke: rgba(43, 217, 247, 0.32);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.heatmapDayLabel {
+  fill: #dbe8ff;
+  font-size: 9px;
+  font-weight: 800;
+  pointer-events: none;
+  paint-order: stroke;
+  stroke: rgba(5, 9, 20, 0.72);
+  stroke-width: 2px;
+}
+.heatmapLegend {
+  width: min(100%, 25rem);
+  margin: 0.6rem auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+}
+.heatmapLegend i {
+  width: 0.85rem;
+  height: 0.85rem;
+  border: 1px solid rgba(43, 217, 247, 0.28);
+  border-radius: 0.22rem;
+  background: var(--color-cyan);
+}
+
 .weekdayChart {
-  min-height: 13rem;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: end;
   gap: 0.35rem;
-  padding-top: var(--space-3);
+  padding-top: var(--space-2);
 }
 .weekdayColumn {
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 0.25rem;
+  gap: 0.2rem;
 }
 .weekdayColumn > div {
   width: min(2rem, 75%);
-  height: 8rem;
+  height: 7.2rem;
   display: flex;
   align-items: flex-end;
   overflow: hidden;
@@ -183,7 +269,14 @@
   background: linear-gradient(180deg, rgba(43, 217, 247, 0.82), rgba(77, 141, 255, 0.46));
 }
 .weekdayColumn strong { font-size: 0.76rem; }
-.weekdayColumn small { color: var(--color-text-muted); font-size: 0.68rem; }
+.weekdayColumn small { color: var(--color-text-muted); font-size: 0.66rem; }
+.weekdayColumn em {
+  color: var(--color-text-secondary);
+  font-size: 0.62rem;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 
 .bandChart { display: grid; gap: 0.55rem; }
 .bandRow {
@@ -213,12 +306,12 @@
 }
 
 .scatterAxis {
-  stroke: rgba(247, 249, 255, 0.2);
+  stroke: rgba(247, 249, 255, 0.24);
   stroke-width: 1;
 }
 .scatterPoint {
   fill: rgba(77, 141, 255, 0.55);
-  stroke: rgba(201, 224, 255, 0.8);
+  stroke: rgba(201, 224, 255, 0.9);
   stroke-width: 1.5;
 }
 
@@ -311,7 +404,7 @@
 }
 
 @media (max-width: 58rem) {
-  .chartGrid { grid-template-columns: 1fr; }
+  .chartColumns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 48rem) {
@@ -329,10 +422,13 @@
   .heading { padding: 0.9rem; border-radius: var(--radius-md); }
   .heading > a { width: 100%; justify-content: center; }
   .weekdayChart { gap: 0.2rem; }
-  .weekdayColumn > div { width: 72%; height: 6.6rem; }
+  .weekdayColumn > div { width: 72%; height: 5.8rem; }
+  .weekdayColumn em { font-size: 0.58rem; }
   .bandRow { grid-template-columns: 1fr auto; }
   .bandRow > div { grid-column: 1 / -1; grid-row: 2; }
   .bandRow > small { grid-column: 1 / -1; grid-row: 3; }
   .transactionRow { align-items: flex-start; }
   .transactionRow > b { font-size: 0.86rem; }
+  .dailyChart,
+  .scatterChart { min-width: 32rem; }
 }
