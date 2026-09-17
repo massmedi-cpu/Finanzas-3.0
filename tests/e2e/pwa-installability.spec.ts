@@ -28,6 +28,11 @@ test("PWA expone manifiesto, service worker y una instalación guiada aunque no 
   await page.goto("/");
 
   const install = page.getByRole("button", { name: "Instalar Financial App en este dispositivo" }).first();
+  if (!(await install.isVisible())) {
+    const more = page.getByRole("button", { name: "Más", exact: true });
+    await expect(more).toBeVisible();
+    await more.click();
+  }
   await expect(install).toBeVisible();
   await install.click();
 
