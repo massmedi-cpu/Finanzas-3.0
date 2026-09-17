@@ -11,45 +11,21 @@ const financial = {
     operatingNetCents: 85000,
     savingsCents: 85000,
     savingsRateBps: 5000,
-    transfers: { grossCents: 12000 },
     quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
   },
   balances: {
     asOfDate: "2026-09-16",
     activeBalanceCents: 234500,
-    quality: {
-      accounts: 2,
-      explicitBalanceAccounts: 1,
-      reconstructedBalanceAccounts: 1,
-      integrityDeltaAccounts: 0,
-    },
     accounts: [
       {
         id: "10000000-0000-4000-8000-000000000001",
         name: "Cuenta principal",
         type: "checking",
         lifecycle: "active",
-        balanceCents: 184500,
-        balanceSource: "bank_explicit",
+        balanceCents: 234500,
         explicitBalanceDate: "2026-09-16",
-        reconstructionDeltaCents: null,
-      },
-      {
-        id: "10000000-0000-4000-8000-000000000002",
-        name: "Cuenta ahorro",
-        type: "savings",
-        lifecycle: "active",
-        balanceCents: 50000,
-        balanceSource: "reconstructed",
-        explicitBalanceDate: null,
-        reconstructionDeltaCents: 0,
       },
     ],
-  },
-  principles: {
-    bankSource: "read_only",
-    transfersExcludedFromSavings: true,
-    explicitBankBalancePreferred: true,
   },
 };
 
@@ -73,30 +49,16 @@ const budgets = {
     progressBps: 7083,
     status: "on_track",
   },
-  categories: [
-    {
-      categoryId: "20000000-0000-4000-8000-000000000001",
-      categoryName: "Alimentación",
-      effectiveAmountCents: 50000,
-      actualExpenseCents: 30000,
-      remainingCents: 20000,
-      progressBps: 6000,
-      status: "on_track",
-    },
-  ],
+  categories: [],
 };
 
 const forecast = {
-  period: { dateFrom: "2026-09-16", dateTo: "2026-10-16", accountId: null },
   summary: {
-    openingBalanceCents: 234500,
     projectedIncomeCents: 40000,
     projectedExpenseCents: 55000,
     projectedNetCents: -15000,
     projectedClosingBalanceCents: 219500,
-    plannedItems: 2,
-    excludedItems: 0,
-    confirmedItems: 0,
+    plannedItems: 1,
   },
   items: [
     {
@@ -104,8 +66,6 @@ const forecast = {
       date: "2026-09-20",
       concept: "Factura prevista",
       amountCents: -55000,
-      origin: "known",
-      confidence: "high",
       status: "planned",
       affectsProjection: true,
     },
@@ -120,10 +80,9 @@ const transactions = {
       amountCents: -3000,
       account: { id: "10000000-0000-4000-8000-000000000001", name: "Cuenta principal" },
       concept: { effective: "Compra supermercado" },
-      merchant: { originalId: null, originalName: null, effectiveId: null, effectiveName: "Supermercado Demo" },
+      merchant: { effectiveName: "Supermercado Demo" },
       category: { effectiveName: "Alimentación" },
       kind: { effective: "expense" },
-      reviewState: { original: "confirmed", effective: "confirmed" },
       duplicateState: "none",
       excludedFromAnalytics: false,
     },
@@ -149,10 +108,11 @@ async function mockDashboard(page: Page) {
           contractVersion: 1,
           scope: "primary",
           asOfDate: "2026-09-16",
+          dataThroughDate: "2026-09-16",
           generatedAt: "2026-09-16T20:00:00.000Z",
-          requestedSources: ["financial"],
+          requestedSources: ["financial", "transactions"],
           failedSources: [],
-          data: { financial, monthly: null, budgets: null, forecast: null, transactions: null },
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions },
         });
         return;
       }
@@ -161,10 +121,11 @@ async function mockDashboard(page: Page) {
           contractVersion: 1,
           scope: "secondary",
           asOfDate: "2026-09-16",
+          dataThroughDate: "2026-09-16",
           generatedAt: "2026-09-16T20:00:00.000Z",
-          requestedSources: ["monthly", "budgets", "forecast", "transactions"],
+          requestedSources: ["monthly", "budgets", "forecast"],
           failedSources: [],
-          data: { financial: null, monthly, budgets, forecast, transactions },
+          data: { financial: null, monthly, budgets, forecast, transactions: null },
         });
         return;
       }
@@ -173,79 +134,63 @@ async function mockDashboard(page: Page) {
   });
 }
 
-function panel(page: Page, heading: string) {
-  return page.locator("article").filter({ has: page.getByRole("heading", { name: heading, exact: true }) }).first();
-}
-
-test("Inicio explica las cifras clave con periodo, criterio y detalle propietario", async ({ page }) => {
+test("Inicio explica las cifras clave desde la portada real y enlaza con sus módulos propietarios", async ({ page }) => {
   await mockDashboard(page);
   await page.goto("/");
 
-  const accounts = panel(page, "Tus cuentas");
-  const month = panel(page, "Balance");
-  const budget = panel(page, "Gasto y presupuesto");
-  const future = panel(page, "Próximos días");
+  const brief = page.getByRole("region", { name: "Resumen inteligente" });
+  const disclosure = brief.getByText("Explicar cifras", { exact: true });
+  await expect(disclosure).toBeVisible();
+  await disclosure.click();
 
-  for (const target of [accounts, month, budget, future]) {
-    await expect(target.getByText("Explicar cifras", { exact: true })).toBeVisible();
-  }
+  await expect(brief.getByText("Disponible", { exact: true }).last()).toBeVisible();
+  await expect(brief.getByText(/Saldo agregado de las cuentas activas/i)).toBeVisible();
+  await expect(brief.getByText(/resumen financiero canónico del mes/i)).toBeVisible();
+  await expect(brief.getByText(/motor central de presupuestos/i)).toBeVisible();
+  await expect(brief.getByText(/motor de previsión/i)).toBeVisible();
 
-  await month.getByText("Explicar cifras", { exact: true }).click();
-  await expect(month.getByText("Ingresos y gastos", { exact: true })).toBeVisible();
-  await expect(month.getByText(/resumen financiero canónico/i)).toBeVisible();
-  await expect(month.getByRole("link", { name: "Ver ingresos" })).toHaveAttribute(
+  await expect(brief.getByRole("link", { name: "Ver cuentas" })).toHaveAttribute("href", "/accounts");
+  await expect(brief.getByRole("link", { name: "Ver ingresos del mes" })).toHaveAttribute(
     "href",
     "/transactions?dateFrom=2026-09-01&dateTo=2026-09-16&kind=income",
   );
-  await expect(month.getByRole("link", { name: "Ver gastos" })).toHaveAttribute(
+  await expect(brief.getByRole("link", { name: "Ver gastos del mes" })).toHaveAttribute(
     "href",
     "/transactions?dateFrom=2026-09-01&dateTo=2026-09-16&kind=expense",
   );
-  await expect(month.getByRole("link", { name: "Abrir Análisis" })).toHaveAttribute("href", "/analysis");
-
-  await accounts.getByText("Explicar cifras", { exact: true }).click();
-  await expect(accounts.getByText(/Se prioriza el saldo bancario explícito/i)).toBeVisible();
-  await expect(accounts.getByRole("link", { name: "Ver detalle de cuentas" })).toHaveAttribute("href", "/accounts");
-
-  await budget.getByText("Explicar cifras", { exact: true }).click();
-  await expect(budget.getByText(/motor central de presupuestos/i)).toBeVisible();
-  await expect(budget.getByRole("link", { name: "Ver presupuesto completo" })).toHaveAttribute("href", "/budgets");
-
-  await future.getByText("Explicar cifras", { exact: true }).click();
-  await expect(future.getByText(/motor de previsión/i)).toBeVisible();
-  await expect(future.getByRole("link", { name: "Ver previsión y partidas" })).toHaveAttribute("href", "/forecast");
+  await expect(brief.getByRole("link", { name: "Ver presupuestos" })).toHaveAttribute("href", "/budgets");
+  await expect(brief.getByRole("link", { name: "Ver previsión" })).toHaveAttribute("href", "/forecast");
 });
 
-test("Explicar cifras conserva privacidad y no introduce importes propios", async ({ page }) => {
+test("Explicar cifras respeta el modo discreto y no revela importes por su cuenta", async ({ page }) => {
   await mockDashboard(page);
   await page.addInitScript(() => localStorage.setItem("financial-app:home-amounts", "hidden"));
   await page.goto("/");
 
-  const month = panel(page, "Balance");
+  const brief = page.getByRole("region", { name: "Resumen inteligente" });
   await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
-  await month.getByText("Explicar cifras", { exact: true }).click();
-  await expect(month.getByText("••••,•• €", { exact: true }).first()).toBeVisible();
-  await expect(month.getByText(/1700|850,00|1\.700/)).toHaveCount(0);
-  await expect(month.getByText(/resumen financiero canónico/i)).toBeVisible();
+  await brief.getByText("Explicar cifras", { exact: true }).click();
+  await expect(brief.getByText("••••,•• €", { exact: true }).first()).toBeVisible();
+  await expect(brief.getByText(/Saldo agregado de las cuentas activas/i)).toBeVisible();
+  await expect(brief.getByText(/1\.700,00|850,00|2\.345,00/)).toHaveCount(0);
 });
 
-test("Explicar cifras es compacto, táctil y no desborda en móvil", async ({ page }) => {
+test("Explicar cifras mantiene objetivos táctiles y no desborda en móvil", async ({ page }) => {
   await mockDashboard(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const summaries = page.locator("details summary").filter({ hasText: "Explicar cifras" });
-  await expect(summaries).toHaveCount(4);
-  for (let index = 0; index < 4; index += 1) {
-    const box = await summaries.nth(index).boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-    await summaries.nth(index).click();
-  }
+  const brief = page.getByRole("region", { name: "Resumen inteligente" });
+  const summary = brief.locator("details summary").filter({ hasText: "Explicar cifras" });
+  await expect(summary).toHaveCount(1);
+  const summaryBox = await summary.boundingBox();
+  expect(summaryBox).not.toBeNull();
+  expect(summaryBox!.height).toBeGreaterThanOrEqual(44);
+  await summary.click();
 
-  const detailLinks = page.locator("details[open] a[href]");
+  const detailLinks = brief.locator("details[open] a[href]");
   const count = await detailLinks.count();
-  expect(count).toBeGreaterThan(0);
+  expect(count).toBeGreaterThanOrEqual(4);
   for (let index = 0; index < count; index += 1) {
     const box = await detailLinks.nth(index).boundingBox();
     expect(box).not.toBeNull();
@@ -256,11 +201,12 @@ test("Explicar cifras es compacto, táctil y no desborda en móvil", async ({ pa
 
 test("Explicar cifras es presentación pura y no crea una segunda fuente financiera", () => {
   const component = readFileSync(resolve(process.cwd(), "app/number-explanation.tsx"), "utf8");
-  const dashboard = readFileSync(resolve(process.cwd(), "app/dashboard-client.tsx"), "utf8");
+  const liveHome = readFileSync(resolve(process.cwd(), "app/home-smart-brief.tsx"), "utf8");
   expect(component).not.toContain("fetch(");
   expect(component).not.toContain("amountCents");
   expect(component).not.toContain("balanceCents");
-  expect(dashboard.match(/<NumberExplanation/g)?.length).toBe(4);
-  expect(dashboard).toContain("Proceden del resumen financiero canónico del periodo; no se recalculan en Inicio.");
-  expect(dashboard).toContain("Gasto real que el motor central de presupuestos atribuye al mes y a sus categorías.");
+  expect(liveHome.match(/<NumberExplanation/g)?.length).toBe(1);
+  expect(liveHome).toContain("Inicio no recalcula esas cifras.");
+  expect(liveHome).toContain("motor central de presupuestos");
+  expect(liveHome).toContain("motor de previsión");
 });
