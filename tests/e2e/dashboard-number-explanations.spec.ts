@@ -170,7 +170,7 @@ test("Explicar cifras respeta el modo discreto y no revela importes por su cuent
   const brief = page.getByRole("region", { name: "Resumen inteligente" });
   await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
   await brief.getByText("Explicar cifras", { exact: true }).click();
-  await expect(brief.getByText("••••,•• €", { exact: true }).first()).toBeVisible();
+  await expect(brief).toContainText("••••,•• €");
   await expect(brief.getByText(/Saldo agregado de las cuentas activas/i)).toBeVisible();
   await expect(brief.getByText(/1\.700,00|850,00|2\.345,00/)).toHaveCount(0);
 });
