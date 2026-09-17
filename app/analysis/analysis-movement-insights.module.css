@@ -1,6 +1,6 @@
 .shell {
   min-width: 0;
-  margin-top: var(--space-4);
+  margin-top: clamp(0.9rem, 1.5vw, 1.25rem);
 }
 
 .heading {
@@ -8,13 +8,13 @@
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: clamp(1rem, 1.5vw, 1.35rem);
-  border: 1px solid var(--color-border);
+  gap: 1rem;
+  padding: 0.95rem 1.05rem;
+  border: 1px solid rgba(137, 173, 255, 0.14);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at 95% 0%, rgba(43, 217, 247, 0.08), transparent 22rem),
-    linear-gradient(145deg, rgba(14, 25, 48, 0.72), rgba(7, 14, 29, 0.62));
+    radial-gradient(circle at 95% 0%, rgba(43, 217, 247, 0.055), transparent 20rem),
+    linear-gradient(145deg, rgba(14, 25, 48, 0.64), rgba(7, 14, 29, 0.54));
 }
 
 .heading > div { min-width: 0; }
@@ -24,43 +24,43 @@
   color: #94b2ff;
   font-size: 0.75rem;
   font-weight: 850;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.09em;
 }
 
 .heading h2 {
-  margin: 0.18rem 0 0;
-  font-size: clamp(1.05rem, 0.98rem + 0.35vw, 1.35rem);
+  margin: 0.14rem 0 0;
+  font-size: clamp(1rem, 0.96rem + 0.25vw, 1.24rem);
   line-height: 1.2;
-  letter-spacing: -0.02em;
+  letter-spacing: -0.018em;
 }
 
 .heading > div > span {
   display: block;
   max-width: 58rem;
-  margin-top: 0.35rem;
+  margin-top: 0.28rem;
   color: var(--color-text-muted);
-  font-size: var(--font-helper);
-  line-height: 1.45;
+  font-size: max(var(--font-helper), 0.76rem);
+  line-height: 1.4;
 }
 
 .heading > a {
-  min-height: 2.75rem;
+  min-height: 2.5rem;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid rgba(77, 141, 255, 0.22);
-  border-radius: var(--radius-sm);
-  background: rgba(77, 141, 255, 0.06);
+  padding: 0.42rem 0.7rem;
+  border: 1px solid rgba(77, 141, 255, 0.18);
+  border-radius: 0.55rem;
+  background: rgba(77, 141, 255, 0.045);
   color: #c8d9fb;
-  font-size: var(--font-helper);
+  font-size: max(var(--font-helper), 0.74rem);
   font-weight: 800;
   text-decoration: none;
 }
 
 .heading > a:hover {
-  border-color: rgba(77, 141, 255, 0.38);
-  background: rgba(77, 141, 255, 0.11);
+  border-color: rgba(77, 141, 255, 0.34);
+  background: rgba(77, 141, 255, 0.09);
   color: white;
 }
 
@@ -69,66 +69,76 @@
 .detailGrid {
   min-width: 0;
   display: grid;
-  gap: var(--space-4);
-  margin-top: var(--space-4);
+  gap: clamp(0.8rem, 1.2vw, 1.05rem);
+  margin-top: clamp(0.8rem, 1.2vw, 1.05rem);
+  align-items: start;
 }
 
 .heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
 .chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.detailGrid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); }
+.detailGrid { grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); }
 
 .chartCard,
 .detailCard,
 .accountStrip {
   min-width: 0;
-  border: 1px solid var(--color-border);
+  border: 1px solid rgba(137, 173, 255, 0.13);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(14, 25, 48, 0.66), rgba(7, 14, 29, 0.58));
-  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.12);
+  background: linear-gradient(145deg, rgba(14, 25, 48, 0.6), rgba(7, 14, 29, 0.52));
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
 .chartCard,
-.detailCard { padding: clamp(0.95rem, 1.4vw, 1.25rem); }
+.detailCard { padding: clamp(0.85rem, 1.15vw, 1.05rem); }
 
 .cardHeading {
   min-width: 0;
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: var(--space-3);
-  margin-bottom: var(--space-3);
+  gap: 0.75rem;
+  margin-bottom: 0.7rem;
+  padding-bottom: 0.58rem;
+  border-bottom: 1px solid rgba(137, 173, 255, 0.08);
 }
 
 .cardHeading > div { min-width: 0; }
 .cardHeading strong {
   display: block;
-  margin-top: 0.16rem;
-  font-size: var(--font-label);
-  line-height: 1.25;
+  margin-top: 0.12rem;
+  font-size: max(var(--font-label), 0.82rem);
+  line-height: 1.24;
 }
 .cardHeading small {
   flex: 0 0 auto;
   color: var(--color-text-muted);
-  font-size: var(--font-helper);
+  font-size: max(var(--font-helper), 0.72rem);
 }
 
 .svgViewport {
   min-width: 0;
-  overflow-x: auto;
-  scrollbar-width: thin;
+  width: 100%;
+  overflow: hidden;
 }
 
 .dailyChart,
 .scatterChart {
   display: block;
   width: 100%;
-  min-width: 34rem;
+  min-width: 0;
+  height: auto;
 }
-.dailyChart { min-height: 13rem; }
-.scatterChart { min-height: 14rem; }
+.dailyChart {
+  max-height: 16rem;
+  aspect-ratio: 3.45 / 1;
+}
+.scatterChart {
+  max-height: 17rem;
+  aspect-ratio: 2.08 / 1;
+}
 
 .gridLine line {
-  stroke: rgba(137, 173, 255, 0.09);
+  stroke: rgba(137, 173, 255, 0.085);
   stroke-width: 1;
 }
 .gridLine text,
@@ -137,11 +147,11 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.dailyArea { fill: rgba(77, 141, 255, 0.08); }
+.dailyArea { fill: rgba(77, 141, 255, 0.07); }
 .dailyLine {
   fill: none;
   stroke: var(--color-primary-bright);
-  stroke-width: 3;
+  stroke-width: 2.6;
   stroke-linecap: round;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
@@ -149,61 +159,62 @@
 .dailyPoint {
   fill: var(--color-bg-elevated);
   stroke: var(--color-cyan);
-  stroke-width: 2.5;
+  stroke-width: 2.2;
   vector-effect: non-scaling-stroke;
 }
 
 .weekdayChart {
-  min-height: 13rem;
+  min-height: 9.5rem;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   align-items: end;
-  gap: 0.35rem;
-  padding-top: var(--space-3);
+  gap: clamp(0.22rem, 0.6vw, 0.5rem);
+  padding-top: 0.4rem;
 }
 .weekdayColumn {
   min-width: 0;
   display: grid;
   justify-items: center;
-  gap: 0.25rem;
+  gap: 0.22rem;
 }
 .weekdayColumn > div {
-  width: min(2rem, 75%);
-  height: 8rem;
+  width: min(2.35rem, 78%);
+  height: 6.7rem;
   display: flex;
   align-items: flex-end;
   overflow: hidden;
-  border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.035);
+  border-radius: 0.55rem 0.55rem 0.25rem 0.25rem;
+  background: rgba(255, 255, 255, 0.03);
 }
 .weekdayColumn i {
   display: block;
   width: 100%;
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(43, 217, 247, 0.82), rgba(77, 141, 255, 0.46));
+  background: linear-gradient(180deg, rgba(43, 217, 247, 0.82), rgba(77, 141, 255, 0.48));
 }
-.weekdayColumn strong { font-size: 0.76rem; }
-.weekdayColumn small { color: var(--color-text-muted); font-size: 0.68rem; }
+.weekdayColumn strong { font-size: 0.78rem; }
+.weekdayColumn small { color: var(--color-text-muted); font-size: 0.7rem; }
 
-.bandChart { display: grid; gap: 0.55rem; }
+.bandChart { display: grid; gap: 0.46rem; }
 .bandRow {
   min-width: 0;
   display: grid;
-  grid-template-columns: 5.7rem minmax(0, 1fr) 2.4rem 6.6rem;
+  grid-template-columns: 5.8rem minmax(0, 1fr) 2.8rem 6.8rem;
   align-items: center;
-  gap: var(--space-2);
+  gap: 0.55rem;
+  min-height: 1.5rem;
 }
 .bandRow > span,
 .bandRow > strong,
-.bandRow > small { font-size: var(--font-helper); }
+.bandRow > small { font-size: max(var(--font-helper), 0.73rem); }
 .bandRow > span { color: var(--color-text-secondary); }
 .bandRow > strong { text-align: right; font-variant-numeric: tabular-nums; }
 .bandRow > small { color: var(--color-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
 .bandRow > div {
-  height: 0.56rem;
+  height: 0.46rem;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
 }
 .bandRow i {
   display: block;
@@ -213,56 +224,56 @@
 }
 
 .scatterAxis {
-  stroke: rgba(247, 249, 255, 0.2);
+  stroke: rgba(247, 249, 255, 0.18);
   stroke-width: 1;
 }
 .scatterPoint {
-  fill: rgba(77, 141, 255, 0.55);
-  stroke: rgba(201, 224, 255, 0.8);
-  stroke-width: 1.5;
+  fill: rgba(77, 141, 255, 0.5);
+  stroke: rgba(201, 224, 255, 0.82);
+  stroke-width: 1.35;
 }
 
 .accountStrip {
-  margin-top: var(--space-4);
-  padding: var(--space-3);
+  margin-top: clamp(0.8rem, 1.2vw, 1rem);
+  padding: 0.72rem;
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.5rem;
 }
 .accountStrip > div {
   min-width: 0;
-  padding: 0.75rem;
-  border-radius: var(--radius-md);
-  background: rgba(77, 141, 255, 0.045);
+  padding: 0.62rem 0.68rem;
+  border-radius: 0.62rem;
+  background: rgba(77, 141, 255, 0.035);
 }
 .accountStrip span,
 .accountStrip strong,
 .accountStrip small { display: block; }
 .accountStrip span { color: var(--color-text-muted); font-size: 0.72rem; }
-.accountStrip strong { margin-top: 0.15rem; font-size: 1rem; font-variant-numeric: tabular-nums; }
-.accountStrip small { margin-top: 0.16rem; color: var(--color-text-muted); font-size: 0.68rem; }
+.accountStrip strong { margin-top: 0.12rem; font-size: 0.96rem; font-variant-numeric: tabular-nums; }
+.accountStrip small { margin-top: 0.12rem; color: var(--color-text-muted); font-size: 0.7rem; }
 
 .conceptList,
 .transactionList { display: grid; }
 .conceptRow {
   min-width: 0;
   display: grid;
-  grid-template-columns: minmax(9rem, 0.8fr) minmax(7rem, 1fr) auto;
+  grid-template-columns: minmax(9rem, 0.82fr) minmax(7rem, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
-  padding: 0.62rem 0;
-  border-bottom: 1px solid rgba(137, 173, 255, 0.08);
+  gap: 0.72rem;
+  padding: 0.52rem 0;
+  border-bottom: 1px solid rgba(137, 173, 255, 0.075);
 }
 .conceptRow:last-child { border-bottom: 0; }
 .conceptRow > div:first-child { min-width: 0; }
-.conceptRow strong { display: block; overflow-wrap: anywhere; font-size: var(--font-label); }
-.conceptRow small { display: block; margin-top: 0.12rem; color: var(--color-text-muted); font-size: 0.68rem; }
-.conceptRow > b { font-size: var(--font-label); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.conceptRow strong { display: block; overflow-wrap: anywhere; font-size: max(var(--font-label), 0.8rem); }
+.conceptRow small { display: block; margin-top: 0.1rem; color: var(--color-text-muted); font-size: 0.7rem; }
+.conceptRow > b { font-size: max(var(--font-label), 0.8rem); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .conceptTrack {
-  height: 0.48rem;
+  height: 0.42rem;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.035);
 }
 .conceptTrack i {
   display: block;
@@ -273,13 +284,13 @@
 
 .transactionRow {
   min-width: 0;
-  min-height: 4.2rem;
+  min-height: 3.55rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
-  padding: 0.65rem 0;
-  border-bottom: 1px solid rgba(137, 173, 255, 0.08);
+  gap: 0.85rem;
+  padding: 0.52rem 0;
+  border-bottom: 1px solid rgba(137, 173, 255, 0.075);
   color: inherit;
   text-decoration: none;
 }
@@ -289,20 +300,21 @@
 .transactionMain strong,
 .transactionMain span,
 .transactionMain small { display: block; }
-.transactionMain strong { overflow-wrap: anywhere; font-size: var(--font-label); }
-.transactionMain span { margin-top: 0.12rem; color: var(--color-text-secondary); font-size: 0.7rem; line-height: 1.35; }
-.transactionMain small { margin-top: 0.08rem; color: var(--color-text-muted); font-size: 0.68rem; }
+.transactionMain strong { overflow-wrap: anywhere; font-size: max(var(--font-label), 0.8rem); }
+.transactionMain span { margin-top: 0.1rem; color: var(--color-text-secondary); font-size: 0.72rem; line-height: 1.32; }
+.transactionMain small { margin-top: 0.06rem; color: var(--color-text-muted); font-size: 0.7rem; }
 .transactionRow > b {
   flex: 0 0 auto;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
 }
 
 .empty {
   margin: 0;
+  padding: 0.55rem 0;
   color: var(--color-text-muted);
-  font-size: var(--font-helper);
-  line-height: 1.5;
+  font-size: max(var(--font-helper), 0.76rem);
+  line-height: 1.45;
 }
 
 @media (max-width: 72rem) {
@@ -312,12 +324,17 @@
 
 @media (max-width: 58rem) {
   .chartGrid { grid-template-columns: 1fr; }
+  .dailyChart { aspect-ratio: 3 / 1; }
+  .scatterChart { aspect-ratio: 2.2 / 1; }
 }
 
 @media (max-width: 48rem) {
   .heading { display: grid; align-items: stretch; }
   .heading > a { width: fit-content; }
-  .bandRow { grid-template-columns: 5.4rem minmax(0, 1fr) 2.2rem; }
+  .dailyChart,
+  .scatterChart { max-height: 15rem; }
+  .gridLine text { display: none; }
+  .bandRow { grid-template-columns: 5.4rem minmax(0, 1fr) 2.4rem; }
   .bandRow > small { grid-column: 2 / -1; text-align: left; }
   .conceptRow { grid-template-columns: 1fr auto; }
   .conceptTrack { grid-column: 1 / -1; grid-row: 2; }
@@ -326,13 +343,28 @@
 @media (max-width: 30rem) {
   .chartCard,
   .detailCard,
-  .heading { padding: 0.9rem; border-radius: var(--radius-md); }
+  .heading {
+    padding: 0.8rem;
+    border-radius: var(--radius-md);
+  }
   .heading > a { width: 100%; justify-content: center; }
-  .weekdayChart { gap: 0.2rem; }
-  .weekdayColumn > div { width: 72%; height: 6.6rem; }
-  .bandRow { grid-template-columns: 1fr auto; }
+  .cardHeading { display: grid; gap: 0.3rem; }
+  .weekdayChart { min-height: 8.4rem; gap: 0.18rem; }
+  .weekdayColumn > div { width: 76%; height: 5.75rem; }
+  .dailyChart { aspect-ratio: 1.7 / 1; }
+  .scatterChart { aspect-ratio: 1.65 / 1; }
+  .bandRow { grid-template-columns: 1fr auto; gap: 0.38rem 0.6rem; }
   .bandRow > div { grid-column: 1 / -1; grid-row: 2; }
   .bandRow > small { grid-column: 1 / -1; grid-row: 3; }
   .transactionRow { align-items: flex-start; }
-  .transactionRow > b { font-size: 0.86rem; }
+  .transactionRow > b { font-size: 0.84rem; }
+}
+
+@media (max-width: 24rem) {
+  .weekdayColumn small { display: none; }
+  .accountStrip { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heading > a { transition: none; }
 }
