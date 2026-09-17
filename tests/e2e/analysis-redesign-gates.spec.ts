@@ -214,7 +214,10 @@ for (const width of [390, 1440] as const) {
     await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
-    await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+    const heatmap = page.getByRole("img", { name: "Mapa de calor diario del gasto" });
+    const scatter = page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" });
+    await expect(heatmap).toBeVisible();
+    await expect(scatter).toBeVisible();
     await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toBeVisible();
 
     const dailyChart = page.getByRole("img", { name: "Evolución diaria del gasto del periodo" });
@@ -222,6 +225,33 @@ for (const width of [390, 1440] as const) {
     const dailyBox = await dailyChart.boundingBox();
     expect(dailyBox).not.toBeNull();
     expect(dailyBox!.height).toBeLessThan(300);
+
+    const heatmapUsage = await heatmap.evaluate((svg) => {
+      const cells = Array.from(svg.querySelectorAll("rect"));
+      if (cells.length < 2) return 1;
+      const svgBox = svg.getBoundingClientRect();
+      const boxes = cells.map((cell) => cell.getBoundingClientRect());
+      const left = Math.min(...boxes.map((box) => box.left));
+      const right = Math.max(...boxes.map((box) => box.right));
+      return svgBox.width > 0 ? (right - left) / svgBox.width : 0;
+    });
+    expect(heatmapUsage).toBeGreaterThan(0.55);
+
+    const scatterLabelsClear = await scatter.evaluate((svg) => {
+      const labels = Array.from(svg.querySelectorAll("text"));
+      const caption = labels.find((node) => node.textContent?.includes("Mayor importe"));
+      const values = labels.filter((node) => node.textContent?.includes("€"));
+      if (!caption || values.length === 0) return false;
+      const captionBox = caption.getBoundingClientRect();
+      return values.every((value) => {
+        const valueBox = value.getBoundingClientRect();
+        return captionBox.right <= valueBox.left
+          || valueBox.right <= captionBox.left
+          || captionBox.bottom <= valueBox.top
+          || valueBox.bottom <= captionBox.top;
+      });
+    });
+    expect(scatterLabelsClear).toBe(true);
 
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1)).toBe(true);
 
