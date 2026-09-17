@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import AppShell from "../app-shell";
+import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadAnalysisSnapshot,
   resolveAnalysisSelection,
@@ -11,6 +12,7 @@ import {
   analysisSelectionFromSearchParams,
   type AnalysisSearchParams,
 } from "../../src/application/analysis/analysis-query-state";
+import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
@@ -65,11 +67,20 @@ async function AnalysisData({
     });
   }
 
+  const resolvedSelection = initialSnapshot?.selection ?? resolveAnalysisSelection(fallbackSelection);
+  const contextLinks = analysisModuleLinks(
+    resolvedSelection,
+    initialSnapshot?.forecast?.period ?? null,
+  );
+
   return (
-    <AnalysisPageClient
-      initialSnapshot={initialSnapshot}
-      fallbackSelection={fallbackSelection}
-    />
+    <>
+      <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" />
+      <AnalysisPageClient
+        initialSnapshot={initialSnapshot}
+        fallbackSelection={fallbackSelection}
+      />
+    </>
   );
 }
 

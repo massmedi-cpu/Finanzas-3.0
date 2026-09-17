@@ -1,0 +1,128 @@
+.shell {
+  width: min(var(--content-max), 100%);
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: clamp(1rem, 2.4vw, 2.5rem);
+}
+
+.topBar {
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(10, 17, 34, 0.72);
+}
+
+.brandMark,
+.navLine,
+.navLineShort,
+.heading,
+.card,
+.panel {
+  position: relative;
+  overflow: hidden;
+  background: rgba(137, 173, 255, 0.09);
+}
+
+.brandMark::after,
+.navLine::after,
+.navLineShort::after,
+.heading::after,
+.card::after,
+.panel::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(137, 173, 255, 0.12), transparent);
+  animation: route-loading-sheen 1.2s ease-in-out infinite;
+}
+
+.brandMark {
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  border-radius: 0.65rem;
+}
+
+.navLine {
+  width: 7rem;
+  height: 0.8rem;
+  border-radius: var(--radius-pill);
+}
+
+.navLineShort {
+  width: 4.5rem;
+  height: 0.8rem;
+  border-radius: var(--radius-pill);
+}
+
+.content {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.heading {
+  width: min(15rem, 52vw);
+  height: 1.45rem;
+  border-radius: var(--radius-pill);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.card {
+  min-height: 6rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.panel {
+  min-height: clamp(12rem, 32vh, 20rem);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-panel);
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@keyframes route-loading-sheen {
+  to { transform: translateX(100%); }
+}
+
+@media (max-width: 48rem) {
+  .summaryGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    min-height: 4.5rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brandMark::after,
+  .navLine::after,
+  .navLineShort::after,
+  .heading::after,
+  .card::after,
+  .panel::after {
+    animation: none;
+  }
+}

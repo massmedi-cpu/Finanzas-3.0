@@ -29,8 +29,10 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
 
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
   const primaryNav = page.getByRole("navigation", { name: "Navegación principal" });
-  await expect(primaryNav).toBeVisible();
-  await expect(primaryNav.getByRole("link", { name: "Inicio", exact: true })).toHaveAttribute("aria-current", "page");
+  const mobileNav = page.getByRole("navigation", { name: "Navegación móvil" });
+  const activeNav = await primaryNav.isVisible() ? primaryNav : mobileNav;
+  await expect(activeNav).toBeVisible();
+  await expect(activeNav.getByRole("link", { name: "Inicio", exact: true })).toHaveAttribute("aria-current", "page");
 
   const summary = page.getByRole("region", { name: "Resumen financiero principal" });
   await expect(summary).toBeVisible();

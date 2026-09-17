@@ -1,0 +1,100 @@
+.explanation {
+  margin-top: .75rem;
+  border-top: 1px solid rgba(137, 173, 255, .1);
+  color: var(--color-text-secondary);
+}
+
+.explanation summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  cursor: pointer;
+  list-style: none;
+  color: #a9c1ff;
+  font-size: .8rem;
+  font-weight: 750;
+  user-select: none;
+}
+
+.explanation summary::-webkit-details-marker { display: none; }
+.explanation summary::before {
+  content: "+";
+  width: 1.25rem;
+  height: 1.25rem;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid rgba(137, 173, 255, .22);
+  border-radius: 50%;
+  font-size: .9rem;
+  line-height: 1;
+}
+.explanation[open] summary::before { content: "−"; }
+.explanation summary:focus-visible { outline: 2px solid #8fb4ff; outline-offset: 2px; border-radius: .35rem; }
+
+.body {
+  padding: 0 0 .75rem;
+}
+
+.body dl {
+  margin: 0;
+  display: grid;
+  gap: .45rem;
+}
+
+.body dl > div {
+  display: grid;
+  grid-template-columns: minmax(6rem, .32fr) minmax(0, 1fr);
+  gap: .65rem;
+  padding: .48rem .55rem;
+  border-radius: .6rem;
+  background: rgba(137, 173, 255, .045);
+}
+
+.body dt {
+  color: #b7c9ed;
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.body dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: .78rem;
+  line-height: 1.4;
+}
+
+.links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+  margin-top: .55rem;
+}
+
+.links a {
+  min-height: 2.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: .5rem .7rem;
+  border: 1px solid rgba(77, 141, 255, .24);
+  border-radius: .65rem;
+  background: rgba(77, 141, 255, .07);
+  color: var(--color-text);
+  font-size: .78rem;
+  font-weight: 720;
+  text-decoration: none;
+}
+
+.links a:hover,
+.links a:focus-visible {
+  border-color: rgba(77, 141, 255, .48);
+  background: rgba(77, 141, 255, .13);
+  outline: none;
+}
+
+@media (max-width: 36rem) {
+  .body dl > div { grid-template-columns: 1fr; gap: .15rem; }
+  .links a { flex: 1 1 100%; }
+}

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { FinancialBarChart } from "../src/design/financial-bar-chart";
+import HomeSmartBrief from "./home-smart-brief";
 import styles from "./inicio-overview.module.css";
 
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
@@ -515,6 +516,26 @@ export default function InicioOverview() {
           <Link className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
         </div>
       </section>
+
+      <HomeSmartBrief
+        month={today.slice(0, 7)}
+        loading={primaryLoading || secondaryLoading}
+        transactionTotalCount={transactions?.totalCount ?? null}
+        latestTransactionId={transactions?.rows?.[0]?.id ?? null}
+        latestTransactionDate={latestDataDate}
+        incomeCents={financial?.period.incomeCents ?? null}
+        expenseCents={financial?.period.expenseCents ?? null}
+        operatingNetCents={financial?.period.operatingNetCents ?? null}
+        activeBalanceCents={financial?.balances.activeBalanceCents ?? null}
+        budgetProgressBps={data.budgets?.total.progressBps ?? null}
+        budgetStatus={data.budgets?.total.status ?? null}
+        overBudgetCount={data.budgets ? overBudgetCount : null}
+        projectedNetCents={data.forecast?.summary.projectedNetCents ?? null}
+        projectedClosingBalanceCents={data.forecast?.summary.projectedClosingBalanceCents ?? null}
+        plannedItems={data.forecast?.summary.plannedItems ?? null}
+        syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
+        displayMoney={displayMoney}
+      />
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
         <article className={styles.decisionCard}>

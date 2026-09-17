@@ -98,6 +98,7 @@ type Filters = {
   categoryId: string;
   merchantId: string;
   kind: string;
+  reviewState: string;
   duplicateState: string;
   dateFrom: string;
   dateTo: string;
@@ -133,6 +134,7 @@ const EMPTY_FILTERS: Filters = {
   categoryId: "",
   merchantId: "",
   kind: "",
+  reviewState: "",
   duplicateState: "",
   dateFrom: "",
   dateTo: "",
@@ -146,6 +148,12 @@ const KIND_LABELS: Record<TransactionKind, string> = {
   transfer: "Transferencia",
   refund: "Devolución",
   adjustment: "Ajuste",
+};
+
+const REVIEW_STATE_LABELS: Record<ReviewState, string> = {
+  confirmed: "Confirmado",
+  pending: "Pendiente",
+  needs_review: "Por revisar",
 };
 
 const DUPLICATE_LABELS: Record<DuplicateState, string> = {
@@ -194,6 +202,7 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["accountId", "accountId"],
     ["merchantId", "merchantId"],
     ["kind", "kind"],
+    ["reviewState", "reviewState"],
     ["duplicateState", "duplicateState"],
     ["dateFrom", "dateFrom"],
     ["dateTo", "dateTo"],
@@ -372,6 +381,7 @@ export default function TransactionsClient() {
     const categoryId = params.get("categoryId");
     const merchantId = params.get("merchantId");
     const kind = params.get("kind");
+    const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
@@ -384,6 +394,7 @@ export default function TransactionsClient() {
       categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
       merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
       kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
+      reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_STATE_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
       dateFrom: safeDateRange ? safeDateFrom : "",
       dateTo: safeDateRange ? safeDateTo : "",
@@ -660,6 +671,13 @@ async function saveEdit(row: TransactionRow) {
           <select value={draftFilters.kind} onChange={(event) => updateFilter("kind", event.target.value)}>
             <option value="">Todos</option>
             {(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Revisión</span>
+          <select value={draftFilters.reviewState} onChange={(event) => updateFilter("reviewState", event.target.value)}>
+            <option value="">Todas</option>
+            {(Object.entries(REVIEW_STATE_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
         <label>

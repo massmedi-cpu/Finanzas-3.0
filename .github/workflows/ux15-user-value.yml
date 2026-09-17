@@ -1,0 +1,90 @@
+name: UX 15 User Value
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/**"
+      - "src/**"
+      - "tests/e2e/**"
+      - ".github/workflows/ux15-user-value.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  user-value-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    env:
+      VALIDATION_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.VALIDATION_SHA }}
+
+      - name: Verify exact checkout
+        run: test "$(git rev-parse HEAD)" = "$VALIDATION_SHA"
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Run current user-value regression suite
+        run: >-
+          npm run test:e2e --
+          tests/e2e/global-search.spec.ts
+          tests/e2e/transactions-ux-comfort.spec.ts
+          tests/e2e/transactions-deeplink.spec.ts
+          tests/e2e/review-action-center.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/module-context-navigation.spec.ts
+          tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/mobile-direct-navigation.spec.ts
+          tests/e2e/mobile-personalization.spec.ts
+          tests/e2e/pwa-installability.spec.ts
+          tests/e2e/actionable-empty-states.spec.ts
+          tests/e2e/safe-reversible-edits.spec.ts
+          tests/e2e/perceived-speed.spec.ts
+          tests/e2e/personal-intelligence.spec.ts
+          tests/e2e/inicio-utility.spec.ts
+          tests/e2e/inicio-visual-restraint.spec.ts
+          tests/e2e/premium-dashboard-visual.spec.ts
+          tests/e2e/cr007-home-initial-paint.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/dashboard-performance-contract.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux15-user-value-${{ env.VALIDATION_SHA }}
+          path: playwright-report/
+          retention-days: 7

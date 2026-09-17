@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { FinancialBarChart } from "../src/design/financial-bar-chart";
 import { ProductIcon as Icon } from "../src/design/product-icons";
+import NumberExplanation from "./number-explanation";
 import styles from "./dashboard.module.css";
 
 type TransactionKind = "income" | "expense" | "transfer" | "refund" | "adjustment";
@@ -701,6 +702,14 @@ export default function DashboardClient() {
                   bancario explícito.
                 </p>
               )}
+              <NumberExplanation
+                rows={[
+                  { label: "Fecha", text: formatDate(financial.balances.asOfDate) },
+                  { label: "Origen", text: allBalancesExplicit ? "Saldos explícitos confirmados por el banco." : "Se prioriza el saldo bancario explícito; sólo se reconstruye una cuenta cuando no existe ese dato." },
+                  { label: "Total", text: "Suma de los saldos de las cuentas activas; las cuentas archivadas no forman parte del total." },
+                ]}
+                links={[{ href: "/accounts", label: "Ver detalle de cuentas" }]}
+              />
             </>
           ) : financialLoading ? (
             <SectionLoading />
@@ -753,6 +762,20 @@ export default function DashboardClient() {
                 Las transferencias internas ({displayMoney(financial.period.transfers.grossCents)})
                 no computan como ahorro.
               </p>
+              <NumberExplanation
+                rows={[
+                  { label: "Periodo", text: `${formatDate(financial.period.dateFrom)} – ${formatDate(financial.period.dateTo)}` },
+                  { label: "Ingresos y gastos", text: "Proceden del resumen financiero canónico del periodo; no se recalculan en Inicio." },
+                  { label: "Balance neto", text: "Resultado operativo central del periodo. Las transferencias internas se excluyen del ahorro." },
+                ]}
+                links={[
+                  ...(financial.period.dateFrom && financial.period.dateTo ? [
+                    { href: `/transactions?dateFrom=${financial.period.dateFrom}&dateTo=${financial.period.dateTo}&kind=income`, label: "Ver ingresos" },
+                    { href: `/transactions?dateFrom=${financial.period.dateFrom}&dateTo=${financial.period.dateTo}&kind=expense`, label: "Ver gastos" },
+                  ] : []),
+                  { href: "/analysis", label: "Abrir Análisis" },
+                ]}
+              />
             </>
           ) : financialLoading ? (
             <SectionLoading />
@@ -913,6 +936,14 @@ export default function DashboardClient() {
                   <p className={styles.empty}>Sin categorías de gasto este mes.</p>
                 )}
               </div>
+              <NumberExplanation
+                rows={[
+                  { label: "Periodo", text: monthLabel(budgets.month) },
+                  { label: "Gastado", text: "Gasto real que el motor central de presupuestos atribuye al mes y a sus categorías." },
+                  { label: "Disponible", text: "Límite efectivo del presupuesto menos el gasto real contabilizado por ese mismo motor." },
+                ]}
+                links={[{ href: "/budgets", label: "Ver presupuesto completo" }]}
+              />
             </>
           ) : budgetLoading ? (
             <SectionLoading />
@@ -984,6 +1015,14 @@ export default function DashboardClient() {
                   </p>
                 )}
               </div>
+              <NumberExplanation
+                rows={[
+                  { label: "Periodo", text: `${formatDate(forecast.period.dateFrom)} – ${formatDate(forecast.period.dateTo)}` },
+                  { label: "Origen", text: "Elementos que el motor de previsión mantiene como planificados y que afectan a la proyección." },
+                  { label: "Saldo final", text: "Saldo de apertura del motor de previsión más su variación neta proyectada." },
+                ]}
+                links={[{ href: "/forecast", label: "Ver previsión y partidas" }]}
+              />
             </>
           ) : forecastLoading ? (
             <SectionLoading />
