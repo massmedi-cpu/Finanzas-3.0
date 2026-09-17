@@ -64,6 +64,7 @@ jobs:
           tests/e2e/dashboard-number-explanations.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/module-context-navigation.spec.ts
+          tests/e2e/document-ocr-natural-review.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-visual-restraint.spec.ts
           tests/e2e/premium-dashboard-visual.spec.ts
