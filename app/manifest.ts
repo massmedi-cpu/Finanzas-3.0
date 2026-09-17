@@ -14,6 +14,12 @@ export default function manifest(): MetadataRoute.Manifest {
     theme_color: "#050914",
     lang: "es-ES",
     categories: ["finance", "productivity"],
+    prefer_related_applications: false,
+    shortcuts: [
+      { name: "Movimientos", short_name: "Movimientos", url: "/transactions" },
+      { name: "Análisis", short_name: "Análisis", url: "/analysis" },
+      { name: "Para revisar", short_name: "Revisar", url: "/review" },
+    ],
     icons: [
       {
         src: "/pwa-icon-192.svg",
