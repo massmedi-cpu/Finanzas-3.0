@@ -186,7 +186,7 @@ export default function GlobalSearch() {
                 items.map((item, index) => {
                   const itemDate = formatDate(item.date);
                   return (
-                    <Link
+                    <Link prefetch={false}
                       id={`${inputId}-result-${index}`}
                       key={item.id}
                       href={item.href}

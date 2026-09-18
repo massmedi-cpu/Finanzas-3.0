@@ -513,7 +513,7 @@ export default function InicioOverview() {
           <button type="button" className={styles.primaryAction} onClick={() => void runSync()} disabled={syncing}>
             {syncing ? "Actualizando…" : syncFailed ? "Reintentar actualización" : "Actualizar datos"}
           </button>
-          <Link className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
+          <Link prefetch={false} className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
         </div>
       </section>
 
@@ -580,7 +580,7 @@ export default function InicioOverview() {
               ? `Media de ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes completo" : "meses completos"}`
               : "Histórico pendiente"}
           </small>
-          <Link className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
+          <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
         </article>
       </section>
 
@@ -593,7 +593,7 @@ export default function InicioOverview() {
             {attentionItems.map((item) => (
               <article key={`${item.title}-${item.href}`} className={`${styles.attentionItem} ${styles[item.tone]}`}>
                 <div><strong>{item.title}</strong><p>{item.detail}</p></div>
-                <Link href={item.href}>{item.action}</Link>
+                <Link prefetch={false} href={item.href}>{item.action}</Link>
               </article>
             ))}
           </div>
@@ -604,7 +604,7 @@ export default function InicioOverview() {
         <article className={`${styles.panel} ${styles.evolutionPanel}`}>
           <div className={styles.sectionHeading}>
             <div><span>CASH FLOW</span><h2>Últimos 12 meses</h2></div>
-            <Link className={styles.panelAction} href="/analysis">Abrir análisis</Link>
+            <Link prefetch={false} className={styles.panelAction} href="/analysis">Abrir análisis</Link>
           </div>
           {completedComparison && (
             <div className={styles.comparison}>
@@ -640,7 +640,7 @@ export default function InicioOverview() {
         <article className={`${styles.panel} ${styles.upcomingPanel}`}>
           <div className={styles.sectionHeading}>
             <div><span>PRÓXIMOS DÍAS</span><h2>Qué viene después</h2></div>
-            <Link className={styles.panelAction} href="/forecast">Ver previsión</Link>
+            <Link prefetch={false} className={styles.panelAction} href="/forecast">Ver previsión</Link>
           </div>
           {data.forecast ? (
             upcomingItems.length > 0 ? (
@@ -665,7 +665,7 @@ export default function InicioOverview() {
         <article className={styles.panel}>
           <div className={styles.sectionHeading}>
             <div><span>CUENTAS</span><h2>Disponible por cuenta</h2></div>
-            <Link className={styles.panelAction} href="/accounts">Ver cuentas</Link>
+            <Link prefetch={false} className={styles.panelAction} href="/accounts">Ver cuentas</Link>
           </div>
           {activeAccounts.length > 0 ? (
             <ul className={styles.compactList}>
@@ -689,7 +689,7 @@ export default function InicioOverview() {
         <article className={styles.panel}>
           <div className={styles.sectionHeading}>
             <div><span>ESTE MES</span><h2>Gasto y presupuesto</h2></div>
-            <Link className={styles.panelAction} href="/budgets">Ver presupuestos</Link>
+            <Link prefetch={false} className={styles.panelAction} href="/budgets">Ver presupuestos</Link>
           </div>
           {data.budgets ? (
             <>
@@ -723,7 +723,7 @@ export default function InicioOverview() {
         <article className={`${styles.panel} ${styles.activityPanel}`}>
           <div className={styles.sectionHeading}>
             <div><span>ACTIVIDAD</span><h2>Últimos movimientos</h2></div>
-            <Link className={styles.panelAction} href="/transactions">Ver todos</Link>
+            <Link prefetch={false} className={styles.panelAction} href="/transactions">Ver todos</Link>
           </div>
           {transactions?.rows.length ? (
             <ul className={styles.activityList}>

@@ -61,7 +61,7 @@ export default function MobileNavigation() {
             {secondary.map((item) => {
               const active = isNavigationActive(pathname, item.href);
               return (
-                <Link
+                <Link prefetch={false}
                   key={item.href}
                   href={item.href}
                   className={`${styles.mobileMoreLink}${active ? ` ${styles.mobileActive}` : ""}`}
@@ -95,7 +95,7 @@ export default function MobileNavigation() {
         {primary.map((item) => {
           const active = isNavigationActive(pathname, item.href);
           return (
-            <Link
+            <Link prefetch={false}
               key={item.href}
               href={item.href}
               className={`${styles.mobileDockLink}${active ? ` ${styles.mobileActive}` : ""}`}

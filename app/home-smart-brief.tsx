@@ -378,7 +378,7 @@ export default function HomeSmartBrief({
 
       <div className={styles.currentGrid}>
         {currentItems.map((item) => (
-          <Link key={`${item.label}-${item.href}`} href={item.href} className={`${styles.currentItem} ${styles[item.tone]}`}>
+          <Link prefetch={false} key={`${item.label}-${item.href}`} href={item.href} className={`${styles.currentItem} ${styles[item.tone]}`}>
             <span>{item.label}</span>
             <strong>{item.title}</strong>
             <small>{item.detail}</small>
@@ -420,7 +420,7 @@ export default function HomeSmartBrief({
         ) : changes.length > 0 ? (
           <div className={styles.changeGrid}>
             {changes.map((item) => (
-              <Link key={`${item.title}-${item.href}`} href={item.href} className={`${styles.changeItem} ${styles[item.tone]}`}>
+              <Link prefetch={false} key={`${item.title}-${item.href}`} href={item.href} className={`${styles.changeItem} ${styles[item.tone]}`}>
                 <strong>{item.title}</strong>
                 <small>{item.detail}</small>
               </Link>
