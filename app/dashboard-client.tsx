@@ -563,7 +563,7 @@ export default function DashboardClient() {
           <p className={styles.eyebrow}>Inicio</p>
           <h1>No se ha podido cargar Inicio</h1>
           <p>La información necesaria no está disponible ahora mismo.</p>
-          <Link href="/accounts" className={styles.primaryLink}>
+          <Link prefetch={false} href="/accounts" className={styles.primaryLink}>
             Abrir Cuentas
           </Link>
         </section>
@@ -653,7 +653,7 @@ export default function DashboardClient() {
                 }`}
               >
                 <span>{item.text}</span>
-                <Link href={item.href}>{item.linkLabel}</Link>
+                <Link prefetch={false} href={item.href}>{item.linkLabel}</Link>
               </div>
             ))}
           </div>
@@ -670,7 +670,7 @@ export default function DashboardClient() {
               <span className={styles.kicker}>Panorama</span>
               <h2>Tus cuentas</h2>
             </div>
-            <Link href="/accounts" className={styles.iconLink} aria-label="Abrir Cuentas">
+            <Link prefetch={false} href="/accounts" className={styles.iconLink} aria-label="Abrir Cuentas">
               <Icon name="arrow" />
             </Link>
           </div>
@@ -859,7 +859,7 @@ export default function DashboardClient() {
               </span>
               <h2>Gasto y presupuesto</h2>
             </div>
-            <Link
+            <Link prefetch={false}
               href="/budgets"
               className={styles.iconLink}
               aria-label="Abrir Presupuestos"
@@ -964,7 +964,7 @@ export default function DashboardClient() {
               <span className={styles.kicker}>Próximos 30 días</span>
               <h2>Próximos días</h2>
             </div>
-            <Link href="/forecast" className={styles.iconLink} aria-label="Abrir Previsión">
+            <Link prefetch={false} href="/forecast" className={styles.iconLink} aria-label="Abrir Previsión">
               <Icon name="arrow" />
             </Link>
           </div>
@@ -1043,7 +1043,7 @@ export default function DashboardClient() {
               <span className={styles.kicker}>Últimos movimientos</span>
               <h2>Actividad reciente</h2>
             </div>
-            <Link
+            <Link prefetch={false}
               href="/transactions"
               className={styles.iconLink}
               aria-label="Abrir Movimientos"

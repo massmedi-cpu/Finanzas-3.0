@@ -22,6 +22,7 @@ export default function ConfigurationAreaNav() {
           const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
           return (
             <Link
+              prefetch={false}
               key={item.href}
               href={item.href}
               className={`${styles.link} ${active ? styles.active : ""}`}

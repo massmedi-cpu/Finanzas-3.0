@@ -305,7 +305,7 @@ function BudgetCard({
               }}
             />
           </div>
-          <Link
+          <Link prefetch={false}
             href={causalHref}
             aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
             style={{ width: "fit-content", fontWeight: 700, textDecoration: "none" }}
@@ -504,7 +504,7 @@ export default function BudgetsClient() {
     <main className={styles.shell}>
       <section className={styles.hero} aria-labelledby="budget-title">
         <div className={styles.heroCopy}>
-          <Link className={styles.backLink} href="/">← Inicio</Link>
+          <Link prefetch={false} className={styles.backLink} href="/">← Inicio</Link>
           <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
@@ -628,7 +628,7 @@ export default function BudgetsClient() {
                         <p>
                           El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí con su recomendación y consumo real.
                         </p>
-                        <Link href="/configuration">Abrir Configuración</Link>
+                        <Link prefetch={false} href="/configuration">Abrir Configuración</Link>
                       </div>
                     ) : null}
                   </div>

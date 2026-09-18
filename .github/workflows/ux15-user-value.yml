@@ -71,6 +71,7 @@ jobs:
           tests/e2e/actionable-empty-states.spec.ts
           tests/e2e/safe-reversible-edits.spec.ts
           tests/e2e/perceived-speed.spec.ts
+          tests/e2e/navigation-demand-loading-contract.spec.ts
           tests/e2e/personal-intelligence.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-visual-restraint.spec.ts

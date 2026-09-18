@@ -526,7 +526,7 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
           const suspectedDuplicate = row.duplicateState === "suspected";
 
           return (
-            <Link key={row.transactionId} href={transactionHref(snapshot, row)} className={styles.transactionRow}>
+            <Link prefetch={false} key={row.transactionId} href={transactionHref(snapshot, row)} className={styles.transactionRow}>
               <div className={styles.transactionMain}>
                 <strong>{row.conceptNormalized}</strong>
                 <span>{formatDate(row.bankDate)} · {row.merchantName} · {row.categoryName}</span>
@@ -563,7 +563,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
           <h2 id="movement-insights-heading">Patrones que no se ven en un simple total</h2>
           <span>Las gráficas usan los mismos movimientos elegibles del periodo y conservan filtros, exclusiones y correcciones.</span>
         </div>
-        <Link href={periodHref(snapshot)}>Ver todos los movimientos</Link>
+        <Link prefetch={false} href={periodHref(snapshot)}>Ver todos los movimientos</Link>
       </div>
 
       <div className={styles.heroGrid}>

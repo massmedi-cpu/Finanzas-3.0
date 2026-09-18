@@ -32,7 +32,7 @@ export default function NumberExplanation({
         </dl>
         {links.length > 0 && (
           <nav className={styles.links} aria-label="Abrir detalle de las cifras">
-            {links.map((link) => <Link key={`${link.href}:${link.label}`} href={link.href}>{link.label}</Link>)}
+            {links.map((link) => <Link prefetch={false} key={`${link.href}:${link.label}`} href={link.href}>{link.label}</Link>)}
           </nav>
         )}
       </div>

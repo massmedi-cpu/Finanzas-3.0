@@ -29,7 +29,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
             {navigationItems.map((item) => {
               const active = isNavigationActive(pathname, item.href);
               return (
-                <Link
+                <Link prefetch={false}
                   key={item.href}
                   href={item.href}
                   className={`${styles.link}${active ? ` ${styles.active}` : ""}`}

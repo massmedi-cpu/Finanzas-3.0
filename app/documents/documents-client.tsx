@@ -453,7 +453,7 @@ export function DocumentsClient() {
     <main className={styles.shell}>
       <section className={styles.hero}>
         <div>
-          <Link href="/" className={styles.backLink}>← Inicio</Link>
+          <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
           <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
           <p className={styles.heroText}>Guarda facturas y tickets, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>

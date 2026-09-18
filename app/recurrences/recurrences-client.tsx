@@ -198,7 +198,7 @@ export default function RecurrencesClient() {
     <main className={styles.shell}>
       <section className={styles.hero} aria-labelledby="recurrences-title">
         <div>
-          <Link href="/" className={styles.backLink}>← Inicio</Link>
+          <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
           <p className={styles.eyebrow}>RECURRENTES</p>
           <h1 id="recurrences-title">Patrones que se repiten, sin adivinar</h1>
           <p className={styles.heroText}>
