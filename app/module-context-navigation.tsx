@@ -17,7 +17,7 @@ export default function ModuleContextNavigation({
       </div>
       <div className={styles.links}>
         {links.map((item) => (
-          <Link className={styles.link} href={item.href} key={`${item.label}-${item.href}`}>
+          <Link prefetch={false} className={styles.link} href={item.href} key={`${item.label}-${item.href}`}>
             <strong>{item.label}</strong>
             <span>{item.detail}</span>
           </Link>

@@ -8,6 +8,9 @@ const demandLoadedLinkFiles = [
   "app/home-smart-brief.tsx",
   "app/number-explanation.tsx",
   "app/global-search.tsx",
+  "app/module-context-navigation.tsx",
+  "app/transactions/transactions-quick-nav.tsx",
+  "app/configuration/configuration-area-nav.tsx",
 ] as const;
 
 test("PERF · navegación visible no precarga rutas financieras dinámicas", () => {
