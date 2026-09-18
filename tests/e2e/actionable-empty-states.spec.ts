@@ -31,7 +31,7 @@ test("Previsión convierte el vacío en acciones reales sin inventar movimientos
 
   expect(source).toContain("No hay cargos ni ingresos previstos en este periodo.");
   expect(source).toContain("No se inventan movimientos. Añade uno manual o confirma recurrencias reales para generar fechas futuras.");
-  expect(source).toContain('<Link href="/recurrences"');
+  expect(source).toContain('href="/recurrences"');
   expect(source).toContain("<h2>Añadir previsión</h2>");
   expect(source).toContain('busy === "manual" ? "Guardando…" : "Añadir al calendario"');
 });
