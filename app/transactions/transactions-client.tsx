@@ -624,7 +624,7 @@ async function saveEdit(row: TransactionRow) {
     <main className={styles.shell}>
       <header className={styles.hero}>
         <div className={styles.heroCopy}>
-          <Link className={styles.backLink} href="/">← Financial App</Link>
+          <Link prefetch={false} className={styles.backLink} href="/">← Financial App</Link>
           <p className={styles.eyebrow}>FINANCIAL APP · MOVIMIENTOS</p>
           <h1>Movimientos</h1>
           <p>

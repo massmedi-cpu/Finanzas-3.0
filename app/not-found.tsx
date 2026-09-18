@@ -7,7 +7,7 @@ export default function NotFound() {
         <p className="eyebrow">Financial App</p>
         <h1 id="not-found-title">Esta página no existe</h1>
         <p>La dirección puede haber cambiado o no formar parte de Financial App.</p>
-        <Link className="foundation-cta" href="/">Volver a Inicio</Link>
+        <Link prefetch={false} className="foundation-cta" href="/">Volver a Inicio</Link>
       </section>
     </main>
   );

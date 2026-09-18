@@ -277,7 +277,7 @@ export default function AccountsClient() {
     <main className={styles.shell}>
       <header className={styles.hero}>
         <div>
-          <Link className={styles.backLink} href="/">← Inicio</Link>
+          <Link prefetch={false} className={styles.backLink} href="/">← Inicio</Link>
           <p className={styles.eyebrow}>CUENTAS</p>
           <h1>Tu dinero, cuenta por cuenta</h1>
           <p className={styles.heroText}>
@@ -438,7 +438,7 @@ export default function AccountsClient() {
                     <p className={styles.sectionEyebrow}>ACTIVIDAD RECIENTE</p>
                     <h3 id="account-movements-title">Movimientos</h3>
                   </div>
-                  <Link className={styles.secondaryLink} href="/transactions">Abrir Movimientos</Link>
+                  <Link prefetch={false} className={styles.secondaryLink} href="/transactions">Abrir Movimientos</Link>
                 </div>
 
                 {transactions && transactions.rows.length === 0 ? (

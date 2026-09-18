@@ -361,8 +361,8 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
           </p>
         </div>
         <div className={styles.heroActions}>
-          <Link href="/" className={styles.secondaryButton}>Inicio</Link>
-          <Link href="/recurrences" className={styles.secondaryButton}>Recurrentes</Link>
+          <Link prefetch={false} href="/" className={styles.secondaryButton}>Inicio</Link>
+          <Link prefetch={false} href="/recurrences" className={styles.secondaryButton}>Recurrentes</Link>
           <button className={styles.primaryButton} onClick={() => void refreshRecurring()} disabled={busy !== null}>
             {busy === "refresh" ? "Actualizando…" : "Actualizar recurrentes"}
           </button>

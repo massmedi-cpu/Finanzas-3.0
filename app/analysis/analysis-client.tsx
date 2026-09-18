@@ -269,7 +269,7 @@ function DriverRanking({
                   {deltaText(item.deltaCents)}
                 </span>
               </div>
-              {item.href ? <Link href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>Sin filtro</span>}
+              {item.href ? <Link prefetch={false} href={item.href} aria-label={`Ver movimientos de ${item.name}`}>Abrir</Link> : <span className={styles.noLink}>Sin filtro</span>}
             </li>
           ))}
         </ol>
@@ -298,7 +298,7 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <strong>Lo importante del periodo</strong>
       </div>
       {strongest ? (
-        <Link className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
+        <Link prefetch={false} className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
           <span>Mayor cambio</span>
           <strong>{strongest.name}</strong>
           <small className={strongest.deltaCents > 0 ? styles.badDelta : styles.goodDelta}>{deltaText(strongest.deltaCents)}</small>
@@ -310,17 +310,17 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
           <small>frente al periodo comparable</small>
         </div>
       )}
-      <Link className={styles.quickReadItem} href="#anomalies-heading">
+      <Link prefetch={false} className={styles.quickReadItem} href="#anomalies-heading">
         <span>Anomalías</span>
         <strong>{anomalyCount.toLocaleString("es-ES")}</strong>
         <small>{anomalyLabel}</small>
       </Link>
-      <Link className={styles.quickReadItem} href="/forecast">
+      <Link prefetch={false} className={styles.quickReadItem} href="/forecast">
         <span>Previsión neta</span>
         <strong>{hasForecastItems && forecast ? formatMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "Fuera del periodo"}</strong>
         <small>{hasForecastItems && forecast ? `hasta ${formatDate(forecast.period.dateTo)}` : forecast ? "sin movimientos previstos" : "previsión no aplicable al periodo"}</small>
       </Link>
-      <Link className={styles.quickReadItem} href="#comercios-heading">
+      <Link prefetch={false} className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
         <strong>{merchantConcentration.available
           ? formatPercentBps(merchantConcentration.valueBps)
@@ -545,7 +545,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <p>EVOLUCIÓN</p>
                 <h2 id="evolution-heading">Cómo está cambiando tu dinero</h2>
               </div>
-              <Link className={styles.secondaryLink} href={periodHref(snapshot)}>Movimientos del periodo</Link>
+              <Link prefetch={false} className={styles.secondaryLink} href={periodHref(snapshot)}>Movimientos del periodo</Link>
             </div>
             <FinancialTrendChart
               rows={snapshot.history}
@@ -586,7 +586,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               ) : (
                 <div className={styles.breakdown}>
                   {currentCategoryDrivers.slice(0, 6).map((item) => (
-                    <Link href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
+                    <Link prefetch={false} href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                       <div>
                         <strong>{item.name}</strong>
                         <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
@@ -624,7 +624,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 <div className={styles.insufficient}>
                   <strong>Sin clasificación fiable todavía</strong>
                   <p>No hay recurrencias activas con suficiente confianza para separar gasto fijo y variable sin hacer suposiciones.</p>
-                  <Link href="/recurrences">Revisar recurrentes</Link>
+                  <Link prefetch={false} href="/recurrences">Revisar recurrentes</Link>
                 </div>
               )}
             </section>
@@ -644,7 +644,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
               ) : (
                 <div className={styles.anomalyList}>
                   {snapshot.anomalies.map((item) => (
-                    <Link href={item.href} key={item.transactionId} className={styles.anomaly}>
+                    <Link prefetch={false} href={item.href} key={item.transactionId} className={styles.anomaly}>
                       <div>
                         <strong>{item.merchantName}</strong>
                         <span>{formatDate(item.bankDate)} · {item.categoryName}</span>
@@ -665,7 +665,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <section className={`${styles.section} ${styles.contextCard}`} aria-labelledby="budget-heading">
               <div className={styles.sectionHeadingCompact}>
                 <h2 id="budget-heading">Presupuesto</h2>
-                <Link href="/budgets">Abrir Presupuestos</Link>
+                <Link prefetch={false} href="/budgets">Abrir Presupuestos</Link>
               </div>
               {snapshot.budget?.total ? (
                 <>
@@ -694,7 +694,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
             <section className={`${styles.section} ${styles.contextCard}`} aria-labelledby="forecast-heading">
               <div className={styles.sectionHeadingCompact}>
                 <h2 id="forecast-heading">Previsión</h2>
-                <Link href="/forecast">Abrir Previsión</Link>
+                <Link prefetch={false} href="/forecast">Abrir Previsión</Link>
               </div>
               {snapshot.forecast ? (
                 snapshot.forecast.summary.plannedItems > 0 ? (

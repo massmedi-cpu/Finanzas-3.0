@@ -235,7 +235,7 @@ export default function OnboardingClient() {
             {step.blocked ? (
               <span className={styles.blockedAction}>Completa el paso anterior</span>
             ) : (
-              <Link className={styles.action} href={step.href}>{step.action}</Link>
+              <Link prefetch={false} className={styles.action} href={step.href}>{step.action}</Link>
             )}
           </article>
         ))}

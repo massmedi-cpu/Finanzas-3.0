@@ -1,25 +1,26 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
-const demandLoadedLinkFiles = [
-  "app/app-shell.tsx",
-  "app/mobile-navigation.tsx",
-  "app/inicio-overview.tsx",
-  "app/home-smart-brief.tsx",
-  "app/number-explanation.tsx",
-  "app/global-search.tsx",
-  "app/module-context-navigation.tsx",
-  "app/transactions/transactions-quick-nav.tsx",
-  "app/configuration/configuration-area-nav.tsx",
-] as const;
+function tsxFiles(directory: string): string[] {
+  const files: string[] = [];
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const path = join(directory, entry.name);
+    if (entry.isDirectory()) files.push(...tsxFiles(path));
+    else if (entry.isFile() && entry.name.endsWith(".tsx")) files.push(path);
+  }
+  return files;
+}
 
-test("PERF · navegación visible no precarga rutas financieras dinámicas", () => {
-  for (const path of demandLoadedLinkFiles) {
+test("PERF · ningún Link interno precarga rutas antes del clic", () => {
+  const linkFiles = tsxFiles("app").filter((path) => readFileSync(path, "utf8").includes("<Link"));
+  expect(linkFiles.length).toBeGreaterThan(0);
+
+  for (const path of linkFiles) {
     const source = readFileSync(path, "utf8");
     const linkTags = source.split("<Link").slice(1).map((fragment) => fragment.split(">")[0] ?? "");
-    expect(linkTags.length, `${path} debe conservar enlaces de navegación`).toBeGreaterThan(0);
     for (const tag of linkTags) {
-      expect(tag, `${path} no debe precargar una ruta dinámica antes del clic`).toContain("prefetch={false}");
+      expect(tag, `${path} no debe precargar una ruta antes del clic`).toContain("prefetch={false}");
     }
   }
 });
