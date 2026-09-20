@@ -1,3 +1,5 @@
+import { clusterOcrRows } from "./ocr-rows";
+
 export type OcrBoundingBox = {
   x: number;
   y: number;
@@ -46,13 +48,18 @@ export type DocumentOcrResult = {
     bankSource: "read_only";
     financialWrites: false;
     requiresHumanReview: true;
-    preservesGeometry: true;
+    preservesGeometry: boolean;
   };
 };
 
 const DEFAULT_LAYOUT_COLUMNS = 80;
 const LOW_CONFIDENCE = 0.65;
 const MAX_WORD_TEXT = 500;
+const NUMERIC_STRUCTURE_WARNING = "numeric_structure_unreliable";
+const PERIPHERAL_NOISE_WARNING = "peripheral_noise_detected";
+const GEOMETRY_WARNING = "geometry_unreliable";
+
+type HorizontalBounds = { left: number; right: number };
 
 function finiteUnit(value: number, field: string) {
   if (!Number.isFinite(value) || value < 0 || value > 1) throw new Error(`invalid_ocr_${field}`);
@@ -103,26 +110,61 @@ function verticalOverlap(a: OcrBoundingBox, b: OcrBoundingBox) {
   return overlap / Math.max(0.000001, Math.min(a.height, b.height));
 }
 
-function belongsToRow(word: OcrWord, rowWords: OcrWord[]) {
-  const rowBox = unionBox(rowWords);
-  if (verticalOverlap(word.box, rowBox) >= 0.35) return true;
-  const wordCenter = word.box.y + word.box.height / 2;
-  const rowCenter = rowBox.y + rowBox.height / 2;
-  return Math.abs(wordCenter - rowCenter) <= Math.max(word.box.height, rowBox.height) * 0.58;
+function wordRight(word: OcrWord) {
+  return word.box.x + word.box.width;
 }
 
-function alignment(box: OcrBoundingBox): OcrAlignment {
-  const center = box.x + box.width / 2;
-  if (box.width <= 0.42 && box.x >= 0.56) return "right";
-  if (box.width <= 0.62 && center >= 0.39 && center <= 0.61) return "center";
+function visibleChars(text: string) {
+  return text.replace(/[^\p{L}\p{N}]/gu, "").length;
+}
+
+function horizontalBounds(words: OcrWord[]): HorizontalBounds {
+  if (!words.length) return { left: 0, right: 1 };
+  const substantial = words.filter((word) => visibleChars(word.text) >= 2 || /\d[,.]\d/.test(word.text));
+  const source = substantial.length >= 4 ? substantial : words;
+  const lefts = source.map((word) => word.box.x).sort((a, b) => a - b);
+  const rights = source.map(wordRight).sort((a, b) => a - b);
+  const trim = source.length >= 20 ? Math.floor(source.length * 0.05) : 0;
+  let left = lefts[Math.min(trim, lefts.length - 1)];
+  let right = rights[Math.max(0, rights.length - 1 - trim)];
+  if (!Number.isFinite(left) || !Number.isFinite(right) || right - left < 0.18) {
+    left = Math.min(...words.map((word) => word.box.x));
+    right = Math.max(...words.map(wordRight));
+  }
+  const width = Math.max(0.001, right - left);
+  const margin = Math.min(0.025, width * 0.035);
+  return { left: Math.max(0, left - margin), right: Math.min(1, right + margin) };
+}
+
+function localBox(box: OcrBoundingBox, bounds: HorizontalBounds) {
+  const width = Math.max(0.001, bounds.right - bounds.left);
+  const x = (box.x - bounds.left) / width;
+  return {
+    x: Math.min(1, Math.max(0, x)),
+    width: Math.min(1, Math.max(0, box.width / width)),
+  };
+}
+
+function alignment(box: OcrBoundingBox, bounds: HorizontalBounds): OcrAlignment {
+  const local = localBox(box, bounds);
+  const center = local.x + local.width / 2;
+  if (local.width <= 0.42 && local.x >= 0.56) return "right";
+  if (local.width <= 0.62 && center >= 0.39 && center <= 0.61) return "center";
   return "left";
 }
 
-function renderLine(words: OcrWord[], columns: number) {
+function peripheralNoise(word: OcrWord, bounds: HorizontalBounds) {
+  if (visibleChars(word.text) > 2) return false;
+  const tolerance = Math.max(0.012, (bounds.right - bounds.left) * 0.025);
+  return wordRight(word) < bounds.left - tolerance || word.box.x > bounds.right + tolerance;
+}
+
+function renderLine(words: OcrWord[], columns: number, bounds: HorizontalBounds) {
   const cells = Array.from({ length: columns }, () => " ");
   let cursor = 0;
-  for (const word of words) {
-    const desired = Math.round(word.box.x * Math.max(0, columns - 1));
+  for (const word of words.filter((item) => !peripheralNoise(item, bounds))) {
+    const local = localBox(word.box, bounds);
+    const desired = Math.round(local.x * Math.max(0, columns - 1));
     const start = Math.max(cursor, Math.min(columns - 1, desired));
     const available = Math.max(0, columns - start);
     if (!available) break;
@@ -131,6 +173,28 @@ function renderLine(words: OcrWord[], columns: number) {
     cursor = Math.min(columns, start + value.length + 1);
   }
   return cells.join("").trimEnd();
+}
+
+function suspiciousNumericToken(text: string) {
+  const token = text.replace(/[€\s]/g, "");
+  return /^\d{3,6}$/.test(token) || /^\d{1,6}[,.]\d{3,}$/.test(token);
+}
+
+function pageQualityWarnings(page: OcrPage) {
+  const warnings: string[] = [];
+  const words = page.lines.flatMap((line) => line.words);
+  const bounds = horizontalBounds(words);
+  const peripheralCount = words.filter((word) => peripheralNoise(word, bounds)).length;
+  if (peripheralCount >= 2) warnings.push(PERIPHERAL_NOISE_WARNING);
+
+  const suspiciousFinancialRow = page.lines.some((line) => {
+    const numericWords = line.words.filter((word) => /\d/.test(word.text));
+    if (numericWords.length < 2) return false;
+    return numericWords.some((word) => suspiciousNumericToken(word.text));
+  });
+  if (suspiciousFinancialRow) warnings.push(NUMERIC_STRUCTURE_WARNING);
+  if (warnings.length) warnings.push(GEOMETRY_WARNING);
+  return warnings;
 }
 
 export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], columns = DEFAULT_LAYOUT_COLUMNS): OcrPage {
@@ -144,24 +208,8 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
     return a.box.x - b.box.x;
   });
 
-  const rows: OcrWord[][] = [];
-  for (const word of words) {
-    let bestIndex = -1;
-    let bestDistance = Number.POSITIVE_INFINITY;
-    for (let index = 0; index < rows.length; index += 1) {
-      if (!belongsToRow(word, rows[index])) continue;
-      const rowBox = unionBox(rows[index]);
-      const distance = Math.abs((word.box.y + word.box.height / 2) - (rowBox.y + rowBox.height / 2));
-      if (distance < bestDistance) {
-        bestIndex = index;
-        bestDistance = distance;
-      }
-    }
-    if (bestIndex === -1) rows.push([word]);
-    else rows[bestIndex].push(word);
-  }
-
-  rows.sort((a, b) => unionBox(a).y - unionBox(b).y);
+  const rows = clusterOcrRows(words);
+  const bounds = horizontalBounds(words);
   const lines = rows.map((row, index) => {
     const ordered = [...row].sort((a, b) => a.box.x - b.box.x);
     const box = unionBox(ordered);
@@ -170,7 +218,7 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
       text: ordered.map((word) => word.text).join(" "),
       confidence: lineConfidence(ordered),
       box,
-      alignment: alignment(box),
+      alignment: alignment(box, bounds),
       words: ordered,
     } satisfies OcrLine;
   });
@@ -179,7 +227,7 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
     pageNumber,
     lines,
     plainText: lines.map((line) => line.text).join("\n"),
-    layoutText: lines.map((line) => renderLine(line.words, columns)).join("\n"),
+    layoutText: lines.map((line) => renderLine(line.words, columns, bounds)).filter(Boolean).join("\n"),
   };
 }
 
@@ -209,11 +257,13 @@ export function buildDocumentOcrResult(input: {
     ? allLines.reduce((sum, line) => sum + line.confidence, 0) / allLines.length
     : null;
   const warnings = [...new Set((input.warnings ?? []).map((warning) => warning.trim()).filter(Boolean))];
+  for (const page of pages) warnings.push(...pageQualityWarnings(page));
   if (!allLines.length) warnings.push("no_text_detected");
   if (confidence !== null && confidence < LOW_CONFIDENCE) warnings.push("low_confidence");
   const uniqueWarnings = [...new Set(warnings)];
   const plainText = pages.map((page) => page.plainText).filter(Boolean).join("\n\n");
   const status = !plainText ? "empty" : uniqueWarnings.length || confidence === null ? "needs_review" : "ready";
+  const preservesGeometry = !uniqueWarnings.includes(GEOMETRY_WARNING);
 
   return {
     contractVersion: 1,
@@ -230,7 +280,7 @@ export function buildDocumentOcrResult(input: {
       bankSource: "read_only",
       financialWrites: false,
       requiresHumanReview: true,
-      preservesGeometry: true,
+      preservesGeometry,
     },
   };
 }
