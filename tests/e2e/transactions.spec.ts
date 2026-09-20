@@ -250,7 +250,7 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel("Cuenta").selectOption(accountId);
-  await page.getByLabel("Buscar").fill("supermercado");
+  await page.getByRole("textbox", { name: "Buscar" }).fill("supermercado");
   const requestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return request.method() === "GET" && url.pathname === "/api/transactions" && url.searchParams.get("accountId") === accountId && url.searchParams.get("q") === "supermercado";
