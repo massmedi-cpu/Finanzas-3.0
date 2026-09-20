@@ -42,8 +42,8 @@ jobs:
           done
           npx playwright install --with-deps chromium
 
-      - name: Run browser E2E locally
-        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+      - name: Run CR-008 inherited-failure baseline
+        run: npm run test:e2e -- tests/e2e/axiom-final-gates.spec.ts tests/e2e/commercial-readiness-accessibility-hardening.spec.ts tests/e2e/dashboard.spec.ts tests/e2e/financial-visualization.spec.ts tests/e2e/forecast-period-race.spec.ts tests/e2e/no-review-ui-contract.spec.ts tests/e2e/premium-transaction-editor-contract.spec.ts tests/e2e/review-center.spec.ts tests/e2e/transactions-race.spec.ts tests/e2e/app-shell.spec.ts tests/e2e/onboarding.spec.ts --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
         if: failure()
