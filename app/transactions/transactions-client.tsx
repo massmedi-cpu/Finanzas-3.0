@@ -726,7 +726,7 @@ async function saveEdit(row: TransactionRow) {
                 {rows.map((row) => (
                   <Fragment key={row.id}>
                     <tr className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>
-                      <td data-label="Seleccionar" className={styles.selectCell}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={() => toggleRow(row.id)} /></td>
+                      <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectionTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={() => toggleRow(row.id)} /></label></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
                         <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
