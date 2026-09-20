@@ -28,14 +28,13 @@ async function mockTransactions(page: import("@playwright/test").Page, seen: URL
   });
 }
 
-test("E1 · los deep-links de duplicados aplican su filtro y la revisión retirada se ignora", async ({ page }) => {
+test("E1 · los deep-links de revisión aplican realmente el filtro propietario en Movimientos", async ({ page }) => {
   const seen: URL[] = [];
   await mockTransactions(page, seen);
 
   await page.goto("/transactions?reviewState=needs_review");
-  await expect.poll(() => seen.length).toBeGreaterThan(0);
-  await expect(page.getByRole("combobox", { name: "Revisión" })).toHaveCount(0);
-  expect(seen.every((url) => !url.searchParams.has("reviewState"))).toBe(true);
+  await expect(page.getByRole("combobox", { name: "Revisión" })).toHaveValue("needs_review");
+  await expect.poll(() => seen.some((url) => url.searchParams.get("reviewState") === "needs_review")).toBe(true);
 
   seen.length = 0;
   await page.goto("/transactions?duplicateState=suspected");
