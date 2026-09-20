@@ -1,0 +1,55 @@
+# CR-008 · OCR V22 · iluminación y recuperación por celdas
+
+Estado: candidato de Preview; CR-008 sigue abierta.
+
+El replay local de V21 reproducía pérdidas de importes, mezcla entre columnas y
+caracteres falsos en los pliegues del papel. V22 estima la iluminación del papel
+antes de recortar, conserva la proporción de los caracteres y contrasta dos
+preprocesados con tres segmentaciones. Las observaciones de baja confianza no
+pueden imponerse por repetición. La recuperación exige evidencia de los píxeles;
+no reconstruye decimales ni calcula importes a partir de otros valores.
+
+Las cajas recuperadas corresponden a los glifos detectados. Los resúmenes reservan
+todo el espacio posterior a su etiqueta para no cortar cifras grandes. Las
+descripciones se contrastan por región y los fragmentos inciertos se releen en
+su propio recorte. El filtrado por cabecera vuelve a agrupar las filas dentro del
+papel y evita incorporar una última fila de fondo distante.
+
+## Evidencia local del 15 de septiembre de 2026
+
+- 45 pruebas OCR correctas, incluyendo Tesseract nativo, columnas separadas,
+  fondo fotografiado, sombras, totales grandes y conservación de evidencia.
+- Compilación Next.js y TypeScript correcta antes y después de integrar el nuevo Inicio.
+- Replay con la copia privada de 1542 × 2048, 700.330 bytes: cinco descripciones
+  de producto y los ocho importes de líneas/resumen recuperados; 10,204 s en la
+  última ejecución. El trazo falso junto a una descripción ya no aparece.
+- Persisten errores y residuos en los metadatos y el pie. Este resultado no
+  acredita todavía una transcripción completa y fiel.
+- La copia local no equivale al objeto privado persistido de 2.258.072 bytes.
+  Falta el replay de ese objeto desde una sesión legítima en la Preview exacta.
+
+Se incorpora `main` 28719715ffd77c419528450b3973146f81f48acf conservando su nuevo
+Inicio y los cambios acumulados. Los tests de interfaz se adaptan a la retirada
+ya realizada de la revisión manual, a los textos actuales y a una fusión de
+categorías válida con confirmación explícita. Las pruebas conservan los límites
+de accesibilidad y de escrituras personales, sin reintroducir controles retirados.
+
+La batería general anterior (34923993369) terminó con 582 passed, 109 skipped y
+17 failed. La nueva batería y el gate de Preview deben verificarse sobre el nuevo
+SHA. El navegador de Playwright no está instalado en este entorno local; la
+validación interactiva debe ejecutarse en CI con su Chromium declarado.
+
+La primera batería V22 (34966962686, SHA 7a06a561) terminó con **677 passed,
+109 skipped y 2 failed**. Los únicos fallos corresponden a la misma casilla de
+selección de Movimientos en escritorio y móvil: su área interactiva mide 18,39 px.
+El gate `protected-preview-live` pasó sobre ese SHA y la Preview está READY.
+La corrección añade una etiqueta pulsable de 44 × 44 px manteniendo el glifo
+nativo compacto. Las pruebas miden el área asociada a la casilla, esperan a que
+la fila cargue y pulsan el margen exterior del glifo para verificar su efecto.
+El nuevo build es correcto; se requiere repetir el gate global sobre el commit
+que contiene esta corrección.
+
+La fuente bancaria continúa en solo lectura. OCR sigue aislado con
+`financialWrites: false` y `requiresHumanReview: true`. No fusionar ni promover a
+Production hasta pasar los gates automáticos y el replay real autenticado.
+La fotografía y los resultados privados no se incluyen en el repositorio.
