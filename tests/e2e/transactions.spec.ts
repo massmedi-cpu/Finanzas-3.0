@@ -228,6 +228,7 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
 
   const controlsTooSmall = await page.locator("main button, main input, main select, main summary, main a").evaluateAll((elements) =>
     elements.filter((element) => {
+      // A checkbox's associated label is also a real clickable target.
       const target = element instanceof HTMLInputElement && element.type === "checkbox"
         ? element.labels?.[0] ?? element : element;
       const rect = target.getBoundingClientRect();
@@ -290,7 +291,6 @@ test("Edición individual envía un override no destructivo", async ({ page }) =
 
   await page.getByTestId(`edit-${firstId}`).click();
   await page.getByTestId("edit-concept").fill("Compra supermercado personalizada");
-  await page.getByTestId("edit-review").selectOption("needs_review");
   await page.getByTestId("save-edit").click();
 
   await expect.poll(() => patches.length).toBe(1);
@@ -301,14 +301,14 @@ test("Edición individual envía un override no destructivo", async ({ page }) =
     merchantId,
     categoryMode: "set",
     categoryId,
-    reviewState: "needs_review",
     excludedFromAnalytics: false,
     note: "Compra revisada",
   });
+  expect(patches[0].patch).not.toHaveProperty("reviewState");
   await expect(page.getByText(/Movimiento actualizado/)).toBeVisible();
 });
 
-test("Selección múltiple aplica categoría y revisión en una sola operación", async ({ page }) => {
+test("Selección múltiple aplica categoría en una sola operación", async ({ page }) => {
   const patches: PatchBody[] = [];
   await mockTransactionApi(page, patches);
   await page.goto("/transactions");
@@ -317,12 +317,11 @@ test("Selección múltiple aplica categoría y revisión en una sola operación"
   await page.getByTestId(`select-${firstId}`).check();
   await page.getByTestId(`select-${secondId}`).check();
   await page.getByTestId("bulk-category").selectOption(categoryId);
-  await page.getByTestId("bulk-review").selectOption("confirmed");
   await page.getByTestId("bulk-apply").click();
 
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0].transactionIds).toEqual([firstId, secondId]);
-  expect(patches[0].patch).toEqual({ categoryMode: "set", categoryId, reviewState: "confirmed" });
+  expect(patches[0].patch).toEqual({ categoryMode: "set", categoryId });
   await expect(page.getByText(/Edición masiva completada/)).toBeVisible();
 });
 
