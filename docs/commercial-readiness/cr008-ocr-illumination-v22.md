@@ -53,3 +53,8 @@ La fuente bancaria continúa en solo lectura. OCR sigue aislado con
 `financialWrites: false` y `requiresHumanReview: true`. No fusionar ni promover a
 Production hasta pasar los gates automáticos y el replay real autenticado.
 La fotografía y los resultados privados no se incluyen en el repositorio.
+
+
+## 20/09/2026 · Rebase seguro sobre Production actual
+
+V22 se ha reconstruido sobre `main` `b829adb07e00e46bb73e893b87e2b60a55d87315` en PR #367. La comparación contra el merge-base anterior confirma que 33/34 archivos de V22 no habían cambiado en `main`; el único solapamiento real era `app/transactions/transactions-client.tsx`, integrado conservando la versión actual y aplicando sólo el hit-area de selección de 44 px. Este commit solicita una única Preview Vercel exacta del candidato actualizado. No autoriza merge ni Production: siguen siendo obligatorios CI verde y replay autenticado del documento canónico.
