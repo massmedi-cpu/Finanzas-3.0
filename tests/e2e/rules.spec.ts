@@ -71,7 +71,7 @@ test("Reglas mantiene una UX responsive y controles accesibles", async ({ page }
   await expect(page.getByRole("link", { name: "Reglas" })).toHaveAttribute("aria-current", "page");
   await expect(page.getByText("Supermercado mensual", { exact: true })).toBeVisible();
   await expect(page.getByText(/Menor número = mayor prioridad/)).toBeVisible();
-  await expect(page.getByText(/fuente bancaria sigue siendo de solo lectura/i)).toBeVisible();
+  await expect(page.getByRole("button", { name: "+ Nueva regla" })).toBeEnabled();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
