@@ -42,8 +42,10 @@ jobs:
           done
           npx playwright install --with-deps chromium
 
-      - name: Run browser E2E locally
-        run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
+      - name: Run CR-008 OCR and impacted regressions locally
+        run: |
+          npm run test:ocr
+          npm run test:e2e -- tests/e2e/category-editor-contract.spec.ts tests/e2e/configuration.spec.ts tests/e2e/documents.spec.ts tests/e2e/rules.spec.ts tests/e2e/transactions-accessibility.spec.ts tests/e2e/transactions-deeplink.spec.ts tests/e2e/transactions.spec.ts --project=chromium-desktop --project=chromium-mobile
 
       - name: Upload Playwright report on failure
         if: failure()
