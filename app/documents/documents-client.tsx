@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
 
@@ -532,7 +533,7 @@ export function DocumentsClient() {
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
-                <OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} />
+                <OcrReviewBoundary key={detail.document.id}><OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} /></OcrReviewBoundary>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
