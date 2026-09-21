@@ -163,7 +163,7 @@ test("Documentos contains malformed 200 OCR payloads without crashing the review
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await page.getByRole("button", { name: "Analizar documento" }).click();
-  await expect(page.getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
   await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
