@@ -138,6 +138,36 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("Documentos contains malformed 200 OCR payloads without crashing the review UI", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-21T18:15:10.000Z",
+        confidence: 0.72,
+        plainText: "LECTURA PARCIAL",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{ pageNumber: 1, plainText: "LECTURA PARCIAL", layoutText: "LECTURA PARCIAL" }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
