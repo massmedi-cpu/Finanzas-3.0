@@ -68,7 +68,7 @@ function parseOcrResult(value: unknown): OcrResult {
       throw new Error("ocr_response_invalid");
     }
     for (const line of page.lines) {
-      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Array.isArray(line.words)) {
+      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Number.isFinite(line.confidence)) {
         throw new Error("ocr_response_invalid");
       }
     }
