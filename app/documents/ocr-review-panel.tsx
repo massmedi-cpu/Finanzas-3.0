@@ -53,6 +53,32 @@ async function readJson(response: Response) {
   return body;
 }
 
+function parseOcrResult(value: unknown): OcrResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ocr_response_invalid");
+  const row = value as Partial<OcrResult>;
+  if (row.contractVersion !== 1 || typeof row.documentId !== "string") throw new Error("ocr_response_invalid");
+  if (row.status !== "ready" && row.status !== "needs_review" && row.status !== "empty") throw new Error("ocr_response_invalid");
+  if (row.source !== "pdf_text" && row.source !== "image_ocr" && row.source !== "pdf_ocr" && row.source !== "hybrid") throw new Error("ocr_response_invalid");
+  if (typeof row.extractor !== "string" || typeof row.extractedAt !== "string" || typeof row.plainText !== "string") throw new Error("ocr_response_invalid");
+  if (row.confidence !== null && typeof row.confidence !== "number") throw new Error("ocr_response_invalid");
+  if (!Array.isArray(row.pages) || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
+  if (!row.warnings.every((warning) => typeof warning === "string")) throw new Error("ocr_response_invalid");
+  for (const page of row.pages) {
+    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string") {
+      throw new Error("ocr_response_invalid");
+    }
+    for (const line of page.lines) {
+      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Array.isArray(line.words)) {
+        throw new Error("ocr_response_invalid");
+      }
+    }
+  }
+  if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true) {
+    throw new Error("ocr_response_invalid");
+  }
+  return row as OcrResult;
+}
+
 function errorLabel(code: string) {
   const labels: Record<string, string> = {
     ocr_google_drive_file_id_missing: "Este documento de Drive no conserva un identificador de archivo válido y no puede leerse de forma segura.",
@@ -74,6 +100,7 @@ function errorLabel(code: string) {
     ocr_worker_timeout: "El motor OCR no ha podido iniciarse a tiempo.",
     ocr_recognize_timeout: "La lectura OCR ha superado el tiempo máximo de seguridad.",
     unsupported_ocr_mime_type: "Este formato todavía no admite OCR.",
+    ocr_response_invalid: "La lectura terminó, pero la respuesta OCR no tiene el formato esperado. No se ha guardado ningún dato.",
   };
   return labels[code] ?? "No se ha podido completar la lectura OCR de este documento.";
 }
@@ -110,8 +137,8 @@ export function OcrReviewPanel({
     setError(null);
     setCopyState("idle");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })) as OcrResult;
-      setResult(data);
+      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" }));
+      setResult(parseOcrResult(data));
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
       setError(errorLabel(code));
