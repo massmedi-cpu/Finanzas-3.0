@@ -250,6 +250,7 @@ export default function SourceClient() {
   const serviceAccountMode = google?.authMode === "service-account";
   const managedConnection = google?.connection?.managed === true;
   const runtimeReady = runtime?.compatible === true;
+  const workspaceContextRequired = runtime?.error === "workspace_context_required";
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
@@ -378,8 +379,20 @@ export default function SourceClient() {
               </div>
               <div>
                 <span>Runtime de persistencia</span>
-                <strong>{runtimeReady ? "Compatible · contrato v2" : "No disponible"}</strong>
-                <p>{runtimeReady ? "Lifecycle y selección canónica de productos están exigidos antes de escribir." : "La sincronización permanece bloqueada de forma segura."}</p>
+                <strong>
+                  {runtimeReady
+                    ? "Compatible · contrato v2"
+                    : workspaceContextRequired
+                      ? "Sesión requerida"
+                      : "No disponible"}
+                </strong>
+                <p>
+                  {runtimeReady
+                    ? "Lifecycle y selección canónica de productos están exigidos antes de escribir."
+                    : workspaceContextRequired
+                      ? "El runtime no se evalúa sin una sesión válida de Financial App; no es un fallo de persistencia."
+                      : "La sincronización permanece bloqueada de forma segura."}
+                </p>
               </div>
               <div>
                 <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>
