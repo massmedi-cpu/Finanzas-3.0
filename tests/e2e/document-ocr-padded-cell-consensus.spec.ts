@@ -273,3 +273,32 @@ test("CR008-OCR-002 restores Spanish diacritics only when both isolated reads ag
   expect(mergeDescriptionObservations(alreadyAccented, [plain0, plain1], 0.54).map((item) => item.text))
     .toEqual(["CAÑA"]);
 });
+
+
+test("CR008-OCR-002 preserves an explicit VAT percentage while cleaning a summary row", () => {
+  const word = (text: string, x: number, width = 0.04, confidence = 0.8): OcrWord => ({
+    text,
+    confidence,
+    box: { x, y: 0.72, width, height: 0.018 },
+  });
+  const words: OcrWord[] = [
+    word("IVA", 0.56, 0.04),
+    word("10", 0.64, 0.025),
+    word("%", 0.671, 0.012),
+    word("1,59", 0.80, 0.05),
+  ];
+  const row: SweepRow = {
+    words,
+    box: { x: 0.54, y: 0.72, width: 0.33, height: 0.02 },
+    text: "IVA 10 % 1,59",
+    summaryLike: true,
+  };
+  const bands = [
+    { left: 0.54, right: 0.60, center: 0.57, support: 5 },
+    { left: 0.65, right: 0.74, center: 0.695, support: 5 },
+    { left: 0.78, right: 0.87, center: 0.825, support: 5 },
+  ];
+
+  expect(finalizeReceiptTableWords(words, [row], bands).map((item) => item.text))
+    .toEqual(["IVA", "10", "%", "1,59"]);
+});
