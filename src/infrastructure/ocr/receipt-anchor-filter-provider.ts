@@ -581,6 +581,18 @@ export function mergeReceiptRecropWords(firstPass: OcrWord[], reread: OcrWord[])
   });
 }
 
+function countLexicalSlotChanges(before: OcrWord[], after: OcrWord[]) {
+  return before.filter((word) => {
+    if (alphaChars(word.text) < 3) return false;
+    const beforeToken = normalizedToken(word.text);
+    return after.some((candidate) => (
+      alphaChars(candidate.text) >= 3
+      && sameEvidenceSlot(word, candidate)
+      && normalizedToken(candidate.text) !== beforeToken
+    ));
+  }).length;
+}
+
 function rereadLooksSafe(words: OcrWord[]) {
   if (words.length < 12) return false;
   const rows = clusterRows(words);
@@ -647,6 +659,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
     let words = filtered.words;
     let rereadWords = 0;
     let recropUsed = false;
+    let lexicalSlotChanges = 0;
     let rereadWarnings: string[] = [];
 
     if (!(base.warnings ?? []).includes("orientation_corrected")) {
@@ -654,6 +667,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
         const reread = await rereadReceiptCrop(this.base, input, filtered.recoveryBounds);
         if (reread) {
           words = mergeReceiptRecropWords(filtered.words, reread.words);
+          lexicalSlotChanges = countLexicalSlotChanges(filtered.words, words);
           rereadWords = reread.words.length;
           rereadWarnings = reread.warnings;
           recropUsed = true;
@@ -668,6 +682,7 @@ export class ReceiptAnchorFilteringImageOcrProvider implements DocumentOcrProvid
         initialKeptWords: filtered.words.length,
         rereadWords,
         mergedWords: words.length,
+        lexicalSlotChanges,
         recropUsed,
         header: filtered.headerText.slice(0, 80),
         filterBounds: filtered.bounds,
