@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { reconstructOcrPage, type OcrWord } from "../../src/domain/document-ocr";
+import { buildDocumentOcrResult, reconstructOcrPage, type OcrWord } from "../../src/domain/document-ocr";
 
 function word(text: string, x: number, y: number, width = 0.06, confidence = 0.9): OcrWord {
   return { text, confidence, box: { x, y, width, height: 0.018 } };
@@ -143,4 +143,14 @@ test("receipt integrity flags contradictions instead of silently normalizing the
     lineTotalMatchesDocumentTotal: true,
     basePlusTaxMatchesTotal: true,
   });
+
+  const result = buildDocumentOcrResult({
+    documentId: "98000000-0000-4000-8000-000000000098",
+    source: "image_ocr",
+    extractor: "test",
+    extractedAt: "2026-09-22T18:00:00.000Z",
+    pages: [page],
+  });
+  expect(result.status).toBe("needs_review");
+  expect(result.warnings).toContain("receipt_arithmetic_mismatch");
 });
