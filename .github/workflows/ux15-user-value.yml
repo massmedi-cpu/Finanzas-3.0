@@ -66,6 +66,7 @@ jobs:
           tests/e2e/module-context-navigation.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts
           tests/e2e/document-ocr-runtime-composition.spec.ts
+          tests/e2e/document-ocr-anchor-filter.spec.ts
           tests/e2e/document-ocr-padded-cell-consensus.spec.ts
           tests/e2e/documents.spec.ts
           tests/e2e/mobile-direct-navigation.spec.ts
