@@ -29,6 +29,7 @@ export type OcrPage = {
   lines: OcrLine[];
   plainText: string;
   layoutText: string;
+  reviewText?: string;
 };
 
 export type OcrSource = "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
@@ -180,6 +181,132 @@ function suspiciousNumericToken(text: string) {
   return /^\d{3,6}$/.test(token) || /^\d{1,6}[,.]\d{3,}$/.test(token);
 }
 
+function receiptToken(text: string) {
+  return text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9%]/g, "");
+}
+
+function explicitReceiptMoney(text: string) {
+  return /^\d{1,6}[,.]\d{2}$/.test(text.replace(/[€\s]/g, ""));
+}
+
+function receiptHeaderWord(line: OcrLine, role: "description" | "units" | "price" | "amount") {
+  return line.words.find((word) => {
+    const token = receiptToken(word.text);
+    if (role === "description") return token.startsWith("descrip");
+    if (role === "units") return token === "uds" || token === "ud" || token.startsWith("unid");
+    if (role === "price") return token.startsWith("precio");
+    return token.startsWith("importe");
+  }) ?? null;
+}
+
+function receiptSummaryLabel(line: OcrLine) {
+  return line.words.filter((word) => /^(base|iva|total|subtotal)$/i.test(receiptToken(word.text)));
+}
+
+function formatReceiptProduct(description: string, quantity: string, price: string, amount: string) {
+  return `${description.padEnd(34)} ${quantity.padStart(3)} ${price.padStart(8)} ${amount.padStart(8)}`.trimEnd();
+}
+
+function buildReceiptReviewText(lines: OcrLine[]) {
+  const headerIndex = lines.findIndex((line) => (
+    receiptHeaderWord(line, "description")
+    && receiptHeaderWord(line, "units")
+    && receiptHeaderWord(line, "price")
+    && receiptHeaderWord(line, "amount")
+  ));
+  if (headerIndex < 0) return undefined;
+
+  const summaryIndex = lines.findIndex((line, index) => index > headerIndex && receiptSummaryLabel(line).length > 0);
+  if (summaryIndex < 0) return undefined;
+
+  const header = lines[headerIndex];
+  const descriptionHeader = receiptHeaderWord(header, "description");
+  const unitsHeader = receiptHeaderWord(header, "units");
+  const priceHeader = receiptHeaderWord(header, "price");
+  const amountHeader = receiptHeaderWord(header, "amount");
+  if (!descriptionHeader || !unitsHeader || !priceHeader || !amountHeader) return undefined;
+
+  const output: string[] = [];
+  const metadata = lines.slice(0, headerIndex)
+    .map((line) => line.text.trim())
+    .filter((text) => text && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 2);
+  if (metadata.length) output.push(...metadata, "");
+
+  output.push(formatReceiptProduct(
+    descriptionHeader.text.toUpperCase(),
+    unitsHeader.text.toUpperCase(),
+    priceHeader.text.toUpperCase(),
+    amountHeader.text.toUpperCase(),
+  ));
+
+  let productCount = 0;
+  for (const line of lines.slice(headerIndex + 1, summaryIndex)) {
+    const ordered = [...line.words].sort((a, b) => a.box.x - b.box.x);
+    const monies = ordered.filter((word) => explicitReceiptMoney(word.text));
+    if (monies.length >= 2) {
+      const firstMoneyX = monies[0].box.x;
+      const quantity = [...ordered]
+        .filter((word) => /^\d{1,2}$/.test(word.text.trim()) && word.box.x < firstMoneyX)
+        .sort((a, b) => b.box.x - a.box.x)[0] ?? null;
+      if (quantity) {
+        const description = ordered
+          .filter((word) => word.box.x < quantity.box.x)
+          .map((word) => word.text.trim())
+          .filter((text) => text && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 1)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim();
+        if ((description.match(/\p{L}/gu) ?? []).length >= 2) {
+          const price = monies[monies.length - 2].text;
+          const amount = monies[monies.length - 1].text;
+          output.push(formatReceiptProduct(description, quantity.text.trim(), price, amount));
+          productCount += 1;
+          continue;
+        }
+      }
+    }
+
+    const fallback = line.text.trim();
+    const usefulChars = (fallback.match(/[\p{L}\p{N}]/gu) ?? []).length;
+    if (usefulChars >= 4) output.push(fallback);
+  }
+
+  // Require more than one structured item before replacing geometric review.
+  if (productCount < 2) return undefined;
+
+  output.push("");
+  for (const line of lines.slice(summaryIndex)) {
+    const labels = receiptSummaryLabel(line);
+    const monies = [...line.words]
+      .filter((word) => explicitReceiptMoney(word.text))
+      .sort((a, b) => a.box.x - b.box.x);
+
+    if (labels.length === 1 && monies.length) {
+      const label = labels[0];
+      const amount = monies[monies.length - 1];
+      const extras = [...line.words]
+        .filter((word) => word !== label && word !== amount)
+        .sort((a, b) => a.box.x - b.box.x)
+        .map((word) => word.text.trim())
+        .filter((text) => /^\d{1,3}(?:[,.]\d{1,2})?$/.test(text) || text === "%");
+      const extraText = extras.length ? ` ${extras.join(" ")}` : "";
+      output.push(`${label.text.replace(/:$/, "")}${extraText}: ${amount.text}`);
+      continue;
+    }
+
+    const fallback = line.text.trim();
+    const usefulLetters = (fallback.match(/\p{L}/gu) ?? []).length;
+    const hasMoney = line.words.some((word) => explicitReceiptMoney(word.text));
+    if (usefulLetters >= 2 || hasMoney) output.push(fallback);
+  }
+
+  return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 function pageQualityWarnings(page: OcrPage) {
   const warnings: string[] = [];
   const words = page.lines.flatMap((line) => line.words);
@@ -223,11 +350,16 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
     } satisfies OcrLine;
   });
 
+  const plainText = lines.map((line) => line.text).join("\n");
+  const layoutText = lines.map((line) => renderLine(line.words, columns, bounds)).filter(Boolean).join("\n");
+  const reviewText = buildReceiptReviewText(lines);
+
   return {
     pageNumber,
     lines,
-    plainText: lines.map((line) => line.text).join("\n"),
-    layoutText: lines.map((line) => renderLine(line.words, columns, bounds)).filter(Boolean).join("\n"),
+    plainText,
+    layoutText,
+    ...(reviewText ? { reviewText } : {}),
   };
 }
 
