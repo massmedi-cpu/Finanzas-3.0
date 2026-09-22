@@ -51,6 +51,7 @@ test("CR008-OCR-002 builds a clean structured receipt review without altering ra
 
     word("Base", 0.64, 0.64, 0.05),
     word("15,91", 0.81, 0.64, 0.06),
+    word("4", 0.55, 0.69, 0.02, 0.35),
     word("IVA", 0.64, 0.69, 0.04),
     word("1,59", 0.81, 0.69, 0.05),
     word("Total", 0.64, 0.74, 0.06),
@@ -74,6 +75,7 @@ test("CR008-OCR-002 builds a clean structured receipt review without altering ra
   expect(review).toMatch(/AGUA CON GAS\s+1\s+1,80\s+1,80/);
   expect(review).toContain("Base: 15,91");
   expect(review).toContain("IVA: 1,59");
+  expect(review).not.toContain("IVA 4");
   expect(review).toContain("Total: 17,50");
   expect(review).not.toMatch(/(^|\n)4($|\n)/);
 
@@ -92,4 +94,21 @@ test("generic documents keep geometric review when receipt structure is not prov
 
   expect(page.reviewText).toBeUndefined();
   expect(page.layoutText).toContain("CONTRATO");
+});
+
+
+test("structured VAT review preserves a rate only when the percent sign is explicit", () => {
+  const page = reconstructOcrPage(1, [
+    word("DESCRIPCION", 0.14, 0.30, 0.14),
+    word("UDS", 0.56, 0.30, 0.04),
+    word("PRECIO", 0.66, 0.30, 0.07),
+    word("IMPORTE", 0.80, 0.30, 0.08),
+    word("UNO", 0.14, 0.35, 0.05), word("1", 0.57, 0.35, 0.02), word("5,00", 0.67, 0.35, 0.05), word("5,00", 0.81, 0.35, 0.05),
+    word("DOS", 0.14, 0.40, 0.05), word("1", 0.57, 0.40, 0.02), word("5,00", 0.67, 0.40, 0.05), word("5,00", 0.81, 0.40, 0.05),
+    word("Base", 0.64, 0.55, 0.05), word("9,09", 0.81, 0.55, 0.05),
+    word("IVA", 0.60, 0.60, 0.04), word("10", 0.66, 0.60, 0.025), word("%", 0.70, 0.60, 0.015), word("0,91", 0.81, 0.60, 0.05),
+    word("Total", 0.64, 0.65, 0.06), word("10,00", 0.81, 0.65, 0.06),
+  ]);
+
+  expect(page.reviewText).toContain("IVA 10 %: 0,91");
 });
