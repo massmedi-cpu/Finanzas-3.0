@@ -229,6 +229,29 @@ function rowContainsWord(row: SweepRow, word: OcrWord) {
   return Math.abs(rowCenter - wordCenter) <= Math.max(row.box.height, word.box.height) * 0.55;
 }
 
+function horizontalGap(a: OcrWord, b: OcrWord) {
+  const left = a.box.x <= b.box.x ? a : b;
+  const right = left === a ? b : a;
+  return Math.max(0, right.box.x - (left.box.x + left.box.width));
+}
+
+function summaryPercentageTokens(row: SweepRow, words: OcrWord[]) {
+  const rowWords = words.filter((word) => rowContainsWord(row, word));
+  const protectedWords = new Set<OcrWord>();
+  const percentGlyphs = rowWords.filter((word) => /^%$/.test(cleanToken(word.text)));
+  for (const percent of percentGlyphs) {
+    const numeric = rowWords
+      .filter((word) => word !== percent && /^\d{1,3}(?:[,.]\d{1,2})?$/.test(cleanToken(word.text)))
+      .filter((word) => horizontalGap(word, percent) <= Math.max(0.012, row.box.height * 1.2))
+      .sort((a, b) => horizontalGap(a, percent) - horizontalGap(b, percent))[0];
+    if (numeric) {
+      protectedWords.add(numeric);
+      protectedWords.add(percent);
+    }
+  }
+  return protectedWords;
+}
+
 function cleanCanonicalCell(
   words: OcrWord[],
   row: SweepRow,
@@ -333,8 +356,9 @@ export function finalizeReceiptTableWords(
     const labelLeft = summaryLabels.length
       ? Math.min(...summaryLabels.map((word) => word.box.x))
       : Number.POSITIVE_INFINITY;
+    const protectedPercent = summaryPercentageTokens(row, baseWords);
     for (const word of baseWords) {
-      if (removed.has(word) || !rowContainsWord(row, word) || word === amount) continue;
+      if (removed.has(word) || !rowContainsWord(row, word) || word === amount || protectedPercent.has(word)) continue;
       const x = centerX(word);
       const isRightSideNoise = x >= Math.min(summaryBand.left, amountBand.left) - 0.03
         && (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text));
