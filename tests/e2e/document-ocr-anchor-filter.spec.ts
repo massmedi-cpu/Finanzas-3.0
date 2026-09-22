@@ -306,8 +306,9 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
     && item.box.y + item.box.height <= recovery.y + recovery.height + 0.000001
   ));
   expect(recoveredInsideCrop.length).toBeGreaterThanOrEqual(recoveredGlobal.length - 2);
-  expect(recoveredInsideCrop.map((item) => item.text)).not.toContain("DEMO");
+  expect(recoveredInsideCrop.filter((item) => item.text === "DEMO")).toHaveLength(1);
   expect(recoveredInsideCrop.map((item) => item.text)).not.toContain("BAR");
+  expect(recoveredInsideCrop.some((item) => item.box.y < recovery.y)).toBe(false);
 
   let calls = 0;
   const fakeBase: DocumentOcrProvider = {
