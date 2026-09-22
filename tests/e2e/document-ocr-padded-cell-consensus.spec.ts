@@ -190,7 +190,7 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
     w("eco", 0.25, 0.65, 0.04, 0.42),
     w("0", 0.56, 0.68, 0.018, 0.28),
     w("Base", 0.64, 0.73, 0.05), w("15.91", 0.80, 0.73),
-    w("4", 0.30, 0.77, 0.018, 0.41), w("IVA", 0.64, 0.77, 0.04), w("1,59", 0.80, 0.77),
+    w("4", 0.30, 0.77, 0.018, 0.41), w("Total", 0.46, 0.77, 0.06, 0.55), w("IVA", 0.64, 0.77, 0.04), w("1,59", 0.80, 0.77),
     w("Total", 0.64, 0.81, 0.06), w("17,50", 0.80, 0.81),
     w("4", 0.20, 0.86, 0.018, 0.25),
     w("4", 0.18, 0.90, 0.018, 0.22),
@@ -211,7 +211,7 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
     row(0.65, "eco"),
     row(0.68, "0"),
     row(0.73, "Base 15,91", true),
-    row(0.77, "4 IVA 1,59", true),
+    row(0.77, "4 Total IVA 1,59", true),
     row(0.81, "Total 17,50", true),
   ];
 
@@ -226,6 +226,7 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
     expect(text).not.toContain(rejected);
   }
   expect(cleaned.filter((item) => item.text === "4")).toHaveLength(0);
+  expect(cleaned.filter((item) => item.text === "Total")).toHaveLength(1);
   expect(text).toContain("2,80");
   expect(text).toContain("15,91");
   expect(text).not.toContain("2.80");
@@ -295,6 +296,46 @@ test("CR008-OCR-002 restores Spanish diacritics only when both isolated reads ag
     .toEqual(["CAÑA"]);
 });
 
+
+test("CR008-OCR-002 preserves a compact Total IVA compound label while removing only detached duplicates", () => {
+  const word = (text: string, x: number, y: number, width = 0.04): OcrWord => ({
+    text,
+    confidence: 0.82,
+    box: { x, y, width, height: 0.018 },
+  });
+  const words: OcrWord[] = [
+    word("Total", 0.55, 0.72, 0.06),
+    word("IVA", 0.62, 0.72, 0.04),
+    word("1,59", 0.80, 0.72, 0.05),
+    word("Total", 0.64, 0.77, 0.06),
+    word("17,50", 0.80, 0.77, 0.05),
+  ];
+  const rows: SweepRow[] = [
+    {
+      words: words.filter((item) => item.box.y === 0.72),
+      box: { x: 0.54, y: 0.72, width: 0.33, height: 0.02 },
+      text: "Total IVA 1,59",
+      summaryLike: true,
+    },
+    {
+      words: words.filter((item) => item.box.y === 0.77),
+      box: { x: 0.62, y: 0.77, width: 0.25, height: 0.02 },
+      text: "Total 17,50",
+      summaryLike: true,
+    },
+  ];
+  const bands = [
+    { left: 0.54, right: 0.60, center: 0.57, support: 5 },
+    { left: 0.65, right: 0.74, center: 0.695, support: 5 },
+    { left: 0.78, right: 0.87, center: 0.825, support: 5 },
+  ];
+
+  const cleaned = finalizeReceiptTableWords(words, rows, bands).map((item) => item.text);
+  expect(cleaned.filter((item) => item === "Total")).toHaveLength(2);
+  expect(cleaned).toContain("IVA");
+  expect(cleaned).toContain("1,59");
+  expect(cleaned).toContain("17,50");
+});
 
 test("CR008-OCR-002 preserves an explicit VAT percentage while cleaning a summary row", () => {
   const word = (text: string, x: number, width = 0.04, confidence = 0.8): OcrWord => ({
