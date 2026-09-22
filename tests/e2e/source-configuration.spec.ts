@@ -363,3 +363,58 @@ test.describe("Configuración · Fuente bancaria", () => {
     await expect(page.getByRole("status")).toHaveCount(0);
   });
 });
+
+
+  test("Preview sin sesión interna explica el contexto requerido sin fingir un fallo del runtime", async ({ page }) => {
+    await page.route("**/api/source/google/status", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          configured: true,
+          authMode: "service-account",
+          connection: {
+            connected: true,
+            accountEmail: "financial-app-reader@example.test",
+            sourceFileName: "Movimientos bancarios - fuente",
+            connectedAt: "2026-09-04T17:00:00.000Z",
+            lastVerifiedAt: null,
+            readonly: true,
+            managed: true,
+          },
+        }),
+      }),
+    );
+    await page.route("**/api/health/source-runtime", (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({
+          status: "failed",
+          compatible: false,
+          error: "workspace_context_required",
+        }),
+      }),
+    );
+    await page.route("**/api/source/google/sync", (route) =>
+      route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "workspace_context_required" }),
+      }),
+    );
+
+    await page.goto("/configuration/source");
+
+    await expect(page.locator(".config-message.error")).toContainText(
+      "La Preview necesita una sesión de Financial App",
+    );
+    await expect(page.locator(".config-message.error")).not.toContainText(
+      "No se ha podido verificar el runtime seguro de sincronización",
+    );
+    await expect(page.getByText("Sesión requerida", { exact: true })).toBeVisible();
+    await expect(page.getByText("No disponible", { exact: true })).toHaveCount(0);
+    await expect(page.getByText(/no se evalúa sin una sesión válida de Financial App/i)).toBeVisible();
+    await expect(page.getByText("financial-app-reader@example.test")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Validar fuente antes de importar" })).toBeDisabled();
+  });

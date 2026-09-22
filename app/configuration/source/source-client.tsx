@@ -152,6 +152,7 @@ function formatMoneyCents(value: number | null) {
 }
 
 function sourceActionErrorMessage(code: string | undefined) {
+  if (code === "workspace_context_required") return "La Preview necesita una sesión de Financial App para acceder al runtime seguro. Inicia sesión y vuelve a comprobar el estado.";
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
   if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
   if (code === "source_runtime_incompatible") return "El runtime de sincronización no cumple el contrato seguro requerido.";
@@ -208,10 +209,17 @@ export default function SourceClient() {
 
       if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
+      } else if (runtimePayload.error === "workspace_context_required") {
+        setError(sourceActionErrorMessage("workspace_context_required"));
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
         setError("No se ha podido verificar el runtime seguro de sincronización.");
       } else if (!syncResponse.ok) {
-        setError("No se ha podido leer la trazabilidad persistida de sincronización.");
+        const syncError = await jsonOrEmpty<{ error?: string }>(syncResponse);
+        setError(
+          syncError.error === "workspace_context_required"
+            ? sourceActionErrorMessage("workspace_context_required")
+            : "No se ha podido leer la trazabilidad persistida de sincronización.",
+        );
       }
     } catch {
       setError("No se ha podido leer el estado de la fuente bancaria.");
@@ -242,6 +250,7 @@ export default function SourceClient() {
   const serviceAccountMode = google?.authMode === "service-account";
   const managedConnection = google?.connection?.managed === true;
   const runtimeReady = runtime?.compatible === true;
+  const workspaceContextRequired = runtime?.error === "workspace_context_required";
   const hasSuccessfulSync = syncStatus.cursors.length > 0;
   const firstImportNeedsPreflight = connected && !hasSuccessfulSync;
   const readyToPreflight = connected && runtimeReady && !busy;
@@ -370,8 +379,20 @@ export default function SourceClient() {
               </div>
               <div>
                 <span>Runtime de persistencia</span>
-                <strong>{runtimeReady ? "Compatible · contrato v2" : "No disponible"}</strong>
-                <p>{runtimeReady ? "Lifecycle y selección canónica de productos están exigidos antes de escribir." : "La sincronización permanece bloqueada de forma segura."}</p>
+                <strong>
+                  {runtimeReady
+                    ? "Compatible · contrato v2"
+                    : workspaceContextRequired
+                      ? "Sesión requerida"
+                      : "No disponible"}
+                </strong>
+                <p>
+                  {runtimeReady
+                    ? "Lifecycle y selección canónica de productos están exigidos antes de escribir."
+                    : workspaceContextRequired
+                      ? "El runtime no se evalúa sin una sesión válida de Financial App; no es un fallo de persistencia."
+                      : "La sincronización permanece bloqueada de forma segura."}
+                </p>
               </div>
               <div>
                 <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>

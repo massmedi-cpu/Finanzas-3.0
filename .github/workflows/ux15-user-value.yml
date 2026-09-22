@@ -65,6 +65,13 @@ jobs:
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/module-context-navigation.spec.ts
           tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/document-ocr-structured-review.spec.ts
+          tests/e2e/document-ocr-runtime-composition.spec.ts
+          tests/e2e/document-ocr-anchor-filter.spec.ts
+          tests/e2e/document-ocr-padded-cell-consensus.spec.ts
+          tests/e2e/release-version-contract.spec.ts
+          tests/e2e/documents.spec.ts
+          tests/e2e/source-configuration.spec.ts
           tests/e2e/mobile-direct-navigation.spec.ts
           tests/e2e/mobile-personalization.spec.ts
           tests/e2e/pwa-installability.spec.ts

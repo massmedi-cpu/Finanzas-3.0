@@ -58,42 +58,19 @@ async function mockDocumentApi(
     const url = new URL(request.url());
     const method = request.method();
     if (method === "GET" && url.searchParams.get("mode") === "candidates") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, documentId, ready: true, reason: null, days: 7, amountToleranceCents: 200, principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false }, candidates: [{ transactionId, date: "2026-09-02", concept: "COMUNIDAD BLOQUE", accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente", amountCents: -5404, categoryId: null, merchantId: null, merchantName: null, confidence: 1, dayDifference: 0, amountDifferenceCents: 0, effectiveKind: "expense" }] }) });
-      return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, documentId, ready: true, reason: null, days: 7, amountToleranceCents: 200, principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false }, candidates: [{ transactionId, date: "2026-09-02", concept: "COMUNIDAD BLOQUE", accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente", amountCents: -5404, categoryId: null, merchantId: null, merchantName: null, confidence: 1, dayDifference: 0, amountDifferenceCents: 0, effectiveKind: "expense" }] }) }); return;
     }
-    if (method === "GET" && url.searchParams.get("mode") === "open") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/open`, expiresInSeconds: 300 }) }); return;
-    }
-    if (method === "GET" && url.searchParams.has("id")) {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
-    if (method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, items: [{ ...detail.document, associationCount: detail.associations.length }], total: 1, limit: 50, offset: 0, principles }) }); return;
-    }
+    if (method === "GET" && url.searchParams.get("mode") === "open") { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ provider: "supabase", url: `${SUPABASE_ORIGIN}/storage/v1/object/sign/financial-app-documents/open`, expiresInSeconds: 300 }) }); return; }
+    if (method === "GET" && url.searchParams.has("id")) { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
+    if (method === "GET") { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, items: [{ ...detail.document, associationCount: detail.associations.length }], total: 1, limit: 50, offset: 0, principles }) }); return; }
     const body = request.postDataJSON() as Record<string, any>;
     writes.push({ method, ...body });
-    if (method === "PATCH" && body.action === "metadata") {
-      detail = { ...detail, document: { ...detail.document, type: body.type, documentDate: body.documentDate, issuerName: body.issuerName, totalCents: body.totalCents, notes: body.notes } };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
-    if (method === "PATCH" && body.action === "associate") {
-      detail = { ...detail, associations: [{ id: "96000000-0000-4000-8000-000000000096", date: "2026-09-02", method: body.method, concept: "COMUNIDAD BLOQUE", accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente", confirmed: true, amountCents: -5404, transactionId: body.transactionId, categoryId: null, merchantId: null, merchantName: null, effectiveKind: "expense", confidence: 1 }] };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
-    if (method === "PATCH" && body.action === "unassociate") {
-      detail = { ...detail, associations: [] };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
-    if (method === "PATCH" && body.action === "status") {
-      detail = { ...detail, document: { ...detail.document, status: body.status } };
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
-    if (method === "POST" && body.action === "upload_sign") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: "uploads/97000000-0000-4000-8000-000000000097.pdf", token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return;
-    }
-    if (method === "POST" && body.action === "upload_finalize") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
-    }
+    if (method === "PATCH" && body.action === "metadata") { detail = { ...detail, document: { ...detail.document, type: body.type, documentDate: body.documentDate, issuerName: body.issuerName, totalCents: body.totalCents, notes: body.notes } }; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
+    if (method === "PATCH" && body.action === "associate") { detail = { ...detail, associations: [{ id: "96000000-0000-4000-8000-000000000096", date: "2026-09-02", method: body.method, concept: "COMUNIDAD BLOQUE", accountId: "95000000-0000-4000-8000-000000000095", accountName: "Cuenta corriente", confirmed: true, amountCents: -5404, transactionId: body.transactionId, categoryId: null, merchantId: null, merchantName: null, effectiveKind: "expense", confidence: 1 }] }; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
+    if (method === "PATCH" && body.action === "unassociate") { detail = { ...detail, associations: [] }; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
+    if (method === "PATCH" && body.action === "status") { detail = { ...detail, document: { ...detail.document, status: body.status } }; await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
+    if (method === "POST" && body.action === "upload_sign") { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: "uploads/97000000-0000-4000-8000-000000000097.pdf", token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return; }
+    if (method === "POST" && body.action === "upload_finalize") { await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return; }
     await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "unsupported" }) });
   });
   await page.route(signedUploadUrl, async (route) => route.fulfill({ status: 200, body: "ok" }));
@@ -138,7 +115,7 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   expect(ocrReads).toHaveLength(0);
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Lectura y reconstrucción" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
   expect(ocrReads).toHaveLength(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
@@ -153,11 +130,113 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   expect(ocrReads).toHaveLength(0);
-  await page.getByRole("button", { name: "Analizar con OCR" }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
   await expect.poll(() => ocrReads.length).toBe(1);
   await expect(page.getByText("Texto nativo PDF")).toBeVisible();
   await expect(page.getByText("FACTURA DEMO")).toBeVisible();
   await expect(page.getByText(/Sin escrituras financieras/)).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+test("Documentos marks unreliable geometry without claiming it is preserved", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "needs_review",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-22T04:30:00.000Z",
+        confidence: 0.78,
+        plainText: "TOTAL 17,50",
+        warnings: ["geometry_unreliable", "numeric_structure_unreliable", "peripheral_noise_detected"],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: false },
+        pages: [{
+          pageNumber: 1,
+          plainText: "TOTAL 17,50",
+          layoutText: "TOTAL     17,50",
+          lines: [{ id: "p1-l1", text: "TOTAL 17,50", confidence: 0.78, alignment: "right", words: [] }],
+        }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByText("⚠ Geometría requiere revisión")).toBeVisible();
+  await expect(page.getByText("✓ Geometría preservada")).toHaveCount(0);
+  await expect(page.getByText(/posición de filas o columnas no es suficientemente fiable/i)).toBeVisible();
+  await expect(page.getByText(/estructura de los importes no es suficientemente fiable/i)).toBeVisible();
+  await expect(page.getByText(/texto fuera del cuerpo principal/i)).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+test("Documentos rejects out-of-range OCR confidence before rendering", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-22T04:31:00.000Z",
+        confidence: 1.2,
+        plainText: "TOTAL 17,50",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{
+          pageNumber: 1,
+          plainText: "TOTAL 17,50",
+          layoutText: "TOTAL     17,50",
+          lines: [{ id: "p1-l1", text: "TOTAL 17,50", confidence: 0.9, alignment: "right", words: [] }],
+        }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
+  expect(writes).toHaveLength(0);
+});
+
+test("Documentos contains malformed 200 OCR payloads without crashing the review UI", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-21T18:15:10.000Z",
+        confidence: 0.72,
+        plainText: "LECTURA PARCIAL",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{ pageNumber: 1, plainText: "LECTURA PARCIAL", layoutText: "LECTURA PARCIAL" }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
 

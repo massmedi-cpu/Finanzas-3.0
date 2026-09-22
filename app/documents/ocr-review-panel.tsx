@@ -19,6 +19,13 @@ const STATUS_LABELS: Record<OcrStatus, string> = {
 const WARNING_LABELS: Record<string, string> = {
   low_confidence: "La confianza global es baja: revisa el original antes de usar cualquier dato.",
   no_text_detected: "No se ha detectado texto fiable.",
+  geometry_unreliable: "La posición de filas o columnas no es suficientemente fiable: compara la distribución con el original.",
+  numeric_structure_unreliable: "La estructura de los importes no es suficientemente fiable: revisa cantidades y decimales contra el original.",
+  peripheral_noise_detected: "Se ha detectado texto fuera del cuerpo principal del documento: comprueba que no se haya mezclado contenido del fondo.",
+  orientation_corrected: "La orientación de la imagen se ha corregido automáticamente: comprueba el resultado con el original.",
+  background_text_filtered: "Se ha filtrado texto del fondo para aislar el documento: revisa que no se haya descartado contenido válido.",
+  receipt_arithmetic_mismatch: "Los importes leídos no cuadran entre sí: revisa cantidades, precios, IVA y total contra el original.",
+  receipt_structure_incomplete: "Hay filas de producto que no se han podido estructurar por completo: la lectura queda pendiente de revisión.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
 };
@@ -53,6 +60,48 @@ async function readJson(response: Response) {
   return body;
 }
 
+function parseOcrResult(value: unknown): OcrResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ocr_response_invalid");
+  const row = value as Partial<OcrResult>;
+  if (row.contractVersion !== 1 || typeof row.documentId !== "string") throw new Error("ocr_response_invalid");
+  if (row.status !== "ready" && row.status !== "needs_review" && row.status !== "empty") throw new Error("ocr_response_invalid");
+  if (row.source !== "pdf_text" && row.source !== "image_ocr" && row.source !== "pdf_ocr" && row.source !== "hybrid") throw new Error("ocr_response_invalid");
+  if (typeof row.extractor !== "string" || typeof row.extractedAt !== "string" || typeof row.plainText !== "string") throw new Error("ocr_response_invalid");
+  if (row.confidence !== null && (typeof row.confidence !== "number" || !Number.isFinite(row.confidence) || row.confidence < 0 || row.confidence > 1)) throw new Error("ocr_response_invalid");
+  if (!Array.isArray(row.pages) || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
+  if (!row.warnings.every((warning) => typeof warning === "string")) throw new Error("ocr_response_invalid");
+  for (const page of row.pages) {
+    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string" || (page.reviewText !== undefined && typeof page.reviewText !== "string")) {
+      throw new Error("ocr_response_invalid");
+    }
+    for (const line of page.lines) {
+      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Number.isFinite(line.confidence) || line.confidence < 0 || line.confidence > 1) {
+        throw new Error("ocr_response_invalid");
+      }
+    }
+    if (page.receiptIntegrity !== undefined) {
+      const integrity = page.receiptIntegrity;
+      if (!integrity || typeof integrity !== "object"
+        || (integrity.status !== "verified" && integrity.status !== "issues" && integrity.status !== "partial")
+        || !Number.isSafeInteger(integrity.productRows) || integrity.productRows < 0
+        || !Number.isSafeInteger(integrity.candidateProductRows) || integrity.candidateProductRows < integrity.productRows
+        || !Number.isSafeInteger(integrity.unresolvedProductRows) || integrity.unresolvedProductRows < 0
+        || integrity.unresolvedProductRows !== integrity.candidateProductRows - integrity.productRows
+        || !Number.isSafeInteger(integrity.arithmeticRowsChecked) || integrity.arithmeticRowsChecked < 0
+        || !Number.isSafeInteger(integrity.arithmeticRowsMatching) || integrity.arithmeticRowsMatching < 0
+        || integrity.arithmeticRowsMatching > integrity.arithmeticRowsChecked
+        || (integrity.lineTotalMatchesDocumentTotal !== null && typeof integrity.lineTotalMatchesDocumentTotal !== "boolean")
+        || (integrity.basePlusTaxMatchesTotal !== null && typeof integrity.basePlusTaxMatchesTotal !== "boolean")) {
+        throw new Error("ocr_response_invalid");
+      }
+    }
+  }
+  if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true || typeof row.principles.preservesGeometry !== "boolean") {
+    throw new Error("ocr_response_invalid");
+  }
+  return row as OcrResult;
+}
+
 function errorLabel(code: string) {
   const labels: Record<string, string> = {
     ocr_google_drive_file_id_missing: "Este documento de Drive no conserva un identificador de archivo válido y no puede leerse de forma segura.",
@@ -74,8 +123,25 @@ function errorLabel(code: string) {
     ocr_worker_timeout: "El motor OCR no ha podido iniciarse a tiempo.",
     ocr_recognize_timeout: "La lectura OCR ha superado el tiempo máximo de seguridad.",
     unsupported_ocr_mime_type: "Este formato todavía no admite OCR.",
+    ocr_response_invalid: "La lectura terminó, pero la respuesta OCR no tiene el formato esperado. No se ha guardado ningún dato.",
   };
   return labels[code] ?? "No se ha podido completar la lectura OCR de este documento.";
+}
+
+function integrityLabel(integrity: NonNullable<OcrResult["pages"][number]["receiptIntegrity"]>) {
+  const coverage = `${integrity.productRows}/${integrity.candidateProductRows} filas estructuradas`;
+  const rows = `${integrity.arithmeticRowsMatching}/${integrity.arithmeticRowsChecked} líneas cuadran`;
+  const total = integrity.lineTotalMatchesDocumentTotal === null
+    ? "total no comprobable"
+    : integrity.lineTotalMatchesDocumentTotal
+      ? "suma de líneas = total"
+      : "suma de líneas ≠ total";
+  const tax = integrity.basePlusTaxMatchesTotal === null
+    ? null
+    : integrity.basePlusTaxMatchesTotal
+      ? "base + IVA = total"
+      : "base + IVA ≠ total";
+  return [coverage, rows, total, tax].filter(Boolean).join(" · ");
 }
 
 export function OcrReviewPanel({
@@ -110,8 +176,8 @@ export function OcrReviewPanel({
     setError(null);
     setCopyState("idle");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })) as OcrResult;
-      setResult(data);
+      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" }));
+      setResult(parseOcrResult(data));
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
       setError(errorLabel(code));
@@ -137,8 +203,12 @@ export function OcrReviewPanel({
 
   async function copyReading() {
     if (!result?.plainText.trim()) return;
+    const reviewText = result.pages
+      .map((page) => page.reviewText?.trim() || page.layoutText.trim() || page.plainText.trim())
+      .filter(Boolean)
+      .join("\n\n");
     try {
-      await navigator.clipboard.writeText(result.plainText);
+      await navigator.clipboard.writeText(reviewText || result.plainText);
       setCopyState("copied");
     } catch {
       setCopyState("error");
@@ -220,7 +290,14 @@ export function OcrReviewPanel({
                     <strong>Página {page.pageNumber}</strong>
                     <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}{lowConfidence ? ` · ${lowConfidence} a revisar` : ""}</span>
                   </summary>
-                  {page.layoutText ? <pre className={ocrStyles.layout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
+                  {page.receiptIntegrity ? (
+                    <div className={page.receiptIntegrity.status === "issues" ? ocrStyles.warnings : ocrStyles.info} data-testid={`receipt-integrity-${page.pageNumber}`}>
+                      <strong>{page.receiptIntegrity.status === "verified" ? "Coherencia numérica verificada" : page.receiptIntegrity.status === "issues" ? "Incoherencias numéricas detectadas" : "Coherencia numérica parcial"}</strong>
+                      <span>{integrityLabel(page.receiptIntegrity)}</span>
+                      <small>Comprueba el original igualmente: esta validación detecta contradicciones internas, no sustituye la revisión del documento.</small>
+                    </div>
+                  ) : null}
+                  {page.reviewText || page.layoutText ? <pre className={ocrStyles.layout}>{page.reviewText || page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
                 </details>
               );
             })}
@@ -228,7 +305,7 @@ export function OcrReviewPanel({
 
           <div className={ocrStyles.principles}>
             <span>✓ Sin escrituras financieras</span>
-            <span>✓ Geometría preservada</span>
+            <span>{result.principles.preservesGeometry ? "✓ Geometría preservada" : "⚠ Geometría requiere revisión"}</span>
             <span>✓ Revisión humana obligatoria</span>
           </div>
         </div>
