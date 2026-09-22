@@ -1,8 +1,12 @@
 import { expect, test } from "@playwright/test";
 import type { OcrWord } from "../../src/domain/document-ocr";
-import type { SweepRow } from "../../src/infrastructure/ocr/receipt-column-sweep-provider";
+import {
+  mergeColumnSweepCell,
+  type SweepRow,
+} from "../../src/infrastructure/ocr/receipt-column-sweep-provider";
 import {
   choosePaddedNumericConsensus,
+  mergeDescriptionObservations,
   paddedCellDimensions,
   paddedExplicitNumericTokens,
   paddedFocusedCellRectangle,
@@ -107,4 +111,56 @@ test("CR008-OCR-002 v12 refuses conflicting explicit-money consensus", () => {
     observation("5,00", 1, "raw_line"),
   ], "money");
   expect(recovered).toBeNull();
+});
+
+
+test("CR008-OCR-002 removes malformed numeric and glyph noise that overlaps a recovered cell", () => {
+  const row: SweepRow = {
+    words: [],
+    box: { x: 0.1, y: 0.5, width: 0.8, height: 0.03 },
+    text: "CUBATA 1 5,50 5,508 ]",
+    summaryLike: false,
+  };
+  const band = { left: 0.8, right: 0.86, center: 0.83, support: 5 };
+  const words: OcrWord[] = [
+    { text: "CUBATA", confidence: 0.85, box: { x: 0.12, y: 0.5, width: 0.1, height: 0.02 } },
+    // Centre is just outside the band, but the malformed value physically overlaps it.
+    { text: "5,508", confidence: 0.76, box: { x: 0.75, y: 0.5, width: 0.08, height: 0.02 } },
+    { text: "]", confidence: 0.31, box: { x: 0.825, y: 0.5, width: 0.01, height: 0.02 } },
+  ];
+  const recovered: OcrWord = {
+    text: "5,50",
+    confidence: 0.88,
+    box: { x: 0.81, y: 0.5, width: 0.04, height: 0.02 },
+  };
+
+  const merged = mergeColumnSweepCell(words, row, band, recovered);
+  expect(merged.map((word) => word.text)).toContain("CUBATA");
+  expect(merged.map((word) => word.text)).toContain("5,50");
+  expect(merged.map((word) => word.text)).not.toContain("5,508");
+  expect(merged.map((word) => word.text)).not.toContain("]");
+});
+
+test("CR008-OCR-002 lets two independent normalized reads fix one-character description substitutions", () => {
+  const base: OcrWord[] = [
+    { text: "CUEATA", confidence: 0.91, box: { x: 0.12, y: 0.5, width: 0.09, height: 0.02 } },
+  ];
+  const variant0: OcrWord[] = [
+    { text: "CUBATA", confidence: 0.68, box: { x: 0.12, y: 0.5, width: 0.09, height: 0.02 } },
+  ];
+  const variant1: OcrWord[] = [
+    { text: "CUBATA", confidence: 0.66, box: { x: 0.12, y: 0.5, width: 0.09, height: 0.02 } },
+  ];
+
+  const corrected = mergeDescriptionObservations(base, [variant0, variant1], 0.5);
+  expect(corrected.map((word) => word.text)).toEqual(["CUBATA"]);
+
+  const unrelated0: OcrWord[] = [
+    { text: "COCA", confidence: 0.7, box: { x: 0.12, y: 0.5, width: 0.09, height: 0.02 } },
+  ];
+  const unrelated1: OcrWord[] = [
+    { text: "COCA", confidence: 0.7, box: { x: 0.12, y: 0.5, width: 0.09, height: 0.02 } },
+  ];
+  const guarded = mergeDescriptionObservations(base, [unrelated0, unrelated1], 0.5);
+  expect(guarded.map((word) => word.text)).toEqual(["CUEATA"]);
 });
