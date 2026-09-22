@@ -24,12 +24,22 @@ export type OcrLine = {
   words: OcrWord[];
 };
 
+export type OcrReceiptIntegrity = {
+  status: "verified" | "issues" | "partial";
+  productRows: number;
+  arithmeticRowsChecked: number;
+  arithmeticRowsMatching: number;
+  lineTotalMatchesDocumentTotal: boolean | null;
+  basePlusTaxMatchesTotal: boolean | null;
+};
+
 export type OcrPage = {
   pageNumber: number;
   lines: OcrLine[];
   plainText: string;
   layoutText: string;
   reviewText?: string;
+  receiptIntegrity?: OcrReceiptIntegrity;
 };
 
 export type OcrSource = "pdf_text" | "image_ocr" | "pdf_ocr" | "hybrid";
@@ -311,6 +321,70 @@ function buildReceiptReviewText(lines: OcrLine[]) {
   return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function receiptMoneyCents(text: string) {
+  const token = text.replace(/[€\s]/g, "").replace(".", ",");
+  if (!/^\d{1,6},\d{2}$/.test(token)) return null;
+  const [integer, decimals] = token.split(",");
+  const cents = Number(integer) * 100 + Number(decimals);
+  return Number.isSafeInteger(cents) ? cents : null;
+}
+
+function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefined {
+  const lines = reviewText.split("\n").map((line) => line.trim()).filter(Boolean);
+  const productRows: Array<{ quantity: number; priceCents: number; amountCents: number }> = [];
+  const summaries = new Map<string, number>();
+
+  for (const line of lines) {
+    const product = line.match(/^(.+?)\s+(\d{1,2})\s+(\d{1,6}[,.]\d{2})\s+(\d{1,6}[,.]\d{2})$/u);
+    if (product) {
+      const quantity = Number(product[2]);
+      const priceCents = receiptMoneyCents(product[3]);
+      const amountCents = receiptMoneyCents(product[4]);
+      if (Number.isSafeInteger(quantity) && quantity > 0 && priceCents !== null && amountCents !== null) {
+        productRows.push({ quantity, priceCents, amountCents });
+      }
+      continue;
+    }
+
+    const summary = line.match(/^(Base|IVA|Total|Subtotal)(?:\s+\d{1,3}(?:[,.]\d{1,2})?\s*%)?:\s*(\d{1,6}[,.]\d{2})$/iu);
+    if (summary) {
+      const cents = receiptMoneyCents(summary[2]);
+      if (cents !== null) summaries.set(receiptToken(summary[1]), cents);
+    }
+  }
+
+  if (productRows.length < 2) return undefined;
+
+  const arithmeticRowsChecked = productRows.length;
+  const arithmeticRowsMatching = productRows.filter((row) => row.quantity * row.priceCents === row.amountCents).length;
+  const total = summaries.get("total") ?? null;
+  const base = summaries.get("base") ?? summaries.get("subtotal") ?? null;
+  const tax = summaries.get("iva") ?? null;
+  const lineTotal = productRows.reduce((sum, row) => sum + row.amountCents, 0);
+
+  const lineTotalMatchesDocumentTotal = total === null ? null : lineTotal === total;
+  const basePlusTaxMatchesTotal = base === null || tax === null || total === null ? null : base + tax === total;
+
+  const hasIssue = arithmeticRowsMatching !== arithmeticRowsChecked
+    || lineTotalMatchesDocumentTotal === false
+    || basePlusTaxMatchesTotal === false;
+  const hasStrongSummaryCheck = lineTotalMatchesDocumentTotal !== null;
+  const status: OcrReceiptIntegrity["status"] = hasIssue
+    ? "issues"
+    : hasStrongSummaryCheck
+      ? "verified"
+      : "partial";
+
+  return {
+    status,
+    productRows: productRows.length,
+    arithmeticRowsChecked,
+    arithmeticRowsMatching,
+    lineTotalMatchesDocumentTotal,
+    basePlusTaxMatchesTotal,
+  };
+}
+
 function pageQualityWarnings(page: OcrPage) {
   const warnings: string[] = [];
   const words = page.lines.flatMap((line) => line.words);
@@ -357,6 +431,7 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
   const plainText = lines.map((line) => line.text).join("\n");
   const layoutText = lines.map((line) => renderLine(line.words, columns, bounds)).filter(Boolean).join("\n");
   const reviewText = buildReceiptReviewText(lines);
+  const receiptIntegrity = reviewText ? buildReceiptIntegrity(reviewText) : undefined;
 
   return {
     pageNumber,
@@ -364,6 +439,7 @@ export function reconstructOcrPage(pageNumber: number, rawWords: OcrWord[], colu
     plainText,
     layoutText,
     ...(reviewText ? { reviewText } : {}),
+    ...(receiptIntegrity ? { receiptIntegrity } : {}),
   };
 }
 
@@ -393,7 +469,10 @@ export function buildDocumentOcrResult(input: {
     ? allLines.reduce((sum, line) => sum + line.confidence, 0) / allLines.length
     : null;
   const warnings = [...new Set((input.warnings ?? []).map((warning) => warning.trim()).filter(Boolean))];
-  for (const page of pages) warnings.push(...pageQualityWarnings(page));
+  for (const page of pages) {
+    warnings.push(...pageQualityWarnings(page));
+    if (page.receiptIntegrity?.status === "issues") warnings.push("receipt_arithmetic_mismatch");
+  }
   if (!allLines.length) warnings.push("no_text_detected");
   if (confidence !== null && confidence < LOW_CONFIDENCE) warnings.push("low_confidence");
   const uniqueWarnings = [...new Set(warnings)];
