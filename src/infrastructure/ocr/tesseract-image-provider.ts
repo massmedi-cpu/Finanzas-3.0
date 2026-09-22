@@ -521,6 +521,7 @@ async function recognizeMonetaryColumns(
     preserve_interword_spaces: "1",
     classify_bln_numeric_mode: "1",
   });
+  let timedOut = false;
   try {
     const words: OcrWord[] = [];
     for (const rectangle of numericColumnRectangles(baseWords, isolation, metadata)) {
@@ -537,16 +538,23 @@ async function recognizeMonetaryColumns(
       words.push(...parseTsv(data?.tsv, metadata.width, metadata.height, rectangle));
     }
     return words;
+  } catch (error) {
+    if (error instanceof OcrTimeoutError) timedOut = true;
+    throw error;
   } finally {
-    try {
-      await worker.setParameters({
-        tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
-        tessedit_char_whitelist: "",
-        preserve_interword_spaces: "0",
-        classify_bln_numeric_mode: "0",
-      });
-    } catch {
+    if (timedOut) {
       invalidateWorker();
+    } else {
+      try {
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+          tessedit_char_whitelist: "",
+          preserve_interword_spaces: "0",
+          classify_bln_numeric_mode: "0",
+        });
+      } catch {
+        invalidateWorker();
+      }
     }
   }
 }
@@ -595,7 +603,8 @@ async function refineBackgroundContamination(
   try {
     const refined = await recognizeCandidate(worker, bytes, metadata, 0, false, rectangle);
     if (refinementIsSafe(isolation.words, refined.words)) selectedWords = refined.words;
-  } catch {
+  } catch (error) {
+    if (error instanceof OcrTimeoutError) throw error;
     // The geometry-filtered first pass is still safer than reintroducing detached background text.
   }
 
@@ -607,7 +616,8 @@ async function refineBackgroundContamination(
   try {
     const monetaryWords = await recognizeMonetaryColumns(worker, bytes, metadata, isolation, selectedWords);
     selectedWords = mergeMonetaryRefinement(selectedWords, monetaryWords);
-  } catch {
+  } catch (error) {
+    if (error instanceof OcrTimeoutError) throw error;
     // Numeric refinement is additive hardening; keep the isolated document result if unavailable.
   }
 
