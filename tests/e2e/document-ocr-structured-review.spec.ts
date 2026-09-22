@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { buildDocumentOcrResult, reconstructOcrPage, type OcrWord } from "../../src/domain/document-ocr";
+import { isReceiptMoney, normalizeReceiptMoneyEs, receiptMoneyCents } from "../../src/domain/receipt-money";
+import { productRowArithmeticMismatch } from "../../src/infrastructure/ocr/receipt-row-cell-consensus-provider";
 
 function word(text: string, x: number, y: number, width = 0.06, confidence = 0.9): OcrWord {
   return { text, confidence, box: { x, y, width, height: 0.018 } };
@@ -215,4 +217,43 @@ test("unresolved product-like rows force partial integrity instead of a false ve
   expect(result.status).toBe("needs_review");
   expect(result.warnings).toContain("receipt_structure_incomplete");
   expect(result.warnings).not.toContain("receipt_arithmetic_mismatch");
+});
+
+
+test("receipt money truth supports Spanish thousands consistently and rejects malformed decimals", () => {
+  expect(isReceiptMoney("17,50")).toBe(true);
+  expect(isReceiptMoney("1.234,56 €")).toBe(true);
+  expect(isReceiptMoney("1,234.56")).toBe(true);
+  expect(receiptMoneyCents("1.234,56")).toBe(123456);
+  expect(receiptMoneyCents("1,234.56")).toBe(123456);
+  expect(normalizeReceiptMoneyEs("1,234.56")).toBe("1.234,56");
+
+  expect(isReceiptMoney("5,508")).toBe(false);
+  expect(isReceiptMoney("1.23.4,56")).toBe(false);
+  expect(isReceiptMoney("1234")).toBe(false);
+
+  expect(productRowArithmeticMismatch("2", "1.234,56", "2.469,12")).toBe(false);
+  expect(productRowArithmeticMismatch("2", "1.234,56", "2.469,13")).toBe(true);
+});
+
+test("structured receipt review verifies totals above one thousand euros", () => {
+  const page = reconstructOcrPage(1, [
+    word("DESCRIPCION", 0.14, 0.25, 0.14),
+    word("UDS", 0.56, 0.25, 0.04),
+    word("PRECIO", 0.66, 0.25, 0.07),
+    word("IMPORTE", 0.80, 0.25, 0.08),
+    word("SERVICIO", 0.14, 0.30, 0.09), word("1", 0.57, 0.30, 0.02), word("1.234,56", 0.66, 0.30, 0.09), word("1.234,56", 0.80, 0.30, 0.09),
+    word("TASA", 0.14, 0.35, 0.05), word("1", 0.57, 0.35, 0.02), word("2,00", 0.67, 0.35, 0.05), word("2,00", 0.81, 0.35, 0.05),
+    word("Total", 0.64, 0.45, 0.06), word("1.236,56", 0.79, 0.45, 0.09),
+  ]);
+
+  expect(page.reviewText).toMatch(/SERVICIO\s+1\s+1\.234,56\s+1\.234,56/);
+  expect(page.reviewText).toContain("Total: 1.236,56");
+  expect(page.receiptIntegrity).toMatchObject({
+    status: "verified",
+    productRows: 2,
+    candidateProductRows: 2,
+    unresolvedProductRows: 0,
+    lineTotalMatchesDocumentTotal: true,
+  });
 });
