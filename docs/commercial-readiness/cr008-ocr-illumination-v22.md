@@ -77,3 +77,7 @@ Validated before requesting Preview:
 - Financial source remains read-only; `financialWrites=false`; `requiresHumanReview=true`.
 
 This documentation-only commit requests the exact Vercel Preview. Runtime code is unchanged from the frozen functional tree.
+
+## Retry exact Preview · 22/09/2026
+
+The previous documentation-only Preview request reached Vercel while the Hobby build-rate limit was active and produced no new deployment. This retry changes documentation only and requests one exact Preview of the same frozen runtime tree `a1b781a67836a35403d7bb9ff225b59b9ff2a390`. Production remains untouched until the authenticated canonical-ticket replay and runtime log checks pass.
