@@ -138,6 +138,78 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("Documentos marks unreliable geometry without claiming it is preserved", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "needs_review",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-22T04:30:00.000Z",
+        confidence: 0.78,
+        plainText: "TOTAL 17,50",
+        warnings: ["geometry_unreliable", "numeric_structure_unreliable", "peripheral_noise_detected"],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: false },
+        pages: [{
+          pageNumber: 1,
+          plainText: "TOTAL 17,50",
+          layoutText: "TOTAL     17,50",
+          lines: [{ id: "p1-l1", text: "TOTAL 17,50", confidence: 0.78, alignment: "right", words: [] }],
+        }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByText("⚠ Geometría requiere revisión")).toBeVisible();
+  await expect(page.getByText("✓ Geometría preservada")).toHaveCount(0);
+  await expect(page.getByText(/posición de filas o columnas no es suficientemente fiable/i)).toBeVisible();
+  await expect(page.getByText(/estructura de los importes no es suficientemente fiable/i)).toBeVisible();
+  await expect(page.getByText(/texto fuera del cuerpo principal/i)).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+test("Documentos rejects out-of-range OCR confidence before rendering", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/ocr*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId,
+        status: "ready",
+        source: "image_ocr",
+        extractor: "tesseract",
+        extractedAt: "2026-09-22T04:31:00.000Z",
+        confidence: 1.2,
+        plainText: "TOTAL 17,50",
+        warnings: [],
+        principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
+        pages: [{
+          pageNumber: 1,
+          plainText: "TOTAL 17,50",
+          layoutText: "TOTAL     17,50",
+          lines: [{ id: "p1-l1", text: "TOTAL 17,50", confidence: 0.9, alignment: "right", words: [] }],
+        }],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("La lectura terminó, pero la respuesta OCR no tiene el formato esperado");
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos contains malformed 200 OCR payloads without crashing the review UI", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
