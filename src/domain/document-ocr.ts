@@ -1,4 +1,5 @@
 import { clusterOcrRows } from "./ocr-rows";
+import { isReceiptMoney, normalizeReceiptMoneyEs, receiptMoneyCents } from "./receipt-money";
 
 export type OcrBoundingBox = {
   x: number;
@@ -202,7 +203,7 @@ function receiptToken(text: string) {
 }
 
 function explicitReceiptMoney(text: string) {
-  return /^\d{1,6}[,.]\d{2}$/.test(text.replace(/[€\s]/g, ""));
+  return isReceiptMoney(text);
 }
 
 function receiptHeaderWord(line: OcrLine, role: "description" | "units" | "price" | "amount") {
@@ -349,8 +350,8 @@ function buildReceiptReviewText(lines: OcrLine[]) {
           .replace(/\s+/g, " ")
           .trim();
         if ((description.match(/\p{L}/gu) ?? []).length >= 2) {
-          const price = monies[monies.length - 2].text;
-          const amount = monies[monies.length - 1].text;
+          const price = normalizeReceiptMoneyEs(monies[monies.length - 2].text) ?? monies[monies.length - 2].text;
+          const amount = normalizeReceiptMoneyEs(monies[monies.length - 1].text) ?? monies[monies.length - 1].text;
           output.push(formatReceiptProduct(description, quantity.text.trim(), price, amount));
           productCount += 1;
           continue;
@@ -386,7 +387,8 @@ function buildReceiptReviewText(lines: OcrLine[]) {
           .sort((a, b) => b.box.x - a.box.x)[0] ?? null
         : null;
       const extraText = explicitRate && percent ? ` ${explicitRate.text.trim()} %` : "";
-      output.push(`${label.text.replace(/:$/, "")}${extraText}: ${amount.text}`);
+      const normalizedAmount = normalizeReceiptMoneyEs(amount.text) ?? amount.text;
+      output.push(`${label.text.replace(/:$/, "")}${extraText}: ${normalizedAmount}`);
       continue;
     }
 
@@ -397,14 +399,6 @@ function buildReceiptReviewText(lines: OcrLine[]) {
   }
 
   return output.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-}
-
-function receiptMoneyCents(text: string) {
-  const token = text.replace(/[€\s]/g, "").replace(".", ",");
-  if (!/^\d{1,6},\d{2}$/.test(token)) return null;
-  const [integer, decimals] = token.split(",");
-  const cents = Number(integer) * 100 + Number(decimals);
-  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefined {
@@ -424,20 +418,32 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
     : [];
 
   for (const line of lines) {
-    const product = line.match(/^(.+?)\s+(\d{1,2})\s+(\d{1,6}[,.]\d{2})\s+(\d{1,6}[,.]\d{2})$/u);
-    if (product) {
-      const quantity = Number(product[2]);
-      const priceCents = receiptMoneyCents(product[3]);
-      const amountCents = receiptMoneyCents(product[4]);
-      if (Number.isSafeInteger(quantity) && quantity > 0 && priceCents !== null && amountCents !== null) {
+    const tokens = line.split(/\s+/).filter(Boolean);
+    if (tokens.length >= 4) {
+      const amountToken = tokens[tokens.length - 1];
+      const priceToken = tokens[tokens.length - 2];
+      const quantityToken = tokens[tokens.length - 3];
+      const description = tokens.slice(0, -3).join(" ");
+      const quantity = /^\d{1,2}$/.test(quantityToken) ? Number(quantityToken) : null;
+      const priceCents = receiptMoneyCents(priceToken);
+      const amountCents = receiptMoneyCents(amountToken);
+      if (
+        (description.match(/\p{L}/gu) ?? []).length >= 2
+        && quantity !== null
+        && Number.isSafeInteger(quantity)
+        && quantity > 0
+        && priceCents !== null
+        && amountCents !== null
+      ) {
         productRows.push({ quantity, priceCents, amountCents });
+        continue;
       }
-      continue;
     }
 
-    const summary = line.match(/^(Base|IVA|Total|Subtotal)(?:\s+\d{1,3}(?:[,.]\d{1,2})?\s*%)?:\s*(\d{1,6}[,.]\d{2})$/iu);
+    const summary = line.match(/^(Base|IVA|Total|Subtotal)\b/iu);
     if (summary) {
-      const cents = receiptMoneyCents(summary[2]);
+      const amountToken = [...tokens].reverse().find((token) => isReceiptMoney(token.replace(/:$/, "")));
+      const cents = amountToken ? receiptMoneyCents(amountToken.replace(/:$/, "")) : null;
       if (cents !== null) summaries.set(receiptToken(summary[1]), cents);
     }
   }
@@ -446,7 +452,7 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
 
   const candidateProductRows = productSection.filter((line) => {
     const letters = (line.match(/\p{L}/gu) ?? []).length;
-    const moneyTokens = line.match(/\d{1,6}[,.]\d{2}/g) ?? [];
+    const moneyTokens = line.split(/\s+/).filter((token) => isReceiptMoney(token.replace(/:$/, "")));
     return letters >= 2 && moneyTokens.length >= 1;
   }).length;
   const unresolvedProductRows = Math.max(0, candidateProductRows - productRows.length);
