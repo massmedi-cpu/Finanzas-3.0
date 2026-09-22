@@ -68,6 +68,7 @@ jobs:
           tests/e2e/document-ocr-runtime-composition.spec.ts
           tests/e2e/document-ocr-anchor-filter.spec.ts
           tests/e2e/document-ocr-padded-cell-consensus.spec.ts
+          tests/e2e/release-version-contract.spec.ts
           tests/e2e/documents.spec.ts
           tests/e2e/source-configuration.spec.ts
           tests/e2e/mobile-direct-navigation.spec.ts
