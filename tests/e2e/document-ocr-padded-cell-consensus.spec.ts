@@ -246,3 +246,30 @@ test("CR008-OCR-002 keeps a high-confidence first pass only until two isolated v
   expect(mergeDescriptionObservations(base, [isolated0, isolated1], 0.54).map((item) => item.text))
     .toEqual(["CUBATA"]);
 });
+
+
+test("CR008-OCR-002 restores Spanish diacritics only when both isolated reads agree", () => {
+  const base: OcrWord[] = [
+    { text: "CANA", confidence: 0.93, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  const accented0: OcrWord[] = [
+    { text: "CAÑA", confidence: 0.72, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  const accented1: OcrWord[] = [
+    { text: "CAÑA", confidence: 0.69, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  expect(mergeDescriptionObservations(base, [accented0, accented1], 0.54).map((item) => item.text))
+    .toEqual(["CAÑA"]);
+
+  const alreadyAccented: OcrWord[] = [
+    { text: "CAÑA", confidence: 0.9, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  const plain0: OcrWord[] = [
+    { text: "CANA", confidence: 0.75, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  const plain1: OcrWord[] = [
+    { text: "CANA", confidence: 0.76, box: { x: 0.16, y: 0.52, width: 0.07, height: 0.018 } },
+  ];
+  expect(mergeDescriptionObservations(alreadyAccented, [plain0, plain1], 0.54).map((item) => item.text))
+    .toEqual(["CAÑA"]);
+});
