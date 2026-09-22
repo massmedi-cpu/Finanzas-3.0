@@ -416,5 +416,5 @@ test.describe("Configuración · Fuente bancaria", () => {
     await expect(page.getByText("No disponible", { exact: true })).toHaveCount(0);
     await expect(page.getByText(/no se evalúa sin una sesión válida de Financial App/i)).toBeVisible();
     await expect(page.getByText("financial-app-reader@example.test")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Actualizar desde Google" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Validar fuente antes de importar" })).toBeDisabled();
   });
