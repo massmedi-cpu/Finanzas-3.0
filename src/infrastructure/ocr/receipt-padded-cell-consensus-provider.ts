@@ -69,12 +69,18 @@ type RecognitionSignals = {
   hasBareDigits: boolean;
 };
 
+class PaddedCellTimeoutError extends Error {
+  constructor(readonly code: string) {
+    super(code);
+  }
+}
+
 let workerPromise: Promise<Worker> | null = null;
 let queueTail: Promise<void> = Promise.resolve();
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
   return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(label)), timeoutMs);
+    const timer = setTimeout(() => reject(new PaddedCellTimeoutError(label)), timeoutMs);
     promise.then(
       (value) => {
         clearTimeout(timer);
@@ -92,6 +98,11 @@ function invalidateWorker() {
   const current = workerPromise;
   workerPromise = null;
   if (current) void current.then((worker) => worker.terminate()).catch(() => undefined);
+}
+
+async function terminateOwnedWorker(worker: Worker) {
+  workerPromise = null;
+  await worker.terminate().catch(() => undefined);
 }
 
 async function getWorker() {
@@ -608,12 +619,16 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
   const glyphHeight = heights[Math.floor(heights.length / 2)] ?? 30;
   // Estimate paper brightness with full-image context, before cutting the cells.
   // Normalizing each tiny crop independently mistakes its edges for characters.
-  const preparedPages = await Promise.all(([0, 1] as const)
-    .map((variant) => normalizeReceiptIllumination(bytes, glyphHeight, variant)));
+  // Keep full-image normalization sequential: both variants at once multiply peak RAW-buffer memory.
+  const preparedPages = [
+    await normalizeReceiptIllumination(bytes, glyphHeight, 0),
+    await normalizeReceiptIllumination(bytes, glyphHeight, 1),
+  ];
 
   return exclusive(async () => {
     const worker = await withTimeout(getWorker(), CELL_TIMEOUT_MS, "ocr_padded_cell_worker_timeout");
-    let words = baseWords;
+    try {
+      let words = baseWords;
     let attemptedCells = 0;
     let preparedVariants = 0;
     let recognitionAttempts = 0;
@@ -649,7 +664,8 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
             if (signals.hasExplicitDecimal) explicitDecimalReads += 1;
             if (signals.hasBareDigits) bareDigitReads += 1;
             if (signals.observation) observations.push(signals.observation);
-          } catch {
+          } catch (error) {
+            if (error instanceof PaddedCellTimeoutError) throw error;
             recognitionFailures += 1;
           }
         }
@@ -686,10 +702,15 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       });
     }
 
-    try {
-      return await recoverDescriptions(worker, preparedPages, metadata, rows, bands, words);
-    } catch {
-      return words;
+      try {
+        return await recoverDescriptions(worker, preparedPages, metadata, rows, bands, words);
+      } catch (error) {
+        if (error instanceof PaddedCellTimeoutError) throw error;
+        return words;
+      }
+    } finally {
+      // Do not retain a second Tesseract worker alongside the base OCR worker between requests.
+      await terminateOwnedWorker(worker);
     }
   });
 }
@@ -715,8 +736,11 @@ export class ReceiptPaddedCellConsensusImageOcrProvider implements DocumentOcrPr
         extractor: `${base.extractor}${EXTRACTOR_SUFFIX}`.slice(0, 100),
         pages: [{ ...base.pages[0], words }],
       };
-    } catch {
-      invalidateWorker();
+    } catch (error) {
+      // Queue timeout means a previous request still owns the shared padded worker.
+      if (!(error instanceof PaddedCellTimeoutError && error.code === "ocr_padded_cell_queue_timeout")) {
+        invalidateWorker();
+      }
       return base;
     }
   }
