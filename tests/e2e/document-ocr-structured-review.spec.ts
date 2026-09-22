@@ -7,6 +7,8 @@ function word(text: string, x: number, y: number, width = 0.06, confidence = 0.9
 
 test("CR008-OCR-002 builds a clean structured receipt review without altering raw trace text", () => {
   const words: OcrWord[] = [
+    word("FONDO", 0.02, 0.01, 0.07),
+    word("AJENO", 0.10, 0.01, 0.07),
     word("Misa", 0.38, 0.08, 0.05),
     word("Avila", 0.22, 0.11, 0.06),
     word("Bar", 0.29, 0.11, 0.04),
@@ -67,6 +69,7 @@ test("CR008-OCR-002 builds a clean structured receipt review without altering ra
 
   expect(review).toContain("Misa");
   expect(review).toContain("Avila Bar");
+  expect(review).not.toContain("FONDO AJENO");
   expect(review).toMatch(/DESCRIPCION\s+UDS\s+PRECIO\s+IMPORTE/);
   expect(review).toMatch(/ENERGY\s+1\s+1,80\s+1,80/);
   expect(review).toMatch(/TERCIO GALICIA CERO\s+1\s+2,80\s+2,80/);
@@ -153,4 +156,21 @@ test("receipt integrity flags contradictions instead of silently normalizing the
   });
   expect(result.status).toBe("needs_review");
   expect(result.warnings).toContain("receipt_arithmetic_mismatch");
+});
+
+
+test("structured review keeps a nearby merchant title even when no labelled metadata exists", () => {
+  const page = reconstructOcrPage(1, [
+    word("BAR", 0.28, 0.20, 0.04),
+    word("CENTRAL", 0.33, 0.20, 0.08),
+    word("DESCRIPCION", 0.14, 0.25, 0.14),
+    word("UDS", 0.56, 0.25, 0.04),
+    word("PRECIO", 0.66, 0.25, 0.07),
+    word("IMPORTE", 0.80, 0.25, 0.08),
+    word("UNO", 0.14, 0.30, 0.05), word("1", 0.57, 0.30, 0.02), word("2,00", 0.67, 0.30, 0.05), word("2,00", 0.81, 0.30, 0.05),
+    word("DOS", 0.14, 0.35, 0.05), word("1", 0.57, 0.35, 0.02), word("3,00", 0.67, 0.35, 0.05), word("3,00", 0.81, 0.35, 0.05),
+    word("Total", 0.64, 0.45, 0.06), word("5,00", 0.81, 0.45, 0.05),
+  ]);
+
+  expect(page.reviewText).toContain("BAR CENTRAL");
 });
