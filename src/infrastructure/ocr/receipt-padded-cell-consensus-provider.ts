@@ -347,7 +347,20 @@ export function finalizeReceiptTableWords(
     }
   }
 
-  return baseWords.filter((word) => !removed.has(word));
+  return baseWords
+    .filter((word) => !removed.has(word))
+    .map((word) => {
+      if (!isMoney(word.text) || !cleanToken(word.text).includes(".")) return word;
+      const productMoneyCell = productRows.some((row) => rowContainsWord(row, word))
+        && [priceBand, amountBand].some((band) => (
+          centerX(word) >= band.left && centerX(word) <= band.right
+        ));
+      const summaryMoneyCell = summaryRows.some((row) => rowContainsWord(row, word))
+        && centerX(word) >= Math.min(amountBand.left, summaryRecoveryBand(row, amountBand).left)
+        && centerX(word) <= amountBand.right;
+      if (!productMoneyCell && !summaryMoneyCell) return word;
+      return { ...word, text: cleanToken(word.text).replace(".", ",") };
+    });
 }
 
 function documentBounds(words: OcrWord[]) {
