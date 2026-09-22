@@ -52,6 +52,14 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
           plainText: "TIENDA PRUEBA\nTOTAL 24,50 EUR",
           layoutText: "GEOMETRIA BRUTA\nTOTAL                         24,50 EUR",
           reviewText: "TIENDA PRUEBA\nTOTAL: 24,50 EUR",
+          receiptIntegrity: {
+            status: "verified",
+            productRows: 5,
+            arithmeticRowsChecked: 5,
+            arithmeticRowsMatching: 5,
+            lineTotalMatchesDocumentTotal: true,
+            basePlusTaxMatchesTotal: true,
+          },
           lines: [
             { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center" },
             { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left" },
@@ -111,6 +119,9 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
+  await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
+  await expect(panel.getByText(/5\/5 líneas cuadran/)).toBeVisible();
+  await expect(panel.getByText(/suma de líneas = total/)).toBeVisible();
   await expect(panel.getByText("Los datos editables siguen arriba y requieren guardado explícito.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
