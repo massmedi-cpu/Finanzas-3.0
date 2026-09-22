@@ -95,6 +95,31 @@ function normalizedToken(text: string) {
     .replace(/[^a-z0-9]/g, "");
 }
 
+function oneEditApart(a: string, b: string) {
+  if (!a || !b || Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+  let left = 0;
+  let right = 0;
+  let edits = 0;
+  while (left < a.length && right < b.length) {
+    if (a[left] === b[right]) {
+      left += 1;
+      right += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) left += 1;
+    else if (b.length > a.length) right += 1;
+    else {
+      left += 1;
+      right += 1;
+    }
+  }
+  if (left < a.length || right < b.length) edits += 1;
+  return edits <= 1;
+}
+
 function normalizedRowText(row: ReceiptRow) {
   return row.words.map((word) => normalizedToken(word.text)).filter(Boolean).join(" ");
 }
@@ -145,8 +170,27 @@ function findReceiptHeader(rows: ReceiptRow[]): ReceiptHeaderAnchor | null {
   ))[0] ?? null;
 }
 
+const METADATA_ANCHOR_TOKENS = [
+  "direccion",
+  "telefono",
+  "pedido",
+  "hora",
+  "staff",
+  "camarero",
+  "mesa",
+  "razon",
+  "social",
+] as const;
+
 function hasMetadataAnchor(row: ReceiptRow) {
-  return /\b(nif|direccion|telefono|pedido|hora|staff|camarero|mesa|razon|social)\b/.test(normalizedRowText(row));
+  return row.words.some((word) => {
+    const token = normalizedToken(word.text);
+    if (token === "nif") return true;
+    return METADATA_ANCHOR_TOKENS.some((anchor) => (
+      token === anchor
+      || (token.length >= 4 && anchor.length >= 4 && oneEditApart(token, anchor))
+    ));
+  });
 }
 
 function hasSummaryAnchor(row: ReceiptRow) {
@@ -482,31 +526,6 @@ function explicitNumericToken(text: string) {
 
 function digitSignature(text: string) {
   return text.replace(/\D/g, "");
-}
-
-function oneEditApart(a: string, b: string) {
-  if (!a || !b || Math.abs(a.length - b.length) > 1) return false;
-  if (a === b) return true;
-  let left = 0;
-  let right = 0;
-  let edits = 0;
-  while (left < a.length && right < b.length) {
-    if (a[left] === b[right]) {
-      left += 1;
-      right += 1;
-      continue;
-    }
-    edits += 1;
-    if (edits > 1) return false;
-    if (a.length > b.length) left += 1;
-    else if (b.length > a.length) right += 1;
-    else {
-      left += 1;
-      right += 1;
-    }
-  }
-  if (left < a.length || right < b.length) edits += 1;
-  return edits <= 1;
 }
 
 function sameRowLexicalToken(a: OcrWord, b: OcrWord) {
