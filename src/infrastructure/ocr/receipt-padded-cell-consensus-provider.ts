@@ -473,23 +473,67 @@ async function recognizePrepared(
 const lexicalKey = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "")
   .replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
 
+function oneEditApart(a: string, b: string) {
+  if (!a || !b || Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+  let left = 0;
+  let right = 0;
+  let edits = 0;
+  while (left < a.length && right < b.length) {
+    if (a[left] === b[right]) {
+      left += 1;
+      right += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) left += 1;
+    else if (b.length > a.length) right += 1;
+    else {
+      left += 1;
+      right += 1;
+    }
+  }
+  if (left < a.length || right < b.length) edits += 1;
+  return edits <= 1;
+}
+
 function sameTextRegion(a: OcrWord, b: OcrWord) {
   const overlap = Math.min(a.box.x + a.box.width, b.box.x + b.box.width) - Math.max(a.box.x, b.box.x);
   return overlap > Math.min(a.box.width, b.box.width) * 0.35 && verticalOverlap(a.box, b.box) >= 0.25;
 }
 
-function mergeDescriptionObservations(baseWords: OcrWord[], observations: OcrWord[][], descriptionRight: number) {
+export function mergeDescriptionObservations(baseWords: OcrWord[], observations: OcrWord[][], descriptionRight: number) {
   let words = baseWords;
   for (let variant = 0; variant < observations.length; variant += 1) {
     for (const candidate of observations[variant]) {
+      const candidateKey = lexicalKey(candidate.text);
       const peers = observations[1 - variant].filter((word) => sameTextRegion(word, candidate));
-      const agreement = peers.some((word) => lexicalKey(word.text) === lexicalKey(candidate.text) && word.confidence >= 0.45);
-      const conflict = peers.some((word) => lexicalKey(word.text) !== lexicalKey(candidate.text) && word.confidence >= 0.65);
+      const agreeingPeers = peers.filter((word) => lexicalKey(word.text) === candidateKey && word.confidence >= 0.45);
+      const agreement = agreeingPeers.length > 0;
+      const conflict = peers.some((word) => lexicalKey(word.text) !== candidateKey && word.confidence >= 0.65);
       if (!(agreement && candidate.confidence >= 0.5) && !(candidate.confidence >= 0.85 && !conflict)) continue;
       const existing = words.filter((word) => centerX(word) < descriptionRight && sameTextRegion(word, candidate));
-      const strongestExisting = Math.max(0, ...existing.map((word) => word.confidence));
-      if (existing.some((word) => lexicalKey(word.text) === lexicalKey(candidate.text))) continue;
-      if (existing.length && candidate.confidence < strongestExisting + 0.15) continue;
+      if (existing.some((word) => lexicalKey(word.text) === candidateKey)) continue;
+
+      const strongest = [...existing].sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+      const strongestExisting = strongest?.confidence ?? 0;
+      const consensusFloor = agreement
+        ? Math.min(candidate.confidence, ...agreeingPeers.map((word) => word.confidence))
+        : 0;
+      const closeIndependentCorrection = Boolean(
+        strongest
+        && candidateKey.length >= 4
+        && lexicalKey(strongest.text).length >= 4
+        && oneEditApart(candidateKey, lexicalKey(strongest.text))
+        && consensusFloor >= 0.55
+        && !conflict
+      );
+
+      // Two independently preprocessed reads may correct a one-character OCR substitution even
+      // when the first pass was overconfident. Larger lexical changes still require the historical
+      // confidence gain so we never turn description recovery into dictionary-style guessing.
+      if (existing.length && !closeIndependentCorrection && candidate.confidence < strongestExisting + 0.15) continue;
       words = words.filter((word) => !existing.includes(word));
       words.push(candidate);
     }
