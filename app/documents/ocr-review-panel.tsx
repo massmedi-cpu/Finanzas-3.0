@@ -19,6 +19,11 @@ const STATUS_LABELS: Record<OcrStatus, string> = {
 const WARNING_LABELS: Record<string, string> = {
   low_confidence: "La confianza global es baja: revisa el original antes de usar cualquier dato.",
   no_text_detected: "No se ha detectado texto fiable.",
+  geometry_unreliable: "La posición de filas o columnas no es suficientemente fiable: compara la distribución con el original.",
+  numeric_structure_unreliable: "La estructura de los importes no es suficientemente fiable: revisa cantidades y decimales contra el original.",
+  peripheral_noise_detected: "Se ha detectado texto fuera del cuerpo principal del documento: comprueba que no se haya mezclado contenido del fondo.",
+  orientation_corrected: "La orientación de la imagen se ha corregido automáticamente: comprueba el resultado con el original.",
+  background_text_filtered: "Se ha filtrado texto del fondo para aislar el documento: revisa que no se haya descartado contenido válido.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
 };
@@ -60,20 +65,20 @@ function parseOcrResult(value: unknown): OcrResult {
   if (row.status !== "ready" && row.status !== "needs_review" && row.status !== "empty") throw new Error("ocr_response_invalid");
   if (row.source !== "pdf_text" && row.source !== "image_ocr" && row.source !== "pdf_ocr" && row.source !== "hybrid") throw new Error("ocr_response_invalid");
   if (typeof row.extractor !== "string" || typeof row.extractedAt !== "string" || typeof row.plainText !== "string") throw new Error("ocr_response_invalid");
-  if (row.confidence !== null && typeof row.confidence !== "number") throw new Error("ocr_response_invalid");
+  if (row.confidence !== null && (typeof row.confidence !== "number" || !Number.isFinite(row.confidence) || row.confidence < 0 || row.confidence > 1)) throw new Error("ocr_response_invalid");
   if (!Array.isArray(row.pages) || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
   if (!row.warnings.every((warning) => typeof warning === "string")) throw new Error("ocr_response_invalid");
   for (const page of row.pages) {
-    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string") {
+    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string") {
       throw new Error("ocr_response_invalid");
     }
     for (const line of page.lines) {
-      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Number.isFinite(line.confidence)) {
+      if (!line || typeof line !== "object" || typeof line.text !== "string" || typeof line.confidence !== "number" || !Number.isFinite(line.confidence) || line.confidence < 0 || line.confidence > 1) {
         throw new Error("ocr_response_invalid");
       }
     }
   }
-  if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true) {
+  if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true || typeof row.principles.preservesGeometry !== "boolean") {
     throw new Error("ocr_response_invalid");
   }
   return row as OcrResult;
@@ -255,7 +260,7 @@ export function OcrReviewPanel({
 
           <div className={ocrStyles.principles}>
             <span>✓ Sin escrituras financieras</span>
-            <span>✓ Geometría preservada</span>
+            <span>{result.principles.preservesGeometry ? "✓ Geometría preservada" : "⚠ Geometría requiere revisión"}</span>
             <span>✓ Revisión humana obligatoria</span>
           </div>
         </div>
