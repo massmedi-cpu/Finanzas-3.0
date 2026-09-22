@@ -333,7 +333,7 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
   });
 
   expect(calls).toBe(2);
-  expect(output.extractor).toContain("anchor-recrop-v19");
+  expect(output.extractor).toContain("anchor-recrop-v20");
   expect(output.warnings).toContain("background_text_filtered");
   const text = output.pages[0].words.map((item) => item.text).join(" ").toUpperCase();
   for (const expected of ["IMPORTE", "5,60", "15,91", "IVA", "1,59", "TOTAL", "17,50"]) {
@@ -375,6 +375,51 @@ test("CR008-OCR-002 recrop never uses confidence alone for larger lexical rewrit
   expect(merged.map((item) => item.text)).toEqual(["CUBATA"]);
 });
 
+
+
+test("CR008-OCR-002 ignores distant background words such as Misa instead of treating them as fuzzy Mesa metadata", () => {
+  const words: OcrWord[] = [
+    word("Misa", 0.36, 0.02, 0.06, 0.018, 0.88),
+    word("Avila", 0.20, 0.06, 0.07, 0.018, 0.84),
+    word("Victoria", 0.35, 0.06, 0.09, 0.018, 0.82),
+    word("Razon", 0.20, 0.14, 0.07, 0.018, 0.82),
+    word("Social", 0.28, 0.14, 0.07, 0.018, 0.82),
+    word("Demo", 0.40, 0.14, 0.06, 0.018, 0.82),
+    word("N.I.F.", 0.20, 0.19, 0.07, 0.018, 0.82),
+    word("X1234567Z", 0.31, 0.19, 0.10, 0.018, 0.82),
+    word("Direccion", 0.20, 0.24, 0.09, 0.018, 0.82),
+    word("Central", 0.31, 0.24, 0.08, 0.018, 0.82),
+    word("Telefono", 0.20, 0.29, 0.08, 0.018, 0.82),
+    word("600000000", 0.34, 0.29, 0.10, 0.018, 0.82),
+    word("DESCRIPCION", 0.20, 0.40, 0.13),
+    word("UDS", 0.55, 0.40, 0.05),
+    word("PRECIO", 0.65, 0.40, 0.08),
+    word("IMPORTE", 0.78, 0.40, 0.09),
+    word("ENERGY", 0.20, 0.45, 0.08),
+    word("1", 0.56, 0.45, 0.02),
+    word("1,80", 0.66, 0.45, 0.06),
+    word("1,80", 0.79, 0.45, 0.06),
+    word("CUBATA", 0.20, 0.50, 0.08),
+    word("1", 0.56, 0.50, 0.02),
+    word("5,50", 0.66, 0.50, 0.06),
+    word("5,50", 0.79, 0.50, 0.06),
+    word("Base", 0.62, 0.60, 0.06),
+    word("15,91", 0.79, 0.60, 0.07),
+    word("IVA", 0.62, 0.65, 0.05),
+    word("1,59", 0.79, 0.65, 0.06),
+    word("Total", 0.62, 0.70, 0.06),
+    word("17,50", 0.79, 0.70, 0.07),
+  ];
+
+  const filtered = filterReceiptAnchorWords(words);
+  expect(filtered).not.toBeNull();
+  expect(filtered!.bounds.y).toBeGreaterThan(0.10);
+  const text = filtered!.words.map((item) => item.text);
+  expect(text).toContain("Razon");
+  expect(text).toContain("Social");
+  expect(text).not.toContain("Misa");
+  expect(text).not.toContain("Avila");
+});
 
 test("CR008-OCR-002 preserves one-edit metadata anchors so recrop can verify them", () => {
   const words: OcrWord[] = [
