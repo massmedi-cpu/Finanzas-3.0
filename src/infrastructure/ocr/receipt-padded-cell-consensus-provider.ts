@@ -31,7 +31,7 @@ const MIN_SCALE = 1;
 const MAX_SCALE = 3;
 const HORIZONTAL_PADDING = 8;
 const VERTICAL_PADDING = 8;
-const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v22";
+const EXTRACTOR_SUFFIX = "+padded-cell-consensus-v23";
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type NumericBand = ReturnType<typeof deriveNumericColumnBands>[number];
@@ -1013,7 +1013,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     }
 
     if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-padded-cell-consensus-v22", {
+      console.info("ocr-padded-cell-consensus-v23", {
         rows: rows.length,
         numericBands: bands.length,
         targetCells: targets.length,
@@ -1043,7 +1043,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       finalWords = finalizeReceiptTableWords(finalWords, rows, bands);
       const structuralNoiseRemoved = beforeStructuralCleanup - finalWords.length;
       if (process.env.VERCEL_ENV === "preview") {
-        console.info("ocr-padded-final-v22", {
+        console.info("ocr-padded-final-v23", {
           finalWords: finalWords.length,
           structuralNoiseRemoved,
           suspiciousNumericTokens: finalWords.filter((word) => suspiciousNumericToken(word.text)).length,
