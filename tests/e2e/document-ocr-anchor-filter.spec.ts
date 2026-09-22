@@ -4,6 +4,7 @@ import type { DocumentOcrProvider, DocumentOcrProviderOutput } from "../../src/a
 import type { OcrBoundingBox, OcrWord } from "../../src/domain/document-ocr";
 import {
   filterReceiptAnchorWords,
+  mergeReceiptRecropWords,
   ReceiptAnchorFilteringImageOcrProvider,
 } from "../../src/infrastructure/ocr/receipt-anchor-filter-provider";
 
@@ -341,4 +342,35 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
   for (const rejected of ["FONDO", "PUBLICIDAD", "AJENO", "560", "5,508", "1,008", "505/60", "50550"]) {
     expect(text).not.toContain(rejected);
   }
+});
+
+
+test("CR008-OCR-002 recrop can repair one-character metadata substitutions only with a clear confidence gain", () => {
+  const first = [
+    word("vazon", 0.20, 0.20, 0.08, 0.018, 0.52),
+    word("vocial", 0.30, 0.20, 0.09, 0.018, 0.50),
+    word("Luis", 0.42, 0.20, 0.06, 0.018, 0.88),
+  ];
+  const reread = [
+    word("razon", 0.20, 0.20, 0.08, 0.018, 0.88),
+    word("social", 0.30, 0.20, 0.09, 0.018, 0.86),
+    word("Luis", 0.42, 0.20, 0.06, 0.018, 0.90),
+  ];
+
+  const merged = mergeReceiptRecropWords(first, reread);
+  expect(merged.map((item) => item.text)).toEqual(["razon", "social", "Luis"]);
+
+  const cautious = mergeReceiptRecropWords(
+    [word("vazon", 0.20, 0.20, 0.08, 0.018, 0.82)],
+    [word("razon", 0.20, 0.20, 0.08, 0.018, 0.88)],
+  );
+  expect(cautious.map((item) => item.text)).toEqual(["vazon"]);
+});
+
+test("CR008-OCR-002 recrop never uses confidence alone for larger lexical rewrites", () => {
+  const merged = mergeReceiptRecropWords(
+    [word("CUBATA", 0.20, 0.55, 0.08, 0.018, 0.40)],
+    [word("COCA", 0.20, 0.55, 0.08, 0.018, 0.99)],
+  );
+  expect(merged.map((item) => item.text)).toEqual(["CUBATA"]);
 });
