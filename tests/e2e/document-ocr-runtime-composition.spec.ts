@@ -23,6 +23,8 @@ test("CR008-OCR-002 keeps the staged OCR runtime bounded and timeout-safe", asyn
   expect(tesseract).toContain('error.kind === "queue"');
 
   expect(padded).toContain("class PaddedCellTimeoutError extends Error");
+  expect(padded).toContain('+padded-cell-consensus-v23');
+  expect(padded).toContain('"ocr-padded-final-v23"');
   expect(padded).toContain("let pipelineTail: Promise<void> = Promise.resolve();");
   expect(padded).toContain("return exclusivePipeline(async () => {");
   expect(padded.match(/if \(error instanceof PaddedCellTimeoutError\) throw error;/g)).toHaveLength(2);
