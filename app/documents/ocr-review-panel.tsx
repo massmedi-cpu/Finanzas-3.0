@@ -69,7 +69,7 @@ function parseOcrResult(value: unknown): OcrResult {
   if (!Array.isArray(row.pages) || !Array.isArray(row.warnings)) throw new Error("ocr_response_invalid");
   if (!row.warnings.every((warning) => typeof warning === "string")) throw new Error("ocr_response_invalid");
   for (const page of row.pages) {
-    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string") {
+    if (!page || typeof page !== "object" || !Number.isSafeInteger(page.pageNumber) || page.pageNumber < 1 || !Array.isArray(page.lines) || typeof page.plainText !== "string" || typeof page.layoutText !== "string" || (page.reviewText !== undefined && typeof page.reviewText !== "string")) {
       throw new Error("ocr_response_invalid");
     }
     for (const line of page.lines) {
@@ -169,8 +169,12 @@ export function OcrReviewPanel({
 
   async function copyReading() {
     if (!result?.plainText.trim()) return;
+    const reviewText = result.pages
+      .map((page) => page.reviewText?.trim() || page.layoutText.trim() || page.plainText.trim())
+      .filter(Boolean)
+      .join("\n\n");
     try {
-      await navigator.clipboard.writeText(result.plainText);
+      await navigator.clipboard.writeText(reviewText || result.plainText);
       setCopyState("copied");
     } catch {
       setCopyState("error");
@@ -252,7 +256,7 @@ export function OcrReviewPanel({
                     <strong>Página {page.pageNumber}</strong>
                     <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}{lowConfidence ? ` · ${lowConfidence} a revisar` : ""}</span>
                   </summary>
-                  {page.layoutText ? <pre className={ocrStyles.layout}>{page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
+                  {page.reviewText || page.layoutText ? <pre className={ocrStyles.layout}>{page.reviewText || page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
                 </details>
               );
             })}
