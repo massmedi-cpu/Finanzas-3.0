@@ -77,6 +77,7 @@ class PaddedCellTimeoutError extends Error {
 
 let workerPromise: Promise<Worker> | null = null;
 let queueTail: Promise<void> = Promise.resolve();
+let pipelineTail: Promise<void> = Promise.resolve();
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string) {
   return new Promise<T>((resolve, reject) => {
@@ -130,6 +131,21 @@ async function exclusive<T>(task: () => Promise<T>) {
   queueTail = previous.then(() => slot);
   try {
     await withTimeout(previous, QUEUE_TIMEOUT_MS, "ocr_padded_cell_queue_timeout");
+    return await task();
+  } finally {
+    release();
+  }
+}
+
+async function exclusivePipeline<T>(task: () => Promise<T>) {
+  const previous = pipelineTail.catch(() => undefined);
+  let release!: () => void;
+  const slot = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  pipelineTail = previous.then(() => slot);
+  await previous;
+  try {
     return await task();
   } finally {
     release();
@@ -725,23 +741,27 @@ export class ReceiptPaddedCellConsensusImageOcrProvider implements DocumentOcrPr
   }
 
   async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }): Promise<DocumentOcrProviderOutput> {
-    const base = await this.base.extract(input);
-    const metadata = readOcrImageMetadata(input.bytes);
-    if (!metadata || base.pages.length !== 1 || !base.pages[0]?.words.length
-      || (base.warnings ?? []).includes("orientation_corrected")) return base;
-    try {
-      const words = await recoverPaddedCells(input.bytes, metadata, base.pages[0].words);
-      return {
-        ...base,
-        extractor: `${base.extractor}${EXTRACTOR_SUFFIX}`.slice(0, 100),
-        pages: [{ ...base.pages[0], words }],
-      };
-    } catch (error) {
-      // Queue timeout means a previous request still owns the shared padded worker.
-      if (!(error instanceof PaddedCellTimeoutError && error.code === "ocr_padded_cell_queue_timeout")) {
-        invalidateWorker();
+    // Serialize the whole image pipeline per process. This prevents request A's V22 worker and
+    // request B's base worker/full-image normalization from overlapping in memory.
+    return exclusivePipeline(async () => {
+      const base = await this.base.extract(input);
+      const metadata = readOcrImageMetadata(input.bytes);
+      if (!metadata || base.pages.length !== 1 || !base.pages[0]?.words.length
+        || (base.warnings ?? []).includes("orientation_corrected")) return base;
+      try {
+        const words = await recoverPaddedCells(input.bytes, metadata, base.pages[0].words);
+        return {
+          ...base,
+          extractor: `${base.extractor}${EXTRACTOR_SUFFIX}`.slice(0, 100),
+          pages: [{ ...base.pages[0], words }],
+        };
+      } catch (error) {
+        // Queue timeout means a previous request still owns the shared padded worker.
+        if (!(error instanceof PaddedCellTimeoutError && error.code === "ocr_padded_cell_queue_timeout")) {
+          invalidateWorker();
+        }
+        return base;
       }
-      return base;
-    }
+    });
   }
 }
