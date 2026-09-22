@@ -288,12 +288,16 @@ function buildReceiptReviewText(lines: OcrLine[]) {
     if (labels.length === 1 && monies.length) {
       const label = labels[0];
       const amount = monies[monies.length - 1];
-      const extras = [...line.words]
+      const orderedExtras = [...line.words]
         .filter((word) => word !== label && word !== amount)
-        .sort((a, b) => a.box.x - b.box.x)
-        .map((word) => word.text.trim())
-        .filter((text) => /^\d{1,3}(?:[,.]\d{1,2})?$/.test(text) || text === "%");
-      const extraText = extras.length ? ` ${extras.join(" ")}` : "";
+        .sort((a, b) => a.box.x - b.box.x);
+      const percent = orderedExtras.find((word) => word.text.trim() === "%") ?? null;
+      const explicitRate = percent
+        ? [...orderedExtras]
+          .filter((word) => word !== percent && /^\d{1,3}(?:[,.]\d{1,2})?$/.test(word.text.trim()) && word.box.x < percent.box.x)
+          .sort((a, b) => b.box.x - a.box.x)[0] ?? null
+        : null;
+      const extraText = explicitRate && percent ? ` ${explicitRate.text.trim()} %` : "";
       output.push(`${label.text.replace(/:$/, "")}${extraText}: ${amount.text}`);
       continue;
     }
