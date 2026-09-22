@@ -20,6 +20,8 @@ export async function GET() {
       { headers: { "cache-control": "no-store", "x-robots-tag": "noindex" } },
     );
   } catch (error) {
+    const workspaceRequired =
+      error instanceof PersistenceGatewayError && error.code === "workspace_context_required";
     const incompatible =
       error instanceof SourceSyncRuntimeCompatibilityError ||
       (error instanceof PersistenceGatewayError && error.code === "unsupported_action");
@@ -28,10 +30,14 @@ export async function GET() {
       {
         status: "failed",
         compatible: false,
-        error: incompatible ? "source_runtime_incompatible" : "source_runtime_unavailable",
+        error: workspaceRequired
+          ? "workspace_context_required"
+          : incompatible
+            ? "source_runtime_incompatible"
+            : "source_runtime_unavailable",
       },
       {
-        status: 503,
+        status: workspaceRequired ? 401 : 503,
         headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
       },
     );
