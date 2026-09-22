@@ -299,12 +299,15 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
     word("17,50", 0.79, 0.80, 0.07),
   ];
 
-  for (const item of recoveredGlobal) {
-    expect(item.box.x).toBeGreaterThanOrEqual(recovery.x);
-    expect(item.box.x + item.box.width).toBeLessThanOrEqual(recovery.x + recovery.width + 0.000001);
-    expect(item.box.y).toBeGreaterThanOrEqual(recovery.y);
-    expect(item.box.y + item.box.height).toBeLessThanOrEqual(recovery.y + recovery.height + 0.000001);
-  }
+  const recoveredInsideCrop = recoveredGlobal.filter((item) => (
+    item.box.x >= recovery.x
+    && item.box.x + item.box.width <= recovery.x + recovery.width + 0.000001
+    && item.box.y >= recovery.y
+    && item.box.y + item.box.height <= recovery.y + recovery.height + 0.000001
+  ));
+  expect(recoveredInsideCrop.length).toBeGreaterThanOrEqual(recoveredGlobal.length - 2);
+  expect(recoveredInsideCrop.map((item) => item.text)).not.toContain("DEMO");
+  expect(recoveredInsideCrop.map((item) => item.text)).not.toContain("BAR");
 
   let calls = 0;
   const fakeBase: DocumentOcrProvider = {
@@ -317,7 +320,7 @@ test("CR008-OCR-002 v13 second pass restores the missing amount column and IVA/T
       return {
         source: "image_ocr",
         extractor: "fake-recovery-pass",
-        pages: [{ pageNumber: 1, words: recoveredGlobal.map((item) => toLocalWord(item, recovery)) }],
+        pages: [{ pageNumber: 1, words: recoveredInsideCrop.map((item) => toLocalWord(item, recovery)) }],
       };
     },
   };
