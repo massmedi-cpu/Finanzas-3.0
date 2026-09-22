@@ -236,6 +236,19 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
   expect(visible.plainText).toContain("Base 15,91");
   expect(visible.plainText).toContain("Total 17,50");
   expect(visible.layoutText).toContain("17,50");
+  const visibleLines = visible.layoutText.split("\n").map((line) => line.trim()).filter(Boolean);
+  for (const rowPattern of [
+    /^ENERGY\s+1\s+1,80\s+1,80$/,
+    /^TERCIO\s+GALICIA\s+CERO\s+1\s+2,80\s+2,80$/,
+    /^CANA\s+GRANDE\s+2\s+2,80\s+5,60$/,
+    /^CUBATA\s+1\s+5,50\s+5,50$/,
+    /^AGUA\s+CON\s+GAS\s+1\s+1,80\s+1,80$/,
+    /^Base\s+15,91$/,
+    /^IVA\s+1,59$/,
+    /^Total\s+17,50$/,
+  ]) {
+    expect(visibleLines.some((line) => rowPattern.test(line)), `missing visible row ${rowPattern}`).toBe(true);
+  }
   expect(visible.plainText).not.toMatch(/5,508|\beco\b|(^|\s)0($|\s)/m);
   expect(visible.plainText).not.toMatch(/(^|\s)[EI]($|\s)/m);
 });
