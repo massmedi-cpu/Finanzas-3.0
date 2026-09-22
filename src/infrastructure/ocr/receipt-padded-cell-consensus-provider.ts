@@ -295,14 +295,17 @@ export function finalizeReceiptTableWords(
       const isolatedLetters = baseWords.filter((word) => {
         if (removed.has(word) || !rowContainsWord(row, word) || centerX(word) >= unitBand.left) return false;
         const token = cleanToken(word.text);
-        if (!/^\p{L}$/u.test(token) || word.confidence > 0.72) return false;
+        if (!/^\p{L}$/u.test(token)) return false;
         const nearestGap = descriptionWords.reduce((best, description) => {
           const leftGap = word.box.x - (description.box.x + description.box.width);
           const rightGap = description.box.x - (word.box.x + word.box.width);
           const gap = Math.max(0, leftGap, rightGap);
           return Math.min(best, gap);
         }, Number.POSITIVE_INFINITY);
-        return Number.isFinite(nearestGap) && nearestGap > Math.max(0.014, row.box.height * 0.75);
+        const isolated = Number.isFinite(nearestGap)
+          && nearestGap > Math.max(0.014, row.box.height * 0.75);
+        const unmistakablyDetached = nearestGap > Math.max(0.04, row.box.height * 2.5);
+        return isolated && (word.confidence <= 0.72 || unmistakablyDetached);
       });
       isolatedLetters.forEach((word) => removed.add(word));
 
