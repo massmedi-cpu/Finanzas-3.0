@@ -2,6 +2,7 @@ import path from "node:path";
 import { createWorker, PSM } from "tesseract.js";
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
 import type { OcrWord } from "../../domain/document-ocr";
+import { isReceiptMoney } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
 const SUPPORTED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -21,7 +22,6 @@ const NUMERIC_COLUMN_START_SHARE = 0.36;
 const NUMERIC_CLUSTER_GAP_SHARE = 0.055;
 const NUMERIC_CLUSTER_MARGIN_SHARE = 0.035;
 const MAX_NUMERIC_COLUMNS = 3;
-const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 
 type Worker = Awaited<ReturnType<typeof createWorker>>;
 type TimeoutKind = "queue" | "worker" | "recognize";
@@ -475,7 +475,7 @@ function verticalOverlapRatio(a: OcrWord, b: OcrWord) {
 }
 
 function isMonetaryWord(word: OcrWord) {
-  return MONEY_TOKEN.test(word.text.replace(/\s+/g, ""));
+  return isReceiptMoney(word.text);
 }
 
 function isReplaceableNumericWord(word: OcrWord) {
