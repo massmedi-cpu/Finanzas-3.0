@@ -84,6 +84,8 @@ test("CR008-OCR-002 builds a clean structured receipt review without altering ra
   expect(page.receiptIntegrity).toEqual({
     status: "verified",
     productRows: 5,
+    candidateProductRows: 5,
+    unresolvedProductRows: 0,
     arithmeticRowsChecked: 5,
     arithmeticRowsMatching: 5,
     lineTotalMatchesDocumentTotal: true,
@@ -141,6 +143,8 @@ test("receipt integrity flags contradictions instead of silently normalizing the
   expect(page.receiptIntegrity).toEqual({
     status: "issues",
     productRows: 2,
+    candidateProductRows: 2,
+    unresolvedProductRows: 0,
     arithmeticRowsChecked: 2,
     arithmeticRowsMatching: 1,
     lineTotalMatchesDocumentTotal: true,
@@ -173,4 +177,42 @@ test("structured review keeps a nearby merchant title even when no labelled meta
   ]);
 
   expect(page.reviewText).toContain("BAR CENTRAL");
+});
+
+
+test("unresolved product-like rows force partial integrity instead of a false verified result", () => {
+  const page = reconstructOcrPage(1, [
+    word("DESCRIPCION", 0.14, 0.30, 0.14),
+    word("UDS", 0.56, 0.30, 0.04),
+    word("PRECIO", 0.66, 0.30, 0.07),
+    word("IMPORTE", 0.80, 0.30, 0.08),
+    word("UNO", 0.14, 0.35, 0.05), word("1", 0.57, 0.35, 0.02), word("2,00", 0.67, 0.35, 0.05), word("2,00", 0.81, 0.35, 0.05),
+    word("DOS", 0.14, 0.40, 0.05), word("1", 0.57, 0.40, 0.02), word("3,00", 0.67, 0.40, 0.05), word("3,00", 0.81, 0.40, 0.05),
+    // Product-like line with only one trustworthy money token: keep it visible, but do not claim full verification.
+    word("TRES", 0.14, 0.45, 0.05), word("1", 0.57, 0.45, 0.02), word("4,00", 0.81, 0.45, 0.05),
+    word("Total", 0.64, 0.55, 0.06), word("9,00", 0.81, 0.55, 0.05),
+  ]);
+
+  expect(page.reviewText).toContain("TRES 1 4,00");
+  expect(page.receiptIntegrity).toEqual({
+    status: "partial",
+    productRows: 2,
+    candidateProductRows: 3,
+    unresolvedProductRows: 1,
+    arithmeticRowsChecked: 2,
+    arithmeticRowsMatching: 2,
+    lineTotalMatchesDocumentTotal: null,
+    basePlusTaxMatchesTotal: null,
+  });
+
+  const result = buildDocumentOcrResult({
+    documentId: "99000000-0000-4000-8000-000000000099",
+    source: "image_ocr",
+    extractor: "test",
+    extractedAt: "2026-09-22T19:00:00.000Z",
+    pages: [page],
+  });
+  expect(result.status).toBe("needs_review");
+  expect(result.warnings).toContain("receipt_structure_incomplete");
+  expect(result.warnings).not.toContain("receipt_arithmetic_mismatch");
 });
