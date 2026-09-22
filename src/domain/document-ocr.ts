@@ -221,6 +221,84 @@ function formatReceiptProduct(description: string, quantity: string, price: stri
   return `${description.padEnd(34)} ${quantity.padStart(3)} ${price.padStart(8)} ${amount.padStart(8)}`.trimEnd();
 }
 
+function receiptMetadataAnchor(line: OcrLine) {
+  const tokens = line.words.map((word) => receiptToken(word.text)).filter(Boolean);
+  return tokens.some((token) => (
+    token === "razon"
+    || token === "social"
+    || token === "nif"
+    || token === "cif"
+    || token.startsWith("direccion")
+    || token.startsWith("telefono")
+    || token === "tel"
+    || token.startsWith("pedido")
+    || token === "hora"
+    || token === "fecha"
+    || token === "mesa"
+    || token === "ticket"
+    || token === "factura"
+  ));
+}
+
+function receiptLineGap(upper: OcrLine, lower: OcrLine) {
+  return Math.max(0, lower.box.y - (upper.box.y + upper.box.height));
+}
+
+function receiptLinesAreContiguous(upper: OcrLine, lower: OcrLine) {
+  const referenceHeight = Math.max(upper.box.height, lower.box.height);
+  return receiptLineGap(upper, lower) <= Math.max(0.045, referenceHeight * 2.6);
+}
+
+function receiptTitleLike(line: OcrLine) {
+  const letters = (line.text.match(/\p{L}/gu) ?? []).length;
+  const digits = (line.text.match(/\d/gu) ?? []).length;
+  const useful = (line.text.match(/[\p{L}\p{N}]/gu) ?? []).length;
+  return useful >= 3 && letters >= 2 && digits <= Math.max(4, letters * 2);
+}
+
+function buildReceiptMetadataLines(lines: OcrLine[], headerIndex: number) {
+  const source = lines.slice(0, headerIndex).filter((line) => {
+    const useful = (line.text.match(/[\p{L}\p{N}]/gu) ?? []).length;
+    return Boolean(line.text.trim()) && useful >= 2;
+  });
+  if (!source.length) return [] as string[];
+
+  const firstAnchor = source.findIndex(receiptMetadataAnchor);
+  if (firstAnchor < 0) {
+    const candidates: OcrLine[] = [];
+    for (let index = source.length - 1; index >= 0 && candidates.length < 2; index -= 1) {
+      const line = source[index];
+      const lower = candidates[0] ?? lines[headerIndex];
+      if (!lower || !receiptTitleLike(line) || !receiptLinesAreContiguous(line, lower)) break;
+      candidates.unshift(line);
+    }
+    return candidates.map((line) => line.text.trim());
+  }
+
+  let start = firstAnchor;
+  while (start > 0 && firstAnchor - start < 2) {
+    const previous = source[start - 1];
+    const current = source[start];
+    if (!receiptTitleLike(previous) || !receiptLinesAreContiguous(previous, current)) break;
+    start -= 1;
+  }
+
+  const kept: OcrLine[] = [];
+  for (let index = start; index < source.length; index += 1) {
+    const line = source[index];
+    if (!kept.length) {
+      kept.push(line);
+      continue;
+    }
+    const previous = kept[kept.length - 1];
+    if (receiptMetadataAnchor(line) || receiptLinesAreContiguous(previous, line)) {
+      kept.push(line);
+    }
+  }
+
+  return kept.map((line) => line.text.trim());
+}
+
 function buildReceiptReviewText(lines: OcrLine[]) {
   const headerIndex = lines.findIndex((line) => (
     receiptHeaderWord(line, "description")
@@ -241,9 +319,7 @@ function buildReceiptReviewText(lines: OcrLine[]) {
   if (!descriptionHeader || !unitsHeader || !priceHeader || !amountHeader) return undefined;
 
   const output: string[] = [];
-  const metadata = lines.slice(0, headerIndex)
-    .map((line) => line.text.trim())
-    .filter((text) => text && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 2);
+  const metadata = buildReceiptMetadataLines(lines, headerIndex);
   if (metadata.length) output.push(...metadata, "");
 
   output.push(formatReceiptProduct(
