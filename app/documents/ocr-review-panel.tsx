@@ -24,6 +24,7 @@ const WARNING_LABELS: Record<string, string> = {
   peripheral_noise_detected: "Se ha detectado texto fuera del cuerpo principal del documento: comprueba que no se haya mezclado contenido del fondo.",
   orientation_corrected: "La orientación de la imagen se ha corregido automáticamente: comprueba el resultado con el original.",
   background_text_filtered: "Se ha filtrado texto del fondo para aislar el documento: revisa que no se haya descartado contenido válido.",
+  receipt_arithmetic_mismatch: "Los importes leídos no cuadran entre sí: revisa cantidades, precios, IVA y total contra el original.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
 };
@@ -77,6 +78,19 @@ function parseOcrResult(value: unknown): OcrResult {
         throw new Error("ocr_response_invalid");
       }
     }
+    if (page.receiptIntegrity !== undefined) {
+      const integrity = page.receiptIntegrity;
+      if (!integrity || typeof integrity !== "object"
+        || (integrity.status !== "verified" && integrity.status !== "issues" && integrity.status !== "partial")
+        || !Number.isSafeInteger(integrity.productRows) || integrity.productRows < 0
+        || !Number.isSafeInteger(integrity.arithmeticRowsChecked) || integrity.arithmeticRowsChecked < 0
+        || !Number.isSafeInteger(integrity.arithmeticRowsMatching) || integrity.arithmeticRowsMatching < 0
+        || integrity.arithmeticRowsMatching > integrity.arithmeticRowsChecked
+        || (integrity.lineTotalMatchesDocumentTotal !== null && typeof integrity.lineTotalMatchesDocumentTotal !== "boolean")
+        || (integrity.basePlusTaxMatchesTotal !== null && typeof integrity.basePlusTaxMatchesTotal !== "boolean")) {
+        throw new Error("ocr_response_invalid");
+      }
+    }
   }
   if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true || typeof row.principles.preservesGeometry !== "boolean") {
     throw new Error("ocr_response_invalid");
@@ -108,6 +122,21 @@ function errorLabel(code: string) {
     ocr_response_invalid: "La lectura terminó, pero la respuesta OCR no tiene el formato esperado. No se ha guardado ningún dato.",
   };
   return labels[code] ?? "No se ha podido completar la lectura OCR de este documento.";
+}
+
+function integrityLabel(integrity: NonNullable<OcrResult["pages"][number]["receiptIntegrity"]>) {
+  const rows = `${integrity.arithmeticRowsMatching}/${integrity.arithmeticRowsChecked} líneas cuadran`;
+  const total = integrity.lineTotalMatchesDocumentTotal === null
+    ? "total no comprobable"
+    : integrity.lineTotalMatchesDocumentTotal
+      ? "suma de líneas = total"
+      : "suma de líneas ≠ total";
+  const tax = integrity.basePlusTaxMatchesTotal === null
+    ? null
+    : integrity.basePlusTaxMatchesTotal
+      ? "base + IVA = total"
+      : "base + IVA ≠ total";
+  return [rows, total, tax].filter(Boolean).join(" · ");
 }
 
 export function OcrReviewPanel({
@@ -256,6 +285,13 @@ export function OcrReviewPanel({
                     <strong>Página {page.pageNumber}</strong>
                     <span>{page.lines.length} {page.lines.length === 1 ? "línea" : "líneas"}{lowConfidence ? ` · ${lowConfidence} a revisar` : ""}</span>
                   </summary>
+                  {page.receiptIntegrity ? (
+                    <div className={page.receiptIntegrity.status === "issues" ? ocrStyles.warnings : ocrStyles.info} data-testid={`receipt-integrity-${page.pageNumber}`}>
+                      <strong>{page.receiptIntegrity.status === "verified" ? "Coherencia numérica verificada" : page.receiptIntegrity.status === "issues" ? "Incoherencias numéricas detectadas" : "Coherencia numérica parcial"}</strong>
+                      <span>{integrityLabel(page.receiptIntegrity)}</span>
+                      <small>Comprueba el original igualmente: esta validación detecta contradicciones internas, no sustituye la revisión del documento.</small>
+                    </div>
+                  ) : null}
                   {page.reviewText || page.layoutText ? <pre className={ocrStyles.layout}>{page.reviewText || page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
                 </details>
               );
