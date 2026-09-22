@@ -168,6 +168,11 @@ function isInteger(text: string) {
   return INTEGER_TOKEN.test(cleanToken(text));
 }
 
+function suspiciousNumericToken(text: string) {
+  const token = cleanToken(text);
+  return /^\d{3,6}$/.test(token) || /^\d{1,6}[,.]\d{3,}$/.test(token);
+}
+
 function centerX(word: OcrWord) {
   return word.box.x + word.box.width / 2;
 }
@@ -766,12 +771,24 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       });
     }
 
+      let finalWords = words;
       try {
-        return await recoverDescriptions(worker, preparedPages, metadata, rows, bands, words);
+        finalWords = await recoverDescriptions(worker, preparedPages, metadata, rows, bands, words);
       } catch (error) {
         if (error instanceof PaddedCellTimeoutError) throw error;
-        return words;
       }
+      if (process.env.VERCEL_ENV === "preview") {
+        console.info("ocr-padded-final-v22", {
+          finalWords: finalWords.length,
+          suspiciousNumericTokens: finalWords.filter((word) => suspiciousNumericToken(word.text)).length,
+          veryShortLowConfidenceGlyphs: finalWords.filter((word) => (
+            cleanToken(word.text).length <= 1
+            && !/\d/.test(word.text)
+            && word.confidence < 0.55
+          )).length,
+        });
+      }
+      return finalWords;
     } finally {
       // Do not retain a second Tesseract worker alongside the base OCR worker between requests.
       await terminateOwnedWorker(worker);
