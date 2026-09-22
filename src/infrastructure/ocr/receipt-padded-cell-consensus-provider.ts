@@ -355,9 +355,12 @@ export function finalizeReceiptTableWords(
         && [priceBand, amountBand].some((band) => (
           centerX(word) >= band.left && centerX(word) <= band.right
         ));
-      const summaryMoneyCell = summaryRows.some((row) => rowContainsWord(row, word))
-        && centerX(word) >= Math.min(amountBand.left, summaryRecoveryBand(row, amountBand).left)
-        && centerX(word) <= amountBand.right;
+      const summaryMoneyCell = summaryRows.some((row) => {
+        const summaryBand = summaryRecoveryBand(row, amountBand);
+        return rowContainsWord(row, word)
+          && centerX(word) >= Math.min(amountBand.left, summaryBand.left)
+          && centerX(word) <= amountBand.right;
+      });
       if (!productMoneyCell && !summaryMoneyCell) return word;
       return { ...word, text: cleanToken(word.text).replace(".", ",") };
     });
