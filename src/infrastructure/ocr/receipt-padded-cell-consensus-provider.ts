@@ -1,4 +1,4 @@
-import { ocrRowTextBox } from "../../domain/ocr-rows";
+import { clusterOcrRows, ocrRowTextBox } from "../../domain/ocr-rows";
 import path from "node:path";
 import sharp from "sharp";
 import { createWorker, PSM } from "tesseract.js";
@@ -175,6 +175,16 @@ function suspiciousNumericToken(text: string) {
 
 function centerX(word: OcrWord) {
   return word.box.x + word.box.width / 2;
+}
+
+function isolatedShortNumericRowsAfterTotal(words: OcrWord[]) {
+  const rows = clusterOcrRows(words);
+  const totalIndex = rows.findIndex((row) => row.some((word) => /^total$/i.test(cleanToken(word.text))));
+  if (totalIndex < 0) return 0;
+  return rows.slice(totalIndex + 1).filter((row) => (
+    row.length === 1
+    && /^\d{1,2}$/.test(cleanToken(row[0].text))
+  )).length;
 }
 
 function verticalOverlap(a: OcrBoundingBox, b: OcrBoundingBox) {
@@ -781,6 +791,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
         console.info("ocr-padded-final-v22", {
           finalWords: finalWords.length,
           suspiciousNumericTokens: finalWords.filter((word) => suspiciousNumericToken(word.text)).length,
+          isolatedShortNumericRowsAfterTotal: isolatedShortNumericRowsAfterTotal(finalWords),
           veryShortLowConfidenceGlyphs: finalWords.filter((word) => (
             cleanToken(word.text).length <= 1
             && !/\d/.test(word.text)
