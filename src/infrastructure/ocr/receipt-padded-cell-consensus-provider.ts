@@ -677,6 +677,13 @@ async function recognizePrepared(
 const lexicalKey = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "")
   .replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
 
+const lexicalSurfaceKey = (text: string) => text.normalize("NFC")
+  .replace(/[^\p{L}\p{N}]/gu, "").toLowerCase();
+
+function diacriticCount(text: string) {
+  return (text.normalize("NFD").match(/\p{Diacritic}/gu) ?? []).length;
+}
+
 function oneEditApart(a: string, b: string) {
   if (!a || !b || Math.abs(a.length - b.length) > 1) return false;
   if (a === b) return true;
@@ -712,13 +719,25 @@ export function mergeDescriptionObservations(baseWords: OcrWord[], observations:
   for (let variant = 0; variant < observations.length; variant += 1) {
     for (const candidate of observations[variant]) {
       const candidateKey = lexicalKey(candidate.text);
+      const candidateSurface = lexicalSurfaceKey(candidate.text);
       const peers = observations[1 - variant].filter((word) => sameTextRegion(word, candidate));
       const agreeingPeers = peers.filter((word) => lexicalKey(word.text) === candidateKey && word.confidence >= 0.45);
+      const exactSurfacePeers = peers.filter((word) => lexicalSurfaceKey(word.text) === candidateSurface && word.confidence >= 0.45);
       const agreement = agreeingPeers.length > 0;
+      const exactSurfaceAgreement = exactSurfacePeers.length > 0;
       const conflict = peers.some((word) => lexicalKey(word.text) !== candidateKey && word.confidence >= 0.65);
       if (!(agreement && candidate.confidence >= 0.5) && !(candidate.confidence >= 0.85 && !conflict)) continue;
       const existing = words.filter((word) => centerX(word) < descriptionRight && sameTextRegion(word, candidate));
-      if (existing.some((word) => lexicalKey(word.text) === candidateKey)) continue;
+      const sameLexicalExisting = existing.filter((word) => lexicalKey(word.text) === candidateKey);
+      const bestSameLexical = [...sameLexicalExisting].sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+      const orthographyUpgrade = Boolean(
+        bestSameLexical
+        && exactSurfaceAgreement
+        && candidate.confidence >= 0.55
+        && lexicalSurfaceKey(bestSameLexical.text) !== candidateSurface
+        && diacriticCount(candidate.text) > diacriticCount(bestSameLexical.text)
+      );
+      if (sameLexicalExisting.length && !orthographyUpgrade) continue;
 
       const strongest = [...existing].sort((a, b) => b.confidence - a.confidence)[0] ?? null;
       const strongestExisting = strongest?.confidence ?? 0;
@@ -737,7 +756,7 @@ export function mergeDescriptionObservations(baseWords: OcrWord[], observations:
       // Two independently preprocessed reads may correct a one-character OCR substitution even
       // when the first pass was overconfident. Larger lexical changes still require the historical
       // confidence gain so we never turn description recovery into dictionary-style guessing.
-      if (existing.length && !closeIndependentCorrection && candidate.confidence < strongestExisting + 0.15) continue;
+      if (existing.length && !orthographyUpgrade && !closeIndependentCorrection && candidate.confidence < strongestExisting + 0.15) continue;
       words = words.filter((word) => !existing.includes(word));
       words.push(candidate);
     }
