@@ -182,14 +182,14 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
     w("TERCIO", 0.16, 0.48, 0.08), w("GALICIA", 0.25, 0.48, 0.09), w("CERO", 0.35, 0.48, 0.06),
     w("1", 0.56, 0.48, 0.018), w("2,80", 0.67, 0.48), w("2,80", 0.80, 0.48),
     w("CANA", 0.16, 0.52, 0.06), w("GRANDE", 0.23, 0.52, 0.09), w("2", 0.56, 0.52, 0.018),
-    w("2,80", 0.67, 0.52), w("5,60", 0.80, 0.52),
+    w("2.80", 0.67, 0.52), w("5,60", 0.80, 0.52),
     w("CUBATA", 0.16, 0.56, 0.09), w("I", 0.555, 0.56, 0.012, 0.34), w("1", 0.57, 0.56, 0.018),
     w("5,50", 0.67, 0.56), w("5,508", 0.795, 0.56, 0.065, 0.72), w("5,50", 0.81, 0.56),
     w("AGUA", 0.16, 0.60, 0.06), w("CON", 0.23, 0.60, 0.05), w("GAS", 0.29, 0.60, 0.05),
     w("1", 0.56, 0.60, 0.018), w("4", 0.62, 0.60, 0.018, 0.31), w("1,80", 0.67, 0.60), w("1,80", 0.80, 0.60),
     w("eco", 0.25, 0.65, 0.04, 0.42),
     w("0", 0.56, 0.68, 0.018, 0.28),
-    w("Base", 0.64, 0.73, 0.05), w("15,91", 0.80, 0.73),
+    w("Base", 0.64, 0.73, 0.05), w("15.91", 0.80, 0.73),
     w("IVA", 0.64, 0.77, 0.04), w("1,59", 0.80, 0.77),
     w("Total", 0.64, 0.81, 0.06), w("17,50", 0.80, 0.81),
     w("4", 0.20, 0.86, 0.018, 0.25),
@@ -226,6 +226,10 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
     expect(text).not.toContain(rejected);
   }
   expect(cleaned.filter((item) => item.text === "4")).toHaveLength(0);
+  expect(text).toContain("2,80");
+  expect(text).toContain("15,91");
+  expect(text).not.toContain("2.80");
+  expect(text).not.toContain("15.91");
 });
 
 test("CR008-OCR-002 keeps a high-confidence first pass only until two isolated variants agree on a one-character repair", () => {
