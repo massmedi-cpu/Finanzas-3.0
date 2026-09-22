@@ -139,6 +139,21 @@ function verticalOverlap(a: OcrBoundingBox, b: OcrBoundingBox) {
   return Math.max(0, bottom - top) / Math.max(0.000001, Math.min(a.height, b.height));
 }
 
+function horizontalBandOverlap(word: OcrWord, band: NumericBand) {
+  const left = Math.max(word.box.x, band.left);
+  const right = Math.min(word.box.x + word.box.width, band.right);
+  const overlap = Math.max(0, right - left);
+  return overlap / Math.max(0.000001, Math.min(word.box.width, band.right - band.left));
+}
+
+function isRecoverableCellNoise(word: OcrWord) {
+  if (isNumericLike(word)) return true;
+  const token = cleanToken(word.text);
+  return token.length <= 3
+    && !/[\p{L}\p{N}]{2,}/u.test(token)
+    && /^[\p{P}\p{S}Iil|]+$/u.test(token);
+}
+
 function clusterRows(words: OcrWord[]): SweepRow[] {
   return clusterOcrRows(words).map((rowWords) => {
     const ordered = [...rowWords].sort((a, b) => a.box.x - b.box.x);
@@ -466,8 +481,8 @@ export function mergeColumnSweepCell(
   if (!recovered || (!isMoney(recovered.text) && !isInteger(recovered.text))) return baseWords;
   const kept = baseWords.filter((word) => {
     const x = centerX(word);
-    const inBand = x >= band.left && x <= band.right;
-    return !(inBand && isNumericLike(word) && verticalOverlap(word.box, row.box) >= 0.22);
+    const inBand = (x >= band.left && x <= band.right) || horizontalBandOverlap(word, band) >= 0.35;
+    return !(inBand && isRecoverableCellNoise(word) && verticalOverlap(word.box, row.box) >= 0.22);
   });
   return [...kept, recovered];
 }
