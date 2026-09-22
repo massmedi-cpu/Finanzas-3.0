@@ -5,13 +5,13 @@ import type {
   DocumentOcrProviderOutput,
 } from "../../application/document-ocr-service";
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
+import { isReceiptMoney } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 import {
   deriveNumericColumnBands,
   ReceiptRowRefiningImageOcrProvider,
 } from "./receipt-row-refining-provider";
 
-const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 const CELL_TIMEOUT_MS = 8_000;
 const QUEUE_TIMEOUT_MS = 8_000;
 const MAX_RECOVERY_ROWS = 10;
@@ -90,7 +90,7 @@ function cleanToken(text: string) {
 }
 
 function isMoney(text: string) {
-  return MONEY_TOKEN.test(cleanToken(text));
+  return isReceiptMoney(text);
 }
 
 function isNumericLike(word: OcrWord) {
