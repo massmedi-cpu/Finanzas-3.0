@@ -9,7 +9,9 @@ const PUBLIC_PATHS = new Set([
 ]);
 
 export function shouldEnforceAppAuth(env: NodeJS.ProcessEnv = process.env) {
-  return env.VERCEL_ENV === "production" || env.FINANCIAL_APP_AUTH_ENFORCED === "true";
+  return env.VERCEL_ENV === "production"
+    || env.VERCEL_ENV === "preview"
+    || env.FINANCIAL_APP_AUTH_ENFORCED === "true";
 }
 
 export function isPublicAuthPath(pathname: string) {
