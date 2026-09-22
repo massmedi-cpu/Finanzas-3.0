@@ -484,6 +484,31 @@ function digitSignature(text: string) {
   return text.replace(/\D/g, "");
 }
 
+function oneEditApart(a: string, b: string) {
+  if (!a || !b || Math.abs(a.length - b.length) > 1) return false;
+  if (a === b) return true;
+  let left = 0;
+  let right = 0;
+  let edits = 0;
+  while (left < a.length && right < b.length) {
+    if (a[left] === b[right]) {
+      left += 1;
+      right += 1;
+      continue;
+    }
+    edits += 1;
+    if (edits > 1) return false;
+    if (a.length > b.length) left += 1;
+    else if (b.length > a.length) right += 1;
+    else {
+      left += 1;
+      right += 1;
+    }
+  }
+  if (left < a.length || right < b.length) edits += 1;
+  return edits <= 1;
+}
+
 function sameRowLexicalToken(a: OcrWord, b: OcrWord) {
   const tokenA = normalizedToken(a.text);
   const tokenB = normalizedToken(b.text);
@@ -522,7 +547,26 @@ export function mergeReceiptRecropWords(firstPass: OcrWord[], reread: OcrWord[])
     }
 
     const slotCandidates = merged.filter((candidate) => sameEvidenceSlot(word, candidate));
-    if (slotCandidates.length) continue;
+    if (slotCandidates.length) {
+      const rereadToken = normalizedToken(word.text);
+      const lexicalCandidates = slotCandidates.filter((candidate) => alphaChars(candidate.text) >= 3);
+      const bestLexical = [...lexicalCandidates].sort((a, b) => b.confidence - a.confidence)[0] ?? null;
+      const firstToken = bestLexical ? normalizedToken(bestLexical.text) : "";
+      const mayCorrectOneCharacter = Boolean(
+        bestLexical
+        && rereadToken.length >= 4
+        && firstToken.length >= 4
+        && rereadToken !== firstToken
+        && oneEditApart(rereadToken, firstToken)
+        && word.confidence >= 0.72
+        && word.confidence >= bestLexical.confidence + 0.12
+      );
+      if (mayCorrectOneCharacter && bestLexical) {
+        merged = merged.filter((candidate) => candidate !== bestLexical);
+        merged.push(word);
+      }
+      continue;
+    }
 
     const numeric = explicitNumericToken(word.text);
     const lexical = alphaChars(word.text) >= 3;
