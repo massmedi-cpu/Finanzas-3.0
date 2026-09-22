@@ -206,6 +206,150 @@ function existingWordsForCell(baseWords: OcrWord[], row: SweepRow, band: Numeric
   });
 }
 
+function horizontalOverlapWithBand(word: OcrWord, band: NumericBand) {
+  const left = Math.max(word.box.x, band.left);
+  const right = Math.min(word.box.x + word.box.width, band.right);
+  const overlap = Math.max(0, right - left);
+  return overlap / Math.max(0.000001, Math.min(word.box.width, band.right - band.left));
+}
+
+function numericOrGlyphNoise(word: OcrWord) {
+  const token = cleanToken(word.text);
+  if (!token) return true;
+  if (/\d/.test(token) && /^[\d,./:-]+$/.test(token)) return true;
+  return token.length <= 2
+    && !/[\p{L}\p{N}]{2,}/u.test(token)
+    && /^[\p{P}\p{S}Iil|]+$/u.test(token);
+}
+
+function rowContainsWord(row: SweepRow, word: OcrWord) {
+  if (verticalOverlap(word.box, row.box) >= 0.2) return true;
+  const rowCenter = row.box.y + row.box.height / 2;
+  const wordCenter = word.box.y + word.box.height / 2;
+  return Math.abs(rowCenter - wordCenter) <= Math.max(row.box.height, word.box.height) * 0.55;
+}
+
+function cleanCanonicalCell(
+  words: OcrWord[],
+  row: SweepRow,
+  band: NumericBand,
+  kind: CellKind,
+  removed: Set<OcrWord>,
+) {
+  const candidates = words.filter((word) => (
+    !removed.has(word)
+    && rowContainsWord(row, word)
+    && (centerX(word) >= band.left && centerX(word) <= band.right
+      || horizontalOverlapWithBand(word, band) >= 0.3)
+  ));
+  const valid = candidates.filter((word) => kind === "money" ? isMoney(word.text) : isInteger(word.text));
+  if (!valid.length) return null;
+  const keep = strongest(valid);
+  if (!keep) return null;
+
+  for (const candidate of candidates) {
+    if (candidate === keep) continue;
+    if ((kind === "money" ? isMoney(candidate.text) : isInteger(candidate.text))
+      || suspiciousNumericToken(candidate.text)
+      || numericOrGlyphNoise(candidate)) {
+      removed.add(candidate);
+    }
+  }
+  return keep;
+}
+
+/**
+ * Final structural guard for receipt tables. It never invents values: it only removes
+ * competing numeric/glyph residue after a valid cell is already present in that row/band.
+ * It also discards isolated short numeric debris after the printed Total and tiny orphan
+ * rows between the final complete product row and the summary block.
+ */
+export function finalizeReceiptTableWords(
+  baseWords: OcrWord[],
+  rows: SweepRow[],
+  bands: NumericBand[],
+) {
+  if (rows.length < 3 || bands.length < 3) return baseWords;
+  const removed = new Set<OcrWord>();
+  const unitBand = bands[0];
+  const priceBand = bands[bands.length - 2];
+  const amountBand = bands[bands.length - 1];
+  const productRows = rows.filter((row) => !row.summaryLike);
+  const summaryRows = rows.filter((row) => row.summaryLike);
+
+  let lastCompleteProductBottom = -1;
+  for (const row of productRows) {
+    const unit = cleanCanonicalCell(baseWords, row, unitBand, "integer", removed);
+    const price = cleanCanonicalCell(baseWords, row, priceBand, "money", removed);
+    const amount = cleanCanonicalCell(baseWords, row, amountBand, "money", removed);
+    const hasCompleteNumericShape = Boolean(unit && (price || amount));
+
+    if (hasCompleteNumericShape) {
+      lastCompleteProductBottom = Math.max(lastCompleteProductBottom, row.box.y + row.box.height);
+      const numericLeft = unitBand.left;
+      const numericRight = amountBand.right;
+      for (const word of baseWords) {
+        if (removed.has(word) || !rowContainsWord(row, word)) continue;
+        const x = centerX(word);
+        if (x < numericLeft || x > numericRight) continue;
+        const belongsToKnownBand = [unitBand, priceBand, amountBand].some((band) => (
+          (x >= band.left && x <= band.right) || horizontalOverlapWithBand(word, band) >= 0.3
+        ));
+        if (!belongsToKnownBand && (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text))) {
+          removed.add(word);
+        }
+      }
+    }
+  }
+
+  for (const row of summaryRows) {
+    const summaryBand = summaryRecoveryBand(row, amountBand);
+    const amount = cleanCanonicalCell(baseWords, row, summaryBand, "money", removed);
+    if (!amount) continue;
+    for (const word of baseWords) {
+      if (removed.has(word) || !rowContainsWord(row, word) || word === amount) continue;
+      if (centerX(word) < Math.min(summaryBand.left, amountBand.left) - 0.03) continue;
+      if (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text)) removed.add(word);
+    }
+  }
+
+  const firstSummaryTop = summaryRows.length
+    ? Math.min(...summaryRows.map((row) => row.box.y))
+    : Number.POSITIVE_INFINITY;
+  if (lastCompleteProductBottom >= 0 && Number.isFinite(firstSummaryTop)) {
+    const clustered = clusterOcrRows(baseWords.filter((word) => !removed.has(word)));
+    for (const clusteredRow of clustered) {
+      const rowBox = ocrRowTextBox(clusteredRow);
+      if (rowBox.y <= lastCompleteProductBottom || rowBox.y >= firstSummaryTop) continue;
+      const joined = clusteredRow.map((word) => cleanToken(word.text)).join("");
+      const letters = (joined.match(/\p{L}/gu) ?? []).length;
+      const hasMoney = clusteredRow.some((word) => isMoney(word.text));
+      const hasUsefulInteger = clusteredRow.some((word) => isInteger(word.text));
+      if (!hasMoney && !hasUsefulInteger && letters > 0 && letters <= 3) {
+        clusteredRow.forEach((word) => removed.add(word));
+      } else if (!hasMoney && letters === 0 && clusteredRow.every((word) => numericOrGlyphNoise(word))) {
+        clusteredRow.forEach((word) => removed.add(word));
+      }
+    }
+  }
+
+  const remaining = baseWords.filter((word) => !removed.has(word));
+  const clustered = clusterOcrRows(remaining);
+  const totalRowIndex = clustered.findIndex((row) => row.some((word) => /^total:?$/i.test(cleanToken(word.text))));
+  if (totalRowIndex >= 0) {
+    for (const row of clustered.slice(totalRowIndex + 1)) {
+      const text = row.map((word) => cleanToken(word.text)).join("");
+      const hasMeaningfulLetters = (text.match(/\p{L}/gu) ?? []).length >= 2;
+      const hasMoney = row.some((word) => isMoney(word.text));
+      if (!hasMeaningfulLetters && !hasMoney && row.every((word) => numericOrGlyphNoise(word))) {
+        row.forEach((word) => removed.add(word));
+      }
+    }
+  }
+
+  return baseWords.filter((word) => !removed.has(word));
+}
+
 function documentBounds(words: OcrWord[]) {
   const substantial = words.filter((word) => /\p{L}{2,}/u.test(word.text) || /\d/.test(word.text));
   const source = substantial.length >= 6 ? substantial : words;
@@ -590,27 +734,48 @@ async function recoverDescriptions(
       words = words.filter((word) => !(row.words.includes(word) && /^[|_—-]+$/.test(word.text)
         && word.box.height > lineHeight * 1.7));
     }
-    // A fold elsewhere in the description can lower a whole-line read. Retry
-    // unresolved words in their own observed rectangle, using the same pixels.
-    for (const uncertain of letters.filter((word) => word.confidence < 0.65).slice(0, 4)) {
+    // Whole-line OCR can be confidently wrong on a single folded/blurred word. Any lexical
+    // token not independently confirmed by both normalized variants gets one isolated retry.
+    // This remains evidence-based: the replacement still needs cross-variant agreement and
+    // mergeDescriptionObservations refuses larger lexical rewrites without a confidence gain.
+    const retryCandidates = letters
+      .filter((word) => lexicalKey(word.text).length >= 4)
+      .filter((word) => !observations.every((variant) => variant.some((candidate) =>
+        sameTextRegion(candidate, word)
+        && lexicalKey(candidate.text) === lexicalKey(word.text)
+        && candidate.confidence >= 0.65)))
+      .sort((a, b) => a.confidence - b.confidence || lexicalKey(b.text).length - lexicalKey(a.text).length)
+      .slice(0, 2);
+
+    for (const uncertain of retryCandidates) {
       if (!words.includes(uncertain)) continue;
-      const agreed = observations.every((variant) => variant.some((word) =>
-        sameTextRegion(word, uncertain) && lexicalKey(word.text) === lexicalKey(uncertain.text) && word.confidence >= 0.65));
-      if (agreed) continue;
-      const inset = Math.max(3, uncertain.box.height * metadata.height * 0.16);
+      const inset = Math.max(3, uncertain.box.height * metadata.height * 0.22);
       const x = Math.max(0, Math.floor(uncertain.box.x * metadata.width - inset));
       const y = Math.max(0, Math.floor(uncertain.box.y * metadata.height - inset));
       const endX = Math.min(right, Math.ceil((uncertain.box.x + uncertain.box.width) * metadata.width + inset));
       const endY = Math.min(metadata.height, Math.ceil((uncertain.box.y + uncertain.box.height) * metadata.height + inset));
+      if (endX - x < 8 || endY - y < 6) continue;
       const wordObservations: OcrWord[][] = [];
       for (const variant of [0, 1] as const) {
         const prepared = await prepareCell(pages[variant], { left: x, top: y, width: endX - x, height: endY - y }, variant);
+        await worker.setParameters({
+          tessedit_pageseg_mode: PSM.SINGLE_WORD,
+          tessedit_char_whitelist: "",
+          classify_bln_numeric_mode: "0",
+          user_defined_dpi: "300",
+        });
         const result = await withTimeout(worker.recognize(prepared.bytes, { rotateRadians: 0 }, { text: true, tsv: true }),
           CELL_TIMEOUT_MS, "ocr_description_word_timeout");
         wordObservations.push(preparedWords(result.data.tsv, prepared, metadata)
           .filter((word) => /\p{L}{2}/u.test(word.text) && sameTextRegion(word, uncertain)));
       }
       words = mergeDescriptionObservations(words, wordObservations, bands[0].left);
+      await worker.setParameters({
+        tessedit_pageseg_mode: PSM.SINGLE_LINE,
+        tessedit_char_whitelist: "",
+        classify_bln_numeric_mode: "0",
+        user_defined_dpi: "300",
+      });
     }
   }
   return words;
@@ -787,9 +952,13 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       } catch (error) {
         if (error instanceof PaddedCellTimeoutError) throw error;
       }
+      const beforeStructuralCleanup = finalWords.length;
+      finalWords = finalizeReceiptTableWords(finalWords, rows, bands);
+      const structuralNoiseRemoved = beforeStructuralCleanup - finalWords.length;
       if (process.env.VERCEL_ENV === "preview") {
         console.info("ocr-padded-final-v22", {
           finalWords: finalWords.length,
+          structuralNoiseRemoved,
           suspiciousNumericTokens: finalWords.filter((word) => suspiciousNumericToken(word.text)).length,
           isolatedShortNumericRowsAfterTotal: isolatedShortNumericRowsAfterTotal(finalWords),
           veryShortLowConfidenceGlyphs: finalWords.filter((word) => (
