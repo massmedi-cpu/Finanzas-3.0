@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import type { OcrWord } from "../../src/domain/document-ocr";
+import { reconstructOcrPage, type OcrWord } from "../../src/domain/document-ocr";
 import {
   mergeColumnSweepCell,
   type SweepRow,
@@ -230,6 +230,14 @@ test("CR008-OCR-002 final structural guard removes the real replay residue witho
   expect(text).toContain("15,91");
   expect(text).not.toContain("2.80");
   expect(text).not.toContain("15.91");
+
+  const visible = reconstructOcrPage(1, cleaned);
+  expect(visible.plainText).toContain("CUBATA");
+  expect(visible.plainText).toContain("Base 15,91");
+  expect(visible.plainText).toContain("Total 17,50");
+  expect(visible.layoutText).toContain("17,50");
+  expect(visible.plainText).not.toMatch(/5,508|\beco\b|(^|\s)0($|\s)/m);
+  expect(visible.plainText).not.toMatch(/(^|\s)[EI]($|\s)/m);
 });
 
 test("CR008-OCR-002 keeps a high-confidence first pass only until two isolated variants agree on a one-character repair", () => {
