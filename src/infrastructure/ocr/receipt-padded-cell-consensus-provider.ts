@@ -698,6 +698,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     let observedCells = 0;
     let consensusCells = 0;
     let changedCells = 0;
+    let noiseWordsRemoved = 0;
     let summaryRecovered = 0;
     let preparationFailures = 0;
     let recognitionFailures = 0;
@@ -737,7 +738,9 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       consensusCells += 1;
       const existing = existingWordsForCell(words, target.row, target.band, target.kind);
       if (existing.some((word) => tokenKey(word.text) === tokenKey(recovered.text))) continue;
+      const beforeMergeCount = words.length;
       words = mergeColumnSweepCell(words, target.row, target.band, recovered);
+      noiseWordsRemoved += Math.max(0, beforeMergeCount + 1 - words.length);
       changedCells += 1;
       if (target.reason === "summary_missing") summaryRecovered += 1;
     }
@@ -756,6 +759,7 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
         observedCells,
         consensusCells,
         changedCells,
+        noiseWordsRemoved,
         summaryRecovered,
         preparationFailures,
         recognitionFailures,
