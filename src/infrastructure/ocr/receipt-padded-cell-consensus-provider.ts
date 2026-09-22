@@ -286,6 +286,26 @@ export function finalizeReceiptTableWords(
 
     if (hasCompleteNumericShape) {
       lastCompleteProductBottom = Math.max(lastCompleteProductBottom, row.box.y + row.box.height);
+      const descriptionWords = baseWords.filter((word) => (
+        !removed.has(word)
+        && rowContainsWord(row, word)
+        && centerX(word) < unitBand.left
+        && (cleanToken(word.text).match(/\p{L}/gu) ?? []).length >= 2
+      ));
+      const isolatedLetters = baseWords.filter((word) => {
+        if (removed.has(word) || !rowContainsWord(row, word) || centerX(word) >= unitBand.left) return false;
+        const token = cleanToken(word.text);
+        if (!/^\p{L}$/u.test(token) || word.confidence > 0.72) return false;
+        const nearestGap = descriptionWords.reduce((best, description) => {
+          const leftGap = word.box.x - (description.box.x + description.box.width);
+          const rightGap = description.box.x - (word.box.x + word.box.width);
+          const gap = Math.max(0, leftGap, rightGap);
+          return Math.min(best, gap);
+        }, Number.POSITIVE_INFINITY);
+        return Number.isFinite(nearestGap) && nearestGap > Math.max(0.014, row.box.height * 0.75);
+      });
+      isolatedLetters.forEach((word) => removed.add(word));
+
       const numericLeft = unitBand.left;
       const numericRight = amountBand.right;
       for (const word of baseWords) {
@@ -306,10 +326,19 @@ export function finalizeReceiptTableWords(
     const summaryBand = summaryRecoveryBand(row, amountBand);
     const amount = cleanCanonicalCell(baseWords, row, summaryBand, "money", removed);
     if (!amount) continue;
+    const summaryLabels = row.words.filter((word) => /^(base|iva|total|subtotal):?$/i.test(cleanToken(word.text)));
+    const labelLeft = summaryLabels.length
+      ? Math.min(...summaryLabels.map((word) => word.box.x))
+      : Number.POSITIVE_INFINITY;
     for (const word of baseWords) {
       if (removed.has(word) || !rowContainsWord(row, word) || word === amount) continue;
-      if (centerX(word) < Math.min(summaryBand.left, amountBand.left) - 0.03) continue;
-      if (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text)) removed.add(word);
+      const x = centerX(word);
+      const isRightSideNoise = x >= Math.min(summaryBand.left, amountBand.left) - 0.03
+        && (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text));
+      const isOrphanBeforeLabel = Number.isFinite(labelLeft)
+        && word.box.x + word.box.width < labelLeft - Math.max(0.012, row.box.height * 0.65)
+        && (numericOrGlyphNoise(word) || suspiciousNumericToken(word.text));
+      if (isRightSideNoise || isOrphanBeforeLabel) removed.add(word);
     }
   }
 
@@ -750,18 +779,14 @@ async function recoverDescriptions(
       words = words.filter((word) => !(row.words.includes(word) && /^[|_—-]+$/.test(word.text)
         && word.box.height > lineHeight * 1.7));
     }
-    // Whole-line OCR can be confidently wrong on a single folded/blurred word. Any lexical
-    // token not independently confirmed by both normalized variants gets one isolated retry.
-    // This remains evidence-based: the replacement still needs cross-variant agreement and
-    // mergeDescriptionObservations refuses larger lexical rewrites without a confidence gain.
+    // Whole-line OCR can be confidently wrong on one folded/blurred token (the real replay
+    // returned CUEATA with high confidence). Verify every substantive product word independently,
+    // bounded to three words per product row. A replacement still requires agreement from both
+    // normalized variants and mergeDescriptionObservations only permits evidence-backed changes.
     const retryCandidates = letters
       .filter((word) => lexicalKey(word.text).length >= 4)
-      .filter((word) => !observations.every((variant) => variant.some((candidate) =>
-        sameTextRegion(candidate, word)
-        && lexicalKey(candidate.text) === lexicalKey(word.text)
-        && candidate.confidence >= 0.65)))
       .sort((a, b) => a.confidence - b.confidence || lexicalKey(b.text).length - lexicalKey(a.text).length)
-      .slice(0, 2);
+      .slice(0, 3);
 
     for (const uncertain of retryCandidates) {
       if (!words.includes(uncertain)) continue;
