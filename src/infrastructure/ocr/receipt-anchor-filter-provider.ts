@@ -305,6 +305,30 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
       && candidateTitle.words.some((word) => word.confidence >= 0.45)
     ) {
       startIndex = precedingIndex;
+
+      // A real merchant heading may occupy two consecutive lines above the
+      // metadata block. Preserve the second title line only when it is also
+      // physically contiguous with the title already accepted. This keeps
+      // legitimate multi-line headers without reopening the crop to distant
+      // photographed text.
+      const secondTitleIndex = startIndex - 1;
+      if (secondTitleIndex >= 0) {
+        const secondTitle = rows[secondTitleIndex];
+        const firstTitle = rows[startIndex];
+        const titleGap = firstTitle.box.y - (secondTitle.box.y + secondTitle.box.height);
+        const contiguousTitle = titleGap <= Math.max(
+          0.028,
+          Math.max(secondTitle.box.height, firstTitle.box.height) * 1.8,
+        );
+        if (
+          contiguousTitle
+          && intersectsHorizontalBand(secondTitle, left, right)
+          && alphaChars(secondTitle.text) >= 3
+          && secondTitle.words.some((word) => word.confidence >= 0.45)
+        ) {
+          startIndex = secondTitleIndex;
+        }
+      }
     }
   }
 
