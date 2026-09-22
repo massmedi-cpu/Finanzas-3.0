@@ -374,3 +374,54 @@ test("CR008-OCR-002 recrop never uses confidence alone for larger lexical rewrit
   );
   expect(merged.map((item) => item.text)).toEqual(["CUBATA"]);
 });
+
+
+test("CR008-OCR-002 preserves one-edit metadata anchors so recrop can verify them", () => {
+  const words: OcrWord[] = [
+    word("BAR", 0.24, 0.08, 0.06),
+    word("DEMO", 0.32, 0.08, 0.08),
+    // These are deliberately one character away from valid metadata labels.
+    word("vazon", 0.20, 0.14, 0.08, 0.018, 0.48),
+    word("vocial", 0.30, 0.14, 0.09, 0.018, 0.46),
+    word("Luis", 0.42, 0.14, 0.06, 0.018, 0.86),
+    word("NIF", 0.20, 0.18, 0.05),
+    word("X1234567Z", 0.30, 0.18, 0.10),
+    word("Direccion", 0.20, 0.22, 0.10),
+    word("Central", 0.34, 0.22, 0.08),
+    word("Telefono", 0.20, 0.26, 0.09),
+    word("600000000", 0.34, 0.26, 0.10),
+    word("Pedido", 0.20, 0.30, 0.07),
+    word("DEMO", 0.31, 0.30, 0.06),
+    word("Hora", 0.20, 0.34, 0.05),
+    word("00:02:03", 0.31, 0.34, 0.09),
+    word("DESCRIPCION", 0.20, 0.42, 0.13),
+    word("UDS", 0.55, 0.42, 0.05),
+    word("PRECIO", 0.65, 0.42, 0.08),
+    word("IMPORTE", 0.78, 0.42, 0.09),
+    word("ENERGY", 0.20, 0.47, 0.08),
+    word("1", 0.56, 0.47, 0.02),
+    word("1,80", 0.66, 0.47, 0.06),
+    word("1,80", 0.79, 0.47, 0.06),
+    word("CUBATA", 0.20, 0.52, 0.08),
+    word("1", 0.56, 0.52, 0.02),
+    word("5,50", 0.66, 0.52, 0.06),
+    word("5,50", 0.79, 0.52, 0.06),
+    word("AGUA", 0.20, 0.57, 0.06),
+    word("1", 0.56, 0.57, 0.02),
+    word("1,80", 0.66, 0.57, 0.06),
+    word("1,80", 0.79, 0.57, 0.06),
+    word("Base", 0.62, 0.65, 0.06),
+    word("15,91", 0.79, 0.65, 0.07),
+    word("IVA", 0.62, 0.70, 0.05),
+    word("1,59", 0.79, 0.70, 0.06),
+    word("Total", 0.62, 0.75, 0.06),
+    word("17,50", 0.79, 0.75, 0.07),
+  ];
+
+  const filtered = filterReceiptAnchorWords(words);
+  expect(filtered).not.toBeNull();
+  const text = filtered!.words.map((item) => item.text.toLowerCase());
+  expect(text).toContain("vazon");
+  expect(text).toContain("vocial");
+  expect(filtered!.bounds.y).toBeLessThan(0.14);
+});
