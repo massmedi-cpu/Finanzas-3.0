@@ -58,3 +58,22 @@ La fotografía y los resultados privados no se incluyen en el repositorio.
 ## 20/09/2026 · Rebase seguro sobre Production actual
 
 V22 se ha reconstruido sobre `main` `b829adb07e00e46bb73e893b87e2b60a55d87315` en PR #367. La comparación contra el merge-base anterior confirma que 33/34 archivos de V22 no habían cambiado en `main`; el único solapamiento real era `app/transactions/transactions-client.tsx`, integrado conservando la versión actual y aplicando sólo el hit-area de selección de 44 px. Este commit solicita una única Preview Vercel exacta del candidato actualizado. No autoriza merge ni Production: siguen siendo obligatorios CI verde y replay autenticado del documento canónico.
+
+
+## Preview candidate checkpoint · 22/09/2026
+
+Functional tree frozen at `a1b781a67836a35403d7bb9ff225b59b9ff2a390`.
+
+Validated before requesting Preview:
+- UX 15 User Value run `35687649075`: SUCCESS.
+- TypeScript: SUCCESS.
+- Production build: SUCCESS.
+- Playwright desktop/mobile: 130 passed / 4 skipped / 0 failed.
+- OCR base worker terminates before queue handoff.
+- V22 padded worker terminates before queue handoff.
+- Whole image OCR pipeline serialized per process.
+- OCR timeouts do not start overlapping recognitions on a timed-out worker.
+- Full-image illumination variants are prepared sequentially and reuse the decoded grayscale buffer.
+- Financial source remains read-only; `financialWrites=false`; `requiresHumanReview=true`.
+
+This documentation-only commit requests the exact Vercel Preview. Runtime code is unchanged from the frozen functional tree.
