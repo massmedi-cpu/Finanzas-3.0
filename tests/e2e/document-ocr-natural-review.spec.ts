@@ -50,7 +50,8 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
         pages: [{
           pageNumber: 1,
           plainText: "TIENDA PRUEBA\nTOTAL 24,50 EUR",
-          layoutText: "TIENDA PRUEBA\nTOTAL                         24,50 EUR",
+          layoutText: "GEOMETRIA BRUTA\nTOTAL                         24,50 EUR",
+          reviewText: "TIENDA PRUEBA\nTOTAL: 24,50 EUR",
           lines: [
             { id: "p1-l1", text: "TIENDA PRUEBA", confidence: 0.91, alignment: "center" },
             { id: "p1-l2", text: "TOTAL 24,50 EUR", confidence: 0.54, alignment: "left" },
@@ -108,7 +109,8 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect.poll(() => ocrReads).toBe(1);
   await expect(panel.getByText("Compara la lectura con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
-  await expect(panel.getByText(/TOTAL\s+24,50 EUR/).last()).toBeVisible();
+  await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
+  await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
   await expect(panel.getByText("Los datos editables siguen arriba y requieren guardado explícito.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
