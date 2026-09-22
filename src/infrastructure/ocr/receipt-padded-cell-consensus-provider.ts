@@ -348,6 +348,15 @@ export function finalizeReceiptTableWords(
     }
   }
 
+  const standaloneSummaryKeys = new Set<string>();
+  for (const row of summaryRows) {
+    const labels = row.words.filter((word) => /^(base|iva|total|subtotal):?$/i.test(cleanToken(word.text)));
+    const keys = [...new Set(labels.map((word) => cleanToken(word.text).replace(/:$/, "").toLowerCase()))];
+    if (keys.length === 1 && row.words.some((word) => isMoney(word.text))) {
+      standaloneSummaryKeys.add(keys[0]);
+    }
+  }
+
   for (const row of summaryRows) {
     const summaryBand = summaryRecoveryBand(row, amountBand);
     const amount = cleanCanonicalCell(baseWords, row, summaryBand, "money", removed);
@@ -356,6 +365,19 @@ export function finalizeReceiptTableWords(
     const labelLeft = summaryLabels.length
       ? Math.min(...summaryLabels.map((word) => word.box.x))
       : Number.POSITIVE_INFINITY;
+
+    if (summaryLabels.length > 1) {
+      const nearestLabel = [...summaryLabels].sort((a, b) => (
+        Math.abs(centerX(a) - centerX(amount)) - Math.abs(centerX(b) - centerX(amount))
+      ))[0];
+      for (const label of summaryLabels) {
+        if (label === nearestLabel) continue;
+        const key = cleanToken(label.text).replace(/:$/, "").toLowerCase();
+        const detached = horizontalGap(label, nearestLabel) > Math.max(0.018, row.box.height * 1.1);
+        if (standaloneSummaryKeys.has(key) && detached) removed.add(label);
+      }
+    }
+
     const protectedPercent = summaryPercentageTokens(row, baseWords);
     for (const word of baseWords) {
       if (removed.has(word) || !rowContainsWord(row, word) || word === amount || protectedPercent.has(word)) continue;
