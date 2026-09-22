@@ -5,6 +5,7 @@ import type {
   DocumentOcrProviderOutput,
 } from "../../application/document-ocr-service";
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
+import { isReceiptMoney, receiptMoneyCents, receiptMoneyKey } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 import {
   ReceiptColumnSweepImageOcrProvider,
@@ -14,7 +15,6 @@ import {
 } from "./receipt-column-sweep-provider";
 import { deriveNumericColumnBands } from "./receipt-row-refining-provider";
 
-const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 const INTEGER_TOKEN = /^\d{1,2}$/;
 const CELL_TIMEOUT_MS = 8_000;
 const QUEUE_TIMEOUT_MS = 8_000;
@@ -103,11 +103,11 @@ function cleanToken(text: string) {
 }
 
 function tokenKey(text: string) {
-  return cleanToken(text).replace(",", ".");
+  return receiptMoneyKey(text) ?? cleanToken(text).replace(",", ".");
 }
 
 function isMoney(text: string) {
-  return MONEY_TOKEN.test(cleanToken(text));
+  return isReceiptMoney(text);
 }
 
 function isInteger(text: string) {
@@ -154,10 +154,7 @@ function strongest(words: OcrWord[]) {
 }
 
 function cents(text: string) {
-  if (!isMoney(text)) return null;
-  const normalized = cleanToken(text).replace(",", ".");
-  const value = Number(normalized);
-  return Number.isFinite(value) ? Math.round(value * 100) : null;
+  return receiptMoneyCents(text);
 }
 
 function integerValue(text: string) {
