@@ -5,11 +5,11 @@ import type {
   DocumentOcrProviderOutput,
 } from "../../application/document-ocr-service";
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
+import { isReceiptMoney } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
 
 const SUPPORTED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
-const MONEY_TOKEN = /^\d{1,6}[,.]\d{2}$/;
 const INTEGER_TOKEN = /^\d{1,2}$/;
 const MAX_REFINED_ROWS = 12;
 const REFINE_TIMEOUT_MS = 9_000;
@@ -177,7 +177,7 @@ function cleanToken(text: string) {
 }
 
 function isMoney(text: string) {
-  return MONEY_TOKEN.test(cleanToken(text));
+  return isReceiptMoney(text);
 }
 
 function isInteger(text: string) {
@@ -457,7 +457,7 @@ export function mergeRefinedNumericRow(
   const normalizedRefinedWords = coalesceExplicitDecimalTokens(refinedWords);
   const usable = normalizedRefinedWords.filter((word) => {
     const token = cleanToken(word.text);
-    return word.confidence >= 0.12 && (MONEY_TOKEN.test(token) || INTEGER_TOKEN.test(token));
+    return word.confidence >= 0.12 && (isReceiptMoney(token) || INTEGER_TOKEN.test(token));
   });
   if (!usable.some((word) => isMoney(word.text))) return baseWords;
 
