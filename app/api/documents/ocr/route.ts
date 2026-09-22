@@ -280,10 +280,10 @@ class PreviewAnchorSignalDiagnosticProvider implements DocumentOcrProvider {
   }
 }
 
-// Keep the runtime pipeline flat. The anchor filter is pure geometry/text post-processing and
-// does not create another OCR worker. Historical V3-V8 providers remain available for regression
-// coverage, but chaining them here creates multiple concurrent Tesseract workers and can exhaust
-// the Vercel function memory before the focused cell pass.
+// Keep the runtime pipeline staged. The base/anchor pass owns one Tesseract worker and releases it
+// before the V22 padded-cell refinement may create its own worker. Historical V3-V8 providers remain
+// available for regression coverage, but chaining their worker-owning stages here would multiply
+// resident Tesseract memory and can exhaust the Vercel function before focused recovery completes.
 const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
   new ReceiptAnchorFilteringImageOcrProvider(
     new PreviewAnchorSignalDiagnosticProvider(new TesseractImageOcrProvider()),
