@@ -25,6 +25,7 @@ const WARNING_LABELS: Record<string, string> = {
   orientation_corrected: "La orientación de la imagen se ha corregido automáticamente: comprueba el resultado con el original.",
   background_text_filtered: "Se ha filtrado texto del fondo para aislar el documento: revisa que no se haya descartado contenido válido.",
   receipt_arithmetic_mismatch: "Los importes leídos no cuadran entre sí: revisa cantidades, precios, IVA y total contra el original.",
+  receipt_structure_incomplete: "Hay filas de producto que no se han podido estructurar por completo: la lectura queda pendiente de revisión.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
 };
@@ -83,6 +84,9 @@ function parseOcrResult(value: unknown): OcrResult {
       if (!integrity || typeof integrity !== "object"
         || (integrity.status !== "verified" && integrity.status !== "issues" && integrity.status !== "partial")
         || !Number.isSafeInteger(integrity.productRows) || integrity.productRows < 0
+        || !Number.isSafeInteger(integrity.candidateProductRows) || integrity.candidateProductRows < integrity.productRows
+        || !Number.isSafeInteger(integrity.unresolvedProductRows) || integrity.unresolvedProductRows < 0
+        || integrity.unresolvedProductRows !== integrity.candidateProductRows - integrity.productRows
         || !Number.isSafeInteger(integrity.arithmeticRowsChecked) || integrity.arithmeticRowsChecked < 0
         || !Number.isSafeInteger(integrity.arithmeticRowsMatching) || integrity.arithmeticRowsMatching < 0
         || integrity.arithmeticRowsMatching > integrity.arithmeticRowsChecked
@@ -125,6 +129,7 @@ function errorLabel(code: string) {
 }
 
 function integrityLabel(integrity: NonNullable<OcrResult["pages"][number]["receiptIntegrity"]>) {
+  const coverage = `${integrity.productRows}/${integrity.candidateProductRows} filas estructuradas`;
   const rows = `${integrity.arithmeticRowsMatching}/${integrity.arithmeticRowsChecked} líneas cuadran`;
   const total = integrity.lineTotalMatchesDocumentTotal === null
     ? "total no comprobable"
@@ -136,7 +141,7 @@ function integrityLabel(integrity: NonNullable<OcrResult["pages"][number]["recei
     : integrity.basePlusTaxMatchesTotal
       ? "base + IVA = total"
       : "base + IVA ≠ total";
-  return [rows, total, tax].filter(Boolean).join(" · ");
+  return [coverage, rows, total, tax].filter(Boolean).join(" · ");
 }
 
 export function OcrReviewPanel({
