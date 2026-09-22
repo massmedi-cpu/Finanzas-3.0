@@ -280,10 +280,10 @@ class PreviewAnchorSignalDiagnosticProvider implements DocumentOcrProvider {
   }
 }
 
-// Keep the runtime pipeline staged. The base/anchor pass owns one Tesseract worker and releases it
-// before the V22 padded-cell refinement may create its own worker. Historical V3-V8 providers remain
-// available for regression coverage, but chaining their worker-owning stages here would multiply
-// resident Tesseract memory and can exhaust the Vercel function before focused recovery completes.
+// Keep the runtime pipeline staged and serialized per process. The base/anchor pass owns one
+// Tesseract worker and releases it before V22 creates its own worker; the composite provider also
+// prevents another image request from starting its base stage while V22 is refining the current one.
+// Historical worker-owning stages stay out of this chain to keep resident Tesseract memory bounded.
 const imageProvider = new ReceiptPaddedCellConsensusImageOcrProvider(
   new ReceiptAnchorFilteringImageOcrProvider(
     new PreviewAnchorSignalDiagnosticProvider(new TesseractImageOcrProvider()),
