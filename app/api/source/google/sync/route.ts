@@ -115,6 +115,12 @@ export async function GET() {
       { headers: HEADERS },
     );
   } catch (error) {
+    if (error instanceof PersistenceGatewayError && error.code === "workspace_context_required") {
+      return Response.json(
+        { error: "workspace_context_required" },
+        { status: 401, headers: HEADERS },
+      );
+    }
     console.error(
       "google-source-status",
       error instanceof PersistenceGatewayError
@@ -175,6 +181,12 @@ export async function POST() {
       return Response.json(
         { error: "source_runtime_incompatible" },
         { status: 503, headers: HEADERS },
+      );
+    }
+    if (error instanceof PersistenceGatewayError && error.code === "workspace_context_required") {
+      return Response.json(
+        { error: "workspace_context_required" },
+        { status: 401, headers: HEADERS },
       );
     }
     if (error instanceof PersistenceGatewayError && error.code === "google_oauth_not_connected") {
