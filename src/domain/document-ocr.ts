@@ -27,6 +27,8 @@ export type OcrLine = {
 export type OcrReceiptIntegrity = {
   status: "verified" | "issues" | "partial";
   productRows: number;
+  candidateProductRows: number;
+  unresolvedProductRows: number;
   arithmeticRowsChecked: number;
   arithmeticRowsMatching: number;
   lineTotalMatchesDocumentTotal: boolean | null;
@@ -410,6 +412,17 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
   const productRows: Array<{ quantity: number; priceCents: number; amountCents: number }> = [];
   const summaries = new Map<string, number>();
 
+  const headerIndex = lines.findIndex((line) => {
+    const token = receiptToken(line);
+    return token.includes("descrip") && token.includes("uds") && token.includes("precio") && token.includes("importe");
+  });
+  const summaryIndex = lines.findIndex((line, index) => (
+    index > headerIndex && /^(Base|IVA|Total|Subtotal)\b/iu.test(line)
+  ));
+  const productSection = headerIndex >= 0
+    ? lines.slice(headerIndex + 1, summaryIndex >= 0 ? summaryIndex : lines.length)
+    : [];
+
   for (const line of lines) {
     const product = line.match(/^(.+?)\s+(\d{1,2})\s+(\d{1,6}[,.]\d{2})\s+(\d{1,6}[,.]\d{2})$/u);
     if (product) {
@@ -431,6 +444,13 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
 
   if (productRows.length < 2) return undefined;
 
+  const candidateProductRows = productSection.filter((line) => {
+    const letters = (line.match(/\p{L}/gu) ?? []).length;
+    const moneyTokens = line.match(/\d{1,6}[,.]\d{2}/g) ?? [];
+    return letters >= 2 && moneyTokens.length >= 1;
+  }).length;
+  const unresolvedProductRows = Math.max(0, candidateProductRows - productRows.length);
+
   const arithmeticRowsChecked = productRows.length;
   const arithmeticRowsMatching = productRows.filter((row) => row.quantity * row.priceCents === row.amountCents).length;
   const total = summaries.get("total") ?? null;
@@ -438,7 +458,9 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
   const tax = summaries.get("iva") ?? null;
   const lineTotal = productRows.reduce((sum, row) => sum + row.amountCents, 0);
 
-  const lineTotalMatchesDocumentTotal = total === null ? null : lineTotal === total;
+  // Do not compare a partial product subtotal against the printed Total: a missing structured row
+  // makes that comparison inconclusive rather than contradictory.
+  const lineTotalMatchesDocumentTotal = total === null || unresolvedProductRows > 0 ? null : lineTotal === total;
   const basePlusTaxMatchesTotal = base === null || tax === null || total === null ? null : base + tax === total;
 
   const hasIssue = arithmeticRowsMatching !== arithmeticRowsChecked
@@ -447,13 +469,15 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
   const hasStrongSummaryCheck = lineTotalMatchesDocumentTotal !== null;
   const status: OcrReceiptIntegrity["status"] = hasIssue
     ? "issues"
-    : hasStrongSummaryCheck
-      ? "verified"
-      : "partial";
+    : unresolvedProductRows > 0 || !hasStrongSummaryCheck
+      ? "partial"
+      : "verified";
 
   return {
     status,
     productRows: productRows.length,
+    candidateProductRows,
+    unresolvedProductRows,
     arithmeticRowsChecked,
     arithmeticRowsMatching,
     lineTotalMatchesDocumentTotal,
@@ -548,6 +572,7 @@ export function buildDocumentOcrResult(input: {
   for (const page of pages) {
     warnings.push(...pageQualityWarnings(page));
     if (page.receiptIntegrity?.status === "issues") warnings.push("receipt_arithmetic_mismatch");
+    if (page.receiptIntegrity?.status === "partial") warnings.push("receipt_structure_incomplete");
   }
   if (!allLines.length) warnings.push("no_text_detected");
   if (confidence !== null && confidence < LOW_CONFIDENCE) warnings.push("low_confidence");
