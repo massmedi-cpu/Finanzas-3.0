@@ -425,6 +425,44 @@ test("CR008-OCR-002 ignores distant background words such as Misa instead of tre
   expect(text).not.toContain("Avila");
 });
 
+test("CR008-OCR-002 preserves a genuine contiguous two-line merchant heading above metadata", () => {
+  const words: OcrWord[] = [
+    word("Misa", 0.36, 0.08, 0.06, 0.018, 0.88),
+    word("Avila", 0.22, 0.115, 0.07, 0.018, 0.86),
+    word("Bar", 0.31, 0.115, 0.05, 0.018, 0.86),
+    word("Razon", 0.20, 0.15, 0.07, 0.018, 0.82),
+    word("Social", 0.28, 0.15, 0.07, 0.018, 0.82),
+    word("Demo", 0.40, 0.15, 0.06, 0.018, 0.82),
+    word("N.I.F.", 0.20, 0.20, 0.07, 0.018, 0.82),
+    word("X1234567Z", 0.31, 0.20, 0.10, 0.018, 0.82),
+    word("DESCRIPCION", 0.20, 0.40, 0.13),
+    word("UDS", 0.55, 0.40, 0.05),
+    word("PRECIO", 0.65, 0.40, 0.08),
+    word("IMPORTE", 0.78, 0.40, 0.09),
+    word("ENERGY", 0.20, 0.45, 0.08),
+    word("1", 0.56, 0.45, 0.02),
+    word("1,80", 0.66, 0.45, 0.06),
+    word("1,80", 0.79, 0.45, 0.06),
+    word("CUBATA", 0.20, 0.50, 0.08),
+    word("1", 0.56, 0.50, 0.02),
+    word("5,50", 0.66, 0.50, 0.06),
+    word("5,50", 0.79, 0.50, 0.06),
+    word("Base", 0.62, 0.60, 0.06),
+    word("15,91", 0.79, 0.60, 0.07),
+    word("Total", 0.62, 0.65, 0.06),
+    word("17,50", 0.79, 0.65, 0.07),
+  ];
+
+  const filtered = filterReceiptAnchorWords(words);
+  expect(filtered).not.toBeNull();
+  const text = filtered!.words.map((item) => item.text);
+  expect(text).toContain("Misa");
+  expect(text).toContain("Avila");
+  expect(text).toContain("Bar");
+  expect(text).toContain("Razon");
+  expect(filtered!.bounds.y).toBeLessThanOrEqual(0.08);
+});
+
 test("CR008-OCR-002 preserves one-edit metadata anchors so recrop can verify them", () => {
   const words: OcrWord[] = [
     word("BAR", 0.24, 0.08, 0.06),
