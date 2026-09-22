@@ -74,6 +74,11 @@ function invalidateWorker() {
   if (current) void current.then((worker) => worker.terminate()).catch(() => undefined);
 }
 
+async function terminateOwnedWorker(worker: Worker) {
+  workerPromise = null;
+  await worker.terminate().catch(() => undefined);
+}
+
 async function getWorker() {
   if (!workerPromise) {
     const root = process.cwd();
@@ -639,15 +644,20 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
     try {
       const selected = await exclusive(async () => {
         const worker = await withTimeout(getWorker(), OCR_TIMEOUT_MS, "worker");
-        const initial = await recognizeCandidate(worker, input.bytes, metadata, 0, true);
-        let best = initial;
-        if (needsOrientationFallback(initial.words, metadata)) {
-          for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
-            const candidate = await recognizeCandidate(worker, input.bytes, metadata, rotationRadians, false);
-            if (candidate.score > best.score) best = candidate;
+        try {
+          const initial = await recognizeCandidate(worker, input.bytes, metadata, 0, true);
+          let best = initial;
+          if (needsOrientationFallback(initial.words, metadata)) {
+            for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
+              const candidate = await recognizeCandidate(worker, input.bytes, metadata, rotationRadians, false);
+              if (candidate.score > best.score) best = candidate;
+            }
           }
+          return await refineBackgroundContamination(worker, input.bytes, metadata, best);
+        } finally {
+          // Release Tesseract before this queue slot is handed to the next request.
+          await terminateOwnedWorker(worker);
         }
-        return refineBackgroundContamination(worker, input.bytes, metadata, best);
       });
 
       const warnings: string[] = [];
@@ -661,7 +671,8 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
         warnings,
       };
     } catch (error) {
-      if (error instanceof OcrTimeoutError || error instanceof Error) invalidateWorker();
+      // A queue timeout means another request still owns the worker: never terminate its worker.
+      if (!(error instanceof OcrTimeoutError && error.kind === "queue")) invalidateWorker();
       throw error;
     }
   }
