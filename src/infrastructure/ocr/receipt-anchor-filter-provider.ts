@@ -7,7 +7,7 @@ import type {
 import type { OcrBoundingBox, OcrWord } from "../../domain/document-ocr";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
 
-const EXTRACTOR_SUFFIX = "+anchor-recrop-v19";
+const EXTRACTOR_SUFFIX = "+anchor-recrop-v20";
 const HEADER_ROLE_MIN = 3;
 const HEADER_WINDOW_MAX_ROWS = 3;
 const HORIZONTAL_MARGIN = 0.022;
@@ -188,7 +188,7 @@ function hasMetadataAnchor(row: ReceiptRow) {
     if (token === "nif") return true;
     return METADATA_ANCHOR_TOKENS.some((anchor) => (
       token === anchor
-      || (token.length >= 4 && anchor.length >= 4 && oneEditApart(token, anchor))
+      || (token.length >= 5 && anchor.length >= 5 && oneEditApart(token, anchor))
     ));
   });
 }
@@ -290,13 +290,22 @@ function structuralBounds(rows: ReceiptRow[], header: ReceiptHeaderAnchor): Rece
       precedingIndex -= 1;
     }
   }
-  if (
-    precedingIndex >= 0
-    && intersectsHorizontalBand(rows[precedingIndex], left, right)
-    && alphaChars(rows[precedingIndex].text) >= 3
-    && rows[precedingIndex].words.some((word) => word.confidence >= 0.45)
-  ) {
-    startIndex = precedingIndex;
+  if (precedingIndex >= 0) {
+    const candidateTitle = rows[precedingIndex];
+    const firstMetadata = rows[startIndex];
+    const gap = firstMetadata.box.y - (candidateTitle.box.y + candidateTitle.box.height);
+    const adjacentTitle = gap <= Math.max(
+      0.028,
+      Math.max(candidateTitle.box.height, firstMetadata.box.height) * 1.8,
+    );
+    if (
+      adjacentTitle
+      && intersectsHorizontalBand(candidateTitle, left, right)
+      && alphaChars(candidateTitle.text) >= 3
+      && candidateTitle.words.some((word) => word.confidence >= 0.45)
+    ) {
+      startIndex = precedingIndex;
+    }
   }
 
   const lastStructure = Math.max(
