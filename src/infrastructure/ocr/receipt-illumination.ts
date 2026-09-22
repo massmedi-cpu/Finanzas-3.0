@@ -16,9 +16,10 @@ export async function normalizeReceiptIllumination(
     : backgroundImage.median(window))
     .grayscale().raw().toBuffer();
   if (background.length !== data.length) throw new Error("ocr_illumination_channels");
-  const pixels = Buffer.alloc(data.length);
+  // The background buffer is independent after await, so the decoded grayscale buffer can be
+  // binarized in place instead of allocating a third full-image raw buffer.
   for (let index = 0; index < data.length; index += 1) {
-    pixels[index] = data[index] < background[index] * 0.78 ? 0 : 255;
+    data[index] = data[index] < background[index] * 0.78 ? 0 : 255;
   }
-  return sharp(pixels, { raw: info }).png({ compressionLevel: 3 }).toBuffer();
+  return sharp(data, { raw: info }).png({ compressionLevel: 3 }).toBuffer();
 }
