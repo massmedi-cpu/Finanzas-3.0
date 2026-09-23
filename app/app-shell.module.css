@@ -199,7 +199,7 @@
     align-content: center;
     gap: 0.2rem;
     font: inherit;
-    font-size: 0.66rem;
+    font-size: 0.875rem;
     font-weight: 780;
     line-height: 1.05;
     text-align: center;
@@ -262,12 +262,12 @@
     gap: 0.75rem;
     padding: 0 0.25rem 0.45rem;
     color: var(--color-text-secondary);
-    font-size: 0.78rem;
+    font-size: 0.875rem;
   }
 
   .mobileMoreHeader button {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: 2.75rem;
+    height: 2.75rem;
     border: 0;
     border-radius: 0.7rem;
     background: rgba(255, 255, 255, 0.04);
@@ -296,7 +296,7 @@
     align-items: center;
     gap: 0.5rem;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: 0.875rem;
     font-weight: 760;
     text-decoration: none;
     cursor: pointer;
@@ -320,26 +320,26 @@
 
   .mobilePreference label {
     color: var(--color-text-secondary);
-    font-size: 0.72rem;
+    font-size: 0.875rem;
     font-weight: 760;
   }
 
   .mobilePreference select {
     min-width: 0;
-    min-height: 2.5rem;
+    min-height: 2.75rem;
     padding: 0.4rem 0.55rem;
     border: 1px solid rgba(137, 173, 255, 0.16);
     border-radius: 0.65rem;
     background: rgba(9, 17, 35, 0.96);
     color: #ffffff;
     font: inherit;
-    font-size: 0.72rem;
+    font-size: 0.875rem;
   }
 
   .mobilePreference small {
     grid-column: 1 / -1;
     color: var(--color-text-muted);
-    font-size: 0.66rem;
+    font-size: 0.875rem;
     line-height: 1.35;
   }
 }

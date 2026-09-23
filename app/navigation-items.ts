@@ -21,8 +21,6 @@ export const navigationItems = [
   { href: "/configuration", label: "Configuración", icon: "settings" },
 ] satisfies ReadonlyArray<NavigationItem>;
 
-export const mobilePrimaryHrefs = new Set(["/", "/transactions", "/analysis", "/review"]);
-
 export function isNavigationActive(pathname: string, href: string) {
   if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);

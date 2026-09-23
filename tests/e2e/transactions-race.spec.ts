@@ -92,7 +92,7 @@ test("Movimientos conserva el filtro más nuevo aunque una petición anterior te
   await page.goto("/transactions");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
 
-  const search = page.getByLabel("Buscar");
+  const search = page.getByLabel("Buscar", { exact: true });
   await search.fill("antigua");
   const slowStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "antigua");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
@@ -161,7 +161,7 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await paginationStarted;
 
-  await page.getByLabel("Buscar").fill("nueva");
+  await page.getByLabel("Buscar", { exact: true }).fill("nueva");
   const filteredStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "nueva");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await filteredStarted;

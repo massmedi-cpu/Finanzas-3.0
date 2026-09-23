@@ -104,7 +104,7 @@ test("forecast keeps the newest period when an older request finishes later", as
   await page.goto("/forecast");
   await expect(page.getByRole("heading", { name: "PERIODO INICIAL", exact: true })).toBeVisible();
 
-  await page.getByLabel("Desde").fill("2026-10-01");
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
   await page.getByLabel("Hasta").fill("2026-10-31");
 
   await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();

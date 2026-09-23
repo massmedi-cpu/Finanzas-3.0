@@ -37,9 +37,17 @@ test("CR-006 · 320 CSS px, equivalente al reflow de 400% sobre 1280 px, no intr
 
   for (const route of primaryRoutes) {
     await page.goto(route.path);
-    const nav = page.getByRole("navigation", { name: "Navegación principal" });
-    await expect(nav).toBeVisible();
-    await expect(nav.getByRole("link", { name: route.current, exact: true })).toHaveAttribute("aria-current", "page");
+    const dock = page.getByRole("navigation", { name: "Navegación móvil" });
+    await expect(dock).toBeVisible();
+    const label = route.current === "Movimientos" ? "Movs." : route.current === "Para revisar" ? "Revisar" : route.current;
+    const dockLink = dock.getByRole("link", { name: label, exact: true });
+    if (await dockLink.count()) {
+      await expect(dockLink).toHaveAttribute("aria-current", "page");
+    } else {
+      await dock.getByRole("button", { name: "Más", exact: true }).click();
+      await expect(page.getByRole("navigation", { name: "Más secciones" }).getByRole("link", { name: route.current, exact: true }))
+        .toHaveAttribute("aria-current", "page");
+    }
 
     const dimensions = await page.evaluate(() => ({
       rootClientWidth: document.documentElement.clientWidth,

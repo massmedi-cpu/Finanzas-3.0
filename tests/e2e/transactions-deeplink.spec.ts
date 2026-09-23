@@ -49,7 +49,7 @@ test("E2 · los drill-downs de Análisis aplican periodo, tipo, categoría y com
   await page.goto(`/transactions?dateFrom=2026-09-01&dateTo=2026-09-30&kind=expense&categoryId=${CATEGORY_ID}`);
   await expect(page.getByRole("combobox", { name: "Tipo" })).toHaveValue("expense");
   await expect(page.getByRole("combobox", { name: "Categoría" })).toHaveValue(CATEGORY_ID);
-  await expect(page.getByLabel("Desde")).toHaveValue("2026-09-01");
+  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("2026-09-01");
   await expect(page.getByLabel("Hasta")).toHaveValue("2026-09-30");
   await expect.poll(() => seen.some((url) =>
     url.searchParams.get("dateFrom") === "2026-09-01" &&

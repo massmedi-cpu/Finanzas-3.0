@@ -427,7 +427,7 @@ export default function TransactionsClient() {
   const visibleSummary = useMemo(() => {
     if (loading) return "Leyendo movimientos…";
     if (totalCount === 0) return "0 movimientos";
-    if (rows.length === totalCount) return `${totalCount.toLocaleString("es-ES")} movimientos`;
+    if (rows.length === totalCount) return `${totalCount.toLocaleString("es-ES")} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
     return `${rows.length.toLocaleString("es-ES")} de ${totalCount.toLocaleString("es-ES")}`;
   }, [loading, rows.length, totalCount]);
 
