@@ -47,6 +47,11 @@ export function analysisModuleLinks(
 
   return [
     {
+      label: "Cash Flow",
+      href: href("/cash-flow", [["month", selection.dateFrom.slice(0, 7)]]),
+      detail: "Hechos reales y previsiones del mismo mes",
+    },
+    {
       label: "Movimientos",
       href: transactionHref,
       detail: "Mismo periodo y cuenta",
@@ -71,6 +76,11 @@ export function analysisModuleLinks(
 
 export function forecastModuleLinks(selection: ForecastModuleSelection): ModuleContextLink[] {
   return [
+    {
+      label: "Cash Flow",
+      href: href("/cash-flow", [["month", selection.dateFrom.slice(0, 7)]]),
+      detail: "Datos reales y previsiones del mes inicial",
+    },
     {
       label: "Análisis",
       href: href("/analysis", [["accountId", selection.accountId]]),

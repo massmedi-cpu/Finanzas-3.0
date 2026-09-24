@@ -6,6 +6,7 @@ const ROUTES = [
   "/onboarding",
   "/review",
   "/transactions",
+  "/cash-flow",
   "/analysis",
   "/accounts",
   "/budgets",

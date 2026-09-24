@@ -9,6 +9,7 @@ export type NavigationItem = {
 
 export const navigationItems = [
   { href: "/", label: "Inicio", icon: "home" },
+  { href: "/cash-flow", label: "Cash Flow", icon: "future" },
   { href: "/onboarding", label: "Primeros pasos", icon: "onboarding" },
   { href: "/review", label: "Para revisar", shortLabel: "Revisar", icon: "review" },
   { href: "/transactions", label: "Movimientos", shortLabel: "Movs.", icon: "transactions" },

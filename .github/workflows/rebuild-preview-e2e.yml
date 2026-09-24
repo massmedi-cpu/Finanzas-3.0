@@ -49,6 +49,8 @@ jobs:
       - name: Verify changed user journeys first
         run: |
           npm run test:e2e -- \
+            tests/e2e/cash-flow-accounting.spec.ts \
+            tests/e2e/cash-flow.spec.ts \
             tests/e2e/category-editor-contract.spec.ts \
             tests/e2e/configuration.spec.ts \
             tests/e2e/dashboard.spec.ts \
