@@ -113,7 +113,7 @@ test("Movimientos mantiene estado, contexto y trazabilidad funcional en al menos
     expect(fontSize).toBeGreaterThanOrEqual(14);
   }
   await page.getByTestId(`edit-${transactionId}`).click();
-  const editorHelper = page.getByText("Solo se modifica la capa personal de overrides.", { exact: true });
+  const editorHelper = page.getByText("El registro bancario original permanece intacto. Tus cambios solo se aplican en Financial App.", { exact: true });
   await expect(editorHelper).toBeVisible();
   const helperFontSize = await editorHelper.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   expect(helperFontSize).toBeGreaterThanOrEqual(14);

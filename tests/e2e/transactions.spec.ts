@@ -228,7 +228,10 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
 
   const controlsTooSmall = await page.locator("main button, main input, main select, main summary, main a").evaluateAll((elements) =>
     elements.filter((element) => {
-      const rect = element.getBoundingClientRect();
+      const target = element instanceof HTMLInputElement && element.type === "checkbox"
+        ? element.closest("label") ?? element
+        : element;
+      const rect = target.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.height < 44;
     }).length,
   );

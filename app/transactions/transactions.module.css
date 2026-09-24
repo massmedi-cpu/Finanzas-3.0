@@ -105,6 +105,9 @@
 .selectedRow { background: rgba(31, 107, 255, .08); }
 .selectHeading { text-align: center !important; }
 .selectCell { text-align: center; }
+.selectTarget { display: inline-grid; place-items: center; min-width: 2.75rem; min-height: 2.75rem; border-radius: .7rem; cursor: pointer; }
+.selectTarget:hover { background: rgba(77, 141, 255, .12); }
+.selectTarget:has(input:focus-visible) { outline: 2px solid var(--color-primary-bright); outline-offset: 2px; }
 .selectCell input, .checkboxLabel input { width: 1.15rem; height: 1.15rem; min-width: 1.15rem; margin: 0; cursor: pointer; accent-color: #4d8dff; }
 .amountHeading { text-align: right !important; }
 .amount { font-variant-numeric: tabular-nums; font-weight: 820; text-align: right; white-space: nowrap; }
@@ -144,6 +147,7 @@
   border-bottom: 1px solid rgba(137, 173, 255, .1);
 }
 .editorHeading strong { color: #f3f7ff; font-size: 1rem; letter-spacing: -.015em; }
+.editorHeading p { margin: .35rem 0 0; color: var(--color-text-secondary); font-size: .875rem; line-height: 1.5; }
 .editorGrid {
   display: grid;
   grid-template-columns: minmax(0, 2.25fr) minmax(0, 2.25fr) minmax(0, 1.35fr);
@@ -177,18 +181,18 @@
   padding-top: .15rem;
 }
 .categoryAssignment small { min-width: 0; color: var(--color-text-muted); font-size: .84rem; font-weight: 600; line-height: 1.35; }
-.categoryAssignment button { flex: 0 0 auto; min-height: 2.35rem; padding: .42rem .72rem; font-size: .84rem; }
+.categoryAssignment button { flex: 0 0 auto; min-height: 2.75rem; padding: .42rem .72rem; font-size: .875rem; }
 .fieldRestore {
   justify-self: flex-start;
   width: auto;
-  min-height: 0 !important;
+  min-height: 2.75rem !important;
   height: auto !important;
-  padding: .12rem 0 !important;
+  padding: .35rem 0 !important;
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
   color: #8fb4ff !important;
-  font-size: .78rem !important;
+  font-size: .875rem !important;
   font-weight: 650;
   line-height: 1.25;
   text-align: left;

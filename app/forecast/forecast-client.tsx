@@ -8,6 +8,7 @@ import type {
   ForecastSnapshot,
 } from "../../src/application/forecast/forecast-contract";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
+import { ForecastCalendar } from "./forecast-calendar";
 import styles from "./forecast.module.css";
 
 type ManualErrors = {
@@ -406,12 +407,13 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
           </section>
 
           <ForecastBalanceChart snapshot={snapshot} />
+          <ForecastCalendar dateFrom={snapshot.period.dateFrom} dateTo={snapshot.period.dateTo} items={items} />
 
           <section className={styles.mainGrid}>
             <div className={styles.timelinePanel}>
               <div className={styles.sectionHeader}>
                 <div>
-                  <p className={styles.eyebrow}>CALENDARIO FUTURO</p>
+                  <p className={styles.eyebrow}>DETALLE DEL PERIODO</p>
                   <h2>Movimientos previstos</h2>
                 </div>
                 <div className={styles.counts}>
@@ -432,7 +434,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                     const excludeErrorId = `exclude-reason-error-${item.id}`;
                     const candidatesId = `forecast-candidates-${item.id}`;
                     return (
-                      <article key={item.id} className={`${styles.itemCard} ${styles[item.status]}`}>
+                      <article key={item.id} id={`forecast-item-${item.id}`} className={`${styles.itemCard} ${styles[item.status]}`}>
                         <div className={styles.itemDate}>
                           <span>{formatDate(item.date)}</span>
                           <small>{originLabel(item.origin)} · confianza {confidenceLabel(item.confidence)}</small>

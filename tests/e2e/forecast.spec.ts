@@ -273,6 +273,28 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
 });
 
+test("el calendario muestra solo fechas consultadas y lleva al detalle del movimiento", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto("/forecast");
+
+  const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
+  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ })).toBeVisible();
+  await expect(calendar.getByRole("button", { name: /1 de septiembre de 2026/ })).toHaveCount(0);
+
+  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ }).click();
+  const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
+  await expect(day.getByText("Seguro mensual", { exact: true })).toBeVisible();
+  await expect(day.getByText("-72,50 €", { exact: true })).toBeVisible();
+  await day.getByRole("link", { name: "Ver detalle" }).click();
+  await expect(page.locator(`#forecast-item-${forecastItemId}`)).toBeInViewport();
+
+  await calendar.getByRole("button", { name: "Mes siguiente" }).click();
+  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026/ })).toHaveCount(0);
+  await expect(calendar.getByText("Selecciona un día para ver sus movimientos y acceder a las acciones disponibles.")).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockForecastApi(page, writes);
