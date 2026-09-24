@@ -32,6 +32,12 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
   expect(response!.status(), `${route} no debe devolver un 5xx`).toBeLessThan(500);
 
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
+  // La ruta puede servir primero app/loading.tsx: ese esqueleto no tiene
+  // aria-busy ni controles de la pantalla que queremos auditar.
+  await expect(
+    page.locator('main:not([aria-label="Cargando sección"]):not([aria-busy="true"])').first(),
+    `${route}: debe renderizar la pantalla antes de auditarla`,
+  ).toBeVisible({ timeout: 15_000 });
   await expect(page.locator('main[aria-busy="true"]')).toHaveCount(0, { timeout: 15_000 });
 
   const audit = await page.evaluate(() => {
@@ -111,10 +117,10 @@ async function auditRenderedSurface(page: import("@playwright/test").Page, route
   expect(audit.touchTargetsTooSmall, `${route}: los controles táctiles visibles deben medir al menos 44 px de alto`).toEqual([]);
   expect(audit.horizontalOverflow, `${route}: no puede existir overflow horizontal global`).toBe(false);
 
-  const focusableCount = await page.locator("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])").count();
+  const focusableCount = await page.locator("a[href]:visible, button:not([disabled]):visible, input:not([disabled]):visible, select:not([disabled]):visible, textarea:not([disabled]):visible").count();
   if (focusableCount > 0) {
     let focusIsVisible = false;
-    for (let attempt = 0; attempt < Math.min(focusableCount, 8); attempt += 1) {
+    for (let attempt = 0; attempt < Math.min(focusableCount + 2, 12); attempt += 1) {
       await page.keyboard.press("Tab");
       focusIsVisible = await page.evaluate(() => {
         const active = document.activeElement;
