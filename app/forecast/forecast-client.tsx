@@ -7,6 +7,7 @@ import type {
   ForecastItem,
   ForecastSnapshot,
 } from "../../src/application/forecast/forecast-contract";
+import { formatMoneyCents } from "../../src/core/money";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { ForecastCalendar } from "./forecast-calendar";
 import styles from "./forecast.module.css";
@@ -15,14 +16,6 @@ type ManualErrors = {
   concept?: string;
   amount?: string;
 };
-
-const money = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
@@ -350,6 +343,9 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
   }
 
   const items = snapshot?.items ?? [];
+  const visiblePeriodIsStale = Boolean(snapshot && (
+    snapshot.period.dateFrom !== dateFrom || snapshot.period.dateTo !== dateTo
+  ));
 
   return (
     <main className={styles.page} aria-busy={loading || undefined}>
@@ -389,6 +385,13 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
         </label>
       </section>
 
+      {visiblePeriodIsStale && snapshot ? (
+        <p className={styles.periodNotice} role="status">
+          {loading ? "Cargando el periodo elegido. " : "No se ha podido mostrar el periodo elegido. "}
+          Las cifras visibles corresponden al {formatDate(snapshot.period.dateFrom)} – {formatDate(snapshot.period.dateTo)}.
+        </p>
+      ) : null}
+
       {error ? <div className={styles.error} role="alert">{error}</div> : null}
       {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
@@ -397,12 +400,12 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
       ) : snapshot ? (
         <>
           <section className={styles.kpis} aria-label="Resumen de previsión">
-            <article><span>Saldo de partida</span><strong>{money.format(snapshot.summary.openingBalanceCents / 100)}</strong></article>
-            <article><span>Ingresos previstos</span><strong>{money.format(snapshot.summary.projectedIncomeCents / 100)}</strong></article>
-            <article><span>Gastos previstos</span><strong>{money.format(snapshot.summary.projectedExpenseCents / 100)}</strong></article>
+            <article><span>Saldo de partida</span><strong>{formatMoneyCents(snapshot.summary.openingBalanceCents)}</strong></article>
+            <article><span>Ingresos previstos</span><strong>{formatMoneyCents(snapshot.summary.projectedIncomeCents)}</strong></article>
+            <article><span>Gastos previstos</span><strong>{formatMoneyCents(snapshot.summary.projectedExpenseCents)}</strong></article>
             <article className={snapshot.summary.projectedNetCents < 0 ? styles.negativeKpi : styles.positiveKpi}>
-              <span>Saldo proyectado</span><strong>{money.format(snapshot.summary.projectedClosingBalanceCents / 100)}</strong>
-              <small>Neto {money.format(snapshot.summary.projectedNetCents / 100)}</small>
+              <span>Saldo proyectado</span><strong>{formatMoneyCents(snapshot.summary.projectedClosingBalanceCents)}</strong>
+              <small>Neto {formatMoneyCents(snapshot.summary.projectedNetCents)}</small>
             </article>
           </section>
 
@@ -443,7 +446,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                           <div className={styles.itemTitleRow}>
                             <h3>{item.concept}</h3>
                             <strong className={item.amountCents < 0 ? styles.outflow : styles.inflow}>
-                              {money.format(item.amountCents / 100)}
+                              {formatMoneyCents(item.amountCents)}
                             </strong>
                           </div>
                           <div className={styles.itemMeta}>
@@ -453,12 +456,12 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                             {item.merchantName ? <span>{item.merchantName}</span> : null}
                           </div>
                           {item.affectsProjection ? (
-                            <p className={styles.balanceLine}>Saldo después: <strong>{money.format(item.projectedBalanceAfterCents / 100)}</strong></p>
+                            <p className={styles.balanceLine}>Saldo después: <strong>{formatMoneyCents(item.projectedBalanceAfterCents)}</strong></p>
                           ) : null}
                           {item.excluded && item.excludedReason ? <p className={styles.reason}>Motivo: {item.excludedReason}</p> : null}
                           {item.confirmedTransactionId && item.actual ? (
                             <p className={styles.confirmedLine}>
-                              Movimiento real: {formatDate(item.actual.date)} · {money.format(item.actual.amountCents / 100)}
+                              Movimiento real: {formatDate(item.actual.date)} · {formatMoneyCents(item.actual.amountCents)}
                             </p>
                           ) : null}
 
@@ -532,9 +535,9 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                                 <div key={candidate.transactionId} className={styles.candidateRow}>
                                   <div>
                                     <strong>{candidate.concept || "Movimiento bancario"}</strong>
-                                    <small>{formatDate(candidate.date)} · diferencia {money.format(candidate.differenceCents / 100)}</small>
+                                    <small>{formatDate(candidate.date)} · diferencia {formatMoneyCents(candidate.differenceCents)}</small>
                                   </div>
-                                  <span>{money.format(candidate.amountCents / 100)}</span>
+                                  <span>{formatMoneyCents(candidate.amountCents)}</span>
                                   <button className={styles.primarySmall} onClick={() => void reconcile(item, candidate.transactionId)} disabled={busy !== null}>
                                     Conciliar
                                   </button>
@@ -611,7 +614,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                   {snapshot.budgetContext.map((month) => (
                     <div key={month.month} className={styles.budgetRow}>
                       <div><strong>{formatMonth(month.month)}</strong><small>{month.status === "over" ? "Superado" : "En seguimiento"}</small></div>
-                      <div><span>{money.format(month.budgetCents / 100)}</span><small>restan {money.format(month.remainingCents / 100)}</small></div>
+                      <div><span>{formatMoneyCents(month.budgetCents)}</span><small>restan {formatMoneyCents(month.remainingCents)}</small></div>
                     </div>
                   ))}
                 </div>

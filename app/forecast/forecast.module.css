@@ -190,7 +190,8 @@
 
 .error,
 .notice,
-.loading {
+.loading,
+.periodNotice {
   max-width: 1500px;
   margin: 0 auto 18px;
   padding: 14px 16px;
@@ -207,6 +208,14 @@
   background: rgba(53, 208, 127, 0.09);
   border: 1px solid rgba(53, 208, 127, 0.25);
   color: var(--color-success);
+}
+
+.periodNotice {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: .875rem;
+  line-height: 1.5;
 }
 
 .loading {

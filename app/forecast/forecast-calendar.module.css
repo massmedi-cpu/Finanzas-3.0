@@ -102,11 +102,13 @@
 .detail h3 { margin: 0 0 12px; text-transform: capitalize; }
 .detail p, .hint { color: var(--color-text-secondary); font-size: .875rem; line-height: 1.5; }
 .detail p { margin: 0; }
+.detail .dayNet { margin: 0 0 12px; color: var(--color-text); }
 .detail ul { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .detail li { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px 18px; padding: 11px 0; border-top: 1px solid var(--color-border); }
 .detail li > div:first-child { display: grid; gap: 4px; min-width: 0; }
 .detail li > div:first-child strong { overflow-wrap: anywhere; }
 .detail li span { color: var(--color-text-secondary); font-size: .875rem; }
+.detail li small { flex: 1 1 100%; color: var(--color-text-secondary); font-size: .875rem; }
 .detailEnd { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; font-variant-numeric: tabular-nums; }
 .detailEnd a { display: inline-flex; min-height: 44px; align-items: center; color: var(--color-primary-bright); font-size: .875rem; font-weight: 700; }
 .positive { color: var(--color-success); }

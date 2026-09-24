@@ -279,10 +279,10 @@ test("el calendario muestra solo fechas consultadas y lleva al detalle del movim
   await page.goto("/forecast");
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
-  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ })).toBeVisible();
+  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ })).toBeVisible();
   await expect(calendar.getByRole("button", { name: /^1 de septiembre de 2026:/ })).toHaveCount(0);
 
-  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ }).click();
+  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ }).click();
   const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
   await expect(day.getByText("Seguro mensual", { exact: true })).toBeVisible();
   await expect(day.getByText("-72,50 €", { exact: true })).toBeVisible();
@@ -291,8 +291,49 @@ test("el calendario muestra solo fechas consultadas y lleva al detalle del movim
 
   await calendar.getByRole("button", { name: "Mes siguiente" }).click();
   await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026/ })).toHaveCount(0);
-  await expect(calendar.getByText("Selecciona un día para ver sus movimientos y acceder a las acciones disponibles.")).toBeVisible();
+  await expect(calendar.getByText("Selecciona un día para ver sus previsiones y acceder a las acciones disponibles.")).toBeVisible();
   expect(writes).toHaveLength(0);
+});
+
+test("el calendario separa la fecha real y excluye confirmados y descartados del neto futuro", async ({ page }) => {
+  const planned = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000091",
+    concept: "Cobro previsto",
+    amountCents: 1000,
+    projectionEffectCents: 1000,
+  };
+  const confirmed = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000092",
+    status: "confirmed",
+    confirmedTransactionId: transactionId,
+    affectsProjection: false,
+    projectionEffectCents: 0,
+    actual: { date: "2026-09-14", amountCents: -7300, accountId: "10000000-0000-4000-8000-000000000001", categoryId: null, merchantId: null, analyticsEligible: true },
+  };
+  const excluded = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000093",
+    status: "excluded",
+    excluded: true,
+    excludedReason: "Pago cancelado",
+    affectsProjection: false,
+    projectionEffectCents: 0,
+  };
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...baseSnapshot, items: [planned, confirmed, excluded] }),
+  }));
+  await page.goto("/forecast");
+
+  const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
+  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 3 previsiones/ }).click();
+  const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
+  await expect(day.getByText("Impacto en la proyección:")).toContainText("10,00");
+  await expect(day.getByText(/Movimiento real: 14 de septiembre de 2026/)).toBeVisible();
+  await expect(day.getByText("Excluido de la proyección")).toBeVisible();
 });
 
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {

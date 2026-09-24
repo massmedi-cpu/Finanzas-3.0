@@ -2,15 +2,8 @@
 
 import { useState } from "react";
 import type { ForecastSnapshot } from "../application/forecast/forecast-contract";
+import { formatMoneyCents } from "../core/money";
 import styles from "./forecast-balance-chart.module.css";
-
-const money = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
@@ -39,9 +32,10 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
       balanceCents: item.projectedBalanceAfterCents,
     })),
   ];
-  const balances = points.map((point) => point.balanceCents);
-  const minimum = Math.min(...balances);
-  const maximum = Math.max(...balances);
+  const { minimum, maximum } = points.reduce(({ minimum, maximum }, point) => ({
+    minimum: Math.min(minimum, point.balanceCents),
+    maximum: Math.max(maximum, point.balanceCents),
+  }), { minimum: Infinity, maximum: -Infinity });
   const range = Math.max(1, maximum - minimum);
   const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
   const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
@@ -69,7 +63,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
         <article>
           <span>Saldo mínimo previsto</span>
           <strong className={minimumPoint.balanceCents < 0 ? styles.riskValue : undefined}>
-            {money.format(minimumPoint.balanceCents / 100)}
+            {formatMoneyCents(minimumPoint.balanceCents)}
           </strong>
           <small>{formatDate(minimumPoint.date)}</small>
         </article>
@@ -78,11 +72,11 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
           <strong className={firstNegative ? styles.riskValue : styles.safeValue}>
             {firstNegative ? formatDate(firstNegative.date) : "No prevista"}
           </strong>
-          <small>{firstNegative ? money.format(firstNegative.balanceCents / 100) : "El saldo no baja de cero en el periodo"}</small>
+          <small>{firstNegative ? formatMoneyCents(firstNegative.balanceCents) : "El saldo no baja de cero en el periodo"}</small>
         </article>
         <article>
           <span>Mayor salida prevista</span>
-          <strong>{largestOutflow ? money.format(Math.abs(largestOutflow.projectionEffectCents) / 100) : "Sin salidas"}</strong>
+          <strong>{largestOutflow ? formatMoneyCents(Math.abs(largestOutflow.projectionEffectCents)) : "Sin salidas"}</strong>
           <small>{largestOutflow ? `${largestOutflow.concept} · ${formatDate(largestOutflow.date)}` : "No hay cargos que afecten a la proyección"}</small>
         </article>
       </div>
@@ -102,7 +96,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
 
           {points.map((point, index) => {
             const id = `forecast-balance-${point.id}`;
-            const label = `${point.label} · ${formatDate(point.date)} · ${money.format(point.balanceCents / 100)}`;
+            const label = `${point.label} · ${formatDate(point.date)} · ${formatMoneyCents(point.balanceCents)}`;
             return (
               <div
                 key={point.id}
@@ -120,7 +114,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
                 />
                 {activePoint === id ? (
                   <div role="tooltip" className={styles.tooltip}>
-                    {point.label} · {money.format(point.balanceCents / 100)}
+                    {point.label} · {formatMoneyCents(point.balanceCents)}
                   </div>
                 ) : null}
               </div>
@@ -143,7 +137,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
               <tr key={point.id}>
                 <th scope="row">{point.label}</th>
                 <td>{formatDate(point.date)}</td>
-                <td>{money.format(point.balanceCents / 100)}</td>
+                <td>{formatMoneyCents(point.balanceCents)}</td>
               </tr>
             ))}
           </tbody>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ForecastItem } from "../../src/application/forecast/forecast-contract";
+import { formatMoneyCents } from "../../src/core/money";
 import styles from "./forecast-calendar.module.css";
 
 const dateLabel = new Intl.DateTimeFormat("es-ES", {
@@ -9,9 +10,6 @@ const dateLabel = new Intl.DateTimeFormat("es-ES", {
 });
 const monthLabel = new Intl.DateTimeFormat("es-ES", {
   month: "long", year: "numeric", timeZone: "Europe/Madrid",
-});
-const money = new Intl.NumberFormat("es-ES", {
-  style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2,
 });
 const weekdays = ["L", "M", "X", "J", "V", "S", "D"];
 
@@ -61,6 +59,7 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
     return `${month}-${String(index - offset + 1).padStart(2, "0")}`;
   });
   const selectedItems = selectedDate ? byDate.get(selectedDate) ?? [] : [];
+  const selectedProjectedNetCents = selectedItems.reduce((sum, item) => sum + item.projectionEffectCents, 0);
 
   return (
     <section className={styles.calendar} aria-labelledby="forecast-calendar-title">
@@ -96,7 +95,13 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
                 key={day}
                 type="button"
                 className={`${styles.day} ${selectedDate === day ? styles.selected : ""}`}
-                aria-label={`${formattedDate(day)}: ${events.length === 0 ? "sin movimientos" : `${events.length} ${events.length === 1 ? "movimiento" : "movimientos"}`}`}
+                aria-label={`${formattedDate(day)}: ${events.length === 0 ? "sin previsiones" : [
+                  `${events.length} ${events.length === 1 ? "previsión" : "previsiones"}`,
+                  hasIncome ? "ingresos previstos" : null,
+                  hasExpense ? "gastos previstos" : null,
+                  hasConfirmed ? "conciliadas" : null,
+                  hasExcluded ? "excluidas" : null,
+                ].filter(Boolean).join(", ")}`}
                 aria-pressed={selectedDate === day}
                 onClick={() => setRequestedDate(day)}
               >
@@ -124,17 +129,21 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
         <div className={styles.detail} role="region" aria-label={`Detalle del ${formattedDate(selectedDate)}`}>
           <h3>{formattedDate(selectedDate)}</h3>
           {selectedItems.length > 0 ? (
-            <ul>
-              {selectedItems.map((item) => (
-                <li key={item.id}>
-                  <div><strong>{item.concept}</strong><span>{statusText(item)}</span></div>
-                  <div className={styles.detailEnd}><strong className={item.amountCents < 0 ? styles.negative : styles.positive}>{money.format(item.amountCents / 100)}</strong><a href={`#forecast-item-${item.id}`}>Ver detalle</a></div>
-                </li>
-              ))}
-            </ul>
-          ) : <p>No hay movimientos previstos para este día dentro del periodo consultado.</p>}
+            <>
+              <p className={styles.dayNet}>Impacto en la proyección: <strong>{formatMoneyCents(selectedProjectedNetCents)}</strong></p>
+              <ul>
+                {selectedItems.map((item) => (
+                  <li key={item.id}>
+                    <div><strong>{item.concept}</strong><span>{statusText(item)}</span></div>
+                    <div className={styles.detailEnd}><strong className={item.amountCents < 0 ? styles.negative : styles.positive}>{formatMoneyCents(item.amountCents)}</strong><a href={`#forecast-item-${item.id}`}>Ver detalle</a></div>
+                    {item.actual ? <small>Movimiento real: {formattedDate(item.actual.date)} · {formatMoneyCents(item.actual.amountCents)}</small> : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : <p>No hay previsiones para este día dentro del periodo consultado.</p>}
         </div>
-      ) : <p className={styles.hint}>Selecciona un día para ver sus movimientos y acceder a las acciones disponibles.</p>}
+      ) : <p className={styles.hint}>Selecciona un día para ver sus previsiones y acceder a las acciones disponibles.</p>}
     </section>
   );
 }

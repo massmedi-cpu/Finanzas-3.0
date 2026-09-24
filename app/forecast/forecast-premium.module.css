@@ -50,7 +50,7 @@
 }
 
 .root main > header + [aria-label="Periodo de previsión"] label {
-  font-size: 0.82rem;
+  font-size: var(--font-label);
 }
 
 .root form,
@@ -93,11 +93,5 @@
 
   .root [aria-label="Resumen de previsión"] article > strong {
     font-size: clamp(1.22rem, 5vw, 1.55rem);
-  }
-}
-
-@media (max-width: 27.5rem) {
-  .root main > header > div:first-child > p:last-child {
-    display: none;
   }
 }
