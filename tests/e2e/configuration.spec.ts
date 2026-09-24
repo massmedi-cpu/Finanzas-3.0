@@ -124,15 +124,16 @@ test.describe("Configuración interactiva sin residuos", () => {
   test("busca y filtra categorías sin perder la jerarquía", async ({ page }) => {
     await page.goto("/configuration");
     await page.getByRole("button", { name: /Categorías/ }).click();
+    const categoryList = page.locator(".category-groups");
     await page.getByPlaceholder("Buscar categoría…").fill("Suministros");
-    await expect(page.getByText("Hogar", { exact: true })).toBeVisible();
-    await expect(page.getByText("Suministros", { exact: true })).toBeVisible();
-    await expect(page.getByText("Nómina", { exact: true })).toHaveCount(0);
+    await expect(categoryList.getByRole("heading", { name: "Hogar", exact: true })).toBeVisible();
+    await expect(categoryList.getByRole("heading", { name: "Suministros", exact: true })).toBeVisible();
+    await expect(categoryList.getByRole("heading", { name: "Nómina", exact: true })).toHaveCount(0);
 
     await page.getByPlaceholder("Buscar categoría…").fill("");
-    await page.getByRole("button", { name: "Ingresos" }).click();
-    await expect(page.getByText("Nómina", { exact: true })).toBeVisible();
-    await expect(page.getByText("Hogar", { exact: true })).toHaveCount(0);
+    await page.getByRole("group", { name: "Filtrar categorías por tipo" }).getByRole("button", { name: "Ingresos" }).click();
+    await expect(categoryList.getByRole("heading", { name: "Nómina", exact: true })).toBeVisible();
+    await expect(categoryList.getByRole("heading", { name: "Hogar", exact: true })).toHaveCount(0);
   });
 
   test("no ofrece jerarquías, fusiones ni ciclos de vida imposibles", async ({ page }) => {
@@ -161,9 +162,12 @@ test.describe("Configuración interactiva sin residuos", () => {
     await page.goto("/configuration");
     await page.getByRole("button", { name: /Categorías/ }).click();
     const mergePanel = page.locator(".merge-panel");
-    await mergePanel.getByLabel("Origen").selectOption(HOME_ID);
-    await mergePanel.getByLabel("Destino").selectOption(UTILITIES_ID).catch(() => undefined);
+    await mergePanel.getByLabel("Origen").selectOption(UTILITIES_ID);
+    await mergePanel.getByLabel("Destino").selectOption(HOME_ID);
     await expect(mergePanel.getByText(/12 movimientos/)).toBeVisible();
+    await mergePanel.getByRole("button", { name: "Revisar fusión" }).click();
+    await expect(mergePanel.getByRole("button", { name: "Confirmar fusión" })).toBeVisible();
+    await expect(mergePanel.getByRole("status")).toContainText("se archivará");
   });
 
   test("no introduce scroll horizontal en la anchura efectiva", async ({ page }) => {

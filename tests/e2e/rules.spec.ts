@@ -68,7 +68,15 @@ test("Reglas mantiene una UX responsive y controles accesibles", async ({ page }
   await page.goto("/configuration/rules");
 
   await expect(page.getByRole("heading", { name: "Reglas de categorización", level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Reglas" })).toHaveAttribute("aria-current", "page");
+  const activeNavigation = page.getByRole("navigation", { name: "Navegación principal" });
+  if (await activeNavigation.isVisible()) {
+    await expect(activeNavigation.getByRole("link", { name: "Configuración", exact: true })).toHaveAttribute("aria-current", "page");
+  } else {
+    await page.getByRole("navigation", { name: "Navegación móvil" }).getByRole("button", { name: "Más", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Más secciones" }).getByRole("link", { name: "Configuración", exact: true }))
+      .toHaveAttribute("aria-current", "page");
+  }
+  await expect(page.getByText("FINANCIAL APP · REGLAS", { exact: true })).toBeVisible();
   await expect(page.getByText("Supermercado mensual", { exact: true })).toBeVisible();
   await expect(page.getByText(/Menor número = mayor prioridad/)).toBeVisible();
   await expect(page.getByText(/fuente bancaria sigue siendo de solo lectura/i)).toBeVisible();

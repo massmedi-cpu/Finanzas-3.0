@@ -239,7 +239,7 @@ export default function MerchantsClient() {
     <main className={styles.shell}>
       <header className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>FASE 3 · NORMALIZACIÓN CENTRAL</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · COMERCIOS</p>
           <h1>Comercios y alias</h1>
           <p className={styles.copy}>Define un nombre canónico por comercio, agrupa variantes bancarias mediante alias y asigna una categoría predeterminada sin alterar la fuente bancaria.</p>
         </div>

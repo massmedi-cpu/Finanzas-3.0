@@ -294,7 +294,7 @@ export default function RulesClient() {
     <main className={styles.shell}>
       <header className={styles.hero}>
         <div>
-          <p className={styles.eyebrow}>FASE 3 · MOTOR CENTRAL DETERMINISTA</p>
+          <p className={styles.eyebrow}>FINANCIAL APP · REGLAS</p>
           <h1>Reglas de categorización</h1>
           <p className={styles.copy}>Una sola lógica decide por prioridad y combina concepto, cuenta, importe, comercio y categoría. Los overrides manuales siempre tienen precedencia y la fuente bancaria sigue siendo de solo lectura.</p>
         </div>

@@ -336,7 +336,7 @@ export default function SourceClient() {
         <div className="configuration-summary" aria-label="Estado de la fuente bancaria">
           <div><strong>{google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
           <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{runtimeReady ? "v2" : "—"}</strong><span>Runtime seguro</span></div>
+          <div><strong>{runtimeReady ? "Sí" : "No"}</strong><span>Sincronización disponible</span></div>
         </div>
       </header>
 
@@ -344,7 +344,7 @@ export default function SourceClient() {
       {notice && <div className="config-message success" role="status">{notice}</div>}
 
       {loading ? (
-        <section className="config-panel loading-state">Comprobando conexión, runtime y última sincronización…</section>
+        <section className="config-panel loading-state">Comprobando conexión y última sincronización…</section>
       ) : (
         <div className={styles.grid}>
           <section className={`config-panel ${styles.mainPanel}`} aria-labelledby="source-status-heading">
@@ -353,7 +353,7 @@ export default function SourceClient() {
                 <p className="panel-kicker">CONEXIÓN CONTROLADA</p>
                 <h2 id="source-status-heading">Google · solo lectura</h2>
               </div>
-              <span className="status-chip">Read-only</span>
+              <span className="status-chip">Solo lectura</span>
             </div>
 
             <div className={styles.statusList}>
@@ -369,9 +369,9 @@ export default function SourceClient() {
                 </p>
               </div>
               <div>
-                <span>Runtime de persistencia</span>
-                <strong>{runtimeReady ? "Compatible · contrato v2" : "No disponible"}</strong>
-                <p>{runtimeReady ? "Lifecycle y selección canónica de productos están exigidos antes de escribir." : "La sincronización permanece bloqueada de forma segura."}</p>
+                <span>Protección de la importación</span>
+                <strong>{runtimeReady ? "Preparada" : "No disponible"}</strong>
+                <p>{runtimeReady ? "Se comprueban las cuentas y los movimientos antes de incorporarlos. La fuente original permanece intacta." : "La sincronización permanece bloqueada de forma segura."}</p>
               </div>
               <div>
                 <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>
@@ -384,7 +384,7 @@ export default function SourceClient() {
 
             {!google?.configured && missingLabels.length > 0 && (
               <div className={styles.missingBox}>
-                <strong>Configuración pendiente en preview</strong>
+                <strong>Configuración pendiente</strong>
                 <ul>{missingLabels.map((item) => <li key={item}>{item}</li>)}</ul>
               </div>
             )}

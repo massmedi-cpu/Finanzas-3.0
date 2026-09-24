@@ -14,7 +14,7 @@ permissions:
 jobs:
   browser-interaction-e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout branch commit
         uses: actions/checkout@v6
@@ -41,6 +41,19 @@ jobs:
             fi
           done
           npx playwright install --with-deps chromium
+
+      - name: Verify changed user journeys first
+        run: |
+          npm run test:e2e -- \
+            tests/e2e/category-editor-contract.spec.ts \
+            tests/e2e/configuration.spec.ts \
+            tests/e2e/dashboard.spec.ts \
+            tests/e2e/rules.spec.ts \
+            tests/e2e/source-configuration.spec.ts \
+            tests/e2e/transactions-accessibility.spec.ts \
+            tests/e2e/transactions-race.spec.ts \
+            tests/e2e/transactions.spec.ts \
+            --project=chromium-desktop
 
       - name: Run browser E2E locally
         run: npm run test:e2e -- --project=chromium-desktop --project=chromium-mobile
