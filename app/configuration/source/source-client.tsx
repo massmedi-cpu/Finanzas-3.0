@@ -154,7 +154,7 @@ function formatMoneyCents(value: number | null) {
 function sourceActionErrorMessage(code: string | undefined) {
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
   if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
-  if (code === "source_runtime_incompatible") return "El runtime de sincronización no cumple el contrato seguro requerido.";
+  if (code === "source_runtime_incompatible") return "La sincronización está detenida porque faltan comprobaciones de seguridad. Inténtalo más tarde.";
   if (code === "google_connection_contract_mismatch") return "La conexión Google no coincide con la cuenta autorizada.";
   if (code === "google_oauth_refresh_unavailable") {
     return "Google no ha podido renovar temporalmente la autorización. Vuelve a intentarlo; si el problema persiste, reconecta la fuente.";
@@ -209,7 +209,7 @@ export default function SourceClient() {
       if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
-        setError("No se ha podido verificar el runtime seguro de sincronización.");
+        setError("No se han podido comprobar las condiciones para sincronizar de forma segura.");
       } else if (!syncResponse.ok) {
         setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
@@ -459,15 +459,15 @@ export default function SourceClient() {
 
           <aside className={`config-panel ${styles.sidePanel}`}>
             <div className="panel-heading">
-              <div><p className="panel-kicker">GARANTÍAS</p><h2>Contrato de seguridad</h2></div>
+              <div><p className="panel-kicker">GARANTÍAS</p><h2>Cómo protegemos la importación</h2></div>
             </div>
             <ul className={styles.guarantees}>
-              <li>Scopes de Google estrictamente de solo lectura.</li>
-              <li>La fuente bancaria original no recibe escrituras.</li>
-              <li>La identidad Google autorizada queda anclada y validada antes de sincronizar.</li>
-              <li>La primera importación exige prevalidación completa sin persistencia.</li>
-              <li>El libro completo se vuelve a validar antes de persistir datos.</li>
-              <li>Runtime v2 obligatorio antes de cualquier escritura en PostgreSQL.</li>
+              <li>Google solo concede permisos de lectura.</li>
+              <li>La fuente bancaria original no se modifica.</li>
+              <li>Se comprueba la cuenta de Google autorizada antes de sincronizar.</li>
+              <li>La primera importación se revisa antes de guardar datos.</li>
+              <li>Los movimientos se vuelven a comprobar antes de incorporarlos.</li>
+              <li>La sincronización se detiene si falta alguna comprobación de seguridad.</li>
             </ul>
           </aside>
 

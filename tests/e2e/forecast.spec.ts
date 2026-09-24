@@ -280,7 +280,7 @@ test("el calendario muestra solo fechas consultadas y lleva al detalle del movim
 
   const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
   await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ })).toBeVisible();
-  await expect(calendar.getByRole("button", { name: /1 de septiembre de 2026/ })).toHaveCount(0);
+  await expect(calendar.getByRole("button", { name: /^1 de septiembre de 2026:/ })).toHaveCount(0);
 
   await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 movimiento/ }).click();
   const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
