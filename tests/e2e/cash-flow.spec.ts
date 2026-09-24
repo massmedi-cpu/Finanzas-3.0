@@ -10,7 +10,7 @@ test("Cash Flow navega por meses y abre el detalle diario sin inventar cifras", 
   const lastDay = calendar.getByRole("button", { name: /29 de febrero de 2028/ });
   await lastDay.click();
   await expect(lastDay).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByRole("region", { name: /Detalle del 29 de febrero de 2028/ })).toBeVisible();
+  await expect(page.getByRole("region", { name: /Detalle del .*29 de febrero de 2028/ })).toBeVisible();
 
   await page.getByRole("link", { name: "Mes siguiente: marzo de 2028" }).click();
   await expect(page.getByRole("group", { name: "Días de marzo de 2028" }).locator("button[aria-pressed]")).toHaveCount(31);
@@ -27,7 +27,7 @@ test("Cash Flow mantiene los días utilizables en móvil pequeño", async ({ pag
   await page.goto("/cash-flow?month=2026-09", { waitUntil: "domcontentloaded" });
   const calendar = page.getByRole("group", { name: "Días de septiembre de 2026" });
   await expect(calendar.locator("button[aria-pressed]")).toHaveCount(30);
-  const firstDay = calendar.getByRole("button", { name: /1 de septiembre de 2026/ });
+  const firstDay = calendar.getByRole("button", { name: /^martes, 1 de septiembre de 2026:/ });
   await firstDay.click();
   await expect(firstDay).toHaveAttribute("aria-pressed", "true");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
