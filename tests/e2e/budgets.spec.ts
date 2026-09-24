@@ -343,6 +343,7 @@ test("Presupuestos conserva el último mes si una respuesta anterior llega tarde
 
   await page.goto("/budgets");
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
   const monthInput = page.locator('input[type="month"]');
   await monthInput.fill("2026-08");
   await augustStarted;
