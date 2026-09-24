@@ -138,8 +138,15 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   expect(ocrReads).toHaveLength(0);
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Lectura y reconstrucción" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
   expect(ocrReads).toHaveLength(0);
+  for (const label of [
+    page.getByText("Pendiente de revisar", { exact: true }).first(),
+    page.getByText("Corrige y guarda sólo lo comprobado en el formulario superior.", { exact: true }),
+  ]) {
+    await expect(label).toBeVisible();
+    expect(await label.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
+  }
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
   const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
@@ -153,7 +160,7 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   expect(ocrReads).toHaveLength(0);
-  await page.getByRole("button", { name: "Analizar con OCR" }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
   await expect.poll(() => ocrReads.length).toBe(1);
   await expect(page.getByText("Texto nativo PDF")).toBeVisible();
   await expect(page.getByText("FACTURA DEMO")).toBeVisible();

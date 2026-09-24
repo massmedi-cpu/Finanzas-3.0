@@ -224,7 +224,7 @@ test("F · Análisis ofrece visualización accesible, tabla alternativa, tooltip
   const deficitPoint = visual.getByRole("button", { name: /Neto.*septiembre.*-50,00.*déficit/i });
   await deficitPoint.focus();
   await expect(page.getByRole("tooltip")).toContainText(/Neto.*-50,00.*déficit/i);
-  await expect(visual.getByRole("link", { name: /Ver movimientos del periodo/i })).toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30/);
+  await expect(visual.getByRole("link", { name: /Ver movimientos de septiembre de 2026/i })).toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30/);
 });
 
 test("F · Presupuestos representa la magnitud del exceso y enlaza con los movimientos causantes", async ({ page }) => {
