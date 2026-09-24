@@ -55,6 +55,7 @@ jobs:
             tests/e2e/documents.spec.ts \
             tests/e2e/financial-visualization.spec.ts \
             tests/e2e/forecast.spec.ts \
+            tests/e2e/forecast-period-race.spec.ts \
             tests/e2e/premium-forecast-visual.spec.ts \
             tests/e2e/rules.spec.ts \
             tests/e2e/source-configuration.spec.ts \

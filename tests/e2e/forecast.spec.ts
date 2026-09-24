@@ -285,7 +285,7 @@ test("el calendario muestra solo fechas consultadas y lleva al detalle del movim
   await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ }).click();
   const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
   await expect(day.getByText("Seguro mensual", { exact: true })).toBeVisible();
-  await expect(day.getByText("-72,50 €", { exact: true })).toBeVisible();
+  await expect(day.getByRole("listitem").getByText("-72,50 €", { exact: true })).toBeVisible();
   await day.getByRole("link", { name: "Ver detalle" }).click();
   await expect(page.locator(`#forecast-item-${forecastItemId}`)).toBeInViewport();
 
