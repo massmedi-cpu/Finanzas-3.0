@@ -46,7 +46,7 @@ test("Inicio evita porcentajes de ahorro absurdos cuando no hay base de ingresos
 });
 
 test("el cash flow de Inicio muestra 12 meses sin scroll horizontal", () => {
-  expect(inicioSource).toContain("data.monthly?.rows.slice(-12)");
+  expect(inicioSource).toContain("row.monthStart !== currentMonthStart).slice(-12)");
   expect(inicioSource).toContain("Últimos 12 meses");
   expect(dashboardApiSource).toContain("trailingMonthStart(today, 12)");
   expect(chartSource).not.toContain("Math.abs(row.operatingNetCents)");

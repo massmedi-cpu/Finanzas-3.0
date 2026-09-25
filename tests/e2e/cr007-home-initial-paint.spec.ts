@@ -52,7 +52,7 @@ test("Inicio pinta estructura útil antes de que terminen las fuentes financiera
   release();
 
   await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
-  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La evolución no está disponible ahora.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Las cuentas no están disponibles ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });

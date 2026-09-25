@@ -46,7 +46,7 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(client).toContain('method: "POST"');
   expect(client).toContain("Últimos 12 meses");
   expect(client).toContain("Gasto medio mensual");
-  expect(client).toContain("rows.slice(-12)");
+  expect(client).toContain("row.monthStart !== currentMonthStart).slice(-12)");
   expect(client).not.toContain("pendingRecent");
   expect(client).not.toContain("Por revisar");
   expect(client).not.toContain("Revisar movimientos");

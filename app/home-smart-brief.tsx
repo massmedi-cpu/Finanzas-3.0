@@ -126,7 +126,7 @@ function signedMoney(delta: number, displayMoney: (cents: number) => string) {
 
 function signedPoints(deltaBps: number) {
   if (deltaBps === 0) return "0 pp";
-  return `${deltaBps > 0 ? "+" : "−"}${formatBasisPoints(Math.abs(deltaBps), 1, "pp")}`;
+  return `${deltaBps > 0 ? "+" : "−"}${formatBasisPoints(Math.abs(deltaBps), 1, "pp", 0)}`;
 }
 
 export default function HomeSmartBrief({

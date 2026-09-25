@@ -308,7 +308,7 @@ test("Inicio conserva el balance mensual cuando falla únicamente la evolución"
   await page.goto("/");
 
   await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
-  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La evolución no está disponible ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
@@ -317,7 +317,7 @@ test("Inicio conserva módulos independientes si falla el motor financiero princ
   await page.goto("/");
 
   await expect(summary(page).getByText("—").first()).toBeVisible();
-  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Las cuentas no están disponibles ahora.", { exact: true })).toBeVisible();
   await expect(chart(page)).toBeVisible();
   await expect(page.getByText("Internet", { exact: true })).toBeVisible();
   await expect(page.getByText("Mercado Central", { exact: true })).toBeVisible();
@@ -329,11 +329,11 @@ test("Inicio mantiene una salida comprensible ante indisponibilidad total", asyn
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
-  await expect(page.getByText("No hay evolución disponible.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No hay cuentas activas disponibles.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No hay presupuesto mensual configurado.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La evolución no está disponible ahora.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Las cuentas no están disponibles ahora.", { exact: true })).toBeVisible();
+  await expect(page.getByText("El presupuesto no está disponible ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("La previsión no está disponible.", { exact: true })).toBeVisible();
-  await expect(page.getByText("No hay actividad reciente.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La actividad reciente no está disponible ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
