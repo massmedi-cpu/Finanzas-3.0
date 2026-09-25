@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { formatMoneyCents } from "../src/core/money";
 import { shouldOpenGlobalSearchShortcut } from "./global-search-shortcut";
 import styles from "./global-search.module.css";
 
@@ -26,7 +27,6 @@ const KIND_LABEL: Record<SearchKind, string> = {
   account: "Cuenta",
   section: "Sección",
 };
-const money = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid" });
 
 function formatDate(value: string | null | undefined) {
@@ -199,7 +199,7 @@ export default function GlobalSearch() {
                     >
                       <span className={styles.kind}>{KIND_LABEL[item.kind]}</span>
                       <span className={styles.copy}><strong>{item.title}</strong>{item.subtitle && <small>{item.subtitle}</small>}</span>
-                      <span className={styles.meta}>{typeof item.amountCents === "number" ? <b>{money.format(item.amountCents / 100)}</b> : null}{itemDate && <small>{itemDate}</small>}</span>
+                      <span className={styles.meta}>{typeof item.amountCents === "number" ? <b>{formatMoneyCents(item.amountCents)}</b> : null}{itemDate && <small>{itemDate}</small>}</span>
                     </Link>
                   );
                 })

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatBasisPoints, formatInteger } from "../src/core/formatters";
 import NumberExplanation from "./number-explanation";
 import styles from "./home-smart-brief.module.css";
 
@@ -61,10 +62,6 @@ type ChangeItem = {
 
 export const HOME_VISIT_KEY = "financial-app:home-last-visit:v1";
 
-const percent = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
-});
 const dateTime = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -129,7 +126,7 @@ function signedMoney(delta: number, displayMoney: (cents: number) => string) {
 
 function signedPoints(deltaBps: number) {
   if (deltaBps === 0) return "0 pp";
-  return `${deltaBps > 0 ? "+" : "−"}${percent.format(Math.abs(deltaBps) / 100)} pp`;
+  return `${deltaBps > 0 ? "+" : "−"}${formatBasisPoints(Math.abs(deltaBps), 1, "pp", 0)}`;
 }
 
 export default function HomeSmartBrief({
@@ -222,7 +219,7 @@ export default function HomeSmartBrief({
     }
 
     if (budgetStatus !== null) {
-      const progress = budgetProgressBps !== null ? `${percent.format(budgetProgressBps / 100)} % usado` : null;
+      const progress = budgetProgressBps !== null ? `${formatBasisPoints(budgetProgressBps, 1, "%", 0)} usado` : null;
       const title = budgetStatus === "over"
         ? "Presupuesto excedido"
         : budgetStatus === "unfunded"
@@ -265,7 +262,7 @@ export default function HomeSmartBrief({
       label: "DATOS",
       title: dataTitle,
       detail: transactionTotalCount !== null
-        ? `${transactionTotalCount.toLocaleString("es-ES")} movimientos en el historial.`
+        ? `${formatInteger(transactionTotalCount)} movimientos en el historial.`
         : "El historial sigue disponible aunque alguna fuente tarde en responder.",
       href: syncState === "failed" ? "/configuration/source" : "/transactions",
       tone: syncState === "failed" ? "warning" : "neutral",
@@ -297,7 +294,7 @@ export default function HomeSmartBrief({
       const delta = currentVisit.transactionTotalCount - previousVisit.transactionTotalCount;
       if (delta > 0) {
         items.push({
-          title: `${delta.toLocaleString("es-ES")} ${delta === 1 ? "movimiento nuevo" : "movimientos nuevos"}`,
+          title: `${formatInteger(delta)} ${delta === 1 ? "movimiento nuevo" : "movimientos nuevos"}`,
           detail: `Actividad incorporada desde ${formatDateTime(previousVisit.savedAt)}.`,
           href: "/transactions",
           tone: "neutral",

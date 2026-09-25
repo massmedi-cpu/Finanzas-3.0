@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatInteger } from "../../src/core/formatters";
+import { formatMoneyCents } from "../../src/core/money";
 import {
   authRecoveryFromCode,
   requestErrorCode,
@@ -177,13 +179,6 @@ const OVERRIDE_LABELS: Record<string, string> = {
   note: "nota",
 };
 
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
   month: "2-digit",
@@ -192,7 +187,7 @@ const dateFormatter = new Intl.DateTimeFormat("es-ES", {
 });
 
 function formatMoney(cents: number | null) {
-  return cents === null ? "—" : moneyFormatter.format(cents / 100);
+  return cents === null ? "—" : formatMoneyCents(cents);
 }
 
 function formatDate(value: string) {
@@ -436,8 +431,8 @@ export default function TransactionsClient() {
   const visibleSummary = useMemo(() => {
     if (loading) return "Leyendo movimientos…";
     if (totalCount === 0) return "0 movimientos";
-    if (rows.length === totalCount) return `${totalCount.toLocaleString("es-ES")} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
-    return `${rows.length.toLocaleString("es-ES")} de ${totalCount.toLocaleString("es-ES")}`;
+    if (rows.length === totalCount) return `${formatInteger(totalCount)} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
+    return `${formatInteger(rows.length)} de ${formatInteger(totalCount)}`;
   }, [loading, rows.length, totalCount]);
 
   function updateFilter(field: keyof Filters, value: string) {
@@ -508,7 +503,7 @@ export default function TransactionsClient() {
         throw new Error(readableError(payload));
       }
       const changed = payload?.result?.changedTransactions;
-      setNotice(Number.isInteger(changed) ? `${message} · ${changed.toLocaleString("es-ES")} modificados.` : message);
+      setNotice(Number.isInteger(changed) ? `${message} · ${formatInteger(changed)} modificados.` : message);
       setEditingId(null);
       setEditor(null);
       setSelectedIds([]);
@@ -648,9 +643,9 @@ async function saveEdit(row: TransactionRow) {
           </p>
         </div>
         <div className={styles.summary} aria-label="Resumen del listado">
-          <div><strong>{totalCount.toLocaleString("es-ES")}</strong><span>Coincidencias</span></div>
+          <div><strong>{formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
           <div><strong>{activeFilterCount}</strong><span>Filtros activos</span></div>
-          <div><strong>{selectedIds.length.toLocaleString("es-ES")}</strong><span>Seleccionados</span></div>
+          <div><strong>{formatInteger(selectedIds.length)}</strong><span>Seleccionados</span></div>
         </div>
       </header>
 
@@ -712,7 +707,7 @@ async function saveEdit(row: TransactionRow) {
 
       {selectedIds.length > 0 && (
         <section className={styles.bulkBar} aria-label="Edición masiva de movimientos">
-          <div className={styles.bulkIntro}><strong>{selectedIds.length.toLocaleString("es-ES")} seleccionados</strong><span>Los cambios se guardan como overrides; el origen bancario permanece intacto.</span></div>
+          <div className={styles.bulkIntro}><strong>{formatInteger(selectedIds.length)} seleccionados</strong><span>Los cambios se guardan como overrides; el origen bancario permanece intacto.</span></div>
           <label><span>Categoría</span><select data-testid="bulk-category" value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)}>
             <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar automática</option><option value={NONE}>Sin categoría</option>
             {facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}

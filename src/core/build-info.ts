@@ -5,7 +5,7 @@ import { getReleaseProvenance } from "./release-provenance";
 export const APP_VERSION = packageJson.version;
 export const TARGET_VERSION = APP_VERSION;
 export const CURRENT_PHASE = 13 as const;
-export const CURRENT_PHASE_NAME = "Consolidación, hardening precomercial y producción 10.0.3" as const;
+export const CURRENT_PHASE_NAME = "Consolidación, coherencia financiera y producción 10.0.4" as const;
 export const CURRENT_PHASE_BLOCK = 1 as const;
 export const CURRENT_PHASE_BLOCK_NAME = "Integración, regresión, limpieza, respaldo, restauración y publicación" as const;
 

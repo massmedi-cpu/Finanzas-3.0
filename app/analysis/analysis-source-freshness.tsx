@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { formatInteger } from "../../src/core/formatters";
 import styles from "./analysis-source-freshness.module.css";
 
 type SyncStatus = "success" | "partial" | "failed" | "started";
@@ -96,10 +97,10 @@ function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
   const parts: string[] = [];
 
   if (failedRows > 0) {
-    parts.push(`${failedRows.toLocaleString("es-ES")} ${failedRows === 1 ? "fila fallida" : "filas fallidas"}`);
+    parts.push(`${formatInteger(failedRows)} ${failedRows === 1 ? "fila fallida" : "filas fallidas"}`);
   }
   if (warnings > 0) {
-    parts.push(`${warnings.toLocaleString("es-ES")} ${warnings === 1 ? "aviso" : "avisos"}`);
+    parts.push(`${formatInteger(warnings)} ${warnings === 1 ? "aviso" : "avisos"}`);
   }
 
   return {
@@ -118,7 +119,7 @@ function statusText(freshness: SourceFreshness) {
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
   const when = timestampLabel ? ` ${timestampLabel}` : "";
-  const rows = sync.rowsSeen !== null ? ` · ${sync.rowsSeen.toLocaleString("es-ES")} filas revisadas` : "";
+  const rows = sync.rowsSeen !== null ? ` · ${formatInteger(sync.rowsSeen)} filas revisadas` : "";
   const health = syncHealth(sync);
 
   if (sync.status === "success") {
@@ -162,10 +163,10 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const incidentParts: string[] = [];
 
   if (failedRows > 0) {
-    incidentParts.push(`${failedRows.toLocaleString("es-ES")} ${failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
+    incidentParts.push(`${formatInteger(failedRows)} ${failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
   }
   if (warnings > 0) {
-    incidentParts.push(`${warnings.toLocaleString("es-ES")} ${warnings === 1 ? "aviso" : "avisos"}`);
+    incidentParts.push(`${formatInteger(warnings)} ${warnings === 1 ? "aviso" : "avisos"}`);
   }
 
   if (sync.status === "started") {

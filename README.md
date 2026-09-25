@@ -4,15 +4,13 @@ Construcción desde cero de una nueva Financial App.
 
 ## Versión actual
 
-`0.0.1`
+El código toma su versión de `package.json`. La versión publicada se comprueba en
+`https://financialapp-home.vercel.app/api/build`; una rama candidata no equivale a Production.
 
 ## Objetivo de versión
 
-La aplicación avanzará mediante versiones incrementales desde `0.0.1`. La versión `10.0.0` se reservará exclusivamente para el primer estado completo, estable y validado de la nueva aplicación.
-
-Hasta alcanzar ese hito, cada versión representa progreso de construcción, integración, corrección o validación. No se debe marcar la aplicación como `10.0.0` antes de completar y validar el alcance funcional acordado.
-
-A partir de `10.0.0`, las mejoras posteriores seguirán versionado incremental normal: `10.0.1`, `10.1.0`, `11.0.0`, etc., según el impacto de los cambios.
+La reconstrucción comenzó en `0.0.1`. A partir de `10.0.0`, cada mejora publicada
+incrementa la versión conforme a `docs/precommercial-audit/21-production-versioning-policy.md`.
 
 ## Regla de reconstrucción
 

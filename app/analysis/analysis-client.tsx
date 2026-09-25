@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { formatBasisPoints, formatInteger } from "../../src/core/formatters";
+import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import type {
   AnalysisDriver,
   AnalysisMerchantDriver,
@@ -23,19 +25,6 @@ import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import AnalysisMovementInsights from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
-
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
-
-const percentFormatter = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
 
 const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
@@ -73,20 +62,16 @@ function currentMadridMonth() {
   return `${values.year}-${values.month}`;
 }
 
-function formatMoney(cents: number) {
-  return moneyFormatter.format(cents / 100);
-}
-
 function formatPercentBps(bps: number | null, signed = false) {
   if (bps === null) return "—";
   const sign = signed && bps > 0 ? "+" : "";
-  return `${sign}${percentFormatter.format(bps / 100)} %`;
+  return `${sign}${formatBasisPoints(bps)}`;
 }
 
 function formatPointDeltaBps(bps: number | null) {
   if (bps === null) return "—";
   const sign = bps > 0 ? "+" : bps < 0 ? "−" : "";
-  return `${sign}${percentFormatter.format(Math.abs(bps) / 100)} pp`;
+  return `${sign}${formatBasisPoints(Math.abs(bps), 1, "pp")}`;
 }
 
 function monthDate(monthStart: string) {
@@ -138,7 +123,7 @@ function deltaText(cents: number) {
 function topConcentrationContext(count: number, singular: string, plural: string) {
   const visible = Math.min(3, Math.max(0, count));
   if (visible === 0) return `sin ${plural} elegibles`;
-  return `en ${visible.toLocaleString("es-ES")} ${visible === 1 ? singular : plural}`;
+  return `en ${formatInteger(visible)} ${visible === 1 ? singular : plural}`;
 }
 
 function periodHref(snapshot: AnalysisSnapshot) {
@@ -245,7 +230,7 @@ function DriverRanking({
     <section className={styles.ranking} aria-labelledby={headingId}>
       <div className={styles.sectionHeadingCompact}>
         <h3 id={headingId}>{title}</h3>
-        <span>{items.length.toLocaleString("es-ES")} {merchant ? (items.length === 1 ? "comercio" : "comercios") : (items.length === 1 ? "grupo" : "grupos")}</span>
+        <span>{formatInteger(items.length)} {merchant ? (items.length === 1 ? "comercio" : "comercios") : (items.length === 1 ? "grupo" : "grupos")}</span>
       </div>
       {visible.length === 0 ? (
         <p className={styles.empty}>No hay gastos elegibles en el periodo.</p>
@@ -257,7 +242,7 @@ function DriverRanking({
               <div className={styles.rankMain}>
                 <strong>{item.name}</strong>
                 <span>
-                  {item.rows.toLocaleString("es-ES")} mov. · {formatPercentBps(item.shareBps)} del gasto
+                  {formatInteger(item.rows)} mov. · {formatPercentBps(item.shareBps)} del gasto
                   {merchant && "habitualVariationBps" in item && item.habitualVariationBps !== null
                     ? ` · ${formatPercentBps(item.habitualVariationBps, true)} vs. importe habitual`
                     : ""}
@@ -312,7 +297,7 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       )}
       <Link prefetch={false} className={styles.quickReadItem} href="#anomalies-heading">
         <span>Anomalías</span>
-        <strong>{anomalyCount.toLocaleString("es-ES")}</strong>
+        <strong>{formatInteger(anomalyCount)}</strong>
         <small>{anomalyLabel}</small>
       </Link>
       <Link prefetch={false} className={styles.quickReadItem} href="/forecast">
@@ -637,7 +622,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   <p>ANOMALÍAS</p>
                   <h2 id="anomalies-heading">Movimientos que merecen la pena revisar</h2>
                 </div>
-                <span>{snapshot.anomalies.length.toLocaleString("es-ES")}</span>
+                <span>{formatInteger(snapshot.anomalies.length)}</span>
               </div>
               {snapshot.anomalies.length === 0 ? (
                 <p className={styles.empty}>No se han detectado importes que superen de forma clara el comportamiento histórico disponible.</p>
@@ -700,7 +685,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 snapshot.forecast.summary.plannedItems > 0 ? (
                   <>
                     <strong className={styles.contextValue}>{formatMoney(snapshot.forecast.summary.projectedNetCents)} previstos</strong>
-                    <p>{`${snapshot.forecast.summary.plannedItems.toLocaleString("es-ES")} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
+                    <p>{`${formatInteger(snapshot.forecast.summary.plannedItems)} movimientos previstos hasta ${formatDate(snapshot.forecast.period.dateTo)}.`}</p>
                     <div className={styles.forecastFigures}>
                       <span>Ingresos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedIncomeCents)}</strong></span>
                       <span>Gastos previstos <strong>{formatMoney(snapshot.forecast.summary.projectedExpenseCents)}</strong></span>

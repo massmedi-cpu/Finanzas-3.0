@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { formatBasisPoints, formatInteger } from "../../src/core/formatters";
+import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import { isComparisonSnapshot } from "../../src/application/comparison/comparison-contract";
 import type {
   ComparisonDriver,
@@ -27,19 +29,6 @@ type ComparisonForm = {
   accountId: string;
 };
 
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
-
-const percentFormatter = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -57,10 +46,6 @@ function formFromSelection(selection: ResolvedComparisonSelection): ComparisonFo
   };
 }
 
-function formatMoney(cents: number) {
-  return moneyFormatter.format(cents / 100);
-}
-
 function formatDate(value: string) {
   return dateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
 }
@@ -72,13 +57,13 @@ function formatPeriod(dateFrom: string, dateTo: string) {
 function formatPercent(bps: number | null, signed = false) {
   if (bps === null) return "Sin base comparable";
   const sign = signed && bps > 0 ? "+" : "";
-  return `${sign}${percentFormatter.format(bps / 100)} %`;
+  return `${sign}${formatBasisPoints(bps)}`;
 }
 
 function formatPointDelta(bps: number | null) {
   if (bps === null) return "Sin base comparable";
   const sign = bps > 0 ? "+" : bps < 0 ? "−" : "";
-  return `${sign}${percentFormatter.format(Math.abs(bps) / 100)} pp`;
+  return `${sign}${formatBasisPoints(Math.abs(bps), 1, "pp")}`;
 }
 
 function signedMoney(cents: number) {
@@ -220,7 +205,7 @@ function DriverPanel({
                   <tr key={`${kind}-${item.id ?? "unassigned"}`}>
                     <th scope="row">
                       <strong>{item.name}</strong>
-                      <span>{item.primaryRows.toLocaleString("es-ES")} vs {item.referenceRows.toLocaleString("es-ES")} mov.</span>
+                      <span>{formatInteger(item.primaryRows)} vs {formatInteger(item.referenceRows)} mov.</span>
                       <i className={styles.driverBar} aria-hidden="true"><i style={{ width: `${barWidth}%` }} /></i>
                     </th>
                     <td><DriverValue href={item.primaryHref} cents={item.primaryExpenseCents} label={`${item.name}, periodo principal`} /></td>
@@ -486,8 +471,8 @@ export default function ComparisonClient({
                 <span>Categorías = gasto en ambos periodos · cálculo determinista · sin IA generativa</span>
               </div>
               <div>
-                <span>Principal: {snapshot.quality.primaryIncludedRows.toLocaleString("es-ES")} incl. · {snapshot.quality.primaryExcludedRows.toLocaleString("es-ES")} excl.</span>
-                <span>Referencia: {snapshot.quality.referenceIncludedRows.toLocaleString("es-ES")} incl. · {snapshot.quality.referenceExcludedRows.toLocaleString("es-ES")} excl.</span>
+                <span>Principal: {formatInteger(snapshot.quality.primaryIncludedRows)} incl. · {formatInteger(snapshot.quality.primaryExcludedRows)} excl.</span>
+                <span>Referencia: {formatInteger(snapshot.quality.referenceIncludedRows)} incl. · {formatInteger(snapshot.quality.referenceExcludedRows)} excl.</span>
               </div>
             </footer>
           </>

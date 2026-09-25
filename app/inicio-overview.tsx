@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
+import { formatBasisPoints } from "../src/core/formatters";
+import { formatMoneyCents } from "../src/core/money";
 import { FinancialBarChart } from "../src/design/financial-bar-chart";
 import HomeSmartBrief from "./home-smart-brief";
 import styles from "./inicio-overview.module.css";
@@ -138,14 +141,6 @@ type AttentionItem = {
 };
 
 const PRIVACY_KEY = "financial-app:home-amounts";
-const money = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: true,
-});
-const percent = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 });
 const dayFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
   month: "short",
@@ -364,19 +359,31 @@ export default function InicioOverview() {
   const currentMonthStart = `${today.slice(0, 7)}-01`;
   const financial = data.financial;
   const transactions = data.transactions;
+  const consistency = checkHomeConsistency({
+    financial,
+    monthly: data.monthly,
+    budgetMonth: data.budgets?.month ?? null,
+    today,
+  });
+  const budget = consistency.budgetMonthMatches ? data.budgets : null;
   const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
   const revealAmounts = privacyReady && amountsVisible;
-  const displayMoney = (cents: number) => revealAmounts ? money.format(cents / 100) : "••••,•• €";
+  const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";
 
   const activeAccounts = useMemo(
-    () => financial?.balances.accounts.filter((account) => account.lifecycle === "active") ?? [],
-    [financial],
+    () => consistency.balancesMatch
+      ? financial?.balances.accounts.filter((account) => account.lifecycle === "active") ?? []
+      : [],
+    [financial, consistency.balancesMatch],
   );
 
-  const homeMonthlyRows = useMemo(() => data.monthly?.rows.slice(-12) ?? [], [data.monthly]);
+  const homeMonthlyRows = useMemo(
+    () => data.monthly?.rows.filter((row) => consistency.currentMonthMatches || row.monthStart !== currentMonthStart).slice(-12) ?? [],
+    [data.monthly, consistency.currentMonthMatches, currentMonthStart],
+  );
   const monthlyScale = useMemo(
     () => Math.max(1, ...homeMonthlyRows.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)])),
     [homeMonthlyRows],
@@ -401,11 +408,11 @@ export default function InicioOverview() {
   }, [completedMonthlyRows]);
 
   const topBudgetCategories = useMemo(
-    () => data.budgets?.categories
+    () => budget?.categories
       .filter((item) => item.categoryName && item.actualExpenseCents > 0)
       .sort((a, b) => b.actualExpenseCents - a.actualExpenseCents)
       .slice(0, 4) ?? [],
-    [data.budgets],
+    [budget],
   );
   const upcomingItems = useMemo(
     () => data.forecast?.items
@@ -414,7 +421,7 @@ export default function InicioOverview() {
       .slice(0, 4) ?? [],
     [data.forecast],
   );
-  const overBudgetCount = data.budgets?.categories.filter((item) => item.status === "over").length ?? 0;
+  const overBudgetCount = budget?.categories.filter((item) => item.status === "over").length ?? 0;
   const hasSavingsBase = (financial?.period.incomeCents ?? 0) >= 10_000;
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
@@ -531,6 +538,12 @@ export default function InicioOverview() {
         </p>
       )}
 
+      {!primaryLoading && !secondaryLoading && Object.values(consistency).some((matches) => !matches) && (
+        <p className={styles.provenanceNotice} role="alert">
+          Hay datos que no cuadran entre las fuentes del resumen. Hemos ocultado las cifras afectadas; revisa Cuentas, Análisis y Presupuestos antes de tomar decisiones.
+        </p>
+      )}
+
       <HomeSmartBrief
         month={today.slice(0, 7)}
         loading={primaryLoading || secondaryLoading}
@@ -540,10 +553,10 @@ export default function InicioOverview() {
         incomeCents={financial?.period.incomeCents ?? null}
         expenseCents={financial?.period.expenseCents ?? null}
         operatingNetCents={financial?.period.operatingNetCents ?? null}
-        activeBalanceCents={financial?.balances.activeBalanceCents ?? null}
-        budgetProgressBps={data.budgets?.total.progressBps ?? null}
-        budgetStatus={data.budgets?.total.status ?? null}
-        overBudgetCount={data.budgets ? overBudgetCount : null}
+        activeBalanceCents={consistency.balancesMatch ? financial?.balances.activeBalanceCents ?? null : null}
+        budgetProgressBps={budget?.total.progressBps ?? null}
+        budgetStatus={budget?.total.status ?? null}
+        overBudgetCount={budget ? overBudgetCount : null}
         projectedNetCents={data.forecast?.summary.projectedNetCents ?? null}
         projectedClosingBalanceCents={data.forecast?.summary.projectedClosingBalanceCents ?? null}
         plannedItems={data.forecast?.summary.plannedItems ?? null}
@@ -554,8 +567,8 @@ export default function InicioOverview() {
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
         <article className={styles.decisionCard}>
           <span>Saldo total en cuentas</span>
-          <strong>{financial ? displayMoney(financial.balances.activeBalanceCents) : "—"}</strong>
-          <small>{financial?.balances.asOfDate ? `Saldo a ${formatDate(financial.balances.asOfDate)}` : "Fecha pendiente"}</small>
+          <strong>{financial && consistency.balancesMatch ? displayMoney(financial.balances.activeBalanceCents) : "—"}</strong>
+          <small>{!consistency.balancesMatch ? "Saldo no conciliado" : financial?.balances.asOfDate ? `Saldo a ${formatDate(financial.balances.asOfDate)}` : "Fecha pendiente"}</small>
         </article>
         <article className={styles.decisionCard}>
           <span>Este mes</span>
@@ -570,7 +583,7 @@ export default function InicioOverview() {
           {financial && (
             <small>
               {hasSavingsBase && financial.period.savingsRateBps !== null
-                ? `Ahorro ${percent.format(financial.period.savingsRateBps / 100)} %`
+                ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
                 : "Ahorro: sin base suficiente"}
             </small>
           )}
@@ -644,7 +657,7 @@ export default function InicioOverview() {
           ) : secondaryLoading ? (
             <div className={styles.skeleton} />
           ) : (
-            <p className={styles.empty}>No hay evolución disponible.</p>
+            <p className={styles.empty}>{data.monthly ? "No hay evolución disponible." : "La evolución no está disponible ahora."}</p>
           )}
           {latestDataDate && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
             <p className={styles.helper}>El mes actual es parcial: incluye movimientos importados hasta el {formatDate(latestDataDate)}.</p>
@@ -681,7 +694,9 @@ export default function InicioOverview() {
             <div><span>CUENTAS</span><h2>Disponible por cuenta</h2></div>
             <Link prefetch={false} className={styles.panelAction} href="/accounts">Ver cuentas</Link>
           </div>
-          {activeAccounts.length > 0 ? (
+          {!consistency.balancesMatch ? (
+            <p className={styles.empty}>El saldo total no coincide con el detalle de cuentas. Consulta Cuentas antes de usar esta cifra.</p>
+          ) : activeAccounts.length > 0 ? (
             <ul className={styles.compactList}>
               {activeAccounts.map((account) => (
                 <li key={account.id}>
@@ -696,7 +711,7 @@ export default function InicioOverview() {
           ) : primaryLoading ? (
             <div className={styles.skeleton} />
           ) : (
-            <p className={styles.empty}>No hay cuentas activas disponibles.</p>
+            <p className={styles.empty}>{financial ? "No hay cuentas activas disponibles." : "Las cuentas no están disponibles ahora."}</p>
           )}
         </article>
 
@@ -705,16 +720,16 @@ export default function InicioOverview() {
             <div><span>ESTE MES</span><h2>Gasto y presupuesto</h2></div>
             <Link prefetch={false} className={styles.panelAction} href="/budgets">Ver presupuestos</Link>
           </div>
-          {data.budgets ? (
+          {budget ? (
             <>
               <div className={styles.budgetSummary}>
-                <strong>{displayMoney(data.budgets.total.actualExpenseCents)}</strong>
-                <span>gastados de {displayMoney(data.budgets.total.effectiveAmountCents)}</span>
+                <strong>{displayMoney(budget.total.actualExpenseCents)}</strong>
+                <span>gastados de {displayMoney(budget.total.effectiveAmountCents)}</span>
                 <div
                   className={styles.progressTrack}
-                  aria-label={`Presupuesto usado ${Math.max(0, data.budgets.total.progressBps ?? 0) / 100} por ciento`}
+                  aria-label={`Presupuesto usado ${Math.max(0, budget.total.progressBps ?? 0) / 100} por ciento`}
                 >
-                  <span style={{ width: `${Math.min(100, Math.max(0, (data.budgets.total.progressBps ?? 0) / 100))}%` }} />
+                  <span style={{ width: `${Math.min(100, Math.max(0, (budget.total.progressBps ?? 0) / 100))}%` }} />
                 </div>
               </div>
               {topBudgetCategories.length > 0 && (
@@ -727,10 +742,12 @@ export default function InicioOverview() {
                 </ul>
               )}
             </>
+          ) : !consistency.budgetMonthMatches ? (
+            <p className={styles.empty}>El presupuesto recibido corresponde a otro mes. Abre Presupuestos para revisarlo.</p>
           ) : secondaryLoading ? (
             <div className={styles.skeleton} />
           ) : (
-            <p className={styles.empty}>No hay presupuesto mensual configurado.</p>
+            <p className={styles.empty}>El presupuesto no está disponible ahora.</p>
           )}
         </article>
 
@@ -758,7 +775,7 @@ export default function InicioOverview() {
           ) : primaryLoading ? (
             <div className={styles.skeleton} />
           ) : (
-            <p className={styles.empty}>No hay actividad reciente.</p>
+            <p className={styles.empty}>{transactions ? "No hay actividad reciente." : "La actividad reciente no está disponible ahora."}</p>
           )}
         </article>
       </section>

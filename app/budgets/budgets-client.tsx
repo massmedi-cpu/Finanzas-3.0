@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { formatBasisPoints, formatNumberWithDigits } from "../../src/core/formatters";
+import { formatMoneyCents as formatMoney, formatMoneyInputCents, parseMoneyInputToCents } from "../../src/core/money";
 import {
   assembleBudgetPlanning,
   type BudgetItem,
@@ -16,22 +18,10 @@ type BudgetIconName = Extract<
   "wallet" | "spent" | "remaining" | "progress" | "spark" | "category" | "refresh" | "warning"
 >;
 
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const monthFormatter = new Intl.DateTimeFormat("es-ES", {
   month: "long",
   year: "numeric",
   timeZone: "Europe/Madrid",
-});
-
-const exactPercentFormatter = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
 });
 
 function currentMonthMadrid() {
@@ -43,10 +33,6 @@ function currentMonthMadrid() {
   const year = parts.find((part) => part.type === "year")?.value ?? "2026";
   const month = parts.find((part) => part.type === "month")?.value ?? "01";
   return `${year}-${month}`;
-}
-
-function formatMoney(cents: number) {
-  return moneyFormatter.format(cents / 100);
 }
 
 function formatMonth(value: string) {
@@ -62,12 +48,12 @@ function shortMonth(value: string) {
 
 function formatProgress(bps: number | null) {
   if (bps === null) return "Sin referencia";
-  return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1 }).format(bps / 100)} %`;
+  return formatBasisPoints(bps, 1, "%", 0);
 }
 
 function formatExactRate(bps: number | null) {
   if (bps === null) return "—";
-  return `${exactPercentFormatter.format(bps / 100)} %`;
+  return formatBasisPoints(bps, 2);
 }
 
 function progressWidth(item: BudgetItem) {
@@ -87,60 +73,17 @@ function readableError(payload: any) {
 
 function euroInputFromCents(cents: number | null) {
   if (cents === null) return "";
-  return (cents / 100).toFixed(2).replace(".", ",");
-}
-
-function normalizeSpanishInteger(value: string) {
-  if (/^\d+$/.test(value)) return value;
-  const groups = value.split(".");
-  if (
-    groups.length < 2 ||
-    !/^\d{1,3}$/.test(groups[0] ?? "") ||
-    groups.slice(1).some((group) => !/^\d{3}$/.test(group))
-  ) {
-    return null;
-  }
-  return groups.join("");
+  return formatMoneyInputCents(cents);
 }
 
 function parseEuroInput(value: string) {
-  const compact = value.trim().replace(/\s/g, "");
-  if (!compact) return null;
-  if (!/^\d[\d.,]*$/.test(compact)) return undefined;
-
-  let integerPart = "";
-  let decimalPart = "";
-
-  if (compact.includes(",")) {
-    if ((compact.match(/,/g) ?? []).length !== 1) return undefined;
-    const [integerRaw, decimalRaw] = compact.split(",");
-    if (!integerRaw || !/^\d{1,2}$/.test(decimalRaw ?? "")) return undefined;
-    const normalizedInteger = normalizeSpanishInteger(integerRaw);
-    if (normalizedInteger === null) return undefined;
-    integerPart = normalizedInteger;
-    decimalPart = decimalRaw;
-  } else if (compact.includes(".")) {
-    const pieces = compact.split(".");
-    if (
-      pieces.length === 2 &&
-      /^\d+$/.test(pieces[0] ?? "") &&
-      /^\d{1,2}$/.test(pieces[1] ?? "")
-    ) {
-      integerPart = pieces[0];
-      decimalPart = pieces[1];
-    } else {
-      const normalizedInteger = normalizeSpanishInteger(compact);
-      if (normalizedInteger === null) return undefined;
-      integerPart = normalizedInteger;
-    }
-  } else {
-    integerPart = compact;
+  if (!value.trim()) return null;
+  try {
+    const cents = parseMoneyInputToCents(value);
+    return cents >= 0 ? cents : undefined;
+  } catch {
+    return undefined;
   }
-
-  if (!/^\d+$/.test(integerPart)) return undefined;
-  const euros = Number(`${integerPart}.${decimalPart.padEnd(2, "0") || "00"}`);
-  const cents = Math.round(euros * 100);
-  return Number.isSafeInteger(cents) && cents >= 0 ? cents : undefined;
 }
 
 function Icon({ name }: { name: BudgetIconName }) {
@@ -312,7 +255,7 @@ function BudgetCard({
             <span style={{ fontVariantNumeric: "tabular-nums" }}>
               {excessPercent === null
                 ? "Sin base de comparación"
-                : `${exactPercentFormatter.format(excessPercent)} % ${hasChosenLimit ? "sobre el límite" : "sobre lo habitual"}`}
+                : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre lo habitual"}`}
             </span>
           </div>
           <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
