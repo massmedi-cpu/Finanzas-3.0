@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { APP_VERSION } from "../src/core/build-info";
 import { ProductIcon } from "../src/design/product-icons";
 import GlobalSearch from "./global-search";
 import MobileNavigation from "./mobile-navigation";
@@ -22,10 +23,22 @@ export default function AppShell({ children }: { children: ReactNode }) {
       >
         Saltar al contenido principal
       </a>
-      <div className={styles.navigationFrame}>
+      <div className={`${styles.navigationFrame} premium-nav-frame`}>
         <div className={styles.navigationShell}>
+          <Link
+            prefetch={false}
+            href="/"
+            className="financial-brand"
+            aria-label={`Financial App ${APP_VERSION}, ir a Inicio`}
+          >
+            <span className="financial-brand__mark" aria-hidden="true">FA</span>
+            <span className="financial-brand__copy">
+              <strong>Financial App</strong>
+              <small>v{APP_VERSION}</small>
+            </span>
+          </Link>
           <GlobalSearch />
-          <nav className={styles.navigation} aria-label="Navegación principal">
+          <nav className={`${styles.navigation} premium-primary-nav`} aria-label="Navegación principal">
             {navigationItems.map((item) => {
               const active = isNavigationActive(pathname, item.href);
               return (
