@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatMoneyCents } from "../../src/core/money";
 import styles from "./accounts.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -124,13 +125,6 @@ type TransactionsResponse = {
   nextCursor: { bankDate: string; id: string } | null;
 };
 
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-  useGrouping: "always",
-});
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
   month: "2-digit",
@@ -159,7 +153,7 @@ const KIND_LABELS: Record<TransactionKind, string> = {
 };
 
 function formatMoney(cents: number | null | undefined) {
-  return moneyFormatter.format((cents ?? 0) / 100);
+  return formatMoneyCents(cents ?? 0);
 }
 
 function parseDate(value: string) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatMoneyCents } from "../../../src/core/money";
 import styles from "./source.module.css";
 
 type GoogleConnection = {
@@ -141,14 +142,9 @@ function formatDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
-function formatMoneyCents(value: number | null) {
+function formatSourceMoney(value: number | null) {
   if (value === null) return "Sin saldo";
-  return new Intl.NumberFormat("es-ES", {
-    style: "currency",
-    currency: "EUR",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value / 100);
+  return formatMoneyCents(value);
 }
 
 function sourceActionErrorMessage(code: string | undefined) {
@@ -439,8 +435,8 @@ export default function SourceClient() {
                     <article key={account.accountExternalKey}>
                       <span>{account.lifecycle === "archived" ? "Archivada" : "Activa"} · {account.accountType}</span>
                       <strong>{account.accountName}</strong>
-                      <small>{account.authoritativeRows} movimientos · saldo inicial {formatMoneyCents(account.openingBalanceCents)}</small>
-                      <small>Último saldo observado: {formatMoneyCents(account.latestBalanceAfterCents)}</small>
+                      <small>{account.authoritativeRows} movimientos · saldo inicial {formatSourceMoney(account.openingBalanceCents)}</small>
+                      <small>Último saldo observado: {formatSourceMoney(account.latestBalanceAfterCents)}</small>
                     </article>
                   ))}
                 </div>

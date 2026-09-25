@@ -3,19 +3,9 @@
 import Link from "next/link";
 import { useMemo } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { formatInteger, formatNumberWithDigits } from "../../src/core/formatters";
+import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import styles from "./analysis-movement-insights.module.css";
-
-const moneyFormatter = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
-const percentFormatter = new Intl.NumberFormat("es-ES", {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
-});
 
 const shortDateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "numeric",
@@ -42,12 +32,8 @@ type DetailedTopTransaction = AnalysisSnapshot["topTransactions"][number] & {
   hasManualOverride?: boolean;
 };
 
-function formatMoney(cents: number) {
-  return moneyFormatter.format(cents / 100);
-}
-
 function formatPercent(ratio: number) {
-  return `${percentFormatter.format(ratio * 100)} %`;
+  return `${formatNumberWithDigits(ratio * 100, 1, 0)} %`;
 }
 
 function formatDate(value: string) {
@@ -122,7 +108,7 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>RITMO DIARIO</span><strong>Cuándo se está concentrando el gasto</strong></div>
-        <small>{rows.reduce((sum, row) => sum + row.rows, 0).toLocaleString("es-ES")} movimientos</small>
+        <small>{formatInteger(rows.reduce((sum, row) => sum + row.rows, 0))} movimientos</small>
       </div>
       <div className={styles.svgViewport}>
         <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo">
@@ -303,7 +289,7 @@ function AmountBandsChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
           <div key={row.band} className={styles.bandRow}>
             <span>{BAND_LABELS[row.band]}</span>
             <div><i style={{ width: `${Math.max(row.rows > 0 ? 3 : 0, (row.rows / maximum) * 100)}%` }} /></div>
-            <strong>{row.rows.toLocaleString("es-ES")}</strong>
+            <strong>{formatInteger(row.rows)}</strong>
             <small>{formatMoney(row.expenseCents)}</small>
           </div>
         ))}
@@ -351,7 +337,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>FRECUENCIA × IMPORTE</span><strong>Comercios frecuentes frente a compras grandes</strong></div>
-        <small>{rows.length.toLocaleString("es-ES")} comercios</small>
+        <small>{formatInteger(rows.length)} comercios</small>
       </div>
       <div className={styles.svgViewport}>
         <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio">
@@ -485,7 +471,7 @@ function Concepts({ snapshot }: { snapshot: AnalysisSnapshot }) {
       <div className={styles.conceptList}>
         {rows.map((row) => (
           <div key={row.concept} className={styles.conceptRow}>
-            <div><strong>{row.concept}</strong><small>{row.rows.toLocaleString("es-ES")} mov. · media {formatMoney(row.averageCents)}</small></div>
+            <div><strong>{row.concept}</strong><small>{formatInteger(row.rows)} mov. · media {formatMoney(row.averageCents)}</small></div>
             <div className={styles.conceptTrack}><i style={{ width: `${Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
             <b>{formatMoney(row.expenseCents)}</b>
           </div>
@@ -513,7 +499,7 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.detailCard}>
       <div className={styles.cardHeading}>
         <div><span>MOVIMIENTOS DE MAYOR IMPACTO</span><strong>Detalle procedente del movimiento original</strong></div>
-        <small>Top {rows.length.toLocaleString("es-ES")}</small>
+        <small>Top {formatInteger(rows.length)}</small>
       </div>
       <div className={styles.transactionList}>
         {rows.map((baseRow) => {
@@ -584,7 +570,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
             <div key={row.accountId}>
               <span>{row.accountName}</span>
               <strong>{formatMoney(row.expenseCents)}</strong>
-              <small>{row.rows.toLocaleString("es-ES")} mov. · media {formatMoney(row.averageCents)}</small>
+              <small>{formatInteger(row.rows)} mov. · media {formatMoney(row.averageCents)}</small>
             </div>
           ))}
         </div>

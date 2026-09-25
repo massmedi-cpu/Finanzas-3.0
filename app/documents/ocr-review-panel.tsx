@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
@@ -34,7 +35,7 @@ function warningLabel(warning: string) {
 
 function confidenceLabel(value: number | null) {
   if (value === null) return "No disponible";
-  return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 }).format(value * 100)} %`;
+  return `${formatNumberWithDigits(value * 100, 0)} %`;
 }
 
 function sourceLabel(source: OcrResult["source"]) {

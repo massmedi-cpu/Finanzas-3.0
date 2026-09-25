@@ -1,5 +1,7 @@
 "use client";
 
+import { formatMoneyInputCents, parseMoneyInputToCents } from "../../../src/core/money";
+
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import styles from "./rules.module.css";
 
@@ -91,19 +93,20 @@ function amountToInput(value: number | string | null) {
   if (value === null || value === undefined) return "";
   const cents = Number(value);
   if (!Number.isSafeInteger(cents)) return "";
-  return (cents / 100).toLocaleString("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return formatMoneyInputCents(cents, true);
 }
 
 function parseEuroCents(value: string) {
   const trimmed = value.trim();
   if (!trimmed) return null;
-  const normalized = trimmed.includes(",")
-    ? trimmed.replace(/\./g, "").replace(",", ".")
-    : trimmed;
-  if (!/^-?\d+(?:\.\d{1,2})?$/.test(normalized)) throw new Error("Usa un importe válido, por ejemplo -25,50.");
-  const cents = Math.round(Number(normalized) * 100);
-  if (!Number.isSafeInteger(cents)) throw new Error("El importe queda fuera del rango permitido.");
-  return cents;
+  try {
+    return parseMoneyInputToCents(trimmed);
+  } catch (error) {
+    if (error instanceof RangeError && error.message.includes("rango seguro")) {
+      throw new Error("El importe queda fuera del rango permitido.");
+    }
+    throw new Error("Usa un importe válido, por ejemplo -25,50.");
+  }
 }
 
 function describeCondition(rule: Rule) {

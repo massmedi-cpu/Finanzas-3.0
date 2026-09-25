@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { formatInteger } from "../../src/core/formatters";
 import styles from "./onboarding.module.css";
 
 type GoogleStatus = {
@@ -165,7 +166,7 @@ export default function OnboardingClient() {
           number: 2,
           name: "Cuentas",
           description: accountsReady
-            ? `${state.activeAccounts.toLocaleString("es-ES")} ${state.activeAccounts === 1 ? "cuenta activa está disponible" : "cuentas activas están disponibles"}.`
+            ? `${formatInteger(state.activeAccounts)} ${state.activeAccounts === 1 ? "cuenta activa está disponible" : "cuentas activas están disponibles"}.`
             : !state.sourceReady
               ? "Este paso se habilita cuando la fuente bancaria está validada."
               : state.accountsAvailable

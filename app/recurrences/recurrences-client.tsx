@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { formatMoneyCents as money } from "../../src/core/money";
 import {
   forecastHrefForContext,
   forecastImpactHref,
@@ -64,23 +65,12 @@ type ConfirmedImpact = {
   accountScopeChanged: boolean;
 };
 
-const euro = new Intl.NumberFormat("es-ES", {
-  style: "currency",
-  currency: "EUR",
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-
 const shortDate = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
   month: "2-digit",
   year: "numeric",
   timeZone: "UTC",
 });
-
-function money(cents: number) {
-  return euro.format(cents / 100);
-}
 
 function date(value: string | null) {
   if (!value) return "—";

@@ -128,7 +128,11 @@ async function fulfillJson(route: Route, body: unknown) {
   await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) {
+async function installDashboardMocks(
+  page: Page,
+  secondaryGate?: Promise<void>,
+  overrides: Partial<{ financial: typeof financial; monthly: typeof monthly; budgets: typeof budgets }> = {},
+) {
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
@@ -142,7 +146,7 @@ async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) 
       if (scope === "primary") {
         await fulfillJson(
           route,
-          envelope("primary", { financial, transactions }, ["financial", "transactions"]),
+          envelope("primary", { financial: overrides.financial ?? financial, transactions }, ["financial", "transactions"]),
         );
         return;
       }
@@ -150,7 +154,11 @@ async function installDashboardMocks(page: Page, secondaryGate?: Promise<void>) 
         if (secondaryGate) await secondaryGate;
         await fulfillJson(
           route,
-          envelope("secondary", { monthly, budgets, forecast }, ["monthly", "budgets", "forecast"]),
+          envelope("secondary", {
+            monthly: overrides.monthly ?? monthly,
+            budgets: overrides.budgets ?? budgets,
+            forecast,
+          }, ["monthly", "budgets", "forecast"]),
         );
         return;
       }
@@ -204,4 +212,24 @@ test("Inicio mantiene comercio como lectura principal de la actividad reciente",
 
   await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
   await expect(page.getByText("Alimentación · Cuenta principal", { exact: true })).toBeVisible();
+});
+
+test("Inicio oculta saldo, mes y presupuesto incongruentes sin perder la actividad", async ({ page }) => {
+  await installDashboardMocks(page, undefined, {
+    financial: { ...financial, balances: { ...financial.balances, activeBalanceCents: 30001 } },
+    monthly: {
+      ...monthly,
+      rows: [...monthly.rows.slice(0, -1), { ...monthly.rows.at(-1)!, expenseCents: 70001 }],
+    },
+    budgets: { ...budgets, month: "2026-08" },
+  });
+  await page.goto("/");
+
+  await expect(page.getByRole("alert").filter({ hasText: "Hay datos que no cuadran" })).toBeVisible();
+  const summary = page.getByRole("region", { name: "Resumen financiero principal" });
+  await expect(summary.locator("article").filter({ hasText: "Saldo total en cuentas" }).locator("strong")).toHaveText("—");
+  await expect(page.getByText("El saldo total no coincide con el detalle de cuentas.", { exact: false })).toBeVisible();
+  await expect(page.getByText("El presupuesto recibido corresponde a otro mes.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/ }).getByRole("button", { name: /sep.*ingresos/i })).toHaveCount(0);
+  await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
 });

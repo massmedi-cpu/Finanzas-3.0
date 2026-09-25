@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { formatInteger } from "../../src/core/formatters";
 import styles from "./review.module.css";
 
 type SignalItem = {
@@ -188,7 +189,7 @@ export default function ReviewClient() {
           <h1>Para revisar</h1>
         </div>
         <div className={styles.heroStatus} aria-live="polite">
-          <strong>{loading ? "…" : actionableCount.toLocaleString("es-ES")}</strong>
+          <strong>{loading ? "…" : formatInteger(actionableCount)}</strong>
           <span>{loading ? "Comprobando" : actionableCount === 1 ? "acción pendiente" : "acciones pendientes"}</span>
         </div>
       </header>
@@ -203,14 +204,14 @@ export default function ReviewClient() {
                 <p className={styles.kicker}>PRIORIDAD</p>
                 <h2 id="review-actions-heading">Requiere atención</h2>
               </div>
-              <span>{actionItems.length.toLocaleString("es-ES")} áreas</span>
+              <span>{formatInteger(actionItems.length)} áreas</span>
             </div>
 
             {actionItems.length > 0 ? (
               <div className={styles.actionList}>
                 {actionItems.map((item) => (
                   <article key={item.name} className={styles.actionCard} aria-label={item.name}>
-                    <div className={styles.count} aria-label={`${item.count} elementos`}>{item.count!.toLocaleString("es-ES")}</div>
+                    <div className={styles.count} aria-label={`${item.count} elementos`}>{formatInteger(item.count!)}</div>
                     <div className={styles.cardCopy}>
                       <h3>{item.name}</h3>
                       <p>{item.description}</p>
@@ -234,7 +235,7 @@ export default function ReviewClient() {
                   <p className={styles.kicker}>SIN INCIDENCIAS</p>
                   <h2 id="review-clear-heading">Todo en orden</h2>
                 </div>
-                <strong>{clearItems.length.toLocaleString("es-ES")}</strong>
+                <strong>{formatInteger(clearItems.length)}</strong>
               </div>
               <ul className={styles.compactList}>
                 {clearItems.map((item) => <li key={item.name}><span aria-hidden="true">✓</span><span>{item.name}</span></li>)}
@@ -249,7 +250,7 @@ export default function ReviewClient() {
                   <p className={styles.kicker}>SIN CONFIRMAR</p>
                   <h2 id="review-unavailable-heading">No se pudo comprobar</h2>
                 </div>
-                <strong>{unavailableItems.length.toLocaleString("es-ES")}</strong>
+                <strong>{formatInteger(unavailableItems.length)}</strong>
               </div>
               <ul className={styles.unavailableList}>
                 {unavailableItems.map((item) => (

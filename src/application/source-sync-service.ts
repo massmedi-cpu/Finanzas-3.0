@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { formatInteger } from "../core/formatters";
 import type {
   AccountType,
   EntityLifecycle,
@@ -318,7 +319,7 @@ export function prepareOfficialSourceSyncBatch(
       if (seenIdentities.size >= MAX_SOURCE_SYNC_OBSERVATIONS) {
         throw new SourceWorkbookContractError(
           "source_observation_limit_exceeded",
-          `La fuente supera el máximo contractual de ${MAX_SOURCE_SYNC_OBSERVATIONS.toLocaleString("es-ES")} observaciones por sincronización.`,
+          `La fuente supera el máximo contractual de ${formatInteger(MAX_SOURCE_SYNC_OBSERVATIONS)} observaciones por sincronización.`,
           observation.sourceSheetId,
           observation.sourceRowKey,
         );
