@@ -2,15 +2,17 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 
-test("el sistema visual premium se carga después de densidad y antes de accesibilidad forzada", () => {
+test("el sistema visual premium se carga en orden y deja accesibilidad como última capa", () => {
   const layout = readFileSync(resolve(process.cwd(), "app/layout.tsx"), "utf8");
   const densityIndex = layout.indexOf('import "./visual-density.css"');
   const premiumIndex = layout.indexOf('import "./premium-theme.css"');
+  const hardeningIndex = layout.indexOf('import "./premium-hardening.css"');
   const forcedColorsIndex = layout.indexOf('import "./accessibility-forced-colors.css"');
 
   expect(densityIndex).toBeGreaterThan(-1);
   expect(premiumIndex).toBeGreaterThan(densityIndex);
-  expect(forcedColorsIndex).toBeGreaterThan(premiumIndex);
+  expect(hardeningIndex).toBeGreaterThan(premiumIndex);
+  expect(forcedColorsIndex).toBeGreaterThan(hardeningIndex);
 });
 
 test("la identidad del shell usa la versión real y no una versión escrita a mano", () => {
@@ -20,6 +22,28 @@ test("la identidad del shell usa la versión real y no una versión escrita a ma
   expect(shell).toContain('className="financial-brand"');
   expect(shell).toContain("v{APP_VERSION}");
   expect(shell).not.toContain("v10.0.3");
+});
+
+test("el hardening premium protege foco, móvil, reduced-motion y contraste reforzado", () => {
+  const css = readFileSync(resolve(process.cwd(), "app/premium-hardening.css"), "utf8");
+
+  expect(css).toContain(".financial-brand:focus-visible");
+  expect(css).toContain('nav[aria-label="Navegación móvil"] button:focus-visible');
+  expect(css).toContain("@media (max-width: 48rem)");
+  expect(css).toContain("background-attachment: scroll");
+  expect(css).toContain("touch-action: manipulation");
+  expect(css).toContain("@media (prefers-reduced-motion: reduce)");
+  expect(css).toContain("@media (prefers-contrast: more)");
+});
+
+test("forced-colors elimina efectos decorativos que pueden ocultar el estado activo", () => {
+  const css = readFileSync(resolve(process.cwd(), "app/accessibility-forced-colors.css"), "utf8");
+
+  expect(css).toContain("@media (forced-colors: active)");
+  expect(css).toContain(".financial-brand");
+  expect(css).toContain("background: Canvas !important");
+  expect(css).toContain("border-color: Highlight !important");
+  expect(css).toContain("box-shadow: none !important");
 });
 
 test("login conserva legibilidad y recibe el tratamiento premium real", async ({ page }) => {
@@ -43,6 +67,37 @@ test("login conserva legibilidad y recibe el tratamiento premium real", async ({
   expect(visual.borderColor).not.toBe("rgba(0, 0, 0, 0)");
 
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#030711");
+});
+
+test("el fondo premium evita attachment fijo en móvil y lo conserva en escritorio", async ({ page }) => {
+  await page.goto("/login");
+  const state = await page.evaluate(() => ({
+    mobile: window.matchMedia("(max-width: 48rem)").matches,
+    attachment: window.getComputedStyle(document.body).backgroundAttachment,
+  }));
+
+  expect(state.attachment).toBe(state.mobile ? "scroll" : "fixed");
+});
+
+test("el shell expone foco visible en navegación sin depender de hover", async ({ page }) => {
+  await page.goto("/");
+  const mobile = await page.evaluate(() => window.matchMedia("(max-width: 48rem)").matches);
+  const target = mobile
+    ? page.getByRole("navigation", { name: "Navegación móvil" }).getByRole("link").first()
+    : page.getByRole("link", { name: /Financial App .*ir a Inicio/i });
+
+  await expect(target).toBeVisible();
+  await target.focus();
+  const outline = await target.evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    return {
+      style: style.outlineStyle,
+      width: Number.parseFloat(style.outlineWidth),
+    };
+  });
+
+  expect(outline.style).not.toBe("none");
+  expect(outline.width).toBeGreaterThanOrEqual(2);
 });
 
 test("el manifiesto instalado comparte el mismo color de chrome", async ({ page }) => {

@@ -7,6 +7,7 @@ import "./premium-states.css";
 import "./visual-density.css";
 import "./category-controls.css";
 import "./premium-theme.css";
+import "./premium-hardening.css";
 import "./accessibility-forced-colors.css";
 import "./accessibility-live-regions.css";
 
