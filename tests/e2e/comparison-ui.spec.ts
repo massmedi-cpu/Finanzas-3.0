@@ -88,7 +88,7 @@ test("CMP-UI-002 valida solapamientos sin perder la comparación vigente", async
   await page.getByLabel("Desde", { exact: true }).nth(1).fill("2026-09-01");
   await page.getByLabel("Hasta", { exact: true }).nth(1).fill("2026-09-02");
   await page.getByRole("button", { name: "Comparar periodos" }).click();
-  await expect(page.getByRole("alert")).toContainText("debe terminar antes");
+  await expect(page.getByRole("form", { name: "Periodos de comparación" }).getByRole("alert")).toContainText("debe terminar antes");
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 

@@ -459,7 +459,11 @@ test("EDGE-009 renders the principal app routes for a completely empty workspace
 
   for (const route of routes) {
     await page.goto(route.path);
-    await expect(page.getByText(route.text, { exact: route.path !== "/recurrences" }).first()).toBeVisible();
+    if (route.path === "/") {
+      await expect(page.getByRole("heading", { name: "Inicio", exact: true, level: 1 })).toBeVisible();
+    } else {
+      await expect(page.getByText(route.text, { exact: route.path !== "/recurrences" }).first()).toBeVisible();
+    }
     await expect(page.locator("body")).not.toContainText(/NaN|Infinity/);
     await expectNoHorizontalOverflow(page);
   }
