@@ -76,7 +76,10 @@ test("el fondo premium evita attachment fijo en móvil y lo conserva en escritor
     attachment: window.getComputedStyle(document.body).backgroundAttachment,
   }));
 
-  expect(state.attachment).toBe(state.mobile ? "scroll" : "fixed");
+  const expected = state.mobile ? "scroll" : "fixed";
+  const layers = state.attachment.split(",").map((value) => value.trim());
+  expect(layers.length).toBeGreaterThan(0);
+  expect(layers.every((value) => value === expected)).toBe(true);
 });
 
 test("el shell expone foco visible en navegación sin depender de hover", async ({ page }) => {
