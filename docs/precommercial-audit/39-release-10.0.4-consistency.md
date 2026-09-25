@@ -25,9 +25,13 @@ Fecha: 2026-09-25. Base verificada: Production `10.0.3`, commit
 - 26 contratos puros aprobados: fundamentos, formato y conciliación de Inicio,
   presupuestos, Cash Flow, comparador y capacidad de 10.000 observaciones.
 - `npm run typecheck`, `npm run build` y `git diff --check`: correctos.
-- La nueva prueba de interacción de Inicio está tipada y descubierta por Playwright.
-  Su ejecución local con Chromium está pendiente: la descarga del navegador en
-  este entorno devuelve un archivo truncado. Debe pasar en CI en escritorio y móvil.
+- Los contratos estructurales de Inicio y sus funciones puras pasan localmente.
+  Chromium local no se puede descargar en este entorno: el archivo llega truncado.
+- En el primer candidato, la suite de Análisis pasó. Tras corregir expectativas
+  obsoletas de formato y de estado de las fuentes, la suite de valor de usuario
+  pasó en CI. La batería general completó 895 pruebas y señaló tres selectores
+  ambiguos del test (alerta de Next y navegación móvil), corregidos después.
+  Estas observaciones son de commits intermedios; no sustituyen el gate del SHA final.
 
 ## Gate de publicación pendiente
 
