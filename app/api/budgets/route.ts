@@ -1,13 +1,27 @@
 import {
   callPersistenceGateway,
+  callPersistenceGatewayBatch,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import {
+  assembleBudgetPlanning,
+  budgetPlanningRange,
+  isBudgetSnapshot,
+  type BudgetSnapshot,
+} from "../../../src/application/budgets/budget-planning";
 
 export const dynamic = "force-dynamic";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+
+class BudgetSnapshotContractError extends Error {
+  constructor() {
+    super("invalid_budget_snapshot");
+    this.name = "BudgetSnapshotContractError";
+  }
+}
 
 function validMonth(value: unknown) {
   if (typeof value !== "string" || !MONTH.test(value)) return false;
@@ -41,7 +55,39 @@ function objectBody(value: unknown) {
   return value as Record<string, unknown>;
 }
 
+function monthlyPayload(month: string) {
+  const range = budgetPlanningRange(month);
+  return {
+    dateFrom: range.dateFrom,
+    dateTo: range.dateTo,
+    accountId: null,
+    includeArchived: false,
+  };
+}
+
+async function addPlanningContext(month: string, snapshot: unknown) {
+  let monthly: unknown = null;
+  try {
+    monthly = await callPersistenceGateway("financial.monthly", monthlyPayload(month));
+  } catch {
+    // Presupuestos sigue disponible si falla únicamente el contexto de ingresos.
+  }
+  return assembleBudgetPlanning(budgetSnapshot(snapshot), monthly);
+}
+
+function budgetSnapshot(value: unknown): BudgetSnapshot {
+  if (!isBudgetSnapshot(value)) throw new BudgetSnapshotContractError();
+  return value;
+}
+
 function apiError(error: unknown) {
+  if (error instanceof BudgetSnapshotContractError) {
+    return Response.json(
+      { error: "persistence_failed", code: error.message },
+      { status: 502, headers: HEADERS },
+    );
+  }
+
   if (error instanceof PersistenceGatewayError) {
     if (error.status === 404 && error.code === "budget_category_not_found") {
       return Response.json(
@@ -91,7 +137,13 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const month = monthValue(searchParams.get("month"));
-    const result = await callPersistenceGateway("budget.snapshot", { month });
+    const [budgetResult, monthlyResult] = await callPersistenceGatewayBatch([
+      { action: "budget.snapshot", payload: { month } },
+      { action: "financial.monthly", payload: monthlyPayload(month) },
+    ]);
+    if (budgetResult.status === "rejected") throw budgetResult.reason;
+    const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : null;
+    const result = assembleBudgetPlanning(budgetSnapshot(budgetResult.value), monthly);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);
@@ -102,7 +154,8 @@ export async function POST(request: Request) {
   try {
     const row = objectBody(await request.json().catch(() => null));
     const month = monthValue(row.month);
-    const result = await callPersistenceGateway("budget.refresh", { month });
+    const snapshot = await callPersistenceGateway("budget.refresh", { month });
+    const result = await addPlanningContext(month, snapshot);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);
@@ -121,11 +174,12 @@ export async function PATCH(request: Request) {
       throw new Error("invalid_budget_manual_amount");
     }
     const manualAmountCents = manualAmountValue(row.manualAmountCents);
-    const result = await callPersistenceGateway("budget.set_manual", {
+    const snapshot = await callPersistenceGateway("budget.set_manual", {
       month,
       categoryId,
       manualAmountCents,
     });
+    const result = await addPlanningContext(month, snapshot);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

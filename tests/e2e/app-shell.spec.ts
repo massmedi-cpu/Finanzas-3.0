@@ -38,6 +38,7 @@ async function isolateShellFromData(page: Page) {
 async function expectSharedNavigation(page: Page, current: string) {
   const nav = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(nav).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Navegación móvil" })).toBeHidden();
   for (const name of primaryLinks) await expect(nav.getByRole("link", { name, exact: true })).toBeVisible();
   const active = nav.getByRole("link", { name: current, exact: true });
   await expect(active).toHaveAttribute("aria-current", "page");
@@ -78,6 +79,7 @@ async function expectMobileNavigation(page: Page, current: string, width: number
 
 test("D2 · Inicio, Primeros pasos, Para revisar, Movimientos, Análisis y Previsión comparten un AppShell persistente con estado activo", async ({ page }) => {
   await isolateShellFromData(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
   for (const route of firstWaveRoutes) {
     await page.goto(route.path);
     await expectSharedNavigation(page, route.current);
@@ -87,7 +89,7 @@ test("D2 · Inicio, Primeros pasos, Para revisar, Movimientos, Análisis y Previ
 test("D2 · el AppShell móvil prioriza cuatro destinos y deja el resto a un toque, sin overflow", async ({ page }) => {
   test.setTimeout(60_000);
   await isolateShellFromData(page);
-  for (const width of [360, 430, 480]) {
+  for (const width of [320, 360, 430, 480]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of firstWaveRoutes) {
       await page.goto(route.path);
@@ -98,6 +100,7 @@ test("D2 · el AppShell móvil prioriza cuatro destinos y deja el resto a un toq
 
 test("D2 · Cuentas, Presupuestos, Recurrentes, Documentos y Configuración comparten el mismo AppShell", async ({ page }) => {
   await isolateShellFromData(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
   for (const route of secondWaveRoutes) {
     await page.goto(route.path);
     await expectSharedNavigation(page, route.current);
@@ -107,7 +110,7 @@ test("D2 · Cuentas, Presupuestos, Recurrentes, Documentos y Configuración comp
 test("D2 · la segunda ola sigue accesible en móvil desde Más con targets táctiles", async ({ page }) => {
   test.setTimeout(60_000);
   await isolateShellFromData(page);
-  for (const width of [360, 430, 480]) {
+  for (const width of [320, 360, 430, 480]) {
     await page.setViewportSize({ width, height: 844 });
     for (const route of secondWaveRoutes) {
       await page.goto(route.path);
@@ -120,4 +123,24 @@ test("D2 · Login permanece fuera del AppShell de la aplicación autenticada", a
   await page.goto("/login");
   await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: "Navegación móvil" })).toHaveCount(0);
+});
+
+test("D2 · el acceso favorito móvil cambia sin ocultar la sección activa y persiste al volver", async ({ page }) => {
+  await isolateShellFromData(page);
+  await page.setViewportSize({ width: 360, height: 844 });
+  await page.goto("/accounts");
+
+  const dock = page.getByRole("navigation", { name: "Navegación móvil" });
+  const more = dock.getByRole("button", { name: "Más", exact: true });
+  await expect(more).toHaveAttribute("aria-controls", "mobile-more-navigation");
+  await more.click();
+  const extra = page.getByRole("navigation", { name: "Más secciones" });
+  await expect(extra.getByRole("link", { name: "Cuentas", exact: true })).toHaveAttribute("aria-current", "page");
+  await extra.getByRole("combobox", { name: "Acceso favorito" }).selectOption("/accounts");
+  await expect(dock.getByRole("link", { name: "Cuentas", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(extra.getByRole("link", { name: "Cuentas", exact: true })).toHaveCount(0);
+
+  await page.reload();
+  await expect(dock.getByRole("link", { name: "Cuentas", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(page.evaluate(() => localStorage.getItem("financial-app:mobile-favorite"))).resolves.toBe("/accounts");
 });

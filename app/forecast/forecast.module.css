@@ -190,7 +190,8 @@
 
 .error,
 .notice,
-.loading {
+.loading,
+.periodNotice {
   max-width: 1500px;
   margin: 0 auto 18px;
   padding: 14px 16px;
@@ -209,10 +210,92 @@
   color: var(--color-success);
 }
 
+.periodNotice {
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text-secondary);
+  font-size: .875rem;
+  line-height: 1.5;
+}
+
 .loading {
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   color: var(--color-text-secondary);
+}
+
+.recurrenceFlow {
+  max-width: 1500px;
+  margin: 0 auto 18px;
+  padding: clamp(16px, 2.4vw, 24px);
+  border: 1px solid rgba(43, 217, 247, 0.26);
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 100% 0%, rgba(43, 217, 247, 0.1), transparent 24rem),
+    linear-gradient(145deg, rgba(17, 29, 54, 0.94), rgba(8, 16, 32, 0.9));
+  box-shadow: 0 14px 42px rgba(0, 0, 0, 0.2);
+}
+
+.recurrenceFlowHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recurrenceFlowHeader h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 1.05rem + 0.6vw, 1.65rem);
+  letter-spacing: -0.025em;
+}
+
+.recurrenceFlowMessage,
+.recurrenceFlowError {
+  margin: 14px 0 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.recurrenceFlowMessage {
+  color: var(--color-text-secondary);
+}
+
+.recurrenceFlowError {
+  color: var(--color-danger);
+}
+
+.recurrenceImpactSummary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  gap: 12px;
+  align-items: stretch;
+  margin-top: 16px;
+}
+
+.recurrenceImpactSummary > div {
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: 13px;
+  background: rgba(10, 17, 34, 0.62);
+}
+
+.recurrenceImpactSummary span,
+.recurrenceImpactSummary strong {
+  display: block;
+}
+
+.recurrenceImpactSummary span {
+  color: var(--color-text-secondary);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.recurrenceImpactSummary strong {
+  margin-top: 6px;
+  overflow-wrap: anywhere;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .kpis {
@@ -365,6 +448,11 @@
   border-left: 4px solid var(--color-text-muted);
   opacity: 0.78;
   background: rgba(116, 131, 161, 0.06);
+}
+
+.recurrenceImpactItem {
+  border-color: rgba(43, 217, 247, 0.58);
+  box-shadow: 0 0 0 3px rgba(43, 217, 247, 0.1), 0 12px 28px rgba(0, 0, 0, 0.16);
 }
 
 .itemDate {
@@ -588,6 +676,14 @@
   .sideColumn .panel:last-child {
     grid-column: 1 / -1;
   }
+
+  .recurrenceImpactSummary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .recurrenceImpactSummary .primaryButton {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 720px) {
@@ -637,6 +733,23 @@
   .sectionHeader {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .recurrenceFlowHeader {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .recurrenceFlowHeader .secondaryButton {
+    width: 100%;
+  }
+
+  .recurrenceImpactSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .recurrenceImpactSummary .primaryButton {
+    grid-column: auto;
   }
 
   .itemCard {

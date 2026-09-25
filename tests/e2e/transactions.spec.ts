@@ -228,7 +228,10 @@ test("Movimientos muestra valores efectivos, formato español y trazabilidad sin
 
   const controlsTooSmall = await page.locator("main button, main input, main select, main summary, main a").evaluateAll((elements) =>
     elements.filter((element) => {
-      const rect = element.getBoundingClientRect();
+      const target = element instanceof HTMLInputElement && element.type === "checkbox"
+        ? element.closest("label") ?? element
+        : element;
+      const rect = target.getBoundingClientRect();
       return rect.width > 0 && rect.height > 0 && rect.height < 44;
     }).length,
   );
@@ -247,7 +250,7 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
 
   await page.getByLabel("Cuenta").selectOption(accountId);
-  await page.getByLabel("Buscar").fill("supermercado");
+  await page.getByLabel("Buscar", { exact: true }).fill("supermercado");
   const requestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
     return request.method() === "GET" && url.pathname === "/api/transactions" && url.searchParams.get("accountId") === accountId && url.searchParams.get("q") === "supermercado";
@@ -255,7 +258,7 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await requestPromise;
   await expect(transactionRows).toHaveCount(1);
-  await expect(page.getByText("1 movimientos", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 movimiento", { exact: true }).first()).toBeVisible();
   const summary = page.getByLabel("Resumen del listado");
   await expect(summary.locator("div").nth(0).getByText("1", { exact: true })).toBeVisible();
   await expect(summary.locator("div").nth(1).getByText("2", { exact: true })).toBeVisible();
@@ -288,7 +291,6 @@ test("Edición individual envía un override no destructivo", async ({ page }) =
 
   await page.getByTestId(`edit-${firstId}`).click();
   await page.getByTestId("edit-concept").fill("Compra supermercado personalizada");
-  await page.getByTestId("edit-review").selectOption("needs_review");
   await page.getByTestId("save-edit").click();
 
   await expect.poll(() => patches.length).toBe(1);
@@ -299,14 +301,14 @@ test("Edición individual envía un override no destructivo", async ({ page }) =
     merchantId,
     categoryMode: "set",
     categoryId,
-    reviewState: "needs_review",
     excludedFromAnalytics: false,
     note: "Compra revisada",
   });
+  expect(patches[0].patch).not.toHaveProperty("reviewState");
   await expect(page.getByText(/Movimiento actualizado/)).toBeVisible();
 });
 
-test("Selección múltiple aplica categoría y revisión en una sola operación", async ({ page }) => {
+test("Selección múltiple aplica categoría sin alterar el estado de revisión", async ({ page }) => {
   const patches: PatchBody[] = [];
   await mockTransactionApi(page, patches);
   await page.goto("/transactions");
@@ -315,12 +317,11 @@ test("Selección múltiple aplica categoría y revisión en una sola operación"
   await page.getByTestId(`select-${firstId}`).check();
   await page.getByTestId(`select-${secondId}`).check();
   await page.getByTestId("bulk-category").selectOption(categoryId);
-  await page.getByTestId("bulk-review").selectOption("confirmed");
   await page.getByTestId("bulk-apply").click();
 
   await expect.poll(() => patches.length).toBe(1);
   expect(patches[0].transactionIds).toEqual([firstId, secondId]);
-  expect(patches[0].patch).toEqual({ categoryMode: "set", categoryId, reviewState: "confirmed" });
+  expect(patches[0].patch).toEqual({ categoryMode: "set", categoryId });
   await expect(page.getByText(/Edición masiva completada/)).toBeVisible();
 });
 

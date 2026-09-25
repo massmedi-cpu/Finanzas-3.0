@@ -21,7 +21,7 @@ function nullableUuid(value: unknown, field: string): string | null {
   return value;
 }
 
-function nullableText(value: unknown, field: string, maxLength = 160): string | null {
+function nullableText(value: unknown, field: string, maxLength = 200): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string") throw new Error(`invalid_${field}`);
   const normalized = value.trim();

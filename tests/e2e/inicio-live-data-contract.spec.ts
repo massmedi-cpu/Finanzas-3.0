@@ -11,7 +11,7 @@ const chartCss = readFileSync(resolve(process.cwd(), "src/design/financial-bar-c
 test("Inicio prioriza decisiones y deja de abrir con un saldo total aislado", () => {
   expect(pageSource).toContain('import InicioOverview from "./inicio-overview"');
   expect(inicioSource).toContain("Resumen financiero principal");
-  expect(inicioSource).toContain("Disponible");
+  expect(inicioSource).toContain("Saldo total en cuentas");
   expect(inicioSource).toContain("Este mes");
   expect(inicioSource).toContain("Próximos 30 días");
   expect(inicioSource).toContain("Gasto medio mensual");
@@ -30,7 +30,8 @@ test("Inicio usa el resultado real de sincronización y nunca ofrece reconectar 
   expect(inicioSource).toContain('readJson<SyncStatus>("/api/source/google/sync"');
   expect(inicioSource).toContain('fetch("/api/source/google/sync"');
   expect(inicioSource).toContain('method: "POST"');
-  expect(inicioSource).toContain("Datos bancarios actualizados");
+  expect(inicioSource).toContain("Última sincronización completada");
+  expect(inicioSource).toContain("dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null");
   expect(inicioSource).toContain("Actualizar datos");
   expect(inicioSource).not.toContain("Reconectar Google");
   expect(inicioSource).not.toContain("/api/source/google/connect");

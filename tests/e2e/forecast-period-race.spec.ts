@@ -104,11 +104,34 @@ test("forecast keeps the newest period when an older request finishes later", as
   await page.goto("/forecast");
   await expect(page.getByRole("heading", { name: "PERIODO INICIAL", exact: true })).toBeVisible();
 
-  await page.getByLabel("Desde").fill("2026-10-01");
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
   await page.getByLabel("Hasta").fill("2026-10-31");
 
   await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();
   await page.waitForTimeout(450);
   await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "RESPUESTA OBSOLETA", exact: true })).toHaveCount(0);
+});
+
+test("forecast identifies the old period if loading the chosen dates fails", async ({ page }) => {
+  await page.route("**/api/forecast*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("dateFrom") === "2026-10-01") {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "source_unavailable" }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshot("DATO DEL PERIODO ANTERIOR", "2026-09-25", "2026-12-23")),
+    });
+  });
+
+  await page.goto("/forecast");
+  await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
+  await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
+
+  await expect(page.locator("main").getByRole("alert")).toContainText("source_unavailable");
+  await expect(page.locator("main").getByRole("status")).toContainText("Las cifras visibles corresponden al 25 sept 2026 – 23 dic 2026");
+  await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
 });

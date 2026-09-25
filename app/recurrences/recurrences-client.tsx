@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  forecastHrefForContext,
+  forecastImpactHref,
+  recurrenceIdFromResponse,
+  type ForecastRecurrenceContext,
+} from "../../src/application/forecast/recurrence-flow";
 import styles from "./recurrences.module.css";
 
 type RecurrenceStatus = "active" | "ignored" | "archived";
@@ -48,6 +54,14 @@ type Snapshot = {
     nextDateAfterAnalysisPeriod: boolean;
     missedCyclesReduceConfidence: boolean;
   };
+};
+
+type ConfirmedImpact = {
+  recurrenceId: string;
+  concept: string;
+  href: string;
+  periodExtended: boolean;
+  accountScopeChanged: boolean;
 };
 
 const euro = new Intl.NumberFormat("es-ES", {
@@ -97,12 +111,17 @@ async function parseResponse(response: Response) {
   return payload;
 }
 
-export default function RecurrencesClient() {
+export default function RecurrencesClient({
+  forecastContext = null,
+}: {
+  forecastContext?: ForecastRecurrenceContext | null;
+}) {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingKey, setPendingKey] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [confirmedImpact, setConfirmedImpact] = useState<ConfirmedImpact | null>(null);
 
   const load = useCallback(async (announce = false) => {
     setLoading(true);
@@ -153,7 +172,9 @@ export default function RecurrencesClient() {
           minOccurrences: snapshot?.minOccurrences ?? 3,
         }),
       });
-      await parseResponse(response);
+      const saved = await parseResponse(response);
+      const recurrenceId = recurrenceIdFromResponse(saved)
+        ?? recurrenceIdFromResponse({ id: candidate.existingRecurrenceId });
       setMessage(
         status === "active"
           ? candidate.existingStatus === "active"
@@ -161,6 +182,19 @@ export default function RecurrencesClient() {
             : "Recurrencia confirmada."
           : "Patrón ignorado.",
       );
+      if (status === "active" && forecastContext && recurrenceId) {
+        const href = forecastImpactHref(forecastContext, candidate, recurrenceId);
+        const impactUrl = new URL(href, "https://financial-app.local");
+        setConfirmedImpact({
+          recurrenceId,
+          concept: candidate.conceptPattern,
+          href,
+          periodExtended: impactUrl.searchParams.get("dateTo") !== forecastContext.dateTo,
+          accountScopeChanged: impactUrl.searchParams.get("accountId") !== forecastContext.accountId,
+        });
+      } else {
+        setConfirmedImpact(null);
+      }
       await load(false);
     } catch {
       setError("No se ha podido guardar la decisión sobre este patrón.");
@@ -186,6 +220,9 @@ export default function RecurrencesClient() {
           ? "Recurrencia ignorada."
           : "Recurrencia archivada.",
       );
+      if (confirmedImpact?.recurrenceId === candidate.existingRecurrenceId) {
+        setConfirmedImpact(null);
+      }
       await load(false);
     } catch {
       setError("No se ha podido cambiar el estado de la recurrencia.");
@@ -193,6 +230,8 @@ export default function RecurrencesClient() {
       setPendingKey(null);
     }
   }
+
+  const forecastHref = forecastContext ? forecastHrefForContext(forecastContext) : "/forecast";
 
   return (
     <main className={styles.shell}>
@@ -206,19 +245,58 @@ export default function RecurrencesClient() {
             Ningún patrón se confirma como recurrencia sin una decisión explícita.
           </p>
         </div>
-        <button
-          className={styles.actionButton}
-          type="button"
-          onClick={() => void load(true)}
-          disabled={loading || pendingKey !== null}
-        >
-          {loading ? "Analizando…" : "Recalcular patrones"}
-        </button>
+        <div className={styles.heroActions}>
+          <Link prefetch={false} className={styles.secondaryButton} href={forecastHref}>
+            Abrir Previsión
+          </Link>
+          <button
+            className={styles.actionButton}
+            type="button"
+            onClick={() => void load(true)}
+            disabled={loading || pendingKey !== null}
+          >
+            {loading ? "Analizando…" : "Recalcular patrones"}
+          </button>
+        </div>
       </section>
 
       <section className={styles.content}>
+        {forecastContext ? (
+          <section className={styles.forecastContext} aria-labelledby="forecast-context-title">
+            <div>
+              <p className={styles.contextEyebrow}>PREVISIÓN → RECURRENTES</p>
+              <h2 id="forecast-context-title">Revisa el patrón sin perder tu horizonte</h2>
+              <p>
+                Has llegado desde la previsión del {date(forecastContext.dateFrom)} al {date(forecastContext.dateTo)}.
+                {forecastContext.accountId ? " Se conservará la cuenta seleccionada cuando corresponda." : " El periodo incluye todas tus cuentas."}
+              </p>
+            </div>
+            <Link prefetch={false} className={styles.contextLink} href={forecastHref}>
+              Volver sin actualizar
+            </Link>
+          </section>
+        ) : null}
+
         {error ? <div className={styles.alert} role="alert">{error}</div> : null}
-        {message ? <div className={styles.notice} role="status">{message}</div> : null}
+        {message ? (
+          <div className={styles.notice} role="status">
+            <div className={styles.noticeCopy}>
+              <strong>{message}</strong>
+              {confirmedImpact ? (
+                <p>
+                  “{confirmedImpact.concept}” está lista para regenerar el calendario y destacar su impacto futuro.
+                  {confirmedImpact.periodExtended ? " El horizonte se ampliará hasta incluir su próxima fecha." : ""}
+                  {confirmedImpact.accountScopeChanged ? " Se abrirá la cuenta asociada a este patrón para no ocultar su impacto." : ""}
+                </p>
+              ) : null}
+            </div>
+            {confirmedImpact ? (
+              <Link prefetch={false} className={styles.impactLink} href={confirmedImpact.href}>
+                Actualizar y ver impacto en Previsión
+              </Link>
+            ) : null}
+          </div>
+        ) : null}
 
         <div className={styles.summaryGrid} aria-label="Resumen de confianza">
           <article className={styles.metric}>

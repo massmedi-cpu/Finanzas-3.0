@@ -26,13 +26,13 @@ test("PWA expone manifiesto, service worker y una instalación guiada aunque no 
     await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "pwa_shell_isolated" }) });
   });
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
 
-  const install = page.getByRole("button", { name: "Instalar Financial App en este dispositivo" }).first();
-  if (!(await install.isVisible())) {
-    const more = page.getByRole("button", { name: "Más", exact: true });
-    await expect(more).toBeVisible();
+  const more = page.getByRole("navigation", { name: "Navegación móvil" }).getByRole("button", { name: "Más", exact: true });
+  if (await more.isVisible()) {
     await more.click();
   }
+  const install = page.getByRole("button", { name: "Instalar Financial App en este dispositivo" });
   await expect(install).toBeVisible();
   await install.click();
 

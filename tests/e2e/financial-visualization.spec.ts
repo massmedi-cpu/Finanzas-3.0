@@ -1,4 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
+import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 
 const categoryId = "20000000-0000-4000-8000-000000000061";
 
@@ -12,9 +14,16 @@ async function rejectUnexpectedWrites(page: Page, pathname: string, payload: unk
   });
 }
 
-const analysisSnapshot = {
-  contractVersion: 1,
-  month: "2026-09",
+const insufficientTrend = { direction: "insufficient" as const, delta: null, recentAverage: null, previousAverage: null, sampleMonths: 0 };
+
+const analysisSnapshot: AnalysisSnapshot = {
+  contractVersion: 2,
+  selection: {
+    range: "1m", month: "2026-09", accountId: null,
+    dateFrom: "2026-09-01", dateTo: "2026-09-30",
+    previousDateFrom: "2026-08-01", previousDateTo: "2026-08-31",
+    partial: false, partialMonthStart: null,
+  },
   current: {
     dateFrom: "2026-09-01",
     dateTo: "2026-09-30",
@@ -40,15 +49,30 @@ const analysisSnapshot = {
     expenseChangeBps: 0,
     netDeltaCents: -15000,
     netChangeBps: -15000,
+    savingsDeltaCents: -15000,
+    savingsChangeBps: -15000,
+    savingsRateDeltaBps: -2338,
   },
-  categoryDrivers: [
-    { id: categoryId, name: "Supermercado", expenseCents: 60000, shareBps: 10000, rows: 7, href: `/transactions?dateFrom=2026-09-01&dateTo=2026-09-30&kind=expense&categoryId=${categoryId}` },
+  averages: { last3Months: null, last6Months: null },
+  history: [
+    { monthStart: "2026-08-01", rows: 7, incomeCents: 70000, expenseCents: 60000, operatingNetCents: 10000, savingsCents: 10000, savingsRateBps: 1429 },
+    { monthStart: "2026-09-01", rows: 7, incomeCents: 55000, expenseCents: 60000, operatingNetCents: -5000, savingsCents: -5000, savingsRateBps: -909 },
   ],
-  merchantDrivers: [
-    { id: null, name: "Sin comercio", expenseCents: 60000, shareBps: 10000, rows: 7, href: null },
-  ],
-  quality: { expenseRows: 7, excludedRows: 0, confirmedDuplicateRows: 0, reconciled: true },
-  principles: { bankSource: "read_only", totals: "financial_period", drivers: "effective_transaction_query" },
+  dailySpend: [], weekdaySpend: [], amountBands: [], concepts: [], accountSpend: [], topTransactions: [],
+  trends: {
+    income: insufficientTrend, expense: insufficientTrend, savings: insufficientTrend,
+    net: insufficientTrend, savingsRate: insufficientTrend,
+  },
+  categoryDrivers: [], merchantDrivers: [], changeDrivers: [],
+  concentration: { top3CategoryBps: null, top3MerchantBps: null },
+  anomalies: [],
+  fixedVariable: { available: false, reliableRecurrences: 0, fixedExpenseCents: 0, variableExpenseCents: 60000, fixedShareBps: null },
+  budget: null, forecast: null, accounts: [],
+  quality: { expenseRows: 7, excludedRows: 0, confirmedDuplicateRows: 0, categoryExpenseCents: 60000, reconciled: true },
+  principles: {
+    bankSource: "read_only", totals: "financial_period", history: "financial_monthly_series",
+    drivers: "financial_transaction_facts_aggregate", anomalies: "deterministic_history_threshold", generativeAi: false,
+  },
 };
 
 const budgetSnapshot = {
@@ -210,6 +234,7 @@ const forecastSnapshot = {
 };
 
 test("F · Análisis ofrece visualización accesible, tabla alternativa, tooltip por foco y neto divergente", async ({ page }) => {
+  expect(isAnalysisSnapshot(analysisSnapshot)).toBe(true);
   await rejectUnexpectedWrites(page, "/api/analysis", analysisSnapshot);
   await page.goto("/analysis");
 
@@ -224,7 +249,7 @@ test("F · Análisis ofrece visualización accesible, tabla alternativa, tooltip
   const deficitPoint = visual.getByRole("button", { name: /Neto.*septiembre.*-50,00.*déficit/i });
   await deficitPoint.focus();
   await expect(page.getByRole("tooltip")).toContainText(/Neto.*-50,00.*déficit/i);
-  await expect(visual.getByRole("link", { name: /Ver movimientos del periodo/i })).toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30/);
+  await expect(visual.getByRole("link", { name: /Ver movimientos de septiembre de 2026/i })).toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30/);
 });
 
 test("F · Presupuestos representa la magnitud del exceso y enlaza con los movimientos causantes", async ({ page }) => {
@@ -234,7 +259,7 @@ test("F · Presupuestos representa la magnitud del exceso y enlaza con los movim
   const magnitude = page.getByRole("group", { name: "Magnitud del presupuesto · Supermercado" });
   await expect(magnitude).toBeVisible();
   await expect(magnitude).toContainText(/Exceso.*250,00/);
-  await expect(magnitude).toContainText(/62,50\s*%.*sobre el límite/i);
+  await expect(magnitude).toContainText(/62,50\s*%.*sobre lo habitual/i);
   await expect(magnitude).toHaveAttribute("data-budget-state", "over");
   await expect(page.getByRole("link", { name: /Ver movimientos que explican el gasto de Supermercado/i })).toHaveAttribute(
     "href",

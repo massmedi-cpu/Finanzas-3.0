@@ -253,6 +253,8 @@ async function legacySource(source: DashboardSource, today: string) {
 export default function InicioOverview() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
+  const [dataThroughDate, setDataThroughDate] = useState<string | null>(null);
+  const [independentSources, setIndependentSources] = useState<DashboardSource[]>([]);
   const [primaryLoading, setPrimaryLoading] = useState(true);
   const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [failed, setFailed] = useState<DashboardSource[]>([]);
@@ -284,6 +286,7 @@ export default function InicioOverview() {
   const loadSource = useCallback(async (source: DashboardSource) => {
     try {
       const value = await legacySource(source, madridToday());
+      setIndependentSources((current) => current.includes(source) ? current : [...current, source]);
       commit(source, value as DashboardData[DashboardSource], false);
     } catch {
       commit(source, null, true);
@@ -293,6 +296,7 @@ export default function InicioOverview() {
   const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
+      if (scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
       await Promise.all(sources.map(async (source) => {
         if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
           commit(source, envelope.data[source], false);
@@ -315,6 +319,8 @@ export default function InicioOverview() {
 
   const refreshDashboard = useCallback(async () => {
     setPrimaryLoading(true);
+    setDataThroughDate(null);
+    setIndependentSources([]);
     const statusPromise = loadSyncStatus();
     await loadScope("primary", ["financial", "transactions"]);
     setPrimaryLoading(false);
@@ -358,7 +364,7 @@ export default function InicioOverview() {
   const currentMonthStart = `${today.slice(0, 7)}-01`;
   const financial = data.financial;
   const transactions = data.transactions;
-  const latestDataDate = transactions?.rows?.[0]?.bankDate ?? financial?.balances.asOfDate ?? null;
+  const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
@@ -496,15 +502,17 @@ export default function InicioOverview() {
                 : syncFailed
                   ? "La última actualización falló"
                   : syncSucceeded
-                    ? "Datos bancarios actualizados"
+                    ? "Última sincronización completada"
                     : "Estado de la fuente pendiente"}
             </strong>
             <p>
               {syncSucceeded && syncRun
-                ? `Sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)} · movimientos hasta ${formatDate(latestDataDate)}.`
+                ? `Sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)} · ${latestDataDate ? `movimientos hasta ${formatDate(latestDataDate)}` : "fecha del último movimiento sin confirmar"}.`
                 : syncFailed
                   ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
-                  : `Movimientos disponibles hasta ${formatDate(latestDataDate)}.`}
+                  : latestDataDate
+                    ? `Movimientos disponibles hasta ${formatDate(latestDataDate)}.`
+                    : "La fecha del último movimiento no está confirmada."}
               {syncFeedback ? ` ${syncFeedback}` : ""}
             </p>
           </div>
@@ -516,6 +524,12 @@ export default function InicioOverview() {
           <Link prefetch={false} className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
         </div>
       </section>
+
+      {independentSources.length > 0 && !primaryLoading && !secondaryLoading && (
+        <p className={styles.provenanceNotice} role="status">
+          Resumen recuperado mediante consultas independientes. Algunas cifras pueden corresponder a instantes distintos; consulta cada módulo antes de compararlas.
+        </p>
+      )}
 
       <HomeSmartBrief
         month={today.slice(0, 7)}
@@ -539,7 +553,7 @@ export default function InicioOverview() {
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
         <article className={styles.decisionCard}>
-          <span>Disponible</span>
+          <span>Saldo total en cuentas</span>
           <strong>{financial ? displayMoney(financial.balances.activeBalanceCents) : "—"}</strong>
           <small>{financial?.balances.asOfDate ? `Saldo a ${formatDate(financial.balances.asOfDate)}` : "Fecha pendiente"}</small>
         </article>

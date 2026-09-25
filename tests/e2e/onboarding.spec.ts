@@ -75,7 +75,15 @@ test("E3 · Primeros pasos refleja el estado real y nunca escribe datos", async 
   await page.goto("/onboarding");
 
   await expect(page.getByRole("heading", { name: "Primeros pasos", level: 1 })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Primeros pasos" })).toHaveAttribute("aria-current", "page");
+  const mobileDock = page.getByRole("navigation", { name: "Navegación móvil" });
+  if (await mobileDock.isVisible()) {
+    await mobileDock.getByRole("button", { name: "Más", exact: true }).click();
+    await expect(page.getByRole("navigation", { name: "Más secciones" }).getByRole("link", { name: "Primeros pasos", exact: true }))
+      .toHaveAttribute("aria-current", "page");
+  } else {
+    await expect(page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Primeros pasos", exact: true }))
+      .toHaveAttribute("aria-current", "page");
+  }
 
   const source = page.getByRole("article", { name: "Paso 1 · Fuente bancaria" });
   const accounts = page.getByRole("article", { name: "Paso 2 · Cuentas" });

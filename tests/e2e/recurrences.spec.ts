@@ -4,6 +4,7 @@ import { handleRecurrenceLogicAction } from "../../supabase/functions/financial-
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const activeRecurrenceId = "71000000-0000-4000-8000-000000000071";
 const confirmedRecurrenceId = "71000000-0000-4000-8000-000000000072";
+const forecastAccountId = "10000000-0000-4000-8000-000000000099";
 const expenseCandidateKey = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 const incomeCandidateKey = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
 
@@ -360,6 +361,34 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
     dateTo: "2026-09-06",
     minOccurrences: 3,
   });
+});
+
+test("una recurrencia confirmada vuelve al horizonte exacto y ofrece ver su impacto", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockRecurrenceApi(page, writes);
+  await page.goto(
+    `/recurrences?source=forecast&forecastDateFrom=2026-09-07&forecastDateTo=2026-09-08&forecastAccountId=${forecastAccountId}`,
+  );
+
+  await expect(page.getByRole("heading", { name: "Revisa el patrón sin perder tu horizonte" })).toBeVisible();
+  await expect(page.getByText(/del 07\/09\/2026 al 08\/09\/2026/)).toBeVisible();
+  await expect(page.getByRole("link", { name: "Volver sin actualizar" })).toHaveAttribute(
+    "href",
+    `/forecast?dateFrom=2026-09-07&dateTo=2026-09-08&accountId=${forecastAccountId}`,
+  );
+
+  const expenseCard = page.locator("article").filter({ hasText: "supermercado mensual" });
+  await expenseCard.getByRole("button", { name: "Confirmar recurrencia" }).click();
+
+  const status = page.getByRole("status");
+  await expect(status).toContainText("Recurrencia confirmada");
+  await expect(status).toContainText("El horizonte se ampliará");
+  await expect(status).toContainText("Se abrirá la cuenta asociada");
+  await expect(status.getByRole("link", { name: "Actualizar y ver impacto en Previsión" })).toHaveAttribute(
+    "href",
+    `/forecast?dateFrom=2026-09-07&dateTo=2026-09-10&accountId=10000000-0000-4000-8000-000000000071&recurrenceId=${confirmedRecurrenceId}&recurrenceAction=refresh`,
+  );
+  expect(writes).toHaveLength(1);
 });
 
 test("Recurrentes recalcula sin persistir hasta una decisión del usuario", async ({ page }) => {

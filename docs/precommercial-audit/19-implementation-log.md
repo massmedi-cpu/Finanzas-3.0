@@ -16,3 +16,33 @@ Checkpoint previo al gate protegido final.
 - El segundo Preview final debe demostrar simultáneamente: SHA exacto desplegado, postbuild read-only verde, escritura normal bloqueada con 403 y cero residuo, y recuperación de todas las lecturas financieras protegidas.
 
 Este archivo es un sello documental; no modifica lógica funcional.
+
+## PRE-025 · Matriz ampliada de edge cases
+
+- Política determinista de importe cero añadida a los contratos de fuente y análisis; cero cuenta como fila, aporta cero y no genera ratios no finitos.
+- Límite de ingesta fijado y compartido en 10.000 observaciones; 10.001 falla antes de persistencia.
+- Benchmark aislado de 1/3.000/10.000 filas y contrato de rollback atómico añadidos.
+- Recuperación de borrador ante sesión expirada añadida a Movimientos, Documentos y Previsión, con reautenticación en otra pestaña y reintento en el formulario original.
+- Controles de texto alineados con los máximos de API y matriz visual preparada para 360/430/1.440 px.
+- Smoke SQL reversible preparado para cero exacto y workspace totalmente vacío.
+- Evidencia completa y limitaciones del entorno registradas en `36-pre025-expanded-edge-cases-evidence.md`.
+- `main` y Production permanecen sin cambios; no se ha realizado despliegue en este bloque.
+
+## Ampliación funcional · Comparador financiero
+
+- Comparador de dos periodos personalizados añadido en `/compare`, con referencia anterior no solapada, límite de 366 días y fechas futuras prohibidas.
+- Totales y ritmos diarios separados para hacer comparables rangos de distinta duración sin alterar los hechos financieros.
+- Ingresos, gasto, neto operativo, ahorro, tasa y drivers por categoría/comercio derivados en servidor desde una única operación `financial.snapshot`.
+- Reconciliación bilateral al céntimo y contrato v1 fail-closed añadidos; cero y ausencia total de actividad permanecen finitos y explícitos.
+- Drill-down de ambos periodos conectado a Movimientos; `Sin categoría` usa el filtro público `uncategorized=true` también desde Análisis.
+- Navegación, búsqueda global, favorito móvil, shortcut PWA y conexiones entre módulos actualizados.
+- Recorrido visual preparado para 360/430/1.440 px y evidencia registrada en `37-financial-comparator-evidence.md`.
+- `main` y Production permanecen sin cambios; no se ha realizado despliegue en este bloque.
+
+## Candidato de producción · Financial App 10.0.3
+
+- Los bloques acumulados desde Production 10.0.2 se agrupan en un único candidato 10.0.3.
+- La identidad canónica se sincroniza en `package.json`, `package-lock.json` y `/api/build`.
+- El commit que contiene este registro es el único candidato autorizado para Preview y promoción.
+- La promoción exige CI, Preview exacto, gateway Edge alineado, Production READY y comprobación posterior de identidad, autenticación, rutas esenciales y errores 5xx.
+- El workflow `Publish Verified Release` debe crear el tag inmutable `v10.0.3` sólo después de que `/api/build` vincule Production con el SHA exacto de `main`.

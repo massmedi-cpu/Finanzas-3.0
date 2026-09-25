@@ -4,9 +4,11 @@ import { useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { useReportWebVitals } from "next/web-vitals";
 import {
+  isWebVitalRating,
   isWebVitalName,
   normalizeTelemetryRoute,
   type OperationalTelemetry,
+  type TelemetryDevice,
   type TelemetryRoute,
 } from "../src/observability/operational-telemetry-contract";
 
@@ -31,6 +33,12 @@ function sendTelemetry(payload: OperationalTelemetry) {
   }).catch(() => undefined);
 }
 
+function currentTelemetryDevice(): TelemetryDevice {
+  return window.matchMedia("(max-width: 767px)").matches ? "mobile" : "desktop";
+}
+
+type WebVitalsMetric = Parameters<Parameters<typeof useReportWebVitals>[0]>[0];
+
 export function OperationalTelemetryReporter({ enabled }: Readonly<{ enabled: boolean }>) {
   const pathname = usePathname();
   const routeRef = useRef<TelemetryRoute>(normalizeTelemetryRoute(pathname));
@@ -41,14 +49,15 @@ export function OperationalTelemetryReporter({ enabled }: Readonly<{ enabled: bo
     enabledRef.current = enabled && pathname !== "/login";
   }, [enabled, pathname]);
 
-  const reportMetric = useCallback((metric: { name: string; value: number }) => {
+  const reportMetric = useCallback((metric: WebVitalsMetric) => {
     if (!enabledRef.current || !isWebVitalName(metric.name)) return;
     sendTelemetry({
       type: "web_vital",
       route: routeRef.current,
+      device: currentTelemetryDevice(),
       name: metric.name,
       value: metric.value,
-      rating: null,
+      rating: isWebVitalRating(metric.rating) ? metric.rating : null,
     });
   }, []);
 

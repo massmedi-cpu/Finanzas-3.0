@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 import { NET_WORTH_SCOPE_DECISION } from "../../src/domain/product-scope-contract";
 
 const models = readFileSync("src/domain/models.ts", "utf8");
-const dashboard = readFileSync("app/dashboard-client.tsx", "utf8");
+const home = readFileSync("app/page.tsx", "utf8");
+const dashboard = readFileSync("app/inicio-overview.tsx", "utf8");
 const accounts = readFileSync("app/accounts/accounts-client.tsx", "utf8");
 const balancesMigration = readFileSync(
   "supabase/migrations/20260905225858_phase5_scope_balances_by_account.sql",
@@ -19,6 +20,8 @@ test("CR-005 · PRE-019 queda fuera de alcance del producto privado actual", () 
 });
 
 test("CR-005 · saldo agregado de cuentas no se presenta como patrimonio", () => {
+  expect(home).toContain('import InicioOverview from "./inicio-overview"');
+  expect(home).not.toContain("DashboardClient");
   expect(balancesMigration).toContain("totalBalanceCents");
   expect(balancesMigration).toContain("activeBalanceCents");
   expect(balancesMigration.toLowerCase()).not.toContain("networth");

@@ -11,6 +11,9 @@
   --color-text-muted: #7483a1;
   --color-primary: #1f6bff;
   --color-primary-bright: #4d8dff;
+  --color-gold: #c9a45d;
+  --color-gold-bright: #e2c27f;
+  --color-gold-muted: rgba(201, 164, 93, 0.14);
   --color-cyan: #2bd9f7;
   --color-success: #35d07f;
   --color-warning: #ffbf47;

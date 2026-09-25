@@ -212,6 +212,129 @@
   font-size: 0.875rem;
 }
 
+.planningPanel {
+  padding: clamp(1rem, 2.2vw, 1.5rem);
+  border: 1px solid rgba(43, 217, 247, 0.2);
+  border-radius: 1.35rem;
+  background:
+    radial-gradient(circle at 88% 0%, rgba(43, 217, 247, 0.1), transparent 23rem),
+    linear-gradient(145deg, rgba(14, 25, 48, 0.92), rgba(7, 14, 29, 0.84));
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.2);
+}
+
+.planningHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.planningEyebrow {
+  margin: 0 0 0.35rem;
+  color: #70dcf3;
+  font-size: 0.76rem;
+  font-weight: 850;
+  letter-spacing: 0.13em;
+}
+
+.planningHeader h2 {
+  margin: 0;
+  font-size: clamp(1.3rem, 1.12rem + 0.55vw, 1.75rem);
+  letter-spacing: -0.03em;
+}
+
+.planningHeader p:not(.planningEyebrow) {
+  margin: 0.35rem 0 0;
+  color: #8c9bb7;
+  font-size: 0.875rem;
+}
+
+.planningSteps {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.planningStep {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 0.7rem;
+  padding: 1rem;
+  border: 1px solid rgba(137, 173, 255, 0.13);
+  border-radius: 1rem;
+  background: rgba(5, 10, 22, 0.52);
+}
+
+.planningStepRisk {
+  border-color: rgba(255, 93, 115, 0.28);
+  background: linear-gradient(145deg, rgba(255, 93, 115, 0.09), rgba(5, 10, 22, 0.58));
+}
+
+.stepNumber {
+  width: 1.8rem;
+  height: 1.8rem;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(77, 141, 255, 0.14);
+  color: #9bbcff;
+  font-size: 0.8rem;
+  font-weight: 900;
+}
+
+.stepLabel {
+  display: block;
+  color: #8c9bb7;
+  font-size: 0.875rem;
+  font-weight: 780;
+}
+
+.planningStep strong {
+  display: block;
+  margin-top: 0.35rem;
+  overflow-wrap: anywhere;
+  font-size: clamp(1.3rem, 1.1rem + 0.6vw, 1.8rem);
+  line-height: 1.05;
+  letter-spacing: -0.03em;
+}
+
+.planningStep p {
+  margin: 0.55rem 0 0;
+  color: #8191ad;
+  font-size: 0.875rem;
+  line-height: 1.48;
+}
+
+.stepLink {
+  min-height: 2.75rem;
+  width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.65rem;
+  padding: 0.5rem 0.7rem;
+  border: 0;
+  border-radius: 0.72rem;
+  background: transparent;
+  color: #9bbcff;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 0.875rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.stepLink:hover:not(:disabled) { background: rgba(137, 173, 255, 0.08); }
+.stepLink:disabled { cursor: not-allowed; opacity: 0.58; }
+
+.planningNote {
+  margin: 0.85rem 0 0;
+  color: #70809e;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
 .mainGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(20rem, 0.72fr);
@@ -260,6 +383,7 @@
 .budgetCardPrimary {
   background: linear-gradient(135deg, rgba(31, 107, 255, 0.12), rgba(5, 10, 22, 0.68));
   border-color: rgba(77, 141, 255, 0.24);
+  scroll-margin-top: 1rem;
 }
 
 .cardTop {
@@ -542,6 +666,7 @@
   .hero { grid-template-columns: 1fr; align-items: start; }
   .heroControls { justify-content: flex-start; min-width: 0; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .planningSteps { grid-template-columns: 1fr; }
   .mainGrid { grid-template-columns: 1fr; }
 }
 
@@ -552,6 +677,9 @@
   .monthField input, .actionButton { width: 100%; }
   .summaryGrid { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
   .metric { padding: 0.9rem; }
+  .planningHeader { display: grid; }
+  .planningHeader .status { width: fit-content; white-space: normal; }
+  .planningStep { padding: 0.85rem; }
   .amounts { grid-template-columns: 1fr; gap: 0.4rem; }
   .cardTop { align-items: flex-start; }
   .editor { grid-template-columns: 1fr; }

@@ -4,6 +4,7 @@ const TRANSACTION_KINDS = new Set(["income", "expense", "transfer", "refund", "a
 const REVIEW_STATES = new Set(["confirmed", "pending", "needs_review"]);
 const ISSUE_SEVERITIES = new Set(["warning", "error"]);
 const SHA256 = /^[0-9a-f]{64}$/;
+const MAX_SOURCE_SYNC_OBSERVATIONS = 10_000;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -74,7 +75,11 @@ function validateBatch(batch: any) {
   if (!Array.isArray(batch.accounts) || batch.accounts.length === 0 || batch.accounts.length > 20) {
     throw new Error("invalid_source_accounts");
   }
-  if (!Array.isArray(batch.observations) || batch.observations.length === 0 || batch.observations.length > 10000) {
+  if (
+    !Array.isArray(batch.observations)
+    || batch.observations.length === 0
+    || batch.observations.length > MAX_SOURCE_SYNC_OBSERVATIONS
+  ) {
     throw new Error("invalid_source_observations");
   }
   for (const account of batch.accounts) validateAccount(account, batch.sourceFileId);

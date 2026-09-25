@@ -23,7 +23,7 @@ const PATCH_FIELDS = new Set([
   "note",
 ]);
 
-function optionalText(params: URLSearchParams, key: string, maxLength = 160) {
+function optionalText(params: URLSearchParams, key: string, maxLength = 200) {
   const value = params.get(key)?.trim() ?? "";
   if (!value) return null;
   if (value.length > maxLength) throw new Error(`invalid_${key}`);

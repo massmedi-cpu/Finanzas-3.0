@@ -5,6 +5,8 @@ const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const forecastItemId = "81000000-0000-4000-8000-000000000081";
 const transactionId = "82000000-0000-4000-8000-000000000082";
 const forecastUpdatedAt = "2026-09-09T04:00:00.000Z";
+const flowRecurrenceId = "71000000-0000-4000-8000-000000000073";
+const flowAccountId = "10000000-0000-4000-8000-000000000073";
 
 const baseSnapshot = {
   contractVersion: 1,
@@ -119,7 +121,32 @@ async function mockForecastApi(
     });
 
     if (method === "POST" && body.action === "refresh") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ generated: 0, superseded: 0 }) });
+      const recurringItem = {
+        ...current.items[0],
+        id: "81000000-0000-4000-8000-000000000073",
+        date: "2026-09-20",
+        accountId: body.accountId as string | null,
+        concept: "supermercado mensual",
+        amountCents: -4250,
+        origin: "recurring",
+        recurrenceId: flowRecurrenceId,
+        projectionKey: `${flowRecurrenceId}:2026-09-20`,
+        projectionEffectCents: -4250,
+        projectedBalanceAfterCents: 18873099,
+      };
+      current = {
+        ...current,
+        period: {
+          dateFrom: body.dateFrom as string,
+          dateTo: body.dateTo as string,
+          accountId: body.accountId as string | null,
+        },
+        items: [
+          ...current.items.filter((item) => item.recurrenceId !== flowRecurrenceId),
+          recurringItem,
+        ],
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ generated: 1, superseded: 0 }) });
       return;
     }
 
@@ -271,6 +298,97 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   const manualWrite = writes.find((entry) => entry.action === "manual");
   expect(manualWrite?.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
+});
+
+test("la vuelta desde Recurrentes regenera una vez y enfoca solo el impacto confirmado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto(
+    `/forecast?dateFrom=2026-09-07&dateTo=2026-10-15&accountId=${flowAccountId}&recurrenceId=${flowRecurrenceId}&recurrenceAction=refresh`,
+  );
+
+  const flow = page.locator('[data-recurrence-flow-state="ready"]');
+  await expect(flow.getByRole("heading", { name: "Impacto de la recurrencia confirmada" })).toBeVisible();
+  await expect(flow).toContainText("Fechas dentro del horizonte");
+  await expect(flow).toContainText("20 sept 2026");
+  await expect(flow).toContainText(/-42,50\s?€/);
+  await expect.poll(() => writes.filter((entry) => entry.action === "refresh").length).toBe(1);
+  expect(writes.find((entry) => entry.action === "refresh")).toMatchObject({
+    method: "POST",
+    action: "refresh",
+    dateFrom: "2026-09-07",
+    dateTo: "2026-10-15",
+    accountId: flowAccountId,
+  });
+  await expect.poll(() => new URL(page.url()).searchParams.has("recurrenceAction")).toBe(false);
+
+  const impact = page.locator(`[data-recurrence-id="${flowRecurrenceId}"]`);
+  await expect(impact).toBeVisible();
+  await flow.getByRole("button", { name: "Ver primera fecha en el detalle" }).click();
+  await expect(impact).toBeFocused();
+});
+
+test("el calendario muestra solo fechas consultadas y lleva al detalle del movimiento", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto("/forecast");
+
+  const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
+  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ })).toBeVisible();
+  await expect(calendar.getByRole("button", { name: /^1 de septiembre de 2026:/ })).toHaveCount(0);
+
+  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 1 previsión/ }).click();
+  const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
+  await expect(day.getByText("Seguro mensual", { exact: true })).toBeVisible();
+  await expect(day.getByRole("listitem").getByText("-72,50 €", { exact: true })).toBeVisible();
+  await day.getByRole("link", { name: "Ver detalle" }).click();
+  await expect(page.locator(`#forecast-item-${forecastItemId}`)).toBeInViewport();
+
+  await calendar.getByRole("button", { name: "Mes siguiente" }).click();
+  await expect(calendar.getByRole("button", { name: /15 de septiembre de 2026/ })).toHaveCount(0);
+  await expect(calendar.getByText("Selecciona un día para ver sus previsiones y acceder a las acciones disponibles.")).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
+test("el calendario separa la fecha real y excluye confirmados y descartados del neto futuro", async ({ page }) => {
+  const planned = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000091",
+    concept: "Cobro previsto",
+    amountCents: 1000,
+    projectionEffectCents: 1000,
+  };
+  const confirmed = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000092",
+    status: "confirmed",
+    confirmedTransactionId: transactionId,
+    affectsProjection: false,
+    projectionEffectCents: 0,
+    actual: { date: "2026-09-14", amountCents: -7300, accountId: "10000000-0000-4000-8000-000000000001", categoryId: null, merchantId: null, analyticsEligible: true },
+  };
+  const excluded = {
+    ...baseSnapshot.items[0],
+    id: "81000000-0000-4000-8000-000000000093",
+    status: "excluded",
+    excluded: true,
+    excludedReason: "Pago cancelado",
+    affectsProjection: false,
+    projectionEffectCents: 0,
+  };
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ ...baseSnapshot, items: [planned, confirmed, excluded] }),
+  }));
+  await page.goto("/forecast");
+
+  const calendar = page.getByRole("region", { name: "Calendario de previsiones" });
+  await calendar.getByRole("button", { name: /15 de septiembre de 2026: 3 previsiones/ }).click();
+  const day = calendar.getByRole("region", { name: "Detalle del 15 de septiembre de 2026" });
+  await expect(day.getByText("Impacto en la proyección:")).toContainText("10,00");
+  await expect(day.getByText(/Movimiento real: 14 de septiembre de 2026/)).toBeVisible();
+  await expect(day.getByText("Excluido de la proyección")).toBeVisible();
 });
 
 test("forecast UI requires exclusion reason and reconciles from real candidates", async ({ page }) => {

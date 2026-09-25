@@ -13,6 +13,8 @@ const ROUTES = [
   "/documents",
   "/configuration",
   "/configuration/source",
+  "/configuration/merchants",
+  "/configuration/rules",
   "/configuration/data",
 ] as const;
 

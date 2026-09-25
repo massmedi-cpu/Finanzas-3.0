@@ -112,6 +112,7 @@ test("Previsión premium conserva densidad, reflow y touch en seis anchos", asyn
 
     const heading = page.getByRole("heading", { name: "Previsión", exact: true });
     await expect(heading).toBeVisible();
+    await expect(page.getByText("Anticipa ingresos y gastos, revisa recurrencias", { exact: false })).toBeVisible();
     await expect(page.getByLabel("Resumen de previsión")).toBeVisible();
     await expect(page.getByLabel("Curva de saldo prevista")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Movimientos previstos" })).toBeVisible();

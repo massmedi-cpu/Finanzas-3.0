@@ -36,6 +36,8 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   // contenían la reconexión Google errónea y no pueden reaparecer como fallback.
   expect(existsSync(join(root, "app/inicio-client.tsx"))).toBe(false);
   expect(existsSync(join(root, "app/inicio.module.css"))).toBe(false);
+  expect(existsSync(join(root, "app/dashboard-client.tsx"))).toBe(false);
+  expect(existsSync(join(root, "app/dashboard.module.css"))).toBe(false);
 
   expect(client).toContain("/api/dashboard?scope=");
   expect(client).toContain("Ocultar importes");

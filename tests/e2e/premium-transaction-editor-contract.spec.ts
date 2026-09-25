@@ -12,7 +12,7 @@ test("editor premium separa jerarquía, intención y acciones", async () => {
   expect(client).toContain('kindMode: "inherit" | "set"');
   expect(client).not.toContain('data-testid="edit-review"');
   expect(client).not.toContain('data-testid="bulk-review"');
-  expect(client).not.toContain('<span>Revisión</span>');
+  expect(client).toContain('updateFilter("reviewState"');
   expect(client).toContain('Restaurar valor detectado:');
   expect(client).toContain('data-testid="edit-merchant"');
   expect(client).toContain('data-testid="edit-kind"');

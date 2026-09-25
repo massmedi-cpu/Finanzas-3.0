@@ -100,8 +100,15 @@ async function fulfillJson(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
-async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
+async function mockDashboard(
+  page: Page,
+  failures: DashboardSource[] = [],
+  options: { dataThroughDate?: string | null; transactionRows?: typeof transactions.rows } = {},
+) {
   const failed = new Set(failures);
+  const mockTransactions = options.transactionRows === undefined
+    ? transactions
+    : { totalCount: options.transactionRows.length, rows: options.transactionRows };
 
   await page.route("**/*", async (route) => {
     const request = route.request();
@@ -136,7 +143,7 @@ async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
           contractVersion: 1,
           scope: "primary",
           asOfDate: "2026-09-07",
-          dataThroughDate: failed.has("transactions") ? null : "2026-09-06",
+          dataThroughDate: failed.has("transactions") ? null : options.dataThroughDate === undefined ? "2026-09-06" : options.dataThroughDate,
           generatedAt: "2026-09-07T12:00:00.000Z",
           requestedSources: requested,
           failedSources: failedRequested,
@@ -145,7 +152,7 @@ async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
             monthly: null,
             budgets: null,
             forecast: null,
-            transactions: failed.has("transactions") ? null : transactions,
+            transactions: failed.has("transactions") ? null : mockTransactions,
           },
         }, failedRequested.length === requested.length ? 503 : 200);
         return;
@@ -188,7 +195,7 @@ async function mockDashboard(page: Page, failures: DashboardSource[] = []) {
       return;
     }
     if (url.pathname === "/api/transactions") {
-      await fulfillJson(route, failed.has("transactions") ? { error: "temporary_unavailable" } : transactions, failed.has("transactions") ? 503 : 200);
+      await fulfillJson(route, failed.has("transactions") ? { error: "temporary_unavailable" } : mockTransactions, failed.has("transactions") ? 503 : 200);
       return;
     }
 
@@ -209,7 +216,8 @@ test("Inicio compone decisiones y bloques útiles desde motores centrales", asyn
   await page.goto("/");
 
   await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
-  await expect(page.getByText("Datos bancarios actualizados", { exact: true })).toBeVisible();
+  await expect(page.getByText("Última sincronización completada", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("Saldo total en cuentas", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("300,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("-20,00 €", { exact: true })).toBeVisible();
@@ -227,14 +235,46 @@ test("Inicio compone decisiones y bloques útiles desde motores centrales", asyn
   await expect(page.getByText(/FASE\s+\d/i)).toHaveCount(0);
 });
 
+test("Inicio usa la fecha bancaria confirmada por el agregador, no la fecha del saldo", async ({ page }) => {
+  await mockDashboard(page, [], { dataThroughDate: "2026-09-05" });
+  await page.goto("/");
+
+  const source = page.getByRole("region", { name: "Estado de los datos bancarios" });
+  await expect(source).toContainText("movimientos hasta 5 sept");
+  await expect(source).not.toContainText("movimientos hasta 7 sept");
+});
+
+test("Inicio no inventa la fecha del último movimiento a partir del saldo", async ({ page }) => {
+  await mockDashboard(page, [], { dataThroughDate: null, transactionRows: [] });
+  await page.goto("/");
+
+  const source = page.getByRole("region", { name: "Estado de los datos bancarios" });
+  await expect(source).toContainText("fecha del último movimiento sin confirmar");
+  await expect(source).not.toContainText("movimientos hasta 7 sept");
+});
+
+test("Inicio avisa si recupera cifras mediante consultas independientes", async ({ page }) => {
+  await mockDashboard(page);
+  await page.route("**/api/dashboard?scope=secondary", (route) => fulfillJson(route, { error: "temporary_unavailable" }, 503));
+  await page.goto("/");
+
+  await expect(chart(page)).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "consultas independientes" })).toBeVisible();
+});
+
 test("Inicio mantiene controles táctiles y cero overflow horizontal en móvil", async ({ page }) => {
   await mockDashboard(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
-  const primaryNav = page.getByRole("navigation", { name: "Navegación principal" });
-  for (const name of ["Movimientos", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"]) {
-    const link = primaryNav.getByRole("link", { name, exact: true });
+  const dock = page.getByRole("navigation", { name: "Navegación móvil" });
+  await expect(dock).toBeVisible();
+  const more = dock.getByRole("button", { name: "Más", exact: true });
+  await expect(more).toBeVisible();
+  await more.click();
+  const extra = page.getByRole("navigation", { name: "Más secciones" });
+  for (const name of ["Movs.", "Cuentas", "Presupuestos", "Recurrentes", "Previsión", "Documentos", "Configuración"]) {
+    const link = name === "Movs." ? dock.getByRole("link", { name, exact: true }) : extra.getByRole("link", { name, exact: true });
     await expect(link).toBeVisible();
     const box = await link.boundingBox();
     expect(box).not.toBeNull();

@@ -36,7 +36,8 @@ test.describe("Configuración · Fuente bancaria", () => {
 
     await expect(page.getByRole("heading", { name: "Fuente bancaria" })).toBeVisible();
     await expect(page.getByText("Google · solo lectura")).toBeVisible();
-    await expect(page.getByText("Compatible · contrato v2")).toBeVisible();
+    await expect(page.getByText("Protección de la importación")).toBeVisible();
+    await expect(page.getByText("Se comprueban las cuentas y los movimientos antes de incorporarlos. La fuente original permanece intacta.")).toBeVisible();
     await expect(page.getByText("Cliente OAuth de Google")).toBeVisible();
     await expect(page.getByText("Secreto OAuth de Google")).toBeVisible();
     await expect(page.getByText("Cuenta Google autorizada")).toHaveCount(0);

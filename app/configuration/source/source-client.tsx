@@ -154,7 +154,7 @@ function formatMoneyCents(value: number | null) {
 function sourceActionErrorMessage(code: string | undefined) {
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
   if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
-  if (code === "source_runtime_incompatible") return "El runtime de sincronización no cumple el contrato seguro requerido.";
+  if (code === "source_runtime_incompatible") return "La sincronización está detenida porque faltan comprobaciones de seguridad. Inténtalo más tarde.";
   if (code === "google_connection_contract_mismatch") return "La conexión Google no coincide con la cuenta autorizada.";
   if (code === "google_oauth_refresh_unavailable") {
     return "Google no ha podido renovar temporalmente la autorización. Vuelve a intentarlo; si el problema persiste, reconecta la fuente.";
@@ -209,7 +209,7 @@ export default function SourceClient() {
       if (!googleResponse.ok && googlePayload.configured) {
         setError("La configuración de Google existe, pero no se ha podido comprobar el estado de la conexión.");
       } else if (!runtimeResponse.ok && runtimePayload.error !== "source_runtime_incompatible") {
-        setError("No se ha podido verificar el runtime seguro de sincronización.");
+        setError("No se han podido comprobar las condiciones para sincronizar de forma segura.");
       } else if (!syncResponse.ok) {
         setError("No se ha podido leer la trazabilidad persistida de sincronización.");
       }
@@ -336,7 +336,7 @@ export default function SourceClient() {
         <div className="configuration-summary" aria-label="Estado de la fuente bancaria">
           <div><strong>{google?.configured ? "Sí" : "No"}</strong><span>Servidor configurado</span></div>
           <div><strong>{connected ? "Sí" : "No"}</strong><span>Fuente conectada</span></div>
-          <div><strong>{runtimeReady ? "v2" : "—"}</strong><span>Runtime seguro</span></div>
+          <div><strong>{runtimeReady ? "Sí" : "No"}</strong><span>Sincronización disponible</span></div>
         </div>
       </header>
 
@@ -344,7 +344,7 @@ export default function SourceClient() {
       {notice && <div className="config-message success" role="status">{notice}</div>}
 
       {loading ? (
-        <section className="config-panel loading-state">Comprobando conexión, runtime y última sincronización…</section>
+        <section className="config-panel loading-state">Comprobando conexión y última sincronización…</section>
       ) : (
         <div className={styles.grid}>
           <section className={`config-panel ${styles.mainPanel}`} aria-labelledby="source-status-heading">
@@ -353,7 +353,7 @@ export default function SourceClient() {
                 <p className="panel-kicker">CONEXIÓN CONTROLADA</p>
                 <h2 id="source-status-heading">Google · solo lectura</h2>
               </div>
-              <span className="status-chip">Read-only</span>
+              <span className="status-chip">Solo lectura</span>
             </div>
 
             <div className={styles.statusList}>
@@ -369,9 +369,9 @@ export default function SourceClient() {
                 </p>
               </div>
               <div>
-                <span>Runtime de persistencia</span>
-                <strong>{runtimeReady ? "Compatible · contrato v2" : "No disponible"}</strong>
-                <p>{runtimeReady ? "Lifecycle y selección canónica de productos están exigidos antes de escribir." : "La sincronización permanece bloqueada de forma segura."}</p>
+                <span>Protección de la importación</span>
+                <strong>{runtimeReady ? "Preparada" : "No disponible"}</strong>
+                <p>{runtimeReady ? "Se comprueban las cuentas y los movimientos antes de incorporarlos. La fuente original permanece intacta." : "La sincronización permanece bloqueada de forma segura."}</p>
               </div>
               <div>
                 <span>{serviceAccountMode ? "Cuenta de servicio Google" : "Cuenta Google"}</span>
@@ -384,7 +384,7 @@ export default function SourceClient() {
 
             {!google?.configured && missingLabels.length > 0 && (
               <div className={styles.missingBox}>
-                <strong>Configuración pendiente en preview</strong>
+                <strong>Configuración pendiente</strong>
                 <ul>{missingLabels.map((item) => <li key={item}>{item}</li>)}</ul>
               </div>
             )}
@@ -459,15 +459,15 @@ export default function SourceClient() {
 
           <aside className={`config-panel ${styles.sidePanel}`}>
             <div className="panel-heading">
-              <div><p className="panel-kicker">GARANTÍAS</p><h2>Contrato de seguridad</h2></div>
+              <div><p className="panel-kicker">GARANTÍAS</p><h2>Cómo protegemos la importación</h2></div>
             </div>
             <ul className={styles.guarantees}>
-              <li>Scopes de Google estrictamente de solo lectura.</li>
-              <li>La fuente bancaria original no recibe escrituras.</li>
-              <li>La identidad Google autorizada queda anclada y validada antes de sincronizar.</li>
-              <li>La primera importación exige prevalidación completa sin persistencia.</li>
-              <li>El libro completo se vuelve a validar antes de persistir datos.</li>
-              <li>Runtime v2 obligatorio antes de cualquier escritura en PostgreSQL.</li>
+              <li>Google solo concede permisos de lectura.</li>
+              <li>La fuente bancaria original no se modifica.</li>
+              <li>Se comprueba la cuenta de Google autorizada antes de sincronizar.</li>
+              <li>La primera importación se revisa antes de guardar datos.</li>
+              <li>Los movimientos se vuelven a comprobar antes de incorporarlos.</li>
+              <li>La sincronización se detiene si falta alguna comprobación de seguridad.</li>
             </ul>
           </aside>
 

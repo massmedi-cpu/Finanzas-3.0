@@ -92,7 +92,7 @@ test("Movimientos conserva el filtro más nuevo aunque una petición anterior te
   await page.goto("/transactions");
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
 
-  const search = page.getByLabel("Buscar");
+  const search = page.getByLabel("Buscar", { exact: true });
   await search.fill("antigua");
   const slowStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "antigua");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
@@ -104,7 +104,7 @@ test("Movimientos conserva el filtro más nuevo aunque una petición anterior te
   await fastStarted;
 
   await expect(page.getByText("RESULTADO NUEVO", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("1 movimientos", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 movimiento", { exact: true }).first()).toBeVisible();
   await page.waitForTimeout(350);
 
   await expect(page.getByText("RESULTADO NUEVO", { exact: true }).first()).toBeVisible();
@@ -161,7 +161,7 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
   await page.getByRole("button", { name: "Cargar 50 más" }).click();
   await paginationStarted;
 
-  await page.getByLabel("Buscar").fill("nueva");
+  await page.getByLabel("Buscar", { exact: true }).fill("nueva");
   const filteredStarted = page.waitForRequest((request) => new URL(request.url()).searchParams.get("q") === "nueva");
   await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await filteredStarted;
@@ -172,7 +172,7 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
   await expect(page.getByText("RESULTADO NUEVO", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("PÁGINA ANTIGUA", { exact: true })).toHaveCount(0);
   await expect(page.getByText("RESULTADO INICIAL", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("1 movimientos", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("1 movimiento", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("button", { name: "Cargar 50 más" })).toHaveCount(0);
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
 });

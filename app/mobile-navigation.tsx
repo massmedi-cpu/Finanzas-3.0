@@ -51,8 +51,8 @@ export default function MobileNavigation() {
 
   return (
     <div className={styles.mobileNavigation}>
-      {moreOpen ? (
-        <div className={styles.mobileMorePanel} id="mobile-more-navigation">
+      <div className={styles.mobileMorePanel} id="mobile-more-navigation" hidden={!moreOpen}>
+        {moreOpen && <>
           <div className={styles.mobileMoreHeader}>
             <strong>Más secciones</strong>
             <button type="button" onClick={() => setMoreOpen(false)} aria-label="Cerrar más secciones">×</button>
@@ -88,8 +88,8 @@ export default function MobileNavigation() {
             </div>
             <PwaInstallButton className={styles.mobileMoreInstall} />
           </nav>
-        </div>
-      ) : null}
+        </>}
+      </div>
 
       <nav className={styles.mobileDock} aria-label="Navegación móvil">
         {primary.map((item) => {

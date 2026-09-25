@@ -348,7 +348,10 @@ function drilldownHref(input: {
   if (input.kind === "merchant" && input.id === null) return null;
   const params = new URLSearchParams({ dateFrom: input.dateFrom, dateTo: input.dateTo, kind: "expense" });
   if (input.accountId) params.set("accountId", input.accountId);
-  if (input.kind === "category") params.set("categoryId", input.id ?? "__uncategorized__");
+  if (input.kind === "category") {
+    if (input.id === null) params.set("uncategorized", "true");
+    else params.set("categoryId", input.id);
+  }
   if (input.kind === "merchant" && input.id) params.set("merchantId", input.id);
   return `/transactions?${params.toString()}`;
 }

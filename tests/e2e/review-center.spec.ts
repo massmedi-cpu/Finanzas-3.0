@@ -75,6 +75,7 @@ async function mockReviewSources(page: Page) {
 
 test("E1 · Para revisar agrega referencias vivas sin crear una segunda fuente de verdad", async ({ page }) => {
   const methods = await mockReviewSources(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto("/review");
 
   await expect(page.getByRole("heading", { name: "Para revisar", exact: true })).toBeVisible();
@@ -106,7 +107,8 @@ test("E1 · Para revisar mantiene navegación usable y cero overflow en móvil",
   await page.setViewportSize({ width: 360, height: 844 });
   await page.goto("/review");
 
-  const navLink = page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Para revisar", exact: true });
+  const navLink = page.getByRole("navigation", { name: "Navegación móvil" }).getByRole("link", { name: "Revisar", exact: true });
+  await expect(navLink).toHaveAttribute("aria-current", "page");
   const box = await navLink.boundingBox();
   expect(box).not.toBeNull();
   expect(box!.height).toBeGreaterThanOrEqual(44);
