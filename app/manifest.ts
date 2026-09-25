@@ -18,6 +18,7 @@ export default function manifest(): MetadataRoute.Manifest {
     shortcuts: [
       { name: "Movimientos", short_name: "Movimientos", url: "/transactions" },
       { name: "Análisis", short_name: "Análisis", url: "/analysis" },
+      { name: "Comparador", short_name: "Comparar", url: "/compare" },
       { name: "Para revisar", short_name: "Revisar", url: "/review" },
     ],
     icons: [

@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import type { CashFlowDay, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
-import { shiftCashFlowMonth, countsInCashFlow } from "../../src/application/cash-flow/cash-flow-model";
+import type { CashFlowDay, CashFlowEventState, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow } from "../../src/application/cash-flow/cash-flow-model";
 import { formatMoneyCents } from "../../src/core/money";
+import { CashFlowEvolution } from "./cash-flow-evolution";
 import styles from "./cash-flow.module.css";
 
 const monthFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -41,15 +42,33 @@ function daySignals(day: CashFlowDay, actualReady: boolean, forecastReady: boole
     actualReady && day.realExpenseCents < 0 ? "salidas reales" : null,
     forecastReady && day.plannedIncomeCents > 0 ? "entradas previstas" : null,
     forecastReady && day.plannedExpenseCents < 0 ? "salidas previstas" : null,
-    forecastReady && day.forecasts.some((item) => item.status === "confirmed") ? "previsiones conciliadas" : null,
-    forecastReady && day.forecasts.some((item) => item.status === "excluded") ? "previsiones descartadas" : null,
+    forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "suggested") ? "eventos sugeridos" : null,
+    forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "confirmed") ? "eventos confirmados" : null,
+    forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "realized") ? "eventos realizados" : null,
+    forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "discarded") ? "eventos descartados" : null,
   ].filter(Boolean).join(", ");
 }
 
-function forecastLabel(status: CashFlowDay["forecasts"][number]["status"]) {
-  if (status === "confirmed") return "Conciliado con un movimiento real";
-  if (status === "excluded") return "Descartado de la proyección";
-  return "Pendiente previsto";
+const eventLabels: Record<CashFlowEventState, string> = {
+  suggested: "Sugerido",
+  confirmed: "Confirmado",
+  realized: "Realizado",
+  discarded: "Descartado",
+};
+
+const eventClasses: Record<CashFlowEventState, string> = {
+  suggested: styles.suggested,
+  confirmed: styles.confirmed,
+  realized: styles.realized,
+  discarded: styles.discarded,
+};
+
+function forecastLabel(item: CashFlowDay["forecasts"][number]) {
+  const state = cashFlowEventState(item);
+  if (state === "realized") return `Conciliado con un movimiento real${item.actual ? ` el ${formatDate(item.actual.date)}` : ""}`;
+  if (state === "discarded") return item.excludedReason || "Descartado de la proyección";
+  if (state === "confirmed") return "Incorporado de forma manual o como dato conocido; todavía no realizado";
+  return `Sugerido por el motor desde ${item.origin === "recurring" ? "un patrón recurrente" : item.origin === "budget" ? "un presupuesto" : "una inferencia"}`;
 }
 
 export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: boolean } }) {
@@ -62,6 +81,14 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
     ? view.actualNetCents + view.plannedNetCents : null;
   const nextMonth = shiftCashFlowMonth(view.month, 1);
   const previousMonth = shiftCashFlowMonth(view.month, -1);
+
+  function inspectDay(date: string) {
+    setSelected(date);
+    window.setTimeout(() => {
+      const behavior = window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+      document.getElementById("cash-flow-day-detail")?.scrollIntoView({ behavior, block: "center" });
+    }, 0);
+  }
 
   return (
     <main className={styles.page}>
@@ -82,13 +109,47 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
       {view.invalidMonth ? <p className={styles.notice} role="status">El mes solicitado no era válido; se muestra el mes actual.</p> : null}
 
       <section className={styles.kpis} aria-label="Resumen de Cash Flow">
-        <article><span>Neto real</span><strong>{view.actualNetCents === null ? "—" : formatMoneyCents(view.actualNetCents)}</strong><small>Motor financiero · fecha bancaria · sin transferencias internas</small></article>
-        <article><span>Pendiente previsto</span><strong>{view.plannedNetCents === null ? "—" : formatMoneyCents(view.plannedNetCents)}</strong><small>Conciliados y descartados aportan cero a la proyección</small></article>
-        <article className={styles.combined}><span>Real + pendiente previsto</span><strong>{combined === null ? "—" : formatMoneyCents(combined)}</strong><small>Resultado potencial del mes; no equivale al saldo de tus cuentas</small></article>
+        <article>
+          <span>Neto real</span><strong>{view.actualNetCents === null ? "—" : formatMoneyCents(view.actualNetCents)}</strong>
+          <dl><div><dt>Entradas</dt><dd>{view.actualIncomeCents === null ? "—" : formatMoneyCents(view.actualIncomeCents)}</dd></div><div><dt>Salidas</dt><dd>{view.actualExpenseCents === null ? "—" : formatMoneyCents(view.actualExpenseCents)}</dd></div></dl>
+          <Link prefetch={false} href={`/transactions?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Ver movimientos reales</Link>
+        </article>
+        <article>
+          <span>Pendiente previsto</span><strong>{view.plannedNetCents === null ? "—" : formatMoneyCents(view.plannedNetCents)}</strong>
+          <dl><div><dt>Entradas</dt><dd>{view.plannedIncomeCents === null ? "—" : formatMoneyCents(view.plannedIncomeCents)}</dd></div><div><dt>Salidas</dt><dd>{view.plannedExpenseCents === null ? "—" : formatMoneyCents(view.plannedExpenseCents)}</dd></div></dl>
+          <Link prefetch={false} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Ver previsiones pendientes</Link>
+        </article>
+        <article className={styles.combined}>
+          <span>Real + pendiente previsto</span><strong>{combined === null ? "—" : formatMoneyCents(combined)}</strong>
+          <small>Resultado potencial del mes; no equivale al saldo de tus cuentas.</small>
+          <a href="#cash-flow-evolution-title">Ver cómo evoluciona</a>
+        </article>
       </section>
 
       {view.actualState !== "ready" ? <p className={styles.warning} role="alert">{realStatus(view.actualState)} <Link prefetch={false} href={`/transactions?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Abrir Movimientos</Link></p> : null}
       {view.forecastState !== "ready" ? <p className={styles.warning} role="alert">{forecastStatus(view.forecastState)} <Link prefetch={false} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Abrir Previsión</Link></p> : null}
+
+      <section className={styles.eventStates} aria-labelledby="cash-flow-states-title">
+        <div className={styles.sectionTitle}>
+          <div><p className={styles.eyebrow}>MOVIMIENTOS ESPERADOS</p><h2 id="cash-flow-states-title">Estado de las previsiones</h2></div>
+          <p>Separa lo propuesto automáticamente, lo incorporado a la planificación, lo ya realizado y lo descartado.</p>
+        </div>
+        <div className={styles.eventStateGrid}>
+          {([
+            ["suggested", "Sugeridos", "Recurrentes, presupuestos o inferencias aún pendientes de realizar"],
+            ["confirmed", "Confirmados", "Añadidos manualmente o procedentes de un dato conocido"],
+            ["realized", "Realizados", "Conciliados con un movimiento bancario real"],
+            ["discarded", "Descartados", "Conservados como trazabilidad, sin afectar a la proyección"],
+          ] as const).map(([state, label, description]) => (
+            <article key={state} className={eventClasses[state]}>
+              <span>{label}</span><strong>{view.forecastCounts?.[state] ?? "—"}</strong><small>{description}</small>
+            </article>
+          ))}
+        </div>
+        <Link prefetch={false} className={styles.statesLink} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Revisar y gestionar previsiones</Link>
+      </section>
+
+      <CashFlowEvolution points={view.evolution} onInspectDate={inspectDay} />
 
       <section className={styles.calendar} aria-labelledby="cash-flow-calendar-title">
         <div className={styles.sectionTitle}>
@@ -114,8 +175,10 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
                   <span className={styles.signals} aria-hidden="true">
                     {actualReady && day.real.some((row) => countsInCashFlow(row) && row.amountCents > 0) ? <i className={styles.realIncome} /> : null}
                     {actualReady && day.real.some((row) => countsInCashFlow(row) && row.amountCents < 0) ? <i className={styles.realExpense} /> : null}
-                    {forecastReady && day.forecasts.some((item) => item.projectionEffectCents !== 0) ? <i className={styles.planned} /> : null}
-                    {forecastReady && day.forecasts.some((item) => item.status === "confirmed") ? <i className={styles.confirmed} /> : null}
+                    {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "suggested") ? <i className={styles.suggested} /> : null}
+                    {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "confirmed") ? <i className={styles.confirmed} /> : null}
+                    {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "realized") ? <i className={styles.realized} /> : null}
+                    {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "discarded") ? <i className={styles.discarded} /> : null}
                   </span>
                 </button>
               );
@@ -124,10 +187,11 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
         </div>
         <div className={styles.legend} aria-label="Leyenda del Cash Flow">
           <span><i className={styles.realIncome} /> Entrada real</span><span><i className={styles.realExpense} /> Salida real</span>
-          <span><i className={styles.planned} /> Pendiente previsto</span><span><i className={styles.confirmed} /> Conciliado</span>
+          <span><i className={styles.suggested} /> Sugerido</span><span><i className={styles.confirmed} /> Confirmado</span>
+          <span><i className={styles.realized} /> Realizado</span><span><i className={styles.discarded} /> Descartado</span>
         </div>
         {selectedDay ? (
-          <div className={styles.detail} role="region" aria-label={`Detalle del ${formatDate(selectedDay.date)}`}>
+          <div id="cash-flow-day-detail" className={styles.detail} role="region" aria-label={`Detalle del ${formatDate(selectedDay.date)}`}>
             <div className={styles.detailTitle}><h3>{formatDate(selectedDay.date)}</h3><Link prefetch={false} href={`/transactions?dateFrom=${selectedDay.date}&dateTo=${selectedDay.date}`}>Ver todos los movimientos</Link></div>
             <div className={styles.dayTotals}>
               <p>Real <strong>{actualReady ? formatMoneyCents(selectedDay.realNetCents) : "—"}</strong></p>
@@ -144,7 +208,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
             {forecastReady && selectedDay.forecasts.length > 0 ? (
               <div className={styles.group}><h4>Previsiones · fecha estimada</h4><ul>{selectedDay.forecasts.map((item) => (
                 <li key={item.id}>
-                  <div><strong>{item.concept}</strong><small>{forecastLabel(item.status)}{item.actual ? ` · realizado el ${formatDate(item.actual.date)}` : ""}</small>
+                  <div><span className={`${styles.eventBadge} ${eventClasses[cashFlowEventState(item)]}`}>{eventLabels[cashFlowEventState(item)]}</span><strong>{item.concept}</strong><small>{forecastLabel(item)}</small>
                     <Link prefetch={false} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}#forecast-item-${item.id}`}>Ver y gestionar</Link>
                   </div>
                   <strong className={item.amountCents < 0 ? styles.negative : styles.positive}>{formatMoneyCents(item.amountCents)}</strong>
@@ -154,7 +218,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
           </div>
         ) : <p className={styles.hint}>Selecciona un día para ver el detalle y abrir las acciones pertinentes.</p>}
       </section>
-      <p className={styles.method}>El neto real coincide con el motor financiero o se oculta si no concilia. La proyección cuenta solo importes pendientes. Las transferencias internas, duplicados confirmados y filas excluidas no inflan el neto.</p>
+      <p className={styles.method}>El neto real coincide con el motor financiero o se oculta si no concilia. La proyección cuenta solo importes pendientes. Las transferencias internas, duplicados confirmados y filas excluidas no inflan el neto. “Confirmado” identifica datos manuales o conocidos pendientes; “realizado” exige conciliación con un movimiento bancario.</p>
     </main>
   );
 }

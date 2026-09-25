@@ -57,6 +57,7 @@ const SECTIONS = [
   { id: "home", title: "Inicio", keywords: "inicio resumen portada", href: "/" },
   { id: "transactions", title: "Movimientos", keywords: "movimientos transacciones gastos ingresos compras", href: "/transactions" },
   { id: "analysis", title: "Análisis", keywords: "analisis graficas gasto ingresos ahorro tendencias", href: "/analysis" },
+  { id: "compare", title: "Comparador", keywords: "comparar comparacion periodos referencia diferencias categorias comercios", href: "/compare" },
   { id: "accounts", title: "Cuentas", keywords: "cuentas saldos banco", href: "/accounts" },
   { id: "budgets", title: "Presupuestos", keywords: "presupuesto limites categorias gasto", href: "/budgets" },
   { id: "recurrences", title: "Recurrentes", keywords: "recurrentes recibos suscripciones pagos habituales", href: "/recurrences" },

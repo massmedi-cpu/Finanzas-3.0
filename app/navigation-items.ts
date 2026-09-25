@@ -14,6 +14,7 @@ export const navigationItems = [
   { href: "/review", label: "Para revisar", shortLabel: "Revisar", icon: "review" },
   { href: "/transactions", label: "Movimientos", shortLabel: "Movs.", icon: "transactions" },
   { href: "/analysis", label: "Análisis", icon: "analysis" },
+  { href: "/compare", label: "Comparador", shortLabel: "Comparar", icon: "balance" },
   { href: "/accounts", label: "Cuentas", icon: "accounts" },
   { href: "/budgets", label: "Presupuestos", icon: "budgets" },
   { href: "/recurrences", label: "Recurrentes", icon: "recurrences" },

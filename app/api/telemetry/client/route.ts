@@ -1,6 +1,7 @@
 import { APP_VERSION } from "../../../../src/core/build-info";
 import {
   parseOperationalTelemetry,
+  RUM_LOG_CONTRACT_VERSION,
   WEB_VITAL_BUDGETS,
   webVitalWithinBudget,
 } from "../../../../src/observability/operational-telemetry-contract";
@@ -55,15 +56,19 @@ export async function POST(request: Request) {
   }
 
   const common = {
-    contractVersion: 1,
+    contractVersion: RUM_LOG_CONTRACT_VERSION,
     appVersion: APP_VERSION,
     deploymentSha: process.env.VERCEL_GIT_COMMIT_SHA ?? null,
     route: telemetry.route,
+    collectedAt: new Date().toISOString(),
   };
 
   if (telemetry.type === "web_vital") {
-    console.info("financial-app-rum", JSON.stringify({
+    console.info(JSON.stringify({
+      level: "info",
+      event: "financial-app-rum",
       ...common,
+      device: telemetry.device,
       metric: telemetry.name,
       value: telemetry.value,
       rating: telemetry.rating,
@@ -71,7 +76,9 @@ export async function POST(request: Request) {
       withinBudget: webVitalWithinBudget(telemetry.name, telemetry.value),
     }));
   } else {
-    console.info("financial-app-client-error", JSON.stringify({
+    console.info(JSON.stringify({
+      level: "info",
+      event: "financial-app-client-error",
       ...common,
       kind: telemetry.kind,
       errorName: telemetry.errorName,

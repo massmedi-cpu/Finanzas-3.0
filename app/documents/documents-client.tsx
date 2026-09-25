@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { ChangeEvent, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  authRecoveryFromError,
+  requestErrorCode,
+  type AuthRecoveryState,
+} from "../../src/application/auth-recovery";
+import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
 
@@ -176,8 +182,7 @@ function parseEuroToCents(input: string) {
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const code = typeof body?.code === "string" ? body.code : typeof body?.error === "string" ? body.error : "request_failed";
-    throw new Error(code);
+    throw new Error(requestErrorCode(body));
   }
   return body;
 }
@@ -193,7 +198,8 @@ function friendlyError(error: unknown) {
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
-    authentication_required: "Tu sesión ha caducado. Vuelve a iniciar sesión.",
+    authentication_required: "Tu sesión ha caducado antes de guardar.",
+    authentication_unavailable: "El acceso seguro no está disponible temporalmente.",
   };
   return labels[code] ?? "No se pudo completar la operación documental.";
 }
@@ -215,6 +221,7 @@ export function DocumentsClient() {
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
@@ -279,6 +286,7 @@ export function DocumentsClient() {
   useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId, loadDetail]);
 
   const selectDocument = (id: string) => {
+    setAuthRecovery(null);
     selectedIdRef.current = id;
     setSelectedId(id);
   };
@@ -343,6 +351,7 @@ export function DocumentsClient() {
     }
     setBusy("metadata");
     setError(null);
+    setAuthRecovery(null);
     try {
       await readJson(await fetch("/api/documents", {
         method: "PATCH",
@@ -351,7 +360,10 @@ export function DocumentsClient() {
       }));
       await refreshAfterMutation(detail.document.id);
       setNotice("Metadatos guardados.");
-    } catch (caught) { setError(friendlyError(caught)); }
+    } catch (caught) {
+      setAuthRecovery(authRecoveryFromError(caught));
+      setError(friendlyError(caught));
+    }
     finally { setBusy(null); }
   }
 
@@ -466,6 +478,7 @@ export function DocumentsClient() {
 
       <div className={styles.content}>
         {error ? <div className={styles.alert} role="alert" data-testid="documents-alert">{error}</div> : null}
+        {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/documents" /> : null}
         {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
         <section className={styles.uploadPanel} aria-labelledby="upload-title">
@@ -495,7 +508,7 @@ export function DocumentsClient() {
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={loadingList} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
-              <label>Buscar<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, emisor o notas" /></label>
+              <label>Buscar<input value={query} maxLength={200} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, emisor o notas" /></label>
               <label>Estado<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="">Todos</option><option value="imported">Importados</option><option value="pending_review">Pendientes</option><option value="confirmed">Confirmados</option><option value="archived">Archivados</option>
               </select></label>
@@ -525,10 +538,10 @@ export function DocumentsClient() {
                   <div className={styles.formGrid}>
                     <label>Tipo<select value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
                     <label>Fecha<input type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
-                    <label>Emisor<input value={editor.issuerName} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
+                    <label>Emisor<input value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
                     <label>Importe (€)<input inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
-                  <label>Notas<textarea value={editor.notes} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
+                  <label>Notas<textarea value={editor.notes} maxLength={2000} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
@@ -551,7 +564,7 @@ export function DocumentsClient() {
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Asociación manual</h3><p>Busca por concepto en los movimientos efectivos.</p></div></div>
-                  <form className={styles.manualSearch} onSubmit={searchTransactions}><label>Buscar movimiento<input value={manualQuery} onChange={(event) => setManualQuery(event.target.value)} placeholder="Ej. comunidad, seguro, supermercado" /></label><button className={styles.secondaryButton} type="submit" disabled={busy === "manual-search"}>Buscar</button></form>
+                  <form className={styles.manualSearch} onSubmit={searchTransactions}><label>Buscar movimiento<input value={manualQuery} maxLength={200} onChange={(event) => setManualQuery(event.target.value)} placeholder="Ej. comunidad, seguro, supermercado" /></label><button className={styles.secondaryButton} type="submit" disabled={busy === "manual-search"}>Buscar</button></form>
                   {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p><small>{money.format(transaction.amountCents / 100)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 

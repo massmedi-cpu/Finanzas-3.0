@@ -82,8 +82,8 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
   await page.goto("/budgets");
   await expect(page.getByRole("heading", { name: "Presupuestos" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
-  const input = page.getByLabel("Presupuesto manual de total mensual");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const input = page.getByLabel("Límite elegido de total mensual");
   await expect(input).toBeFocused();
 
   await input.fill("1,234");
@@ -103,7 +103,7 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
   await expect(fieldError).toHaveCount(0);
 
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite manual guardado");
+  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ month: "2026-09", categoryId: null, manualAmountCents: 123456 });
 });
@@ -138,17 +138,17 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
   const totalCard = page.getByRole("heading", { name: "Presupuesto mensual total" }).locator("xpath=ancestor::article");
   const targets = [
     page.locator("label").filter({ hasText: "Mes" }).first(),
-    page.getByText("Calculado automáticamente", { exact: true }),
-    page.getByText("Total mensual y detalle por categorías de gasto.", { exact: true }),
-    page.getByText("Límite automático · media de 3 meses", { exact: true }),
-    page.getByText("En objetivo", { exact: true }).first(),
+    page.getByText("El histórico no se presenta como recomendación", { exact: true }),
+    page.getByText("Tu límite elegido tiene prioridad; sin él, el histórico se usa sólo para comparar.", { exact: true }),
+    page.getByText("Referencia histórica · media de 3 meses", { exact: true }),
+    page.getByText("Dentro de referencia", { exact: true }).first(),
     totalCard.getByText("Gastado", { exact: true }),
-    totalCard.getByText("Consumo", { exact: true }),
+    totalCard.getByText("Comparación con lo habitual", { exact: true }),
     page.getByText("Junio", { exact: true }),
     page.getByText(snapshot.total.automaticExplanation, { exact: true }),
-    page.getByText("El gasto mostrado procede de tus movimientos. El presupuesto nunca modifica la fuente bancaria.", { exact: true }),
+    page.getByText("El gasto mostrado procede de tus movimientos. La referencia histórica describe el pasado y no es una recomendación financiera.", { exact: true }),
     page.getByText("La fuente bancaria se mantiene estrictamente en solo lectura.", { exact: true }),
-    page.getByText("El presupuesto total ya funciona. Cuando existan categorías de gasto activas, aparecerán aquí con su recomendación y consumo real.", { exact: true }),
+    page.getByText("El total ya muestra gasto habitual, límite elegido y consumo real. Cuando existan categorías de gasto activas, aparecerán aquí con la misma separación.", { exact: true }),
     page.getByRole("link", { name: "Abrir Configuración" }),
   ];
 
@@ -158,8 +158,8 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
     expect(fontSize).toBeGreaterThanOrEqual(14);
   }
 
-  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
-  const editorInput = page.getByLabel("Presupuesto manual de total mensual");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const editorInput = page.getByLabel("Límite elegido de total mensual");
   const editorLabelSize = await editorInput.evaluate((element) => {
     const label = element.closest("label");
     if (!label) throw new Error("Budget editor input must remain inside its label");

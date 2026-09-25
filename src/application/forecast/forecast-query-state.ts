@@ -1,4 +1,4 @@
-import type { ForecastSelectionInput } from "./forecast-loader";
+import type { ForecastSelectionInput } from "./forecast-selection";
 
 export type ForecastSearchParams = Record<string, string | string[] | undefined>;
 

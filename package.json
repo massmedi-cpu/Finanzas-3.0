@@ -1,6 +1,6 @@
 {
   "name": "financial-app",
-  "version": "10.0.2",
+  "version": "10.0.3",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,11 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:pre025": "playwright test tests/e2e/pre025-edge-case-contracts.spec.ts tests/e2e/source-sync-capacity.spec.ts --project=chromium-desktop",
+    "test:pre025:ui": "playwright test tests/e2e/pre025-edge-cases-ui.spec.ts --project=chromium-desktop",
+    "test:comparison": "playwright test tests/e2e/comparison-contract.spec.ts --project=chromium-desktop",
+    "test:comparison:ui": "playwright test tests/e2e/comparison-ui.spec.ts --project=chromium-desktop",
+    "performance:report": "node scripts/report-web-vitals.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
     "backup:validate": "node scripts/validate-financial-backup.mjs",

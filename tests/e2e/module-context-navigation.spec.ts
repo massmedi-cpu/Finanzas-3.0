@@ -62,5 +62,7 @@ test("Forecast vuelve a módulos propietarios sin inventar un periodo analítico
   expect(links.find((item) => item.label === "Análisis")?.href).toBe(`/analysis?accountId=${ACCOUNT_ID}`);
   expect(links.find((item) => item.label === "Movimientos")?.href).toBe(`/transactions?accountId=${ACCOUNT_ID}`);
   expect(links.find((item) => item.label === "Presupuestos")?.href).toBe("/budgets");
-  expect(links.find((item) => item.label === "Recurrentes")?.href).toBe("/recurrences");
+  expect(links.find((item) => item.label === "Recurrentes")?.href).toBe(
+    `/recurrences?source=forecast&forecastDateFrom=2026-09-18&forecastDateTo=2026-10-31&forecastAccountId=${ACCOUNT_ID}`,
+  );
 });

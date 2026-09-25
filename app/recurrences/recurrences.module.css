@@ -79,6 +79,13 @@
   line-height: 1.55;
 }
 
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.65rem;
+}
+
 .actionButton,
 .primaryButton,
 .secondaryButton,
@@ -111,6 +118,7 @@
   border: 1px solid rgba(137, 173, 255, 0.22);
   background: rgba(255, 255, 255, 0.045);
   color: #dbe6fa;
+  text-decoration: none;
 }
 
 .textButton {
@@ -131,6 +139,8 @@
 .primaryButton:focus-visible,
 .secondaryButton:focus-visible,
 .textButton:focus-visible,
+.contextLink:focus-visible,
+.impactLink:focus-visible,
 .backLink:focus-visible {
   outline: 3px solid rgba(111, 164, 255, 0.62);
   outline-offset: 3px;
@@ -140,6 +150,67 @@
   display: grid;
   gap: 1rem;
   margin-top: 1rem;
+}
+
+.forecastContext {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid rgba(43, 217, 247, 0.22);
+  border-radius: 1.15rem;
+  background:
+    linear-gradient(135deg, rgba(43, 217, 247, 0.08), rgba(31, 107, 255, 0.07)),
+    rgba(8, 16, 32, 0.72);
+}
+
+.forecastContext h2 {
+  margin: 0;
+  font-size: clamp(1rem, 0.92rem + 0.3vw, 1.25rem);
+  letter-spacing: -0.02em;
+}
+
+.forecastContext p:not(.contextEyebrow) {
+  margin: 0.35rem 0 0;
+  color: #94a5c2;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.contextEyebrow {
+  margin: 0 0 0.35rem;
+  color: #70dcf3;
+  font-size: 0.72rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+}
+
+.contextLink,
+.impactLink {
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.65rem 0.9rem;
+  border-radius: 0.8rem;
+  font-size: 0.875rem;
+  font-weight: 820;
+  text-align: center;
+  text-decoration: none;
+}
+
+.contextLink {
+  border: 1px solid rgba(137, 173, 255, 0.22);
+  color: #c7d8f7;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.impactLink {
+  border: 1px solid rgba(53, 208, 127, 0.35);
+  color: #071b12;
+  background: #9aebba;
 }
 
 .alert,
@@ -159,9 +230,21 @@
 }
 
 .notice {
+  justify-content: space-between;
+  align-items: center;
   border: 1px solid rgba(53, 208, 127, 0.24);
   background: rgba(53, 208, 127, 0.08);
   color: #9aebba;
+}
+
+.noticeCopy {
+  min-width: 0;
+}
+
+.noticeCopy p {
+  margin: 0.35rem 0 0;
+  color: #b8d8c4;
+  line-height: 1.48;
 }
 
 .summaryGrid {
@@ -398,6 +481,10 @@
     justify-self: start;
   }
 
+  .heroActions {
+    justify-content: flex-start;
+  }
+
   .summaryGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -422,9 +509,17 @@
   }
 
   .panelHeading,
-  .cardTop {
+  .cardTop,
+  .forecastContext,
+  .notice {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .heroActions > *,
+  .contextLink,
+  .impactLink {
+    width: 100%;
   }
 
   .readOnlyBadge {

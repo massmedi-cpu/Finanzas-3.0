@@ -1,7 +1,19 @@
+import { recurrencesHrefForForecast } from "../forecast/recurrence-flow";
+
 export type AnalysisModuleSelection = {
   month: string;
   dateFrom: string;
   dateTo: string;
+  previousDateFrom?: string;
+  previousDateTo?: string;
+  accountId: string | null;
+};
+
+export type ComparisonModuleSelection = {
+  primaryFrom: string;
+  primaryTo: string;
+  referenceFrom: string;
+  referenceTo: string;
   accountId: string | null;
 };
 
@@ -44,8 +56,22 @@ export function analysisModuleLinks(
         ["accountId", forecastPeriod.accountId ?? selection.accountId],
       ])
     : href("/forecast", [["accountId", selection.accountId]]);
+  const comparisonHref = href("/compare", [
+    ["primaryFrom", selection.dateFrom],
+    ["primaryTo", selection.dateTo],
+    ["referenceFrom", selection.previousDateFrom],
+    ["referenceTo", selection.previousDateTo],
+    ["accountId", selection.accountId],
+  ]);
 
   return [
+    {
+      label: "Comparador",
+      href: comparisonHref,
+      detail: selection.previousDateFrom && selection.previousDateTo
+        ? "Periodo actual frente a su referencia"
+        : "Contrastar dos periodos personalizados",
+    },
     {
       label: "Cash Flow",
       href: href("/cash-flow", [["month", selection.dateFrom.slice(0, 7)]]),
@@ -74,6 +100,39 @@ export function analysisModuleLinks(
   ];
 }
 
+export function comparisonModuleLinks(selection: ComparisonModuleSelection): ModuleContextLink[] {
+  return [
+    {
+      label: "Análisis",
+      href: href("/analysis", [["accountId", selection.accountId]]),
+      detail: "Volver a tendencias y evolución mensual",
+    },
+    {
+      label: "Movimientos · principal",
+      href: href("/transactions", [
+        ["dateFrom", selection.primaryFrom],
+        ["dateTo", selection.primaryTo],
+        ["accountId", selection.accountId],
+      ]),
+      detail: "Auditar el periodo principal",
+    },
+    {
+      label: "Movimientos · referencia",
+      href: href("/transactions", [
+        ["dateFrom", selection.referenceFrom],
+        ["dateTo", selection.referenceTo],
+        ["accountId", selection.accountId],
+      ]),
+      detail: "Auditar el periodo de referencia",
+    },
+    {
+      label: "Cash Flow",
+      href: href("/cash-flow", [["month", selection.primaryFrom.slice(0, 7)]]),
+      detail: "Ver hechos y previsiones del mes principal",
+    },
+  ];
+}
+
 export function forecastModuleLinks(selection: ForecastModuleSelection): ModuleContextLink[] {
   return [
     {
@@ -98,8 +157,8 @@ export function forecastModuleLinks(selection: ForecastModuleSelection): ModuleC
     },
     {
       label: "Recurrentes",
-      href: "/recurrences",
-      detail: "Revisar el origen de las previsiones recurrentes",
+      href: recurrencesHrefForForecast(selection),
+      detail: "Revisar patrones y volver al mismo horizonte",
     },
   ];
 }

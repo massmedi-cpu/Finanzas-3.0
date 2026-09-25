@@ -1,3 +1,5 @@
+import webVitalsPolicy from "./web-vitals-policy.json";
+
 export const WEB_VITAL_NAMES = ["CLS", "FCP", "FID", "INP", "LCP", "TTFB"] as const;
 export type WebVitalName = (typeof WEB_VITAL_NAMES)[number];
 
@@ -6,6 +8,9 @@ export type WebVitalRating = (typeof WEB_VITAL_RATINGS)[number];
 
 export const CLIENT_ERROR_KINDS = ["window_error", "unhandled_rejection"] as const;
 export type ClientErrorKind = (typeof CLIENT_ERROR_KINDS)[number];
+
+export const TELEMETRY_DEVICES = ["mobile", "desktop"] as const;
+export type TelemetryDevice = (typeof TELEMETRY_DEVICES)[number];
 
 export const TELEMETRY_ROUTES = [
   "/",
@@ -24,32 +29,49 @@ export const TELEMETRY_ROUTES = [
 ] as const;
 export type TelemetryRoute = (typeof TELEMETRY_ROUTES)[number];
 
+export const RUM_LOG_CONTRACT_VERSION = webVitalsPolicy.contractVersion;
+export const RUM_REPORT_VERSION = webVitalsPolicy.reportVersion;
+export const RUM_WINDOW_DAYS = webVitalsPolicy.windowDays;
+export const RUM_MIN_SAMPLES_PER_SLICE = webVitalsPolicy.minSamplesPerSlice;
+export const RUM_REQUIRED_ROUTES = webVitalsPolicy.requiredRoutes as readonly TelemetryRoute[];
+export const RUM_GATE_METRICS = webVitalsPolicy.gateMetrics as readonly WebVitalName[];
+
 /**
  * Production RUM budgets. Timing values are milliseconds; CLS is unitless.
  * These thresholds use the established "good" boundary for the corresponding
  * web-vitals metric. FID remains only for compatibility; INP is the current
  * responsiveness metric used for readiness decisions.
  */
-export const WEB_VITAL_BUDGETS: Readonly<Record<WebVitalName, number>> = {
-  CLS: 0.1,
-  FCP: 1_800,
-  FID: 100,
-  INP: 200,
-  LCP: 2_500,
-  TTFB: 800,
-};
+export const WEB_VITAL_BUDGETS: Readonly<Record<WebVitalName, number>> = webVitalsPolicy.budgets;
 
 const WEB_VITAL_SET = new Set<string>(WEB_VITAL_NAMES);
 const RATING_SET = new Set<string>(WEB_VITAL_RATINGS);
 const CLIENT_ERROR_KIND_SET = new Set<string>(CLIENT_ERROR_KINDS);
+const DEVICE_SET = new Set<string>(TELEMETRY_DEVICES);
 const ROUTE_SET = new Set<string>(TELEMETRY_ROUTES);
-const WEB_VITAL_FIELDS = new Set(["type", "route", "name", "value", "rating"]);
+const POLICY_DEVICE_SET = new Set<string>(webVitalsPolicy.devices);
+const POLICY_ROUTE_SET = new Set<string>(webVitalsPolicy.routes);
+const WEB_VITAL_FIELDS = new Set(["type", "route", "device", "name", "value", "rating"]);
 const CLIENT_ERROR_FIELDS = new Set(["type", "route", "kind", "errorName"]);
 const SAFE_ERROR_NAME = /^[A-Za-z][A-Za-z0-9_.-]{0,63}$/;
+
+if (
+  POLICY_ROUTE_SET.size !== ROUTE_SET.size
+  || webVitalsPolicy.routes.some((route) => !ROUTE_SET.has(route))
+  || POLICY_DEVICE_SET.size !== DEVICE_SET.size
+  || webVitalsPolicy.devices.some((device) => !DEVICE_SET.has(device))
+  || webVitalsPolicy.requiredRoutes.some((route) => !ROUTE_SET.has(route))
+  || webVitalsPolicy.gateMetrics.some((metric) => !WEB_VITAL_SET.has(metric))
+  || WEB_VITAL_NAMES.some((name) => !(name in webVitalsPolicy.budgets))
+  || Object.values(webVitalsPolicy.budgets).some((budget) => !Number.isFinite(budget) || budget <= 0)
+) {
+  throw new Error("invalid_web_vitals_policy");
+}
 
 export type WebVitalTelemetry = {
   type: "web_vital";
   route: TelemetryRoute;
+  device: TelemetryDevice;
   name: WebVitalName;
   value: number;
   rating: WebVitalRating | null;
@@ -76,6 +98,14 @@ export function isWebVitalName(value: unknown): value is WebVitalName {
   return typeof value === "string" && WEB_VITAL_SET.has(value);
 }
 
+export function isWebVitalRating(value: unknown): value is WebVitalRating {
+  return typeof value === "string" && RATING_SET.has(value);
+}
+
+export function isTelemetryDevice(value: unknown): value is TelemetryDevice {
+  return typeof value === "string" && DEVICE_SET.has(value);
+}
+
 export function normalizeTelemetryRoute(value: unknown): TelemetryRoute {
   if (typeof value !== "string") return "/other";
   const pathname = value.trim().split(/[?#]/, 1)[0] || "/";
@@ -93,6 +123,7 @@ export function parseOperationalTelemetry(value: unknown): OperationalTelemetry 
 
   if (value.type === "web_vital") {
     if (!hasOnlyKeys(value, WEB_VITAL_FIELDS)) return null;
+    if (!isTelemetryDevice(value.device)) return null;
     if (!isWebVitalName(value.name)) return null;
     if (typeof value.value !== "number" || !Number.isFinite(value.value) || value.value < 0 || value.value > 3_600_000) {
       return null;
@@ -106,6 +137,7 @@ export function parseOperationalTelemetry(value: unknown): OperationalTelemetry 
     return {
       type: "web_vital",
       route,
+      device: value.device,
       name: value.name,
       value: value.value,
       rating: value.rating as WebVitalRating | null,

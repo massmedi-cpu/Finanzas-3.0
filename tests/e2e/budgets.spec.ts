@@ -62,6 +62,32 @@ const baseSnapshot = {
     manualOverrideWins: true,
     parentCategoryIncludesDescendants: true,
   },
+  planning: {
+    contractVersion: 1,
+    state: "ready",
+    objectiveState: "needs_limit",
+    historyDateFrom: "2026-06-01",
+    historyDateTo: "2026-08-31",
+    historicalBaselineCents: 120000,
+    selectedLimitCents: null,
+    trackingReferenceCents: 120000,
+    differenceFromBaselineCents: null,
+    averageIncomeCents: 200000,
+    targetSavingsCents: null,
+    targetSavingsRateBps: null,
+    incomeHistoryMonths: [
+      { month: "2026-06", incomeCents: 190000 },
+      { month: "2026-07", incomeCents: 200000 },
+      { month: "2026-08", incomeCents: 210000 },
+    ],
+    principles: {
+      historicalBaseline: "trailing_3_complete_month_expense_average",
+      chosenLimit: "manual_total_budget_only",
+      objective: "average_income_minus_chosen_limit",
+      incomeSource: "financial_monthly_series",
+      financialAdvice: false,
+    },
+  },
 };
 
 function snapshotWithTotalManual(manualAmountCents: number | null) {
@@ -82,6 +108,19 @@ function snapshotWithTotalManual(manualAmountCents: number | null) {
       status: effectiveAmountCents === 0
         ? (actualExpenseCents > 0 ? "unfunded" : "empty")
         : (actualExpenseCents > effectiveAmountCents ? "over" : "on_track"),
+    },
+    planning: {
+      ...baseSnapshot.planning,
+      objectiveState: manualAmountCents === null ? "needs_limit" : "ready",
+      selectedLimitCents: manualAmountCents,
+      trackingReferenceCents: effectiveAmountCents,
+      differenceFromBaselineCents: manualAmountCents === null
+        ? null
+        : manualAmountCents - baseSnapshot.total.automaticAmountCents,
+      targetSavingsCents: manualAmountCents === null ? null : 200000 - manualAmountCents,
+      targetSavingsRateBps: manualAmountCents === null
+        ? null
+        : Math.round(((200000 - manualAmountCents) * 10000) / 200000),
     },
   };
 }
@@ -260,30 +299,30 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
   expect(writes).toHaveLength(0);
 });
 
-test("Presupuestos guarda y elimina un límite manual sin perder la recomendación automática", async ({ page }) => {
+test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el gasto habitual", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
   await page.goto("/budgets");
 
-  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
-  const input = page.getByLabel("Presupuesto manual de total mensual");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const input = page.getByLabel("Límite elegido de total mensual");
   await input.fill("1.500,50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite manual guardado");
+  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes.at(-1)).toMatchObject({
     method: "PATCH",
     month: "2026-09",
     categoryId: null,
     manualAmountCents: 150050,
   });
-  await expect(page.getByText(/Manual · automático/).first()).toBeVisible();
+  await expect(page.getByText(/Gasto habitual/).first()).toBeVisible();
 
-  await page.getByRole("button", { name: "Volver a automático" }).first().click();
-  await expect(page.getByRole("status")).toContainText("restaurado el cálculo automático");
+  await page.getByRole("button", { name: "Quitar límite elegido" }).first().click();
+  await expect(page.getByRole("status")).toContainText("histórico vuelve a usarse sólo como referencia");
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: null });
 
-  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
-  await page.getByLabel("Presupuesto manual de total mensual").fill("1500.50");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("1500.50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: 150050 });
 });
@@ -293,8 +332,8 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
   await mockBudgetApi(page, writes);
   await page.goto("/budgets");
 
-  await page.getByRole("button", { name: "Fijar límite manual" }).first().click();
-  const input = page.getByLabel("Presupuesto manual de total mensual");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const input = page.getByLabel("Límite elegido de total mensual");
   await input.fill("1,234");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(
@@ -304,7 +343,7 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
 
   await input.fill("1.234,56");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite manual guardado");
+  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({
     method: "PATCH",
@@ -312,6 +351,31 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
     categoryId: null,
     manualAmountCents: 123456,
   });
+});
+
+test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.goto("/budgets");
+
+  const planning = page.getByRole("region", { name: "De lo habitual a tu objetivo" });
+  await expect(planning).toHaveAttribute("data-planning-state", "ready");
+  await expect(planning).toHaveAttribute("data-objective-state", "needs_limit");
+  await expect(planning.getByText("Referencia histórica", { exact: true })).toBeVisible();
+  await expect(planning.getByText("Límite elegido", { exact: true })).toBeVisible();
+  await expect(planning.getByText("Objetivo de ahorro resultante", { exact: true })).toBeVisible();
+  await expect(planning.getByText(/Describe el pasado; no recomienda cuánto deberías gastar/i)).toBeVisible();
+
+  await planning.getByRole("button", { name: "Definir mi límite mensual" }).click();
+  const totalLimit = page.getByLabel("Límite elegido de total mensual");
+  await expect(totalLimit).toBeFocused();
+  await totalLimit.fill("1.000,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+
+  await expect(planning).toHaveAttribute("data-objective-state", "ready");
+  await expect(planning.getByText("1.000,00 €", { exact: true })).toHaveCount(2);
+  await expect(planning.getByText(/50,00 % para ahorro/i)).toBeVisible();
+  expect(writes.at(-1)).toMatchObject({ manualAmountCents: 100000 });
 });
 
 test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
@@ -362,8 +426,8 @@ test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuar
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   expect(writes).toHaveLength(0);
 
-  await page.getByRole("button", { name: "Recalcular y guardar" }).click();
-  await expect(page.getByRole("status")).toContainText("recalculado y guardado");
+  await page.getByRole("button", { name: "Actualizar referencias" }).click();
+  await expect(page.getByRole("status")).toContainText("Referencias históricas");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });

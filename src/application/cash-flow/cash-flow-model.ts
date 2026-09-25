@@ -38,16 +38,33 @@ export type CashFlowDay = {
   forecasts: ForecastItem[];
 };
 
+export type CashFlowEventState = "suggested" | "confirmed" | "realized" | "discarded";
+
+export type CashFlowEvolutionPoint = {
+  date: string;
+  realCumulativeCents: number | null;
+  plannedCumulativeCents: number | null;
+  combinedCumulativeCents: number | null;
+};
+
+export type CashFlowForecastCounts = Record<CashFlowEventState, number>;
+
 export type CashFlowView = {
   month: string;
   dateFrom: string;
   dateTo: string;
   actualState: "ready" | "unavailable" | "incomplete" | "mismatch";
   forecastState: "ready" | "unavailable" | "mismatch";
+  actualIncomeCents: number | null;
+  actualExpenseCents: number | null;
   actualNetCents: number | null;
+  plannedIncomeCents: number | null;
+  plannedExpenseCents: number | null;
   plannedNetCents: number | null;
   realCount: number | null;
+  forecastCounts: CashFlowForecastCounts | null;
   days: CashFlowDay[];
+  evolution: CashFlowEvolutionPoint[];
 };
 
 export function cashFlowMonth(raw: string | null | undefined, today: string) {
@@ -117,6 +134,12 @@ export function countsInCashFlow(row: CashFlowTransaction) {
   return !row.excludedFromAnalytics && row.duplicateState !== "confirmed" && row.kind.effective !== "transfer";
 }
 
+export function cashFlowEventState(item: ForecastItem): CashFlowEventState {
+  if (item.status === "excluded") return "discarded";
+  if (item.status === "confirmed") return "realized";
+  return item.origin === "manual" || item.origin === "known" ? "confirmed" : "suggested";
+}
+
 export function assembleCashFlow(input: {
   month: string;
   dateFrom: string;
@@ -131,7 +154,10 @@ export function assembleCashFlow(input: {
   const forecast = isCashFlowForecast(input.forecast, dateFrom, dateTo) ? input.forecast : null;
   const actualRows = transactions ?? [];
   const eligible = actualRows.filter((row) => !row.excludedFromAnalytics && row.duplicateState !== "confirmed");
-  const derivedRealNet = eligible.reduce((sum, row) => sum + (row.kind.effective === "transfer" ? 0 : row.amountCents), 0);
+  const cashFlowRows = actualRows.filter(countsInCashFlow);
+  const derivedRealIncome = cashFlowRows.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
+  const derivedRealExpense = cashFlowRows.reduce((sum, row) => sum - Math.min(0, row.amountCents), 0);
+  const derivedRealNet = derivedRealIncome - derivedRealExpense;
   const actualState = transactionState === "unavailable" || !periodValid ? "unavailable"
     : transactionState === "incomplete" || transactions === null ? "incomplete"
       : derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
@@ -149,10 +175,23 @@ export function assembleCashFlow(input: {
       && forecast.summary.excludedItems === forecast.items.filter((item) => item.status === "excluded").length
       && new Set(forecast.items.map((item) => item.id)).size === forecast.items.length ? "ready" : "mismatch";
 
+  const transactionsByDate = new Map<string, CashFlowTransaction[]>();
+  for (const row of actualRows) {
+    const rows = transactionsByDate.get(row.bankDate) ?? [];
+    rows.push(row);
+    transactionsByDate.set(row.bankDate, rows);
+  }
+  const forecastsByDate = new Map<string, ForecastItem[]>();
+  for (const item of forecast?.items ?? []) {
+    const items = forecastsByDate.get(item.date) ?? [];
+    items.push(item);
+    forecastsByDate.set(item.date, items);
+  }
+
   const days: CashFlowDay[] = [];
   for (let day = dateFrom; day <= dateTo;) {
-    const real = actualRows.filter((row) => row.bankDate === day);
-    const forecasts = forecast?.items.filter((item) => item.date === day) ?? [];
+    const real = transactionsByDate.get(day) ?? [];
+    const forecasts = forecastsByDate.get(day) ?? [];
     const effects = actualState === "ready" ? real.filter(countsInCashFlow) : [];
     const planned = forecastState === "ready" ? forecasts : [];
     const realIncomeCents = effects.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
@@ -167,11 +206,40 @@ export function assembleCashFlow(input: {
     day = next.toISOString().slice(0, 10);
   }
 
+  let realCumulativeCents = 0;
+  let plannedCumulativeCents = 0;
+  const evolution = days.map((day): CashFlowEvolutionPoint => {
+    realCumulativeCents += day.realNetCents;
+    plannedCumulativeCents += day.plannedNetCents;
+    return {
+      date: day.date,
+      realCumulativeCents: actualState === "ready" ? realCumulativeCents : null,
+      plannedCumulativeCents: forecastState === "ready" ? plannedCumulativeCents : null,
+      combinedCumulativeCents: actualState === "ready" && forecastState === "ready"
+        ? realCumulativeCents + plannedCumulativeCents
+        : null,
+    };
+  });
+
+  const forecastCounts = forecastState === "ready" && forecast ? forecast.items.reduce<CashFlowForecastCounts>(
+    (counts, item) => {
+      const state = cashFlowEventState(item);
+      return { ...counts, [state]: counts[state] + 1 };
+    },
+    { suggested: 0, confirmed: 0, realized: 0, discarded: 0 },
+  ) : null;
+
   return {
     month, dateFrom, dateTo, actualState, forecastState,
+    actualIncomeCents: actualState === "ready" ? derivedRealIncome : null,
+    actualExpenseCents: actualState === "ready" ? derivedRealExpense : null,
     actualNetCents: actualState === "ready" ? derivedRealNet : null,
+    plannedIncomeCents: forecastState === "ready" ? derivedPlannedIncome ?? null : null,
+    plannedExpenseCents: forecastState === "ready" ? derivedPlannedExpense ?? null : null,
     plannedNetCents: forecastState === "ready" ? derivedPlannedNet ?? null : null,
     realCount: actualState === "ready" ? actualRows.length : null,
+    forecastCounts,
     days,
+    evolution,
   };
 }

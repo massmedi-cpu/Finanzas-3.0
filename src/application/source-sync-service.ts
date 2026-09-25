@@ -99,6 +99,8 @@ export type SourceSyncBatchPreparer = (
   snapshot: OfficialSourceWorkbookSnapshot,
 ) => PreparedSourceSyncBatch;
 
+export const MAX_SOURCE_SYNC_OBSERVATIONS = 10_000;
+
 export class SourceWorkbookContractError extends Error {
   constructor(
     public readonly code:
@@ -107,6 +109,7 @@ export class SourceWorkbookContractError extends Error {
       | "empty_source_sheet"
       | "source_order_mismatch"
       | "duplicate_source_row_identity"
+      | "source_observation_limit_exceeded"
       | "ambiguous_product_fallback"
       | "opening_balance_unavailable",
     message: string,
@@ -308,6 +311,14 @@ export function prepareOfficialSourceSyncBatch(
         throw new SourceWorkbookContractError(
           "duplicate_source_row_identity",
           `La identidad “${observation.sourceRowIdentity}” aparece más de una vez en el libro autoritativo.`,
+          observation.sourceSheetId,
+          observation.sourceRowKey,
+        );
+      }
+      if (seenIdentities.size >= MAX_SOURCE_SYNC_OBSERVATIONS) {
+        throw new SourceWorkbookContractError(
+          "source_observation_limit_exceeded",
+          `La fuente supera el máximo contractual de ${MAX_SOURCE_SYNC_OBSERVATIONS.toLocaleString("es-ES")} observaciones por sincronización.`,
           observation.sourceSheetId,
           observation.sourceRowKey,
         );

@@ -4,6 +4,12 @@ test("Cash Flow navega por meses y abre el detalle diario sin inventar cifras", 
   await page.goto("/cash-flow?month=2028-02", { waitUntil: "domcontentloaded" });
   await expect(page.getByRole("heading", { name: "Cash Flow", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Resumen de Cash Flow" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Estado de las previsiones" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Flujo acumulado del mes" })).toBeVisible();
+  await expect(page.getByText("Sugeridos", { exact: true })).toBeVisible();
+  await expect(page.getByText("Confirmados", { exact: true })).toBeVisible();
+  await expect(page.getByText("Realizados", { exact: true })).toBeVisible();
+  await expect(page.getByText("Descartados", { exact: true })).toBeVisible();
 
   const calendar = page.getByRole("group", { name: "Días de febrero de 2028" });
   await expect(calendar.locator("button[aria-pressed]")).toHaveCount(29);
@@ -30,5 +36,6 @@ test("Cash Flow mantiene los días utilizables en móvil pequeño", async ({ pag
   const firstDay = calendar.getByRole("button", { name: /^martes, 1 de septiembre de 2026:/ });
   await firstDay.click();
   await expect(firstDay).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByRole("heading", { name: "Estado de las previsiones" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });

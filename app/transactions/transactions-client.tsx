@@ -2,6 +2,12 @@
 
 import Link from "next/link";
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  authRecoveryFromCode,
+  requestErrorCode,
+  type AuthRecoveryState,
+} from "../../src/application/auth-recovery";
+import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -222,7 +228,9 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
 }
 
 function readableError(payload: any) {
-  const code = typeof payload?.code === "string" ? payload.code : "";
+  const code = requestErrorCode(payload);
+  if (code === "authentication_required") return "Tu sesión ha caducado antes de guardar.";
+  if (code === "authentication_unavailable") return "El acceso seguro no está disponible temporalmente.";
   if (code.includes("date_range")) return "La fecha inicial no puede ser posterior a la fecha final.";
   if (code.includes("cursor")) return "La paginación ha quedado desfasada. Actualiza el listado.";
   if (code.includes("page_limit")) return "El tamaño de página solicitado no es válido.";
@@ -305,6 +313,7 @@ export default function TransactionsClient() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState(UNCHANGED);
@@ -485,6 +494,7 @@ export default function TransactionsClient() {
   async function patchTransactions(ids: string[], patch: Record<string, unknown>, message: string) {
     setSaving(true);
     setError(null);
+    setAuthRecovery(null);
     setNotice(null);
     try {
       const response = await fetch("/api/transactions", {
@@ -493,7 +503,10 @@ export default function TransactionsClient() {
         body: JSON.stringify({ transactionIds: ids, patch }),
       });
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(readableError(payload));
+      if (!response.ok) {
+        setAuthRecovery(authRecoveryFromCode(requestErrorCode(payload)));
+        throw new Error(readableError(payload));
+      }
       const changed = payload?.result?.changedTransactions;
       setNotice(Number.isInteger(changed) ? `${message} · ${changed.toLocaleString("es-ES")} modificados.` : message);
       setEditingId(null);
@@ -569,6 +582,7 @@ export default function TransactionsClient() {
   setConceptError("");
   setCategoryError("");
   setError(null);
+  setAuthRecovery(null);
   setNotice(null);
   closeReview();
 }
@@ -578,6 +592,7 @@ function cancelEdit() {
   setEditor(null);
   setConceptError("");
   setCategoryError("");
+  setAuthRecovery(null);
 }
 
 async function saveEdit(row: TransactionRow) {
@@ -642,7 +657,7 @@ async function saveEdit(row: TransactionRow) {
       <form className={styles.filters} onSubmit={applyFilters} aria-label="Filtros de movimientos">
         <label className={styles.searchField}>
           <span>Buscar</span>
-          <input value={draftFilters.q} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, categoría o cuenta" />
+          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, categoría o cuenta" />
         </label>
         <label>
           <span>Cuenta</span>
@@ -707,6 +722,7 @@ async function saveEdit(row: TransactionRow) {
       )}
 
       {error && <div className={styles.error} role="alert">{error}</div>}
+      {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/transactions" /> : null}
       {notice && <div className={styles.notice} role="status">{notice}</div>}
 
       <section className={styles.panel} aria-labelledby="transaction-list-heading">

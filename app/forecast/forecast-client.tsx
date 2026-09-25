@@ -2,13 +2,24 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  authRecoveryFromError,
+  requestErrorCode,
+  type AuthRecoveryState,
+} from "../../src/application/auth-recovery";
 import type {
   ForecastCandidateSnapshot,
   ForecastItem,
   ForecastSnapshot,
 } from "../../src/application/forecast/forecast-contract";
+import {
+  recurrencesHrefForForecast,
+  type ForecastRecurrenceHandoff,
+} from "../../src/application/forecast/recurrence-flow";
+import type { ResolvedForecastSelection } from "../../src/application/forecast/forecast-selection";
 import { formatMoneyCents } from "../../src/core/money";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
+import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { ForecastCalendar } from "./forecast-calendar";
 import styles from "./forecast.module.css";
 
@@ -16,6 +27,10 @@ type ManualErrors = {
   concept?: string;
   amount?: string;
 };
+
+type RecurrenceFlowState = "review" | "refreshing" | "ready" | "empty" | "error";
+
+const EMPTY_FORECAST_ITEMS: ForecastItem[] = [];
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
   day: "2-digit",
@@ -98,23 +113,38 @@ function confidenceLabel(confidence: ForecastItem["confidence"]) {
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const code = typeof body?.code === "string" ? body.code : typeof body?.error === "string" ? body.error : "request_failed";
-    throw new Error(code);
+    throw new Error(requestErrorCode(body));
   }
   return body;
 }
 
-export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: ForecastSnapshot | null }) {
+function clearRecurrenceRefreshAction() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("recurrenceAction");
+  window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}
+
+export function ForecastClient({
+  initialSnapshot = null,
+  initialSelection = null,
+  recurrenceHandoff = null,
+}: {
+  initialSnapshot?: ForecastSnapshot | null;
+  initialSelection?: ResolvedForecastSelection | null;
+  recurrenceHandoff?: ForecastRecurrenceHandoff | null;
+}) {
   const today = useMemo(() => madridToday(), []);
   const fallbackFrom = useMemo(() => addDays(today, 1), [today]);
   const fallbackTo = useMemo(() => addDays(today, 90), [today]);
-  const initialFrom = initialSnapshot?.period.dateFrom ?? fallbackFrom;
-  const initialTo = initialSnapshot?.period.dateTo ?? fallbackTo;
+  const initialFrom = initialSnapshot?.period.dateFrom ?? initialSelection?.dateFrom ?? fallbackFrom;
+  const initialTo = initialSnapshot?.period.dateTo ?? initialSelection?.dateTo ?? fallbackTo;
+  const initialAccountId = initialSnapshot?.period.accountId ?? initialSelection?.accountId ?? null;
 
   const [dateFrom, setDateFrom] = useState(initialFrom);
   const [dateTo, setDateTo] = useState(initialTo);
   const dateFromRef = useRef(initialFrom);
   const dateToRef = useRef(initialTo);
+  const accountIdRef = useRef(initialAccountId);
   const loadSequence = useRef(0);
   const loadAbortRef = useRef<AbortController | null>(null);
   const skipInitialReloadRef = useRef(Boolean(initialSnapshot));
@@ -125,6 +155,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
   const [loading, setLoading] = useState(!initialSnapshot);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [manualDate, setManualDate] = useState(initialFrom);
   const [manualConcept, setManualConcept] = useState("");
@@ -141,8 +172,17 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
   const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
   const candidateCloseRef = useRef<HTMLButtonElement | null>(null);
   const candidateTriggerRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const recurrenceHandoffAppliedRef = useRef<string | null>(null);
+  const [recurrenceFlowState, setRecurrenceFlowState] = useState<RecurrenceFlowState>(
+    recurrenceHandoff?.refresh ? "refreshing" : "review",
+  );
+  const handoffRecurrenceId = recurrenceHandoff?.recurrenceId ?? null;
+  const handoffDateFrom = recurrenceHandoff?.dateFrom ?? null;
+  const handoffDateTo = recurrenceHandoff?.dateTo ?? null;
+  const handoffAccountId = recurrenceHandoff?.accountId ?? null;
+  const handoffRefresh = recurrenceHandoff?.refresh ?? false;
 
-  const loadSnapshot = useCallback(async () => {
+  const loadSnapshot = useCallback(async (): Promise<ForecastSnapshot | null> => {
     const sequence = ++loadSequence.current;
     const requestedFrom = dateFromRef.current;
     const requestedTo = dateToRef.current;
@@ -151,18 +191,24 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
     loadAbortRef.current = controller;
     setLoading(true);
     setError(null);
+    setAuthRecovery(null);
 
     try {
       const params = new URLSearchParams({ dateFrom: requestedFrom, dateTo: requestedTo });
+      if (accountIdRef.current) params.set("accountId", accountIdRef.current);
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
       }));
-      if (controller.signal.aborted || sequence !== loadSequence.current) return;
-      setSnapshot(data as ForecastSnapshot);
+      if (controller.signal.aborted || sequence !== loadSequence.current) return null;
+      const nextSnapshot = data as ForecastSnapshot;
+      accountIdRef.current = nextSnapshot.period.accountId;
+      setSnapshot(nextSnapshot);
+      return nextSnapshot;
     } catch (err) {
-      if (controller.signal.aborted || sequence !== loadSequence.current) return;
+      if (controller.signal.aborted || sequence !== loadSequence.current) return null;
       setError(err instanceof Error ? err.message : "No se pudo cargar la previsión");
+      return null;
     } finally {
       if (loadAbortRef.current === controller) loadAbortRef.current = null;
       if (!controller.signal.aborted && sequence === loadSequence.current) setLoading(false);
@@ -181,28 +227,39 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
     loadAbortRef.current?.abort();
   }, []);
 
-  async function runMutation(key: string, task: () => Promise<void>) {
+  async function runMutation(
+    key: string,
+    task: () => Promise<void>,
+  ): Promise<ForecastSnapshot | null> {
     setBusy(key);
     setError(null);
+    setAuthRecovery(null);
     setNotice(null);
     try {
       await task();
-      await loadSnapshot();
+      return await loadSnapshot();
     } catch (err) {
       const message = err instanceof Error ? err.message : "La operación no se ha podido completar";
       if (message === "forecast_write_conflict") {
         setError("La previsión cambió en otro lugar. He cargado la versión más reciente; revísala y vuelve a intentarlo.");
-        await loadSnapshot();
+        return await loadSnapshot();
       } else {
-        setError(message);
+        const recovery = authRecoveryFromError(err);
+        setAuthRecovery(recovery);
+        setError(recovery === "required"
+          ? "Tu sesión ha caducado antes de guardar."
+          : recovery === "unavailable"
+            ? "El acceso seguro no está disponible temporalmente."
+            : message);
       }
+      return null;
     } finally {
       setBusy(null);
     }
   }
 
   async function refreshRecurring() {
-    await runMutation("refresh", async () => {
+    const refreshed = await runMutation("refresh", async () => {
       const result = await readJson(await fetch("/api/forecast", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -210,12 +267,62 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
           action: "refresh",
           dateFrom: dateFromRef.current,
           dateTo: dateToRef.current,
-          accountId: snapshot?.period.accountId ?? null,
+          accountId: accountIdRef.current,
         }),
       }));
       setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
     });
+    if (refreshed && handoffRecurrenceId) {
+      const hasImpact = refreshed.items.some((item) => item.recurrenceId === handoffRecurrenceId);
+      setRecurrenceFlowState(hasImpact ? "ready" : "empty");
+      clearRecurrenceRefreshAction();
+    }
   }
+
+  useEffect(() => {
+    if (!handoffRefresh || !handoffRecurrenceId || !handoffDateFrom || !handoffDateTo) return;
+    const key = [
+      handoffRecurrenceId,
+      handoffDateFrom,
+      handoffDateTo,
+      handoffAccountId ?? "all",
+    ].join(":");
+    if (recurrenceHandoffAppliedRef.current === key) return;
+    recurrenceHandoffAppliedRef.current = key;
+
+    const applyConfirmedRecurrence = async () => {
+      setRecurrenceFlowState("refreshing");
+      setBusy("recurrence-handoff");
+      setError(null);
+      setNotice(null);
+      try {
+        await readJson(await fetch("/api/forecast", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "refresh",
+            dateFrom: handoffDateFrom,
+            dateTo: handoffDateTo,
+            accountId: handoffAccountId,
+          }),
+        }));
+        const refreshed = await loadSnapshot();
+        if (!refreshed) throw new Error("forecast_recurrence_refresh_unavailable");
+        const matchingItems = refreshed.items.filter(
+          (item) => item.recurrenceId === handoffRecurrenceId,
+        );
+        setRecurrenceFlowState(matchingItems.length > 0 ? "ready" : "empty");
+        clearRecurrenceRefreshAction();
+      } catch {
+        setRecurrenceFlowState("error");
+        setError("La recurrencia se confirmó, pero no se ha podido regenerar su impacto. Puedes volver a intentarlo con «Actualizar recurrentes».");
+      } finally {
+        setBusy((current) => current === "recurrence-handoff" ? null : current);
+      }
+    };
+
+    void applyConfirmedRecurrence();
+  }, [handoffAccountId, handoffDateFrom, handoffDateTo, handoffRecurrenceId, handoffRefresh, loadSnapshot]);
 
   async function createManual(event: FormEvent) {
     event.preventDefault();
@@ -244,7 +351,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
       date: manualDate,
       concept: manualConcept.trim(),
       amountCents: manualKind === "expense" ? -absoluteCents : absoluteCents,
-      accountId: snapshot?.period.accountId ?? null,
+      accountId: accountIdRef.current,
       categoryId: null,
       merchantId: null,
       confidence: manualConfidence,
@@ -342,10 +449,45 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
     });
   }
 
-  const items = snapshot?.items ?? [];
+  const items = snapshot?.items ?? EMPTY_FORECAST_ITEMS;
+  const recurrenceImpact = useMemo(() => {
+    if (!handoffRecurrenceId) return null;
+    const matchingItems = items.filter(
+      (item) => item.recurrenceId === handoffRecurrenceId,
+    );
+    const firstItem = [...matchingItems].sort((left, right) => left.date.localeCompare(right.date))[0] ?? null;
+    return {
+      matchingItems,
+      firstItem,
+      projectionEffectCents: matchingItems.reduce(
+        (total, item) => total + item.projectionEffectCents,
+        0,
+      ),
+    };
+  }, [handoffRecurrenceId, items]);
+  const visibleRecurrenceFlowState = recurrenceFlowState === "review" && !loading
+    ? snapshot
+      ? (recurrenceImpact?.matchingItems.length ? "ready" : "empty")
+      : "review"
+    : recurrenceFlowState;
+  const recurrenceContextSelection = snapshot?.period ?? initialSelection ?? {
+    dateFrom,
+    dateTo,
+    accountId: handoffAccountId,
+  };
+  const recurrencesHref = recurrencesHrefForForecast(recurrenceContextSelection);
   const visiblePeriodIsStale = Boolean(snapshot && (
     snapshot.period.dateFrom !== dateFrom || snapshot.period.dateTo !== dateTo
   ));
+
+  function focusFirstRecurrenceImpact() {
+    if (!handoffRecurrenceId) return;
+    const element = document.querySelector<HTMLElement>(
+      `[data-recurrence-id="${handoffRecurrenceId}"]`,
+    );
+    element?.focus({ preventScroll: true });
+    element?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
 
   return (
     <main className={styles.page} aria-busy={loading || undefined}>
@@ -359,12 +501,67 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
         </div>
         <div className={styles.heroActions}>
           <Link prefetch={false} href="/" className={styles.secondaryButton}>Inicio</Link>
-          <Link prefetch={false} href="/recurrences" className={styles.secondaryButton}>Recurrentes</Link>
+          <Link prefetch={false} href={recurrencesHref} className={styles.secondaryButton}>Recurrentes</Link>
           <button className={styles.primaryButton} onClick={() => void refreshRecurring()} disabled={busy !== null}>
-            {busy === "refresh" ? "Actualizando…" : "Actualizar recurrentes"}
+            {busy === "refresh" || busy === "recurrence-handoff" ? "Actualizando…" : "Actualizar recurrentes"}
           </button>
         </div>
       </header>
+
+      {handoffRecurrenceId ? (
+        <section
+          className={styles.recurrenceFlow}
+          aria-labelledby="recurrence-impact-title"
+          aria-live="polite"
+          data-recurrence-flow-state={visibleRecurrenceFlowState}
+        >
+          <div className={styles.recurrenceFlowHeader}>
+            <div>
+              <p className={styles.eyebrow}>RECURRENTES → PREVISIÓN</p>
+              <h2 id="recurrence-impact-title">Impacto de la recurrencia confirmada</h2>
+            </div>
+            <Link prefetch={false} href={recurrencesHref} className={styles.secondaryButton}>
+              Revisar patrones
+            </Link>
+          </div>
+
+          {visibleRecurrenceFlowState === "refreshing" ? (
+            <p className={styles.recurrenceFlowMessage}>Regenerando de forma explícita las fechas futuras del periodo…</p>
+          ) : null}
+          {visibleRecurrenceFlowState === "review" ? (
+            <p className={styles.recurrenceFlowMessage}>Comprobando las fechas ya generadas para esta recurrencia…</p>
+          ) : null}
+          {visibleRecurrenceFlowState === "ready" && recurrenceImpact?.firstItem ? (
+            <div className={styles.recurrenceImpactSummary}>
+              <div>
+                <span>Fechas dentro del horizonte</span>
+                <strong>{recurrenceImpact.matchingItems.length}</strong>
+              </div>
+              <div>
+                <span>Primera fecha</span>
+                <strong>{formatDate(recurrenceImpact.firstItem.date)}</strong>
+              </div>
+              <div>
+                <span>Impacto neto proyectado</span>
+                <strong>{formatMoneyCents(recurrenceImpact.projectionEffectCents)}</strong>
+              </div>
+              <button className={styles.primaryButton} type="button" onClick={focusFirstRecurrenceImpact}>
+                Ver primera fecha en el detalle
+              </button>
+            </div>
+          ) : null}
+          {visibleRecurrenceFlowState === "empty" ? (
+            <p className={styles.recurrenceFlowMessage}>
+              La recurrencia está activa, pero no genera fechas visibles con este periodo y cuenta. Amplía el horizonte o revisa el patrón sin inventar un impacto.
+            </p>
+          ) : null}
+          {visibleRecurrenceFlowState === "error" ? (
+            <p className={styles.recurrenceFlowError}>
+              No se ha podido actualizar el calendario. La recurrencia confirmada no se ha deshecho.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className={styles.controls} aria-label="Periodo de previsión">
         <label>
@@ -393,6 +590,7 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
       ) : null}
 
       {error ? <div className={styles.error} role="alert">{error}</div> : null}
+      {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/forecast" /> : null}
       {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
       {loading && !snapshot ? (
@@ -437,7 +635,15 @@ export function ForecastClient({ initialSnapshot = null }: { initialSnapshot?: F
                     const excludeErrorId = `exclude-reason-error-${item.id}`;
                     const candidatesId = `forecast-candidates-${item.id}`;
                     return (
-                      <article key={item.id} id={`forecast-item-${item.id}`} className={`${styles.itemCard} ${styles[item.status]}`}>
+                      <article
+                        key={item.id}
+                        id={`forecast-item-${item.id}`}
+                        className={`${styles.itemCard} ${styles[item.status]} ${
+                          item.recurrenceId === handoffRecurrenceId ? styles.recurrenceImpactItem : ""
+                        }`}
+                        data-recurrence-id={item.recurrenceId ?? undefined}
+                        tabIndex={item.recurrenceId === handoffRecurrenceId ? -1 : undefined}
+                      >
                         <div className={styles.itemDate}>
                           <span>{formatDate(item.date)}</span>
                           <small>{originLabel(item.origin)} · confianza {confidenceLabel(item.confidence)}</small>

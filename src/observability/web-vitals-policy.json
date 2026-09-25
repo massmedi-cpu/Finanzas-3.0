@@ -1,0 +1,41 @@
+{
+  "contractVersion": 2,
+  "reportVersion": 1,
+  "windowDays": 28,
+  "minSamplesPerSlice": 30,
+  "routes": [
+    "/",
+    "/onboarding",
+    "/review",
+    "/transactions",
+    "/analysis",
+    "/accounts",
+    "/budgets",
+    "/forecast",
+    "/recurrences",
+    "/documents",
+    "/configuration",
+    "/configuration/source",
+    "/other"
+  ],
+  "requiredRoutes": [
+    "/",
+    "/transactions",
+    "/analysis",
+    "/accounts",
+    "/budgets",
+    "/forecast",
+    "/recurrences",
+    "/documents"
+  ],
+  "devices": ["mobile", "desktop"],
+  "gateMetrics": ["LCP", "INP", "CLS"],
+  "budgets": {
+    "CLS": 0.1,
+    "FCP": 1800,
+    "FID": 100,
+    "INP": 200,
+    "LCP": 2500,
+    "TTFB": 800
+  }
+}

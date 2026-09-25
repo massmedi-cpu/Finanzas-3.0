@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   assembleCashFlow,
+  cashFlowEventState,
   cashFlowMonth,
   type CashFlowTransaction,
 } from "../../src/application/cash-flow/cash-flow-model";
@@ -16,11 +17,12 @@ function transaction(id: string, bankDate: string, amountCents: number,
 }
 
 function forecast(id: string, date: string, amountCents: number, projectionEffectCents: number,
-  status: ForecastItem["status"], actual: ForecastItem["actual"] = null): ForecastItem {
+  status: ForecastItem["status"], actual: ForecastItem["actual"] = null,
+  origin: ForecastItem["origin"] = "manual"): ForecastItem {
   return {
     id, date, amountCents, projectionEffectCents, status, actual, concept: id,
     accountId: null, accountName: null, categoryId: null, categoryName: null,
-    merchantId: null, merchantName: null, origin: "manual", confidence: "high",
+    merchantId: null, merchantName: null, origin, confidence: "high",
     recurrenceId: null, budgetId: null, confirmedTransactionId: actual ? "bank-matched" : null,
     excluded: status === "excluded", excludedReason: "", reconciliationNote: "", projectionKey: null,
     updatedAt: "2026-09-10T10:00:00Z", affectsProjection: projectionEffectCents !== 0,
@@ -41,7 +43,7 @@ const actualRows = [
 
 const forecastItems = [
   forecast("expected-income", "2026-09-11", 2_000, 2_000, "planned"),
-  forecast("expected-expense", "2026-09-11", -1_200, -1_200, "planned"),
+  forecast("expected-expense", "2026-09-11", -1_200, -1_200, "planned", null, "recurring"),
   forecast("matched-expense", "2026-09-11", -3_000, 0, "confirmed", {
     date: "2026-09-12", amountCents: -3_000, accountId: "account-a",
     categoryId: null, merchantId: null, analyticsEligible: true,
@@ -76,8 +78,13 @@ test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya 
   const result = view();
   expect(result.actualState).toBe("ready");
   expect(result.forecastState).toBe("ready");
+  expect(result.actualIncomeCents).toBe(10_500);
+  expect(result.actualExpenseCents).toBe(6_100);
   expect(result.actualNetCents).toBe(4_400);
+  expect(result.plannedIncomeCents).toBe(2_000);
+  expect(result.plannedExpenseCents).toBe(1_200);
   expect(result.plannedNetCents).toBe(800);
+  expect(result.forecastCounts).toEqual({ suggested: 1, confirmed: 1, realized: 1, discarded: 1 });
   const expectedDay = result.days.find((day) => day.date === "2026-09-11")!;
   const actualDay = result.days.find((day) => day.date === "2026-09-12")!;
   expect(expectedDay.plannedNetCents).toBe(800);
@@ -85,12 +92,25 @@ test("Cash Flow reconcilia hechos reales y previsiones sin duplicar el cargo ya 
   expect(actualDay.plannedNetCents).toBe(0);
   expect(actualDay.realNetCents).toBe(-3_000);
   expect(expectedDay.forecasts.find((item) => item.id === "matched-expense")?.actual?.date).toBe("2026-09-12");
+  expect(result.evolution.find((point) => point.date === "2026-09-11")).toMatchObject({
+    realCumulativeCents: 7_400,
+    plannedCumulativeCents: 800,
+    combinedCumulativeCents: 8_200,
+  });
+  expect(result.evolution.at(-1)).toMatchObject({
+    realCumulativeCents: 4_400,
+    plannedCumulativeCents: 800,
+    combinedCumulativeCents: 5_200,
+  });
+  expect(forecastItems.map(cashFlowEventState)).toEqual(["confirmed", "suggested", "realized", "discarded"]);
 });
 
 test("Cash Flow no publica importes reales si la paginación está incompleta o falla la conciliación", () => {
   expect(view({ rows: null, state: "incomplete" }).actualNetCents).toBeNull();
   const mismatch = view({ net: 4_401 });
   expect(mismatch.actualState).toBe("mismatch");
+  expect(mismatch.actualIncomeCents).toBeNull();
+  expect(mismatch.actualExpenseCents).toBeNull();
   expect(mismatch.actualNetCents).toBeNull();
   expect(mismatch.days.find((day) => day.date === "2026-09-10")?.realNetCents).toBe(0);
   expect(mismatch.plannedNetCents).toBe(800);
@@ -102,6 +122,9 @@ test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del mot
     ...forecastSnapshot, summary: { ...forecastSnapshot.summary, projectedNetCents: 801 },
   } });
   expect(mismatch.forecastState).toBe("mismatch");
+  expect(mismatch.forecastCounts).toBeNull();
+  expect(mismatch.plannedIncomeCents).toBeNull();
+  expect(mismatch.plannedExpenseCents).toBeNull();
   expect(mismatch.plannedNetCents).toBeNull();
   expect(mismatch.actualNetCents).toBe(4_400);
   const incomeMismatch = view({ forecast: {

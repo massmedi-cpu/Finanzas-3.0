@@ -3,6 +3,7 @@ export const MOBILE_FAVORITE_KEY = "financial-app:mobile-favorite";
 export const MOBILE_FAVORITE_OPTIONS = [
   "/review",
   "/cash-flow",
+  "/compare",
   "/accounts",
   "/budgets",
   "/recurrences",

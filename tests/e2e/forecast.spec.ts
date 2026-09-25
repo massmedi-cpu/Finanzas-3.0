@@ -5,6 +5,8 @@ const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const forecastItemId = "81000000-0000-4000-8000-000000000081";
 const transactionId = "82000000-0000-4000-8000-000000000082";
 const forecastUpdatedAt = "2026-09-09T04:00:00.000Z";
+const flowRecurrenceId = "71000000-0000-4000-8000-000000000073";
+const flowAccountId = "10000000-0000-4000-8000-000000000073";
 
 const baseSnapshot = {
   contractVersion: 1,
@@ -119,7 +121,32 @@ async function mockForecastApi(
     });
 
     if (method === "POST" && body.action === "refresh") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ generated: 0, superseded: 0 }) });
+      const recurringItem = {
+        ...current.items[0],
+        id: "81000000-0000-4000-8000-000000000073",
+        date: "2026-09-20",
+        accountId: body.accountId as string | null,
+        concept: "supermercado mensual",
+        amountCents: -4250,
+        origin: "recurring",
+        recurrenceId: flowRecurrenceId,
+        projectionKey: `${flowRecurrenceId}:2026-09-20`,
+        projectionEffectCents: -4250,
+        projectedBalanceAfterCents: 18873099,
+      };
+      current = {
+        ...current,
+        period: {
+          dateFrom: body.dateFrom as string,
+          dateTo: body.dateTo as string,
+          accountId: body.accountId as string | null,
+        },
+        items: [
+          ...current.items.filter((item) => item.recurrenceId !== flowRecurrenceId),
+          recurringItem,
+        ],
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ generated: 1, superseded: 0 }) });
       return;
     }
 
@@ -271,6 +298,34 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   const manualWrite = writes.find((entry) => entry.action === "manual");
   expect(manualWrite?.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
+});
+
+test("la vuelta desde Recurrentes regenera una vez y enfoca solo el impacto confirmado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockForecastApi(page, writes);
+  await page.goto(
+    `/forecast?dateFrom=2026-09-07&dateTo=2026-10-15&accountId=${flowAccountId}&recurrenceId=${flowRecurrenceId}&recurrenceAction=refresh`,
+  );
+
+  const flow = page.locator('[data-recurrence-flow-state="ready"]');
+  await expect(flow.getByRole("heading", { name: "Impacto de la recurrencia confirmada" })).toBeVisible();
+  await expect(flow).toContainText("Fechas dentro del horizonte");
+  await expect(flow).toContainText("20 sept 2026");
+  await expect(flow).toContainText(/-42,50\s?€/);
+  await expect.poll(() => writes.filter((entry) => entry.action === "refresh").length).toBe(1);
+  expect(writes.find((entry) => entry.action === "refresh")).toMatchObject({
+    method: "POST",
+    action: "refresh",
+    dateFrom: "2026-09-07",
+    dateTo: "2026-10-15",
+    accountId: flowAccountId,
+  });
+  await expect.poll(() => new URL(page.url()).searchParams.has("recurrenceAction")).toBe(false);
+
+  const impact = page.locator(`[data-recurrence-id="${flowRecurrenceId}"]`);
+  await expect(impact).toBeVisible();
+  await flow.getByRole("button", { name: "Ver primera fecha en el detalle" }).click();
+  await expect(impact).toBeFocused();
 });
 
 test("el calendario muestra solo fechas consultadas y lleva al detalle del movimiento", async ({ page }) => {
