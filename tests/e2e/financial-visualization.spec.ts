@@ -259,7 +259,7 @@ test("F · Presupuestos representa la magnitud del exceso y enlaza con los movim
   const magnitude = page.getByRole("group", { name: "Magnitud del presupuesto · Supermercado" });
   await expect(magnitude).toBeVisible();
   await expect(magnitude).toContainText(/Exceso.*250,00/);
-  await expect(magnitude).toContainText(/62,50\s*%.*sobre el límite/i);
+  await expect(magnitude).toContainText(/62,50\s*%.*sobre lo habitual/i);
   await expect(magnitude).toHaveAttribute("data-budget-state", "over");
   await expect(page.getByRole("link", { name: /Ver movimientos que explican el gasto de Supermercado/i })).toHaveAttribute(
     "href",
