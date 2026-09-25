@@ -8,6 +8,8 @@ on:
       - "app/**"
       - "src/**"
       - "tests/e2e/**"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/ux15-user-value.yml"
 
 permissions:
@@ -77,6 +79,7 @@ jobs:
           tests/e2e/inicio-visual-restraint.spec.ts
           tests/e2e/premium-dashboard-visual.spec.ts
           tests/e2e/premium-visual-system.spec.ts
+          tests/e2e/release-version-contract.spec.ts
           tests/e2e/cr007-home-initial-paint.spec.ts
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
