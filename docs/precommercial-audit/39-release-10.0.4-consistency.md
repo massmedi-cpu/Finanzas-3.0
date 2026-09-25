@@ -44,3 +44,17 @@ Fecha: 2026-09-25. Base verificada: Production `10.0.3`, commit
 
 Este documento describe un candidato. No acredita por sí solo despliegue ni
 validación visual.
+
+## Checkpoint de integración · 2026-09-25
+
+- La PR #370 se integró en `main` con el merge commit
+  `32e21c5807b660e430555ea1e742ee5f5ca5818b`.
+- El candidato `571fd16197193f67188aab2ebfcdb59c32475ad0` pasó 65 recorridos
+  prioritarios y 898 pruebas de navegador (escritorio y móvil) en GitHub Actions
+  run `36191337955`. El gate del Preview protegido pasó sobre ese mismo SHA,
+  con despliegue `dpl_6nbRByvgA3Go3Dsb9rvkqVvpqSBD` y manifiesto PRE-004.
+- Análisis y valor de usuario pasaron en un commit anterior con el mismo código
+  de producto; el último ajuste afectó solo al selector de una prueba.
+- En este checkpoint, `https://financialapp-home.vercel.app/api/build` aún informa
+  Production `10.0.3` y commit `79708742358fdbc74159f8838b14fa85896fe6d5`.
+  Falta verificar el nuevo despliegue, el manifiesto Production y el tag de release.
