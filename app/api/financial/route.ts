@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUEST_ERROR_CODE = /^invalid_[a-z0-9_]+$/i;
-const MODES = new Set(["snapshot", "period", "balances", "monthly"]);
+const MODES = new Set(["snapshot", "period", "balances", "monthly", "reconciliation"]);
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 function optionalText(params: URLSearchParams, key: string, maxLength: number) {
@@ -88,16 +88,21 @@ export async function GET(request: Request) {
     if (dateFrom && dateTo && dateFrom > dateTo) throw new Error("invalid_financial_date_range");
     const accountId = optionalUuid(searchParams, "accountId");
     const includeArchived = optionalBoolean(searchParams, "includeArchived");
+    if (mode === "reconciliation" && !accountId) throw new Error("invalid_reconciliation_account_id");
 
     const action = mode === "period"
       ? "financial.period"
       : mode === "balances"
         ? "financial.balances"
+        : mode === "reconciliation"
+          ? "financial.reconciliation"
         : mode === "monthly"
           ? "financial.monthly"
           : "financial.snapshot";
 
-    const payload = mode === "balances"
+    const payload = mode === "reconciliation"
+      ? { asOfDate: dateTo, accountId }
+      : mode === "balances"
       ? { asOfDate: dateTo, accountId, includeArchived }
       : { dateFrom, dateTo, accountId, includeArchived };
 

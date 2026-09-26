@@ -56,6 +56,7 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "financial.period",
   "financial.monthly",
   "financial.balances",
+  "financial.reconciliation",
   "financial.snapshot",
   "budget.snapshot",
   "recurrence.snapshot",
