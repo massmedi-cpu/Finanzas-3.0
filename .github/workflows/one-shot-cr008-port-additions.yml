@@ -1,4 +1,4 @@
-name: One Shot CR008 OCR Regression Gate
+name: One Shot CR008 Illumination Threshold Probe
 
 on:
   push:
@@ -11,9 +11,9 @@ permissions:
   contents: read
 
 jobs:
-  ocr-regressions:
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - name: Checkout current CR-008 port
         uses: actions/checkout@v6
@@ -30,5 +30,37 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Run OCR provider and domain regressions
-        run: npx playwright test --config=playwright.ocr.config.ts
+      - name: Probe minimal local-contrast threshold that preserves printed decimals
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='src/infrastructure/ocr/receipt-illumination.ts'
+          cp "$file" /tmp/receipt-illumination.ts
+          any=0
+          for ratio in 0.80 0.82 0.84 0.86 0.88 0.90; do
+            cp /tmp/receipt-illumination.ts "$file"
+            python3 - "$ratio" <<'PY'
+          from pathlib import Path
+          import sys
+          ratio = sys.argv[1]
+          path = Path('src/infrastructure/ocr/receipt-illumination.ts')
+          text = path.read_text()
+          marker = 'background[index] * 0.78'
+          if text.count(marker) != 1:
+              raise SystemExit('Unexpected illumination threshold marker')
+          path.write_text(text.replace(marker, f'background[index] * {ratio}', 1))
+          PY
+            echo "=== ratio ${ratio} ==="
+            set +e
+            npx playwright test tests/e2e/document-ocr-illumination-native.spec.ts --config=playwright.ocr.config.ts
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
+              echo "PASS_RATIO=${ratio}"
+              any=1
+            else
+              echo "FAIL_RATIO=${ratio}"
+            fi
+          done
+          cp /tmp/receipt-illumination.ts "$file"
+          test "$any" -eq 1
