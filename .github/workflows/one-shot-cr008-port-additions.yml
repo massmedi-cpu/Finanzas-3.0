@@ -1,4 +1,4 @@
-name: One Shot CR008 Wrapped Merchant Fix
+name: One Shot CR008 Cell Resolution Probe
 
 on:
   push:
@@ -8,25 +8,18 @@ on:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  fix-and-verify:
-    if: github.actor != 'github-actions[bot]'
+  probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - name: Checkout current CR-008 port
         uses: actions/checkout@v6
         with:
           ref: audit/cr008-ocr-v22-10.0.9
           fetch-depth: 0
-
-      - name: Apply guarded wrapped-title fix
-        run: python3 scripts/fix-cr008-wrapped-title.py
-
-      - name: Check diff
-        run: git diff --check
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -37,16 +30,27 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Verify row-geometry regression
-        run: npx playwright test tests/e2e/document-ocr-row-geometry.spec.ts --config=playwright.ocr.config.ts
-
-      - name: Commit verified fix
+      - name: Probe OCR cell target height
         shell: bash
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add src/infrastructure/ocr/receipt-anchor-filter-provider.ts
-          git diff --cached --check
-          git commit -m "fix: preserve contiguous wrapped OCR merchant titles"
-          git push origin HEAD:audit/cr008-ocr-v22-10.0.9
+          file='src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts'
+          cp "$file" /tmp/provider.ts
+          any=0
+          for height in 56 64 72 84 96; do
+            cp /tmp/provider.ts "$file"
+            sed -i "s/const TARGET_CONTENT_HEIGHT = 48;/const TARGET_CONTENT_HEIGHT = ${height};/" "$file"
+            echo "=== target height ${height} ==="
+            set +e
+            npx playwright test tests/e2e/document-ocr-illumination-native.spec.ts --config=playwright.ocr.config.ts
+            code=$?
+            set -e
+            if [ "$code" -eq 0 ]; then
+              echo "PASS_HEIGHT=${height}"
+              any=1
+            else
+              echo "FAIL_HEIGHT=${height}"
+            fi
+          done
+          cp /tmp/provider.ts "$file"
+          test "$any" -eq 1
