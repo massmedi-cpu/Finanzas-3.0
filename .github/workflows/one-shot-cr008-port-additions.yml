@@ -1,4 +1,4 @@
-name: One Shot CR008 Reconcile UI
+name: One Shot CR008 Reconcile Documentos
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   contents: write
 
 jobs:
-  reconcile-ui:
+  reconcile-documentos:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout current 10.0.8 stack with ported OCR core
+      - name: Checkout current CR-008 port
         uses: actions/checkout@v6
         with:
           ref: audit/cr008-ocr-v22-10.0.9
@@ -25,42 +25,49 @@ jobs:
       - name: Fetch historical OCR V22 source
         run: git fetch origin rebuild/phase-cr008-ocr-v22-current-main
 
-      - name: Three-way reconcile Documentos UI
+      - name: Reconcile OCR review panel and boundary integration
         shell: bash
         run: |
           set -euo pipefail
           base='b829adb07e00e46bb73e893b87e2b60a55d87315'
           source_ref='origin/rebuild/phase-cr008-ocr-v22-current-main'
-          paths=(
-            app/documents/ocr-review-panel.tsx
-            app/documents/documents-client.tsx
-            app/documents/ocr-review.module.css
-          )
-          conflicts=0
-          for path in "${paths[@]}"; do
-            safe=$(printf '%s' "$path" | tr '/.' '__')
-            git show "$base:$path" > "/tmp/${safe}.base"
-            git show "$source_ref:$path" > "/tmp/${safe}.other"
-            if ! git merge-file "$path" "/tmp/${safe}.base" "/tmp/${safe}.other"; then
-              echo "CONFLICT: $path"
-              conflicts=1
-            else
-              echo "CLEAN: $path"
-            fi
-          done
-          if [ "$conflicts" -ne 0 ]; then
-            echo 'Three-way reconciliation produced conflicts; no commit will be created.'
-            git diff --check || true
-            exit 1
-          fi
-          git diff --check
-          git add app/documents/ocr-review-panel.tsx app/documents/documents-client.tsx app/documents/ocr-review.module.css
 
-      - name: Commit reconciled Documentos UI
+          path='app/documents/ocr-review-panel.tsx'
+          git show "$base:$path" > /tmp/ocr-review-panel.base
+          git show "$source_ref:$path" > /tmp/ocr-review-panel.other
+          git merge-file "$path" /tmp/ocr-review-panel.base /tmp/ocr-review-panel.other
+
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('app/documents/documents-client.tsx')
+          text = path.read_text()
+          panel_import = 'import { OcrReviewPanel } from "./ocr-review-panel";'
+          boundary_import = 'import { OcrReviewBoundary } from "./ocr-review-boundary";'
+          if boundary_import not in text:
+              if text.count(panel_import) != 1:
+                  raise SystemExit('Unexpected OcrReviewPanel import marker')
+              text = text.replace(panel_import, boundary_import + '\n' + panel_import, 1)
+          old = '<OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} />'
+          new = '<OcrReviewBoundary key={detail.document.id}><OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} /></OcrReviewBoundary>'
+          if new not in text:
+              if text.count(old) != 1:
+                  raise SystemExit('Unexpected OCR review render marker')
+              text = text.replace(old, new, 1)
+          path.write_text(text)
+
+          css = Path('app/documents/ocr-review.module.css').read_text()
+          if '.flowItem button,.flowItem a{min-height:44px;' not in css:
+              raise SystemExit('Current accessibility hit-area regression: expected 44px OCR controls')
+          PY
+
+          git diff --check
+          git add app/documents/ocr-review-panel.tsx app/documents/documents-client.tsx
+
+      - name: Commit reconciled Documentos OCR UI
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: reconcile CR-008 OCR review UI with current product'
+          git commit -m 'feat: reconcile CR-008 OCR review with current Documentos UI'
           git push origin HEAD:audit/cr008-ocr-v22-10.0.9
