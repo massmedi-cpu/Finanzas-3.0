@@ -111,3 +111,18 @@ test("el manifiesto instalado comparte el mismo color de chrome", async ({ page 
   expect(manifest.background_color).toBe("#030711");
   expect(manifest.theme_color).toBe("#030711");
 });
+
+test("el shell premium conserva navegación y evita desbordamiento en seis anchos", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "la matriz de seis anchos se ejecuta una vez");
+  await page.goto("/");
+
+  for (const width of [360, 430, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    const navigation = width <= 768
+      ? page.getByRole("navigation", { name: "Navegación móvil" })
+      : page.getByRole("navigation", { name: "Navegación principal" });
+    await expect(navigation, `Navegación visible a ${width}px`).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+      `Sin desbordamiento horizontal a ${width}px`).toBe(true);
+  }
+});
