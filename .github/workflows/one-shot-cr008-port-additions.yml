@@ -1,4 +1,4 @@
-name: One Shot CR008 Explicit Money Fix Gate
+name: One Shot CR008 Full Local Gate
 
 on:
   push:
@@ -6,15 +6,14 @@ on:
       - 'audit/cr008-ocr-v22-10.0.9'
     paths:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
-      - 'src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts'
 
 permissions:
   contents: read
 
 jobs:
-  verify:
+  full-local-gate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
     steps:
       - name: Checkout current CR-008 port
         uses: actions/checkout@v6
@@ -31,5 +30,11 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Verify shadowed printed decimals
-        run: npx playwright test tests/e2e/document-ocr-illumination-native.spec.ts --config=playwright.ocr.config.ts
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run complete OCR regression pack
+        run: npx playwright test --config=playwright.ocr.config.ts
