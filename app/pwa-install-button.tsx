@@ -1,21 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { usePwaRuntime } from "./pwa-runtime";
 import styles from "./pwa-install-button.module.css";
-
-type InstallOutcome = "accepted" | "dismissed";
-type BeforeInstallPromptEvent = Event & {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: InstallOutcome }>;
-};
 
 type NavigatorWithStandalone = Navigator & { standalone?: boolean };
 type InstallPlatform = "ios" | "chromium" | "other";
-
-function alreadyInstalled() {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(display-mode: standalone)").matches || Boolean((navigator as NavigatorWithStandalone).standalone);
-}
 
 function platform(): InstallPlatform {
   if (typeof navigator === "undefined") return "other";
@@ -45,67 +35,32 @@ function instructions(value: InstallPlatform) {
   };
 }
 
-export function PwaInstallButton({ className }: { className?: string }) {
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [installed, setInstalled] = useState(false);
+type Props = {
+  className?: string;
+  promptOnly?: boolean;
+};
+
+export function PwaInstallButton({ className, promptOnly = false }: Props) {
+  const { canInstall, install, installed } = usePwaRuntime();
   const [showHelp, setShowHelp] = useState(false);
   const installPlatform = useMemo(() => platform(), []);
   const help = useMemo(() => instructions(installPlatform), [installPlatform]);
 
-  useEffect(() => {
-    setInstalled(alreadyInstalled());
+  if (installed || (promptOnly && !canInstall)) return null;
 
-    const registerServiceWorker = () => {
-      if (!("serviceWorker" in navigator)) return;
-      void navigator.serviceWorker.register("/sw.js", {
-        scope: "/",
-        updateViaCache: "none",
-      }).catch(() => undefined);
-    };
-
-    if (document.readyState === "complete") registerServiceWorker();
-    else window.addEventListener("load", registerServiceWorker, { once: true });
-
-    const onBeforeInstallPrompt = (event: Event) => {
-      event.preventDefault();
-      setDeferredPrompt(event as BeforeInstallPromptEvent);
-    };
-    const onInstalled = () => {
-      setInstalled(true);
-      setDeferredPrompt(null);
-      setShowHelp(false);
-    };
-
-    window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-    window.addEventListener("appinstalled", onInstalled);
-
-    return () => {
-      window.removeEventListener("load", registerServiceWorker);
-      window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
-      window.removeEventListener("appinstalled", onInstalled);
-    };
-  }, []);
-
-  if (installed) return null;
-
-  const install = async () => {
-    if (!deferredPrompt) {
+  const requestInstall = async () => {
+    if (!canInstall) {
       setShowHelp(true);
       return;
     }
-    const prompt = deferredPrompt;
-    setDeferredPrompt(null);
-    await prompt.prompt();
-    const choice = await prompt.userChoice;
-    if (choice.outcome !== "accepted") {
-      setDeferredPrompt(prompt);
-      setShowHelp(true);
-    }
+
+    const outcome = await install();
+    if (!promptOnly && outcome !== "accepted") setShowHelp(true);
   };
 
   return (
     <>
-      <button type="button" className={className} onClick={() => void install()} aria-label="Instalar Financial App en este dispositivo">
+      <button type="button" className={className} onClick={() => void requestInstall()} aria-label="Instalar Financial App en este dispositivo">
         Instalar app
       </button>
       {showHelp ? (
