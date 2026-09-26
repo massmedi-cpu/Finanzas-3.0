@@ -834,6 +834,7 @@ export function ForecastClient({
                       value={manualDate}
                       min={dateFrom}
                       max={dateTo}
+                      aria-label="Fecha"
                       onChange={(event) => {
                         setManualDate(event.target.value);
                         if (manualErrors.date) setManualErrors((current) => ({ ...current, date: undefined }));
