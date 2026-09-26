@@ -10,8 +10,6 @@ on:
     paths:
       - 'supabase/migrations/20260926185000_cover_configuration_recurrence_workspace_foreign_keys.sql'
       - 'tests/e2e/config-recurrence-index-contract.spec.ts'
-      - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/config-recurrence-indexes-10.0.18.yml'
       - 'vercel.json'
 
