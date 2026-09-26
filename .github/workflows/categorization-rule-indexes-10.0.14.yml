@@ -1,0 +1,57 @@
+name: Categorization Rule Indexes 10.0.14
+
+on:
+  push:
+    branches:
+      - audit/rule-fk-indexes-10.0.14
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/20260926174500_cover_categorization_rule_workspace_foreign_keys.sql'
+      - 'tests/e2e/categorization-rule-index-contract.spec.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/categorization-rule-indexes-10.0.14.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: categorization-rule-indexes-10.0.14-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Composite FK index contract
+        run: npx playwright test tests/e2e/categorization-rule-index-contract.spec.ts --project=chromium-desktop
+
+      - name: Verify version contract
+        shell: bash
+        run: |
+          test "$(node -p "require('./package.json').version")" = "10.0.14"
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.14"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.14"
