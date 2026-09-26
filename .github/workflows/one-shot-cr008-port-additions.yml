@@ -1,4 +1,4 @@
-name: One Shot CR008 Port Regression Pack
+name: One Shot CR008 OCR Regression Gate
 
 on:
   push:
@@ -8,50 +8,27 @@ on:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  port-regressions:
-    if: github.actor != 'github-actions[bot]'
+  ocr-regressions:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 30
     steps:
-      - name: Checkout compiled CR-008 port
+      - name: Checkout current CR-008 port
         uses: actions/checkout@v6
         with:
           ref: audit/cr008-ocr-v22-10.0.9
           fetch-depth: 0
 
-      - name: Fetch historical OCR V22 source
-        run: git fetch origin rebuild/phase-cr008-ocr-v22-current-main
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
 
-      - name: Port isolated OCR regression pack
-        shell: bash
-        run: |
-          set -euo pipefail
-          source_ref='origin/rebuild/phase-cr008-ocr-v22-current-main'
-          paths=(
-            playwright.ocr.config.ts
-            tests/e2e/document-ocr-anchor-filter-clean-input.spec.ts
-            tests/e2e/document-ocr-anchor-filter.spec.ts
-            tests/e2e/document-ocr-anchor-recrop-monotonic.spec.ts
-            tests/e2e/document-ocr-anchor-width.spec.ts
-            tests/e2e/document-ocr-columns-native.spec.ts
-            tests/e2e/document-ocr-illumination-native.spec.ts
-            tests/e2e/document-ocr-natural-review.spec.ts
-            tests/e2e/document-ocr-padded-cell-consensus.spec.ts
-            tests/e2e/document-ocr-row-geometry.spec.ts
-            tests/e2e/document-ocr-runtime-composition.spec.ts
-            tests/e2e/document-ocr-structured-review.spec.ts
-          )
-          git checkout "$source_ref" -- "${paths[@]}"
-          git diff --cached --check
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Commit OCR regression pack
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'test: port CR-008 OCR V22 regression pack'
-          git push origin HEAD:audit/cr008-ocr-v22-10.0.9
+      - name: Run OCR provider and domain regressions
+        run: npx playwright test --config=playwright.ocr.config.ts
