@@ -1,0 +1,83 @@
+name: Transaction Indexes 10.0.15
+
+on:
+  push:
+    branches:
+      - audit/transaction-fk-indexes-10.0.15
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/20260926175500_cover_transaction_workspace_foreign_keys.sql'
+      - 'tests/e2e/transaction-index-contract.spec.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/transaction-indexes-10.0.15.yml'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: transaction-indexes-10.0.15-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Synchronize candidate version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          current="$(node -p "require('./package.json').version")"
+          if [ "$current" = "10.0.14" ]; then
+            npm version 10.0.15 --no-git-tag-version
+          elif [ "$current" != "10.0.15" ]; then
+            echo "Unexpected version: $current"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Transaction composite FK index contract
+        run: npx playwright test tests/e2e/transaction-index-contract.spec.ts --project=chromium-desktop
+
+      - name: Verify version contract
+        shell: bash
+        run: |
+          test "$(node -p "require('./package.json').version")" = "10.0.15"
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.15"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.15"
+
+      - name: Persist synchronized version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: version Financial App 10.0.15"
+          git push origin HEAD:audit/transaction-fk-indexes-10.0.15
