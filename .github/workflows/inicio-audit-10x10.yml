@@ -50,6 +50,7 @@ jobs:
           tests/e2e/dashboard-number-explanations.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
+          tests/e2e/inicio-sync-feedback.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
           tests/e2e/regional-home-consistency.spec.ts
           tests/e2e/release-version-contract.spec.ts
@@ -180,6 +181,7 @@ jobs:
           tests/e2e/dashboard-number-explanations.spec.ts
           tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
+          tests/e2e/inicio-sync-feedback.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
           tests/e2e/regional-home-consistency.spec.ts
           tests/e2e/release-version-contract.spec.ts

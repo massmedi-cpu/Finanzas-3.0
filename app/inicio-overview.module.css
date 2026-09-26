@@ -92,6 +92,10 @@
   border-color: color-mix(in srgb, var(--color-danger) 42%, var(--color-border));
 }
 
+.sourceWarning {
+  border-color: color-mix(in srgb, var(--color-warning) 44%, var(--color-border));
+}
+
 .sourceText {
   min-width: 0;
   gap: var(--space-3);
@@ -125,6 +129,11 @@
 .sourceError .healthDot {
   background: var(--color-danger);
   box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-danger) 12%, transparent);
+}
+
+.sourceWarning .healthDot {
+  background: var(--color-warning);
+  box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-warning) 12%, transparent);
 }
 
 .sourceActions {

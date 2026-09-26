@@ -126,10 +126,22 @@ type SyncStatus = {
     rowsRevised: number;
     rowsSkipped: number;
     rowsFailed: number;
+    duplicatesDetected: number;
+    warningsCount: number;
     errorCode: string | null;
     errorMessage: string | null;
   };
   cursors?: Array<{ sourceRevision: string | null; updatedAt: string }>;
+};
+
+type SyncResult = {
+  rowsInserted?: number;
+  rowsRevised?: number;
+  rowsSkipped?: number;
+  rowsMissing?: number;
+  duplicatesDetected?: number;
+  warningsCount?: number;
+  error?: string;
 };
 
 type AttentionItem = {
@@ -214,6 +226,62 @@ function kindLabel(kind: TransactionKind) {
   if (kind === "transfer") return "Transferencia";
   if (kind === "refund") return "Devolución";
   return "Ajuste";
+}
+
+function syncFeedbackFromResult(result: SyncResult | null) {
+  const changed = Math.max(0, result?.rowsInserted ?? 0) + Math.max(0, result?.rowsRevised ?? 0);
+  const missing = Math.max(0, result?.rowsMissing ?? 0);
+  const warnings = Math.max(missing, Math.max(0, result?.warningsCount ?? 0));
+  const duplicates = Math.max(0, result?.duplicatesDetected ?? 0);
+  if (changed === 0 && warnings === 0 && duplicates === 0) return "Sin cambios nuevos.";
+
+  const parts = [changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios incorporados."];
+  if (missing > 0) {
+    parts.push(
+      missing === 1
+        ? "1 movimiento importado anteriormente ya no aparece en la fuente."
+        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+    );
+  } else if (warnings > 0) {
+    parts.push(
+      warnings === 1
+        ? "1 aviso de sincronización requiere revisión."
+        : `${warnings} avisos de sincronización requieren revisión.`,
+    );
+  }
+  if (duplicates > 0) {
+    parts.push(
+      duplicates === 1
+        ? "1 posible duplicado detectado."
+        : `${duplicates} posibles duplicados detectados.`,
+    );
+  }
+  if (warnings > 0 || duplicates > 0) parts.push("Revisa la fuente.");
+  return parts.join(" ");
+}
+
+function syncStatusNotice(run: SyncStatus["run"]) {
+  if (!run || run.status !== "success") return null;
+  const warnings = Math.max(0, run.warningsCount ?? 0);
+  const duplicates = Math.max(0, run.duplicatesDetected ?? 0);
+  if (warnings === 0 && duplicates === 0) return null;
+  const parts: string[] = [];
+  if (warnings > 0) {
+    parts.push(
+      warnings === 1
+        ? "1 aviso de sincronización requiere revisión."
+        : `${warnings} avisos de sincronización requieren revisión.`,
+    );
+  }
+  if (duplicates > 0) {
+    parts.push(
+      duplicates === 1
+        ? "1 posible duplicado detectado."
+        : `${duplicates} posibles duplicados detectados.`,
+    );
+  }
+  parts.push("Revisa la fuente.");
+  return parts.join(" ");
 }
 
 async function readJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
@@ -338,14 +406,9 @@ export default function InicioOverview() {
         cache: "no-store",
         headers: { accept: "application/json" },
       });
-      const payload = await response.json().catch(() => null) as null | {
-        rowsInserted?: number;
-        rowsRevised?: number;
-        error?: string;
-      };
+      const payload = await response.json().catch(() => null) as SyncResult | null;
       if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
-      const changed = (payload?.rowsInserted ?? 0) + (payload?.rowsRevised ?? 0);
-      setSyncFeedback(changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios nuevos.");
+      setSyncFeedback(syncFeedbackFromResult(payload));
       await refreshDashboard();
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
@@ -370,6 +433,10 @@ export default function InicioOverview() {
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
+  const syncWarningCount = Math.max(0, syncRun?.warningsCount ?? 0);
+  const syncDuplicateCount = Math.max(0, syncRun?.duplicatesDetected ?? 0);
+  const syncHasWarnings = syncSucceeded && (syncWarningCount > 0 || syncDuplicateCount > 0);
+  const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
   const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";
 
@@ -434,6 +501,14 @@ export default function InicioOverview() {
         action: "Ver fuente",
         tone: "danger",
       });
+    } else if (syncHasWarnings) {
+      items.push({
+        title: "La última sincronización tiene avisos",
+        detail: syncStatusNotice(syncRun) ?? "La sincronización terminó, pero requiere revisión.",
+        href: "/configuration/source",
+        action: "Revisar fuente",
+        tone: "warning",
+      });
     }
     if ((financial?.period.operatingNetCents ?? 0) < 0) {
       items.push({
@@ -473,7 +548,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed]);
+  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || secondaryLoading}>
@@ -498,7 +573,7 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncSucceeded ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings ? styles.sourceWarning : syncSucceeded ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
@@ -509,9 +584,11 @@ export default function InicioOverview() {
                 ? "Actualizando datos…"
                 : syncFailed
                   ? "La última actualización falló"
-                  : syncSucceeded
-                    ? "Última sincronización completada"
-                    : "Estado de la fuente pendiente"}
+                  : syncHasWarnings
+                    ? "Sincronización completada con avisos"
+                    : syncSucceeded
+                      ? "Última sincronización completada"
+                      : "Estado de la fuente pendiente"}
             </strong>
             <p>
               {syncSucceeded && syncRun
@@ -521,6 +598,7 @@ export default function InicioOverview() {
                   : latestDataDate
                     ? `Movimientos disponibles hasta ${formatDate(latestDataDate)}.`
                     : "La fecha del último movimiento no está confirmada."}
+              {syncPersistentNotice ? ` ${syncPersistentNotice}` : ""}
               {syncFeedback ? ` ${syncFeedback}` : ""}
             </p>
           </div>
