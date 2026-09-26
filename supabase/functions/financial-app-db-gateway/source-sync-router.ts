@@ -154,10 +154,10 @@ async function tryStableRevisionReplay(payload: any, sql: any): Promise<Response
     const runRows = await tx`
       insert into financial_app.sync_runs (
         source_file_id,source_revision,status,finished_at,rows_seen,rows_inserted,rows_revised,
-        rows_skipped,rows_failed,duplicates_detected,warnings_count,schema_fingerprint,error_code,error_message
+        rows_skipped,rows_failed,rows_missing,duplicates_detected,warnings_count,schema_fingerprint,error_code,error_message
       ) values (
         ${batch.sourceFileId},${batch.sourceRevision},'success',now(),${batch.observations.length},0,0,
-        ${batch.observations.length},0,${duplicatesDetected},0,${batch.schemaFingerprint},null,null
+        ${batch.observations.length},0,0,${duplicatesDetected},0,${batch.schemaFingerprint},null,null
       ) returning id
     `;
     const syncRunId = runRows[0]?.id;
