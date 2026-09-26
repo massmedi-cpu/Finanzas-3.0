@@ -4,4 +4,38 @@
     outline-offset: 3px;
     box-shadow: none !important;
   }
+
+  .financial-brand,
+  .premium-primary-nav,
+  nav[aria-label="Navegación móvil"],
+  .reset-card,
+  .configuration-hero,
+  .config-panel,
+  .entity-card {
+    forced-color-adjust: auto;
+    background: Canvas !important;
+    color: CanvasText !important;
+    border-color: CanvasText !important;
+    box-shadow: none !important;
+  }
+
+  .financial-brand__mark {
+    background: Canvas !important;
+    color: CanvasText !important;
+    border-color: CanvasText !important;
+    box-shadow: none !important;
+  }
+
+  nav[aria-label="Navegación principal"] a[aria-current="page"],
+  nav[aria-label="Navegación móvil"] a[aria-current="page"] {
+    background: Canvas !important;
+    color: Highlight !important;
+    border-color: Highlight !important;
+    box-shadow: none !important;
+  }
+
+  nav[aria-label="Navegación principal"] a[aria-current="page"]::after,
+  nav[aria-label="Navegación móvil"] a[aria-current="page"]::after {
+    background: Highlight !important;
+  }
 }

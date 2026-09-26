@@ -453,7 +453,8 @@ export default function InicioOverview() {
         tone: "danger",
       });
     }
-    if ((data.forecast?.summary.projectedClosingBalanceCents ?? 0) < 0) {
+    if ((data.forecast?.summary.plannedItems ?? 0) > 0
+      && (data.forecast?.summary.projectedClosingBalanceCents ?? 0) < 0) {
       items.push({
         title: "La previsión termina en negativo",
         detail: `Saldo previsto a 30 días: ${displayMoney(data.forecast?.summary.projectedClosingBalanceCents ?? 0)}.`,
@@ -557,8 +558,8 @@ export default function InicioOverview() {
         budgetProgressBps={budget?.total.progressBps ?? null}
         budgetStatus={budget?.total.status ?? null}
         overBudgetCount={budget ? overBudgetCount : null}
-        projectedNetCents={data.forecast?.summary.projectedNetCents ?? null}
-        projectedClosingBalanceCents={data.forecast?.summary.projectedClosingBalanceCents ?? null}
+        projectedNetCents={data.forecast?.summary.plannedItems ? data.forecast.summary.projectedNetCents : null}
+        projectedClosingBalanceCents={data.forecast?.summary.plannedItems ? data.forecast.summary.projectedClosingBalanceCents : null}
         plannedItems={data.forecast?.summary.plannedItems ?? null}
         syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
         displayMoney={displayMoney}
@@ -591,13 +592,14 @@ export default function InicioOverview() {
         <article className={styles.decisionCard}>
           <span>Próximos 30 días</span>
           <strong className={(data.forecast?.summary.projectedNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
-            {data.forecast ? displayMoney(data.forecast.summary.projectedNetCents) : "—"}
+            {data.forecast?.summary.plannedItems ? displayMoney(data.forecast.summary.projectedNetCents) : data.forecast ? "Sin previsiones" : "—"}
           </strong>
           <small>
-            {data.forecast
+            {data.forecast?.summary.plannedItems
               ? `${data.forecast.summary.plannedItems} previstos · cierre ${displayMoney(data.forecast.summary.projectedClosingBalanceCents)}`
-              : "Previsión pendiente"}
+              : data.forecast ? "Revisa recurrentes o añade un movimiento" : "Previsión pendiente"}
           </small>
+          {data.forecast && !data.forecast.summary.plannedItems ? <Link prefetch={false} className={styles.inlineLink} href="/forecast">Crear previsión</Link> : null}
         </article>
         <article className={styles.decisionCard}>
           <span>Gasto medio mensual</span>

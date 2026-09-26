@@ -146,6 +146,11 @@ test("Inicio inteligente resume el estado actual sin crear un segundo motor", as
   await expect(brief).toContainText("Presupuesto dentro del límite");
   await expect(brief).toContainText("Sin movimientos previstos");
   await expect(brief).toContainText("Datos hasta 16 sept");
+
+  const forecastCard = page.locator('section[aria-label="Resumen financiero principal"] article').filter({ hasText: "Próximos 30 días" });
+  await expect(forecastCard).toContainText("Sin previsiones");
+  await expect(forecastCard).not.toContainText("cierre");
+  await expect(forecastCard.getByRole("link", { name: "Crear previsión" })).toHaveAttribute("href", "/forecast");
 });
 
 test("Inicio muestra cambios útiles desde la última visita y conserva una memoria mínima", async ({ page }) => {
@@ -175,7 +180,8 @@ test("Inicio muestra cambios útiles desde la última visita y conserva una memo
   await expect(brief).toContainText("2 movimientos nuevos");
   await expect(brief).toContainText(/Gasto del mes \+200,00/);
   await expect(brief).toContainText("Presupuesto +20 pp");
-  await expect(brief).toContainText(/Previsión neta \+10,00/);
+  await expect(brief).toContainText("Previsión sin movimientos");
+  await expect(brief).not.toContainText(/Previsión neta \+10,00/);
 
   await expect.poll(async () => page.evaluate((key) => localStorage.getItem(key), HOME_VISIT_KEY)).not.toBeNull();
   const stored = await page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}"), HOME_VISIT_KEY) as Record<string, unknown>;

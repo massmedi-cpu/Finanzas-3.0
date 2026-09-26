@@ -247,9 +247,9 @@ export default function HomeSmartBrief({
         title: hasPlanned
           ? `${plannedItems} ${plannedItems === 1 ? "movimiento previsto" : "movimientos previstos"}`
           : "Sin movimientos previstos",
-        detail: `${hasPlanned ? `Neto previsto ${displayMoney(projectedNetCents)}` : "No hay cargos o ingresos planificados"}${projectedClosingBalanceCents !== null ? ` · cierre ${displayMoney(projectedClosingBalanceCents)}` : ""}.`,
+        detail: `${hasPlanned ? `Neto previsto ${displayMoney(projectedNetCents)}` : "No hay cargos o ingresos planificados"}${hasPlanned && projectedClosingBalanceCents !== null ? ` · cierre ${displayMoney(projectedClosingBalanceCents)}` : ""}.`,
         href: "/forecast",
-        tone: negative ? "danger" : "neutral",
+        tone: hasPlanned && negative ? "danger" : "neutral",
       });
     }
 
@@ -333,7 +333,14 @@ export default function HomeSmartBrief({
       }
     }
 
-    if (previousVisit.projectedNetCents !== null && currentVisit.projectedNetCents !== null) {
+    if ((previousVisit.plannedItems ?? 0) > 0 && currentVisit.plannedItems === 0) {
+      items.push({
+        title: "Previsión sin movimientos",
+        detail: "Ya no hay movimientos planificados. Revisa las recurrencias o añade una previsión manual.",
+        href: "/forecast",
+        tone: "neutral",
+      });
+    } else if (previousVisit.projectedNetCents !== null && currentVisit.projectedNetCents !== null) {
       const delta = currentVisit.projectedNetCents - previousVisit.projectedNetCents;
       if (delta !== 0) {
         items.push({
