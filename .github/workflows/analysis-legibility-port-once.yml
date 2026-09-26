@@ -19,7 +19,7 @@ jobs:
         with:
           ref: audit/analysis-legibility-10.0.11
           fetch-depth: 0
-      - name: Apply selective Analysis legibility improvements
+      - name: Apply Analysis legibility stage A
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -29,26 +29,16 @@ jobs:
           tsx = tsx_path.read_text()
           css = css_path.read_text()
 
-          def replace_once(text: str, old: str, new: str, label: str) -> str:
-              if text.count(old) != 1:
-                  raise SystemExit(f"{label}: expected exactly one match, got {text.count(old)}")
+          def once(text: str, old: str, new: str, label: str) -> str:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{label}: expected exactly one match, got {count}")
               return text.replace(old, new, 1)
 
-          tsx = replace_once(tsx,
-          '''function comparableConcept(value: string) {
-            return value.trim().toLocaleLowerCase("es-ES").replace(/\\s+/g, " ");
-          }
-          ''',
-          '''function comparableConcept(value: string) {
-            return value.trim().toLocaleLowerCase("es-ES").replace(/\\s+/g, " ");
-          }
-
-          function truncateLabel(value: string, max = 18) {
-            const clean = value.trim();
-            return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
-          }
-
-          function axisScale(maxValue: number) {
+          # A readable daily chart: stable rounded scale plus selected point values.
+          tsx = once(tsx,
+              'function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {',
+              '''function axisScale(maxValue: number) {
             const rawMaximum = Math.max(1, maxValue);
             const roughStep = rawMaximum / 4;
             const magnitude = 10 ** Math.floor(Math.log10(roughStep));
@@ -62,417 +52,72 @@ jobs:
             };
           }
 
-          function integerTicks(minimum: number, maximum: number) {
-            const min = Math.max(0, Math.floor(minimum));
-            const max = Math.max(min + 1, Math.ceil(maximum));
-            const values = new Set<number>([min, max]);
-            for (let index = 1; index < 4; index += 1) values.add(Math.round(min + ((max - min) * index) / 4));
-            return [...values].sort((left, right) => left - right);
-          }
-          ''', 'helpers')
+          function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {''',
+              'axis helper')
+          for old, new, label in [
+              ('    const height = 220;', '    const height = 236;', 'daily height'),
+              ('    const left = 42;', '    const left = 64;', 'daily left'),
+              ('    const right = 12;', '    const right = 16;', 'daily right'),
+              ('    const top = 16;', '    const top = 24;', 'daily top'),
+              ('    const bottom = 30;', '    const bottom = 38;', 'daily bottom'),
+              ('    const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));', '    const scale = axisScale(Math.max(...rows.map((row) => row.expenseCents)));', 'daily scale'),
+              ('      y: top + (1 - row.expenseCents / maximum) * innerHeight,', '      y: top + (1 - row.expenseCents / scale.maximum) * innerHeight,', 'daily point scale'),
+              ('    return { width, height, left, right, top, bottom, maximum, points, path };', '    return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };', 'daily return'),
+              ('aria-label="Evolución diaria del gasto del periodo">', 'aria-label="Evolución diaria del gasto del periodo con escala en euros">', 'daily aria'),
+              ('          {[0, 0.5, 1].map((ratio) => {', '          {chart.ticks.map((value) => {', 'daily tick map'),
+              ('            const y = chart.top + ratio * (chart.height - chart.top - chart.bottom);\n            const value = Math.round(chart.maximum * (1 - ratio));', '            const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);', 'daily tick y'),
+              ('              <g key={ratio} className={styles.gridLine}>', '              <g key={value} className={styles.gridLine}>', 'daily tick key'),
+              ('                <text x={chart.left - 8} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', '                <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', 'daily tick label'),
+              ('                <text className={styles.axisLabel} x={x} y={chart.height - 8} textAnchor="middle">{formatDate(row.date)}</text>', '                <text className={styles.axisLabel} x={x} y={chart.height - 10} textAnchor="middle">{formatDate(row.date)}</text>', 'daily date label'),
+          ]:
+              tsx = once(tsx, old, new, label)
+          marker = '''              </circle>
+              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && ('''
+          tsx = once(tsx, marker, '''              </circle>
+              {(rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0) && (
+                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor="middle">{formatMoney(row.expenseCents)}</text>
+              )}
+              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (''', 'daily point values')
 
-          tsx = replace_once(tsx,
-          '''    const width = 760;
-              const height = 220;
-              const left = 42;
-              const right = 12;
-              const top = 16;
-              const bottom = 30;
-              const innerWidth = width - left - right;
-              const innerHeight = height - top - bottom;
-              const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));
-              const step = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth;
-              const points = rows.map((row, index) => ({
-                x: rows.length > 1 ? left + step * index : left + innerWidth / 2,
-                y: top + (1 - row.expenseCents / maximum) * innerHeight,
-                row,
-              }));
-              const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-              return { width, height, left, right, top, bottom, maximum, points, path };''',
-          '''    const width = 760;
-              const height = 236;
-              const left = 64;
-              const right = 16;
-              const top = 24;
-              const bottom = 38;
-              const innerWidth = width - left - right;
-              const innerHeight = height - top - bottom;
-              const scale = axisScale(Math.max(...rows.map((row) => row.expenseCents)));
-              const step = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth;
-              const points = rows.map((row, index) => ({
-                x: rows.length > 1 ? left + step * index : left + innerWidth / 2,
-                y: top + (1 - row.expenseCents / scale.maximum) * innerHeight,
-                row,
-              }));
-              const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-              return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };''', 'daily chart geometry')
+          # Heatmap: make the calendar actually readable, including dates.
+          for old, new, label in [
+              ('    const cell = 12;', '    const cell = 22;', 'heat cell'),
+              ('    const gap = 3;', '    const gap = 4;', 'heat gap'),
+              ('    const left = 22;', '    const left = 28;', 'heat left'),
+              ('    const top = 16;', '    const top = 12;', 'heat top'),
+              ('        key,\n        week,', '        key,\n        dayOfMonth: date.getUTCDate(),\n        week,', 'heat day'),
+              ('      height: top + 7 * (cell + gap) + 18,', '      height: top + 7 * (cell + gap) + 12,\n      activeDays: days.filter((day) => day.expenseCents > 0).length,', 'heat active'),
+              ('        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n      </div>\n      <div className={styles.svgViewport}>\n        <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">', '        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n        <small>{formatInteger(chart.activeDays)} días con gasto</small>\n      </div>\n      <div className={styles.heatmapViewport}>\n        <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">', 'heat shell'),
+              ('            const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;\n            return (\n              <rect\n                key={day.key}\n                className={styles.heatCell}\n                x={chart.left + day.week * chart.weekStep}\n                y={chart.top + day.weekday * (chart.cell + chart.gap)}\n                width={chart.cell}\n                height={chart.cell}\n                rx="2"\n                style={{ opacity: intensity }}\n              >\n                <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n              </rect>\n            );', '            const intensity = day.expenseCents > 0 ? 0.24 + 0.76 * (day.expenseCents / chart.maximum) : 0.07;\n            const x = chart.left + day.week * chart.weekStep;\n            const y = chart.top + day.weekday * (chart.cell + chart.gap);\n            return (\n              <g key={day.key}>\n                <rect\n                  className={styles.heatCell}\n                  x={x}\n                  y={y}\n                  width={chart.cell}\n                  height={chart.cell}\n                  rx="4"\n                  style={{ opacity: intensity }}\n                >\n                  <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n                </rect>\n                <text className={styles.heatmapDayLabel} x={x + chart.cell / 2} y={y + chart.cell / 2 + 3.5} textAnchor="middle">{day.dayOfMonth}</text>\n              </g>\n            );', 'heat cells'),
+          ]:
+              tsx = once(tsx, old, new, label)
 
-          tsx = replace_once(tsx,
-          '''        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo">
-                    {[0, 0.5, 1].map((ratio) => {
-                      const y = chart.top + ratio * (chart.height - chart.top - chart.bottom);
-                      const value = Math.round(chart.maximum * (1 - ratio));
-                      return (
-                        <g key={ratio} className={styles.gridLine}>
-                          <line x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} />
-                          <text x={chart.left - 8} y={y + 4} textAnchor="end">{formatMoney(value)}</text>
-                        </g>
-                      );
-                    })}''',
-          '''        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo con escala en euros">
-                    {chart.ticks.map((value) => {
-                      const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);
-                      return (
-                        <g key={value} className={styles.gridLine}>
-                          <line x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} />
-                          <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatMoney(value)}</text>
-                        </g>
-                      );
-                    })}''', 'daily ticks')
+          # Weekday chart: keep the existing peak indicator and add the values users need.
+          tsx = once(tsx, 'aria-label="Gasto por día de la semana">', 'aria-label="Gasto por día de la semana con importe y número de movimientos">', 'weekday aria')
+          tsx = once(tsx, '            <small>{row.rows}</small>', '            <small>{formatInteger(row.rows)} mov.</small>\n            <em>{formatMoney(row.expenseCents)}</em>', 'weekday values')
 
-          tsx = replace_once(tsx,
-          '''              <circle className={styles.dailyPoint} cx={x} cy={y} r={rows.length <= 5 ? "5" : "4"}>
-                            <title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title>
-                          </circle>
-                          {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (
-                            <text className={styles.axisLabel} x={x} y={chart.height - 8} textAnchor="middle">{formatDate(row.date)}</text>
-                          )}''',
-          '''              <circle className={styles.dailyPoint} cx={x} cy={y} r={rows.length <= 5 ? "5" : "4"}>
-                            <title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title>
-                          </circle>
-                          {(rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0) && (
-                            <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor="middle">{formatMoney(row.expenseCents)}</text>
-                          )}
-                          {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (
-                            <text className={styles.axisLabel} x={x} y={chart.height - 10} textAnchor="middle">{formatDate(row.date)}</text>
-                          )}''', 'daily labels')
+          # Unequal-density charts use independent columns, avoiding artificial blank rows.
+          tsx = once(tsx, '''      <div className={styles.chartGrid}>
+            <SpendingCalendar snapshot={snapshot} />
+            <AmountBandsChart snapshot={snapshot} />
+            <MerchantScatter snapshot={snapshot} />
+            <MerchantConcentrationCurve snapshot={snapshot} />
+          </div>''', '''      <div className={styles.chartColumns}>
+            <div className={styles.chartColumn}>
+              <SpendingCalendar snapshot={snapshot} />
+              <MerchantScatter snapshot={snapshot} />
+            </div>
+            <div className={styles.chartColumn}>
+              <AmountBandsChart snapshot={snapshot} />
+              <MerchantConcentrationCurve snapshot={snapshot} />
+            </div>
+          </div>''', 'chart columns')
 
-          tsx = replace_once(tsx,
-          '''    const cell = 12;
-              const gap = 3;
-              const left = 22;
-              const top = 16;''',
-          '''    const cell = 22;
-              const gap = 4;
-              const left = 28;
-              const top = 12;''', 'heatmap geometry')
-
-          tsx = replace_once(tsx,
-          '''        key,
-                    week,
-                    weekday,
-                    expenseCents: row?.expenseCents ?? 0,''',
-          '''        key,
-                    dayOfMonth: date.getUTCDate(),
-                    week,
-                    weekday,
-                    expenseCents: row?.expenseCents ?? 0,''', 'heatmap day number')
-
-          tsx = replace_once(tsx,
-          '''      height: top + 7 * (cell + gap) + 18,
-                };''',
-          '''      height: top + 7 * (cell + gap) + 12,
-                  activeDays: days.filter((day) => day.expenseCents > 0).length,
-                };''', 'heatmap active days')
-
-          tsx = replace_once(tsx,
-          '''      <div className={styles.cardHeading}>
-                <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
-              </div>
-              <div className={styles.svgViewport}>
-                <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">''',
-          '''      <div className={styles.cardHeading}>
-                <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
-                <small>{formatInteger(chart.activeDays)} días con gasto</small>
-              </div>
-              <div className={styles.heatmapViewport}>
-                <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">''', 'heatmap heading')
-
-          tsx = replace_once(tsx,
-          '''          {chart.days.map((day) => {
-                    const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;
-                    return (
-                      <rect
-                        key={day.key}
-                        className={styles.heatCell}
-                        x={chart.left + day.week * chart.weekStep}
-                        y={chart.top + day.weekday * (chart.cell + chart.gap)}
-                        width={chart.cell}
-                        height={chart.cell}
-                        rx="2"
-                        style={{ opacity: intensity }}
-                      >
-                        <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>
-                      </rect>
-                    );
-                  })}''',
-          '''          {chart.days.map((day) => {
-                    const intensity = day.expenseCents > 0 ? 0.24 + 0.76 * (day.expenseCents / chart.maximum) : 0.07;
-                    const x = chart.left + day.week * chart.weekStep;
-                    const y = chart.top + day.weekday * (chart.cell + chart.gap);
-                    return (
-                      <g key={day.key}>
-                        <rect
-                          className={styles.heatCell}
-                          x={x}
-                          y={y}
-                          width={chart.cell}
-                          height={chart.cell}
-                          rx="4"
-                          style={{ opacity: intensity }}
-                        >
-                          <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>
-                        </rect>
-                        <text className={styles.heatmapDayLabel} x={x + chart.cell / 2} y={y + chart.cell / 2 + 3.5} textAnchor="middle">{day.dayOfMonth}</text>
-                      </g>
-                    );
-                  })}''', 'heatmap cells')
-
-          tsx = replace_once(tsx,
-          '''      <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana">''',
-          '''      <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana con importe y número de movimientos">''', 'weekday aria')
-
-          tsx = replace_once(tsx,
-          '''            <strong>{row.label}</strong>
-                    <small>{row.rows}</small>''',
-          '''            <strong>{row.label}</strong>
-                    <small>{formatInteger(row.rows)} mov.</small>
-                    <em>{formatMoney(row.expenseCents)}</em>''', 'weekday values')
-
-          tsx = replace_once(tsx,
-          '''  const width = 520;
-            const height = 250;
-            const left = 50;
-            const right = 22;
-            const top = 22;
-            const bottom = 38;''',
-          '''  const width = 620;
-            const height = 300;
-            const left = 78;
-            const right = 24;
-            const top = 28;
-            const bottom = 50;''', 'scatter geometry')
-
-          tsx = replace_once(tsx,
-          '''  const gridRatios = [0.25, 0.5, 0.75];''',
-          '''  const gridRatios = [0, 0.25, 0.5, 0.75, 1];''', 'scatter grid ratios')
-
-          tsx = replace_once(tsx,
-          '''        <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio">
-                  {gridRatios.map((ratio) => {
-                    const x = left + ratio * innerWidth;
-                    const y = top + ratio * innerHeight;
-                    return (
-                      <g key={ratio} className={styles.gridLine}>
-                        <line x1={x} x2={x} y1={top} y2={height - bottom} />
-                        <line x1={left} x2={width - right} y1={y} y2={y} />
-                      </g>
-                    );
-                  })}
-                  <line className={styles.scatterAxis} x1={left} x2={left} y1={top} y2={height - bottom} />
-                  <line className={styles.scatterAxis} x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
-                  <text className={styles.axisLabel} x={width / 2} y={height - 7} textAnchor="middle">Más frecuencia →</text>
-                  <text className={styles.axisLabel} x={left + 8} y={top + 12}>Mayor importe ↑</text>
-                  <text className={styles.axisLabel} x={left} y={height - bottom + 15}>{Math.round(xMin)}</text>
-                  <text className={styles.axisLabel} x={width - right} y={height - bottom + 15} textAnchor="end">{Math.round(xMax)}</text>
-                  <text className={styles.axisLabel} x={left - 6} y={top + 4} textAnchor="end">{formatMoney(Math.round(yMax))}</text>
-                  <text className={styles.axisLabel} x={left - 6} y={height - bottom + 4} textAnchor="end">{formatMoney(Math.round(yMin))}</text>
-                  {rows.map((row) => {
-                    const x = left + ((row.rows - xMin) / xSpan) * innerWidth;
-                    const y = top + (1 - ((row.averageCents ?? 0) - yMin) / ySpan) * innerHeight;
-                    const radius = 5 + Math.min(7, ((row.shareBps ?? 0) / 10000) * 18);
-                    return (
-                      <circle key={`${row.id ?? "none"}-${row.name}`} className={styles.scatterPoint} cx={x} cy={y} r={radius}>
-                        <title>{`${row.name} · ${row.rows} movimientos · media ${formatMoney(row.averageCents ?? 0)} · total ${formatMoney(row.expenseCents)}`}</title>
-                      </circle>
-                    );
-                  })}''',
-          '''        <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio con ejes numéricos">
-                  {gridRatios.map((ratio) => {
-                    const x = left + ratio * innerWidth;
-                    const y = top + (1 - ratio) * innerHeight;
-                    const xValue = xMin + ratio * xSpan;
-                    const yValue = yMin + ratio * ySpan;
-                    return (
-                      <g key={ratio} className={styles.gridLine}>
-                        <line x1={x} x2={x} y1={top} y2={height - bottom} />
-                        <line x1={left} x2={width - right} y1={y} y2={y} />
-                        <text x={x} y={height - bottom + 20} textAnchor="middle">{Math.round(xValue)}</text>
-                        <text x={left - 10} y={y + 4} textAnchor="end">{formatMoney(Math.round(yValue))}</text>
-                      </g>
-                    );
-                  })}
-                  <line className={styles.scatterAxis} x1={left} x2={left} y1={top} y2={height - bottom} />
-                  <line className={styles.scatterAxis} x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
-                  <text className={styles.axisTitle} x={width / 2} y={height - 8} textAnchor="middle">Número de compras</text>
-                  <text className={styles.axisTitle} x={left} y={15}>Importe medio por compra</text>
-                  {rows.map((row, index) => {
-                    const x = left + ((row.rows - xMin) / xSpan) * innerWidth;
-                    const y = top + (1 - ((row.averageCents ?? 0) - yMin) / ySpan) * innerHeight;
-                    const radius = 5 + Math.min(7, ((row.shareBps ?? 0) / 10000) * 18);
-                    return (
-                      <g key={`${row.id ?? "none"}-${row.name}`}>
-                        <circle className={styles.scatterPoint} cx={x} cy={y} r={radius}>
-                          <title>{`${row.name} · ${row.rows} movimientos · media ${formatMoney(row.averageCents ?? 0)} · total ${formatMoney(row.expenseCents)}`}</title>
-                        </circle>
-                        {(rows.length <= 8 || index < 5) && (
-                          <text className={styles.pointLabel} x={x + radius + 5} y={Math.max(top + 10, y - 5)}>{truncateLabel(row.name)}</text>
-                        )}
-                      </g>
-                    );
-                  })}''', 'scatter labels')
-
-          tsx = replace_once(tsx,
-          '''    const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-                const eightyIndex = points.findIndex((point) => point.ratio >= 0.8);
-                return {
-                  width,
-                  height,
-                  left,
-                  right,
-                  top,
-                  bottom,
-                  points,
-                  path,
-                  innerHeight,
-                  eightyCount: eightyIndex >= 0 ? eightyIndex + 1 : null,
-                };''',
-          '''    const path = [`M ${left} ${height - bottom}`, ...points.map((point) => `L ${point.x} ${point.y}`)].join(" ");
-                const eightyIndex = points.findIndex((point) => point.ratio >= 0.8);
-                return {
-                  width,
-                  height,
-                  left,
-                  right,
-                  top,
-                  bottom,
-                  points,
-                  path,
-                  innerWidth,
-                  innerHeight,
-                  eightyCount: eightyIndex >= 0 ? eightyIndex + 1 : null,
-                };''', 'concentration chart geometry')
-
-          tsx = replace_once(tsx,
-          '''  const eightyY = chart.top + 0.2 * chart.innerHeight;
-
-            return (''',
-          '''  const eightyY = chart.top + 0.2 * chart.innerHeight;
-            const yTicks = [0, 0.5, 0.8, 1];
-            const xTicks = integerTicks(1, rows.length);
-
-            return (''', 'concentration ticks')
-
-          tsx = replace_once(tsx,
-          '''        <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio">
-                  <line className={styles.scatterAxis} x1={chart.left} x2={chart.left} y1={chart.top} y2={chart.height - chart.bottom} />
-                  <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
-                  <line className={styles.concentrationReference} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} />
-                  <text className={styles.axisLabel} x={chart.left - 6} y={chart.top + 4} textAnchor="end">100 %</text>
-                  <text className={styles.axisLabel} x={chart.left - 6} y={eightyY + 4} textAnchor="end">80 %</text>
-                  <text className={styles.axisLabel} x={chart.left - 6} y={chart.height - chart.bottom + 4} textAnchor="end">0 %</text>
-                  <text className={styles.axisLabel} x={chart.width / 2} y={chart.height - 6} textAnchor="middle">Comercios ordenados por gasto</text>
-                  <path className={styles.dailyLine} d={chart.path} />
-                  {chart.points.map((point, index) => (
-                    <circle key={`${point.row.id ?? "none"}-${point.row.name}`} className={styles.dailyPoint} cx={point.x} cy={point.y} r={index < 5 ? 4 : 3}>
-                      <title>{`${index + 1}. ${point.row.name} · acumulado ${formatPercent(point.ratio)} · ${formatMoney(point.row.expenseCents)}`}</title>
-                    </circle>
-                  ))}''',
-          '''        <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio con escala porcentual">
-                  {yTicks.map((ratio) => {
-                    const y = chart.top + (1 - ratio) * chart.innerHeight;
-                    return (
-                      <g key={`y-${ratio}`} className={styles.gridLine}>
-                        <line x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} />
-                        <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatPercent(ratio)}</text>
-                      </g>
-                    );
-                  })}
-                  {xTicks.map((count) => {
-                    const x = chart.left + (count / rows.length) * chart.innerWidth;
-                    return (
-                      <g key={`x-${count}`} className={styles.gridLine}>
-                        <line x1={x} x2={x} y1={chart.top} y2={chart.height - chart.bottom} />
-                        <text x={x} y={chart.height - chart.bottom + 20} textAnchor="middle">{count}</text>
-                      </g>
-                    );
-                  })}
-                  <line className={styles.scatterAxis} x1={chart.left} x2={chart.left} y1={chart.top} y2={chart.height - chart.bottom} />
-                  <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
-                  <line className={styles.concentrationReference} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} />
-                  <text className={styles.axisTitle} x={chart.width / 2} y={chart.height - 7} textAnchor="middle">Número de comercios acumulados</text>
-                  <path className={styles.dailyLine} d={chart.path} />
-                  {chart.points.map((point, index) => (
-                    <g key={`${point.row.id ?? "none"}-${point.row.name}`}>
-                      <circle className={styles.dailyPoint} cx={point.x} cy={point.y} r={index < 5 ? 4 : 3}>
-                        <title>{`${index + 1}. ${point.row.name} · acumulado ${formatPercent(point.ratio)} · ${formatMoney(point.row.expenseCents)}`}</title>
-                      </circle>
-                      {index < 4 && (
-                        <text className={styles.valueLabel} x={point.x} y={Math.max(chart.top + 10, point.y - 10)} textAnchor="middle">{formatPercent(point.ratio)}</text>
-                      )}
-                    </g>
-                  ))}''', 'concentration labels')
-
-          tsx = replace_once(tsx,
-          '''      <div className={styles.chartGrid}>
-                <SpendingCalendar snapshot={snapshot} />
-                <AmountBandsChart snapshot={snapshot} />
-                <MerchantScatter snapshot={snapshot} />
-                <MerchantConcentrationCurve snapshot={snapshot} />
-              </div>''',
-          '''      <div className={styles.chartColumns}>
-                <div className={styles.chartColumn}>
-                  <SpendingCalendar snapshot={snapshot} />
-                  <MerchantScatter snapshot={snapshot} />
-                </div>
-                <div className={styles.chartColumn}>
-                  <AmountBandsChart snapshot={snapshot} />
-                  <MerchantConcentrationCurve snapshot={snapshot} />
-                </div>
-              </div>''', 'independent chart columns')
-
-          css = replace_once(css,
-          '''.heroGrid,
-          .chartGrid,
-          .detailGrid {''',
-          '''.heroGrid,
-          .chartColumns,
-          .detailGrid {''', 'grid selector')
-          css = replace_once(css,
-          '''.heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
-          .chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .detailGrid { grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); }''',
-          '''.heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
-          .chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-          .detailGrid { grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr); }
-          .chartColumn {
-            min-width: 0;
-            display: grid;
-            align-content: start;
-            gap: clamp(0.8rem, 1.2vw, 1.05rem);
-          }''', 'chart columns CSS')
-          css = replace_once(css,
-          '''.chartCard,
-          .detailCard { padding: clamp(0.85rem, 1.15vw, 1.05rem); }''',
-          '''.chartCard,
-          .detailCard {
-            align-self: start;
-            padding: clamp(0.85rem, 1.15vw, 1.05rem);
-          }''', 'card sizing')
-          css = replace_once(css,
-          '''.cardHeading small {
-            flex: 0 0 auto;
-            color: var(--color-text-muted);
-            font-size: max(var(--font-helper), 0.72rem);
-          }''',
-          '''.cardHeading small {
-            flex: 0 0 auto;
-            color: var(--color-text-muted);
-            font-size: max(var(--font-helper), 0.72rem);
-            text-align: right;
-          }''', 'heading meta')
-          css = replace_once(css,
-          '''.svgViewport {
+          # CSS: preserve readable scales on mobile and scroll the chart, not the whole page.
+          css = once(css, '.heroGrid,\n.chartGrid,\n.detailGrid {', '.heroGrid,\n.chartColumns,\n.detailGrid {', 'grid selector')
+          css = once(css, '.chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }', '.chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.chartColumn {\n  min-width: 0;\n  display: grid;\n  align-content: start;\n  gap: clamp(0.8rem, 1.2vw, 1.05rem);\n}', 'column CSS')
+          css = once(css, '.chartCard,\n.detailCard { padding: clamp(0.85rem, 1.15vw, 1.05rem); }', '.chartCard,\n.detailCard {\n  align-self: start;\n  padding: clamp(0.85rem, 1.15vw, 1.05rem);\n}', 'card sizing')
+          css = once(css, '''.svgViewport {
             min-width: 0;
             width: 100%;
             overflow: hidden;
@@ -496,8 +141,7 @@ jobs:
           .scatterChart {
             max-height: 17rem;
             aspect-ratio: 2.08 / 1;
-          }''',
-          '''.svgViewport,
+          }''', '''.svgViewport,
           .heatmapViewport {
             min-width: 0;
             width: 100%;
@@ -520,129 +164,31 @@ jobs:
           }
           .scatterChart {
             min-width: 34rem;
-            max-height: 18rem;
-            aspect-ratio: 2.07 / 1;
+            max-height: 17rem;
+            aspect-ratio: 2.08 / 1;
           }
           .heatmapChart {
             width: min(100%, 31rem);
             min-width: 18rem;
             margin-inline: auto;
-          }''', 'chart viewport')
-          css = replace_once(css,
-          '''.gridLine text,
-          .axisLabel {
-            fill: var(--color-text-muted);
-            font-size: 11px;
-            font-variant-numeric: tabular-nums;
-          }''',
-          '''.gridLine text,
-          .axisLabel,
-          .axisTitle,
-          .valueLabel,
-          .pointLabel,
-          .heatmapDayLabel {
-            font-variant-numeric: tabular-nums;
-          }
-          .gridLine text,
-          .axisLabel {
-            fill: var(--color-text-muted);
-            font-size: 11px;
-          }
-          .axisTitle {
-            fill: var(--color-text-secondary);
-            font-size: 11px;
-            font-weight: 750;
-          }
-          .valueLabel,
-          .pointLabel {
-            fill: #c8d9fb;
-            font-size: 10px;
-            font-weight: 750;
-            paint-order: stroke;
-            stroke: rgba(5, 9, 20, 0.92);
-            stroke-width: 3px;
-            stroke-linejoin: round;
-          }''', 'chart label styles')
-          css = replace_once(css,
-          '''.heatCell {
-            fill: var(--color-cyan);
-            stroke: rgba(201, 224, 255, 0.22);
-            stroke-width: 0.7;
-          }''',
-          '''.heatCell {
-            fill: var(--color-cyan);
-            stroke: rgba(201, 224, 255, 0.28);
-            stroke-width: 0.8;
-            vector-effect: non-scaling-stroke;
-          }
-          .heatmapDayLabel {
-            fill: #eef7ff;
-            font-size: 9px;
-            font-weight: 850;
-            pointer-events: none;
-            paint-order: stroke;
-            stroke: rgba(5, 9, 20, 0.78);
-            stroke-width: 2px;
-          }''', 'heatmap label style')
-          css = replace_once(css,
-          '''.weekdayColumn strong { font-size: 0.78rem; }
-          .weekdayColumn small { color: var(--color-text-muted); font-size: 0.7rem; }''',
-          '''.weekdayColumn strong { font-size: 0.78rem; }
-          .weekdayColumn small { color: var(--color-text-muted); font-size: 0.67rem; }
-          .weekdayColumn em {
-            color: var(--color-text-secondary);
-            font-size: 0.62rem;
-            font-style: normal;
-            font-variant-numeric: tabular-nums;
-            white-space: nowrap;
-          }''', 'weekday amount style')
-          css = replace_once(css,
-          '''@media (max-width: 58rem) {
-            .chartGrid { grid-template-columns: 1fr; }
-            .dailyChart { aspect-ratio: 3 / 1; }
-            .dailyChart.heatChart { aspect-ratio: auto; }
-            .scatterChart { aspect-ratio: 2.2 / 1; }
-          }''',
-          '''@media (max-width: 58rem) {
-            .chartColumns { grid-template-columns: 1fr; }
-            .dailyChart { aspect-ratio: 3 / 1; }
-            .scatterChart { aspect-ratio: 2.2 / 1; }
-          }''', 'tablet columns')
-          css = replace_once(css,
-          '''  .dailyChart,
-            .scatterChart { max-height: 15rem; }
-            .dailyChart.heatChart { max-height: 14rem; }
-            .gridLine text { display: none; }''',
-          '''  .dailyChart,
-            .scatterChart { max-height: 16rem; min-width: 32rem; }
-            .heatmapChart { min-width: 17rem; }
-            .gridLine text { display: block; }''', 'mobile chart labels')
-          css = replace_once(css,
-          '''  .dailyChart { aspect-ratio: 1.7 / 1; }
-            .dailyChart.heatChart { aspect-ratio: auto; }
-            .scatterChart { aspect-ratio: 1.65 / 1; }''',
-          '''  .dailyChart { aspect-ratio: 1.9 / 1; }
-            .scatterChart { aspect-ratio: 1.8 / 1; }
-            .weekdayColumn em { font-size: 0.58rem; }''', 'small mobile ratios')
-          css = replace_once(css,
-          '''@media (max-width: 24rem) {
-            .weekdayColumn small { display: none; }
-            .accountStrip { grid-template-columns: 1fr; }
-          }''',
-          '''@media (max-width: 24rem) {
-            .weekdayColumn small { font-size: 0.62rem; }
-            .weekdayColumn em { font-size: 0.54rem; }
-            .accountStrip { grid-template-columns: 1fr; }
-          }''', 'smallest mobile values')
+          }''', 'chart viewports')
+          css = once(css, '.gridLine text,\n.axisLabel {\n  fill: var(--color-text-muted);\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n}', '.gridLine text,\n.axisLabel,\n.valueLabel,\n.heatmapDayLabel {\n  font-variant-numeric: tabular-nums;\n}\n.gridLine text,\n.axisLabel {\n  fill: var(--color-text-muted);\n  font-size: 11px;\n}\n.valueLabel {\n  fill: #c8d9fb;\n  font-size: 10px;\n  font-weight: 750;\n  paint-order: stroke;\n  stroke: rgba(5, 9, 20, 0.92);\n  stroke-width: 3px;\n  stroke-linejoin: round;\n}', 'value labels')
+          css = once(css, '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.22);\n  stroke-width: 0.7;\n}', '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.28);\n  stroke-width: 0.8;\n  vector-effect: non-scaling-stroke;\n}\n.heatmapDayLabel {\n  fill: #eef7ff;\n  font-size: 9px;\n  font-weight: 850;\n  pointer-events: none;\n  paint-order: stroke;\n  stroke: rgba(5, 9, 20, 0.78);\n  stroke-width: 2px;\n}', 'heat labels CSS')
+          css = once(css, '.weekdayColumn strong { font-size: 0.78rem; }\n.weekdayColumn small { color: var(--color-text-muted); font-size: 0.7rem; }', '.weekdayColumn strong { font-size: 0.78rem; }\n.weekdayColumn small { color: var(--color-text-muted); font-size: 0.67rem; }\n.weekdayColumn em {\n  color: var(--color-text-secondary);\n  font-size: 0.62rem;\n  font-style: normal;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}', 'weekday amount CSS')
+          css = once(css, '@media (max-width: 58rem) {\n  .chartGrid { grid-template-columns: 1fr; }\n  .dailyChart { aspect-ratio: 3 / 1; }\n  .dailyChart.heatChart { aspect-ratio: auto; }\n  .scatterChart { aspect-ratio: 2.2 / 1; }\n}', '@media (max-width: 58rem) {\n  .chartColumns { grid-template-columns: 1fr; }\n  .dailyChart { aspect-ratio: 3 / 1; }\n  .scatterChart { aspect-ratio: 2.2 / 1; }\n}', 'tablet CSS')
+          css = once(css, '  .dailyChart,\n  .scatterChart { max-height: 15rem; }\n  .dailyChart.heatChart { max-height: 14rem; }\n  .gridLine text { display: none; }', '  .dailyChart,\n  .scatterChart { max-height: 16rem; min-width: 32rem; }\n  .heatmapChart { min-width: 17rem; }\n  .gridLine text { display: block; }', 'mobile axes')
+          css = once(css, '  .dailyChart { aspect-ratio: 1.7 / 1; }\n  .dailyChart.heatChart { aspect-ratio: auto; }\n  .scatterChart { aspect-ratio: 1.65 / 1; }', '  .dailyChart { aspect-ratio: 1.9 / 1; }\n  .scatterChart { aspect-ratio: 1.8 / 1; }\n  .weekdayColumn em { font-size: 0.58rem; }', 'small mobile charts')
+          css = once(css, '@media (max-width: 24rem) {\n  .weekdayColumn small { display: none; }\n  .accountStrip { grid-template-columns: 1fr; }\n}', '@media (max-width: 24rem) {\n  .weekdayColumn small { font-size: 0.62rem; }\n  .weekdayColumn em { font-size: 0.54rem; }\n  .accountStrip { grid-template-columns: 1fr; }\n}', 'smallest mobile values')
 
           tsx_path.write_text(tsx)
           css_path.write_text(css)
           PY
 
+          git diff --check
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add app/analysis/analysis-movement-insights.tsx app/analysis/analysis-movement-insights.module.css
           git diff --cached --check
           git diff --cached --quiet && exit 0
-          git commit -m "feat(analysis): make charts legible across desktop and mobile"
+          git commit -m "feat(analysis): improve primary chart legibility"
           git push origin HEAD:audit/analysis-legibility-10.0.11
