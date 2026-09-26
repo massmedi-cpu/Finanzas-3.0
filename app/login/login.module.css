@@ -2,3 +2,13 @@
   margin-top: 1.5rem;
   text-align: left;
 }
+
+.installWrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.installWrap:empty {
+  display: none;
+}
