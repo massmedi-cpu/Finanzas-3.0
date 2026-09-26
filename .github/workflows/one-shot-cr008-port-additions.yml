@@ -1,4 +1,4 @@
-name: One Shot CR008 Port Core
+name: One Shot CR008 Reconcile UI
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   contents: write
 
 jobs:
-  port-core:
+  reconcile-ui:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Checkout clean 10.0.8 stack
+      - name: Checkout current 10.0.8 stack with ported OCR core
         uses: actions/checkout@v6
         with:
           ref: audit/cr008-ocr-v22-10.0.9
@@ -25,24 +25,42 @@ jobs:
       - name: Fetch historical OCR V22 source
         run: git fetch origin rebuild/phase-cr008-ocr-v22-current-main
 
-      - name: Port OCR files unchanged on the modern line
+      - name: Three-way reconcile Documentos UI
         shell: bash
         run: |
           set -euo pipefail
+          base='b829adb07e00e46bb73e893b87e2b60a55d87315'
           source_ref='origin/rebuild/phase-cr008-ocr-v22-current-main'
           paths=(
-            app/api/documents/ocr/route.ts
-            src/domain/document-ocr.ts
-            src/infrastructure/ocr/tesseract-image-provider.ts
+            app/documents/ocr-review-panel.tsx
+            app/documents/documents-client.tsx
+            app/documents/ocr-review.module.css
           )
-          git checkout "$source_ref" -- "${paths[@]}"
-          git diff --cached --check
+          conflicts=0
+          for path in "${paths[@]}"; do
+            safe=$(printf '%s' "$path" | tr '/.' '__')
+            git show "$base:$path" > "/tmp/${safe}.base"
+            git show "$source_ref:$path" > "/tmp/${safe}.other"
+            if ! git merge-file "$path" "/tmp/${safe}.base" "/tmp/${safe}.other"; then
+              echo "CONFLICT: $path"
+              conflicts=1
+            else
+              echo "CLEAN: $path"
+            fi
+          done
+          if [ "$conflicts" -ne 0 ]; then
+            echo 'Three-way reconciliation produced conflicts; no commit will be created.'
+            git diff --check || true
+            exit 1
+          fi
+          git diff --check
+          git add app/documents/ocr-review-panel.tsx app/documents/documents-client.tsx app/documents/ocr-review.module.css
 
-      - name: Commit reconciled OCR core
+      - name: Commit reconciled Documentos UI
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: port CR-008 OCR V22 core onto 10.0.8'
+          git commit -m 'feat: reconcile CR-008 OCR review UI with current product'
           git push origin HEAD:audit/cr008-ocr-v22-10.0.9
