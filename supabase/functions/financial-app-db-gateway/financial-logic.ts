@@ -111,6 +111,17 @@ export async function handleFinancialLogicAction(input: {
     `);
   }
 
+  if (action === "financial.reconciliation") {
+    const accountId = nullableUuid(payload.accountId, "reconciliation_account_id");
+    if (!accountId) throw new Error("invalid_reconciliation_account_id");
+    const asOfDate = nullableDate(payload.asOfDate, "financial_as_of_date");
+    return financialQuery(() => sql`
+      select financial_app.financial_account_reconciliation(
+        ${accountId}::uuid,${asOfDate}::date,12
+      ) as result
+    `);
+  }
+
   if (action === "financial.monthly") {
     const f = financialFilters(payload);
     return financialQuery(() => sql`

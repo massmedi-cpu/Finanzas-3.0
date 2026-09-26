@@ -118,11 +118,29 @@ function transactionsFor(accountId: string) {
   };
 }
 
-async function mockAccountsApis(page: import("@playwright/test").Page) {
+async function mockAccountsApis(page: import("@playwright/test").Page, withVariance = false) {
   await page.route("**/api/financial?*", async (route) => {
     const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "reconciliation") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+        contractVersion: 1, accountId: accountA, asOfDate: "2026-09-07",
+        balanceSource: "bank_explicit", bankBalanceDate: "2026-09-07",
+        reconstructionDeltaCents: -57900, unanchoredMovementCents: 0,
+        anchorDays: 932, varianceDays: 2,
+        events: [
+          { bankDate: "2019-05-30", periodStartDate: "2019-05-30", bankBalanceCents: 45000, sourceRowKey: "B-3", deltaCents: -60000, cumulativeDeltaCents: -60000 },
+          { bankDate: "2026-07-30", periodStartDate: "2026-07-29", bankBalanceCents: 280000, sourceRowKey: "B-4", deltaCents: 2100, cumulativeDeltaCents: -57900 },
+        ],
+      }) });
+      return;
+    }
     if (url.searchParams.get("mode") === "balances") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(balances) });
+      const data = withVariance ? {
+        ...balances,
+        quality: { ...balances.quality, integrityDeltaAccounts: 1 },
+        accounts: [{ ...balances.accounts[0], reconstructedBalanceCents: 77900, reconstructionDeltaCents: -57900 }, balances.accounts[1]],
+      } : balances;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(data) });
       return;
     }
     const accountId = url.searchParams.get("accountId") ?? accountA;
@@ -153,6 +171,25 @@ test("accounts UI renders central balances, scoped metrics and recent movements"
   await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
   await expect(page.getByText("500,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("50,00 €", { exact: true })).toBeVisible();
+});
+
+test("account discrepancy opens an evidence trail and keeps movement links scoped", async ({ page }) => {
+  await mockAccountsApis(page, true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/accounts");
+
+  await expect(page.getByText(/reconstrucción por movimientos difiere en 579,00/)).toBeVisible();
+  await page.getByRole("button", { name: "Examinar diferencia" }).click();
+  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toBeVisible();
+  await expect(page.getByText("2 días con cambios · 932 días con saldo bancario")).toBeVisible();
+  const firstLink = page.getByRole("link", { name: /Ver movimientos del 30\/05\/2019/ });
+  await expect(firstLink).toHaveAttribute("href", `/transactions?accountId=${accountA}&dateFrom=2019-05-30&dateTo=2019-05-30`);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountA}`);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  await page.getByRole("button", { name: /Ahorro/ }).click();
+  await expect(page.getByRole("heading", { name: "Dónde cambia la diferencia" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Abrir Movimientos" })).toHaveAttribute("href", `/transactions?accountId=${accountB}`);
 });
 
 test("accounts UI keeps touch targets usable on narrow mobile screens", async ({ page }) => {
