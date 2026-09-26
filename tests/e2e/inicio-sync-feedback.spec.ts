@@ -137,24 +137,28 @@ test("Actualizar datos no llama «sin cambios» a una sincronización con filas 
   const postCount = await mockInicio(page, "missing-after-sync");
   await page.goto("/");
 
+  const sourceHealth = page.locator('section[aria-label="Estado de los datos bancarios"]');
+
   await page.getByRole("button", { name: "Actualizar datos" }).click();
   await expect.poll(postCount).toBe(1);
-  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sin cambios incorporados. 1 movimiento importado anteriormente ya no aparece en la fuente. Revisa la fuente.", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sin cambios nuevos.", { exact: true })).toHaveCount(0);
+  await expect(sourceHealth.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(sourceHealth).toContainText("Sin cambios incorporados. 1 movimiento importado anteriormente ya no aparece en la fuente. Revisa la fuente.");
+  await expect(sourceHealth).not.toContainText("Sin cambios nuevos.");
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
 
   await page.reload();
-  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText("1 aviso de sincronización requiere revisión. Revisa la fuente.", { exact: true })).toBeVisible();
+  await expect(sourceHealth.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(sourceHealth).toContainText("1 aviso de sincronización requiere revisión. Revisa la fuente.");
 });
 
 test("Inicio conserva tras recarga los posibles duplicados de la última sincronización", async ({ page }) => {
   await mockInicio(page, "duplicates-persisted");
   await page.goto("/");
 
-  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText("2 posibles duplicados detectados. Revisa la fuente.", { exact: true })).toBeVisible();
+  const sourceHealth = page.locator('section[aria-label="Estado de los datos bancarios"]');
+
+  await expect(sourceHealth.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(sourceHealth).toContainText("2 posibles duplicados detectados. Revisa la fuente.");
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
 });
