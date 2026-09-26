@@ -35,7 +35,14 @@ jobs:
                   raise SystemExit(f"{label}: expected exactly one match, got {count}")
               return text.replace(old, new, 1)
 
-          # A readable daily chart: stable rounded scale plus selected point values.
+          def patch_component(text: str, start_marker: str, end_marker: str, replacements, label: str) -> str:
+              start = text.index(start_marker)
+              end = text.index(end_marker, start)
+              block = text[start:end]
+              for old, new, step in replacements:
+                  block = once(block, old, new, f"{label}/{step}")
+              return text[:start] + block + text[end:]
+
           tsx = once(tsx,
               'function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {',
               '''function axisScale(maxValue: number) {
@@ -54,49 +61,41 @@ jobs:
 
           function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {''',
               'axis helper')
-          for old, new, label in [
-              ('    const height = 220;', '    const height = 236;', 'daily height'),
-              ('    const left = 42;', '    const left = 64;', 'daily left'),
-              ('    const right = 12;', '    const right = 16;', 'daily right'),
-              ('    const top = 16;', '    const top = 24;', 'daily top'),
-              ('    const bottom = 30;', '    const bottom = 38;', 'daily bottom'),
-              ('    const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));', '    const scale = axisScale(Math.max(...rows.map((row) => row.expenseCents)));', 'daily scale'),
-              ('      y: top + (1 - row.expenseCents / maximum) * innerHeight,', '      y: top + (1 - row.expenseCents / scale.maximum) * innerHeight,', 'daily point scale'),
-              ('    return { width, height, left, right, top, bottom, maximum, points, path };', '    return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };', 'daily return'),
-              ('aria-label="Evolución diaria del gasto del periodo">', 'aria-label="Evolución diaria del gasto del periodo con escala en euros">', 'daily aria'),
-              ('          {[0, 0.5, 1].map((ratio) => {', '          {chart.ticks.map((value) => {', 'daily tick map'),
-              ('            const y = chart.top + ratio * (chart.height - chart.top - chart.bottom);\n            const value = Math.round(chart.maximum * (1 - ratio));', '            const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);', 'daily tick y'),
-              ('              <g key={ratio} className={styles.gridLine}>', '              <g key={value} className={styles.gridLine}>', 'daily tick key'),
-              ('                <text x={chart.left - 8} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', '                <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', 'daily tick label'),
-              ('                <text className={styles.axisLabel} x={x} y={chart.height - 8} textAnchor="middle">{formatDate(row.date)}</text>', '                <text className={styles.axisLabel} x={x} y={chart.height - 10} textAnchor="middle">{formatDate(row.date)}</text>', 'daily date label'),
-          ]:
-              tsx = once(tsx, old, new, label)
-          marker = '''              </circle>
-              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && ('''
-          tsx = once(tsx, marker, '''              </circle>
-              {(rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0) && (
-                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor="middle">{formatMoney(row.expenseCents)}</text>
-              )}
-              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (''', 'daily point values')
 
-          # Heatmap: make the calendar actually readable, including dates.
-          for old, new, label in [
-              ('    const cell = 12;', '    const cell = 22;', 'heat cell'),
-              ('    const gap = 3;', '    const gap = 4;', 'heat gap'),
-              ('    const left = 22;', '    const left = 28;', 'heat left'),
-              ('    const top = 16;', '    const top = 12;', 'heat top'),
-              ('        key,\n        week,', '        key,\n        dayOfMonth: date.getUTCDate(),\n        week,', 'heat day'),
-              ('      height: top + 7 * (cell + gap) + 18,', '      height: top + 7 * (cell + gap) + 12,\n      activeDays: days.filter((day) => day.expenseCents > 0).length,', 'heat active'),
-              ('        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n      </div>\n      <div className={styles.svgViewport}>\n        <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">', '        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n        <small>{formatInteger(chart.activeDays)} días con gasto</small>\n      </div>\n      <div className={styles.heatmapViewport}>\n        <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">', 'heat shell'),
-              ('            const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;\n            return (\n              <rect\n                key={day.key}\n                className={styles.heatCell}\n                x={chart.left + day.week * chart.weekStep}\n                y={chart.top + day.weekday * (chart.cell + chart.gap)}\n                width={chart.cell}\n                height={chart.cell}\n                rx="2"\n                style={{ opacity: intensity }}\n              >\n                <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n              </rect>\n            );', '            const intensity = day.expenseCents > 0 ? 0.24 + 0.76 * (day.expenseCents / chart.maximum) : 0.07;\n            const x = chart.left + day.week * chart.weekStep;\n            const y = chart.top + day.weekday * (chart.cell + chart.gap);\n            return (\n              <g key={day.key}>\n                <rect\n                  className={styles.heatCell}\n                  x={x}\n                  y={y}\n                  width={chart.cell}\n                  height={chart.cell}\n                  rx="4"\n                  style={{ opacity: intensity }}\n                >\n                  <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n                </rect>\n                <text className={styles.heatmapDayLabel} x={x + chart.cell / 2} y={y + chart.cell / 2 + 3.5} textAnchor="middle">{day.dayOfMonth}</text>\n              </g>\n            );', 'heat cells'),
-          ]:
-              tsx = once(tsx, old, new, label)
+          tsx = patch_component(tsx, 'function DailySpendChart', 'function SpendingCalendar', [
+              ('    const height = 220;', '    const height = 236;', 'height'),
+              ('    const left = 42;', '    const left = 64;', 'left'),
+              ('    const right = 12;', '    const right = 16;', 'right'),
+              ('    const top = 16;', '    const top = 24;', 'top'),
+              ('    const bottom = 30;', '    const bottom = 38;', 'bottom'),
+              ('    const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));', '    const scale = axisScale(Math.max(...rows.map((row) => row.expenseCents)));', 'scale'),
+              ('      y: top + (1 - row.expenseCents / maximum) * innerHeight,', '      y: top + (1 - row.expenseCents / scale.maximum) * innerHeight,', 'point scale'),
+              ('    return { width, height, left, right, top, bottom, maximum, points, path };', '    return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };', 'return scale'),
+              ('aria-label="Evolución diaria del gasto del periodo">', 'aria-label="Evolución diaria del gasto del periodo con escala en euros">', 'aria'),
+              ('          {[0, 0.5, 1].map((ratio) => {', '          {chart.ticks.map((value) => {', 'tick map'),
+              ('            const y = chart.top + ratio * (chart.height - chart.top - chart.bottom);\n            const value = Math.round(chart.maximum * (1 - ratio));', '            const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);', 'tick position'),
+              ('              <g key={ratio} className={styles.gridLine}>', '              <g key={value} className={styles.gridLine}>', 'tick key'),
+              ('                <text x={chart.left - 8} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', '                <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatMoney(value)}</text>', 'tick text'),
+              ('              </circle>\n              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (', '              </circle>\n              {(rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0) && (\n                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor="middle">{formatMoney(row.expenseCents)}</text>\n              )}\n              {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (', 'point values'),
+              ('y={chart.height - 8}', 'y={chart.height - 10}', 'date position'),
+          ], 'DailySpendChart')
 
-          # Weekday chart: keep the existing peak indicator and add the values users need.
-          tsx = once(tsx, 'aria-label="Gasto por día de la semana">', 'aria-label="Gasto por día de la semana con importe y número de movimientos">', 'weekday aria')
-          tsx = once(tsx, '            <small>{row.rows}</small>', '            <small>{formatInteger(row.rows)} mov.</small>\n            <em>{formatMoney(row.expenseCents)}</em>', 'weekday values')
+          tsx = patch_component(tsx, 'function SpendingCalendar', 'function WeekdayChart', [
+              ('    const cell = 12;', '    const cell = 22;', 'cell'),
+              ('    const gap = 3;', '    const gap = 4;', 'gap'),
+              ('    const left = 22;', '    const left = 28;', 'left'),
+              ('    const top = 16;', '    const top = 12;', 'top'),
+              ('        key,\n        week,', '        key,\n        dayOfMonth: date.getUTCDate(),\n        week,', 'day number'),
+              ('      height: top + 7 * (cell + gap) + 18,', '      height: top + 7 * (cell + gap) + 12,\n      activeDays: days.filter((day) => day.expenseCents > 0).length,', 'active days'),
+              ('        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n      </div>\n      <div className={styles.svgViewport}>\n        <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">', '        <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>\n        <small>{formatInteger(chart.activeDays)} días con gasto</small>\n      </div>\n      <div className={styles.heatmapViewport}>\n        <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">', 'shell'),
+              ('            const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;\n            return (\n              <rect\n                key={day.key}\n                className={styles.heatCell}\n                x={chart.left + day.week * chart.weekStep}\n                y={chart.top + day.weekday * (chart.cell + chart.gap)}\n                width={chart.cell}\n                height={chart.cell}\n                rx="2"\n                style={{ opacity: intensity }}\n              >\n                <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n              </rect>\n            );', '            const intensity = day.expenseCents > 0 ? 0.24 + 0.76 * (day.expenseCents / chart.maximum) : 0.07;\n            const x = chart.left + day.week * chart.weekStep;\n            const y = chart.top + day.weekday * (chart.cell + chart.gap);\n            return (\n              <g key={day.key}>\n                <rect\n                  className={styles.heatCell}\n                  x={x}\n                  y={y}\n                  width={chart.cell}\n                  height={chart.cell}\n                  rx="4"\n                  style={{ opacity: intensity }}\n                >\n                  <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>\n                </rect>\n                <text className={styles.heatmapDayLabel} x={x + chart.cell / 2} y={y + chart.cell / 2 + 3.5} textAnchor="middle">{day.dayOfMonth}</text>\n              </g>\n            );', 'cells'),
+          ], 'SpendingCalendar')
 
-          # Unequal-density charts use independent columns, avoiding artificial blank rows.
+          tsx = patch_component(tsx, 'function WeekdayChart', 'function AmountBandsChart', [
+              ('aria-label="Gasto por día de la semana">', 'aria-label="Gasto por día de la semana con importe y número de movimientos">', 'aria'),
+              ('            <small>{row.rows}</small>', '            <small>{formatInteger(row.rows)} mov.</small>\n            <em>{formatMoney(row.expenseCents)}</em>', 'values'),
+          ], 'WeekdayChart')
+
           tsx = once(tsx, '''      <div className={styles.chartGrid}>
             <SpendingCalendar snapshot={snapshot} />
             <AmountBandsChart snapshot={snapshot} />
@@ -113,7 +112,6 @@ jobs:
             </div>
           </div>''', 'chart columns')
 
-          # CSS: preserve readable scales on mobile and scroll the chart, not the whole page.
           css = once(css, '.heroGrid,\n.chartGrid,\n.detailGrid {', '.heroGrid,\n.chartColumns,\n.detailGrid {', 'grid selector')
           css = once(css, '.chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }', '.chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }\n.chartColumn {\n  min-width: 0;\n  display: grid;\n  align-content: start;\n  gap: clamp(0.8rem, 1.2vw, 1.05rem);\n}', 'column CSS')
           css = once(css, '.chartCard,\n.detailCard { padding: clamp(0.85rem, 1.15vw, 1.05rem); }', '.chartCard,\n.detailCard {\n  align-self: start;\n  padding: clamp(0.85rem, 1.15vw, 1.05rem);\n}', 'card sizing')
@@ -173,7 +171,7 @@ jobs:
             margin-inline: auto;
           }''', 'chart viewports')
           css = once(css, '.gridLine text,\n.axisLabel {\n  fill: var(--color-text-muted);\n  font-size: 11px;\n  font-variant-numeric: tabular-nums;\n}', '.gridLine text,\n.axisLabel,\n.valueLabel,\n.heatmapDayLabel {\n  font-variant-numeric: tabular-nums;\n}\n.gridLine text,\n.axisLabel {\n  fill: var(--color-text-muted);\n  font-size: 11px;\n}\n.valueLabel {\n  fill: #c8d9fb;\n  font-size: 10px;\n  font-weight: 750;\n  paint-order: stroke;\n  stroke: rgba(5, 9, 20, 0.92);\n  stroke-width: 3px;\n  stroke-linejoin: round;\n}', 'value labels')
-          css = once(css, '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.22);\n  stroke-width: 0.7;\n}', '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.28);\n  stroke-width: 0.8;\n  vector-effect: non-scaling-stroke;\n}\n.heatmapDayLabel {\n  fill: #eef7ff;\n  font-size: 9px;\n  font-weight: 850;\n  pointer-events: none;\n  paint-order: stroke;\n  stroke: rgba(5, 9, 20, 0.78);\n  stroke-width: 2px;\n}', 'heat labels CSS')
+          css = once(css, '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.22);\n  stroke-width: 0.7;\n}', '.heatCell {\n  fill: var(--color-cyan);\n  stroke: rgba(201, 224, 255, 0.28);\n  stroke-width: 0.8;\n  vector-effect: non-scaling-stroke;\n}\n.heatmapDayLabel {\n  fill: #eef7ff;\n  font-size: 9px;\n  font-weight: 850;\n  pointer-events: none;\n  paint-order: stroke;\n  stroke: rgba(5, 9, 20, 0.78);\n  stroke-width: 2px;\n}', 'heat label CSS')
           css = once(css, '.weekdayColumn strong { font-size: 0.78rem; }\n.weekdayColumn small { color: var(--color-text-muted); font-size: 0.7rem; }', '.weekdayColumn strong { font-size: 0.78rem; }\n.weekdayColumn small { color: var(--color-text-muted); font-size: 0.67rem; }\n.weekdayColumn em {\n  color: var(--color-text-secondary);\n  font-size: 0.62rem;\n  font-style: normal;\n  font-variant-numeric: tabular-nums;\n  white-space: nowrap;\n}', 'weekday amount CSS')
           css = once(css, '@media (max-width: 58rem) {\n  .chartGrid { grid-template-columns: 1fr; }\n  .dailyChart { aspect-ratio: 3 / 1; }\n  .dailyChart.heatChart { aspect-ratio: auto; }\n  .scatterChart { aspect-ratio: 2.2 / 1; }\n}', '@media (max-width: 58rem) {\n  .chartColumns { grid-template-columns: 1fr; }\n  .dailyChart { aspect-ratio: 3 / 1; }\n  .scatterChart { aspect-ratio: 2.2 / 1; }\n}', 'tablet CSS')
           css = once(css, '  .dailyChart,\n  .scatterChart { max-height: 15rem; }\n  .dailyChart.heatChart { max-height: 14rem; }\n  .gridLine text { display: none; }', '  .dailyChart,\n  .scatterChart { max-height: 16rem; min-width: 32rem; }\n  .heatmapChart { min-width: 17rem; }\n  .gridLine text { display: block; }', 'mobile axes')
