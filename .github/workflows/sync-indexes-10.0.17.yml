@@ -1,0 +1,70 @@
+name: Sync Indexes 10.0.17
+
+on:
+  push:
+    branches:
+      - audit/sync-fk-indexes-10.0.17
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/20260926184000_cover_sync_workspace_foreign_keys.sql'
+      - 'tests/e2e/sync-index-contract.spec.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/sync-indexes-10.0.17.yml'
+      - 'vercel.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-indexes-10.0.17-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Synchronize version 10.0.17
+        shell: bash
+        run: |
+          if [ "$(node -p "require('./package.json').version")" != "10.0.17" ]; then
+            npm version 10.0.17 --no-git-tag-version
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "chore: version Financial App 10.0.17"
+            git push
+          fi
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Sync composite FK index contract
+        run: npx playwright test tests/e2e/sync-index-contract.spec.ts --project=chromium-desktop
+
+      - name: Verify version contract
+        shell: bash
+        run: |
+          test "$(node -p "require('./package.json').version")" = "10.0.17"
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.17"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.17"
