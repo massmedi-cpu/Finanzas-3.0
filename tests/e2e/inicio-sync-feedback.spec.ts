@@ -140,13 +140,13 @@ test("Actualizar datos no llama «sin cambios» a una sincronización con filas 
   await page.getByRole("button", { name: "Actualizar datos" }).click();
   await expect.poll(postCount).toBe(1);
   await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Sin cambios incorporados\. 1 movimiento importado anteriormente ya no aparece en la fuente\. Revisa la fuente\./i)).toBeVisible();
+  await expect(page.getByText("Sin cambios incorporados. 1 movimiento importado anteriormente ya no aparece en la fuente. Revisa la fuente.", { exact: true })).toBeVisible();
   await expect(page.getByText("Sin cambios nuevos.", { exact: true })).toHaveCount(0);
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
 
   await page.reload();
   await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText(/1 aviso de sincronización requiere revisión\. Revisa la fuente\./i)).toBeVisible();
+  await expect(page.getByText("1 aviso de sincronización requiere revisión. Revisa la fuente.", { exact: true })).toBeVisible();
 });
 
 test("Inicio conserva tras recarga los posibles duplicados de la última sincronización", async ({ page }) => {
@@ -154,7 +154,7 @@ test("Inicio conserva tras recarga los posibles duplicados de la última sincron
   await page.goto("/");
 
   await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(page.getByText(/2 posibles duplicados detectados\. Revisa la fuente\./i)).toBeVisible();
+  await expect(page.getByText("2 posibles duplicados detectados. Revisa la fuente.", { exact: true })).toBeVisible();
   await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
 });
