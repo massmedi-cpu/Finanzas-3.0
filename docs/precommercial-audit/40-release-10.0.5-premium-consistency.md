@@ -22,12 +22,15 @@
 | Elementos de previsión almacenados y previstos en la consulta | 0 y 0 |
 | Límites de presupuesto guardados | 0; el módulo puede mostrar referencias automáticas sin inventar objetivos |
 
-## Verificaciones antes de integrar
+## Verificaciones e integración
 
-- `npm run typecheck`
-- `npm run build` y comprobación posterior de runtime de fuente (local)
-- Contratos de versión, formato, consistencia y sistema visual: 7 pruebas sin navegador.
-- Pendiente de los trabajos de CI y comprobación de Preview de la SHA exacta: navegación, formularios, estados vacíos y anchos desktop/móvil.
+- `npm run typecheck` y `npm run build`: OK. Una caché local dañada de Turbopack se regeneró antes de compilar.
+- Contratos de versión, formato, consistencia y sistema visual: 7 pruebas sin navegador, aprobadas.
+- Gate UX 15 [run #249](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/36219241423) sobre `5c43223268d2b07c8d09b2c304d67e628ae91c04`: 144 aprobadas y 6 omitidas; Chromium escritorio/móvil, formularios de Previsión y seis anchos de navegación premium.
+- Preview `dpl_CffTtWaDC3UwfVFmfCVikLUY44rt` READY para esa SHA.
+- PR [#371](https://github.com/massmedi-cpu/Finanzas-3.0/pull/371) fusionada en `0ca08fbdf13d2671271c0003c34a7a4a265e9813`; el árbol Git fusionado coincide exactamente con el árbol validado.
+- Production `dpl_CjtPDE2RmKhvsWRNmvPPB8WPvWVs` READY y `/api/build` sirve 10.0.5 con la SHA de fusión. `/manifest.webmanifest` devuelve `#030711`; la consulta de errores de runtime de los últimos 30 minutos no mostró incidencias.
+- El objeto Git de etiqueta `v10.0.5` y la GitHub Release aún no existen: `releaseTag` en `/api/build` es identidad calculada y no acredita publicación formal.
 
 ## Seguimiento de permisos de base de datos
 
