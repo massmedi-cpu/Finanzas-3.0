@@ -1,0 +1,181 @@
+name: Sync Missing Persistence 10.0.21
+
+on:
+  push:
+    branches:
+      - audit/sync-missing-persistence-10.0.21
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'supabase/migrations/20260926193000_persist_sync_missing_rows.sql'
+      - 'supabase/functions/financial-app-db-gateway/source-sync.ts'
+      - 'supabase/functions/financial-app-db-gateway/source-sync-router.ts'
+      - 'app/api/source/google/sync/route.ts'
+      - 'app/inicio-overview.tsx'
+      - 'tests/e2e/sync-missing-persistence-contract.spec.ts'
+      - '.github/workflows/sync-missing-persistence-10.0.21.yml'
+      - 'package.json'
+      - 'package-lock.json'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-missing-persistence-10.0.21-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Apply guarded 10.0.21 patch and version
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          if [ "$(node -p "require('./package.json').version")" = "10.0.21" ]; then
+            exit 0
+          fi
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one anchor, found {count}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "supabase/functions/financial-app-db-gateway/source-sync.ts",
+              "rows_skipped=${rowsSkipped},rows_failed=0,duplicates_detected=${duplicatesDetected},warnings_count=${warningsCount},",
+              "rows_skipped=${rowsSkipped},rows_failed=0,rows_missing=${missingRows.length},duplicates_detected=${duplicatesDetected},warnings_count=${warningsCount},",
+          )
+          replace_once(
+              "supabase/functions/financial-app-db-gateway/source-sync.ts",
+              "rows_revised,rows_skipped,rows_failed,duplicates_detected,warnings_count,schema_fingerprint,",
+              "rows_revised,rows_skipped,rows_failed,rows_missing,duplicates_detected,warnings_count,schema_fingerprint,",
+          )
+          replace_once(
+              "supabase/functions/financial-app-db-gateway/source-sync-router.ts",
+              "rows_skipped,rows_failed,duplicates_detected,warnings_count,schema_fingerprint,error_code,error_message",
+              "rows_skipped,rows_failed,rows_missing,duplicates_detected,warnings_count,schema_fingerprint,error_code,error_message",
+          )
+          replace_once(
+              "supabase/functions/financial-app-db-gateway/source-sync-router.ts",
+              "${batch.observations.length},0,${duplicatesDetected},0,${batch.schemaFingerprint},null,null",
+              "${batch.observations.length},0,0,${duplicatesDetected},0,${batch.schemaFingerprint},null,null",
+          )
+          replace_once(
+              "app/api/source/google/sync/route.ts",
+              "    rows_failed: number;\n    duplicates_detected: number;",
+              "    rows_failed: number;\n    rows_missing: number;\n    duplicates_detected: number;",
+          )
+          replace_once(
+              "app/api/source/google/sync/route.ts",
+              "              rowsFailed: status.run.rows_failed,\n              duplicatesDetected: status.run.duplicates_detected,",
+              "              rowsFailed: status.run.rows_failed,\n              rowsMissing: status.run.rows_missing,\n              duplicatesDetected: status.run.duplicates_detected,",
+          )
+          replace_once(
+              "app/inicio-overview.tsx",
+              "    rowsFailed: number;\n    duplicatesDetected: number;",
+              "    rowsFailed: number;\n    rowsMissing: number;\n    duplicatesDetected: number;",
+          )
+          old_notice = '''function syncStatusNotice(run: SyncStatus["run"]) {
+            if (!run || run.status !== "success") return null;
+            const warnings = Math.max(0, run.warningsCount ?? 0);
+            const duplicates = Math.max(0, run.duplicatesDetected ?? 0);
+            if (warnings === 0 && duplicates === 0) return null;
+            const parts: string[] = [];
+            if (warnings > 0) {
+              parts.push(
+                warnings === 1
+                  ? "1 aviso de sincronización requiere revisión."
+                  : `${warnings} avisos de sincronización requieren revisión.`,
+              );
+            }
+            if (duplicates > 0) {
+              parts.push(
+                duplicates === 1
+                  ? "1 posible duplicado detectado."
+                  : `${duplicates} posibles duplicados detectados.`,
+              );
+            }
+            parts.push("Revisa la fuente.");
+            return parts.join(" ");
+          }'''.replace("          ", "")
+          new_notice = '''function syncStatusNotice(run: SyncStatus["run"]) {
+            if (!run || run.status !== "success") return null;
+            const warnings = Math.max(0, run.warningsCount ?? 0);
+            const missing = Math.max(0, run.rowsMissing ?? 0);
+            const otherWarnings = Math.max(0, warnings - missing);
+            const duplicates = Math.max(0, run.duplicatesDetected ?? 0);
+            if (missing === 0 && otherWarnings === 0 && duplicates === 0) return null;
+            const parts: string[] = [];
+            if (missing > 0) {
+              parts.push(
+                missing === 1
+                  ? "1 movimiento importado anteriormente ya no aparece en la fuente."
+                  : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+              );
+            }
+            if (otherWarnings > 0) {
+              parts.push(
+                otherWarnings === 1
+                  ? "1 aviso adicional de sincronización requiere revisión."
+                  : `${otherWarnings} avisos adicionales de sincronización requieren revisión.`,
+              );
+            }
+            if (duplicates > 0) {
+              parts.push(
+                duplicates === 1
+                  ? "1 posible duplicado detectado."
+                  : `${duplicates} posibles duplicados detectados.`,
+              );
+            }
+            parts.push("Revisa la fuente.");
+            return parts.join(" ");
+          }'''.replace("          ", "")
+          replace_once("app/inicio-overview.tsx", old_notice, new_notice)
+          PY
+          npm version 10.0.21 --no-git-tag-version
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add supabase/functions/financial-app-db-gateway/source-sync.ts \
+                  supabase/functions/financial-app-db-gateway/source-sync-router.ts \
+                  app/api/source/google/sync/route.ts app/inicio-overview.tsx \
+                  package.json package-lock.json
+          git commit -m "feat(sync): preserve missing-row warnings after reload"
+          git push
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Persistent missing-row contract
+        run: npx playwright test tests/e2e/sync-missing-persistence-contract.spec.ts --project=chromium-desktop
+
+      - name: Verify version contract
+        shell: bash
+        run: |
+          test "$(node -p "require('./package.json').version")" = "10.0.21"
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.21"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.21"
