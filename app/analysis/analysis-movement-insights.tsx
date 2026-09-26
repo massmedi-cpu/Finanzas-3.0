@@ -98,8 +98,9 @@ function ChartData({
   return (
     <details className={styles.chartData}>
       <summary>{label}</summary>
-      <div className={styles.chartDataScroll}>
-        <table>
+      {columns.length > 3 && <small className={styles.chartDataHint}>Desliza la tabla para ver todas las columnas.</small>}
+      <div className={styles.chartDataScroll} role="region" aria-label={`${label}: desplazar tabla`} tabIndex={0}>
+        <table className={columns.length > 3 ? styles.wideData : undefined}>
           <thead><tr>{columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr></thead>
           <tbody>{rows.map((row) => (
             <tr key={row.key}>{row.cells.map((cell, index) => <td key={columns[index]}>{cell}</td>)}</tr>

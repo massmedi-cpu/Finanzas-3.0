@@ -208,6 +208,9 @@ for (const width of WIDTHS) {
       ]) {
         const card = page.getByRole("img", { name: chart }).locator("xpath=ancestor::div[contains(@class, 'chartCard')][1]");
         await card.scrollIntoViewIfNeeded();
+        await card.evaluate((element) => {
+          window.scrollTo({ top: window.scrollY + element.getBoundingClientRect().top - 110, behavior: "instant" });
+        });
         await card.screenshot({ path: testInfo.outputPath(`analysis-patterns-${testInfo.project.name}-${width}-${name}.png`) });
       }
     }
@@ -218,6 +221,11 @@ for (const width of WIDTHS) {
     const merchantData = page.getByText("Ver datos de comercios", { exact: true });
     await merchantData.click();
     await expect(merchantData.locator("..").getByRole("table")).toContainText("Mercado Central");
+    if (width <= 430) {
+      const merchantTable = merchantData.locator("..").getByRole("region", { name: "Ver datos de comercios: desplazar tabla" });
+      expect(await merchantTable.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await expect(merchantData.locator("..").getByText("Desliza la tabla para ver todas las columnas.")).toBeVisible();
+    }
 
     const scatter = page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" });
     const xTicks = await scatter.locator('text[y="270"]').allTextContents();
