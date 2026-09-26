@@ -49,23 +49,13 @@ jobs:
           psm, whitelist = sys.argv[1], sys.argv[2]
           path = Path('src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts')
           text = path.read_text()
-          old = '''  await worker.setParameters({
-            tessedit_pageseg_mode: segmentation.mode,
-            tessedit_char_whitelist: "",
-            preserve_interword_spaces: "1",
-            classify_bln_numeric_mode: "0",
-            user_defined_dpi: "300",
-          });'''
-          new = f'''  await worker.setParameters({{
-            tessedit_pageseg_mode: kind === "money" ? "{psm}" : segmentation.mode,
-            tessedit_char_whitelist: kind === "money" ? "{whitelist}" : "",
-            preserve_interword_spaces: "1",
-            classify_bln_numeric_mode: "0",
-            user_defined_dpi: "300",
-          }});'''
-          if text.count(old) != 1:
-              raise SystemExit('Unexpected Tesseract configuration marker')
-          path.write_text(text.replace(old, new, 1))
+          mode = 'tessedit_pageseg_mode: segmentation.mode,'
+          chars = 'tessedit_char_whitelist: "",'
+          if text.count(mode) != 1 or text.count(chars) != 1:
+              raise SystemExit(f'Unexpected Tesseract markers: mode={text.count(mode)} whitelist={text.count(chars)}')
+          text = text.replace(mode, f'tessedit_pageseg_mode: kind === "money" ? "{psm}" : segmentation.mode,', 1)
+          text = text.replace(chars, f'tessedit_char_whitelist: kind === "money" ? "{whitelist}" : "",', 1)
+          path.write_text(text)
           PY
             echo "=== ${label}: PSM=${psm}, whitelist=${whitelist} ==="
             set +e
