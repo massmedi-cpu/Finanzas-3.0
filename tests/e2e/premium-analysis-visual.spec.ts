@@ -290,5 +290,14 @@ for (const width of WIDTHS) {
       expect(box.right).toBeLessThanOrEqual(width + 1);
       expect(box.width).toBeGreaterThan(0);
     }
+
+    if (
+      (testInfo.project.name === "chromium-desktop" && [360, 430, 768, 1440].includes(width))
+      || (testInfo.project.name === "chromium-mobile" && width === 360)
+    ) {
+      await page.locator('section[aria-labelledby="movement-insights-heading"]').screenshot({
+        path: testInfo.outputPath(`analysis-patterns-${testInfo.project.name}-${width}.png`),
+      });
+    }
   });
 }
