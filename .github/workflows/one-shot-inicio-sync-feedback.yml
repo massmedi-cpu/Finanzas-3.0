@@ -46,6 +46,13 @@ jobs:
       - name: Apply guarded patch
         run: python3 scripts/apply-inicio-sync-feedback.py
 
+      - name: Keep workflow files for connector-side gate update
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout HEAD -- .github/workflows/inicio-audit-10x10.yml
+          git checkout HEAD -- .github/workflows/one-shot-inicio-sync-feedback.yml
+
       - name: Commit product changes
         shell: bash
         run: |
