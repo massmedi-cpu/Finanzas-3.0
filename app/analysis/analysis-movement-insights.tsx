@@ -66,6 +66,20 @@ function transactionHref(snapshot: AnalysisSnapshot, row: AnalysisSnapshot["topT
   return `/transactions?${params.toString()}`;
 }
 
+function axisScale(maxValue: number) {
+  const rawMaximum = Math.max(1, maxValue);
+  const roughStep = rawMaximum / 4;
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep));
+  const normalized = roughStep / magnitude;
+  const multiplier = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  const step = Math.max(1, Math.round(multiplier * magnitude));
+  const maximum = Math.max(step, Math.ceil(rawMaximum / step) * step);
+  return {
+    maximum,
+    ticks: Array.from({ length: Math.floor(maximum / step) + 1 }, (_, index) => index * step),
+  };
+}
+
 function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {
   return (
     <div className={styles.chartCard}>
@@ -82,22 +96,22 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
     const width = 760;
-    const height = 220;
-    const left = 42;
-    const right = 12;
-    const top = 16;
-    const bottom = 30;
+    const height = 236;
+    const left = 64;
+    const right = 16;
+    const top = 24;
+    const bottom = 38;
     const innerWidth = width - left - right;
     const innerHeight = height - top - bottom;
-    const maximum = Math.max(1, ...rows.map((row) => row.expenseCents));
+    const scale = axisScale(Math.max(...rows.map((row) => row.expenseCents)));
     const step = rows.length > 1 ? innerWidth / (rows.length - 1) : innerWidth;
     const points = rows.map((row, index) => ({
       x: rows.length > 1 ? left + step * index : left + innerWidth / 2,
-      y: top + (1 - row.expenseCents / maximum) * innerHeight,
+      y: top + (1 - row.expenseCents / scale.maximum) * innerHeight,
       row,
     }));
     const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-    return { width, height, left, right, top, bottom, maximum, points, path };
+    return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };
   }, [rows]);
 
   if (!chart) {
@@ -111,14 +125,13 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <small>{formatInteger(rows.reduce((sum, row) => sum + row.rows, 0))} movimientos</small>
       </div>
       <div className={styles.svgViewport}>
-        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo">
-          {[0, 0.5, 1].map((ratio) => {
-            const y = chart.top + ratio * (chart.height - chart.top - chart.bottom);
-            const value = Math.round(chart.maximum * (1 - ratio));
+        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo con escala en euros">
+          {chart.ticks.map((value) => {
+            const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);
             return (
-              <g key={ratio} className={styles.gridLine}>
+              <g key={value} className={styles.gridLine}>
                 <line x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} />
-                <text x={chart.left - 8} y={y + 4} textAnchor="end">{formatMoney(value)}</text>
+                <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatMoney(value)}</text>
               </g>
             );
           })}
@@ -131,8 +144,11 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
               <circle className={styles.dailyPoint} cx={x} cy={y} r={rows.length <= 5 ? "5" : "4"}>
                 <title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title>
               </circle>
+              {(rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0) && (
+                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor="middle">{formatMoney(row.expenseCents)}</text>
+              )}
               {(index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0) && (
-                <text className={styles.axisLabel} x={x} y={chart.height - 8} textAnchor="middle">{formatDate(row.date)}</text>
+                <text className={styles.axisLabel} x={x} y={chart.height - 10} textAnchor="middle">{formatDate(row.date)}</text>
               )}
             </g>
           ))}
@@ -150,10 +166,10 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
     const firstWeekday = (start.getUTCDay() + 6) % 7;
     const byDate = new Map(snapshot.dailySpend.map((row) => [row.date, row]));
     const maximum = Math.max(1, ...snapshot.dailySpend.map((row) => row.expenseCents));
-    const cell = 12;
-    const gap = 3;
-    const left = 22;
-    const top = 16;
+    const cell = 22;
+    const gap = 4;
+    const left = 28;
+    const top = 12;
     const weeks = Math.ceil((firstWeekday + totalDays) / 7);
     const width = Math.max(300, left + weeks * (cell + gap) + 12);
     const weekStep = weeks > 1 && weeks <= 6
@@ -169,6 +185,7 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
       const row = byDate.get(key);
       return {
         key,
+        dayOfMonth: date.getUTCDate(),
         week,
         weekday,
         expenseCents: row?.expenseCents ?? 0,
@@ -184,7 +201,8 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
       top,
       weekStep,
       width,
-      height: top + 7 * (cell + gap) + 18,
+      height: top + 7 * (cell + gap) + 12,
+      activeDays: days.filter((day) => day.expenseCents > 0).length,
     };
   }, [snapshot.dailySpend, snapshot.selection.dateFrom, snapshot.selection.dateTo]);
 
@@ -196,27 +214,32 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
+        <small>{formatInteger(chart.activeDays)} días con gasto</small>
       </div>
-      <div className={styles.svgViewport}>
-        <svg className={`${styles.dailyChart} ${styles.heatChart}`} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto">
+      <div className={styles.heatmapViewport}>
+        <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">
           {WEEKDAYS.map((label, index) => (
             <text key={label} className={styles.axisLabel} x={7} y={chart.top + index * (chart.cell + chart.gap) + chart.cell - 2}>{label}</text>
           ))}
           {chart.days.map((day) => {
-            const intensity = day.expenseCents > 0 ? 0.2 + 0.8 * (day.expenseCents / chart.maximum) : 0.07;
+            const intensity = day.expenseCents > 0 ? 0.24 + 0.76 * (day.expenseCents / chart.maximum) : 0.07;
+            const x = chart.left + day.week * chart.weekStep;
+            const y = chart.top + day.weekday * (chart.cell + chart.gap);
             return (
-              <rect
-                key={day.key}
-                className={styles.heatCell}
-                x={chart.left + day.week * chart.weekStep}
-                y={chart.top + day.weekday * (chart.cell + chart.gap)}
-                width={chart.cell}
-                height={chart.cell}
-                rx="2"
-                style={{ opacity: intensity }}
-              >
-                <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>
-              </rect>
+              <g key={day.key}>
+                <rect
+                  className={styles.heatCell}
+                  x={x}
+                  y={y}
+                  width={chart.cell}
+                  height={chart.cell}
+                  rx="4"
+                  style={{ opacity: intensity }}
+                >
+                  <title>{`${formatDate(day.key)} · ${formatMoney(day.expenseCents)} · ${day.rows} movimientos`}</title>
+                </rect>
+                <text className={styles.heatmapDayLabel} x={x + chart.cell / 2} y={y + chart.cell / 2 + 3.5} textAnchor="middle">{day.dayOfMonth}</text>
+              </g>
             );
           })}
         </svg>
@@ -252,7 +275,7 @@ function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>DÍA DE LA SEMANA</span><strong>Qué días pesan más en el gasto</strong></div>
         <small>Máximo: {peakWeekday.label}</small>
       </div>
-      <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana">
+      <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana con importe y número de movimientos">
         {rows.map((row) => (
           <div
             key={row.weekday}
@@ -261,7 +284,8 @@ function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
           >
             <div><i style={{ height: `${Math.max(row.expenseCents > 0 ? 5 : 0, (row.expenseCents / maximum) * 100)}%` }} /></div>
             <strong>{row.label}</strong>
-            <small>{row.rows}</small>
+            <small>{formatInteger(row.rows)} mov.</small>
+            <em>{formatMoney(row.expenseCents)}</em>
           </div>
         ))}
       </div>
@@ -557,11 +581,15 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
         <WeekdayChart snapshot={snapshot} />
       </div>
 
-      <div className={styles.chartGrid}>
-        <SpendingCalendar snapshot={snapshot} />
-        <AmountBandsChart snapshot={snapshot} />
-        <MerchantScatter snapshot={snapshot} />
-        <MerchantConcentrationCurve snapshot={snapshot} />
+      <div className={styles.chartColumns}>
+        <div className={styles.chartColumn}>
+          <SpendingCalendar snapshot={snapshot} />
+          <MerchantScatter snapshot={snapshot} />
+        </div>
+        <div className={styles.chartColumn}>
+          <AmountBandsChart snapshot={snapshot} />
+          <MerchantConcentrationCurve snapshot={snapshot} />
+        </div>
       </div>
 
       {snapshot.accountSpend.length > 1 && (
