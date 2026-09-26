@@ -1,0 +1,38 @@
+name: Fix Analysis Port Once
+
+on:
+  push:
+    branches:
+      - audit/analysis-legibility-10.0.11
+    paths:
+      - ".github/workflows/fix-analysis-port-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: audit/analysis-legibility-10.0.11
+      - name: Correct chart-grid transform in one-shot port
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('.github/workflows/analysis-legibility-port-once.yml')
+          text = path.read_text()
+          start_marker = "          tsx = once(tsx, '''      <div className={styles.chartGrid}>"
+          end_marker = "''', 'chart columns')"
+          start = text.index(start_marker)
+          end = text.index(end_marker, start) + len(end_marker)
+          replacement = "          old_grid = '      <div className={styles.chartGrid}>\\n        <SpendingCalendar snapshot={snapshot} />\\n        <AmountBandsChart snapshot={snapshot} />\\n        <MerchantScatter snapshot={snapshot} />\\n        <MerchantConcentrationCurve snapshot={snapshot} />\\n      </div>'\n          new_grid = '      <div className={styles.chartColumns}>\\n        <div className={styles.chartColumn}>\\n          <SpendingCalendar snapshot={snapshot} />\\n          <MerchantScatter snapshot={snapshot} />\\n        </div>\\n        <div className={styles.chartColumn}>\\n          <AmountBandsChart snapshot={snapshot} />\\n          <MerchantConcentrationCurve snapshot={snapshot} />\\n        </div>\\n      </div>'\n          tsx = once(tsx, old_grid, new_grid, 'chart columns')"
+          path.write_text(text[:start] + replacement + text[end:])
+          PY
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/analysis-legibility-port-once.yml
+          git commit -m "ci(analysis): fix chart-grid one-shot transform"
+          git push origin HEAD:audit/analysis-legibility-10.0.11
