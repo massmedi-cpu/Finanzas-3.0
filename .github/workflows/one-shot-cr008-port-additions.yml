@@ -1,4 +1,4 @@
-name: One Shot CR008 Reconcile Documentos
+name: One Shot CR008 Compile Gate
 
 on:
   push:
@@ -8,13 +8,12 @@ on:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  reconcile-documentos:
-    if: github.actor != 'github-actions[bot]'
+  compile:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     steps:
       - name: Checkout current CR-008 port
         uses: actions/checkout@v6
@@ -22,52 +21,17 @@ jobs:
           ref: audit/cr008-ocr-v22-10.0.9
           fetch-depth: 0
 
-      - name: Fetch historical OCR V22 source
-        run: git fetch origin rebuild/phase-cr008-ocr-v22-current-main
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
 
-      - name: Reconcile OCR review panel and boundary integration
-        shell: bash
-        run: |
-          set -euo pipefail
-          base='b829adb07e00e46bb73e893b87e2b60a55d87315'
-          source_ref='origin/rebuild/phase-cr008-ocr-v22-current-main'
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-          path='app/documents/ocr-review-panel.tsx'
-          git show "$base:$path" > /tmp/ocr-review-panel.base
-          git show "$source_ref:$path" > /tmp/ocr-review-panel.other
-          git merge-file "$path" /tmp/ocr-review-panel.base /tmp/ocr-review-panel.other
+      - name: Typecheck
+        run: npm run typecheck
 
-          python3 - <<'PY'
-          from pathlib import Path
-          path = Path('app/documents/documents-client.tsx')
-          text = path.read_text()
-          panel_import = 'import { OcrReviewPanel } from "./ocr-review-panel";'
-          boundary_import = 'import { OcrReviewBoundary } from "./ocr-review-boundary";'
-          if boundary_import not in text:
-              if text.count(panel_import) != 1:
-                  raise SystemExit('Unexpected OcrReviewPanel import marker')
-              text = text.replace(panel_import, boundary_import + '\n' + panel_import, 1)
-          old = '<OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} />'
-          new = '<OcrReviewBoundary key={detail.document.id}><OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} /></OcrReviewBoundary>'
-          if new not in text:
-              if text.count(old) != 1:
-                  raise SystemExit('Unexpected OCR review render marker')
-              text = text.replace(old, new, 1)
-          path.write_text(text)
-
-          css = Path('app/documents/ocr-review.module.css').read_text()
-          if '.flowItem button,.flowItem a{min-height:44px;' not in css:
-              raise SystemExit('Current accessibility hit-area regression: expected 44px OCR controls')
-          PY
-
-          git diff --check
-          git add app/documents/ocr-review-panel.tsx app/documents/documents-client.tsx
-
-      - name: Commit reconciled Documentos OCR UI
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: reconcile CR-008 OCR review with current Documentos UI'
-          git push origin HEAD:audit/cr008-ocr-v22-10.0.9
+      - name: Build
+        run: npm run build
