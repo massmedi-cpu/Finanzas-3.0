@@ -163,7 +163,7 @@ export default function HomeSmartBrief({
       || expenseCents !== null
       || activeBalanceCents !== null
       || budgetProgressBps !== null
-      || projectedNetCents !== null;
+      || (plannedItems !== null && plannedItems > 0 && projectedNetCents !== null);
     if (!hasUsefulData) return null;
     return {
       version: 1,
@@ -177,7 +177,7 @@ export default function HomeSmartBrief({
       activeBalanceCents,
       budgetProgressBps,
       budgetStatus,
-      projectedNetCents,
+      projectedNetCents: plannedItems !== null && plannedItems > 0 ? projectedNetCents : null,
       plannedItems,
     };
   }, [

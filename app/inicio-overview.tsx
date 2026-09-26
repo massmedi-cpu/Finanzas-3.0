@@ -558,7 +558,7 @@ export default function InicioOverview() {
         budgetProgressBps={budget?.total.progressBps ?? null}
         budgetStatus={budget?.total.status ?? null}
         overBudgetCount={budget ? overBudgetCount : null}
-        projectedNetCents={data.forecast?.summary.plannedItems ? data.forecast.summary.projectedNetCents : null}
+        projectedNetCents={data.forecast?.summary.projectedNetCents ?? null}
         projectedClosingBalanceCents={data.forecast?.summary.plannedItems ? data.forecast.summary.projectedClosingBalanceCents : null}
         plannedItems={data.forecast?.summary.plannedItems ?? null}
         syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
