@@ -1,4 +1,4 @@
-name: One Shot CR008 Port Additions
+name: One Shot CR008 Port Core
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
   contents: write
 
 jobs:
-  port-additions:
+  port-core:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -25,32 +25,24 @@ jobs:
       - name: Fetch historical OCR V22 source
         run: git fetch origin rebuild/phase-cr008-ocr-v22-current-main
 
-      - name: Port isolated OCR product additions
+      - name: Port OCR files unchanged on the modern line
         shell: bash
         run: |
           set -euo pipefail
           source_ref='origin/rebuild/phase-cr008-ocr-v22-current-main'
           paths=(
-            app/documents/ocr-review-boundary.tsx
-            src/domain/ocr-rows.ts
-            src/domain/receipt-money.ts
-            src/infrastructure/ocr/receipt-anchor-filter-provider.ts
-            src/infrastructure/ocr/receipt-cell-recovery-provider.ts
-            src/infrastructure/ocr/receipt-column-sweep-provider.ts
-            src/infrastructure/ocr/receipt-focused-cell-consensus-provider.ts
-            src/infrastructure/ocr/receipt-illumination.ts
-            src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts
-            src/infrastructure/ocr/receipt-row-cell-consensus-provider.ts
-            src/infrastructure/ocr/receipt-row-refining-provider.ts
+            app/api/documents/ocr/route.ts
+            src/domain/document-ocr.ts
+            src/infrastructure/ocr/tesseract-image-provider.ts
           )
           git checkout "$source_ref" -- "${paths[@]}"
           git diff --cached --check
 
-      - name: Commit isolated OCR runtime graph
+      - name: Commit reconciled OCR core
         shell: bash
         run: |
           set -euo pipefail
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git commit -m 'feat: port isolated CR-008 OCR V22 runtime modules'
+          git commit -m 'feat: port CR-008 OCR V22 core onto 10.0.8'
           git push origin HEAD:audit/cr008-ocr-v22-10.0.9
