@@ -1,4 +1,4 @@
-name: One Shot CR008 Cell Resolution Probe
+name: One Shot CR008 Money OCR Config Probe
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
 jobs:
   probe:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - name: Checkout current CR-008 port
         uses: actions/checkout@v6
@@ -30,27 +30,50 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Probe OCR cell target height
+      - name: Probe money-cell whitelist and page segmentation
         shell: bash
         run: |
           set -euo pipefail
           file='src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts'
           cp "$file" /tmp/provider.ts
           any=0
-          for height in 56 64 72 84 96; do
+
+          probe() {
+            label="$1"
+            psm="$2"
+            whitelist="$3"
             cp /tmp/provider.ts "$file"
-            sed -i "s/const TARGET_CONTENT_HEIGHT = 48;/const TARGET_CONTENT_HEIGHT = ${height};/" "$file"
-            echo "=== target height ${height} ==="
+            python3 - "$psm" "$whitelist" <<'PY'
+          from pathlib import Path
+          import sys
+          psm, whitelist = sys.argv[1], sys.argv[2]
+          path = Path('src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts')
+          text = path.read_text()
+          old = '''      tessedit_pageseg_mode: pageSegMode,\n      tessedit_char_whitelist: "",'''
+          new = f'''      tessedit_pageseg_mode: target.kind === "description" ? pageSegMode : "{psm}",\n      tessedit_char_whitelist: target.kind === "description" ? "" : "{whitelist}",'''
+          if text.count(old) != 1:
+              raise SystemExit('Unexpected Tesseract configuration marker')
+          path.write_text(text.replace(old, new, 1))
+          PY
+            echo "=== ${label}: PSM=${psm}, whitelist=${whitelist} ==="
             set +e
             npx playwright test tests/e2e/document-ocr-illumination-native.spec.ts --config=playwright.ocr.config.ts
             code=$?
             set -e
             if [ "$code" -eq 0 ]; then
-              echo "PASS_HEIGHT=${height}"
+              echo "PASS_CONFIG=${label}"
               any=1
             else
-              echo "FAIL_HEIGHT=${height}"
+              echo "FAIL_CONFIG=${label}"
             fi
-          done
+          }
+
+          probe 'psm8-digits-separators' 8 '0123456789,.'
+          probe 'psm8-digits-separators-euro' 8 '0123456789,.€'
+          probe 'psm7-digits-separators' 7 '0123456789,.'
+          probe 'psm13-digits-separators' 13 '0123456789,.'
+          probe 'psm7-digits-separators-euro' 7 '0123456789,.€'
+          probe 'psm13-digits-separators-euro' 13 '0123456789,.€'
+
           cp /tmp/provider.ts "$file"
           test "$any" -eq 1
