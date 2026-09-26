@@ -1,4 +1,4 @@
-name: One Shot CR008 Money OCR Raw Probe
+name: One Shot CR008 Explicit Money Fix Gate
 
 on:
   push:
@@ -6,13 +6,13 @@ on:
       - 'audit/cr008-ocr-v22-10.0.9'
     paths:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
-      - 'scripts/diagnose-cr008-money-raw.py'
+      - 'src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts'
 
 permissions:
   contents: read
 
 jobs:
-  probe:
+  verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -21,12 +21,6 @@ jobs:
         with:
           ref: audit/cr008-ocr-v22-10.0.9
           fetch-depth: 0
-
-      - name: Add temporary raw money-cell diagnostics
-        run: python3 scripts/diagnose-cr008-money-raw.py
-
-      - name: Check diagnostic diff
-        run: git diff --check
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -37,5 +31,5 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Capture raw OCR candidates on shadow fixture
+      - name: Verify shadowed printed decimals
         run: npx playwright test tests/e2e/document-ocr-illumination-native.spec.ts --config=playwright.ocr.config.ts
