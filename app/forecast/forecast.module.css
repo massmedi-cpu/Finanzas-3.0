@@ -420,6 +420,14 @@
   line-height: 1.6;
 }
 
+.emptyActions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 20px;
+}
+
 .timeline {
   display: grid;
   gap: 12px;

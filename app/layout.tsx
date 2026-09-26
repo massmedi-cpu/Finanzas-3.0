@@ -6,6 +6,8 @@ import "./touch-targets.css";
 import "./premium-states.css";
 import "./visual-density.css";
 import "./category-controls.css";
+import "./premium-theme.css";
+import "./premium-hardening.css";
 import "./accessibility-forced-colors.css";
 import "./accessibility-live-regions.css";
 
@@ -28,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#050914",
+  themeColor: "#030711",
   colorScheme: "dark",
 };
 

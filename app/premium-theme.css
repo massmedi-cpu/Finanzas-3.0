@@ -1,0 +1,347 @@
+:root {
+  --color-bg: #030711;
+  --color-bg-elevated: #081126;
+  --color-surface: rgba(11, 22, 44, 0.9);
+  --color-surface-strong: #111f3a;
+  --color-border: rgba(132, 169, 255, 0.18);
+  --color-border-strong: rgba(132, 169, 255, 0.38);
+  --color-text: #f8fbff;
+  --color-text-secondary: #b7c4dd;
+  --color-text-muted: #8190ad;
+  --color-primary: #4f7cff;
+  --color-primary-bright: #86a6ff;
+  --color-on-primary: #ffffff;
+  --color-gold: #d2ae66;
+  --color-gold-bright: #efd18a;
+  --color-gold-muted: rgba(210, 174, 102, 0.13);
+  --color-cyan: #41d8f2;
+  --font-body-strong: 1rem;
+  --shadow-panel: 0 24px 84px rgba(0, 0, 0, 0.42), 0 0 0 1px rgba(115, 157, 255, 0.025);
+  --shadow-card: 0 16px 44px rgba(0, 0, 0, 0.28);
+  --shadow-card-hover: 0 22px 58px rgba(0, 0, 0, 0.34), 0 0 32px rgba(79, 124, 255, 0.07);
+  --shadow-glow: 0 0 0 1px rgba(132, 169, 255, 0.08), 0 18px 60px rgba(28, 70, 160, 0.18);
+}
+
+html {
+  background: var(--color-bg);
+}
+
+body {
+  background:
+    radial-gradient(circle at 14% -10%, rgba(67, 111, 255, 0.26), transparent 34rem),
+    radial-gradient(circle at 86% 3%, rgba(45, 205, 235, 0.12), transparent 30rem),
+    radial-gradient(circle at 74% 72%, rgba(210, 174, 102, 0.065), transparent 28rem),
+    linear-gradient(rgba(3, 7, 17, 0.18), rgba(3, 7, 17, 0.78)),
+    repeating-linear-gradient(90deg, rgba(131, 164, 230, 0.025) 0, rgba(131, 164, 230, 0.025) 1px, transparent 1px, transparent 96px),
+    repeating-linear-gradient(0deg, rgba(131, 164, 230, 0.018) 0, rgba(131, 164, 230, 0.018) 1px, transparent 1px, transparent 96px),
+    var(--color-bg);
+  background-attachment: fixed;
+}
+
+main {
+  isolation: isolate;
+}
+
+/* Marca y navegación principal */
+.premium-nav-frame {
+  border-bottom: 1px solid rgba(132, 169, 255, 0.045);
+}
+
+.financial-brand {
+  min-height: 3.35rem;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.62rem;
+  padding: 0.42rem 0.68rem 0.42rem 0.45rem;
+  border: 1px solid rgba(132, 169, 255, 0.17);
+  border-radius: 1rem;
+  background:
+    linear-gradient(145deg, rgba(18, 34, 66, 0.9), rgba(7, 14, 29, 0.86));
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+  text-decoration: none;
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  transition: border-color 170ms ease, transform 170ms ease, box-shadow 170ms ease;
+}
+
+.financial-brand:hover {
+  border-color: rgba(210, 174, 102, 0.36);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-card-hover);
+}
+
+.financial-brand__mark {
+  width: 2.28rem;
+  height: 2.28rem;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(239, 209, 138, 0.42);
+  border-radius: 0.78rem;
+  background:
+    radial-gradient(circle at 30% 20%, rgba(255, 232, 178, 0.18), transparent 52%),
+    linear-gradient(145deg, #1a2847, #0a1122 62%);
+  color: var(--color-gold-bright);
+  box-shadow: inset 0 0 0 1px rgba(210, 174, 102, 0.08), 0 8px 20px rgba(0, 0, 0, 0.28);
+  font-size: 0.73rem;
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+.financial-brand__copy {
+  min-width: 0;
+  display: grid;
+  gap: 0.08rem;
+}
+
+.financial-brand__copy strong {
+  font-size: 0.86rem;
+  line-height: 1.05;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+}
+
+.financial-brand__copy small {
+  color: var(--color-text-muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.premium-primary-nav {
+  border-color: rgba(132, 169, 255, 0.2) !important;
+  background:
+    linear-gradient(180deg, rgba(15, 27, 52, 0.92), rgba(7, 14, 29, 0.91)) !important;
+  box-shadow: 0 18px 52px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.025) !important;
+}
+
+nav[aria-label="Navegación principal"] a[aria-current="page"] {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(132, 169, 255, 0.42) !important;
+  background:
+    radial-gradient(circle at 50% 0%, rgba(107, 153, 255, 0.22), transparent 70%),
+    linear-gradient(135deg, rgba(61, 105, 232, 0.36), rgba(35, 165, 200, 0.1)) !important;
+  box-shadow: inset 0 0 0 1px rgba(134, 166, 255, 0.09), 0 8px 26px rgba(23, 69, 165, 0.13);
+}
+
+nav[aria-label="Navegación principal"] a[aria-current="page"]::after {
+  content: "";
+  position: absolute;
+  left: 22%;
+  right: 22%;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-bright), transparent);
+  opacity: 0.78;
+}
+
+/* Inicio: más jerarquía y profundidad sin tocar los cálculos */
+main[aria-busy] > section[aria-label="Estado de los datos bancarios"] {
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(132, 169, 255, 0.2);
+  background:
+    radial-gradient(circle at 4% 50%, rgba(79, 124, 255, 0.11), transparent 22rem),
+    linear-gradient(145deg, rgba(15, 29, 56, 0.9), rgba(7, 14, 29, 0.85));
+  box-shadow: var(--shadow-card);
+}
+
+main[aria-busy] > section[aria-label="Estado de los datos bancarios"]::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  background: linear-gradient(180deg, var(--color-primary-bright), var(--color-cyan));
+  opacity: 0.72;
+}
+
+main[aria-busy] > section[aria-label="Resumen financiero principal"] > article,
+main[aria-busy] article {
+  border-color: rgba(132, 169, 255, 0.16);
+  background:
+    linear-gradient(145deg, rgba(15, 29, 55, 0.91), rgba(7, 14, 29, 0.88));
+  box-shadow: var(--shadow-card);
+  transition: border-color 170ms ease, transform 170ms ease, box-shadow 170ms ease, background 170ms ease;
+}
+
+main[aria-busy] > section[aria-label="Resumen financiero principal"] > article {
+  position: relative;
+  overflow: hidden;
+  min-height: 8.25rem;
+}
+
+main[aria-busy] > section[aria-label="Resumen financiero principal"] > article::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(134, 166, 255, 0.52), rgba(239, 209, 138, 0.32), transparent);
+}
+
+main[aria-busy] > section[aria-label="Resumen financiero principal"] > article::after {
+  content: "";
+  position: absolute;
+  width: 8rem;
+  height: 8rem;
+  right: -3rem;
+  bottom: -4rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(79, 124, 255, 0.12), transparent 68%);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  main[aria-busy] article:hover {
+    border-color: rgba(132, 169, 255, 0.3);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-card-hover);
+  }
+}
+
+/* Configuración y login: misma calidad visual que el área financiera */
+.reset-card {
+  border-color: rgba(132, 169, 255, 0.21);
+  background:
+    radial-gradient(circle at 85% 8%, rgba(210, 174, 102, 0.08), transparent 18rem),
+    radial-gradient(circle at 12% 0%, rgba(79, 124, 255, 0.15), transparent 22rem),
+    linear-gradient(145deg, rgba(16, 29, 55, 0.96), rgba(6, 12, 26, 0.93));
+  box-shadow: var(--shadow-panel);
+}
+
+.reset-card::before {
+  content: "";
+  display: block;
+  width: 3.1rem;
+  height: 0.18rem;
+  margin: 0 auto 1.15rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--color-primary-bright), var(--color-gold-bright));
+  box-shadow: 0 0 22px rgba(94, 125, 255, 0.22);
+}
+
+.configuration-hero,
+.config-panel {
+  border-color: rgba(132, 169, 255, 0.19);
+  background:
+    radial-gradient(circle at 92% 0%, rgba(79, 124, 255, 0.08), transparent 18rem),
+    linear-gradient(145deg, rgba(15, 29, 55, 0.92), rgba(7, 14, 29, 0.88));
+  box-shadow: var(--shadow-card);
+}
+
+.entity-card {
+  border-color: rgba(132, 169, 255, 0.13);
+  background: linear-gradient(145deg, rgba(11, 23, 45, 0.86), rgba(6, 13, 27, 0.8));
+}
+
+.entity-card:hover {
+  border-color: rgba(132, 169, 255, 0.34);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.2);
+}
+
+.primary-button {
+  border-color: rgba(134, 166, 255, 0.46);
+  background: linear-gradient(135deg, #557df5 0%, #3d67df 54%, #3152bf 100%);
+  box-shadow: 0 12px 28px rgba(52, 92, 200, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+}
+
+.primary-button:hover:not(:disabled) {
+  filter: brightness(1.07);
+  transform: translateY(-1px);
+}
+
+.secondary-button,
+.icon-button {
+  background: linear-gradient(145deg, rgba(18, 32, 59, 0.76), rgba(7, 14, 29, 0.72));
+}
+
+.config-tabs {
+  border-color: rgba(132, 169, 255, 0.18);
+  background: rgba(5, 12, 26, 0.78);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.config-tabs button.active {
+  background: linear-gradient(135deg, rgba(79, 124, 255, 0.34), rgba(65, 216, 242, 0.08));
+  box-shadow: inset 0 0 0 1px rgba(132, 169, 255, 0.16), 0 8px 22px rgba(34, 73, 158, 0.12);
+}
+
+/* Formularios */
+input,
+select,
+textarea {
+  transition: border-color 150ms ease, background 150ms ease, box-shadow 150ms ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: rgba(134, 166, 255, 0.56) !important;
+  box-shadow: 0 0 0 3px rgba(79, 124, 255, 0.12);
+}
+
+/* Dock móvil: más flotante, legible y con estado activo evidente */
+@media (max-width: 48rem) {
+  .financial-brand {
+    display: none;
+  }
+
+  nav[aria-label="Navegación móvil"] {
+    border-color: rgba(132, 169, 255, 0.2) !important;
+    background:
+      linear-gradient(180deg, rgba(12, 23, 45, 0.98), rgba(5, 11, 24, 0.985)) !important;
+    box-shadow: 0 -14px 44px rgba(0, 0, 0, 0.44), 0 0 0 1px rgba(132, 169, 255, 0.025) !important;
+  }
+
+  nav[aria-label="Navegación móvil"] a[aria-current="page"] {
+    position: relative;
+    overflow: hidden;
+    border-color: rgba(132, 169, 255, 0.38) !important;
+    background: linear-gradient(145deg, rgba(79, 124, 255, 0.3), rgba(65, 216, 242, 0.08)) !important;
+    box-shadow: inset 0 0 0 1px rgba(132, 169, 255, 0.06);
+  }
+
+  nav[aria-label="Navegación móvil"] a[aria-current="page"]::after {
+    content: "";
+    position: absolute;
+    left: 30%;
+    right: 30%;
+    bottom: 0.18rem;
+    height: 2px;
+    border-radius: 999px;
+    background: var(--color-gold-bright);
+    opacity: 0.82;
+  }
+
+  main[aria-busy] > section[aria-label="Resumen financiero principal"] > article {
+    min-height: 7.55rem;
+  }
+}
+
+@media (max-width: 72rem) and (min-width: 48.01rem) {
+  .financial-brand__copy {
+    display: none;
+  }
+
+  .financial-brand {
+    padding-right: 0.45rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .financial-brand,
+  main[aria-busy] article,
+  .primary-button {
+    transition: none;
+  }
+
+  .financial-brand:hover,
+  main[aria-busy] article:hover,
+  .primary-button:hover:not(:disabled) {
+    transform: none;
+  }
+}

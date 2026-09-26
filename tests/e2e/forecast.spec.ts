@@ -298,6 +298,43 @@ test("forecast UI renders server cash flow and sends manual expense in cents", a
   const manualWrite = writes.find((entry) => entry.action === "manual");
   expect(manualWrite?.idempotencyKey).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
   await expect(page.getByRole("heading", { name: "Seguro anual", exact: true })).toBeVisible();
+
+  await page.getByLabel("Concepto").fill("Seguro agrupado");
+  await page.getByLabel("Importe").fill("1.234,56");
+  await page.getByRole("button", { name: "Añadir al calendario" }).click();
+  await expect.poll(() => writes.filter((entry) => entry.action === "manual").at(-1)?.amountCents).toBe(-123456);
+
+  await page.getByLabel("Concepto").fill("Importe fuera de rango");
+  await page.getByLabel("Importe").fill("90.071.992.547.409,92");
+  await page.getByRole("button", { name: "Añadir al calendario" }).click();
+  await expect(page.getByText("Introduce un importe válido con hasta dos decimales.")).toBeVisible();
+  expect(writes.filter((entry) => entry.action === "manual")).toHaveLength(2);
+});
+
+test("una previsión vacía guía a recurrentes o al formulario manual", async ({ page }) => {
+  const emptySnapshot = {
+    ...baseSnapshot,
+    summary: {
+      ...baseSnapshot.summary,
+      projectedIncomeCents: 0,
+      projectedExpenseCents: 0,
+      projectedNetCents: 0,
+      projectedClosingBalanceCents: baseSnapshot.summary.openingBalanceCents,
+      plannedItems: 0,
+    },
+    items: [],
+  };
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(emptySnapshot),
+  }));
+  await page.goto("/forecast");
+
+  const empty = page.getByText("No hay cargos ni ingresos previstos en este periodo.").locator("..");
+  await expect(empty.getByRole("link", { name: "Revisar recurrentes" })).toHaveAttribute("href", /\/recurrences/);
+  await empty.getByRole("link", { name: "Añadir previsión manual" }).click();
+  await expect(page.locator("#forecast-manual-concept")).toBeInViewport();
 });
 
 test("la vuelta desde Recurrentes regenera una vez y enfoca solo el impacto confirmado", async ({ page }) => {

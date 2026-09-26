@@ -1,0 +1,46 @@
+/* Hardening del sistema visual premium: interacción, rendimiento y preferencias del sistema. */
+
+.financial-brand:focus-visible,
+nav[aria-label="Navegación principal"] a:focus-visible,
+nav[aria-label="Navegación principal"] button:focus-visible,
+nav[aria-label="Navegación móvil"] a:focus-visible,
+nav[aria-label="Navegación móvil"] button:focus-visible,
+nav[aria-label="Más secciones"] a:focus-visible,
+nav[aria-label="Más secciones"] button:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 3px;
+  box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.16);
+}
+
+@media (max-width: 48rem) {
+  body {
+    background-attachment: scroll;
+  }
+
+  nav[aria-label="Navegación móvil"] a,
+  nav[aria-label="Navegación móvil"] button,
+  nav[aria-label="Más secciones"] a,
+  nav[aria-label="Más secciones"] button {
+    touch-action: manipulation;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-attachment: scroll;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --color-border: rgba(182, 204, 255, 0.38);
+    --color-border-strong: rgba(198, 216, 255, 0.62);
+    --color-text-muted: #a9b8d2;
+  }
+
+  .financial-brand,
+  .premium-primary-nav,
+  nav[aria-label="Navegación móvil"] {
+    border-color: var(--color-border-strong) !important;
+  }
+}

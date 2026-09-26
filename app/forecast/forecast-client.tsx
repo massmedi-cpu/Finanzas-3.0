@@ -17,7 +17,7 @@ import {
   type ForecastRecurrenceHandoff,
 } from "../../src/application/forecast/recurrence-flow";
 import type { ResolvedForecastSelection } from "../../src/application/forecast/forecast-selection";
-import { formatMoneyCents } from "../../src/core/money";
+import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { ForecastCalendar } from "./forecast-calendar";
@@ -71,22 +71,13 @@ function formatMonth(month: string) {
 }
 
 function parseEuroToCents(input: string) {
-  const compact = input.trim().replace(/\s/g, "");
-  if (!compact) return null;
-
-  let normalized: string;
-  if (compact.includes(",")) {
-    normalized = compact.replace(/\./g, "").replace(",", ".");
-  } else {
-    const dots = compact.match(/\./g)?.length ?? 0;
-    if (dots === 1 && /^\d+\.\d{1,2}$/.test(compact)) normalized = compact;
-    else normalized = compact.replace(/\./g, "");
+  if (!input.trim()) return null;
+  try {
+    const cents = parseMoneyInputToCents(input);
+    return cents >= 0 ? cents : null;
+  } catch {
+    return null;
   }
-
-  if (!/^\d+(\.\d{1,2})?$/.test(normalized)) return null;
-  const [units, decimals = ""] = normalized.split(".");
-  const cents = Number(units) * 100 + Number(decimals.padEnd(2, "0"));
-  return Number.isSafeInteger(cents) ? cents : null;
 }
 
 function statusLabel(status: ForecastItem["status"]) {
@@ -628,6 +619,10 @@ export function ForecastClient({
                 <div className={styles.empty}>
                   <strong>No hay cargos ni ingresos previstos en este periodo.</strong>
                   <p>No se inventan movimientos. Añade uno manual o confirma recurrencias reales para generar fechas futuras.</p>
+                  <div className={styles.emptyActions}>
+                    <Link prefetch={false} href={recurrencesHref} className={styles.secondaryButton}>Revisar recurrentes</Link>
+                    <a href="#forecast-manual-concept" className={styles.primaryButton}>Añadir previsión manual</a>
+                  </div>
                 </div>
               ) : (
                 <div className={styles.timeline}>
