@@ -281,12 +281,6 @@ function cleanCanonicalCell(
   return keep;
 }
 
-/**
- * Final structural guard for receipt tables. It never invents values: it only removes
- * competing numeric/glyph residue after a valid cell is already present in that row/band.
- * It also discards isolated short numeric debris after the printed Total and tiny orphan
- * rows between the final complete product row and the summary block.
- */
 export function finalizeReceiptTableWords(
   baseWords: OcrWord[],
   rows: SweepRow[],
@@ -492,9 +486,6 @@ export function paddedFocusedCellRectangle(
   variant: PreparedVariant,
 ): ImageRectangle {
   const initial = focusedCellRectangle(metadata, row, band, kind, variant);
-  // The historical 1.55x/2x vertical expansion can include the adjacent line.
-  // Prefer glyphs inside this column; fall back to other numbers on the same
-  // baseline when this cell was missed. Horizontal V20 band limits stay intact.
   const normalNumbers = row.words.filter((word) => /\d/.test(word.text)
     && word.box.height >= row.box.height * 0.45
     && word.box.height <= row.box.height * 1.7);
@@ -507,9 +498,6 @@ export function paddedFocusedCellRectangle(
   const rectangle = { ...initial, top, height: Math.max(3, bottom - top) };
   if (kind !== "money") return rectangle;
 
-  // Keep enough source pixels around the monetary glyphs to preserve punctuation, but never let
-  // the recovery crop cross into a neighbouring numeric band. The V19 real replay showed that
-  // cross-column contamination yields digit reads without a trustworthy single monetary token.
   const lineHeight = Math.max(10, row.box.height * metadata.height);
   const margin = Math.max(6, Math.round(lineHeight * (row.summaryLike ? 0.8 : 0.55)));
   const bandLeft = Math.max(0, Math.floor(band.left * metadata.width));
@@ -623,17 +611,23 @@ function recognitionSignals(
 ): RecognitionSignals {
   const sources = [normalizedRecognitionText(data.text), tsvText(data.tsv)].filter(Boolean);
   const joined = sources.join(" ");
-  const tokens = [...new Set(sources
-    .flatMap((source) => paddedExplicitNumericTokens(source, kind))
-    .map(tokenKey))];
+  const rawTokens = [...new Set(sources.flatMap((source) => paddedExplicitNumericTokens(source, kind)))];
+  const groups = new Map<string, string[]>();
+  for (const rawToken of rawTokens) {
+    const key = tokenKey(rawToken);
+    groups.set(key, [...(groups.get(key) ?? []), rawToken]);
+  }
   const hasDigits = /\d/.test(joined);
   const hasExplicitDecimal = kind === "money" && /\d\s*[,.]\s*\d{2}/.test(joined);
   const hasBareDigits = kind === "money" && /(?:^|\D)\d{3,6}(?:\D|$)/.test(joined);
-  if (tokens.length !== 1) {
+  if (groups.size !== 1) {
     return { observation: null, hasDigits, hasExplicitDecimal, hasBareDigits };
   }
-  const token = tokens[0].replace(".", ",");
-  if (kind === "money" ? !isMoney(token) : !isInteger(token)) {
+  const groupedTokens = [...groups.values()][0];
+  const token = kind === "money"
+    ? normalizeReceiptMoneyEs(groupedTokens[0])
+    : cleanToken(groupedTokens[0]);
+  if (!token || (kind === "money" ? !isMoney(token) : !isInteger(token))) {
     return { observation: null, hasDigits, hasExplicitDecimal, hasBareDigits };
   }
   const rawConfidence = Number(data.confidence);
@@ -805,9 +799,6 @@ export function mergeDescriptionObservations(baseWords: OcrWord[], observations:
         && !conflict
       );
 
-      // Two independently preprocessed reads may correct a one-character OCR substitution even
-      // when the first pass was overconfident. Larger lexical changes still require the historical
-      // confidence gain so we never turn description recovery into dictionary-style guessing.
       if (existing.length && !orthographyUpgrade && !closeIndependentCorrection && candidate.confidence < strongestExisting + 0.15) continue;
       words = words.filter((word) => !existing.includes(word));
       words.push(candidate);
@@ -850,10 +841,6 @@ async function recoverDescriptions(
       words = words.filter((word) => !(row.words.includes(word) && /^[|_—-]+$/.test(word.text)
         && word.box.height > lineHeight * 1.7));
     }
-    // Whole-line OCR can be confidently wrong on one folded/blurred token (the real replay
-    // returned CUEATA with high confidence). Verify every substantive product word independently,
-    // bounded to three words per product row. A replacement still requires agreement from both
-    // normalized variants and mergeDescriptionObservations only permits evidence-backed changes.
     const retryCandidates = letters
       .filter((word) => lexicalKey(word.text).length >= 4)
       .sort((a, b) => a.confidence - b.confidence || lexicalKey(b.text).length - lexicalKey(a.text).length)
@@ -898,8 +885,6 @@ export function summaryRecoveryBand(row: SweepRow, amountBand: NumericBand): Num
   const labels = row.words.filter((word) => /\b(total|subtotal|base|iva)\b/i.test(word.text));
   if (!labels.length) return amountBand;
   const labelRight = Math.max(...labels.map((word) => word.box.x + word.box.width));
-  // Summary lines have one amount, which can be printed much larger than the
-  // product prices. Reserve the pixels after its label, never another column.
   const left = Math.min(amountBand.left, labelRight + row.box.height * 0.8);
   return { ...amountBand, left, center: (left + amountBand.right) / 2 };
 }
@@ -969,9 +954,6 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     .filter((word) => word.confidence >= 0.5 && word.text.length >= 3)
     .map((word) => word.box.height * metadata.height).sort((a, b) => a - b);
   const glyphHeight = heights[Math.floor(heights.length / 2)] ?? 30;
-  // Estimate paper brightness with full-image context, before cutting the cells.
-  // Normalizing each tiny crop independently mistakes its edges for characters.
-  // Keep full-image normalization sequential: both variants at once multiply peak RAW-buffer memory.
   const preparedPages = [
     await normalizeReceiptIllumination(bytes, glyphHeight, 0),
     await normalizeReceiptIllumination(bytes, glyphHeight, 1),
@@ -981,82 +963,82 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
     const worker = await withTimeout(getWorker(), CELL_TIMEOUT_MS, "ocr_padded_cell_worker_timeout");
     try {
       let words = baseWords;
-    let attemptedCells = 0;
-    let preparedVariants = 0;
-    let recognitionAttempts = 0;
-    let digitReads = 0;
-    let explicitDecimalReads = 0;
-    let bareDigitReads = 0;
-    let observedCells = 0;
-    let consensusCells = 0;
-    let changedCells = 0;
-    let noiseWordsRemoved = 0;
-    let summaryRecovered = 0;
-    let preparationFailures = 0;
-    let recognitionFailures = 0;
+      let attemptedCells = 0;
+      let preparedVariants = 0;
+      let recognitionAttempts = 0;
+      let digitReads = 0;
+      let explicitDecimalReads = 0;
+      let bareDigitReads = 0;
+      let observedCells = 0;
+      let consensusCells = 0;
+      let changedCells = 0;
+      let noiseWordsRemoved = 0;
+      let summaryRecovered = 0;
+      let preparationFailures = 0;
+      let recognitionFailures = 0;
 
-    for (const target of targets) {
-      attemptedCells += 1;
-      const observations: PaddedRecognitionObservation[] = [];
-      for (const variant of [0, 1] as const) {
-        const rectangle = paddedFocusedCellRectangle(metadata, target.row, target.band, target.kind, variant);
-        let prepared: PreparedCell;
-        try {
-          prepared = await prepareCell(preparedPages[variant], rectangle, variant);
-          preparedVariants += 1;
-        } catch {
-          preparationFailures += 1;
-          continue;
-        }
-
-        for (const segmentation of SEGMENTATIONS) {
-          recognitionAttempts += 1;
+      for (const target of targets) {
+        attemptedCells += 1;
+        const observations: PaddedRecognitionObservation[] = [];
+        for (const variant of [0, 1] as const) {
+          const rectangle = paddedFocusedCellRectangle(metadata, target.row, target.band, target.kind, variant);
+          let prepared: PreparedCell;
           try {
-            const signals = await recognizePrepared(worker, prepared, metadata, target.kind, variant, segmentation);
-            if (signals.hasDigits) digitReads += 1;
-            if (signals.hasExplicitDecimal) explicitDecimalReads += 1;
-            if (signals.hasBareDigits) bareDigitReads += 1;
-            if (signals.observation) observations.push(signals.observation);
-          } catch (error) {
-            if (error instanceof PaddedCellTimeoutError) throw error;
-            recognitionFailures += 1;
+            prepared = await prepareCell(preparedPages[variant], rectangle, variant);
+            preparedVariants += 1;
+          } catch {
+            preparationFailures += 1;
+            continue;
+          }
+
+          for (const segmentation of SEGMENTATIONS) {
+            recognitionAttempts += 1;
+            try {
+              const signals = await recognizePrepared(worker, prepared, metadata, target.kind, variant, segmentation);
+              if (signals.hasDigits) digitReads += 1;
+              if (signals.hasExplicitDecimal) explicitDecimalReads += 1;
+              if (signals.hasBareDigits) bareDigitReads += 1;
+              if (signals.observation) observations.push(signals.observation);
+            } catch (error) {
+              if (error instanceof PaddedCellTimeoutError) throw error;
+              recognitionFailures += 1;
+            }
           }
         }
+
+        if (observations.length) observedCells += 1;
+        const recovered = choosePaddedNumericConsensus(observations, target.kind);
+        if (!recovered) continue;
+        consensusCells += 1;
+        const existing = existingWordsForCell(words, target.row, target.band, target.kind);
+        if (existing.some((word) => tokenKey(word.text) === tokenKey(recovered.text))) continue;
+        const beforeMergeCount = words.length;
+        words = mergeColumnSweepCell(words, target.row, target.band, recovered);
+        noiseWordsRemoved += Math.max(0, beforeMergeCount + 1 - words.length);
+        changedCells += 1;
+        if (target.reason === "summary_missing") summaryRecovered += 1;
       }
 
-      if (observations.length) observedCells += 1;
-      const recovered = choosePaddedNumericConsensus(observations, target.kind);
-      if (!recovered) continue;
-      consensusCells += 1;
-      const existing = existingWordsForCell(words, target.row, target.band, target.kind);
-      if (existing.some((word) => tokenKey(word.text) === tokenKey(recovered.text))) continue;
-      const beforeMergeCount = words.length;
-      words = mergeColumnSweepCell(words, target.row, target.band, recovered);
-      noiseWordsRemoved += Math.max(0, beforeMergeCount + 1 - words.length);
-      changedCells += 1;
-      if (target.reason === "summary_missing") summaryRecovered += 1;
-    }
-
-    if (process.env.VERCEL_ENV === "preview") {
-      console.info("ocr-padded-cell-consensus-v23", {
-        rows: rows.length,
-        numericBands: bands.length,
-        targetCells: targets.length,
-        attemptedCells,
-        preparedVariants,
-        recognitionAttempts,
-        digitReads,
-        explicitDecimalReads,
-        bareDigitReads,
-        observedCells,
-        consensusCells,
-        changedCells,
-        noiseWordsRemoved,
-        summaryRecovered,
-        preparationFailures,
-        recognitionFailures,
-      });
-    }
+      if (process.env.VERCEL_ENV === "preview") {
+        console.info("ocr-padded-cell-consensus-v23", {
+          rows: rows.length,
+          numericBands: bands.length,
+          targetCells: targets.length,
+          attemptedCells,
+          preparedVariants,
+          recognitionAttempts,
+          digitReads,
+          explicitDecimalReads,
+          bareDigitReads,
+          observedCells,
+          consensusCells,
+          changedCells,
+          noiseWordsRemoved,
+          summaryRecovered,
+          preparationFailures,
+          recognitionFailures,
+        });
+      }
 
       let finalWords = words;
       try {
@@ -1082,7 +1064,6 @@ async function recoverPaddedCells(bytes: Uint8Array, metadata: OcrImageMetadata,
       }
       return finalWords;
     } finally {
-      // Do not retain a second Tesseract worker alongside the base OCR worker between requests.
       await terminateOwnedWorker(worker);
     }
   });
@@ -1098,8 +1079,6 @@ export class ReceiptPaddedCellConsensusImageOcrProvider implements DocumentOcrPr
   }
 
   async extract(input: { bytes: Uint8Array; mimeType: string; originalFileName: string }): Promise<DocumentOcrProviderOutput> {
-    // Serialize the whole image pipeline per process. This prevents request A's V22 worker and
-    // request B's base worker/full-image normalization from overlapping in memory.
     return exclusivePipeline(async () => {
       const base = await this.base.extract(input);
       const metadata = readOcrImageMetadata(input.bytes);
@@ -1113,7 +1092,6 @@ export class ReceiptPaddedCellConsensusImageOcrProvider implements DocumentOcrPr
           pages: [{ ...base.pages[0], words }],
         };
       } catch (error) {
-        // Queue timeout means a previous request still owns the shared padded worker.
         if (!(error instanceof PaddedCellTimeoutError && error.code === "ocr_padded_cell_queue_timeout")) {
           invalidateWorker();
         }
