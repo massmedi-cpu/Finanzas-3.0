@@ -110,6 +110,7 @@ test("la selección avisa de un horizonte de más de 730 días sin consultar el 
   });
 
   await page.goto("/forecast?dateFrom=2026-10-01&dateTo=2026-10-31");
+  await expect(page.getByRole("region", { name: "Resumen de previsión" })).toBeVisible();
   await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("2026-10-01");
   await page.getByLabel("Desde", { exact: true }).fill("2024-01-01");
   await expect(page.locator("main").getByRole("alert")).toContainText("730 días");
