@@ -1,0 +1,51 @@
+name: PWA Android Install Certification
+
+on:
+  push:
+    branches:
+      - audit/pwa-android-install-10.0.10
+  pull_request:
+    paths:
+      - "app/pwa-runtime.tsx"
+      - "app/pwa-install-button.tsx"
+      - "app/login/**"
+      - "app/layout.tsx"
+      - "public/sw.js"
+      - "public/manifest.webmanifest"
+      - "tests/e2e/pwa-android-install.spec.ts"
+      - "playwright.config.ts"
+      - ".github/workflows/pwa-android-install-certification.yml"
+
+concurrency:
+  group: pwa-android-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Typecheck, build and Android install regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Android install regression
+        run: npx playwright test tests/e2e/pwa-android-install.spec.ts --project=chromium-mobile --workers=1

@@ -1,0 +1,47 @@
+name: Forecast Period Integrity Certification
+
+on:
+  push:
+    branches:
+      - audit/forecast-period-integrity-10.0.12
+  pull_request:
+    paths:
+      - "app/forecast/**"
+      - "app/api/forecast/**"
+      - "src/application/forecast/forecast-selection.ts"
+      - "tests/e2e/forecast*.spec.ts"
+      - ".github/workflows/forecast-period-integrity-certification.yml"
+
+concurrency:
+  group: forecast-period-integrity-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Typecheck, build and Forecast regressions
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Forecast period and write regressions on desktop and mobile
+        run: npx playwright test tests/e2e/forecast-period-integrity.spec.ts tests/e2e/forecast-boundaries.spec.ts tests/e2e/forecast.spec.ts tests/e2e/forecast-period-race.spec.ts tests/e2e/forecast-accessibility.spec.ts tests/e2e/forecast-write-integrity.spec.ts tests/e2e/recurrence-forecast-flow.spec.ts tests/e2e/module-context-navigation.spec.ts tests/e2e/release-version.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2

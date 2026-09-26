@@ -152,7 +152,7 @@ const SNAPSHOT = buildAnalysisSnapshot({
 });
 
 for (const width of WIDTHS) {
-  test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }) => {
+  test(`Premium Análisis v5 · ${width}px sin overflow y con jerarquía financiera completa`, async ({ page }, testInfo) => {
     await page.route("**/api/analysis**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
     });
@@ -173,6 +173,64 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+    const weekday = page.getByRole("img", { name: "Gasto por día de la semana" });
+    await expect(weekday).toHaveAttribute("aria-label", /lunes, 140,00\s*€/);
+    for (const [name, maximum] of [
+      ["Gráfica de gasto diario", 760],
+      ["Gráfica de comercios", 620],
+      ["Curva de concentración", 620],
+    ] as const) {
+      const chart = page.getByRole("region", { name });
+      await expect.poll(() => chart.evaluate((element, maxWidth) => {
+        const svg = element.querySelector("svg");
+        return !!svg && Math.abs(svg.viewBox.baseVal.width - Math.min(maxWidth, element.clientWidth)) <= 1;
+      }, maximum)).toBe(true);
+      expect(await chart.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)).toBe(true);
+    }
+    if (width <= 430) {
+      const firstDay = await weekday.locator(":scope > div").nth(0).boundingBox();
+      const secondDay = await weekday.locator(":scope > div").nth(1).boundingBox();
+      expect(firstDay).not.toBeNull();
+      expect(secondDay).not.toBeNull();
+      expect(secondDay!.y).toBeGreaterThan(firstDay!.y);
+    }
+
+    if (
+      (testInfo.project.name === "chromium-desktop" && [360, 430, 768, 1440].includes(width))
+      || (testInfo.project.name === "chromium-mobile" && width === 360)
+    ) {
+      for (const [name, chart] of [
+        ["daily", "Evolución diaria del gasto del periodo"],
+        ["weekday", "Gasto por día de la semana"],
+        ["heatmap", "Mapa de calor diario del gasto"],
+        ["merchants", "Relación entre frecuencia de compra e importe medio por comercio"],
+        ["concentration", "Curva de concentración del gasto por comercio"],
+      ]) {
+        const card = page.getByRole("img", { name: chart }).locator("xpath=ancestor::div[contains(@class, 'chartCard')][1]");
+        await card.scrollIntoViewIfNeeded();
+        await card.evaluate((element) => {
+          window.scrollTo({ top: window.scrollY + element.getBoundingClientRect().top - 110, behavior: "instant" });
+        });
+        await card.screenshot({ path: testInfo.outputPath(`analysis-patterns-${testInfo.project.name}-${width}-${name}.png`) });
+      }
+    }
+
+    const dailyData = page.getByText("Ver datos diarios", { exact: true });
+    await dailyData.click();
+    await expect(dailyData.locator("..").getByRole("table")).toContainText(/120,00\s*€/);
+    const merchantData = page.getByText("Ver datos de comercios", { exact: true });
+    await merchantData.click();
+    await expect(merchantData.locator("..").getByRole("table")).toContainText("Mercado Central");
+    if (width <= 430) {
+      const merchantTable = merchantData.locator("..").getByRole("region", { name: "Ver datos de comercios: desplazar tabla" });
+      expect(await merchantTable.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      await expect(merchantData.locator("..").getByText("Desliza la tabla para ver todas las columnas.")).toBeVisible();
+    }
+
+    const scatter = page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" });
+    const xTicks = await scatter.locator('text[y="270"]').allTextContents();
+    expect(xTicks.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(xTicks).size).toBe(xTicks.length);
     await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
     await expect(page.getByText("Detalle procedente del movimiento original")).toBeVisible();
     await expect(page.getByLabel("Gasto por cuenta").getByText("Cuenta secundaria")).toBeVisible();
@@ -267,5 +325,6 @@ for (const width of WIDTHS) {
       expect(box.right).toBeLessThanOrEqual(width + 1);
       expect(box.width).toBeGreaterThan(0);
     }
+
   });
 }

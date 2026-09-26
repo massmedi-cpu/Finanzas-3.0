@@ -1,0 +1,54 @@
+name: CR008 OCR Certification
+
+on:
+  push:
+    branches:
+      - 'audit/cr008-*'
+      - 'rebuild/phase-cr008-*'
+  pull_request:
+    paths:
+      - 'app/api/documents/ocr/**'
+      - 'app/documents/**'
+      - 'src/application/document-ocr-service.ts'
+      - 'src/domain/document-ocr.ts'
+      - 'src/domain/ocr-rows.ts'
+      - 'src/domain/receipt-money.ts'
+      - 'src/infrastructure/ocr/**'
+      - 'tests/e2e/document-ocr-*.spec.ts'
+      - 'playwright.ocr.config.ts'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/cr008-ocr-certification.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cr008-ocr-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  local-certification:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Run complete OCR regression pack
+        run: npx playwright test --config=playwright.ocr.config.ts

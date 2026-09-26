@@ -2,6 +2,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { resolveForecastSelection } from "../../../src/application/forecast/forecast-selection";
 
 export const dynamic = "force-dynamic";
 
@@ -37,10 +38,10 @@ function dateValue(value: unknown, code: string) {
 }
 
 function forecastRange(dateFromValue: unknown, dateToValue: unknown) {
-  const dateFrom = dateValue(dateFromValue, "invalid_forecast_date_from");
-  const dateTo = dateValue(dateToValue, "invalid_forecast_date_to");
-  if (dateFrom > dateTo) throw new Error("invalid_forecast_date_range");
-  return { dateFrom, dateTo };
+  return resolveForecastSelection({
+    dateFrom: dateValue(dateFromValue, "invalid_forecast_date_from"),
+    dateTo: dateValue(dateToValue, "invalid_forecast_date_to"),
+  });
 }
 
 function timestampValue(value: unknown, code: string) {
