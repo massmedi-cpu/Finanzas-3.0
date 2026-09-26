@@ -173,6 +173,29 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+    const weekday = page.getByRole("img", { name: "Gasto por día de la semana" });
+    await expect(weekday).toHaveAttribute("aria-label", /lunes, 140,00\s*€/);
+    if (width <= 430) {
+      const dailyScroller = page.getByRole("region", { name: "Desplazar gráfica de gasto diario" });
+      expect(await dailyScroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
+      const firstDay = await weekday.locator(":scope > div").nth(0).boundingBox();
+      const secondDay = await weekday.locator(":scope > div").nth(1).boundingBox();
+      expect(firstDay).not.toBeNull();
+      expect(secondDay).not.toBeNull();
+      expect(secondDay!.y).toBeGreaterThan(firstDay!.y);
+    }
+
+    const dailyData = page.getByText("Ver datos diarios", { exact: true });
+    await dailyData.click();
+    await expect(dailyData.locator("..").getByRole("table")).toContainText(/120,00\s*€/);
+    const merchantData = page.getByText("Ver datos de comercios", { exact: true });
+    await merchantData.click();
+    await expect(merchantData.locator("..").getByRole("table")).toContainText("Mercado Central");
+
+    const scatter = page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" });
+    const xTicks = await scatter.locator('text[y="270"]').allTextContents();
+    expect(xTicks.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(xTicks).size).toBe(xTicks.length);
     await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
     await expect(page.getByText("Detalle procedente del movimiento original")).toBeVisible();
     await expect(page.getByLabel("Gasto por cuenta").getByText("Cuenta secundaria")).toBeVisible();

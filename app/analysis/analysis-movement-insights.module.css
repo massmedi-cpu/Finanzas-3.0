@@ -132,6 +132,28 @@
   overflow-y: hidden;
   scrollbar-width: thin;
 }
+.svgViewport:focus-visible,
+.heatmapViewport:focus-visible,
+.chartData summary:focus-visible {
+  outline: 2px solid var(--color-cyan);
+  outline-offset: 2px;
+}
+
+.chartData { margin-top: 0.7rem; color: var(--color-text-secondary); }
+.chartData summary {
+  width: fit-content;
+  cursor: pointer;
+  font-size: max(var(--font-helper), 0.76rem);
+  font-weight: 700;
+}
+.chartDataScroll { max-width: 100%; overflow-x: auto; margin-top: 0.55rem; }
+.chartData table { width: 100%; border-collapse: collapse; font-size: max(var(--font-helper), 0.76rem); }
+.chartData th,
+.chartData td { padding: 0.4rem 0.55rem; border-bottom: 1px solid rgba(137, 173, 255, 0.1); text-align: left; }
+.chartData th:not(:first-child),
+.chartData td:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.chartData th { color: var(--color-text-secondary); font-weight: 750; }
+.chartData td:first-child { overflow-wrap: anywhere; }
 
 .dailyChart,
 .scatterChart,
@@ -276,6 +298,7 @@
 .weekdayColumn i {
   display: block;
   width: 100%;
+  height: var(--bar-ratio);
   border-radius: inherit;
   background: linear-gradient(180deg, rgba(43, 217, 247, 0.72), rgba(77, 141, 255, 0.42));
 }
@@ -464,11 +487,27 @@
   }
   .heading > a { width: 100%; justify-content: center; }
   .cardHeading { display: grid; gap: 0.3rem; }
-  .weekdayChart { min-height: 8.4rem; gap: 0.18rem; }
-  .weekdayColumn > div { width: 76%; height: 5.75rem; }
+  .weekdayChart { min-height: 0; grid-template-columns: 1fr; gap: 0.55rem; }
+  .weekdayColumn {
+    grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+    grid-template-rows: repeat(2, minmax(0, 1.15rem));
+    align-items: center;
+    justify-items: stretch;
+    column-gap: 0.55rem;
+  }
+  .weekdayColumn > div {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    width: 100%;
+    height: 1.4rem;
+    align-items: center;
+  }
+  .weekdayColumn i { width: var(--bar-ratio); height: 100%; }
+  .weekdayColumn strong { grid-column: 1; grid-row: 1 / 3; }
+  .weekdayColumn small { grid-column: 3; grid-row: 1; justify-self: end; }
+  .weekdayColumn em { grid-column: 3; grid-row: 2; justify-self: end; font-size: max(var(--font-helper), 0.7rem); }
   .dailyChart { aspect-ratio: 1.9 / 1; }
   .scatterChart { aspect-ratio: 1.8 / 1; }
-  .weekdayColumn em { font-size: 0.58rem; }
   .heatLegend { justify-content: flex-start; flex-wrap: wrap; }
   .bubbleLegend { text-align: left; }
   .bandRow { grid-template-columns: 1fr auto; gap: 0.38rem 0.6rem; }
@@ -479,8 +518,7 @@
 }
 
 @media (max-width: 24rem) {
-  .weekdayColumn small { font-size: 0.62rem; }
-  .weekdayColumn em { font-size: 0.54rem; }
+  .weekdayColumn { column-gap: 0.35rem; }
   .accountStrip { grid-template-columns: 1fr; }
 }
 

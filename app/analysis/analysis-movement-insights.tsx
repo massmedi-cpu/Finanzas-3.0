@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import { formatInteger, formatNumberWithDigits } from "../../src/core/formatters";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
@@ -14,6 +14,7 @@ const shortDateFormatter = new Intl.DateTimeFormat("es-ES", {
 });
 
 const WEEKDAYS = ["L", "M", "X", "J", "V", "S", "D"];
+const WEEKDAY_NAMES = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"];
 const BAND_LABELS: Record<string, string> = {
   lt10: "< 10 €",
   "10to25": "10–25 €",
@@ -85,6 +86,30 @@ function truncateLabel(value: string, max = 18) {
   return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
 }
 
+function ChartData({
+  label,
+  columns,
+  rows,
+}: {
+  label: string;
+  columns: string[];
+  rows: { key: string; cells: string[] }[];
+}) {
+  return (
+    <details className={styles.chartData}>
+      <summary>{label}</summary>
+      <div className={styles.chartDataScroll}>
+        <table>
+          <thead><tr>{columns.map((column) => <th scope="col" key={column}>{column}</th>)}</tr></thead>
+          <tbody>{rows.map((row) => (
+            <tr key={row.key}>{row.cells.map((cell, index) => <td key={columns[index]}>{cell}</td>)}</tr>
+          ))}</tbody>
+        </table>
+      </div>
+    </details>
+  );
+}
+
 function integerTicks(minimum: number, maximum: number) {
   const min = Math.max(0, Math.floor(minimum));
   const max = Math.max(min, Math.ceil(maximum));
@@ -138,7 +163,7 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>RITMO DIARIO</span><strong>Cuándo se está concentrando el gasto</strong></div>
         <small>{formatInteger(rows.reduce((sum, row) => sum + row.rows, 0))} movimientos</small>
       </div>
-      <div className={styles.svgViewport}>
+      <div className={styles.svgViewport} role="region" aria-label="Desplazar gráfica de gasto diario" tabIndex={0}>
         <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo con escala en euros">
           {chart.ticks.map((value) => {
             const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);
@@ -168,6 +193,14 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
           ))}
         </svg>
       </div>
+      <ChartData
+        label="Ver datos diarios"
+        columns={["Fecha", "Gasto", "Movimientos"]}
+        rows={rows.map((row) => ({
+          key: row.date,
+          cells: [formatDate(row.date), formatMoney(row.expenseCents), formatInteger(row.rows)],
+        }))}
+      />
     </div>
   );
 }
@@ -230,7 +263,7 @@ function SpendingCalendar({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>MAPA DE CALOR</span><strong>Qué días concentran más intensidad de gasto</strong></div>
         <small>{formatInteger(chart.activeDays)} días con gasto</small>
       </div>
-      <div className={styles.heatmapViewport}>
+      <div className={styles.heatmapViewport} role="region" aria-label="Desplazar calendario de gasto" tabIndex={0}>
         <svg className={styles.heatmapChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Mapa de calor diario del gasto con número de día visible">
           {WEEKDAYS.map((label, index) => (
             <text key={label} className={styles.axisLabel} x={7} y={chart.top + index * (chart.cell + chart.gap) + chart.cell - 2}>{label}</text>
@@ -289,14 +322,18 @@ function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>DÍA DE LA SEMANA</span><strong>Qué días pesan más en el gasto</strong></div>
         <small>Máximo: {peakWeekday.label}</small>
       </div>
-      <div className={styles.weekdayChart} role="img" aria-label="Gasto por día de la semana con importe y número de movimientos">
+      <div
+        className={styles.weekdayChart}
+        role="img"
+        aria-label={`Gasto por día de la semana con importe y número de movimientos: ${rows.map((row, index) => `${WEEKDAY_NAMES[index]}, ${formatMoney(row.expenseCents)}, ${formatInteger(row.rows)} movimientos`).join("; ")}`}
+      >
         {rows.map((row) => (
           <div
             key={row.weekday}
             className={`${styles.weekdayColumn} ${row.weekday === peakWeekday.weekday ? styles.weekdayPeak : ""}`}
             title={`${row.label}: ${formatMoney(row.expenseCents)} · ${row.rows} movimientos · media ${formatMoney(row.averageCents)}`}
           >
-            <div><i style={{ height: `${Math.max(row.expenseCents > 0 ? 5 : 0, (row.expenseCents / maximum) * 100)}%` }} /></div>
+            <div><i style={{ "--bar-ratio": `${Math.max(row.expenseCents > 0 ? 5 : 0, (row.expenseCents / maximum) * 100)}%` } as CSSProperties} /></div>
             <strong>{row.label}</strong>
             <small>{formatInteger(row.rows)} mov.</small>
             <em>{formatMoney(row.expenseCents)}</em>
@@ -370,6 +407,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const xSpan = Math.max(1, xMax - xMin);
   const ySpan = Math.max(1, yMax - yMin);
   const gridRatios = [0, 0.25, 0.5, 0.75, 1];
+  const frequencyTicks = integerTicks(minRows, maxRows);
 
   return (
     <div className={styles.chartCard}>
@@ -377,19 +415,24 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <div><span>FRECUENCIA × IMPORTE</span><strong>Comercios frecuentes frente a compras grandes</strong></div>
         <small>{formatInteger(rows.length)} comercios</small>
       </div>
-      <div className={styles.svgViewport}>
+      <div className={styles.svgViewport} role="region" aria-label="Desplazar gráfica de comercios" tabIndex={0}>
         <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio con ejes numéricos">
           {gridRatios.map((ratio) => {
-            const x = left + ratio * innerWidth;
             const y = top + (1 - ratio) * innerHeight;
-            const xValue = xMin + ratio * xSpan;
             const yValue = yMin + ratio * ySpan;
             return (
               <g key={ratio} className={styles.gridLine}>
-                <line x1={x} x2={x} y1={top} y2={height - bottom} />
                 <line x1={left} x2={width - right} y1={y} y2={y} />
-                <text x={x} y={height - bottom + 20} textAnchor="middle">{Math.round(xValue)}</text>
                 <text x={left - 10} y={y + 4} textAnchor="end">{formatMoney(Math.round(yValue))}</text>
+              </g>
+            );
+          })}
+          {frequencyTicks.map((value) => {
+            const x = left + ((value - xMin) / xSpan) * innerWidth;
+            return (
+              <g key={`frequency-${value}`} className={styles.gridLine}>
+                <line x1={x} x2={x} y1={top} y2={height - bottom} />
+                <text x={x} y={height - bottom + 20} textAnchor="middle">{formatInteger(value)}</text>
               </g>
             );
           })}
@@ -415,6 +458,14 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
         </svg>
       </div>
       <div className={styles.bubbleLegend}>Tamaño de burbuja = peso del comercio en el gasto</div>
+      <ChartData
+        label="Ver datos de comercios"
+        columns={["Comercio", "Compras", "Media", "Gasto"]}
+        rows={rows.map((row) => ({
+          key: `${row.id ?? "none"}-${row.name}`,
+          cells: [row.name, formatInteger(row.rows), formatMoney(row.averageCents ?? 0), formatMoney(row.expenseCents)],
+        }))}
+      />
     </div>
   );
 }
@@ -473,7 +524,7 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
         <div><span>CONCENTRACIÓN</span><strong>Cuánto gasto acumulan los primeros comercios</strong></div>
         {chart.eightyCount !== null && <small>{chart.eightyCount} para alcanzar 80 %</small>}
       </div>
-      <div className={styles.svgViewport}>
+      <div className={styles.svgViewport} role="region" aria-label="Desplazar curva de concentración" tabIndex={0}>
         <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio con escala porcentual">
           {yTicks.map((ratio) => {
             const y = chart.top + (1 - ratio) * chart.innerHeight;
