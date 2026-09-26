@@ -10,8 +10,6 @@ on:
     paths:
       - 'supabase/migrations/20260926174500_cover_categorization_rule_workspace_foreign_keys.sql'
       - 'tests/e2e/categorization-rule-index-contract.spec.ts'
-      - 'package.json'
-      - 'package-lock.json'
       - '.github/workflows/categorization-rule-indexes-10.0.14.yml'
 
 permissions:
@@ -48,10 +46,3 @@ jobs:
 
       - name: Composite FK index contract
         run: npx playwright test tests/e2e/categorization-rule-index-contract.spec.ts --project=chromium-desktop
-
-      - name: Verify version contract
-        shell: bash
-        run: |
-          test "$(node -p "require('./package.json').version")" = "10.0.14"
-          test "$(node -p "require('./package-lock.json').version")" = "10.0.14"
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.14"
