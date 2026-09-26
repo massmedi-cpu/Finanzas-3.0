@@ -52,6 +52,7 @@ jobs:
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
           tests/e2e/regional-home-consistency.spec.ts
+          tests/e2e/release-version-contract.spec.ts
           tests/e2e/premium-dashboard-visual.spec.ts
           tests/e2e/foundation-gate-static-contract.spec.ts
           tests/e2e/design-token-source.spec.ts
@@ -88,7 +89,7 @@ jobs:
           script: |
             const token = await core.getIDToken();
             core.setSecret(token);
-            core.setOutput('token', token);
+            core.setOutput('token', token)
 
       - name: Discover matching Vercel preview for exact SHA
         id: vercel
@@ -124,7 +125,7 @@ jobs:
               }
               await sleep(5000);
             }
-            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`);
+            core.setFailed(`No successful Vercel deployment was found for ${context.sha}.`)
 
       - name: Verify protected preview exact SHA
         env:
@@ -181,6 +182,7 @@ jobs:
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
           tests/e2e/regional-home-consistency.spec.ts
+          tests/e2e/release-version-contract.spec.ts
           tests/e2e/preview-production-isolation-live.spec.ts
           tests/e2e/protected-preview-auth-boundary-live.spec.ts
           --grep-invert "protected preview exposes dashboard orchestration using validated engines"
