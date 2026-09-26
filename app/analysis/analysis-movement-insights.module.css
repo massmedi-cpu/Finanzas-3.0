@@ -147,7 +147,7 @@
 }
 .scatterChart {
   min-width: 34rem;
-  max-height: 17rem;
+  max-height: 18rem;
   aspect-ratio: 2.08 / 1;
 }
 .heatmapChart {
@@ -162,7 +162,9 @@
 }
 .gridLine text,
 .axisLabel,
+.axisTitle,
 .valueLabel,
+.pointLabel,
 .heatmapDayLabel {
   font-variant-numeric: tabular-nums;
 }
@@ -177,6 +179,20 @@
   font-weight: 750;
   paint-order: stroke;
   stroke: rgba(5, 9, 20, 0.92);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+.axisTitle {
+  fill: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 750;
+}
+.pointLabel {
+  fill: #d7e5ff;
+  font-size: 10px;
+  font-weight: 750;
+  paint-order: stroke;
+  stroke: rgba(5, 9, 20, 0.94);
   stroke-width: 3px;
   stroke-linejoin: round;
 }

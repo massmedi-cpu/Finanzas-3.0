@@ -80,6 +80,20 @@ function axisScale(maxValue: number) {
   };
 }
 
+function truncateLabel(value: string, max = 18) {
+  const clean = value.trim();
+  return clean.length <= max ? clean : `${clean.slice(0, max - 1)}…`;
+}
+
+function integerTicks(minimum: number, maximum: number) {
+  const min = Math.max(0, Math.floor(minimum));
+  const max = Math.max(min, Math.ceil(maximum));
+  if (max <= min) return [min];
+  const values = new Set<number>([min, max]);
+  for (let index = 1; index < 4; index += 1) values.add(Math.round(min + ((max - min) * index) / 4));
+  return [...values].sort((left, right) => left - right);
+}
+
 function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: string; message: string }) {
   return (
     <div className={styles.chartCard}>
@@ -331,12 +345,12 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
     return <EmptyChartCard eyebrow="FRECUENCIA × IMPORTE" title="Comercios frecuentes frente a compras grandes" message="No hay comercios suficientes para relacionar frecuencia e importe medio." />;
   }
 
-  const width = 520;
-  const height = 250;
-  const left = 50;
-  const right = 22;
-  const top = 22;
-  const bottom = 38;
+  const width = 620;
+  const height = 300;
+  const left = 78;
+  const right = 24;
+  const top = 28;
+  const bottom = 50;
   const innerWidth = width - left - right;
   const innerHeight = height - top - bottom;
   const frequencies = rows.map((row) => row.rows);
@@ -355,7 +369,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const yMax = maxAverage + averagePadding;
   const xSpan = Math.max(1, xMax - xMin);
   const ySpan = Math.max(1, yMax - yMin);
-  const gridRatios = [0.25, 0.5, 0.75];
+  const gridRatios = [0, 0.25, 0.5, 0.75, 1];
 
   return (
     <div className={styles.chartCard}>
@@ -364,33 +378,38 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <small>{formatInteger(rows.length)} comercios</small>
       </div>
       <div className={styles.svgViewport}>
-        <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio">
+        <svg className={styles.scatterChart} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Relación entre frecuencia de compra e importe medio por comercio con ejes numéricos">
           {gridRatios.map((ratio) => {
             const x = left + ratio * innerWidth;
-            const y = top + ratio * innerHeight;
+            const y = top + (1 - ratio) * innerHeight;
+            const xValue = xMin + ratio * xSpan;
+            const yValue = yMin + ratio * ySpan;
             return (
               <g key={ratio} className={styles.gridLine}>
                 <line x1={x} x2={x} y1={top} y2={height - bottom} />
                 <line x1={left} x2={width - right} y1={y} y2={y} />
+                <text x={x} y={height - bottom + 20} textAnchor="middle">{Math.round(xValue)}</text>
+                <text x={left - 10} y={y + 4} textAnchor="end">{formatMoney(Math.round(yValue))}</text>
               </g>
             );
           })}
           <line className={styles.scatterAxis} x1={left} x2={left} y1={top} y2={height - bottom} />
           <line className={styles.scatterAxis} x1={left} x2={width - right} y1={height - bottom} y2={height - bottom} />
-          <text className={styles.axisLabel} x={width / 2} y={height - 7} textAnchor="middle">Más frecuencia →</text>
-          <text className={styles.axisLabel} x={left + 8} y={top + 12}>Mayor importe ↑</text>
-          <text className={styles.axisLabel} x={left} y={height - bottom + 15}>{Math.round(xMin)}</text>
-          <text className={styles.axisLabel} x={width - right} y={height - bottom + 15} textAnchor="end">{Math.round(xMax)}</text>
-          <text className={styles.axisLabel} x={left - 6} y={top + 4} textAnchor="end">{formatMoney(Math.round(yMax))}</text>
-          <text className={styles.axisLabel} x={left - 6} y={height - bottom + 4} textAnchor="end">{formatMoney(Math.round(yMin))}</text>
-          {rows.map((row) => {
+          <text className={styles.axisTitle} x={width / 2} y={height - 8} textAnchor="middle">Número de compras</text>
+          <text className={styles.axisTitle} x={left} y={15}>Importe medio por compra</text>
+          {rows.map((row, index) => {
             const x = left + ((row.rows - xMin) / xSpan) * innerWidth;
             const y = top + (1 - ((row.averageCents ?? 0) - yMin) / ySpan) * innerHeight;
             const radius = 5 + Math.min(7, ((row.shareBps ?? 0) / 10000) * 18);
             return (
-              <circle key={`${row.id ?? "none"}-${row.name}`} className={styles.scatterPoint} cx={x} cy={y} r={radius}>
-                <title>{`${row.name} · ${row.rows} movimientos · media ${formatMoney(row.averageCents ?? 0)} · total ${formatMoney(row.expenseCents)}`}</title>
-              </circle>
+              <g key={`${row.id ?? "none"}-${row.name}`}>
+                <circle className={styles.scatterPoint} cx={x} cy={y} r={radius}>
+                  <title>{`${row.name} · ${row.rows} movimientos · media ${formatMoney(row.averageCents ?? 0)} · total ${formatMoney(row.expenseCents)}`}</title>
+                </circle>
+                {index < 5 && (
+                  <text className={styles.pointLabel} x={x + radius + 5} y={Math.max(top + 11, y - 5)}>{truncateLabel(row.name, 17)}</text>
+                )}
+              </g>
             );
           })}
         </svg>
@@ -404,12 +423,12 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
   const rows = snapshot.merchantDrivers.filter((row) => row.expenseCents > 0).slice(0, 30);
   const chart = useMemo(() => {
     if (rows.length === 0 || snapshot.current.expenseCents <= 0) return null;
-    const width = 520;
-    const height = 250;
-    const left = 42;
+    const width = 620;
+    const height = 300;
+    const left = 64;
     const right = 20;
-    const top = 18;
-    const bottom = 34;
+    const top = 24;
+    const bottom = 48;
     const innerWidth = width - left - right;
     const innerHeight = height - top - bottom;
     let cumulative = 0;
@@ -423,7 +442,7 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
         y: top + (1 - ratio) * innerHeight,
       };
     });
-    const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+    const path = [`M ${left} ${height - bottom}`, ...points.map((point) => `L ${point.x} ${point.y}`)].join(" ");
     const eightyIndex = points.findIndex((point) => point.ratio >= 0.8);
     return {
       width,
@@ -432,9 +451,10 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
       right,
       top,
       bottom,
+      innerWidth,
+      innerHeight,
       points,
       path,
-      innerHeight,
       eightyCount: eightyIndex >= 0 ? eightyIndex + 1 : null,
     };
   }, [rows, snapshot.current.expenseCents]);
@@ -444,6 +464,8 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
   }
 
   const eightyY = chart.top + 0.2 * chart.innerHeight;
+  const yTicks = [0, 0.5, 0.8, 1];
+  const xTicks = integerTicks(1, rows.length);
 
   return (
     <div className={styles.chartCard}>
@@ -452,19 +474,39 @@ function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }
         {chart.eightyCount !== null && <small>{chart.eightyCount} para alcanzar 80 %</small>}
       </div>
       <div className={styles.svgViewport}>
-        <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio">
+        <svg className={styles.scatterChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Curva de concentración del gasto por comercio con escala porcentual">
+          {yTicks.map((ratio) => {
+            const y = chart.top + (1 - ratio) * chart.innerHeight;
+            return (
+              <g key={`y-${ratio}`} className={styles.gridLine}>
+                <line x1={chart.left} x2={chart.width - chart.right} y1={y} y2={y} />
+                <text x={chart.left - 10} y={y + 4} textAnchor="end">{formatPercent(ratio)}</text>
+              </g>
+            );
+          })}
+          {xTicks.map((count) => {
+            const x = chart.left + (count / rows.length) * chart.innerWidth;
+            return (
+              <g key={`x-${count}`} className={styles.gridLine}>
+                <line x1={x} x2={x} y1={chart.top} y2={chart.height - chart.bottom} />
+                <text x={x} y={chart.height - chart.bottom + 20} textAnchor="middle">{count}</text>
+              </g>
+            );
+          })}
           <line className={styles.scatterAxis} x1={chart.left} x2={chart.left} y1={chart.top} y2={chart.height - chart.bottom} />
           <line className={styles.scatterAxis} x1={chart.left} x2={chart.width - chart.right} y1={chart.height - chart.bottom} y2={chart.height - chart.bottom} />
           <line className={styles.concentrationReference} x1={chart.left} x2={chart.width - chart.right} y1={eightyY} y2={eightyY} />
-          <text className={styles.axisLabel} x={chart.left - 6} y={chart.top + 4} textAnchor="end">100 %</text>
-          <text className={styles.axisLabel} x={chart.left - 6} y={eightyY + 4} textAnchor="end">80 %</text>
-          <text className={styles.axisLabel} x={chart.left - 6} y={chart.height - chart.bottom + 4} textAnchor="end">0 %</text>
-          <text className={styles.axisLabel} x={chart.width / 2} y={chart.height - 6} textAnchor="middle">Comercios ordenados por gasto</text>
+          <text className={styles.axisTitle} x={chart.width / 2} y={chart.height - 8} textAnchor="middle">Número de comercios acumulados</text>
           <path className={styles.dailyLine} d={chart.path} />
           {chart.points.map((point, index) => (
-            <circle key={`${point.row.id ?? "none"}-${point.row.name}`} className={styles.dailyPoint} cx={point.x} cy={point.y} r={index < 5 ? 4 : 3}>
-              <title>{`${index + 1}. ${point.row.name} · acumulado ${formatPercent(point.ratio)} · ${formatMoney(point.row.expenseCents)}`}</title>
-            </circle>
+            <g key={`${point.row.id ?? "none"}-${point.row.name}`}>
+              <circle className={styles.dailyPoint} cx={point.x} cy={point.y} r={index < 5 ? 4 : 3}>
+                <title>{`${index + 1}. ${point.row.name} · acumulado ${formatPercent(point.ratio)} · ${formatMoney(point.row.expenseCents)}`}</title>
+              </circle>
+              {index < 4 && (
+                <text className={styles.valueLabel} x={point.x} y={Math.max(chart.top + 11, point.y - 10)} textAnchor="middle">{formatPercent(point.ratio)}</text>
+              )}
+            </g>
           ))}
         </svg>
       </div>
