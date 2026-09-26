@@ -6,6 +6,7 @@ on:
       - 'audit/inicio-sync-feedback-10.0.8'
     paths:
       - '.github/workflows/one-shot-inicio-sync-feedback.yml'
+      - 'scripts/apply-inicio-sync-feedback.py'
 
 permissions:
   contents: write
@@ -21,6 +22,26 @@ jobs:
         with:
           ref: audit/inicio-sync-feedback-10.0.8
           fetch-depth: 0
+
+      - name: Align guarded audit marker with both Inicio gates
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('scripts/apply-inicio-sync-feedback.py')
+          text = path.read_text()
+          old = '''marker = "          tests/e2e/inicio-utility.spec.ts\\n"
+          if workflow_text.count(marker) != 1:
+              raise SystemExit("Unexpected Inicio audit test marker")
+          workflow.write_text(workflow_text.replace(marker, marker + "          tests/e2e/inicio-sync-feedback.spec.ts\\n", 1))'''
+          new = '''marker = "          tests/e2e/inicio-utility.spec.ts\\n"
+          if workflow_text.count(marker) != 2:
+              raise SystemExit("Unexpected Inicio audit test marker")
+          workflow.write_text(workflow_text.replace(marker, marker + "          tests/e2e/inicio-sync-feedback.spec.ts\\n", 2))'''
+          if text.count(old) != 1:
+              raise SystemExit('Unexpected patcher audit-marker block')
+          path.write_text(text.replace(old, new, 1))
+          PY
 
       - name: Apply guarded patch
         run: python3 scripts/apply-inicio-sync-feedback.py
