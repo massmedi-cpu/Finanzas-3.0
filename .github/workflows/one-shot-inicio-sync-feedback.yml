@@ -1,0 +1,290 @@
+name: One Shot Inicio Sync Feedback
+
+on:
+  push:
+    branches:
+      - 'audit/inicio-sync-feedback-10.0.8'
+    paths:
+      - '.github/workflows/one-shot-inicio-sync-feedback.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout stacked candidate
+        uses: actions/checkout@v6
+        with:
+          ref: audit/inicio-sync-feedback-10.0.8
+          fetch-depth: 0
+
+      - name: Apply guarded Inicio sync-warning patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, old, new):
+              p = Path(path)
+              text = p.read_text()
+              if text.count(old) != 1:
+                  raise SystemExit(f"Expected exactly one match in {path}, found {text.count(old)}")
+              p.write_text(text.replace(old, new, 1))
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''    rowsSkipped: number;\n    rowsFailed: number;\n    errorCode: string | null;''',
+              '''    rowsSkipped: number;\n    rowsFailed: number;\n    duplicatesDetected: number;\n    warningsCount: number;\n    errorCode: string | null;''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''type AttentionItem = {\n  title: string;''',
+              '''type SyncResult = {\n  rowsInserted?: number;\n  rowsRevised?: number;\n  rowsSkipped?: number;\n  rowsMissing?: number;\n  duplicatesDetected?: number;\n  warningsCount?: number;\n  error?: string;\n};\n\ntype AttentionItem = {\n  title: string;''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''function kindLabel(kind: TransactionKind) {\n  if (kind === "income") return "Ingreso";\n  if (kind === "expense") return "Gasto";\n  if (kind === "transfer") return "Transferencia";\n  if (kind === "refund") return "Devolución";\n  return "Ajuste";\n}\n\nasync function readJson<T>''',
+              '''function kindLabel(kind: TransactionKind) {\n  if (kind === "income") return "Ingreso";\n  if (kind === "expense") return "Gasto";\n  if (kind === "transfer") return "Transferencia";\n  if (kind === "refund") return "Devolución";\n  return "Ajuste";\n}\n\nfunction syncFeedbackFromResult(result: SyncResult | null) {\n  const changed = Math.max(0, result?.rowsInserted ?? 0) + Math.max(0, result?.rowsRevised ?? 0);\n  const missing = Math.max(0, result?.rowsMissing ?? 0);\n  const warnings = Math.max(missing, Math.max(0, result?.warningsCount ?? 0));\n  const duplicates = Math.max(0, result?.duplicatesDetected ?? 0);\n  if (changed === 0 && warnings === 0 && duplicates === 0) return "Sin cambios nuevos.";\n\n  const parts = [changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios incorporados."];\n  if (missing > 0) {\n    parts.push(\n      missing === 1\n        ? "1 movimiento importado anteriormente ya no aparece en la fuente."\n        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,\n    );\n  } else if (warnings > 0) {\n    parts.push(\n      warnings === 1\n        ? "1 aviso de sincronización requiere revisión."\n        : `${warnings} avisos de sincronización requieren revisión.`,\n    );\n  }\n  if (duplicates > 0) {\n    parts.push(\n      duplicates === 1\n        ? "1 posible duplicado detectado."\n        : `${duplicates} posibles duplicados detectados.`,\n    );\n  }\n  if (warnings > 0 || duplicates > 0) parts.push("Revisa la fuente.");\n  return parts.join(" ");\n}\n\nfunction syncStatusNotice(run: SyncStatus["run"]) {\n  if (!run || run.status !== "success") return null;\n  const warnings = Math.max(0, run.warningsCount ?? 0);\n  const duplicates = Math.max(0, run.duplicatesDetected ?? 0);\n  if (warnings === 0 && duplicates === 0) return null;\n  const parts: string[] = [];\n  if (warnings > 0) {\n    parts.push(\n      warnings === 1\n        ? "1 aviso de sincronización requiere revisión."\n        : `${warnings} avisos de sincronización requieren revisión.`,\n    );\n  }\n  if (duplicates > 0) {\n    parts.push(\n      duplicates === 1\n        ? "1 posible duplicado detectado."\n        : `${duplicates} posibles duplicados detectados.`,\n    );\n  }\n  parts.push("Revisa la fuente.");\n  return parts.join(" ");\n}\n\nasync function readJson<T>''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''      const payload = await response.json().catch(() => null) as null | {\n        rowsInserted?: number;\n        rowsRevised?: number;\n        error?: string;\n      };\n      if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);\n      const changed = (payload?.rowsInserted ?? 0) + (payload?.rowsRevised ?? 0);\n      setSyncFeedback(changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios nuevos.");''',
+              '''      const payload = await response.json().catch(() => null) as SyncResult | null;\n      if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);\n      setSyncFeedback(syncFeedbackFromResult(payload));''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''  const syncFailed = syncRun?.status === "failed";\n  const syncSucceeded = syncRun?.status === "success";\n  const revealAmounts = privacyReady && amountsVisible;''',
+              '''  const syncFailed = syncRun?.status === "failed";\n  const syncSucceeded = syncRun?.status === "success";\n  const syncWarningCount = Math.max(0, syncRun?.warningsCount ?? 0);\n  const syncDuplicateCount = Math.max(0, syncRun?.duplicatesDetected ?? 0);\n  const syncHasWarnings = syncSucceeded && (syncWarningCount > 0 || syncDuplicateCount > 0);\n  const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);\n  const revealAmounts = privacyReady && amountsVisible;''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''    if (syncFailed) {\n      items.push({\n        title: "La última actualización falló",\n        detail: "La fuente sigue protegida; puedes reintentar la lectura sin reconectar Google.",\n        href: "/configuration/source",\n        action: "Ver fuente",\n        tone: "danger",\n      });\n    }''',
+              '''    if (syncFailed) {\n      items.push({\n        title: "La última actualización falló",\n        detail: "La fuente sigue protegida; puedes reintentar la lectura sin reconectar Google.",\n        href: "/configuration/source",\n        action: "Ver fuente",\n        tone: "danger",\n      });\n    } else if (syncHasWarnings) {\n      items.push({\n        title: "La última sincronización tiene avisos",\n        detail: syncStatusNotice(syncRun) ?? "La sincronización terminó, pero requiere revisión.",\n        href: "/configuration/source",\n        action: "Revisar fuente",\n        tone: "warning",\n      });\n    }''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed]);''',
+              '''  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncSucceeded ? styles.sourceOk : ""}`}''',
+              '''        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings ? styles.sourceWarning : syncSucceeded ? styles.sourceOk : ""}`}''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''                  : syncSucceeded\n                    ? "Última sincronización completada"\n                    : "Estado de la fuente pendiente"}''',
+              '''                  : syncHasWarnings\n                    ? "Sincronización completada con avisos"\n                    : syncSucceeded\n                      ? "Última sincronización completada"\n                      : "Estado de la fuente pendiente"}''',
+          )
+
+          replace_once(
+              "app/inicio-overview.tsx",
+              '''              {syncFeedback ? ` ${syncFeedback}` : ""}\n            </p>''',
+              '''              {syncPersistentNotice ? ` ${syncPersistentNotice}` : ""}\n              {syncFeedback ? ` ${syncFeedback}` : ""}\n            </p>''',
+          )
+
+          replace_once(
+              "app/inicio-overview.module.css",
+              '''.sourceError {\n  border-color: color-mix(in srgb, var(--color-danger) 42%, var(--color-border));\n}\n''',
+              '''.sourceError {\n  border-color: color-mix(in srgb, var(--color-danger) 42%, var(--color-border));\n}\n\n.sourceWarning {\n  border-color: color-mix(in srgb, var(--color-warning) 44%, var(--color-border));\n}\n''',
+          )
+
+          replace_once(
+              "app/inicio-overview.module.css",
+              '''.sourceError .healthDot {\n  background: var(--color-danger);\n  box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-danger) 12%, transparent);\n}\n''',
+              '''.sourceError .healthDot {\n  background: var(--color-danger);\n  box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-danger) 12%, transparent);\n}\n\n.sourceWarning .healthDot {\n  background: var(--color-warning);\n  box-shadow: 0 0 0 0.25rem color-mix(in srgb, var(--color-warning) 12%, transparent);\n}\n''',
+          )
+
+          workflow = Path(".github/workflows/inicio-audit-10x10.yml")
+          workflow_text = workflow.read_text()
+          marker = "          tests/e2e/inicio-utility.spec.ts\n"
+          if workflow_text.count(marker) != 1:
+              raise SystemExit("Unexpected Inicio audit test marker")
+          workflow.write_text(workflow_text.replace(marker, marker + "          tests/e2e/inicio-sync-feedback.spec.ts\n", 1))
+
+          test_content = r'''import { expect, test, type Page, type Route } from "@playwright/test";
+
+async function json(route: Route, body: unknown, status = 200) {
+  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
+}
+
+const financial = {
+  period: {
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-11",
+    incomeCents: 120000,
+    expenseCents: 60000,
+    operatingNetCents: 60000,
+    savingsCents: 60000,
+    savingsRateBps: 5000,
+    quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
+  },
+  balances: {
+    asOfDate: "2026-09-11",
+    activeBalanceCents: 300000,
+    accounts: [
+      { id: "a", name: "Cuenta principal", type: "checking", lifecycle: "active", balanceCents: 300000, explicitBalanceDate: "2026-09-11" },
+    ],
+  },
+};
+
+const monthly = {
+  dateFrom: "2026-08-01",
+  dateTo: "2026-09-11",
+  rows: [
+    { monthStart: "2026-08-01", incomeCents: 120000, expenseCents: 50000, operatingNetCents: 70000 },
+    { monthStart: "2026-09-01", incomeCents: 120000, expenseCents: 60000, operatingNetCents: 60000 },
+  ],
+};
+
+const budgets = {
+  month: "2026-09",
+  total: { categoryId: null, categoryName: null, effectiveAmountCents: 100000, actualExpenseCents: 60000, remainingCents: 40000, progressBps: 6000, status: "on_track" },
+  categories: [],
+};
+
+const forecast = {
+  summary: { projectedIncomeCents: 0, projectedExpenseCents: 0, projectedNetCents: 0, projectedClosingBalanceCents: 300000, plannedItems: 0 },
+  items: [],
+};
+
+const transactions = {
+  totalCount: 10,
+  rows: [
+    {
+      id: "t1",
+      bankDate: "2026-09-11",
+      amountCents: -1200,
+      account: { id: "a", name: "Cuenta principal" },
+      concept: { effective: "Compra" },
+      merchant: { effectiveName: "Comercio" },
+      category: { effectiveName: "Compras" },
+      kind: { effective: "expense" },
+      duplicateState: "none",
+      excludedFromAnalytics: false,
+    },
+  ],
+};
+
+type SyncMode = "missing-after-sync" | "duplicates-persisted";
+
+async function mockInicio(page: Page, mode: SyncMode) {
+  let posts = 0;
+  await page.route("**/*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+
+    if (url.pathname === "/api/source/google/sync") {
+      if (request.method() === "POST") {
+        posts += 1;
+        await json(route, mode === "missing-after-sync"
+          ? { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 1, duplicatesDetected: 0, warningsCount: 1 }
+          : { status: "success", rowsInserted: 0, rowsRevised: 0, rowsSkipped: 10, rowsMissing: 0, duplicatesDetected: 2, warningsCount: 0 });
+        return;
+      }
+
+      const warned = mode === "duplicates-persisted" || posts > 0;
+      await json(route, {
+        run: {
+          id: "run-warning",
+          status: "success",
+          startedAt: "2026-09-15T09:04:08.000Z",
+          finishedAt: "2026-09-15T09:04:08.000Z",
+          rowsSeen: 10,
+          rowsInserted: 0,
+          rowsRevised: 0,
+          rowsSkipped: 10,
+          rowsFailed: 0,
+          duplicatesDetected: warned && mode === "duplicates-persisted" ? 2 : 0,
+          warningsCount: warned && mode === "missing-after-sync" ? 1 : 0,
+          errorCode: null,
+          errorMessage: null,
+        },
+        cursors: [],
+      });
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard") {
+      if (url.searchParams.get("scope") === "primary") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "primary",
+          asOfDate: "2026-09-11",
+          dataThroughDate: "2026-09-11",
+          generatedAt: "2026-09-15T09:04:08.000Z",
+          requestedSources: ["financial", "transactions"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
+      await json(route, {
+        contractVersion: 1,
+        scope: "secondary",
+        asOfDate: "2026-09-11",
+        dataThroughDate: "2026-09-11",
+        generatedAt: "2026-09-15T09:04:08.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"],
+        failedSources: [],
+        data: { financial: null, monthly, budgets, forecast, transactions: null },
+      });
+      return;
+    }
+
+    await route.fallback();
+  });
+  return () => posts;
+}
+
+test("Actualizar datos no llama «sin cambios» a una sincronización con filas desaparecidas", async ({ page }) => {
+  const postCount = await mockInicio(page, "missing-after-sync");
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Actualizar datos" }).click();
+  await expect.poll(postCount).toBe(1);
+  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Sin cambios incorporados\. 1 movimiento importado anteriormente ya no aparece en la fuente\. Revisa la fuente\./i)).toBeVisible();
+  await expect(page.getByText("Sin cambios nuevos.", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("La última sincronización tiene avisos", { exact: true })).toBeVisible();
+
+  await page.reload();
+  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(page.getByText(/1 aviso de sincronización requiere revisión\. Revisa la fuente\./i)).toBeVisible();
+});
+
+test("Inicio conserva tras recarga los posibles duplicados de la última sincronización", async ({ page }) => {
+  await mockInicio(page, "duplicates-persisted");
+  await page.goto("/");
+
+  await expect(page.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
+  await expect(page.getByText(/2 posibles duplicados detectados\. Revisa la fuente\./i)).toBeVisible();
+  const attention = page.getByText("La última sincronización tiene avisos", { exact: true });
+  await expect(attention).toBeVisible();
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+});
+'''
+          Path("tests/e2e/inicio-sync-feedback.spec.ts").write_text(test_content)
+
+          Path(".github/workflows/one-shot-inicio-sync-feedback.yml").unlink()
+          PY
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/inicio-overview.tsx app/inicio-overview.module.css tests/e2e/inicio-sync-feedback.spec.ts .github/workflows/inicio-audit-10x10.yml .github/workflows/one-shot-inicio-sync-feedback.yml
+          git diff --cached --check
+          git commit -m "fix: surface source sync warnings on Inicio"
+          git push origin HEAD:audit/inicio-sync-feedback-10.0.8
