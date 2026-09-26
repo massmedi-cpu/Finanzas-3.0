@@ -47,8 +47,11 @@ jobs:
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
           tests/e2e/dashboard.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
+          tests/e2e/regional-home-consistency.spec.ts
           tests/e2e/premium-dashboard-visual.spec.ts
           tests/e2e/foundation-gate-static-contract.spec.ts
           tests/e2e/design-token-source.spec.ts
@@ -173,8 +176,11 @@ jobs:
         run: >-
           npm run test:e2e --
           tests/e2e/dashboard.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
           tests/e2e/inicio-utility.spec.ts
           tests/e2e/inicio-privacy-visual.spec.ts
+          tests/e2e/regional-home-consistency.spec.ts
           tests/e2e/preview-production-isolation-live.spec.ts
           tests/e2e/protected-preview-auth-boundary-live.spec.ts
           --grep-invert "protected preview exposes dashboard orchestration using validated engines"
