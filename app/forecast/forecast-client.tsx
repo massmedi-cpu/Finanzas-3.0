@@ -16,7 +16,11 @@ import {
   recurrencesHrefForForecast,
   type ForecastRecurrenceHandoff,
 } from "../../src/application/forecast/recurrence-flow";
-import type { ResolvedForecastSelection } from "../../src/application/forecast/forecast-selection";
+import {
+  forecastEndDateLimit,
+  resolveForecastSelection,
+  type ResolvedForecastSelection,
+} from "../../src/application/forecast/forecast-selection";
 import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
@@ -24,6 +28,7 @@ import { ForecastCalendar } from "./forecast-calendar";
 import styles from "./forecast.module.css";
 
 type ManualErrors = {
+  date?: string;
   concept?: string;
   amount?: string;
 };
@@ -78,6 +83,14 @@ function parseEuroToCents(input: string) {
   } catch {
     return null;
   }
+}
+
+function periodErrorMessage(error: unknown) {
+  const code = error instanceof Error ? error.message : "";
+  if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
+  if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
+  if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
+  return error instanceof Error ? error.message : "No se pudo cargar la previsión";
 }
 
 function statusLabel(status: ForecastItem["status"]) {
@@ -158,6 +171,7 @@ export function ForecastClient({
   const [excludeErrorFor, setExcludeErrorFor] = useState<string | null>(null);
   const [candidateFor, setCandidateFor] = useState<string | null>(null);
   const [candidateData, setCandidateData] = useState<ForecastCandidateSnapshot | null>(null);
+  const manualDateRef = useRef<HTMLInputElement | null>(null);
   const manualConceptRef = useRef<HTMLInputElement | null>(null);
   const manualAmountRef = useRef<HTMLInputElement | null>(null);
   const manualRequestRef = useRef<{ fingerprint: string; key: string } | null>(null);
@@ -172,6 +186,13 @@ export function ForecastClient({
   const handoffDateTo = recurrenceHandoff?.dateTo ?? null;
   const handoffAccountId = recurrenceHandoff?.accountId ?? null;
   const handoffRefresh = recurrenceHandoff?.refresh ?? false;
+  const maxPeriodDate = useMemo(() => {
+    try {
+      return forecastEndDateLimit(dateFrom);
+    } catch {
+      return undefined;
+    }
+  }, [dateFrom]);
 
   const loadSnapshot = useCallback(async (): Promise<ForecastSnapshot | null> => {
     const sequence = ++loadSequence.current;
@@ -185,8 +206,13 @@ export function ForecastClient({
     setAuthRecovery(null);
 
     try {
-      const params = new URLSearchParams({ dateFrom: requestedFrom, dateTo: requestedTo });
-      if (accountIdRef.current) params.set("accountId", accountIdRef.current);
+      const selection = resolveForecastSelection({
+        dateFrom: requestedFrom,
+        dateTo: requestedTo,
+        accountId: accountIdRef.current,
+      });
+      const params = new URLSearchParams({ dateFrom: selection.dateFrom, dateTo: selection.dateTo });
+      if (selection.accountId) params.set("accountId", selection.accountId);
       const data = await readJson(await fetch(`/api/forecast?${params.toString()}`, {
         cache: "no-store",
         signal: controller.signal,
@@ -198,7 +224,7 @@ export function ForecastClient({
       return nextSnapshot;
     } catch (err) {
       if (controller.signal.aborted || sequence !== loadSequence.current) return null;
-      setError(err instanceof Error ? err.message : "No se pudo cargar la previsión");
+      setError(periodErrorMessage(err));
       return null;
     } finally {
       if (loadAbortRef.current === controller) loadAbortRef.current = null;
@@ -213,6 +239,12 @@ export function ForecastClient({
     }
     void loadSnapshot();
   }, [dateFrom, dateTo, loadSnapshot]);
+
+  useEffect(() => {
+    if (!dateFrom || !dateTo || dateFrom > dateTo) return;
+    setManualDate((current) => current >= dateFrom && current <= dateTo ? current : dateFrom);
+    setManualErrors((current) => current.date ? { ...current, date: undefined } : current);
+  }, [dateFrom, dateTo]);
 
   useEffect(() => () => {
     loadAbortRef.current?.abort();
@@ -250,15 +282,27 @@ export function ForecastClient({
   }
 
   async function refreshRecurring() {
+    let selection: ResolvedForecastSelection;
+    try {
+      selection = resolveForecastSelection({
+        dateFrom: dateFromRef.current,
+        dateTo: dateToRef.current,
+        accountId: accountIdRef.current,
+      });
+    } catch (selectionError) {
+      setError(periodErrorMessage(selectionError));
+      setNotice(null);
+      return;
+    }
     const refreshed = await runMutation("refresh", async () => {
       const result = await readJson(await fetch("/api/forecast", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           action: "refresh",
-          dateFrom: dateFromRef.current,
-          dateTo: dateToRef.current,
-          accountId: accountIdRef.current,
+          dateFrom: selection.dateFrom,
+          dateTo: selection.dateTo,
+          accountId: selection.accountId,
         }),
       }));
       setNotice(`Recurrencias actualizadas: ${result.generated ?? 0} fechas previstas.`);
@@ -317,6 +361,20 @@ export function ForecastClient({
 
   async function createManual(event: FormEvent) {
     event.preventDefault();
+    try {
+      resolveForecastSelection({ dateFrom, dateTo, accountId: accountIdRef.current });
+    } catch (selectionError) {
+      setError(periodErrorMessage(selectionError));
+      setNotice(null);
+      return;
+    }
+    let dateError: string | undefined;
+    try {
+      resolveForecastSelection({ dateFrom: manualDate, dateTo: manualDate });
+      if (manualDate < dateFrom || manualDate > dateTo) dateError = "Elige una fecha dentro del periodo mostrado.";
+    } catch {
+      dateError = "Elige una fecha dentro del periodo mostrado.";
+    }
     const absoluteCents = parseEuroToCents(manualAmount);
     const amountError = absoluteCents === null || absoluteCents <= 0
       ? "Introduce un importe válido con hasta dos decimales."
@@ -325,12 +383,13 @@ export function ForecastClient({
       ? "Escribe un concepto para la previsión manual."
       : undefined;
 
-    setManualErrors({ concept: conceptError, amount: amountError });
-    if (amountError || conceptError) {
+    setManualErrors({ date: dateError, concept: conceptError, amount: amountError });
+    if (dateError || amountError || conceptError) {
       setError(null);
       setNotice(null);
       window.requestAnimationFrame(() => {
-        if (conceptError) manualConceptRef.current?.focus();
+        if (dateError) manualDateRef.current?.focus();
+        else if (conceptError) manualConceptRef.current?.focus();
         else manualAmountRef.current?.focus();
       });
       return;
@@ -560,6 +619,8 @@ export function ForecastClient({
           <input
             type="date"
             value={dateFrom}
+            required
+            disabled={busy !== null}
             onChange={(event) => {
               const nextFrom = event.target.value;
               setDateFrom(nextFrom);
@@ -569,7 +630,7 @@ export function ForecastClient({
         </label>
         <label>
           Hasta
-          <input type="date" value={dateTo} min={dateFrom} onChange={(event) => setDateTo(event.target.value)} />
+          <input type="date" value={dateTo} min={dateFrom} max={maxPeriodDate} required disabled={busy !== null} onChange={(event) => setDateTo(event.target.value)} />
         </label>
       </section>
 
@@ -765,7 +826,24 @@ export function ForecastClient({
                   </div>
                 </div>
                 <form className={styles.manualForm} onSubmit={(event) => void createManual(event)} noValidate>
-                  <label>Fecha<input type="date" value={manualDate} onChange={(event) => setManualDate(event.target.value)} required /></label>
+                  <label>
+                    Fecha
+                    <input
+                      ref={manualDateRef}
+                      type="date"
+                      value={manualDate}
+                      min={dateFrom}
+                      max={dateTo}
+                      onChange={(event) => {
+                        setManualDate(event.target.value);
+                        if (manualErrors.date) setManualErrors((current) => ({ ...current, date: undefined }));
+                      }}
+                      aria-invalid={Boolean(manualErrors.date) || undefined}
+                      aria-describedby={manualErrors.date ? "forecast-manual-date-error" : undefined}
+                      required
+                    />
+                    {manualErrors.date ? <span id="forecast-manual-date-error" className={styles.fieldError} role="alert">{manualErrors.date}</span> : null}
+                  </label>
                   <label>
                     Concepto
                     <input
@@ -827,7 +905,7 @@ export function ForecastClient({
                 <h2>Cómo se calcula</h2>
                 <ul className={styles.principles}>
                   <li>Fuente bancaria oficial: <strong>solo lectura</strong>.</li>
-                  <li>Saldo inicial: saldos actuales de tus cuentas.</li>
+                  <li>Saldo inicial: saldo de tus cuentas al comienzo del periodo.</li>
                   <li>Recurrencias: solo las confirmadas como activas.</li>
                   <li>Los elementos excluidos o ya confirmados no vuelven a afectar al saldo previsto.</li>
                   <li>Consultar la previsión no modifica datos.</li>

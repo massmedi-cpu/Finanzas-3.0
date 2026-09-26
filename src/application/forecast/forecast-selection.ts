@@ -1,6 +1,6 @@
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
-const MAX_FORECAST_DAYS = 730;
+export const MAX_FORECAST_DAYS = 730;
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,6 +26,10 @@ function validDate(value: string, code: string) {
   return value;
 }
 
+export function forecastEndDateLimit(dateFrom: string) {
+  return addDays(validDate(dateFrom, "invalid_forecast_date_from"), MAX_FORECAST_DAYS);
+}
+
 export type ForecastSelectionInput = {
   dateFrom?: string | null;
   dateTo?: string | null;
@@ -40,8 +44,8 @@ export type ResolvedForecastSelection = {
 
 export function resolveForecastSelection(input: ForecastSelectionInput = {}): ResolvedForecastSelection {
   const today = madridToday();
-  const dateFromCandidate = input.dateFrom?.trim() || addDays(today, 1);
-  const dateToCandidate = input.dateTo?.trim() || addDays(today, 90);
+  const dateFromCandidate = input.dateFrom == null ? addDays(today, 1) : input.dateFrom.trim();
+  const dateToCandidate = input.dateTo == null ? addDays(today, 90) : input.dateTo.trim();
   const dateFrom = validDate(dateFromCandidate, "invalid_forecast_date_from");
   const dateTo = validDate(dateToCandidate, "invalid_forecast_date_to");
   if (dateFrom > dateTo) throw new Error("invalid_forecast_date_range");

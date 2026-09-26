@@ -50,6 +50,7 @@ test("Forecast hereda parámetros explícitos y los valida antes de consultar el
     dateFrom: "2026-10-31",
     dateTo: "2026-09-18",
   })).toThrow("invalid_forecast_date_range");
+  expect(() => resolveForecastSelection({ dateFrom: "", dateTo: "2026-10-31" })).toThrow("invalid_forecast_date_from");
 });
 
 test("Forecast vuelve a módulos propietarios sin inventar un periodo analítico futuro", () => {

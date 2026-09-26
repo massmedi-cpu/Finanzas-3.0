@@ -43,3 +43,21 @@ test("recurrence refresh rejects an inverted period before persistence", async (
     code: "invalid_forecast_date_range",
   });
 });
+
+test("forecast API rejects more than 730 days for reads and refresh before persistence", async ({ request }) => {
+  const read = await request.get("/api/forecast?dateFrom=2099-01-01&dateTo=2101-01-02");
+  expect(read.status()).toBe(400);
+  await expect(read.json()).resolves.toEqual({
+    error: "invalid_request",
+    code: "invalid_forecast_date_range_too_large",
+  });
+
+  const refresh = await request.post("/api/forecast", {
+    data: { action: "refresh", dateFrom: "2099-01-01", dateTo: "2101-01-02" },
+  });
+  expect(refresh.status()).toBe(400);
+  await expect(refresh.json()).resolves.toEqual({
+    error: "invalid_request",
+    code: "invalid_forecast_date_range_too_large",
+  });
+});
