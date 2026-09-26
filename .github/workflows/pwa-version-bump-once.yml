@@ -33,3 +33,5 @@ jobs:
           git diff --cached --quiet && exit 0
           git commit -m "chore(release): set version 10.0.10"
           git push origin HEAD:audit/pwa-android-install-10.0.10
+
+# Intentionally one-shot: remove after the synchronized version commit lands.
