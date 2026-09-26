@@ -120,11 +120,12 @@ function integerTicks(minimum: number, maximum: number) {
   return [...values].sort((left, right) => left - right);
 }
 
-function useChartWidth(maximum: number) {
+function useChartWidth(maximum: number, enabled: boolean) {
   const viewportRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(maximum);
 
   useEffect(() => {
+    if (!enabled) return;
     const viewport = viewportRef.current;
     if (!viewport) return;
     const resize = () => setWidth(Math.min(maximum, Math.max(1, Math.floor(viewport.clientWidth))));
@@ -132,7 +133,7 @@ function useChartWidth(maximum: number) {
     observer.observe(viewport);
     resize();
     return () => observer.disconnect();
-  }, [maximum]);
+  }, [maximum, enabled]);
 
   return { viewportRef, width };
 }
@@ -150,7 +151,7 @@ function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: s
 
 function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.dailySpend;
-  const { viewportRef, width } = useChartWidth(760);
+  const { viewportRef, width } = useChartWidth(760, rows.length > 0);
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
     const height = 236;
@@ -397,10 +398,10 @@ function AmountBandsChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
 }
 
 function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const { viewportRef, width } = useChartWidth(620);
   const rows = snapshot.merchantDrivers
     .filter((row) => row.rows > 0 && (row.averageCents ?? 0) > 0)
     .slice(0, 18);
+  const { viewportRef, width } = useChartWidth(620, rows.length > 0);
 
   if (rows.length === 0) {
     return <EmptyChartCard eyebrow="FRECUENCIA × IMPORTE" title="Comercios frecuentes frente a compras grandes" message="No hay comercios suficientes para relacionar frecuencia e importe medio." />;
@@ -494,8 +495,8 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
 }
 
 function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const { viewportRef, width } = useChartWidth(620);
   const rows = snapshot.merchantDrivers.filter((row) => row.expenseCents > 0).slice(0, 30);
+  const { viewportRef, width } = useChartWidth(620, rows.length > 0 && snapshot.current.expenseCents > 0);
   const chart = useMemo(() => {
     if (rows.length === 0 || snapshot.current.expenseCents <= 0) return null;
     const height = 300;
