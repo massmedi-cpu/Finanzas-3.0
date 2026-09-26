@@ -6,6 +6,7 @@ on:
       - 'audit/cr008-ocr-v22-10.0.9'
     paths:
       - '.github/workflows/one-shot-cr008-port-additions.yml'
+      - 'scripts/diagnose-cr008-money-raw.py'
 
 permissions:
   contents: read
