@@ -42,8 +42,17 @@ test("Inicio · conserva privacidad y muestra decisiones, no métricas de escapa
   expect(inicioSource).toContain("Gasto medio mensual");
   expect(inicioSource).toContain("Necesita tu atención");
   expect(inicioSource).not.toContain("Por revisar");
-  expect(inicioSource).not.toContain("Revisar movimientos");
+  expect(inicioSource).not.toContain("/transactions?review=open");
   expect(inicioSource).not.toContain("pendingRecent");
   expect(inicioSource).not.toContain("Tasa de ahorro</span>");
   expect(inicioSource).not.toContain("balanceSummary");
+
+  // El CTA de revisión queda limitado al aviso de incoherencia de signo.
+  expect(inicioSource.match(/Revisar movimientos/g) ?? []).toHaveLength(1);
+  expect(inicioSource).toContain("if (signMismatchRows > 0)");
+  expect(inicioSource).toContain("movimiento con signo incoherente");
+  expect(inicioSource).toContain("No hemos corregido el importe automáticamente.");
+  expect(inicioSource).toContain('action: "Revisar movimientos"');
+  expect(inicioSource).toContain('href: "/transactions"');
+  expect(inicioSource).toContain('tone: "warning"');
 });
