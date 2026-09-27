@@ -528,6 +528,16 @@ export default function InicioOverview() {
         tone: "warning",
       });
     }
+    const signMismatchRows = financial?.period.quality.signMismatchRows ?? 0;
+    if (signMismatchRows > 0) {
+      items.push({
+        title: `${signMismatchRows} ${signMismatchRows === 1 ? "movimiento con signo incoherente" : "movimientos con signo incoherente"}`,
+        detail: "El tipo financiero y el signo bancario no coinciden. No hemos corregido el importe automáticamente.",
+        href: "/transactions",
+        action: "Revisar movimientos",
+        tone: "warning",
+      });
+    }
     if ((financial?.period.operatingNetCents ?? 0) < 0) {
       items.push({
         title: "El balance del mes está en negativo",
