@@ -1,0 +1,74 @@
+name: Bootstrap Extreme Financial Scenarios 10.0.24
+
+on:
+  push:
+    branches:
+      - audit/extreme-financial-scenarios-10.0.24
+    paths:
+      - ".github/workflows/bootstrap-extreme-financial-scenarios-10.0.24.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v6
+        with:
+          ref: audit/extreme-financial-scenarios-10.0.24
+
+      - name: Apply reviewed 10.0.24 edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('fs');
+
+          const homePath = 'app/inicio-overview.tsx';
+          let home = fs.readFileSync(homePath, 'utf8');
+          const homeNeedle = '    if ((financial?.period.operatingNetCents ?? 0) < 0) {';
+          if (!home.includes(homeNeedle)) throw new Error('Inicio attention insertion point not found');
+          if (!home.includes('const signMismatchRows = financial?.period.quality.signMismatchRows ?? 0;')) {
+            const block = `    const signMismatchRows = financial?.period.quality.signMismatchRows ?? 0;\n    if (signMismatchRows > 0) {\n      items.push({\n        title: \`${'${signMismatchRows}'} ${'${signMismatchRows === 1 ? "movimiento con signo incoherente" : "movimientos con signo incoherente"}'}\`,\n        detail: "El tipo financiero y el signo bancario no coinciden. No hemos corregido el importe automáticamente.",\n        href: "/transactions",\n        action: "Revisar movimientos",\n        tone: "warning",\n      });\n    }\n`;
+            home = home.replace(homeNeedle, `${block}${homeNeedle}`);
+          }
+          fs.writeFileSync(homePath, home);
+
+          const pkgPath = 'package.json';
+          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+          pkg.version = '10.0.24';
+          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+
+          const lockPath = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          lock.version = '10.0.24';
+          lock.packages[''].version = '10.0.24';
+          fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+
+          const inheritedGatePath = '.github/workflows/cross-module-financial-consistency-10.0.23.yml';
+          let inheritedGate = fs.readFileSync(inheritedGatePath, 'utf8');
+          const oldCheck = `run: node -e "const p=require('./package.json');const l=require('./package-lock.json');if(p.version!=='10.0.23'||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"`;
+          const newCheck = `run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<23||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"`;
+          if (!inheritedGate.includes(newCheck)) {
+            if (!inheritedGate.includes(oldCheck)) throw new Error('10.0.23 cumulative gate insertion point not found');
+            inheritedGate = inheritedGate.replace(oldCheck, newCheck);
+          }
+          fs.writeFileSync(inheritedGatePath, inheritedGate);
+          NODE
+
+          rm .github/workflows/bootstrap-extreme-financial-scenarios-10.0.24.yml
+          git diff --check
+          git status --short
+
+      - name: Commit reviewed edits
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/inicio-overview.tsx package.json package-lock.json .github/workflows/cross-module-financial-consistency-10.0.23.yml .github/workflows/bootstrap-extreme-financial-scenarios-10.0.24.yml
+          git commit -m "feat: surface extreme financial anomalies in 10.0.24"
+          git push origin HEAD:audit/extreme-financial-scenarios-10.0.24
