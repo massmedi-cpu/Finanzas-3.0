@@ -81,17 +81,23 @@ export function checkHomeConsistency(input: {
   if (financial && budget && budgetMonthMatches
     && financial.period.dateFrom === `${currentMonth}-01`
     && financial.period.dateTo === today) {
+    const actualExpenseCents = budget.total?.actualExpenseCents;
     budgetActualMatches = Number.isSafeInteger(financial.period.expenseCents)
-      && Number.isSafeInteger(budget.total.actualExpenseCents)
-      && financial.period.expenseCents === budget.total.actualExpenseCents;
+      && Number.isSafeInteger(actualExpenseCents)
+      && financial.period.expenseCents === actualExpenseCents;
   }
 
   let forecastOpeningBalanceMatches = true;
-  if (financial && forecast && forecast.period.dateFrom === today
-    && financial.balances.asOfDate === today) {
-    forecastOpeningBalanceMatches = Number.isSafeInteger(financial.balances.activeBalanceCents)
-      && Number.isSafeInteger(forecast.summary.openingBalanceCents)
-      && financial.balances.activeBalanceCents === forecast.summary.openingBalanceCents;
+  if (financial && forecast && financial.balances.asOfDate === today) {
+    const forecastDateFrom = forecast.period?.dateFrom;
+    const openingBalanceCents = forecast.summary?.openingBalanceCents;
+    if (forecastDateFrom === undefined || forecastDateFrom === null) {
+      forecastOpeningBalanceMatches = false;
+    } else if (forecastDateFrom === today) {
+      forecastOpeningBalanceMatches = Number.isSafeInteger(financial.balances.activeBalanceCents)
+        && Number.isSafeInteger(openingBalanceCents)
+        && financial.balances.activeBalanceCents === openingBalanceCents;
+    }
   }
 
   return {
