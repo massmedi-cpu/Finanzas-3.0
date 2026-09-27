@@ -80,8 +80,8 @@ test("10.0.23 alinea Inicio, Análisis, Presupuestos y Previsión con las fuente
   expect(phase5).toContain("'period',financial_app.financial_period_summary(p_date_from,p_date_to,p_account_id)");
   expect(phase5).toContain("'balances',financial_app.financial_account_balances(p_date_to,p_include_archived)");
   expect(analysis).toContain("financial_app.financial_period_summary");
-  expect(budgetEngine).toContain("financial_app.financial_transaction_facts()");
-  expect(budgetEngine).toContain("effective_kind='expense'");
+  expect(budgetEngine).toContain("financial_app.financial_transaction_facts(v_start, v_end, null)");
+  expect(budgetEngine).toContain("effective_kind = 'expense'");
 
   expect(home).toContain("openingBalanceCents: number;");
   expect(home).toContain("budget: data.budgets");
