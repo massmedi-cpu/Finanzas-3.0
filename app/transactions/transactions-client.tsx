@@ -42,6 +42,7 @@ type TransactionRow = {
   kind: { original: TransactionKind; effective: TransactionKind };
   reviewState: { original: ReviewState; effective: ReviewState };
   duplicateState: DuplicateState;
+  signMismatch: boolean;
   transferPairId: string | null;
   excludedFromAnalytics: boolean;
   userNote: string | null;
@@ -110,6 +111,7 @@ type Filters = {
   kind: string;
   reviewState: string;
   duplicateState: string;
+  signMismatch: string;
   dateFrom: string;
   dateTo: string;
 };
@@ -146,6 +148,7 @@ const EMPTY_FILTERS: Filters = {
   kind: "",
   reviewState: "",
   duplicateState: "",
+  signMismatch: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -207,6 +210,7 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["kind", "kind"],
     ["reviewState", "reviewState"],
     ["duplicateState", "duplicateState"],
+    ["signMismatch", "signMismatch"],
     ["dateFrom", "dateFrom"],
     ["dateTo", "dateTo"],
   ];
@@ -396,6 +400,7 @@ export default function TransactionsClient() {
     const kind = params.get("kind");
     const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
+    const signMismatch = params.get("signMismatch");
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
     const safeDateFrom = dateFrom && DATE.test(dateFrom) ? dateFrom : "";
@@ -410,6 +415,7 @@ export default function TransactionsClient() {
       kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
       reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_STATE_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
+      signMismatch: signMismatch === "true" ? "true" : "",
       dateFrom: safeDateRange ? safeDateFrom : "",
       dateTo: safeDateRange ? safeDateTo : "",
     };
@@ -732,6 +738,13 @@ async function saveEdit(row: TransactionRow) {
             {(Object.entries(DUPLICATE_LABELS) as Array<[DuplicateState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
+        <label>
+          <span>Calidad</span>
+          <select data-testid="sign-mismatch-filter" value={draftFilters.signMismatch} onChange={(event) => updateFilter("signMismatch", event.target.value)}>
+            <option value="">Todas</option>
+            <option value="true">Signo incoherente</option>
+          </select>
+        </label>
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
         <div className={styles.filterActions}>
@@ -765,7 +778,7 @@ async function saveEdit(row: TransactionRow) {
           </div>
         </div>
 
-        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>No hay movimientos que coincidan con los filtros actuales.</div> : (
+        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead><tr><th className={styles.selectHeading}>Sel.</th><th>Fecha</th><th>Concepto y trazabilidad</th><th>Cuenta</th><th>Categoría</th><th className={styles.amountHeading}>Importe</th><th>Gestión</th></tr></thead>
@@ -776,13 +789,14 @@ async function saveEdit(row: TransactionRow) {
                       <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} disabled={saving || (!selectedSet.has(row.id) && selectedIds.length >= MAX_TRANSACTION_PATCH_SIZE)} onChange={() => toggleRow(row.id)} /></label></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
-                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
+                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.signMismatch && <span className={styles.anomalyChip}>Signo incoherente</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
                         <p>{row.merchant.effectiveName ?? "Sin comercio"}</p>
                         <details className={styles.trace}><summary>Detalle y trazabilidad</summary><dl>
                           <div><dt>Concepto original</dt><dd>{row.concept.original}</dd></div><div><dt>Concepto procesado</dt><dd>{row.concept.processed}</dd></div><div><dt>Concepto efectivo</dt><dd>{row.concept.effective}</dd></div>
                           <div><dt>Comercio original</dt><dd>{row.merchant.originalName ?? "—"}</dd></div><div><dt>Comercio efectivo</dt><dd>{row.merchant.effectiveName ?? "—"}</dd></div>
                           <div><dt>Categoría original</dt><dd>{row.category.originalName ?? "—"}</dd></div><div><dt>Categoría efectiva</dt><dd>{row.category.effectiveName ?? "—"}</dd></div>
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
+                          {row.signMismatch && <div><dt>Control de signo</dt><dd>El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.</dd></div>}
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
                           {row.overriddenFields.some((field) => field !== "reviewState") && <div><dt>Campos modificados</dt><dd>{row.overriddenFields.filter((field) => field !== "reviewState").map((field) => OVERRIDE_LABELS[field] ?? field).join(", ")}</dd></div>}{row.userNote && <div><dt>Nota</dt><dd>{row.userNote}</dd></div>}

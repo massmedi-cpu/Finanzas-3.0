@@ -45,5 +45,5 @@ test("10.0.24 detecta signos incompatibles sin reescribir el movimiento bancario
   expect(home).toContain("const signMismatchRows = financial?.period.quality.signMismatchRows ?? 0;");
   expect(home).toContain("movimiento con signo incoherente");
   expect(home).toContain("No hemos corregido el importe automáticamente.");
-  expect(home).toContain('href: "/transactions"');
+  expect(home).toContain('href: "/transactions?signMismatch=true"');
 });

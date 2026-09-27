@@ -117,10 +117,11 @@
 .conceptCell strong { color: #f6f8fe; font-size: .98rem; line-height: 1.35; }
 .conceptCell > p { margin: .3rem 0 0; color: var(--color-text-muted); font-size: .875rem; }
 .conceptTop { display: flex; align-items: flex-start; flex-wrap: wrap; gap: .4rem; }
-.overrideChip, .mutedChip, .duplicateChip, .transferChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
+.overrideChip, .mutedChip, .duplicateChip, .anomalyChip, .transferChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
 .overrideChip { background: rgba(77, 141, 255, .12); color: #a9c5ff; }
 .mutedChip { background: rgba(116, 131, 161, .12); color: #a7b2c8; }
 .duplicateChip { background: rgba(255, 93, 115, .09); color: #ffc0c9; }
+.anomalyChip { background: rgba(255, 184, 77, .12); color: #ffd28a; }
 .transferChip { background: rgba(43, 217, 247, .09); color: #9cecf8; }
 .rowActions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .rowActions button { flex: 1 1 6rem; }
