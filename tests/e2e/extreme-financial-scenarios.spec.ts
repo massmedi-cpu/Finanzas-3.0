@@ -37,8 +37,8 @@ test("10.0.24 conserva devoluciones como hecho financiero y las incorpora al net
 });
 
 test("10.0.24 detecta signos incompatibles sin reescribir el movimiento bancario", () => {
-  expect(phase5).toContain("financial_app.effective_transaction_kind(t.kind,t.category,t.amount_cents)='income' and t.amount_cents<0");
-  expect(phase5).toContain("financial_app.effective_transaction_kind(t.kind,t.category,t.amount_cents)='expense' and t.amount_cents>0");
+  expect(phase5).toContain("financial_app.effective_transaction_kind(t.id,t.kind,o.kind_override,t.transfer_pair_id,t.category,t.amount_cents)='income' and t.amount_cents<0");
+  expect(phase5).toContain("financial_app.effective_transaction_kind(t.id,t.kind,o.kind_override,t.transfer_pair_id,t.category,t.amount_cents)='expense' and t.amount_cents>0");
   expect(phase5).toContain("count(*) filter (where sign_mismatch)::int as sign_mismatch_count");
   expect(phase5).toContain("'signMismatchRows',m.sign_mismatch_count");
 
