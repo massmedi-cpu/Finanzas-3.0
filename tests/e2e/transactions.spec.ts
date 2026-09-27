@@ -402,3 +402,54 @@ test("Preview protegido real expone el histórico persistido y revisiones en lec
     expect(Array.isArray(candidatePayload.rows)).toBe(true);
   }
 });
+
+test("10.0.21 · paginación solapada no duplica filas ni selección", async ({ page }) => {
+  await mockTransactionApi(page);
+  await page.route('**/api/transactions?*cursorBankDate*', route => route.fulfill({
+    json: { rows: [firstRow, secondRow], totalCount: 2, hasMore: false, nextCursor: null },
+  }));
+  await page.goto('/transactions');
+  await page.getByTestId(`select-${firstId}`).check();
+  await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(2);
+  await expect(page.getByTestId(`select-${firstId}`)).toBeChecked();
+  await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
+  await expect(page.getByLabel('Edición masiva de movimientos')).toContainText('2 seleccionados');
+});
+
+test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sola operación", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  const manyRows = Array.from({ length: 201 }, (_, index) => ({
+    ...firstRow, id: `60000000-0000-4000-8000-${String(index + 1).padStart(12, '0')}`,
+  }));
+  await page.route('**/api/transactions?*', async route => {
+    const params = new URL(route.request().url()).searchParams;
+    if (params.has('mode')) return route.fallback();
+    const offset = params.has('cursorId') ? manyRows.findIndex(row => row.id === params.get('cursorId')) + 1 : 0;
+    const rows = manyRows.slice(offset, offset + 50);
+    const hasMore = offset + rows.length < manyRows.length;
+    await route.fulfill({ json: { rows, totalCount: 201, hasMore, nextCursor: hasMore ? { bankDate: rows.at(-1)!.bankDate, id: rows.at(-1)!.id } : null } });
+  });
+  await page.goto('/transactions');
+  for (let count = 50; count <= 200; count += 50) {
+    await expect(page.locator('tbody tr')).toHaveCount(count);
+    await page.getByRole('button', { name: 'Cargar 50 más' }).click();
+  }
+  await expect(page.locator('tbody tr')).toHaveCount(201);
+  await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
+  await expect(page.getByLabel('Edición masiva de movimientos')).toContainText('200 seleccionados');
+  await expect(page.getByTestId(`select-${manyRows[200].id}`)).toBeDisabled();
+  await page.getByTestId(`select-${manyRows[0].id}`).uncheck();
+  await page.getByTestId(`select-${manyRows[200].id}`).check();
+  await page.getByTestId('bulk-category').selectOption(categoryId);
+  await page.getByTestId('bulk-apply').click();
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0].transactionIds).toHaveLength(200);
+  expect(patches[0].transactionIds).not.toContain(manyRows[0].id);
+  expect(patches[0].transactionIds).toContain(manyRows[200].id);
+  await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Seleccionar cargados' }).click();
+  await page.getByRole('button', { name: 'Quitar selección' }).click();
+  await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
+});
