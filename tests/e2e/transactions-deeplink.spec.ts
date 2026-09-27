@@ -68,3 +68,32 @@ test("E2 · los drill-downs de Análisis aplican periodo, tipo, categoría y com
   await expect(page.getByRole("combobox", { name: "Categoría" })).toHaveValue("__uncategorized__");
   await expect.poll(() => seen.some((url) => url.searchParams.get("uncategorized") === "true")).toBe(true);
 });
+
+test("10.0.21 · búsqueda y sin categoría desde Análisis conservan el filtro real", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto('/transactions?uncategorized=true&q=caf%C3%A9&kind=expense');
+  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('café');
+  await expect(page.getByTestId('category-filter')).toHaveValue('__uncategorized__');
+  await expect.poll(() => seen.some(url => url.searchParams.get('q') === 'café' && url.searchParams.get('uncategorized') === 'true')).toBe(true);
+});
+
+test("10.0.21 · filtros sobreviven recarga, atrás y navegación rápida", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto('/transactions');
+  await expect(page.getByText('0 movimientos', { exact: true }).first()).toBeVisible();
+  await page.getByLabel('Buscar', { exact: true }).fill('supermercado');
+  await page.getByRole('button', { name: 'Aplicar filtros' }).click();
+  await expect(page).toHaveURL(/q=supermercado/);
+  await page.reload();
+  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('supermercado');
+  await page.getByRole('button', { name: 'Limpiar', exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  await page.goBack();
+  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('supermercado');
+  await page.getByRole('navigation', { name: 'Filtros rápidos de movimientos' }).getByRole('link', { name: 'Gastos', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Tipo', exact: true })).toHaveValue('expense');
+  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('');
+  await expect.poll(() => seen.at(-1)?.searchParams.get('kind')).toBe('expense');
+});

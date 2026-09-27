@@ -1,6 +1,8 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { MAX_TRANSACTION_PATCH_SIZE } from "../../src/core/transaction-limits";
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatInteger } from "../../src/core/formatters";
 import { formatMoneyCents } from "../../src/core/money";
@@ -297,6 +299,8 @@ function individualPatch(row: TransactionRow, editor: EditorState, categories: F
 }
 
 export default function TransactionsClient() {
+  const searchParams = useSearchParams();
+  const filterSearch = searchParams.toString();
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -340,7 +344,7 @@ export default function TransactionsClient() {
       if (!response.ok) throw new Error(readableError(payload));
       const result = payload as QueryResponse;
       const incoming = Array.isArray(result.rows) ? result.rows : [];
-      setRows((current) => append ? [...current, ...incoming] : incoming);
+      setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
       setTotalCount(Number.isInteger(result.totalCount) ? result.totalCount : 0);
       setHasMore(result.hasMore === true);
       setNextCursor(result.nextCursor ?? null);
@@ -380,7 +384,12 @@ export default function TransactionsClient() {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los filtros.");
       }
     }
-    const params = new URLSearchParams(window.location.search);
+    void bootstrap();
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(filterSearch);
     const accountId = params.get("accountId");
     const categoryId = params.get("categoryId");
     const merchantId = params.get("merchantId");
@@ -394,8 +403,9 @@ export default function TransactionsClient() {
     const safeDateRange = !safeDateFrom || !safeDateTo || safeDateFrom <= safeDateTo;
     const initialFilters: Filters = {
       ...EMPTY_FILTERS,
+      q: (params.get("q") ?? "").trim().slice(0, 200),
       accountId: accountId && UUID.test(accountId) ? accountId : "",
-      categoryId: categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
+      categoryId: params.get("uncategorized") === "true" ? UNCATEGORIZED : categoryId === UNCATEGORIZED || (categoryId && UUID.test(categoryId)) ? categoryId : "",
       merchantId: merchantId && UUID.test(merchantId) ? merchantId : "",
       kind: kind && Object.prototype.hasOwnProperty.call(KIND_LABELS, kind) ? kind : "",
       reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_STATE_LABELS, reviewState) ? reviewState : "",
@@ -405,13 +415,21 @@ export default function TransactionsClient() {
     };
     setDraftFilters(initialFilters);
     setAppliedFilters(initialFilters);
-    void bootstrap();
+    setEditingId(null);
+    setEditor(null);
+    setConceptError("");
+    setCategoryError("");
+    setReviewingId(null);
+    setReviewMode(null);
+    setDuplicateGroup([]);
+    setTransferCandidates([]);
+    setSelectedIds([]);
+    setNotice(null);
     void fetchPage(initialFilters, null, false);
     return () => {
-      cancelled = true;
       listRequestSequence.current += 1;
     };
-  }, [fetchPage]);
+  }, [fetchPage, filterSearch]);
 
   const activeFilterCount = useMemo(
     () => Object.values(appliedFilters).filter((value) => value.trim() !== "").length,
@@ -446,6 +464,18 @@ export default function TransactionsClient() {
     setTransferCandidates([]);
   }
 
+  function navigateFilters(filters: Filters) {
+    const params = new URLSearchParams(buildQuery(filters));
+    params.delete("limit");
+    const query = params.toString();
+    const target = `/transactions${query ? `?${query}` : ""}`;
+    if (`${window.location.pathname}${window.location.search}` === target) {
+      void fetchPage(filters, null, false);
+    } else {
+      window.history.pushState(null, "", target);
+    }
+  }
+
   function applyFilters(event: FormEvent) {
     event.preventDefault();
     if (draftFilters.dateFrom && draftFilters.dateTo && draftFilters.dateFrom > draftFilters.dateTo) {
@@ -459,7 +489,7 @@ export default function TransactionsClient() {
     setEditor(null);
     setConceptError("");
     closeReview();
-    void fetchPage(next, null, false);
+    navigateFilters(next);
   }
 
   function clearFilters() {
@@ -470,20 +500,25 @@ export default function TransactionsClient() {
     setEditor(null);
     setConceptError("");
     closeReview();
-    void fetchPage(EMPTY_FILTERS, null, false);
+    navigateFilters(EMPTY_FILTERS);
   }
 
   function loadMore() {
-    if (!nextCursor || loadingMore) return;
+    if (!nextCursor || loading || loadingMore || saving) return;
     void fetchPage(appliedFilters, nextCursor, true);
   }
 
   function toggleRow(id: string) {
-    setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : [...current, id]);
+    if (saving || loading) return;
+    setSelectedIds((current) => current.includes(id) ? current.filter((value) => value !== id) : current.length < MAX_TRANSACTION_PATCH_SIZE ? [...current, id] : current);
   }
 
   function toggleAllLoaded() {
-    setSelectedIds(allLoadedSelected ? [] : rows.map((row) => row.id));
+    if (saving || loading) return;
+    setSelectedIds(allLoadedSelected ? [] : rows.slice(0, MAX_TRANSACTION_PATCH_SIZE).map((row) => row.id));
+    if (!allLoadedSelected && rows.length > MAX_TRANSACTION_PATCH_SIZE) {
+      setNotice(`Se han seleccionado los primeros ${MAX_TRANSACTION_PATCH_SIZE} movimientos cargados. Puedes editar hasta ${MAX_TRANSACTION_PATCH_SIZE} en cada operación.`);
+    }
   }
 
   async function patchTransactions(ids: string[], patch: Record<string, unknown>, message: string) {
@@ -610,7 +645,7 @@ async function saveEdit(row: TransactionRow) {
 }
 
   async function applyBulk() {
-    if (selectedIds.length === 0) return;
+    if (selectedIds.length === 0 || selectedIds.length > MAX_TRANSACTION_PATCH_SIZE || loading || saving) return;
     const patch: Record<string, unknown> = {};
     if (bulkCategory !== UNCHANGED) {
       if (bulkCategory === INHERIT) {
@@ -707,12 +742,13 @@ async function saveEdit(row: TransactionRow) {
 
       {selectedIds.length > 0 && (
         <section className={styles.bulkBar} aria-label="Edición masiva de movimientos">
-          <div className={styles.bulkIntro}><strong>{formatInteger(selectedIds.length)} seleccionados</strong><span>Los cambios se guardan como overrides; el origen bancario permanece intacto.</span></div>
-          <label><span>Categoría</span><select data-testid="bulk-category" value={bulkCategory} onChange={(event) => setBulkCategory(event.target.value)}>
+          <div className={styles.bulkIntro}><strong>{formatInteger(selectedIds.length)} seleccionados</strong><span>Edita hasta 200 movimientos por operación. Tus cambios se guardan sin alterar los datos del banco.</span></div>
+          <label><span>Categoría</span><select data-testid="bulk-category" value={bulkCategory} disabled={saving || loading} onChange={(event) => setBulkCategory(event.target.value)}>
             <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar automática</option><option value={NONE}>Sin categoría</option>
             {facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving}>Aplicar cambios</button>
+          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || loading || bulkCategory === UNCHANGED}>Aplicar cambios</button>
+          <button className={styles.secondaryButton} type="button" onClick={() => setSelectedIds([])} disabled={saving || loading}>Quitar selección</button>
         </section>
       )}
 
@@ -737,7 +773,7 @@ async function saveEdit(row: TransactionRow) {
                 {rows.map((row) => (
                   <Fragment key={row.id}>
                     <tr className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>
-                      <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} onChange={() => toggleRow(row.id)} /></label></td>
+                      <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} disabled={saving || (!selectedSet.has(row.id) && selectedIds.length >= MAX_TRANSACTION_PATCH_SIZE)} onChange={() => toggleRow(row.id)} /></label></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
                         <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>

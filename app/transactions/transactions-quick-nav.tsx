@@ -15,7 +15,7 @@ const presets: Preset[] = [
   { label: "Gastos", href: "/transactions?kind=expense", matches: (params) => params.get("kind") === "expense" && params.size === 1 },
   { label: "Ingresos", href: "/transactions?kind=income", matches: (params) => params.get("kind") === "income" && params.size === 1 },
   { label: "Transferencias", href: "/transactions?kind=transfer", matches: (params) => params.get("kind") === "transfer" && params.size === 1 },
-  { label: "Sin categoría", href: "/transactions?categoryId=__uncategorized__", matches: (params) => params.get("categoryId") === "__uncategorized__" && params.size === 1 },
+  { label: "Sin categoría", href: "/transactions?categoryId=__uncategorized__", matches: (params) => (params.get("categoryId") === "__uncategorized__" || params.get("uncategorized") === "true") && params.size === 1 },
   { label: "Posibles duplicados", href: "/transactions?duplicateState=suspected", matches: (params) => params.get("duplicateState") === "suspected" && params.size === 1 },
 ];
 

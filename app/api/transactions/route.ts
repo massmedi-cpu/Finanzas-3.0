@@ -1,3 +1,4 @@
+import { MAX_TRANSACTION_PATCH_SIZE } from "../../../src/core/transaction-limits";
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
@@ -106,7 +107,7 @@ function validatePatchBody(value: unknown) {
   const ids = body.transactionIds;
   const patch = body.patch;
 
-  if (!Array.isArray(ids) || ids.length < 1 || ids.length > 200) throw new Error("invalid_transaction_ids");
+  if (!Array.isArray(ids) || ids.length < 1 || ids.length > MAX_TRANSACTION_PATCH_SIZE) throw new Error("invalid_transaction_ids");
   if (ids.some((id) => typeof id !== "string" || !UUID.test(id))) throw new Error("invalid_transaction_ids");
   if (new Set(ids).size !== ids.length) throw new Error("duplicate_transaction_ids");
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new Error("invalid_transaction_patch");
