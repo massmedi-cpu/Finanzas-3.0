@@ -23,6 +23,8 @@ test("Movimientos no deja un resultado vacío sin salida y permite quitar filtro
   const clear = page.getByRole("button", { name: "Limpiar", exact: true });
   await expect(clear).toBeEnabled();
   await clear.click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  await expect(page.getByRole("combobox", { name: "Tipo", exact: true })).toHaveValue("");
   await expect.poll(() => requestedSearches.some((search) => !new URLSearchParams(search).has("kind"))).toBe(true);
 });
 
@@ -39,11 +41,8 @@ test("Previsión convierte el vacío en acciones reales sin inventar movimientos
 
 test("Los estados vacíos siguen siendo presentación y reutilizan módulos propietarios", () => {
   const forecast = readFileSync(resolve(process.cwd(), "app/forecast/forecast-client.tsx"), "utf8");
-  const transactions = readFileSync(resolve(process.cwd(), "app/transactions/transactions-client.tsx"), "utf8");
   const analysis = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
 
-  expect(transactions).toContain("function clearFilters()");
-  expect(transactions).toContain("void fetchPage(EMPTY_FILTERS, null, false)");
   expect(forecast).toContain("createManual");
   expect(forecast).toContain("refreshRecurring");
   expect(analysis).toContain("Sin gasto elegible");
