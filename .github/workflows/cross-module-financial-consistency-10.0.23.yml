@@ -9,6 +9,7 @@ on:
       - 'src/application/dashboard/home-consistency.ts'
       - 'supabase/migrations/20260927100500_cross_module_financial_consistency.sql'
       - 'tests/e2e/cross-module-financial-consistency.spec.ts'
+      - 'tests/e2e/regional-home-consistency.spec.ts'
       - 'package.json'
       - 'package-lock.json'
       - '.github/workflows/cross-module-financial-consistency-10.0.23.yml'
@@ -48,5 +49,5 @@ jobs:
       - name: Production build
         run: npm run build
 
-      - name: Cross-module consistency contract
-        run: npx playwright test tests/e2e/cross-module-financial-consistency.spec.ts --project=chromium-desktop
+      - name: Cross-module consistency contracts
+        run: npx playwright test tests/e2e/cross-module-financial-consistency.spec.ts tests/e2e/regional-home-consistency.spec.ts --project=chromium-desktop
