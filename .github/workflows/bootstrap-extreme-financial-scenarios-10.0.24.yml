@@ -38,28 +38,20 @@ jobs:
           fs.writeFileSync(homePath, home);
 
           const pkgPath = 'package.json';
-          const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
-          pkg.version = '10.0.24';
-          fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
+          let pkg = fs.readFileSync(pkgPath, 'utf8');
+          const pkgMatches = pkg.match(/"version": "10\.0\.23"/g) ?? [];
+          if (pkgMatches.length !== 1) throw new Error(`package version occurrences: ${pkgMatches.length}`);
+          pkg = pkg.replace('"version": "10.0.23"', '"version": "10.0.24"');
+          fs.writeFileSync(pkgPath, pkg);
 
           const lockPath = 'package-lock.json';
-          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-          lock.version = '10.0.24';
-          lock.packages[''].version = '10.0.24';
-          fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
-
-          const inheritedGatePath = '.github/workflows/cross-module-financial-consistency-10.0.23.yml';
-          let inheritedGate = fs.readFileSync(inheritedGatePath, 'utf8');
-          const oldCheck = `run: node -e "const p=require('./package.json');const l=require('./package-lock.json');if(p.version!=='10.0.23'||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"`;
-          const newCheck = `run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<23||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"`;
-          if (!inheritedGate.includes(newCheck)) {
-            if (!inheritedGate.includes(oldCheck)) throw new Error('10.0.23 cumulative gate insertion point not found');
-            inheritedGate = inheritedGate.replace(oldCheck, newCheck);
-          }
-          fs.writeFileSync(inheritedGatePath, inheritedGate);
+          let lock = fs.readFileSync(lockPath, 'utf8');
+          const lockMatches = lock.match(/"version": "10\.0\.23"/g) ?? [];
+          if (lockMatches.length !== 2) throw new Error(`lock version occurrences: ${lockMatches.length}`);
+          lock = lock.replace(/"version": "10\.0\.23"/g, '"version": "10.0.24"');
+          fs.writeFileSync(lockPath, lock);
           NODE
 
-          rm .github/workflows/bootstrap-extreme-financial-scenarios-10.0.24.yml
           git diff --check
           git status --short
 
@@ -69,6 +61,6 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add app/inicio-overview.tsx package.json package-lock.json .github/workflows/cross-module-financial-consistency-10.0.23.yml .github/workflows/bootstrap-extreme-financial-scenarios-10.0.24.yml
+          git add app/inicio-overview.tsx package.json package-lock.json
           git commit -m "feat: surface extreme financial anomalies in 10.0.24"
           git push origin HEAD:audit/extreme-financial-scenarios-10.0.24
