@@ -93,8 +93,10 @@ test("10.0.25 abre Movimientos ya filtrado, conserva la URL y explica la anomal√
   await expect.poll(() => seen.some((url) => url.searchParams.get("signMismatch") === "true")).toBe(true);
   await expect(page.locator("tbody").getByText("Signo incoherente", { exact: true })).toBeVisible();
 
-  await page.locator("tbody details").click();
-  await expect(page.getByText("El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.")).toBeVisible();
+  const trace = page.locator("tbody details");
+  await trace.locator("summary").click();
+  await expect(trace).toHaveAttribute("open", "");
+  await expect(trace.getByText("El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.")).toBeVisible();
 
   await page.reload();
   await expect(page).toHaveURL(/signMismatch=true/);
@@ -115,5 +117,7 @@ test("10.0.25 distingue un resultado limpio de un fallo de carga", async ({ page
 
   await page.goto("/transactions?signMismatch=true");
   await expect(page.getByText("No hay movimientos con el signo incoherente.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("alert")).toHaveCount(0);
+  // Next.js mantiene fuera de <main> su propio anunciador de ruta con role=alert.
+  // La ausencia que importa aqu√≠ es la del error funcional de Movimientos.
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
 });
