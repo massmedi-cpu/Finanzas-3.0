@@ -12,6 +12,7 @@ const financial = {
     operatingNetCents: 125000,
   },
   balances: {
+    asOfDate: "2026-09-25",
     activeBalanceCents: 125000,
     accounts: [
       { lifecycle: "active" as const, balanceCents: 100000 },
@@ -24,6 +25,16 @@ const financial = {
 const monthly = {
   dateTo: "2026-09-25",
   rows: [{ monthStart: "2026-09-01", incomeCents: 200000, expenseCents: 75000, operatingNetCents: 125000 }],
+};
+
+const budget = {
+  month: "2026-09",
+  total: { actualExpenseCents: 75000 },
+};
+
+const forecast = {
+  period: { dateFrom: "2026-09-25" },
+  summary: { openingBalanceCents: 125000 },
 };
 
 test("el formato común conserva céntimos y miles en todo el rango seguro", () => {
@@ -44,20 +55,32 @@ test("el formato común conserva céntimos y miles en todo el rango seguro", () 
   expect(() => parseMoneyInputToCents("1.23,456")).toThrow(RangeError);
 });
 
-test("Inicio muestra solo fuentes conciliadas y rechaza una respuesta de otro mes", () => {
-  const input = { financial, monthly, budgetMonth: "2026-09", today: "2026-09-25" };
+test("Inicio muestra solo fuentes conciliadas y rechaza respuestas financieras incompatibles", () => {
+  const input = { financial, monthly, budget, forecast, today: "2026-09-25" };
   expect(checkHomeConsistency(input)).toEqual({
     balancesMatch: true,
     currentMonthMatches: true,
     budgetMonthMatches: true,
+    budgetActualMatches: true,
+    forecastOpeningBalanceMatches: true,
   });
 
   expect(checkHomeConsistency({
     ...input,
-    financial: { ...financial, balances: { ...financial.balances, activeBalanceCents: 125001 } },
+    financial: {
+      ...financial,
+      balances: { ...financial.balances, activeBalanceCents: 125001 },
+    },
     monthly: { ...monthly, rows: [{ ...monthly.rows[0], expenseCents: 75001 }] },
-    budgetMonth: "2026-08",
-  })).toEqual({ balancesMatch: false, currentMonthMatches: false, budgetMonthMatches: false });
+    budget: { ...budget, month: "2026-08", total: { actualExpenseCents: 75001 } },
+    forecast: { ...forecast, summary: { openingBalanceCents: 125002 } },
+  })).toEqual({
+    balancesMatch: false,
+    currentMonthMatches: false,
+    budgetMonthMatches: false,
+    budgetActualMatches: true,
+    forecastOpeningBalanceMatches: false,
+  });
 
   // Independent reads taken at different date boundaries cannot be compared.
   expect(checkHomeConsistency({

@@ -13,7 +13,7 @@ test("Inicio prioriza atención personal desde los motores canónicos y limita e
   expect(overview).toContain("if (syncFailed)");
   expect(overview).toContain("(financial?.period.operatingNetCents ?? 0) < 0");
   expect(overview).toContain("if (overBudgetCount > 0)");
-  expect(overview).toContain("(data.forecast?.summary.projectedClosingBalanceCents ?? 0) < 0");
+  expect(overview).toContain("(forecast?.summary.projectedClosingBalanceCents ?? 0) < 0");
   expect(overview).toContain("return items.slice(0, 3)");
   expect(overview).toContain('href: "/analysis"');
   expect(overview).toContain('href: "/budgets"');

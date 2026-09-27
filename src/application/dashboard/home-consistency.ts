@@ -7,6 +7,7 @@ type Financial = {
     operatingNetCents: number;
   };
   balances: {
+    asOfDate: string | null;
     activeBalanceCents: number;
     accounts: Array<{ lifecycle: "active" | "archived"; balanceCents: number }>;
   };
@@ -22,21 +23,35 @@ type Monthly = {
   }>;
 };
 
+type Budget = {
+  month: string;
+  total: { actualExpenseCents: number };
+};
+
+type Forecast = {
+  period: { dateFrom: string };
+  summary: { openingBalanceCents: number };
+};
+
 export type HomeConsistency = {
   balancesMatch: boolean;
   currentMonthMatches: boolean;
   budgetMonthMatches: boolean;
+  budgetActualMatches: boolean;
+  forecastOpeningBalanceMatches: boolean;
 };
 
 // These checks compare already calculated values. Inicio never computes a
-// replacement balance, period total or budget when two sources disagree.
+// replacement balance, period total, budget actual or forecast opening balance
+// when two canonical sources disagree.
 export function checkHomeConsistency(input: {
   financial: Financial | null;
   monthly: Monthly | null;
-  budgetMonth: string | null;
+  budget: Budget | null;
+  forecast: Forecast | null;
   today: string;
 }): HomeConsistency {
-  const { financial, monthly, budgetMonth, today } = input;
+  const { financial, monthly, budget, forecast, today } = input;
   const currentMonth = today.slice(0, 7);
   let balancesMatch = true;
   if (financial) {
@@ -61,9 +76,35 @@ export function checkHomeConsistency(input: {
       ));
   }
 
+  const budgetMonthMatches = budget === null || budget.month === currentMonth;
+  let budgetActualMatches = true;
+  if (financial && budget && budgetMonthMatches
+    && financial.period.dateFrom === `${currentMonth}-01`
+    && financial.period.dateTo === today) {
+    const actualExpenseCents = budget.total?.actualExpenseCents;
+    budgetActualMatches = Number.isSafeInteger(financial.period.expenseCents)
+      && Number.isSafeInteger(actualExpenseCents)
+      && financial.period.expenseCents === actualExpenseCents;
+  }
+
+  let forecastOpeningBalanceMatches = true;
+  if (financial && forecast && financial.balances.asOfDate === today) {
+    const forecastDateFrom = forecast.period?.dateFrom;
+    const openingBalanceCents = forecast.summary?.openingBalanceCents;
+    if (forecastDateFrom === undefined || forecastDateFrom === null) {
+      forecastOpeningBalanceMatches = false;
+    } else if (forecastDateFrom === today) {
+      forecastOpeningBalanceMatches = Number.isSafeInteger(financial.balances.activeBalanceCents)
+        && Number.isSafeInteger(openingBalanceCents)
+        && financial.balances.activeBalanceCents === openingBalanceCents;
+    }
+  }
+
   return {
     balancesMatch,
     currentMonthMatches,
-    budgetMonthMatches: budgetMonth === null || budgetMonth === currentMonth,
+    budgetMonthMatches,
+    budgetActualMatches,
+    forecastOpeningBalanceMatches,
   };
 }

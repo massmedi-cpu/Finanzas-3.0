@@ -71,7 +71,13 @@ type ForecastItem = {
 };
 
 type ForecastSnapshot = {
+  period: {
+    dateFrom: string;
+    dateTo: string;
+    accountId: string | null;
+  };
   summary: {
+    openingBalanceCents: number;
     projectedIncomeCents: number;
     projectedExpenseCents: number;
     projectedNetCents: number;
@@ -435,10 +441,12 @@ export default function InicioOverview() {
   const consistency = checkHomeConsistency({
     financial,
     monthly: data.monthly,
-    budgetMonth: data.budgets?.month ?? null,
+    budget: data.budgets,
+    forecast: data.forecast,
     today,
   });
-  const budget = consistency.budgetMonthMatches ? data.budgets : null;
+  const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;
+  const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;
   const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
@@ -492,11 +500,11 @@ export default function InicioOverview() {
     [budget],
   );
   const upcomingItems = useMemo(
-    () => data.forecast?.items
+    () => forecast?.items
       .filter((item) => item.affectsProjection && item.status === "planned")
       .sort((a, b) => a.date.localeCompare(b.date))
       .slice(0, 4) ?? [],
-    [data.forecast],
+    [forecast],
   );
   const overBudgetCount = budget?.categories.filter((item) => item.status === "over").length ?? 0;
   const hasSavingsBase = (financial?.period.incomeCents ?? 0) >= 10_000;
@@ -538,11 +546,11 @@ export default function InicioOverview() {
         tone: "danger",
       });
     }
-    if ((data.forecast?.summary.plannedItems ?? 0) > 0
-      && (data.forecast?.summary.projectedClosingBalanceCents ?? 0) < 0) {
+    if ((forecast?.summary.plannedItems ?? 0) > 0
+      && (forecast?.summary.projectedClosingBalanceCents ?? 0) < 0) {
       items.push({
         title: "La previsión termina en negativo",
-        detail: `Saldo previsto a 30 días: ${displayMoney(data.forecast?.summary.projectedClosingBalanceCents ?? 0)}.`,
+        detail: `Saldo previsto a 30 días: ${displayMoney(forecast?.summary.projectedClosingBalanceCents ?? 0)}.`,
         href: "/forecast",
         action: "Ver previsión",
         tone: "danger",
@@ -558,7 +566,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [data.forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
+  }, [forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || secondaryLoading}>
@@ -646,9 +654,9 @@ export default function InicioOverview() {
         budgetProgressBps={budget?.total.progressBps ?? null}
         budgetStatus={budget?.total.status ?? null}
         overBudgetCount={budget ? overBudgetCount : null}
-        projectedNetCents={data.forecast?.summary.projectedNetCents ?? null}
-        projectedClosingBalanceCents={data.forecast?.summary.plannedItems ? data.forecast.summary.projectedClosingBalanceCents : null}
-        plannedItems={data.forecast?.summary.plannedItems ?? null}
+        projectedNetCents={forecast?.summary.projectedNetCents ?? null}
+        projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
+        plannedItems={forecast?.summary.plannedItems ?? null}
         syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
         displayMoney={displayMoney}
       />
@@ -679,15 +687,15 @@ export default function InicioOverview() {
         </article>
         <article className={styles.decisionCard}>
           <span>Próximos 30 días</span>
-          <strong className={(data.forecast?.summary.projectedNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
-            {data.forecast?.summary.plannedItems ? displayMoney(data.forecast.summary.projectedNetCents) : data.forecast ? "Sin previsiones" : "—"}
+          <strong className={(forecast?.summary.projectedNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
+            {forecast?.summary.plannedItems ? displayMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"}
           </strong>
           <small>
-            {data.forecast?.summary.plannedItems
-              ? `${data.forecast.summary.plannedItems} previstos · cierre ${displayMoney(data.forecast.summary.projectedClosingBalanceCents)}`
-              : data.forecast ? "Revisa recurrentes o añade un movimiento" : "Previsión pendiente"}
+            {forecast?.summary.plannedItems
+              ? `${forecast.summary.plannedItems} previstos · cierre ${displayMoney(forecast.summary.projectedClosingBalanceCents)}`
+              : forecast ? "Revisa recurrentes o añade un movimiento" : "Previsión pendiente"}
           </small>
-          {data.forecast && !data.forecast.summary.plannedItems ? <Link prefetch={false} className={styles.inlineLink} href="/forecast">Crear previsión</Link> : null}
+          {forecast && !forecast.summary.plannedItems ? <Link prefetch={false} className={styles.inlineLink} href="/forecast">Crear previsión</Link> : null}
         </article>
         <article className={styles.decisionCard}>
           <span>Gasto medio mensual</span>
@@ -759,7 +767,7 @@ export default function InicioOverview() {
             <div><span>PRÓXIMOS DÍAS</span><h2>Qué viene después</h2></div>
             <Link prefetch={false} className={styles.panelAction} href="/forecast">Ver previsión</Link>
           </div>
-          {data.forecast ? (
+          {forecast ? (
             upcomingItems.length > 0 ? (
               <ul className={styles.compactList}>
                 {upcomingItems.map((item) => (
