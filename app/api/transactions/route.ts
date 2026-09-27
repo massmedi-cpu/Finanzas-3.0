@@ -178,6 +178,7 @@ export async function GET(request: Request) {
     if ((cursorBankDate === null) !== (cursorId === null)) throw new Error("invalid_cursor");
 
     const uncategorized = optionalBoolean(searchParams, "uncategorized");
+    const signMismatch = optionalBoolean(searchParams, "signMismatch");
     const categoryId = optionalUuid(searchParams, "categoryId");
     if (uncategorized && categoryId) throw new Error("invalid_category_filter_combination");
 
@@ -195,6 +196,7 @@ export async function GET(request: Request) {
       cursorId,
       limit: pageLimit(searchParams),
       uncategorized,
+      signMismatch,
     });
 
     return Response.json(result, {

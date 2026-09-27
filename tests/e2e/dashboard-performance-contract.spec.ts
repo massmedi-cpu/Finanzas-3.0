@@ -60,7 +60,7 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(client).toContain("movimiento con signo incoherente");
   expect(client).toContain("No hemos corregido el importe automáticamente.");
   expect(client).toContain('action: "Revisar movimientos"');
-  expect(client).toContain('href: "/transactions"');
+  expect(client).toContain('href: "/transactions?signMismatch=true"');
   expect(client).toContain('tone: "warning"');
 
   for (const token of [

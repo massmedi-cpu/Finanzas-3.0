@@ -53,6 +53,6 @@ test("Inicio · conserva privacidad y muestra decisiones, no métricas de escapa
   expect(inicioSource).toContain("movimiento con signo incoherente");
   expect(inicioSource).toContain("No hemos corregido el importe automáticamente.");
   expect(inicioSource).toContain('action: "Revisar movimientos"');
-  expect(inicioSource).toContain('href: "/transactions"');
+  expect(inicioSource).toContain('href: "/transactions?signMismatch=true"');
   expect(inicioSource).toContain('tone: "warning"');
 });

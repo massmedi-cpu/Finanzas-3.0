@@ -80,6 +80,7 @@ export async function handleTransactionQueryAction(input: {
     const cursorId = nullableUuid(payload.cursorId, "transaction_cursor_id");
     const limit = pageLimit(payload.limit);
     const uncategorized = booleanValue(payload.uncategorized, "transaction_uncategorized");
+    const signMismatch = booleanValue(payload.signMismatch, "transaction_sign_mismatch");
 
     if ((cursorBankDate === null) !== (cursorId === null)) throw new Error("invalid_transaction_cursor");
 
@@ -97,7 +98,8 @@ export async function handleTransactionQueryAction(input: {
         ${cursorBankDate}::date,
         ${cursorId}::uuid,
         ${limit},
-        ${uncategorized}
+        ${uncategorized},
+        ${signMismatch}
       ) as result
     `;
     return json(rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null });

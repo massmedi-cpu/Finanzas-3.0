@@ -533,7 +533,7 @@ export default function InicioOverview() {
       items.push({
         title: `${signMismatchRows} ${signMismatchRows === 1 ? "movimiento con signo incoherente" : "movimientos con signo incoherente"}`,
         detail: "El tipo financiero y el signo bancario no coinciden. No hemos corregido el importe automáticamente.",
-        href: "/transactions",
+        href: "/transactions?signMismatch=true",
         action: "Revisar movimientos",
         tone: "warning",
       });
