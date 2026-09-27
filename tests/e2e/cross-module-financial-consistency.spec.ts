@@ -66,6 +66,22 @@ test("10.0.23 Inicio rechaza bases financieras divergentes", () => {
   }).forecastOpeningBalanceMatches).toBe(false);
 });
 
+test("10.0.23 Inicio degrada de forma segura si una respuesta auxiliar llega incompleta", () => {
+  const incompleteBudget = { month: "2026-09" } as unknown as typeof budget;
+  const incompleteForecast = { summary: { openingBalanceCents: 1_000_000 } } as unknown as typeof forecast;
+
+  const result = checkHomeConsistency({
+    financial,
+    monthly,
+    budget: incompleteBudget,
+    forecast: incompleteForecast,
+    today,
+  });
+
+  expect(result.budgetActualMatches).toBe(false);
+  expect(result.forecastOpeningBalanceMatches).toBe(false);
+});
+
 test("10.0.23 alinea Inicio, Análisis, Presupuestos y Previsión con las fuentes canónicas", () => {
   const migration = read("supabase/migrations/20260927100500_cross_module_financial_consistency.sql");
   const phase5 = read("supabase/migrations/20260905225500_phase5_financial_logic_core.sql");
