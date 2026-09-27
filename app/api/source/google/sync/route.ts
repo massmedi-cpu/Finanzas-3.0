@@ -38,6 +38,7 @@ type GatewaySourceStatus = {
     rows_revised: number;
     rows_skipped: number;
     rows_failed: number;
+    rows_missing: number;
     duplicates_detected: number;
     warnings_count: number;
     error_code: string | null;
@@ -97,6 +98,7 @@ export async function GET() {
               rowsRevised: status.run.rows_revised,
               rowsSkipped: status.run.rows_skipped,
               rowsFailed: status.run.rows_failed,
+              rowsMissing: status.run.rows_missing,
               duplicatesDetected: status.run.duplicates_detected,
               warningsCount: status.run.warnings_count,
               errorCode: status.run.error_code,

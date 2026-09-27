@@ -126,6 +126,7 @@ type SyncStatus = {
     rowsRevised: number;
     rowsSkipped: number;
     rowsFailed: number;
+    rowsMissing: number;
     duplicatesDetected: number;
     warningsCount: number;
     errorCode: string | null;
@@ -263,14 +264,23 @@ function syncFeedbackFromResult(result: SyncResult | null) {
 function syncStatusNotice(run: SyncStatus["run"]) {
   if (!run || run.status !== "success") return null;
   const warnings = Math.max(0, run.warningsCount ?? 0);
+  const missing = Math.max(0, run.rowsMissing ?? 0);
+  const otherWarnings = Math.max(0, warnings - missing);
   const duplicates = Math.max(0, run.duplicatesDetected ?? 0);
-  if (warnings === 0 && duplicates === 0) return null;
+  if (missing === 0 && otherWarnings === 0 && duplicates === 0) return null;
   const parts: string[] = [];
-  if (warnings > 0) {
+  if (missing > 0) {
     parts.push(
-      warnings === 1
-        ? "1 aviso de sincronización requiere revisión."
-        : `${warnings} avisos de sincronización requieren revisión.`,
+      missing === 1
+        ? "1 movimiento importado anteriormente ya no aparece en la fuente."
+        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+    );
+  }
+  if (otherWarnings > 0) {
+    parts.push(
+      otherWarnings === 1
+        ? "1 aviso adicional de sincronización requiere revisión."
+        : `${otherWarnings} avisos adicionales de sincronización requieren revisión.`,
     );
   }
   if (duplicates > 0) {

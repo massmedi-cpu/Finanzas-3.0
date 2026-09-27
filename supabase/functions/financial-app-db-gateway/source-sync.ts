@@ -234,7 +234,7 @@ export async function handleSourceSyncAction(input: {
         await tx`
           update financial_app.sync_runs
           set status='success',finished_at=now(),rows_inserted=${rowsInserted},rows_revised=${rowsRevised},
-              rows_skipped=${rowsSkipped},rows_failed=0,duplicates_detected=${duplicatesDetected},warnings_count=${warningsCount},
+              rows_skipped=${rowsSkipped},rows_failed=0,rows_missing=${missingRows.length},duplicates_detected=${duplicatesDetected},warnings_count=${warningsCount},
               error_code=null,error_message=null
           where id=${syncRunId}::uuid
         `;
@@ -302,7 +302,7 @@ export async function handleSourceSyncAction(input: {
     text(payload.sourceFileId, "source_file_id");
     const rows = await sql`
       select id,source_file_id,source_revision,status,started_at,finished_at,rows_seen,rows_inserted,
-             rows_revised,rows_skipped,rows_failed,duplicates_detected,warnings_count,schema_fingerprint,
+             rows_revised,rows_skipped,rows_failed,rows_missing,duplicates_detected,warnings_count,schema_fingerprint,
              error_code,error_message
       from financial_app.sync_runs
       where source_file_id=${payload.sourceFileId}
