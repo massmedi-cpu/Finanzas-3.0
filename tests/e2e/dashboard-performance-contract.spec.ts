@@ -49,9 +49,19 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(client).toContain("row.monthStart !== currentMonthStart).slice(-12)");
   expect(client).not.toContain("pendingRecent");
   expect(client).not.toContain("Por revisar");
-  expect(client).not.toContain("Revisar movimientos");
+  expect(client).not.toContain("/transactions?review=open");
   expect(client).not.toContain("quickNav");
   expect(client).not.toContain("Reconectar Google");
+
+  // La revisión de movimientos solo reaparece como acción contextual ante una
+  // incoherencia de signo; no como cola genérica ni métrica de escaparate.
+  expect(client.match(/Revisar movimientos/g) ?? []).toHaveLength(1);
+  expect(client).toContain("if (signMismatchRows > 0)");
+  expect(client).toContain("movimiento con signo incoherente");
+  expect(client).toContain("No hemos corregido el importe automáticamente.");
+  expect(client).toContain('action: "Revisar movimientos"');
+  expect(client).toContain('href: "/transactions"');
+  expect(client).toContain('tone: "warning"');
 
   for (const token of [
     "--color-surface",
