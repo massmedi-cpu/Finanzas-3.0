@@ -14,12 +14,15 @@ permissions:
 jobs:
   backup-v2:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     env:
       FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
-      FINANCIAL_APP_SOURCE_COMMIT: ${{ github.sha }}
+      FINANCIAL_APP_SOURCE_COMMIT: 00e7879decdab3a62b6b8e325b4f04b2004bfe96
+      FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
     steps:
-      - name: Checkout exact source commit
+      - name: Checkout exact backup tooling commit
         uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
@@ -34,6 +37,8 @@ jobs:
             exit 1
           fi
           echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+          if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"; fi
+          if [ -n "$SUPABASE_SECRET_KEY" ]; then echo "::add-mask::$SUPABASE_SECRET_KEY"; fi
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -67,7 +72,7 @@ jobs:
           if (!password) process.exit(1);
           process.stdout.write(`::add-mask::${password}\n`);
 
-          const projectRef = 'btzukbfesxdratqnxuoj';
+          const projectRef = process.env.FINANCIAL_APP_SUPABASE_PROJECT_REF;
           const candidates = [
             { host: `db.${projectRef}.supabase.co`, user: 'postgres', name: 'direct' },
             { host: 'aws-1-eu-west-3.pooler.supabase.com', user: `postgres.${projectRef}`, name: 'session_pooler' },
@@ -105,17 +110,34 @@ jobs:
           process.exit(1);
           NODE
 
+      - name: Archive and recover-verify Supabase Storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          storage_dir="backups/storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          storage_archive="financial-app-storage-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
+          node scripts/archive-supabase-storage-v2.mjs "$storage_dir"
+          node scripts/validate-storage-archive-v2.mjs "$storage_dir"
+          tar -czf "$storage_archive" -C backups "storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          sha256sum "$storage_archive" | tee "${storage_archive}.sha256"
+          mkdir -p backups/storage-recovery-check
+          tar -xzf "$storage_archive" -C backups/storage-recovery-check
+          node scripts/validate-storage-archive-v2.mjs "backups/storage-recovery-check/storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          echo "FINANCIAL_APP_STORAGE_ARCHIVE=$PWD/$storage_archive" >> "$GITHUB_ENV"
+
       - name: Create and validate immutable backup v2
         shell: bash
         run: |
           set -euo pipefail
-          output="backups/production-v2-${GITHUB_SHA}"
+          output="backups/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
           node scripts/create-financial-backup-v2.mjs "$output"
           node scripts/validate-financial-backup-v2.mjs "$output"
           node - <<'NODE' "$output/manifest.json"
           const fs = require('node:fs');
           const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          if (manifest.sourceCommit !== process.env.GITHUB_SHA) throw new Error('backup source SHA mismatch');
+          if (manifest.sourceCommit !== process.env.FINANCIAL_APP_SOURCE_COMMIT) throw new Error('backup source SHA mismatch');
+          if (manifest.appVersion !== '10.0.34') throw new Error(`expected last stable app version 10.0.34, got ${manifest.appVersion}`);
+          if (!manifest.storage?.archive?.sha256) throw new Error('Storage archive evidence is missing from backup manifest');
           console.log(JSON.stringify({
             status: 'production_backup_v2_validated',
             appVersion: manifest.appVersion,
@@ -123,6 +145,7 @@ jobs:
             sourceCommit: manifest.sourceCommit,
             storageBuckets: manifest.storage?.bucketCount ?? null,
             storageObjects: manifest.storage?.objectCount ?? null,
+            storageArchiveBytes: manifest.storage?.archive?.bytes ?? null,
             workspaceTenancy: manifest.capabilities?.workspaceTenancy ?? null,
           }));
           NODE
@@ -131,16 +154,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          archive="financial-app-production-v2-${GITHUB_SHA}.tgz"
-          tar -czf "$archive" -C backups "production-v2-${GITHUB_SHA}"
+          archive="financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
+          tar -czf "$archive" -C backups "production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
           sha256sum "$archive" | tee "${archive}.sha256"
 
       - name: Upload validated backup artifact
         uses: actions/upload-artifact@v4
         with:
-          name: financial-app-production-v2-${{ github.sha }}
+          name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
           path: |
-            financial-app-production-v2-${{ github.sha }}.tgz
-            financial-app-production-v2-${{ github.sha }}.tgz.sha256
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.sha256
           if-no-files-found: error
           retention-days: 7
