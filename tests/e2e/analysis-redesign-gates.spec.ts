@@ -239,7 +239,7 @@ for (const width of [390, 1440] as const) {
 
     const scatterLabelsClear = await scatter.evaluate((svg) => {
       const labels = Array.from(svg.querySelectorAll("text"));
-      const caption = labels.find((node) => node.textContent?.includes("Mayor importe"));
+      const caption = labels.find((node) => node.textContent?.includes("Importe medio por compra"));
       const values = labels.filter((node) => node.textContent?.includes("€"));
       if (!caption || values.length === 0) return false;
       const captionBox = caption.getBoundingClientRect();
