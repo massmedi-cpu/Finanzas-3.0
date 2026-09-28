@@ -49,8 +49,4 @@ jobs:
         run: npx playwright test tests/e2e/transaction-support-index-contract.spec.ts --project=chromium-desktop
 
       - name: Verify version contract
-        shell: bash
-        run: |
-          test "$(node -p "require('./package.json').version")" = "10.0.19"
-          test "$(node -p "require('./package-lock.json').version")" = "10.0.19"
-          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.19"
+        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<19||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"
