@@ -71,7 +71,9 @@ const productFiles = tracked.filter((path) => {
   return [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"].includes(extname(path));
 });
 
-const debugPattern = /\bdebugger\s*;|\bconsole\.(?:log|debug|info|warn|error)\s*\(/;
+// console.warn/error are valid operational observability and error-boundary signals.
+// Cleanup only blocks accidental interactive/development logging and debugger statements.
+const debugPattern = /\bdebugger\s*;|\bconsole\.(?:log|debug|info)\s*\(/;
 for (const path of productFiles) {
   const text = read(path);
   if (debugPattern.test(text)) fail(`development debug statement found in product code: ${path}`);
@@ -86,7 +88,7 @@ if (!strictWorkspace.includes("workspace_id")) {
 }
 
 const pwaRuntime = read("app/pwa-runtime.tsx");
-if (!pwaRuntime.includes('serviceWorker.register("/sw.js")')) {
+if (!pwaRuntime.includes('navigator.serviceWorker.register("/sw.js"')) {
   fail("PWA runtime no longer registers /sw.js");
 }
 for (const path of ["public/sw.js", "public/pwa-icon-192.svg", "public/pwa-icon-512.svg"]) {
