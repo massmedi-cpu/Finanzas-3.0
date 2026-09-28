@@ -3,6 +3,8 @@ set -euo pipefail
 
 BACKUP_DIR="${1:?backup directory is required}"
 : "${F13_POSTGRES_ADMIN_URL:=postgresql://postgres:postgres@127.0.0.1:5432/postgres}"
+: "${EXPECTED_APP_VERSION:=10.0.34}"
+: "${EXPECTED_SOURCE_COMMIT:=00e7879decdab3a62b6b8e325b4f04b2004bfe96}"
 TARGET_DB="financial_app_production_backup_restore_check"
 TARGET_URL="postgresql://postgres:postgres@127.0.0.1:5432/${TARGET_DB}"
 
@@ -121,7 +123,7 @@ fi
 
 manifest_version="$(node -e "const m=require(process.argv[1]);process.stdout.write(String(m.appVersion))" "$BACKUP_DIR/manifest.json")"
 manifest_sha="$(node -e "const m=require(process.argv[1]);process.stdout.write(String(m.sourceCommit))" "$BACKUP_DIR/manifest.json")"
-if [[ "$manifest_version" != "10.0.34" || "$manifest_sha" != "00e7879decdab3a62b6b8e325b4f04b2004bfe96" ]]; then
+if [[ "$manifest_version" != "$EXPECTED_APP_VERSION" || "$manifest_sha" != "$EXPECTED_SOURCE_COMMIT" ]]; then
   echo "PRODUCTION_BACKUP_RESTORE|status=failed|reason=stable_identity_mismatch"
   exit 1
 fi
