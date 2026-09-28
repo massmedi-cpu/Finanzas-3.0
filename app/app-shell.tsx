@@ -9,6 +9,7 @@ import GlobalSearch from "./global-search";
 import MobileNavigation from "./mobile-navigation";
 import { isNavigationActive, navigationItems } from "./navigation-items";
 import { PwaInstallButton } from "./pwa-install-button";
+import SourceTrustStatus from "./source-trust-status";
 import styles from "./app-shell.module.css";
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -57,6 +58,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           </nav>
         </div>
       </div>
+      <SourceTrustStatus pathname={pathname} />
       <div id="main-content" tabIndex={-1} className={styles.content}>{children}</div>
       <MobileNavigation />
     </div>
