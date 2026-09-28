@@ -5,15 +5,21 @@ on:
     branches:
       - feature/backup-production-10.0.35
     paths:
+      - "scripts/create-financial-backup-v2.mjs"
+      - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/restore-verify-production-backup-v2.sh"
+      - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
   pull_request:
     paths:
+      - "scripts/create-financial-backup-v2.mjs"
+      - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/restore-verify-production-backup-v2.sh"
+      - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
 
 permissions:
@@ -51,6 +57,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          node --check scripts/create-financial-backup-v2.mjs
+          node --check scripts/validate-financial-backup-v2.mjs
           node --check scripts/archive-supabase-storage-v2.mjs
           node --check scripts/validate-storage-archive-v2.mjs
           bash -n scripts/restore-verify-production-backup-v2.sh
