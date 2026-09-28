@@ -12,6 +12,7 @@ test("10.0.22 persiste rowsMissing desde PostgreSQL hasta Inicio", () => {
   const replay = read("supabase/functions/financial-app-db-gateway/source-sync-router.ts");
   const route = read("app/api/source/google/sync/route.ts");
   const home = read("app/inicio-overview.tsx");
+  const incidents = read("src/application/source-sync-incidents.ts");
 
   expect(migration).toContain("add column if not exists rows_missing integer not null default 0");
   expect(migration).toContain("check (rows_missing >= 0)");
@@ -24,12 +25,14 @@ test("10.0.22 persiste rowsMissing desde PostgreSQL hasta Inicio", () => {
   expect(route).toContain("rowsMissing: status.run.rows_missing");
 
   expect(home).toContain("rowsMissing: number;");
-  expect(home).toContain("const missing = Math.max(0, run.rowsMissing ?? 0);");
+  expect(home).toContain("normalizeSourceSyncIncidents(run)");
+  expect(incidents).toContain("const missingRows = nonNegativeCount(value?.rowsMissing);");
   expect(home).toContain("movimiento importado anteriormente ya no aparece en la fuente");
 });
 
 test("10.0.22 no confunde filas ausentes con avisos adicionales", () => {
   const home = read("app/inicio-overview.tsx");
-  expect(home).toContain("const otherWarnings = Math.max(0, warnings - missing);");
-  expect(home).toContain("if (missing === 0 && otherWarnings === 0 && duplicates === 0) return null;");
+  const incidents = read("src/application/source-sync-incidents.ts");
+  expect(incidents).toContain("additionalWarnings: Math.max(0, warnings - missingRows)");
+  expect(home).toContain("incidents.additionalWarnings");
 });

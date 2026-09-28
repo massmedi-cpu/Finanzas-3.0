@@ -86,14 +86,17 @@ test("10.0.27 transporta incidencias persistidas sin crear otra fuente de verdad
   const route = readFileSync(resolve(process.cwd(), "app/api/source/google/sync/route.ts"), "utf8");
   const source = readFileSync(resolve(process.cwd(), "app/configuration/source/source-client.tsx"), "utf8");
   const review = readFileSync(resolve(process.cwd(), "app/review/review-client.tsx"), "utf8");
+  const incidents = readFileSync(resolve(process.cwd(), "src/application/source-sync-incidents.ts"), "utf8");
 
   expect(route).toContain("rowsMissing: status.run.rows_missing");
   expect(route).toContain("duplicatesDetected: status.run.duplicates_detected");
   expect(source).toContain("rowsMissing: number;");
   expect(source).toContain("Ya no están en la fuente");
   expect(source).toContain("sourceIncidentMessage(syncStatus.run)");
-  expect(review).toContain("(syncStatus.run.rowsMissing ?? 0) > 0");
-  expect(review).toContain("(syncStatus.run.duplicatesDetected ?? 0) > 0");
+  expect(source).toContain("normalizeSourceSyncIncidents");
+  expect(review).toContain("hasSourceSyncIncidents(syncStatus.run)");
+  expect(incidents).toContain("rowsMissing?: number | null;");
+  expect(incidents).toContain("duplicatesDetected?: number | null;");
 });
 
 test("Para revisar mantiene alertada la fuente si faltan filas aunque warningsCount sea cero", async ({ page }) => {

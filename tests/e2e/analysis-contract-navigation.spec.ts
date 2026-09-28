@@ -206,6 +206,8 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
   expect(routeSource).toContain("value >= 0");
   expect(routeSource).toContain("available: Boolean(latestMovementDate)");
   expect(routeSource).toContain("rowsFailed: integer(run.rows_failed)");
+  expect(routeSource).toContain("rowsMissing: integer(run.rows_missing)");
+  expect(routeSource).toContain("duplicatesDetected: integer(run.duplicates_detected)");
   expect(routeSource).toContain("warningsCount: integer(run.warnings_count)");
   expect(freshnessSource).toContain('type SyncStatus = "success" | "partial" | "failed" | "started"');
   expect(freshnessSource).toContain('value.sync.status === "partial"');
@@ -217,6 +219,9 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
   expect(freshnessSource).toContain("Number.isFinite(value)");
   expect(freshnessSource).toContain("Number.isNaN(date.getTime())");
   expect(freshnessSource).toContain("function syncHasIncidents");
+  expect(freshnessSource).toContain("normalizeSourceSyncIncidents(sync)");
+  expect(freshnessSource).toContain("Datos sincronizados con incidencias");
+  expect(freshnessSource).toContain('href="/configuration/source"');
   expect(freshnessSource).toContain("syncHasIncidents(freshness.sync)");
   expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness \/>[\s\S]*<AnalysisClient/);
   expect(loaderSource).not.toContain("source.google_connection_status");

@@ -39,7 +39,7 @@ function connectionSourceFileId(payload: unknown) {
   return text(connection?.source_file_id) ?? text(connection?.sourceFileId);
 }
 
-function syncSummary(payload: unknown) {
+export function syncSummary(payload: unknown) {
   const run = record(record(payload)?.run);
   if (!run) return null;
 
@@ -52,6 +52,8 @@ function syncSummary(payload: unknown) {
     startedAt: text(run.started_at) ?? text(run.startedAt),
     rowsSeen: integer(run.rows_seen) ?? integer(run.rowsSeen),
     rowsFailed: integer(run.rows_failed) ?? integer(run.rowsFailed),
+    rowsMissing: integer(run.rows_missing) ?? integer(run.rowsMissing),
+    duplicatesDetected: integer(run.duplicates_detected) ?? integer(run.duplicatesDetected),
     warningsCount: integer(run.warnings_count) ?? integer(run.warningsCount),
   };
 }
