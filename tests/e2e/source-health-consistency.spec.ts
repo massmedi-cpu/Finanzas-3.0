@@ -51,7 +51,14 @@ function comparisonSnapshot() {
     previous: { ...period, dateFrom: selection.referenceFrom, dateTo: selection.referenceTo },
     history: { rows: [] },
     accounts: [{ id: ACCOUNT_ID, name: "Cuenta principal", lifecycle: "active" }],
-    categories: [],
+    categories: [{
+      id: null,
+      name: "Sin categoría",
+      currentExpenseCents: 20_000,
+      previousExpenseCents: 20_000,
+      currentRows: 4,
+      previousRows: 4,
+    }],
     merchants: [],
     concentration: { top3CategoryBps: null, top3MerchantBps: null },
     anomalies: [],
@@ -83,6 +90,7 @@ async function openComparison(page: Page, sync: typeof BASE_SYNC) {
 }
 
 test("10.0.28 normaliza incidencias sin contar dos veces las filas ausentes", () => {
+  expect(comparisonSnapshot().quality.reconciled).toBe(true);
   expect(normalizeSourceSyncIncidents({
     rowsFailed: 1,
     rowsMissing: 2,
