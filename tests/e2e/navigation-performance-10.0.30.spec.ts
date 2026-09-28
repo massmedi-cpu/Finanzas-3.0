@@ -43,6 +43,13 @@ test("10.0.30 · la rueda vertical desplaza horizontalmente el menú cuando hay 
   await page.goto("/");
 
   const navigation = page.getByRole("navigation", { name: "Navegación principal" });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("link")).toHaveCount(13);
+
+  const nextButton = page.getByRole("button", { name: "Ver más secciones del menú" });
+  await expect(nextButton).toBeVisible();
+  await expect(nextButton).toBeEnabled();
+
   const before = await navigation.evaluate((element) => element.scrollLeft);
   await navigation.dispatchEvent("wheel", { deltaY: 420, deltaX: 0 });
   await expect.poll(() => navigation.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
