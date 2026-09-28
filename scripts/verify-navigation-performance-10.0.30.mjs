@@ -10,7 +10,21 @@ function requireText(source, fragment, description) {
   if (!source.includes(fragment)) throw new Error(`Falta ${description}: ${fragment}`);
 }
 
-if (pkg.version !== "10.0.30") throw new Error(`package.json debe ser 10.0.30, es ${pkg.version}`);
+function versionAtLeast(current, minimum) {
+  const currentParts = current.split(".").map(Number);
+  const minimumParts = minimum.split(".").map(Number);
+  if (currentParts.length !== 3 || currentParts.some((value) => !Number.isInteger(value) || value < 0)) return false;
+  if (minimumParts.length !== 3 || minimumParts.some((value) => !Number.isInteger(value) || value < 0)) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (currentParts[index] > minimumParts[index]) return true;
+    if (currentParts[index] < minimumParts[index]) return false;
+  }
+  return true;
+}
+
+if (!versionAtLeast(pkg.version, "10.0.30")) {
+  throw new Error(`package.json debe conservar navegación >=10.0.30, es ${pkg.version}`);
+}
 if (lock.version !== pkg.version || lock.packages?.[""]?.version !== pkg.version) {
   throw new Error("package-lock.json no coincide con package.json");
 }
@@ -32,4 +46,4 @@ requireText(css, "grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem", "flechas
 requireText(css, "@media (max-width: 90rem) and (min-width: 48.01rem)", "segunda fila de navegación en anchos intermedios");
 requireText(css, ".navigationCluster,\n  .navigationProgress {\n    display: none;", "ocultación correcta del menú desktop en móvil");
 
-console.log("Navigation Performance 10.0.30 contract: OK");
+console.log(`Navigation Performance 10.0.30+ contract: OK (${pkg.version})`);
