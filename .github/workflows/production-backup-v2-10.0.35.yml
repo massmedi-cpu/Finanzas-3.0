@@ -1,0 +1,146 @@
+name: Production Backup v2 10.0.35
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/backup-production-10.0.35
+    paths:
+      - ".github/workflows/production-backup-v2-10.0.35.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  backup-v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
+      FINANCIAL_APP_SOURCE_COMMIT: ${{ github.sha }}
+    steps:
+      - name: Checkout exact source commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Verify raw database password secret exists
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "$FINANCIAL_APP_DB_PASSWORD" ]; then
+            echo "FINANCIAL_APP_DB_PASSWORD is not configured."
+            exit 1
+          fi
+          echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Resolve authenticated production database route
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+
+          const password = process.env.FINANCIAL_APP_DB_PASSWORD ?? '';
+          if (!password) process.exit(1);
+          process.stdout.write(`::add-mask::${password}\n`);
+
+          const projectRef = 'btzukbfesxdratqnxuoj';
+          const candidates = [
+            { host: `db.${projectRef}.supabase.co`, user: 'postgres', name: 'direct' },
+            { host: 'aws-1-eu-west-3.pooler.supabase.com', user: `postgres.${projectRef}`, name: 'session_pooler' },
+          ];
+
+          function probe(candidate) {
+            return spawnSync(
+              'psql',
+              ['--host', candidate.host, '--port', '5432', '--username', candidate.user, '--dbname', 'postgres', '--no-password', '--tuples-only', '--command', 'SELECT 1;'],
+              { encoding: 'utf8', env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' } },
+            );
+          }
+
+          for (const candidate of candidates) {
+            for (let round = 1; round <= (candidate.name === 'session_pooler' ? 5 : 1); round += 1) {
+              const result = probe(candidate);
+              if (result.status === 0) {
+                const url = new URL('postgresql://postgres@localhost/postgres');
+                url.hostname = candidate.host;
+                url.port = '5432';
+                url.username = candidate.user;
+                url.password = password;
+                url.searchParams.set('sslmode', 'require');
+                const value = url.toString();
+                process.stdout.write(`::add-mask::${value}\n`);
+                fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
+                console.log(`production_backup_v2_route=${candidate.name}`);
+                process.exit(0);
+              }
+              if (round < 5) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+            }
+          }
+
+          console.error('production_backup_v2_database_route_unavailable');
+          process.exit(1);
+          NODE
+
+      - name: Create and validate immutable backup v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="backups/production-v2-${GITHUB_SHA}"
+          node scripts/create-financial-backup-v2.mjs "$output"
+          node scripts/validate-financial-backup-v2.mjs "$output"
+          node - <<'NODE' "$output/manifest.json"
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (manifest.sourceCommit !== process.env.GITHUB_SHA) throw new Error('backup source SHA mismatch');
+          console.log(JSON.stringify({
+            status: 'production_backup_v2_validated',
+            appVersion: manifest.appVersion,
+            schemaVersion: manifest.schemaVersion,
+            sourceCommit: manifest.sourceCommit,
+            storageBuckets: manifest.storage?.bucketCount ?? null,
+            storageObjects: manifest.storage?.objectCount ?? null,
+            workspaceTenancy: manifest.capabilities?.workspaceTenancy ?? null,
+          }));
+          NODE
+
+      - name: Package validated backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="financial-app-production-v2-${GITHUB_SHA}.tgz"
+          tar -czf "$archive" -C backups "production-v2-${GITHUB_SHA}"
+          sha256sum "$archive" | tee "${archive}.sha256"
+
+      - name: Upload validated backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-app-production-v2-${{ github.sha }}
+          path: |
+            financial-app-production-v2-${{ github.sha }}.tgz
+            financial-app-production-v2-${{ github.sha }}.tgz.sha256
+          if-no-files-found: error
+          retention-days: 7
