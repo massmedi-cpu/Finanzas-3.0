@@ -1,0 +1,129 @@
+name: Backup Production Contract 10.0.35
+
+on:
+  push:
+    branches:
+      - feature/backup-production-10.0.35
+    paths:
+      - "scripts/archive-supabase-storage-v2.mjs"
+      - "scripts/validate-storage-archive-v2.mjs"
+      - "scripts/restore-verify-production-backup-v2.sh"
+      - ".github/workflows/backup-production-contract-10.0.35.yml"
+  pull_request:
+    paths:
+      - "scripts/archive-supabase-storage-v2.mjs"
+      - "scripts/validate-storage-archive-v2.mjs"
+      - "scripts/restore-verify-production-backup-v2.sh"
+      - ".github/workflows/backup-production-contract-10.0.35.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Static contract checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/archive-supabase-storage-v2.mjs
+          node --check scripts/validate-storage-archive-v2.mjs
+          bash -n scripts/restore-verify-production-backup-v2.sh
+          bash -n scripts/phase13-restore-rehearsal-v2.sh
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Existing backup v2 restore rehearsal
+        shell: bash
+        run: bash scripts/phase13-restore-rehearsal-v2.sh
+
+      - name: Restore-verify generated backup with the new production verifier
+        shell: bash
+        env:
+          EXPECTED_APP_VERSION: "10.0.34"
+          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          bash scripts/restore-verify-production-backup-v2.sh "$RUNNER_TEMP/financial-app-f13-v2-backup"
+
+      - name: Storage archive integrity and recovery contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/storage-contract"
+          recovered="$RUNNER_TEMP/storage-contract-recovered"
+          mkdir -p "$root/objects" "$recovered"
+          printf 'financial-app-storage-contract-v2\n' > "$root/objects/11111111-1111-4111-8111-111111111111.bin"
+          ROOT="$root" node <<'NODE'
+          const fs = require('node:fs');
+          const crypto = require('node:crypto');
+          const path = require('node:path');
+          const root = process.env.ROOT;
+          const file = 'objects/11111111-1111-4111-8111-111111111111.bin';
+          const bytes = fs.readFileSync(path.join(root, file));
+          const manifest = {
+            contractVersion: 2,
+            createdAt: new Date().toISOString(),
+            projectRef: 'contract-project',
+            bucketCount: 1,
+            objectCount: 1,
+            totalBytes: bytes.byteLength,
+            objects: [{
+              id: '11111111-1111-4111-8111-111111111111',
+              bucketId: 'documents',
+              name: 'private/contract.bin',
+              public: false,
+              file,
+              bytes: bytes.byteLength,
+              sha256: crypto.createHash('sha256').update(bytes).digest('hex'),
+            }],
+          };
+          fs.writeFileSync(path.join(root, 'storage-archive-manifest.json'), JSON.stringify(manifest, null, 2) + '\n');
+          NODE
+          node scripts/validate-storage-archive-v2.mjs "$root"
+          tar -czf "$RUNNER_TEMP/storage-contract.tgz" -C "$RUNNER_TEMP" storage-contract
+          tar -xzf "$RUNNER_TEMP/storage-contract.tgz" -C "$recovered"
+          node scripts/validate-storage-archive-v2.mjs "$recovered/storage-contract"
+          printf 'tampered\n' >> "$recovered/storage-contract/objects/11111111-1111-4111-8111-111111111111.bin"
+          if node scripts/validate-storage-archive-v2.mjs "$recovered/storage-contract"; then
+            echo "tampered storage archive was incorrectly accepted"
+            exit 1
+          fi
+          echo "storage archive tamper detection passed"
