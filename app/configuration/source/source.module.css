@@ -250,6 +250,12 @@
   color: #a8e9c2;
 }
 
+.sourceWarning {
+  border-color: color-mix(in srgb, var(--color-warning) 34%, transparent);
+  background: color-mix(in srgb, var(--color-warning) 8%, transparent);
+  color: color-mix(in srgb, var(--color-warning) 78%, white);
+}
+
 @media (max-width: 980px) {
   .grid {
     grid-template-columns: 1fr;

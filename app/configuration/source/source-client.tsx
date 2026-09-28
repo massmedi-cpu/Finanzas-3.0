@@ -45,6 +45,7 @@ type SyncRun = {
   rowsRevised: number;
   rowsSkipped: number;
   rowsFailed: number;
+  rowsMissing: number;
   duplicatesDetected: number;
   warningsCount: number;
   errorCode: string | null;
@@ -63,6 +64,17 @@ type SyncCursor = {
 type SyncStatus = {
   run: SyncRun | null;
   cursors: SyncCursor[];
+};
+
+type Notice = {
+  message: string;
+  tone: "success" | "warning";
+};
+
+type SyncIncidentCounts = {
+  rowsMissing?: number;
+  duplicatesDetected?: number;
+  warningsCount?: number;
 };
 
 type SyncResult = {
@@ -147,6 +159,38 @@ function formatSourceMoney(value: number | null) {
   return formatMoneyCents(value);
 }
 
+function sourceIncidentMessage(value: SyncIncidentCounts) {
+  const missing = Math.max(0, value.rowsMissing ?? 0);
+  const duplicates = Math.max(0, value.duplicatesDetected ?? 0);
+  const additionalWarnings = Math.max(0, (value.warningsCount ?? 0) - missing);
+  if (missing === 0 && duplicates === 0 && additionalWarnings === 0) return null;
+
+  const parts: string[] = [];
+  if (missing > 0) {
+    parts.push(
+      missing === 1
+        ? "1 movimiento importado anteriormente ya no aparece en la fuente."
+        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+    );
+  }
+  if (duplicates > 0) {
+    parts.push(
+      duplicates === 1
+        ? "1 posible duplicado detectado."
+        : `${duplicates} posibles duplicados detectados.`,
+    );
+  }
+  if (additionalWarnings > 0) {
+    parts.push(
+      additionalWarnings === 1
+        ? "1 aviso adicional requiere revisión."
+        : `${additionalWarnings} avisos adicionales requieren revisión.`,
+    );
+  }
+  parts.push("Los movimientos ya importados se conservan; la fuente bancaria original no se ha modificado.");
+  return parts.join(" ");
+}
+
 function sourceActionErrorMessage(code: string | undefined) {
   if (code === "google_oauth_not_connected") return "Google ya no está conectado. Vuelve a autorizar la fuente.";
   if (code === "google_service_account_unavailable") return "Financial App Reader no ha podido autenticarse con Google. La importación permanece bloqueada sin escribir datos.";
@@ -180,7 +224,7 @@ export default function SourceClient() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -224,7 +268,10 @@ export default function SourceClient() {
     void (async () => {
       await load();
       if (googleResult === "connected") {
-        setNotice("Google se ha conectado y la fuente oficial ha superado la validación previa de solo lectura.");
+        setNotice({
+          message: "Google se ha conectado y la fuente oficial ha superado la validación previa de solo lectura.",
+          tone: "success",
+        });
       } else if (googleResult === "error") {
         setError(GOOGLE_CALLBACK_ERRORS[callbackCode] ?? "No se pudo completar la conexión con Google.");
       }
@@ -243,6 +290,7 @@ export default function SourceClient() {
   const readyToPreflight = connected && runtimeReady && !busy;
   const readyToSync = connected && runtimeReady && !busy && (!firstImportNeedsPreflight || preflight !== null);
   const latestAttemptFailed = syncStatus.run?.status === "failed";
+  const persistentIncident = syncStatus.run ? sourceIncidentMessage(syncStatus.run) : null;
   const missingLabels = useMemo(
     () => (google?.missing ?? []).map((item) => CONFIG_LABELS[item] ?? item),
     [google?.missing],
@@ -260,9 +308,10 @@ export default function SourceClient() {
       if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
 
       setPreflight(payload);
-      setNotice(
-        `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`,
-      );
+      setNotice({
+        message: `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`,
+        tone: "success",
+      });
     } catch (cause) {
       setPreflight(null);
       setError(cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.");
@@ -284,9 +333,12 @@ export default function SourceClient() {
       if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
 
       setSyncResult(payload);
-      setNotice(
-        `Actualización completada: ${payload.rowsInserted} nuevos, ${payload.rowsRevised} revisados y ${payload.rowsSkipped} sin cambios.`,
-      );
+      const incident = sourceIncidentMessage(payload);
+      const summary = `Actualización completada: ${payload.rowsInserted} nuevos, ${payload.rowsRevised} revisados y ${payload.rowsSkipped} sin cambios.`;
+      setNotice({
+        message: incident ? `${summary} ${incident}` : summary,
+        tone: incident ? "warning" : "success",
+      });
       await load();
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
@@ -308,7 +360,10 @@ export default function SourceClient() {
       if (!response.ok) throw new Error("No se ha podido desconectar Google.");
       setSyncResult(null);
       setPreflight(null);
-      setNotice("Conexión Google eliminada. Los movimientos ya importados permanecen intactos.");
+      setNotice({
+        message: "Conexión Google eliminada. Los movimientos ya importados permanecen intactos.",
+        tone: "success",
+      });
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se ha podido desconectar Google.");
@@ -337,7 +392,7 @@ export default function SourceClient() {
       </header>
 
       {error && <div className="config-message error" role="alert">{error}</div>}
-      {notice && <div className="config-message success" role="status">{notice}</div>}
+      {notice && <div className={`config-message ${notice.tone}`} role="status">{notice.message}</div>}
 
       {loading ? (
         <section className="config-panel loading-state">Comprobando conexión y última sincronización…</section>
@@ -488,14 +543,20 @@ export default function SourceClient() {
                   <div><dt>Revisados</dt><dd>{syncStatus.run.rowsRevised}</dd></div>
                   <div><dt>Sin cambios</dt><dd>{syncStatus.run.rowsSkipped}</dd></div>
                   <div><dt>Fallidas</dt><dd>{syncStatus.run.rowsFailed}</dd></div>
+                  <div><dt>Ya no están en la fuente</dt><dd>{syncStatus.run.rowsMissing ?? 0}</dd></div>
                   <div><dt>Duplicados detectados en esa ejecución</dt><dd>{syncStatus.run.duplicatesDetected}</dd></div>
-                  <div><dt>Avisos</dt><dd>{syncStatus.run.warningsCount}</dd></div>
+                  <div><dt>Otros avisos</dt><dd>{Math.max(0, syncStatus.run.warningsCount - (syncStatus.run.rowsMissing ?? 0))}</dd></div>
                 </dl>
                 <div className={styles.metaRows}>
                   <p><span>Inicio</span><strong>{formatDateTime(syncStatus.run.startedAt)}</strong></p>
                   <p><span>Fin</span><strong>{formatDateTime(syncStatus.run.finishedAt)}</strong></p>
                   <p><span>Revisión fuente</span><strong>{syncStatus.run.sourceRevision ?? "Sin revisión"}</strong></p>
                 </div>
+                {persistentIncident && (
+                  <div className={`${styles.lastResult} ${styles.sourceWarning}`} role="status">
+                    {persistentIncident}
+                  </div>
+                )}
                 {latestAttemptFailed && (
                   <div className={styles.lastResult}>
                     Último intento fallido: {syncStatus.run.rowsFailed} filas no persistidas. Los cursores permanecen en la última sincronización válida.
