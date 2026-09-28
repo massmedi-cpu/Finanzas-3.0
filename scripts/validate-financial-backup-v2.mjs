@@ -77,7 +77,8 @@ if (
   restoreSafety?.workspaceMembershipsRequireReprovisioning !== true ||
   restoreSafety?.deletionIntentsAreNotRestored !== true ||
   restoreSafety?.deletionRuntimePolicyIsNotRestored !== true ||
-  restoreSafety?.deletionMustBeReapprovedAfterRestore !== true
+  restoreSafety?.deletionMustBeReapprovedAfterRestore !== true ||
+  restoreSafety?.dataTriggersDisabledDuringRestore !== true
 ) {
   fail("restore_safety");
 }
@@ -111,6 +112,9 @@ for (const table of requiredTables) {
   if (!tablePattern.test(schemaSql)) fail("schema_table_missing", table);
 }
 
+if (!/DISABLE\s+TRIGGER\s+ALL/i.test(dataSql) || !/ENABLE\s+TRIGGER\s+ALL/i.test(dataSql)) {
+  fail("restore_trigger_guard");
+}
 for (const table of REQUIRED_DATA_ANCHORS) {
   const dataPattern = new RegExp(`(?:COPY|INSERT\\s+INTO)[\\s\\S]{0,160}(?:financial_app[\\".]*)?\\"?${table}\\"?`, "i");
   if (!dataPattern.test(dataSql)) fail("essential_data_missing", table);
@@ -179,6 +183,7 @@ console.log(JSON.stringify({
   sourceCommit: manifest.sourceCommit,
   workspaceTenancy: capabilities.workspaceTenancy,
   deletionRuntime: capabilities.deletionRuntime,
+  triggerSafeRestore: true,
   storageBuckets: bucketCount,
   storageObjects: objectCount,
   bankSourcePolicy: manifest.bankSourcePolicy,
