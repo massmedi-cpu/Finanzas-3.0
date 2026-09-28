@@ -203,7 +203,7 @@ test("Documentos uploads through private signed storage and leaves OCR for expli
   await page.getByRole("button", { name: "Guardar documento" }).click();
   await expect.poll(() => writes.some((write) => write.action === "upload_sign")).toBe(true);
   await expect.poll(() => writes.some((write) => write.action === "upload_finalize")).toBe(true);
-  await expect(page.getByRole("status")).toContainText("sólo se ejecutará si lo solicitas");
+  await expect(page.getByRole("status").filter({ hasText: "sólo se ejecutará si lo solicitas" })).toBeVisible();
 });
 
 test("protected preview preserves phase 9 document persistence contract across later phases", async ({ request }) => {

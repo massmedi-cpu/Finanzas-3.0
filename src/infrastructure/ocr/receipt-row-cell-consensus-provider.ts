@@ -168,7 +168,7 @@ export function productRowArithmeticMismatch(unitText: string, priceText: string
   const price = cents(priceText);
   const amount = cents(amountText);
   if (units === null || price === null || amount === null) return false;
-  return Math.abs(units * price - amount) > 1;
+  return units * price !== amount;
 }
 
 function rawTsvWords(tsv: unknown): RawTsvWord[] {
