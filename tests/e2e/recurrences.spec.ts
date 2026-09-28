@@ -142,6 +142,10 @@ async function mockRecurrenceApi(
   });
 }
 
+function recurrenceStatus(page: import("@playwright/test").Page, text: string) {
+  return page.getByRole("status").filter({ hasText: text });
+}
+
 test("recurrence API rejects invalid filters and writes before persistence", async ({ request }) => {
   const invalidDate = await request.get("/api/recurrences?dateFrom=2026-02-30");
   expect(invalidDate.status()).toBe(400);
@@ -313,7 +317,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
 
   const expenseCard = page.locator("article").filter({ hasText: "supermercado mensual" });
   await expenseCard.getByRole("button", { name: "Confirmar recurrencia" }).click();
-  await expect(page.getByRole("status")).toContainText("Recurrencia confirmada");
+  await expect(recurrenceStatus(page, "Recurrencia confirmada")).toContainText("Recurrencia confirmada");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: expenseCandidateKey,
@@ -324,7 +328,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
   });
 
   await expenseCard.getByRole("button", { name: "Archivar" }).click();
-  await expect(page.getByRole("status")).toContainText("Recurrencia archivada");
+  await expect(recurrenceStatus(page, "Recurrencia archivada")).toContainText("Recurrencia archivada");
   expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: confirmedRecurrenceId,
@@ -333,7 +337,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
 
   const incomeCard = page.locator("article").filter({ hasText: "ingreso periódico" });
   await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
-  await expect(page.getByRole("status")).toContainText("Recurrencia actualizada con los movimientos actuales.");
+  await expect(recurrenceStatus(page, "Recurrencia actualizada")).toContainText("Recurrencia actualizada con los movimientos actuales.");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: incomeCandidateKey,
@@ -344,7 +348,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
   });
 
   await incomeCard.getByRole("button", { name: "Ignorar" }).click();
-  await expect(page.getByRole("status")).toContainText("Recurrencia ignorada");
+  await expect(recurrenceStatus(page, "Recurrencia ignorada")).toContainText("Recurrencia ignorada");
   expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: activeRecurrenceId,
@@ -352,7 +356,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
   });
 
   await incomeCard.getByRole("button", { name: "Reactivar y recalcular" }).click();
-  await expect(page.getByRole("status")).toContainText("Recurrencia confirmada");
+  await expect(recurrenceStatus(page, "Recurrencia confirmada")).toContainText("Recurrencia confirmada");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: incomeCandidateKey,
@@ -380,7 +384,7 @@ test("una recurrencia confirmada vuelve al horizonte exacto y ofrece ver su impa
   const expenseCard = page.locator("article").filter({ hasText: "supermercado mensual" });
   await expenseCard.getByRole("button", { name: "Confirmar recurrencia" }).click();
 
-  const status = page.getByRole("status");
+  const status = recurrenceStatus(page, "Recurrencia confirmada");
   await expect(status).toContainText("Recurrencia confirmada");
   await expect(status).toContainText("El horizonte se ampliará");
   await expect(status).toContainText("Se abrirá la cuenta asociada");
@@ -399,7 +403,7 @@ test("Recurrentes recalcula sin persistir hasta una decisión del usuario", asyn
   expect(writes).toHaveLength(0);
 
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
-  await expect(page.getByRole("status")).toContainText("Patrones recalculados");
+  await expect(recurrenceStatus(page, "Patrones recalculados")).toContainText("Patrones recalculados");
   expect(writes).toHaveLength(0);
 });
 

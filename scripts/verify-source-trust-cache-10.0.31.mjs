@@ -9,7 +9,21 @@ function requireText(source, fragment, description) {
   if (!source.includes(fragment)) throw new Error(`Falta ${description}: ${fragment}`);
 }
 
-if (pkg.version !== "10.0.31") throw new Error(`package.json debe ser 10.0.31, es ${pkg.version}`);
+function versionAtLeast(current, minimum) {
+  const currentParts = current.split(".").map(Number);
+  const minimumParts = minimum.split(".").map(Number);
+  if (currentParts.length !== 3 || currentParts.some((value) => !Number.isInteger(value) || value < 0)) return false;
+  if (minimumParts.length !== 3 || minimumParts.some((value) => !Number.isInteger(value) || value < 0)) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (currentParts[index] > minimumParts[index]) return true;
+    if (currentParts[index] < minimumParts[index]) return false;
+  }
+  return true;
+}
+
+if (!versionAtLeast(pkg.version, "10.0.31")) {
+  throw new Error(`package.json debe conservar source trust cache >=10.0.31, es ${pkg.version}`);
+}
 if (lock.version !== pkg.version || lock.packages?.[""]?.version !== pkg.version) {
   throw new Error("package-lock.json no coincide con package.json");
 }
@@ -37,4 +51,4 @@ for (const forbidden of ["localStorage", "sessionStorage", "indexedDB"]) {
   }
 }
 
-console.log("Source Trust Cache 10.0.31 contract: OK");
+console.log(`Source Trust Cache 10.0.31+ contract: OK (${pkg.version})`);
