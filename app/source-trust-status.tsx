@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { normalizeSourceSyncIncidents } from "../src/application/source-sync-incidents";
 import styles from "./source-trust-status.module.css";
 
@@ -27,6 +27,11 @@ type RequestState =
   | { kind: "ready"; payload: SourceFreshness }
   | { kind: "unknown" };
 
+type SourceTrustCacheEntry = {
+  payload: SourceFreshness;
+  checkedAt: number;
+};
+
 type Tone = "ok" | "warning" | "danger" | "unknown";
 
 type Summary = {
@@ -35,6 +40,9 @@ type Summary = {
   tone: Tone;
   showReviewLink: boolean;
 };
+
+const SOURCE_TRUST_CACHE_TTL_MS = 20_000;
+const SOURCE_TRUST_TRANSIENT_TTL_MS = 2_500;
 
 const guardedRoutes = [
   "/accounts",
@@ -92,6 +100,12 @@ function isSourceFreshness(value: unknown): value is SourceFreshness {
     && nullableFiniteNumber(value.sync.rowsMissing)
     && nullableFiniteNumber(value.sync.duplicatesDetected)
     && nullableFiniteNumber(value.sync.warningsCount);
+}
+
+function cacheTtl(payload: SourceFreshness) {
+  return payload.sync?.status === "started"
+    ? SOURCE_TRUST_TRANSIENT_TTL_MS
+    : SOURCE_TRUST_CACHE_TTL_MS;
 }
 
 function formatMovementDate(value: string | null) {
@@ -205,11 +219,41 @@ function summarize(payload: SourceFreshness): Summary {
 
 export default function SourceTrustStatus({ pathname }: { pathname: string }) {
   const visible = useMemo(() => shouldShowSourceTrust(pathname), [pathname]);
+  const cacheRef = useRef<SourceTrustCacheEntry | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<RequestState>({ kind: "loading" });
 
   useEffect(() => {
+    if (pathname === "/configuration/source" || pathname.startsWith("/configuration/source/")) {
+      cacheRef.current = null;
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    function revalidateAfterFocus() {
+      if (!visible) return;
+      const cached = cacheRef.current;
+      if (!cached || Date.now() - cached.checkedAt >= cacheTtl(cached.payload)) {
+        setAttempt((value) => value + 1);
+      }
+    }
+
+    window.addEventListener("focus", revalidateAfterFocus);
+    return () => window.removeEventListener("focus", revalidateAfterFocus);
+  }, [visible]);
+
+  useEffect(() => {
     if (!visible) return;
+
+    const cached = cacheRef.current;
+    if (cached && Date.now() - cached.checkedAt < cacheTtl(cached.payload)) {
+      setState((current) => (
+        current.kind === "ready" && current.payload === cached.payload
+          ? current
+          : { kind: "ready", payload: cached.payload }
+      ));
+      return;
+    }
 
     const controller = new AbortController();
     setState({ kind: "loading" });
@@ -225,10 +269,19 @@ export default function SourceTrustStatus({ pathname }: { pathname: string }) {
       })
       .then((payload) => {
         if (controller.signal.aborted) return;
-        setState(payload ? { kind: "ready", payload } : { kind: "unknown" });
+        if (payload) {
+          cacheRef.current = { payload, checkedAt: Date.now() };
+          setState({ kind: "ready", payload });
+          return;
+        }
+        cacheRef.current = null;
+        setState({ kind: "unknown" });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setState({ kind: "unknown" });
+        if (!controller.signal.aborted) {
+          cacheRef.current = null;
+          setState({ kind: "unknown" });
+        }
       });
 
     return () => controller.abort();
