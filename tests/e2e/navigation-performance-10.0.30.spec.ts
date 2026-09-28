@@ -57,12 +57,11 @@ test("10.0.30 · el enlace activo vuelve a quedar visible tras cambiar de secci�
   const configuration = navigation.getByRole("link", { name: "Configuración" });
   await expect(configuration).toHaveAttribute("aria-current", "page");
 
-  const isInsideViewport = await configuration.evaluate((element) => {
+  await expect.poll(() => configuration.evaluate((element) => {
     const item = element.getBoundingClientRect();
     const parent = element.closest("nav")!.getBoundingClientRect();
     return item.left >= parent.left - 1 && item.right <= parent.right + 1;
-  });
-  expect(isInsideViewport).toBe(true);
+  })).toBe(true);
 });
 
 test("10.0.30 · móvil conserva el dock y Más da acceso a las secciones secundarias", async ({ page }) => {
