@@ -70,6 +70,24 @@ test("10.0.31 · conserva una comprobación válida al saltar entre módulos pro
   expect(sourceRequests).toBe(1);
 });
 
+test("10.0.31 · deduplica una comprobación todavía activa durante navegación rápida", async ({ page }) => {
+  let sourceRequests = 0;
+  await isolateData(page, async (route) => {
+    sourceRequests += 1;
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    await fulfillJson(route, 200, successPayload);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.goto("/transactions");
+  await expect.poll(() => sourceRequests).toBe(1);
+
+  await page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Cuentas" }).click();
+  await expect(page).toHaveURL(/\/accounts$/);
+  await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente comprobada");
+  expect(sourceRequests).toBe(1);
+});
+
 test("10.0.31 · visitar Fuente bancaria invalida la comprobación anterior", async ({ page }) => {
   let sourceRequests = 0;
   const incidentPayload: SourcePayload = {
@@ -112,6 +130,55 @@ test("10.0.31 · un fallo no se cachea y el siguiente módulo vuelve a comprobar
   healthy = true;
   await page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Cuentas" }).click();
   await expect(page).toHaveURL(/\/accounts$/);
+  await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente comprobada");
+  expect(sourceRequests).toBe(2);
+});
+
+test("10.0.31 · un payload inválido falla cerrado y tampoco se cachea", async ({ page }) => {
+  let sourceRequests = 0;
+  await isolateData(page, async (route) => {
+    sourceRequests += 1;
+    if (sourceRequests === 1) {
+      return fulfillJson(route, 200, { available: "sí", latestMovementDate: "2026-09-28" });
+    }
+    return fulfillJson(route, 200, successPayload);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.goto("/transactions");
+  await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente no comprobable");
+  expect(sourceRequests).toBe(1);
+
+  await page.getByRole("navigation", { name: "Navegación principal" }).getByRole("link", { name: "Cuentas" }).click();
+  await expect(page).toHaveURL(/\/accounts$/);
+  await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente comprobada");
+  expect(sourceRequests).toBe(2);
+});
+
+test("10.0.31 · una sincronización en curso caduca pronto y se revalida al recuperar foco", async ({ page }) => {
+  let sourceRequests = 0;
+  const startedPayload: SourcePayload = {
+    ...successPayload,
+    sync: {
+      ...successPayload.sync!,
+      status: "started",
+      finishedAt: null,
+      startedAt: "2026-09-28T14:00:00.000Z",
+    },
+  };
+
+  await isolateData(page, async (route) => {
+    sourceRequests += 1;
+    await fulfillJson(route, 200, sourceRequests === 1 ? startedPayload : successPayload);
+  });
+
+  await page.setViewportSize({ width: 1280, height: 850 });
+  await page.goto("/transactions");
+  await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente actualizándose");
+  expect(sourceRequests).toBe(1);
+
+  await page.waitForTimeout(2700);
+  await page.evaluate(() => window.dispatchEvent(new Event("focus")));
   await expect(sourceRegion(page).getByRole("status")).toContainText("Fuente comprobada");
   expect(sourceRequests).toBe(2);
 });
