@@ -122,15 +122,16 @@ test("10.0.29 · falla cerrado ante un payload inválido", async ({ page }) => {
 });
 
 test("10.0.29 · reintenta y recupera confianza sin recargar la página", async ({ page }) => {
+  let allowSuccess = false;
   let sourceRequests = 0;
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/build") return route.continue();
     if (url.pathname === "/api/analysis/source-freshness") {
       sourceRequests += 1;
-      return sourceRequests === 1
-        ? fulfillJson(route, 503, { error: "temporary" })
-        : fulfillJson(route, 200, successPayload);
+      return allowSuccess
+        ? fulfillJson(route, 200, successPayload)
+        : fulfillJson(route, 503, { error: "temporary" });
     }
     return fulfillJson(route, 503, { error: "isolated" });
   });
@@ -138,9 +139,11 @@ test("10.0.29 · reintenta y recupera confianza sin recargar la página", async 
   await page.goto("/forecast");
   const region = sourceRegion(page);
   await expect(region.getByRole("status")).toContainText("Fuente no comprobable");
+  const requestsBeforeRetry = sourceRequests;
+  allowSuccess = true;
   await region.getByRole("button", { name: "Reintentar" }).click();
   await expect(region.getByRole("status")).toContainText("Fuente comprobada");
-  expect(sourceRequests).toBeGreaterThanOrEqual(2);
+  expect(sourceRequests).toBeGreaterThan(requestsBeforeRetry);
 });
 
 test("10.0.29 · conserva las incidencias y sus cifras exactas", async ({ page }) => {
