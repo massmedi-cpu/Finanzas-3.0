@@ -13,6 +13,7 @@ on:
       - 'supabase/functions/financial-app-db-gateway/source-sync-router.ts'
       - 'app/api/source/google/sync/route.ts'
       - 'app/inicio-overview.tsx'
+      - 'src/application/source-sync-incidents.ts'
       - 'package.json'
       - 'package-lock.json'
       - 'tests/e2e/sync-missing-persistence-contract.spec.ts'
