@@ -113,7 +113,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <div className={`${styles.navigationFrame} premium-nav-frame`}>
         <div className={styles.navigationShell}>
           <Link
-            prefetch
+            prefetch={false}
             href="/"
             className="financial-brand"
             aria-label={`Financial App ${APP_VERSION}, ir a Inicio`}
@@ -150,7 +150,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
                 const pending = pendingHref === item.href;
                 return (
                   <Link
-                    prefetch
+                    prefetch={false}
                     key={item.href}
                     href={item.href}
                     className={`${styles.link}${active ? ` ${styles.active}` : ""}${pending ? ` ${styles.pending}` : ""}`}
