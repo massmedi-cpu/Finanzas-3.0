@@ -70,7 +70,7 @@ export default function MobileNavigation() {
               const active = isNavigationActive(pathname, item.href);
               return (
                 <Link
-                  prefetch
+                  prefetch={false}
                   key={item.href}
                   href={item.href}
                   className={`${styles.mobileMoreLink}${active ? ` ${styles.mobileActive}` : ""}`}
@@ -108,11 +108,13 @@ export default function MobileNavigation() {
           const active = isNavigationActive(pathname, item.href);
           return (
             <Link
-              prefetch
+              prefetch={false}
               key={item.href}
               href={item.href}
               className={`${styles.mobileDockLink}${active ? ` ${styles.mobileActive}` : ""}`}
               aria-current={active ? "page" : undefined}
+              onMouseEnter={() => router.prefetch(item.href)}
+              onFocus={() => router.prefetch(item.href)}
               onTouchStart={() => router.prefetch(item.href)}
             >
               <span className={styles.mobileDockIcon}><ProductIcon name={item.icon} /></span>
