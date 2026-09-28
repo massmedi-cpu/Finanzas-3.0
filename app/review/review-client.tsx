@@ -22,6 +22,8 @@ type SyncStatus = {
   run?: {
     status?: string;
     rowsFailed?: number;
+    rowsMissing?: number;
+    duplicatesDetected?: number;
     warningsCount?: number;
     errorCode?: string | null;
   } | null;
@@ -124,6 +126,8 @@ export default function ReviewClient() {
               syncStatus.run && (
                 syncStatus.run.status === "failed" ||
                 (syncStatus.run.rowsFailed ?? 0) > 0 ||
+                (syncStatus.run.rowsMissing ?? 0) > 0 ||
+                (syncStatus.run.duplicatesDetected ?? 0) > 0 ||
                 (syncStatus.run.warningsCount ?? 0) > 0 ||
                 Boolean(syncStatus.run.errorCode)
               )

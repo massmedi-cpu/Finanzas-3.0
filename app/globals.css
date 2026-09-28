@@ -168,6 +168,7 @@ a { color: inherit; }
 .config-message { margin: 0 0 1rem; padding: .75rem .9rem; border-radius: var(--radius-md); font-size: var(--font-label); font-weight: 650; }
 .config-message.error { border: 1px solid rgba(255,93,115,.26); background: rgba(255,93,115,.08); color: #ffc1ca; }
 .config-message.success { border: 1px solid rgba(53,208,127,.23); background: rgba(53,208,127,.07); color: #a6ecc2; }
+.config-message.warning { border: 1px solid color-mix(in srgb, var(--color-warning) 38%, transparent); background: color-mix(in srgb, var(--color-warning) 8%, transparent); color: color-mix(in srgb, var(--color-warning) 78%, white); }
 .category-swatch.category-blue { background: rgba(31,107,255,.2); color: #81a9ff; }
 .category-swatch.category-cyan { background: rgba(43,217,247,.16); color: #78e7fa; }
 .category-swatch.category-green { background: rgba(53,208,127,.16); color: #8ee7b3; }
