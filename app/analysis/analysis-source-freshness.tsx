@@ -1,6 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
+import {
+  hasSourceSyncIncidents,
+  normalizeSourceSyncIncidents,
+} from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
 import styles from "./analysis-source-freshness.module.css";
 
@@ -15,6 +20,8 @@ type SourceFreshness = {
     startedAt: string | null;
     rowsSeen: number | null;
     rowsFailed: number | null;
+    rowsMissing: number | null;
+    duplicatesDetected: number | null;
     warningsCount: number | null;
   };
 };
@@ -70,6 +77,8 @@ function isFreshness(value: unknown): value is SourceFreshness {
     && nullableString(value.sync.startedAt)
     && nullableFiniteNumber(value.sync.rowsSeen)
     && nullableFiniteNumber(value.sync.rowsFailed)
+    && nullableFiniteNumber(value.sync.rowsMissing)
+    && nullableFiniteNumber(value.sync.duplicatesDetected)
     && nullableFiniteNumber(value.sync.warningsCount);
 }
 
@@ -86,25 +95,29 @@ function formatSyncDate(value: string) {
 }
 
 function syncHasIncidents(sync: NonNullable<SourceFreshness["sync"]>) {
-  return sync.status === "partial"
-    || (sync.rowsFailed ?? 0) > 0
-    || (sync.warningsCount ?? 0) > 0;
+  return hasSourceSyncIncidents(sync);
 }
 
 function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
-  const failedRows = sync.rowsFailed ?? 0;
-  const warnings = sync.warningsCount ?? 0;
+  const incidents = normalizeSourceSyncIncidents(sync);
   const parts: string[] = [];
 
-  if (failedRows > 0) {
-    parts.push(`${formatInteger(failedRows)} ${failedRows === 1 ? "fila fallida" : "filas fallidas"}`);
+  if (incidents.failedRows > 0) {
+    parts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila fallida" : "filas fallidas"}`);
   }
-  if (warnings > 0) {
-    parts.push(`${formatInteger(warnings)} ${warnings === 1 ? "aviso" : "avisos"}`);
+  if (incidents.missingRows > 0) {
+    parts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ausente de la fuente" : "movimientos ausentes de la fuente"}`);
+  }
+  if (incidents.duplicates > 0) {
+    parts.push(`${formatInteger(incidents.duplicates)} ${incidents.duplicates === 1 ? "posible duplicado" : "posibles duplicados"}`);
+  }
+  if (incidents.additionalWarnings > 0) {
+    parts.push(`${formatInteger(incidents.additionalWarnings)} ${incidents.additionalWarnings === 1 ? "aviso adicional" : "avisos adicionales"}`);
   }
 
+  const hasIncidents = incidents.failedRows > 0 || incidents.missingRows > 0 || incidents.duplicates > 0;
   return {
-    labelSuffix: failedRows > 0 ? " con incidencias" : warnings > 0 ? " con avisos" : "",
+    labelSuffix: hasIncidents ? " con incidencias" : incidents.additionalWarnings > 0 ? " con avisos" : "",
     detail: parts.length ? ` · ${parts.join(" · ")}` : "",
   };
 }
@@ -158,15 +171,20 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
           : `Sincronizado ${timestampLabel}`
     : null;
   const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
-  const failedRows = sync.rowsFailed ?? 0;
-  const warnings = sync.warningsCount ?? 0;
+  const incidents = normalizeSourceSyncIncidents(sync);
   const incidentParts: string[] = [];
 
-  if (failedRows > 0) {
-    incidentParts.push(`${formatInteger(failedRows)} ${failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
+  if (incidents.failedRows > 0) {
+    incidentParts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
   }
-  if (warnings > 0) {
-    incidentParts.push(`${formatInteger(warnings)} ${warnings === 1 ? "aviso" : "avisos"}`);
+  if (incidents.missingRows > 0) {
+    incidentParts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ya no está en la fuente" : "movimientos ya no están en la fuente"}`);
+  }
+  if (incidents.duplicates > 0) {
+    incidentParts.push(`${formatInteger(incidents.duplicates)} ${incidents.duplicates === 1 ? "posible duplicado" : "posibles duplicados"}`);
+  }
+  if (incidents.additionalWarnings > 0) {
+    incidentParts.push(`${formatInteger(incidents.additionalWarnings)} ${incidents.additionalWarnings === 1 ? "aviso adicional" : "avisos adicionales"}`);
   }
 
   if (sync.status === "started") {
@@ -189,14 +207,14 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
 
   if (sync.status === "partial") {
     return {
-      label: failedRows > 0 ? "Sincronización parcial con incidencias" : "Datos sincronizados parcialmente",
+      label: incidents.failedRows > 0 ? "Sincronización parcial con incidencias" : "Datos sincronizados parcialmente",
       detail,
       incidentDetail: incidentParts.length ? incidentParts.join(" · ") : "La última actualización terminó de forma parcial",
-      tone: failedRows > 0 ? "danger" : "warning",
+      tone: incidents.failedRows > 0 ? "danger" : "warning",
     };
   }
 
-  if (failedRows > 0) {
+  if (incidents.failedRows > 0) {
     return {
       label: "Sincronización con incidencias",
       detail,
@@ -205,7 +223,16 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
-  if (warnings > 0) {
+  if (incidents.missingRows > 0 || incidents.duplicates > 0) {
+    return {
+      label: "Datos sincronizados con incidencias",
+      detail,
+      incidentDetail: incidentParts.join(" · "),
+      tone: "warning",
+    };
+  }
+
+  if (incidents.additionalWarnings > 0) {
     return {
       label: "Datos sincronizados con avisos",
       detail,
@@ -257,21 +284,24 @@ export default function AnalysisSourceFreshness() {
       || freshness.sync.status === "started"
       || syncHasIncidents(freshness.sync)
     : false;
+  const actionable = freshness.sync ? syncHasIncidents(freshness.sync) : false;
 
   return (
     <div className={styles.wrap}>
       <div
         className={`${styles.status} ${styles[summary.tone]} ${warning ? styles.warning : ""}`}
-        role="status"
-        aria-live="polite"
-        aria-label={text}
       >
         <span className={styles.dot} aria-hidden="true" />
-        <span className={styles.copy}>
+        <span className={styles.copy} role="status" aria-live="polite" aria-label={text}>
           <strong>{summary.label}</strong>
           {summary.detail && <span>{summary.detail}</span>}
           {summary.incidentDetail && <small>{summary.incidentDetail}</small>}
         </span>
+        {actionable && (
+          <Link prefetch={false} className={styles.action} href="/configuration/source">
+            Revisar fuente
+          </Link>
+        )}
       </div>
     </div>
   );

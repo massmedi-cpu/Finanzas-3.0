@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
+import {
+  hasSourceSyncIncidents,
+  normalizeSourceSyncIncidents,
+} from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
 import { formatMoneyCents } from "../src/core/money";
 import { FinancialBarChart } from "../src/design/financial-bar-chart";
@@ -237,63 +241,59 @@ function kindLabel(kind: TransactionKind) {
 
 function syncFeedbackFromResult(result: SyncResult | null) {
   const changed = Math.max(0, result?.rowsInserted ?? 0) + Math.max(0, result?.rowsRevised ?? 0);
-  const missing = Math.max(0, result?.rowsMissing ?? 0);
-  const warnings = Math.max(missing, Math.max(0, result?.warningsCount ?? 0));
-  const duplicates = Math.max(0, result?.duplicatesDetected ?? 0);
-  if (changed === 0 && warnings === 0 && duplicates === 0) return "Sin cambios nuevos.";
+  const incidents = normalizeSourceSyncIncidents(result);
+  if (changed === 0 && !hasSourceSyncIncidents(result)) return "Sin cambios nuevos.";
 
   const parts = [changed > 0 ? `${changed} cambios incorporados.` : "Sin cambios incorporados."];
-  if (missing > 0) {
+  if (incidents.missingRows > 0) {
     parts.push(
-      missing === 1
+      incidents.missingRows === 1
         ? "1 movimiento importado anteriormente ya no aparece en la fuente."
-        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
-    );
-  } else if (warnings > 0) {
-    parts.push(
-      warnings === 1
-        ? "1 aviso de sincronización requiere revisión."
-        : `${warnings} avisos de sincronización requieren revisión.`,
+        : `${incidents.missingRows} movimientos importados anteriormente ya no aparecen en la fuente.`,
     );
   }
-  if (duplicates > 0) {
+  if (incidents.additionalWarnings > 0) {
     parts.push(
-      duplicates === 1
+      incidents.additionalWarnings === 1
+        ? "1 aviso adicional de sincronización requiere revisión."
+        : `${incidents.additionalWarnings} avisos adicionales de sincronización requieren revisión.`,
+    );
+  }
+  if (incidents.duplicates > 0) {
+    parts.push(
+      incidents.duplicates === 1
         ? "1 posible duplicado detectado."
-        : `${duplicates} posibles duplicados detectados.`,
+        : `${incidents.duplicates} posibles duplicados detectados.`,
     );
   }
-  if (warnings > 0 || duplicates > 0) parts.push("Revisa la fuente.");
+  if (hasSourceSyncIncidents(result)) parts.push("Revisa la fuente.");
   return parts.join(" ");
 }
 
 function syncStatusNotice(run: SyncStatus["run"]) {
   if (!run || run.status !== "success") return null;
-  const warnings = Math.max(0, run.warningsCount ?? 0);
-  const missing = Math.max(0, run.rowsMissing ?? 0);
-  const otherWarnings = Math.max(0, warnings - missing);
-  const duplicates = Math.max(0, run.duplicatesDetected ?? 0);
-  if (missing === 0 && otherWarnings === 0 && duplicates === 0) return null;
+  const incidents = normalizeSourceSyncIncidents(run);
+  if (!hasSourceSyncIncidents(run)) return null;
   const parts: string[] = [];
-  if (missing > 0) {
+  if (incidents.missingRows > 0) {
     parts.push(
-      missing === 1
+      incidents.missingRows === 1
         ? "1 movimiento importado anteriormente ya no aparece en la fuente."
-        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+        : `${incidents.missingRows} movimientos importados anteriormente ya no aparecen en la fuente.`,
     );
   }
-  if (otherWarnings > 0) {
+  if (incidents.additionalWarnings > 0) {
     parts.push(
-      otherWarnings === 1
+      incidents.additionalWarnings === 1
         ? "1 aviso adicional de sincronización requiere revisión."
-        : `${otherWarnings} avisos adicionales de sincronización requieren revisión.`,
+        : `${incidents.additionalWarnings} avisos adicionales de sincronización requieren revisión.`,
     );
   }
-  if (duplicates > 0) {
+  if (incidents.duplicates > 0) {
     parts.push(
-      duplicates === 1
+      incidents.duplicates === 1
         ? "1 posible duplicado detectado."
-        : `${duplicates} posibles duplicados detectados.`,
+        : `${incidents.duplicates} posibles duplicados detectados.`,
     );
   }
   parts.push("Revisa la fuente.");
@@ -451,9 +451,7 @@ export default function InicioOverview() {
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
-  const syncWarningCount = Math.max(0, syncRun?.warningsCount ?? 0);
-  const syncDuplicateCount = Math.max(0, syncRun?.duplicatesDetected ?? 0);
-  const syncHasWarnings = syncSucceeded && (syncWarningCount > 0 || syncDuplicateCount > 0);
+  const syncHasWarnings = syncSucceeded && hasSourceSyncIncidents(syncRun);
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
   const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";

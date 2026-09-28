@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { hasSourceSyncIncidents } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
 import styles from "./review.module.css";
 
@@ -122,16 +123,7 @@ export default function ReviewClient() {
         : (
             sourceStatus.configured !== true ||
             sourceStatus.connection?.connected !== true ||
-            Boolean(
-              syncStatus.run && (
-                syncStatus.run.status === "failed" ||
-                (syncStatus.run.rowsFailed ?? 0) > 0 ||
-                (syncStatus.run.rowsMissing ?? 0) > 0 ||
-                (syncStatus.run.duplicatesDetected ?? 0) > 0 ||
-                (syncStatus.run.warningsCount ?? 0) > 0 ||
-                Boolean(syncStatus.run.errorCode)
-              )
-            )
+            hasSourceSyncIncidents(syncStatus.run)
           )
           ? 1
           : 0;

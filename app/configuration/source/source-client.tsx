@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import { formatMoneyCents } from "../../../src/core/money";
 import styles from "./source.module.css";
 
@@ -69,12 +70,6 @@ type SyncStatus = {
 type Notice = {
   message: string;
   tone: "success" | "warning";
-};
-
-type SyncIncidentCounts = {
-  rowsMissing?: number;
-  duplicatesDetected?: number;
-  warningsCount?: number;
 };
 
 type SyncResult = {
@@ -159,32 +154,30 @@ function formatSourceMoney(value: number | null) {
   return formatMoneyCents(value);
 }
 
-function sourceIncidentMessage(value: SyncIncidentCounts) {
-  const missing = Math.max(0, value.rowsMissing ?? 0);
-  const duplicates = Math.max(0, value.duplicatesDetected ?? 0);
-  const additionalWarnings = Math.max(0, (value.warningsCount ?? 0) - missing);
-  if (missing === 0 && duplicates === 0 && additionalWarnings === 0) return null;
+function sourceIncidentMessage(value: SyncRun | SyncResult) {
+  const incidents = normalizeSourceSyncIncidents(value);
+  if (incidents.missingRows === 0 && incidents.duplicates === 0 && incidents.additionalWarnings === 0) return null;
 
   const parts: string[] = [];
-  if (missing > 0) {
+  if (incidents.missingRows > 0) {
     parts.push(
-      missing === 1
+      incidents.missingRows === 1
         ? "1 movimiento importado anteriormente ya no aparece en la fuente."
-        : `${missing} movimientos importados anteriormente ya no aparecen en la fuente.`,
+        : `${incidents.missingRows} movimientos importados anteriormente ya no aparecen en la fuente.`,
     );
   }
-  if (duplicates > 0) {
+  if (incidents.duplicates > 0) {
     parts.push(
-      duplicates === 1
+      incidents.duplicates === 1
         ? "1 posible duplicado detectado."
-        : `${duplicates} posibles duplicados detectados.`,
+        : `${incidents.duplicates} posibles duplicados detectados.`,
     );
   }
-  if (additionalWarnings > 0) {
+  if (incidents.additionalWarnings > 0) {
     parts.push(
-      additionalWarnings === 1
+      incidents.additionalWarnings === 1
         ? "1 aviso adicional requiere revisión."
-        : `${additionalWarnings} avisos adicionales requieren revisión.`,
+        : `${incidents.additionalWarnings} avisos adicionales requieren revisión.`,
     );
   }
   parts.push("Los movimientos ya importados se conservan; la fuente bancaria original no se ha modificado.");
@@ -290,6 +283,7 @@ export default function SourceClient() {
   const readyToPreflight = connected && runtimeReady && !busy;
   const readyToSync = connected && runtimeReady && !busy && (!firstImportNeedsPreflight || preflight !== null);
   const latestAttemptFailed = syncStatus.run?.status === "failed";
+  const persistentIncidentCounts = normalizeSourceSyncIncidents(syncStatus.run);
   const persistentIncident = syncStatus.run ? sourceIncidentMessage(syncStatus.run) : null;
   const missingLabels = useMemo(
     () => (google?.missing ?? []).map((item) => CONFIG_LABELS[item] ?? item),
@@ -543,9 +537,9 @@ export default function SourceClient() {
                   <div><dt>Revisados</dt><dd>{syncStatus.run.rowsRevised}</dd></div>
                   <div><dt>Sin cambios</dt><dd>{syncStatus.run.rowsSkipped}</dd></div>
                   <div><dt>Fallidas</dt><dd>{syncStatus.run.rowsFailed}</dd></div>
-                  <div><dt>Ya no están en la fuente</dt><dd>{syncStatus.run.rowsMissing ?? 0}</dd></div>
-                  <div><dt>Duplicados detectados en esa ejecución</dt><dd>{syncStatus.run.duplicatesDetected}</dd></div>
-                  <div><dt>Otros avisos</dt><dd>{Math.max(0, syncStatus.run.warningsCount - (syncStatus.run.rowsMissing ?? 0))}</dd></div>
+                  <div><dt>Ya no están en la fuente</dt><dd>{persistentIncidentCounts.missingRows}</dd></div>
+                  <div><dt>Duplicados detectados en esa ejecución</dt><dd>{persistentIncidentCounts.duplicates}</dd></div>
+                  <div><dt>Otros avisos</dt><dd>{persistentIncidentCounts.additionalWarnings}</dd></div>
                 </dl>
                 <div className={styles.metaRows}>
                   <p><span>Inicio</span><strong>{formatDateTime(syncStatus.run.startedAt)}</strong></p>
