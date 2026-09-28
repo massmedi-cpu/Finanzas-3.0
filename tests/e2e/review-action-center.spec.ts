@@ -2,10 +2,18 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
-async function mockReviewSources(page: Page) {
+async function mockReviewSources(page: Page, options: { failSignMismatch?: boolean } = {}) {
   await page.route("**/api/transactions**", async (route) => {
     const url = new URL(route.request().url());
-    const totalCount = url.searchParams.get("reviewState") === "needs_review" ? 3 : 0;
+    if (url.searchParams.get("signMismatch") === "true" && options.failSignMismatch) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "temporary_unavailable" }) });
+      return;
+    }
+    const totalCount = url.searchParams.get("reviewState") === "needs_review"
+      ? 3
+      : url.searchParams.get("signMismatch") === "true"
+        ? 2
+        : 0;
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [], totalCount, hasMore: false, nextCursor: null }) });
   });
   await page.route("**/api/recurrences**", (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ candidates: [{ existingStatus: null }, { existingStatus: "active" }] }) }));
@@ -21,11 +29,12 @@ test("Para revisar prioriza acciones reales y compacta las áreas sin incidencia
   await page.goto("/review");
 
   await expect(page.getByRole("heading", { name: "Para revisar" })).toBeVisible();
-  await expect(page.getByText("6", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("8", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("acciones pendientes", { exact: true })).toBeVisible();
 
   const actions = page.getByRole("region", { name: "Requiere atención" });
   await expect(actions.getByRole("heading", { name: "Movimientos por revisar" })).toBeVisible();
+  await expect(actions.getByRole("heading", { name: "Signos incoherentes" })).toBeVisible();
   await expect(actions.getByRole("heading", { name: "Recurrentes sin decidir" })).toBeVisible();
   await expect(actions.getByRole("heading", { name: "Presupuestos excedidos" })).toBeVisible();
   await expect(actions.getByRole("heading", { name: "Posibles duplicados" })).toHaveCount(0);
@@ -53,6 +62,20 @@ test("Para revisar no confunde una fuente caída con cero incidencias", async ({
   await expect(clear.getByText("Previsiones con baja confianza", { exact: true })).toHaveCount(0);
 });
 
+test("Para revisar no confunde un control de signo caído con cero incoherencias", async ({ page }) => {
+  await mockReviewSources(page, { failSignMismatch: true });
+  await page.goto("/review");
+
+  const unavailable = page.getByRole("region", { name: "No se pudo comprobar" });
+  const signMismatchItem = unavailable.getByRole("listitem").filter({ hasText: "Signos incoherentes" });
+  await expect(signMismatchItem).toBeVisible();
+  await expect(signMismatchItem.getByRole("link", { name: "Abrir sección" }))
+    .toHaveAttribute("href", "/transactions?signMismatch=true");
+
+  const clear = page.getByRole("region", { name: "Todo en orden" });
+  await expect(clear.getByText("Signos incoherentes", { exact: true })).toHaveCount(0);
+});
+
 test("Para revisar conserva navegación táctil y sin desbordamiento en móvil", async ({ page }) => {
   await mockReviewSources(page);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -70,6 +93,8 @@ test("Para revisar conserva navegación táctil y sin desbordamiento en móvil",
 test("El centro de acción permanece read-only y reutiliza módulos propietarios", () => {
   const source = readFileSync(resolve(process.cwd(), "app/review/review-client.tsx"), "utf8");
   expect(source).toContain("/api/transactions?reviewState=needs_review&limit=1");
+  expect(source).toContain("/api/transactions?signMismatch=true&limit=1");
+  expect(source).toContain('href: "/transactions?signMismatch=true"');
   expect(source).toContain("/api/transactions?duplicateState=suspected&limit=1");
   expect(source).toContain("/api/recurrences?minOccurrences=3");
   expect(source).toContain("/api/documents?status=pending_review");

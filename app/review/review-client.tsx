@@ -27,6 +27,28 @@ type SyncStatus = {
   } | null;
 };
 
+type ReviewCounts = {
+  transactions: number | null;
+  signMismatches: number | null;
+  duplicates: number | null;
+  recurrences: number | null;
+  documents: number | null;
+  budgets: number | null;
+  forecast: number | null;
+  source: number | null;
+};
+
+const EMPTY_COUNTS: ReviewCounts = {
+  transactions: null,
+  signMismatches: null,
+  duplicates: null,
+  recurrences: null,
+  documents: null,
+  budgets: null,
+  forecast: null,
+  source: null,
+};
+
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
@@ -60,7 +82,7 @@ function valueOf<T>(result: PromiseSettledResult<T>) {
 
 export default function ReviewClient() {
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState<Array<number | null>>([null, null, null, null, null, null, null]);
+  const [counts, setCounts] = useState<ReviewCounts>(EMPTY_COUNTS);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -71,6 +93,7 @@ export default function ReviewClient() {
     void (async () => {
       const results = await Promise.allSettled([
         readJson<TransactionCount>("/api/transactions?reviewState=needs_review&limit=1", controller.signal),
+        readJson<TransactionCount>("/api/transactions?signMismatch=true&limit=1", controller.signal),
         readJson<TransactionCount>("/api/transactions?duplicateState=suspected&limit=1", controller.signal),
         readJson<RecurrenceSnapshot>("/api/recurrences?minOccurrences=3", controller.signal),
         readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0", controller.signal),
@@ -83,13 +106,14 @@ export default function ReviewClient() {
       if (controller.signal.aborted) return;
 
       const reviewTransactions = valueOf(results[0]);
-      const suspectedDuplicates = valueOf(results[1]);
-      const recurrences = valueOf(results[2]);
-      const documents = valueOf(results[3]);
-      const budgets = valueOf(results[4]);
-      const forecast = valueOf(results[5]);
-      const sourceStatus = valueOf(results[6]);
-      const syncStatus = valueOf(results[7]);
+      const signMismatches = valueOf(results[1]);
+      const suspectedDuplicates = valueOf(results[2]);
+      const recurrences = valueOf(results[3]);
+      const documents = valueOf(results[4]);
+      const budgets = valueOf(results[5]);
+      const forecast = valueOf(results[6]);
+      const sourceStatus = valueOf(results[7]);
+      const syncStatus = valueOf(results[8]);
 
       const sourceCount = sourceStatus === null || syncStatus === null
         ? null
@@ -108,21 +132,22 @@ export default function ReviewClient() {
           ? 1
           : 0;
 
-      setCounts([
-        reviewTransactions && Number.isInteger(reviewTransactions.totalCount) ? reviewTransactions.totalCount! : null,
-        suspectedDuplicates && Number.isInteger(suspectedDuplicates.totalCount) ? suspectedDuplicates.totalCount! : null,
-        recurrences?.candidates
+      setCounts({
+        transactions: reviewTransactions && Number.isInteger(reviewTransactions.totalCount) ? reviewTransactions.totalCount! : null,
+        signMismatches: signMismatches && Number.isInteger(signMismatches.totalCount) ? signMismatches.totalCount! : null,
+        duplicates: suspectedDuplicates && Number.isInteger(suspectedDuplicates.totalCount) ? suspectedDuplicates.totalCount! : null,
+        recurrences: recurrences?.candidates
           ? recurrences.candidates.filter((candidate) => candidate.existingStatus == null).length
           : null,
-        documents && Number.isInteger(documents.total) ? documents.total! : null,
-        budgets?.categories
+        documents: documents && Number.isInteger(documents.total) ? documents.total! : null,
+        budgets: budgets?.categories
           ? budgets.categories.filter((category) => category.status === "over").length
           : null,
-        forecast?.items
+        forecast: forecast?.items
           ? forecast.items.filter((item) => item.status === "planned" && item.confidence === "low").length
           : null,
-        sourceCount,
-      ]);
+        source: sourceCount,
+      });
       setLoading(false);
     })().catch(() => {
       if (!controller.signal.aborted) setLoading(false);
@@ -135,43 +160,49 @@ export default function ReviewClient() {
     {
       name: "Movimientos por revisar",
       href: "/transactions?reviewState=needs_review",
-      count: counts[0],
+      count: counts.transactions,
       description: "Movimientos que requieren una decisión explícita.",
+    },
+    {
+      name: "Signos incoherentes",
+      href: "/transactions?signMismatch=true",
+      count: counts.signMismatches,
+      description: "Movimientos cuyo tipo financiero y signo bancario no coinciden.",
     },
     {
       name: "Posibles duplicados",
       href: "/transactions?duplicateState=suspected",
-      count: counts[1],
+      count: counts.duplicates,
       description: "Coincidencias que conviene confirmar o descartar.",
     },
     {
       name: "Recurrentes sin decidir",
       href: "/recurrences",
-      count: counts[2],
+      count: counts.recurrences,
       description: "Patrones detectados que aún no tienen una decisión guardada.",
     },
     {
       name: "Documentos pendientes",
       href: "/documents",
-      count: counts[3],
+      count: counts.documents,
       description: "Documentos que siguen esperando revisión.",
     },
     {
       name: "Presupuestos excedidos",
       href: "/budgets",
-      count: counts[4],
+      count: counts.budgets,
       description: "Categorías del mes actual que ya superaron su límite.",
     },
     {
       name: "Previsiones con baja confianza",
       href: "/forecast",
-      count: counts[5],
+      count: counts.forecast,
       description: "Elementos planificados cuya estimación merece revisión.",
     },
     {
       name: "Sincronización bancaria",
       href: "/configuration/source",
-      count: counts[6],
+      count: counts.source,
       description: "Conexión, avisos o incidencias de la fuente bancaria.",
     },
   ], [counts]);
