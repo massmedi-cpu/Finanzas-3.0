@@ -22,6 +22,9 @@ async function mockReviewSources(page: Page) {
     if (url.pathname === "/api/transactions" && url.searchParams.get("reviewState") === "needs_review") {
       return json(route, { rows: [], totalCount: 2, hasMore: false, nextCursor: null });
     }
+    if (url.pathname === "/api/transactions" && url.searchParams.get("signMismatch") === "true") {
+      return json(route, { rows: [], totalCount: 4, hasMore: false, nextCursor: null });
+    }
     if (url.pathname === "/api/transactions" && url.searchParams.get("duplicateState") === "suspected") {
       return json(route, { rows: [], totalCount: 1, hasMore: false, nextCursor: null });
     }
@@ -84,6 +87,7 @@ test("E1 · Para revisar agrega referencias vivas sin crear una segunda fuente d
 
   const expected = [
     ["Movimientos por revisar", "2", "/transactions?reviewState=needs_review"],
+    ["Signos incoherentes", "4", "/transactions?signMismatch=true"],
     ["Posibles duplicados", "1", "/transactions?duplicateState=suspected"],
     ["Recurrentes sin decidir", "2", "/recurrences"],
     ["Documentos pendientes", "3", "/documents"],
@@ -98,7 +102,7 @@ test("E1 · Para revisar agrega referencias vivas sin crear una segunda fuente d
     await expect(region.getByRole("link")).toHaveAttribute("href", href);
   }
 
-  expect(methods.length).toBeGreaterThanOrEqual(8);
+  expect(methods.length).toBeGreaterThanOrEqual(9);
   expect(methods.every((method) => method === "GET")).toBe(true);
 });
 

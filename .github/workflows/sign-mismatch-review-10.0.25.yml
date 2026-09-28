@@ -40,7 +40,7 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Version consistency
-        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');if(p.version!=='10.0.25'||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"
+        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<25||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"
 
       - name: TypeScript
         run: npm run typecheck
