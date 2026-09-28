@@ -45,16 +45,65 @@
   gap: 0.45rem;
 }
 
+.navigationCluster {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
+  align-items: stretch;
+  gap: 0.25rem;
+}
+
+.navigationScrollButton {
+  min-width: 2.5rem;
+  min-height: 3.45rem;
+  padding: 0;
+  border: 1px solid rgba(137, 173, 255, 0.2);
+  border-radius: 0.85rem;
+  background: rgba(10, 17, 34, 0.9);
+  color: #ffffff;
+  font: inherit;
+  font-size: 1.55rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, opacity 160ms ease, transform 160ms ease;
+}
+
+.navigationScrollButton:hover:not(:disabled),
+.navigationScrollButton:focus-visible:not(:disabled) {
+  border-color: rgba(77, 141, 255, 0.48);
+  background: rgba(31, 107, 255, 0.16);
+}
+
+.navigationScrollButton:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.navigationScrollButton:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 2px;
+}
+
+.navigationScrollButton:disabled {
+  opacity: 0.18;
+  cursor: default;
+}
+
 .navigation {
   min-width: 0;
-  flex: 1;
+  width: 100%;
   display: flex;
   align-items: center;
   gap: 0.35rem;
   overflow-x: auto;
+  overflow-y: hidden;
   overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  padding: 0.35rem;
+  scroll-behavior: smooth;
+  scroll-padding-inline: 0.35rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(137, 173, 255, 0.38) transparent;
+  padding: 0.35rem 0.35rem 0.27rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: rgba(10, 17, 34, 0.9);
@@ -62,7 +111,16 @@
 }
 
 .navigation::-webkit-scrollbar {
-  display: none;
+  height: 0.32rem;
+}
+
+.navigation::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.navigation::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(137, 173, 255, 0.38);
 }
 
 .link {
@@ -81,7 +139,7 @@
   line-height: 1.2;
   text-decoration: none;
   white-space: nowrap;
-  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease, opacity 160ms ease;
 }
 
 .linkIcon {
@@ -119,6 +177,39 @@
   box-shadow: inset 0 0 0 1px rgba(77, 141, 255, 0.08);
 }
 
+.pending {
+  color: #ffffff;
+  border-color: rgba(43, 217, 247, 0.5);
+  background: linear-gradient(135deg, rgba(31, 107, 255, 0.34), rgba(43, 217, 247, 0.14));
+}
+
+.navigationProgress {
+  position: relative;
+  display: block;
+  width: min(var(--content-max), 100%);
+  height: 2px;
+  margin: 0.2rem auto 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(77, 141, 255, 0.12);
+}
+
+.navigationProgress::after {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 -35%;
+  width: 35%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, transparent, var(--color-primary-bright), rgba(43, 217, 247, 0.9), transparent);
+  animation: navigation-progress 900ms ease-in-out infinite;
+}
+
+@keyframes navigation-progress {
+  to {
+    transform: translateX(390%);
+  }
+}
+
 .installButton {
   appearance: none;
   font-family: inherit;
@@ -144,6 +235,18 @@
   display: none;
 }
 
+@media (max-width: 90rem) and (min-width: 48.01rem) {
+  .navigationShell {
+    flex-wrap: wrap;
+    align-items: center;
+  }
+
+  .navigationCluster {
+    flex: 1 0 100%;
+    order: 3;
+  }
+}
+
 @media (max-width: 48rem) {
   .root {
     padding-bottom: calc(5.2rem + env(safe-area-inset-bottom));
@@ -157,7 +260,8 @@
     gap: 0;
   }
 
-  .navigation {
+  .navigationCluster,
+  .navigationProgress {
     display: none;
   }
 
@@ -370,7 +474,20 @@
 
 @media (prefers-reduced-motion: reduce) {
   .link,
-  .linkIcon {
+  .linkIcon,
+  .navigationScrollButton {
     transition: none;
+  }
+
+  .navigation,
+  .navigationProgress::after {
+    scroll-behavior: auto;
+    animation: none;
+  }
+
+  .navigationProgress::after {
+    inset: 0;
+    width: 100%;
+    transform: none;
   }
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import {
   MOBILE_FAVORITE_OPTIONS,
@@ -18,6 +18,7 @@ const FIXED_MOBILE_HREFS = new Set(["/", "/transactions", "/analysis"]);
 
 export default function MobileNavigation() {
   const pathname = usePathname();
+  const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [favoriteHref, setFavoriteHref] = useState<MobileFavoriteHref>("/review");
 
@@ -37,6 +38,13 @@ export default function MobileNavigation() {
   const primaryHrefs = useMemo(() => new Set(primary.map((item) => item.href)), [primary]);
   const secondary = useMemo(() => navigationItems.filter((item) => !primaryHrefs.has(item.href)), [primaryHrefs]);
   const moreActive = secondary.some((item) => isNavigationActive(pathname, item.href));
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      primary.forEach((item) => router.prefetch(item.href));
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [primary, router]);
 
   function updateFavorite(value: string) {
     if (!(MOBILE_FAVORITE_OPTIONS as readonly string[]).includes(value)) return;
@@ -61,11 +69,15 @@ export default function MobileNavigation() {
             {secondary.map((item) => {
               const active = isNavigationActive(pathname, item.href);
               return (
-                <Link prefetch={false}
+                <Link
+                  prefetch={false}
                   key={item.href}
                   href={item.href}
                   className={`${styles.mobileMoreLink}${active ? ` ${styles.mobileActive}` : ""}`}
                   aria-current={active ? "page" : undefined}
+                  onMouseEnter={() => router.prefetch(item.href)}
+                  onFocus={() => router.prefetch(item.href)}
+                  onTouchStart={() => router.prefetch(item.href)}
                 >
                   <span className={styles.mobileDockIcon}><ProductIcon name={item.icon} /></span>
                   <span>{item.label}</span>
@@ -95,11 +107,15 @@ export default function MobileNavigation() {
         {primary.map((item) => {
           const active = isNavigationActive(pathname, item.href);
           return (
-            <Link prefetch={false}
+            <Link
+              prefetch={false}
               key={item.href}
               href={item.href}
               className={`${styles.mobileDockLink}${active ? ` ${styles.mobileActive}` : ""}`}
               aria-current={active ? "page" : undefined}
+              onMouseEnter={() => router.prefetch(item.href)}
+              onFocus={() => router.prefetch(item.href)}
+              onTouchStart={() => router.prefetch(item.href)}
             >
               <span className={styles.mobileDockIcon}><ProductIcon name={item.icon} /></span>
               <span>{item.shortLabel ?? item.label}</span>
