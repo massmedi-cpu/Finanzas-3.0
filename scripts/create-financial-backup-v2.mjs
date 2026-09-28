@@ -226,6 +226,7 @@ try {
     ...connectionArgs(),
     "--schema", "financial_app",
     "--data-only",
+    "--disable-triggers",
     "--no-owner",
     "--no-privileges",
     ...exclusionArgs,
@@ -267,6 +268,7 @@ try {
       deletionIntentsAreNotRestored: true,
       deletionRuntimePolicyIsNotRestored: true,
       deletionMustBeReapprovedAfterRestore: true,
+      dataTriggersDisabledDuringRestore: true,
     },
     files: {
       schema: fileEvidence(schemaFile),
@@ -279,6 +281,7 @@ try {
       archive: storageArchive,
     },
     restoreRequires: [
+      "restore data with trigger guards emitted by pg_dump --disable-triggers",
       "reprovision authorized user allowlist",
       "reprovision workspace memberships after auth user exists",
       "reprovision Google/Vault authorization",
