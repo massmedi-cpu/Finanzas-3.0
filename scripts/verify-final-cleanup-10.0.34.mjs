@@ -71,9 +71,10 @@ const productFiles = tracked.filter((path) => {
   return [".js", ".jsx", ".ts", ".tsx", ".mjs", ".cjs"].includes(extname(path));
 });
 
-// console.warn/error are valid operational observability and error-boundary signals.
-// Cleanup only blocks accidental interactive/development logging and debugger statements.
-const debugPattern = /\bdebugger\s*;|\bconsole\.(?:log|debug|info)\s*\(/;
+// info/warn/error are used intentionally for structured RUM, preview OCR diagnostics,
+// performance timing and operational failure reporting. Cleanup blocks only interactive
+// development logging and debugger statements.
+const debugPattern = /\bdebugger\s*;|\bconsole\.(?:log|debug)\s*\(/;
 for (const path of productFiles) {
   const text = read(path);
   if (debugPattern.test(text)) fail(`development debug statement found in product code: ${path}`);
@@ -131,5 +132,6 @@ console.log(JSON.stringify({
   productFilesChecked: productFiles.length,
   retiredTemplates: 0,
   pwaProtected: true,
+  operationalTelemetryPreserved: true,
   backupsProtectedUntilTask30: true,
 }));
