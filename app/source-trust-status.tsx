@@ -61,8 +61,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-ES", {
   timeZone: "Europe/Madrid",
 });
 
-const integerFormatter = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
-
 function record(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -108,8 +106,12 @@ function formatSyncDate(value: string | null) {
   return Number.isNaN(date.getTime()) ? null : dateTimeFormatter.format(date).replace(".", "");
 }
 
+function formatInteger(value: number) {
+  return Math.trunc(value).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
 function plural(count: number, singular: string, pluralValue: string) {
-  return `${integerFormatter.format(count)} ${count === 1 ? singular : pluralValue}`;
+  return `${formatInteger(count)} ${count === 1 ? singular : pluralValue}`;
 }
 
 function incidentText(sync: NonNullable<SourceFreshness["sync"]>) {
@@ -150,7 +152,7 @@ function summarize(payload: SourceFreshness): Summary {
   }
 
   const when = formatSyncDate(sync.finishedAt ?? sync.startedAt);
-  const checkedRows = sync.rowsSeen !== null ? `${integerFormatter.format(sync.rowsSeen)} filas revisadas` : null;
+  const checkedRows = sync.rowsSeen !== null ? `${formatInteger(sync.rowsSeen)} filas revisadas` : null;
   const { incidents, text: incidentsText } = incidentText(sync);
   const context = [when ? `Comprobado ${when}` : null, checkedRows, movement].filter(Boolean).join(" · ") || null;
   const details = [context, incidentsText].filter(Boolean).join(" · ") || null;
@@ -188,7 +190,7 @@ function summarize(payload: SourceFreshness): Summary {
     return {
       label: hasDataIncident ? "Fuente con incidencias" : "Fuente con avisos",
       detail: details,
-      tone: hasDataIncident ? "warning" : "warning",
+      tone: "warning",
       showReviewLink: true,
     };
   }
