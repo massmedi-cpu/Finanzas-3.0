@@ -167,3 +167,80 @@ jobs:
             financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.sha256
           if-no-files-found: error
           retention-days: 7
+
+  restore-verify-v2:
+    needs: backup-v2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FINANCIAL_APP_SOURCE_COMMIT: 00e7879decdab3a62b6b8e325b4f04b2004bfe96
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact backup tooling commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Download exact validated backup artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
+          path: restore-artifact
+
+      - name: Verify package hash and extract backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd restore-artifact
+          sha256sum -c "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.sha256"
+          mkdir extracted
+          tar -xzf "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz" -C extracted
+
+      - name: Restore real production backup into isolated PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/restore-verify-production-backup-v2.sh "restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+
+      - name: Recover-verify bundled Storage archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_dir="restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          storage_archive="$(node -e "const m=require('./' + process.argv[1] + '/manifest.json');process.stdout.write(m.storage.archive.file)" "$backup_dir")"
+          mkdir -p restore-artifact/storage
+          tar -xzf "$backup_dir/$storage_archive" -C restore-artifact/storage
+          storage_dir="$(find restore-artifact/storage -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          test -n "$storage_dir"
+          node scripts/validate-storage-archive-v2.mjs "$storage_dir"
