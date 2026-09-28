@@ -3,24 +3,14 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { normalizeSourceSyncIncidents } from "../src/application/source-sync-incidents";
+import {
+  getCachedSourceTrust,
+  invalidateSourceTrustCache,
+  loadSourceTrustFreshness,
+  shouldRevalidateSourceTrust,
+  type SourceFreshness,
+} from "./source-trust-cache";
 import styles from "./source-trust-status.module.css";
-
-type SyncStatus = "success" | "partial" | "failed" | "started";
-
-type SourceFreshness = {
-  available: boolean;
-  latestMovementDate: string | null;
-  sync: null | {
-    status: SyncStatus;
-    finishedAt: string | null;
-    startedAt: string | null;
-    rowsSeen: number | null;
-    rowsFailed: number | null;
-    rowsMissing: number | null;
-    duplicatesDetected: number | null;
-    warningsCount: number | null;
-  };
-};
 
 type RequestState =
   | { kind: "loading" }
@@ -60,39 +50,6 @@ const dateTimeFormatter = new Intl.DateTimeFormat("es-ES", {
   minute: "2-digit",
   timeZone: "Europe/Madrid",
 });
-
-function record(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
-}
-
-function nullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
-}
-
-function nullableFiniteNumber(value: unknown): value is number | null {
-  return value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0);
-}
-
-function isSourceFreshness(value: unknown): value is SourceFreshness {
-  if (!record(value) || typeof value.available !== "boolean") return false;
-  if (!nullableString(value.latestMovementDate)) return false;
-  if (value.sync === null) return true;
-  if (!record(value.sync)) return false;
-
-  const statusValid = value.sync.status === "success"
-    || value.sync.status === "partial"
-    || value.sync.status === "failed"
-    || value.sync.status === "started";
-
-  return statusValid
-    && nullableString(value.sync.finishedAt)
-    && nullableString(value.sync.startedAt)
-    && nullableFiniteNumber(value.sync.rowsSeen)
-    && nullableFiniteNumber(value.sync.rowsFailed)
-    && nullableFiniteNumber(value.sync.rowsMissing)
-    && nullableFiniteNumber(value.sync.duplicatesDetected)
-    && nullableFiniteNumber(value.sync.warningsCount);
-}
 
 function formatMovementDate(value: string | null) {
   if (!value) return null;
@@ -206,32 +163,52 @@ function summarize(payload: SourceFreshness): Summary {
 export default function SourceTrustStatus({ pathname }: { pathname: string }) {
   const visible = useMemo(() => shouldShowSourceTrust(pathname), [pathname]);
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<RequestState>({ kind: "loading" });
+  const [state, setState] = useState<RequestState>(() => {
+    const cached = getCachedSourceTrust();
+    return cached ? { kind: "ready", payload: cached } : { kind: "loading" };
+  });
+
+  useEffect(() => {
+    if (pathname === "/configuration/source" || pathname.startsWith("/configuration/source/")) {
+      invalidateSourceTrustCache();
+    }
+  }, [pathname]);
+
+  useEffect(() => {
+    function revalidateAfterFocus() {
+      if (visible && shouldRevalidateSourceTrust()) {
+        setAttempt((value) => value + 1);
+      }
+    }
+
+    window.addEventListener("focus", revalidateAfterFocus);
+    return () => window.removeEventListener("focus", revalidateAfterFocus);
+  }, [visible]);
 
   useEffect(() => {
     if (!visible) return;
 
-    const controller = new AbortController();
+    const cached = getCachedSourceTrust();
+    if (cached) {
+      setState((current) => (
+        current.kind === "ready" && current.payload === cached
+          ? current
+          : { kind: "ready", payload: cached }
+      ));
+      return;
+    }
+
+    let active = true;
     setState({ kind: "loading" });
 
-    void fetch("/api/analysis/source-freshness", {
-      cache: "no-store",
-      signal: controller.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok) return null;
-        const payload: unknown = await response.json().catch(() => null);
-        return isSourceFreshness(payload) ? payload : null;
-      })
-      .then((payload) => {
-        if (controller.signal.aborted) return;
-        setState(payload ? { kind: "ready", payload } : { kind: "unknown" });
-      })
-      .catch(() => {
-        if (!controller.signal.aborted) setState({ kind: "unknown" });
-      });
+    void loadSourceTrustFreshness().then((payload) => {
+      if (!active) return;
+      setState(payload ? { kind: "ready", payload } : { kind: "unknown" });
+    });
 
-    return () => controller.abort();
+    return () => {
+      active = false;
+    };
   }, [attempt, visible, pathname]);
 
   if (!visible) return null;

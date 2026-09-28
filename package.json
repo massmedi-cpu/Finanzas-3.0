@@ -1,6 +1,6 @@
 {
   "name": "financial-app",
-  "version": "10.0.30",
+  "version": "10.0.31",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -9,6 +9,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
+    "test:source-trust-cache": "playwright test tests/e2e/source-trust-cache-10.0.31.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2",
     "test:pre025": "playwright test tests/e2e/pre025-edge-case-contracts.spec.ts tests/e2e/source-sync-capacity.spec.ts --project=chromium-desktop",
     "test:pre025:ui": "playwright test tests/e2e/pre025-edge-cases-ui.spec.ts --project=chromium-desktop",
     "test:comparison": "playwright test tests/e2e/comparison-contract.spec.ts --project=chromium-desktop",
