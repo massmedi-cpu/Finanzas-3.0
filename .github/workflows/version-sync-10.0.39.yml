@@ -1,0 +1,33 @@
+name: Version Sync 10.0.39
+
+on:
+  push:
+    branches:
+      - refactor/source-trust-ci-10.0.39
+    paths:
+      - '.github/workflows/version-sync-10.0.39.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  sync-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm version 10.0.39 --no-git-tag-version
+      - run: rm .github/workflows/version-sync-10.0.39.yml
+      - name: Commit synchronized version and retire one-shot workflow
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json .github/workflows/version-sync-10.0.39.yml
+          git commit -m "chore(release): version Financial App 10.0.39"
+          git push
