@@ -267,7 +267,7 @@ export default function GlobalSearch() {
                       href={item.href}
                       role="option"
                       aria-selected={activeIndex === index}
-                      className={`${styles.result}${activeIndex === index ? ` ${styles.active}` : ""}`
+                      className={`${styles.result}${activeIndex === index ? ` ${styles.active}` : ""}`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onFocus={() => setActiveIndex(index)}
                       onClick={() => close(false)}
