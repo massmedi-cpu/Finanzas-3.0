@@ -19,6 +19,7 @@ function requireAbsent(path) {
 
 const postflightWorkflow = read(".github/workflows/production-postflight.yml");
 const backupWorkflow = read(".github/workflows/production-backup-v2.yml");
+const backupContractWorkflow = read(".github/workflows/backup-production-contract.yml");
 const postflightConfig = read("playwright.production-postflight.config.ts");
 const postflightSpec = read("tests/e2e/production-postflight.spec.ts");
 const readonlyVerifier = read("scripts/verify-production-data-readonly.mjs");
@@ -26,6 +27,7 @@ const readonlyVerifier = read("scripts/verify-production-data-readonly.mjs");
 for (const legacyPath of [
   ".github/workflows/production-postflight-10.0.35.yml",
   ".github/workflows/production-backup-v2-10.0.35.yml",
+  ".github/workflows/backup-production-contract-10.0.35.yml",
   "tests/e2e/production-postflight-10.0.35.spec.ts",
   "scripts/verify-production-data-readonly-10.0.35.mjs",
 ]) requireAbsent(legacyPath);
@@ -33,6 +35,7 @@ for (const legacyPath of [
 for (const [label, source] of [
   ["postflight_workflow", postflightWorkflow],
   ["backup_workflow", backupWorkflow],
+  ["backup_contract_workflow", backupContractWorkflow],
   ["postflight_spec", postflightSpec],
 ]) {
   for (const stale of [
@@ -68,6 +71,12 @@ requireText(backupWorkflow, ".tgz.gpg", "backup_encrypted_artifact");
 requireText(backupWorkflow, "restore-verify-production-backup-v2.sh", "backup_real_restore_verification");
 requireText(backupWorkflow, "validate-storage-archive-v2.mjs", "backup_storage_verification");
 
+requireText(backupContractWorkflow, "workflow_dispatch:", "backup_contract_manual_rehearsal");
+requireText(backupContractWorkflow, "scripts/phase13-restore-rehearsal-v2.sh", "backup_contract_restore_rehearsal");
+requireText(backupContractWorkflow, 'EXPECTED_APP_VERSION="$(node -p', "backup_contract_dynamic_version");
+requireText(backupContractWorkflow, 'EXPECTED_SOURCE_COMMIT="$GITHUB_SHA"', "backup_contract_dynamic_commit");
+requireText(backupContractWorkflow, "private-financial-sentinel", "backup_contract_log_redaction");
+
 requireText(postflightConfig, 'testMatch: "production-postflight.spec.ts"', "postflight_config_generic_spec");
 forbidText(postflightConfig, "production-postflight-10.0.35.spec.ts", "postflight_config_legacy_spec");
 forbidText(postflightSpec, '?? "10.0.35"', "postflight_default_legacy_version");
@@ -83,6 +92,7 @@ console.log(JSON.stringify({
   status: "release_operations_contract_ok",
   postflight: "version_agnostic",
   backup: "version_agnostic",
+  backupContract: "version_agnostic",
   legacyReleaseFiles: 0,
   bankSourcePolicy: "read_only",
   productionMutation: false,
