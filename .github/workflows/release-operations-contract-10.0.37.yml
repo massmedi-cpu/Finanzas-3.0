@@ -7,6 +7,7 @@ on:
     paths:
       - ".github/workflows/production-postflight.yml"
       - ".github/workflows/production-backup-v2.yml"
+      - ".github/workflows/backup-production-contract.yml"
       - ".github/workflows/release-operations-contract-10.0.37.yml"
       - "playwright.production-postflight.config.ts"
       - "tests/e2e/production-postflight.spec.ts"
