@@ -1,0 +1,27 @@
+name: Trigger Production Backup 10.0.44 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trigger-production-backup-10.0.44-once.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch exact Production Backup v2
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          gh workflow run production-backup-v2.yml \
+            --ref main \
+            -f source_commit=d84cf69e6bd51a47c58c35eeef55130f5b8ca770 \
+            -f expected_app_version=10.0.44
