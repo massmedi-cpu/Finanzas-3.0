@@ -1,0 +1,5 @@
+
+> financial-app@10.0.44 typecheck
+> tsc --noEmit
+
+app/global-search.tsx(271,23): error TS1005: '}' expected.
