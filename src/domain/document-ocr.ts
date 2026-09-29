@@ -369,12 +369,18 @@ function buildReceiptReviewText(lines: OcrLine[]) {
       }
     }
 
-    // A product row must remain visible even when OCR loses every numeric cell. Because this
-    // loop is already bounded by the receipt header and the first summary line, preserving a
-    // meaningful description here lets integrity checks classify the row as unresolved instead
-    // of incorrectly comparing a partial subtotal with the printed total.
+    // A product row must remain visible even when OCR loses some or every numeric cell. Keep the
+    // cleaned description and only trustworthy numeric evidence from the real numeric columns;
+    // isolated description-column residues stay excluded, while partial rows remain auditable.
     const fallbackDescription = receiptDescriptionText(ordered, unitsHeader.box.x);
-    if (fallbackDescription) output.push(fallbackDescription);
+    if (fallbackDescription) {
+      const fallbackEvidence = ordered
+        .filter((word) => word.box.x >= unitsHeader.box.x - 0.02)
+        .map((word) => word.text.trim())
+        .filter((text) => /^\d{1,2}$/.test(text) || explicitReceiptMoney(text))
+        .map((text) => normalizeReceiptMoneyEs(text) ?? text);
+      output.push([fallbackDescription, ...fallbackEvidence].join(" "));
+    }
   }
 
   // Require more than one structured item before replacing geometric review.
