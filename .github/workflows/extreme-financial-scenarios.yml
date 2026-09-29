@@ -1,0 +1,45 @@
+name: Extreme Financial Scenarios
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/inicio-overview.tsx"
+      - "supabase/migrations/20260905225500_phase5_financial_logic_core.sql"
+      - "tests/e2e/extreme-financial-scenarios.spec.ts"
+      - ".github/workflows/extreme-financial-scenarios.yml"
+      - ".github/workflows/cross-module-financial-consistency.yml"
+      - ".github/workflows/financial-consistency-ci-gates-10.0.40.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Extreme financial scenario contracts
+        run: npx playwright test tests/e2e/extreme-financial-scenarios.spec.ts --project=chromium-desktop
