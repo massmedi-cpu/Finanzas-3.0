@@ -2,6 +2,7 @@ import {
   callPersistenceGatewayBatch,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { prepareGlobalSearchQuery } from "../../global-search-policy";
 
 export const dynamic = "force-dynamic";
 
@@ -192,9 +193,10 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const query = searchParams.get("q")?.trim() ?? "";
-    if (query.length < 2 || query.length > 120) {
-      return Response.json({ query, items: [], partial: false }, { headers: HEADERS });
+    const rawQuery = searchParams.get("q") ?? "";
+    const query = prepareGlobalSearchQuery(rawQuery);
+    if (!query) {
+      return Response.json({ query: rawQuery.trim(), items: [], partial: false }, { headers: HEADERS });
     }
 
     const normalizedQuery = normalize(query);
