@@ -1,0 +1,54 @@
+name: DB Integrity Gates 10.0.38
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/category-lifecycle-integrity.yml'
+      - '.github/workflows/categorization-rule-indexes.yml'
+      - '.github/workflows/transaction-indexes.yml'
+      - '.github/workflows/forecast-indexes.yml'
+      - '.github/workflows/sync-indexes.yml'
+      - '.github/workflows/config-recurrence-indexes.yml'
+      - '.github/workflows/transaction-support-indexes.yml'
+      - '.github/workflows/document-deletion-indexes.yml'
+      - '.github/workflows/db-integrity-gates-10.0.38.yml'
+      - 'scripts/verify-db-ci-gates-10.0.38.mjs'
+      - 'tests/e2e/*index-contract.spec.ts'
+      - 'tests/e2e/category-lifecycle-integrity.spec.ts'
+      - 'supabase/migrations/**'
+  push:
+    branches:
+      - refactor/ci-db-gates-10.0.38
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/verify-db-ci-gates-10.0.38.mjs
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Database integrity regressions
+        run: >-
+          npx playwright test
+          tests/e2e/category-lifecycle-integrity.spec.ts
+          tests/e2e/categorization-rule-index-contract.spec.ts
+          tests/e2e/transaction-index-contract.spec.ts
+          tests/e2e/forecast-index-contract.spec.ts
+          tests/e2e/sync-index-contract.spec.ts
+          tests/e2e/config-recurrence-index-contract.spec.ts
+          tests/e2e/transaction-support-index-contract.spec.ts
+          tests/e2e/document-deletion-index-contract.spec.ts
+          --project=chromium-desktop
