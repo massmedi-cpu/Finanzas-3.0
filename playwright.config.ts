@@ -5,6 +5,11 @@ const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET;
 const trustedOidcToken = process.env.VERCEL_TRUSTED_OIDC_TOKEN;
 const isProtectedPreview = /^https:\/\/.*\.vercel\.app\/?$/i.test(baseURL);
 
+// Provider/domain OCR tests have their own real-OCR certification in playwright.ocr.config.ts.
+// Keep them out of the general desktop/mobile browser matrix so expensive Tesseract work is not
+// duplicated twice while preserving the browser-facing OCR/API/UI coverage in the main suite.
+const OCR_PROVIDER_TESTS = /document-ocr-(?:contract|service|runtime-composition|anchor-filter(?:-clean-input)?|anchor-recrop-monotonic|anchor-width|row-geometry|padded-cell-consensus|focused-cell-consensus|row-cell-consensus|row-refinement|column-sweep|upscaled-cell-consensus|cell-recovery|columns-native|illumination-native|cr008-unresolved-row)\.spec\.ts/;
+
 if (isProtectedPreview && !bypassSecret && !trustedOidcToken) {
   throw new Error(
     "A Vercel automation bypass secret or trusted OIDC token is required for protected preview E2E tests.",
@@ -22,6 +27,7 @@ const protectionHeaders = bypassSecret
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: OCR_PROVIDER_TESTS,
   fullyParallel: false,
   forbidOnly: Boolean(process.env.CI),
   retries: process.env.CI ? 1 : 0,
