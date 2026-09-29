@@ -1,5 +1,5 @@
 name: Production Backup v2 10.0.35
-# Trigger real production backup after secure secret provisioning on 2026-09-29.
+# Retry real production backup after restore path fix on 2026-09-29.
 
 on:
   workflow_dispatch:
@@ -243,7 +243,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash scripts/restore-verify-production-backup-v2.sh "restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          bash scripts/restore-verify-production-backup-v2.sh "$PWD/restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
 
       - name: Recover-verify bundled Storage archive
         shell: bash
