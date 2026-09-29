@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { formatMoneyCents } from "../src/core/money";
+import { MAX_GLOBAL_SEARCH_QUERY_LENGTH, moveGlobalSearchIndex, prepareGlobalSearchQuery } from "./global-search-policy";
 import { shouldOpenGlobalSearchShortcut } from "./global-search-shortcut";
 import styles from "./global-search.module.css";
 
@@ -28,6 +29,7 @@ const KIND_LABEL: Record<SearchKind, string> = {
   section: "Sección",
 };
 const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid" });
+const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 function formatDate(value: string | null | undefined) {
   if (!value) return null;
@@ -39,7 +41,10 @@ export default function GlobalSearch() {
   const pathname = usePathname();
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const openerRef = useRef<HTMLElement | null>(null);
   const requestRef = useRef<AbortController | null>(null);
+  const requestSequenceRef = useRef(0);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
@@ -47,6 +52,29 @@ export default function GlobalSearch() {
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
+
+  function openSearch() {
+    openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setOpen(true);
+  }
+
+  function close(restoreFocus = true) {
+    requestSequenceRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    setOpen(false);
+    setQuery("");
+    setItems([]);
+    setLoading(false);
+    setPartial(false);
+    setError(false);
+    setActiveIndex(-1);
+    const opener = openerRef.current;
+    openerRef.current = null;
+    if (restoreFocus && opener?.isConnected) {
+      window.setTimeout(() => opener.focus(), 0);
+    }
+  }
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
@@ -61,9 +89,9 @@ export default function GlobalSearch() {
         targetContentEditable: target?.isContentEditable ?? false,
       })) {
         event.preventDefault();
+        openerRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         setOpen(true);
       }
-      if (event.key === "Escape") setOpen(false);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
@@ -76,17 +104,25 @@ export default function GlobalSearch() {
   }, [open]);
 
   useEffect(() => {
+    requestSequenceRef.current += 1;
+    requestRef.current?.abort();
+    requestRef.current = null;
+    openerRef.current = null;
     setOpen(false);
     setQuery("");
     setItems([]);
+    setLoading(false);
+    setPartial(false);
+    setError(false);
     setActiveIndex(-1);
   }, [pathname]);
 
   useEffect(() => {
     requestRef.current?.abort();
+    const requestSequence = ++requestSequenceRef.current;
     setActiveIndex(-1);
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
+    const preparedQuery = prepareGlobalSearchQuery(query);
+    if (!preparedQuery) {
       setItems([]);
       setLoading(false);
       setPartial(false);
@@ -98,24 +134,24 @@ export default function GlobalSearch() {
     setLoading(true);
     setError(false);
     const timer = window.setTimeout(() => {
-      void fetch(`/api/search?q=${encodeURIComponent(trimmed)}`, { cache: "no-store", signal: controller.signal })
+      void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => null) as SearchResponse | null;
-          if (!response.ok || !payload || !Array.isArray(payload.items)) throw new Error("search_failed");
-          if (controller.signal.aborted) return;
+          if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
+          if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
           setItems(payload.items);
           setPartial(payload.partial === true);
         })
         .catch((cause) => {
           if (cause instanceof DOMException && cause.name === "AbortError") return;
-          if (!controller.signal.aborted) {
+          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) {
             setItems([]);
             setPartial(false);
             setError(true);
           }
         })
         .finally(() => {
-          if (!controller.signal.aborted) setLoading(false);
+          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) setLoading(false);
         });
     }, 180);
     return () => {
@@ -124,39 +160,74 @@ export default function GlobalSearch() {
     };
   }, [query]);
 
-  function close() {
-    requestRef.current?.abort();
-    setOpen(false);
-  }
+  useEffect(() => {
+    if (activeIndex < 0) return;
+    document.getElementById(`${inputId}-result-${activeIndex}`)?.scrollIntoView({ block: "nearest" });
+  }, [activeIndex, inputId]);
 
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => items.length ? Math.min(items.length - 1, current + 1) : -1);
+      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "next"));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => items.length ? Math.max(0, current - 1) : -1);
+      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "previous"));
     } else if (event.key === "Enter" && activeIndex >= 0 && items[activeIndex]) {
       event.preventDefault();
+      requestSequenceRef.current += 1;
+      requestRef.current?.abort();
       window.location.assign(items[activeIndex].href);
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      close();
     }
   }
 
+  function onDialogKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [])
+      .filter((element) => element.offsetParent !== null);
+    if (focusable.length === 0) {
+      event.preventDefault();
+      inputRef.current?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+    if (event.shiftKey && (active === first || !dialogRef.current?.contains(active))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  const preparedQuery = prepareGlobalSearchQuery(query);
+  const statusMessage = loading
+    ? "Buscando resultados…"
+    : error
+      ? "No se pudo completar la búsqueda."
+      : preparedQuery
+        ? `${items.length} ${items.length === 1 ? "resultado" : "resultados"}${partial ? ". Algunos orígenes no respondieron." : "."}`
+        : "Escribe al menos dos caracteres para buscar.";
+
   return (
     <>
-      <button type="button" className={styles.trigger} onClick={() => setOpen(true)} aria-label="Buscar en Financial App">
+      <button type="button" className={styles.trigger} onClick={openSearch} aria-label="Buscar en Financial App">
         <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
         <span>Buscar</span><kbd>/</kbd>
       </button>
       {open && (
         <div className={styles.backdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
-          <div className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`}>
+          <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`} onKeyDown={onDialogKeyDown}>
             <div className={styles.topline}>
               <div><span>BUSCADOR GLOBAL</span><strong id={`${inputId}-title`}>Encuentra cualquier cosa</strong></div>
-              <button type="button" onClick={close} aria-label="Cerrar buscador">Esc</button>
+              <button type="button" onClick={() => close()} aria-label="Cerrar buscador">Esc</button>
             </div>
             <label className={styles.searchBox} htmlFor={inputId}>
               <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
@@ -168,20 +239,24 @@ export default function GlobalSearch() {
                 onKeyDown={onInputKeyDown}
                 placeholder="Comercio, factura, categoría, movimiento…"
                 autoComplete="off"
+                maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
-                aria-expanded={items.length > 0}
+                aria-expanded="true"
+                aria-autocomplete="list"
                 aria-controls={`${inputId}-results`}
+                aria-describedby={`${inputId}-status`}
                 aria-activedescendant={activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
               />
-              {loading && <span className={styles.loading} role="status">Buscando…</span>}
+              {loading && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
             </label>
+            <p id={`${inputId}-status`} className={styles.srOnly} role="status" aria-live="polite" aria-atomic="true">{statusMessage}</p>
             <div id={`${inputId}-results`} className={styles.results} role="listbox" aria-label="Resultados de búsqueda">
-              {query.trim().length < 2 ? (
+              {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
               ) : error ? (
                 <div className={styles.hint}><strong>No se pudo completar la búsqueda</strong><span>Los datos no se han modificado. Puedes intentarlo de nuevo.</span></div>
               ) : !loading && items.length === 0 ? (
-                <div className={styles.hint}><strong>Sin coincidencias</strong><span>No hay resultados para “{query.trim()}”.</span></div>
+                <div className={styles.hint}><strong>Sin coincidencias</strong><span>No hay resultados para “{preparedQuery}”.</span></div>
               ) : (
                 items.map((item, index) => {
                   const itemDate = formatDate(item.date);
@@ -195,7 +270,7 @@ export default function GlobalSearch() {
                       className={`${styles.result}${activeIndex === index ? ` ${styles.active}` : ""}`}
                       onMouseEnter={() => setActiveIndex(index)}
                       onFocus={() => setActiveIndex(index)}
-                      onClick={close}
+                      onClick={() => close(false)}
                     >
                       <span className={styles.kind}>{KIND_LABEL[item.kind]}</span>
                       <span className={styles.copy}><strong>{item.title}</strong>{item.subtitle && <small>{item.subtitle}</small>}</span>
