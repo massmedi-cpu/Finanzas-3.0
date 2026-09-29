@@ -109,7 +109,7 @@ jobs:
       - name: Restore-verify generated backup with the new production verifier
         shell: bash
         env:
-          EXPECTED_APP_VERSION: "10.0.34"
+          EXPECTED_APP_VERSION: "10.0.35"
           EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
@@ -137,7 +137,7 @@ jobs:
       - name: Failed restore must not expose row contents in public logs
         shell: bash
         env:
-          EXPECTED_APP_VERSION: "10.0.34"
+          EXPECTED_APP_VERSION: "10.0.35"
           EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
