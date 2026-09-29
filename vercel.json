@@ -2,7 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "alias": ["financialapp-home.vercel.app"],
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": {
+      "**": false,
+      "rebuild/phase-cr008-10.0.45": true
+    }
   },
   "ignoreCommand": "if [ \"$VERCEL_ENV\" = \"production\" ] || [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; then exit 1; fi; case \"$VERCEL_GIT_COMMIT_REF\" in rebuild/phase-*) printf \"%s\" \"$VERCEL_GIT_COMMIT_MESSAGE\" | grep -Fq \"[vercel-preview]\" && exit 1 || exit 0 ;; *) exit 1 ;; esac"
 }
