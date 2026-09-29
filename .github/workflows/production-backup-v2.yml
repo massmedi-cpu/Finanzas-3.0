@@ -1,0 +1,302 @@
+name: Production Backup v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_commit:
+        description: "Exact stable Financial App commit SHA to back up"
+        required: true
+        type: string
+      expected_app_version:
+        description: "Exact SemVer stored in source_commit/package.json"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: financial-app-production-backup-v2
+  cancel-in-progress: false
+
+jobs:
+  validate-dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Validate immutable backup identity
+        env:
+          FINANCIAL_APP_SOURCE_COMMIT: ${{ inputs.source_commit }}
+          EXPECTED_APP_VERSION: ${{ inputs.expected_app_version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "${GITHUB_REF_NAME}" = "main"
+          [[ "$FINANCIAL_APP_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$EXPECTED_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+
+  backup-v2:
+    needs: validate-dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
+      FINANCIAL_APP_SOURCE_COMMIT: ${{ inputs.source_commit }}
+      EXPECTED_APP_VERSION: ${{ inputs.expected_app_version }}
+      FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
+    steps:
+      - name: Checkout exact stable source commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+
+      - name: Verify exact source version and backup protection secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$FINANCIAL_APP_SOURCE_COMMIT"
+          version="$(node -p "require('./package.json').version")"
+          test "$version" = "$EXPECTED_APP_VERSION"
+          test -n "$FINANCIAL_APP_DB_PASSWORD"
+          if [ "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -lt 32 ]; then
+            echo "FINANCIAL_APP_BACKUP_PASSPHRASE must be configured with at least 32 random characters."
+            exit 1
+          fi
+          echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
+          echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+          if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"; fi
+          if [ -n "$SUPABASE_SECRET_KEY" ]; then echo "::add-mask::$SUPABASE_SECRET_KEY"; fi
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Resolve authenticated production database route
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+          const password = process.env.FINANCIAL_APP_DB_PASSWORD ?? '';
+          if (!password) process.exit(1);
+          process.stdout.write(`::add-mask::${password}\n`);
+          const projectRef = process.env.FINANCIAL_APP_SUPABASE_PROJECT_REF;
+          const candidates = [
+            { host: `db.${projectRef}.supabase.co`, user: 'postgres', name: 'direct' },
+            { host: 'aws-1-eu-west-3.pooler.supabase.com', user: `postgres.${projectRef}`, name: 'session_pooler' },
+          ];
+          function probe(candidate) {
+            return spawnSync(
+              'psql',
+              ['--host', candidate.host, '--port', '5432', '--username', candidate.user, '--dbname', 'postgres', '--no-password', '--tuples-only', '--command', 'SELECT 1;'],
+              { encoding: 'utf8', env: { ...process.env, PGPASSWORD: password, PGSSLMODE: 'require' } },
+            );
+          }
+          for (const candidate of candidates) {
+            const attempts = candidate.name === 'session_pooler' ? 5 : 1;
+            for (let round = 1; round <= attempts; round += 1) {
+              const result = probe(candidate);
+              if (result.status === 0) {
+                const url = new URL('postgresql://postgres@localhost/postgres');
+                url.hostname = candidate.host;
+                url.port = '5432';
+                url.username = candidate.user;
+                url.password = password;
+                url.searchParams.set('sslmode', 'require');
+                const value = url.toString();
+                process.stdout.write(`::add-mask::${value}\n`);
+                fs.appendFileSync(process.env.GITHUB_ENV, `FINANCIAL_APP_DB_URL=${value}\n`);
+                console.log(`production_backup_v2_route=${candidate.name}`);
+                process.exit(0);
+              }
+              if (round < attempts) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15000);
+            }
+          }
+          throw new Error('production_backup_v2_database_route_unavailable');
+          NODE
+
+      - name: Archive and recover-verify Supabase Storage
+        shell: bash
+        run: |
+          set -euo pipefail
+          storage_dir="backups/storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          storage_archive="financial-app-storage-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
+          node scripts/archive-supabase-storage-v2.mjs "$storage_dir"
+          node scripts/validate-storage-archive-v2.mjs "$storage_dir"
+          tar -czf "$storage_archive" -C backups "storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          sha256sum "$storage_archive" | tee "${storage_archive}.sha256"
+          mkdir -p backups/storage-recovery-check
+          tar -xzf "$storage_archive" -C backups/storage-recovery-check
+          node scripts/validate-storage-archive-v2.mjs "backups/storage-recovery-check/storage-offsite-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          echo "FINANCIAL_APP_STORAGE_ARCHIVE=$PWD/$storage_archive" >> "$GITHUB_ENV"
+
+      - name: Create and validate immutable backup v2
+        shell: bash
+        run: |
+          set -euo pipefail
+          output="backups/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          node scripts/create-financial-backup-v2.mjs "$output"
+          node scripts/validate-financial-backup-v2.mjs "$output"
+          node - <<'NODE' "$output/manifest.json"
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (manifest.sourceCommit !== process.env.FINANCIAL_APP_SOURCE_COMMIT) throw new Error('backup source SHA mismatch');
+          if (manifest.appVersion !== process.env.EXPECTED_APP_VERSION) {
+            throw new Error(`expected app version ${process.env.EXPECTED_APP_VERSION}, got ${manifest.appVersion}`);
+          }
+          if (!manifest.storage?.archive?.sha256) throw new Error('Storage archive evidence is missing from backup manifest');
+          console.log(JSON.stringify({
+            status: 'production_backup_v2_validated',
+            appVersion: manifest.appVersion,
+            schemaVersion: manifest.schemaVersion,
+            sourceCommit: manifest.sourceCommit,
+            storageBuckets: manifest.storage?.bucketCount ?? null,
+            storageObjects: manifest.storage?.objectCount ?? null,
+            storageArchiveBytes: manifest.storage?.archive?.bytes ?? null,
+            workspaceTenancy: manifest.capabilities?.workspaceTenancy ?? null,
+          }));
+          NODE
+
+      - name: Package and encrypt validated backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
+          tar -czf "$archive" -C backups "production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          bash scripts/protect-backup-artifact-v2.sh encrypt "$archive" "${archive}.gpg"
+          sha256sum "${archive}.gpg" | tee "${archive}.gpg.sha256"
+
+      - name: Upload encrypted backup artifact only
+        uses: actions/upload-artifact@v4
+        with:
+          name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
+          path: |
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.gpg
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.gpg.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+  restore-verify-v2:
+    needs: backup-v2
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FINANCIAL_APP_SOURCE_COMMIT: ${{ inputs.source_commit }}
+      EXPECTED_APP_VERSION: ${{ inputs.expected_app_version }}
+      FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact stable source commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_commit }}
+          fetch-depth: 0
+
+      - name: Verify source identity and protection secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$GITHUB_SHA" = "$FINANCIAL_APP_SOURCE_COMMIT"
+          version="$(node -p "require('./package.json').version")"
+          test "$version" = "$EXPECTED_APP_VERSION"
+          test "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -ge 32
+          echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Install PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Download exact encrypted backup artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
+          path: restore-artifact
+
+      - name: Verify ciphertext hash, decrypt and extract backup
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd restore-artifact
+          sha256sum -c "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.gpg.sha256"
+          bash "$GITHUB_WORKSPACE/scripts/protect-backup-artifact-v2.sh" decrypt \
+            "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.gpg" \
+            "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
+          mkdir extracted
+          tar -xzf "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz" -C extracted
+
+      - name: Verify restored manifest identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_dir="restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          node - <<'NODE' "$backup_dir/manifest.json"
+          const fs = require('node:fs');
+          const manifest = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+          if (manifest.sourceCommit !== process.env.FINANCIAL_APP_SOURCE_COMMIT) throw new Error('restored backup source SHA mismatch');
+          if (manifest.appVersion !== process.env.EXPECTED_APP_VERSION) throw new Error('restored backup app version mismatch');
+          NODE
+
+      - name: Restore real production backup into isolated PostgreSQL 17
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash scripts/restore-verify-production-backup-v2.sh "$PWD/restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+
+      - name: Recover-verify bundled Storage archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup_dir="restore-artifact/extracted/production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
+          storage_archive="$(node -e "const m=require('./' + process.argv[1] + '/manifest.json');process.stdout.write(m.storage.archive.file)" "$backup_dir")"
+          mkdir -p restore-artifact/storage
+          tar -xzf "$backup_dir/$storage_archive" -C restore-artifact/storage
+          storage_dir="$(find restore-artifact/storage -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+          test -n "$storage_dir"
+          node scripts/validate-storage-archive-v2.mjs "$storage_dir"
