@@ -1,17 +1,21 @@
-name: Source Trust Cache 10.0.31
+name: Source Incident Trace
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - "app/source-trust-status.tsx"
-      - "app/source-trust-cache.ts"
-      - "tests/e2e/source-trust-cache-10.0.31.spec.ts"
-      - "scripts/verify-source-trust-cache-10.0.31.mjs"
+      - "app/configuration/source/source-client.tsx"
+      - "app/configuration/source/source.module.css"
+      - "app/review/review-client.tsx"
+      - "src/application/source-sync-incidents.ts"
+      - "app/globals.css"
+      - "tests/e2e/source-incident-trace.spec.ts"
       - "package.json"
       - "package-lock.json"
-      - ".github/workflows/source-trust-cache-10.0.31.yml"
+      - ".github/workflows/source-incident-trace.yml"
+      - ".github/workflows/review-sign-mismatch-10.0.26.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,33 +23,24 @@ permissions:
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 20
     steps:
       - name: Checkout exact commit
         uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Source trust cache contract
-        run: node scripts/verify-source-trust-cache-10.0.31.mjs
-
       - name: TypeScript
         run: npm run typecheck
-
       - name: Production build
         run: npm run build
-
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-
-      - name: Source trust cache desktop and mobile
-        run: npx playwright test tests/e2e/source-trust-cache-10.0.31.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+      - name: Source incident contracts and UX
+        run: npx playwright test tests/e2e/source-incident-trace.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
