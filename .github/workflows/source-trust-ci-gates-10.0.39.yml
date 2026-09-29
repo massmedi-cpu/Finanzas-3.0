@@ -1,0 +1,59 @@
+name: Source Trust CI Gates 10.0.39
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/sync-missing-persistence.yml'
+      - '.github/workflows/source-incident-trace.yml'
+      - '.github/workflows/source-health-consistency.yml'
+      - '.github/workflows/source-trust-appshell.yml'
+      - '.github/workflows/source-trust-cache.yml'
+      - '.github/workflows/source-trust-ci-gates-10.0.39.yml'
+      - 'scripts/verify-source-trust-ci-gates-10.0.39.mjs'
+      - 'src/application/source-sync-incidents.ts'
+      - 'app/source-trust-cache.ts'
+      - 'app/source-trust-status.tsx'
+      - 'tests/e2e/sync-missing-persistence-contract.spec.ts'
+      - 'tests/e2e/source-incident-trace.spec.ts'
+      - 'tests/e2e/source-health-consistency.spec.ts'
+      - 'tests/e2e/source-trust-app-shell.spec.ts'
+      - 'tests/e2e/source-trust-cache-10.0.31.spec.ts'
+      - 'package.json'
+      - 'package-lock.json'
+  push:
+    branches:
+      - refactor/source-trust-ci-10.0.39
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/verify-source-trust-ci-gates-10.0.39.mjs
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Persistent missing-row contract
+        run: npx playwright test tests/e2e/sync-missing-persistence-contract.spec.ts --project=chromium-desktop
+      - name: Source trust and incident regressions desktop and mobile
+        run: >-
+          npx playwright test
+          tests/e2e/source-incident-trace.spec.ts
+          tests/e2e/source-health-consistency.spec.ts
+          tests/e2e/source-trust-app-shell.spec.ts
+          tests/e2e/source-trust-cache-10.0.31.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+          --workers=2
