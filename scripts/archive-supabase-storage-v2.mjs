@@ -2,13 +2,17 @@ import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import {
+  expectedStorageObjectSize,
+  resolveStorageServerCredential,
+} from "./supabase-storage-credential-v2.mjs";
 
 const outputDir = resolve(process.argv[2] ?? "backups/storage-offsite-v2");
 const dbUrl = process.env.FINANCIAL_APP_DB_URL ?? "";
 const projectRef = process.env.FINANCIAL_APP_SUPABASE_PROJECT_REF ?? "btzukbfesxdratqnxuoj";
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? "";
 const secretKey = process.env.SUPABASE_SECRET_KEY ?? "";
-const serverKey = serviceRoleKey || secretKey;
+const serverCredential = resolveStorageServerCredential({ secretKey, serviceRoleKey });
 
 function fail(message) {
   throw new Error(message);
@@ -37,16 +41,10 @@ function encodedObjectPath(value) {
 
 function authHeaders(isPublic) {
   if (isPublic) return {};
-  if (!serverKey) {
-    fail("Private Supabase Storage objects require SUPABASE_SERVICE_ROLE_KEY or SUPABASE_SECRET_KEY in CI secrets.");
+  if (!serverCredential) {
+    fail("Private Supabase Storage objects require SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY in CI secrets.");
   }
-  if (serviceRoleKey) {
-    return {
-      apikey: serviceRoleKey,
-      Authorization: `Bearer ${serviceRoleKey}`,
-    };
-  }
-  return { apikey: secretKey };
+  return serverCredential.headers;
 }
 
 async function downloadObject(object, bucket) {
@@ -91,7 +89,7 @@ if (!Array.isArray(inventory?.buckets) || !Array.isArray(inventory?.objects)) {
 
 const buckets = new Map(inventory.buckets.map((bucket) => [String(bucket.id), bucket]));
 const privateObjects = inventory.objects.filter((object) => !buckets.get(String(object.bucketId))?.public).length;
-if (privateObjects > 0 && !serverKey) {
+if (privateObjects > 0 && !serverCredential) {
   fail(`Storage archive requires a server key because ${privateObjects} object(s) are private.`);
 }
 
@@ -104,8 +102,8 @@ for (let index = 0; index < inventory.objects.length; index += 1) {
   const bucket = buckets.get(String(object.bucketId));
   if (!bucket) fail("Storage object references an unknown bucket.");
   const bytes = await downloadObject(object, bucket);
-  const metadataSize = Number(object?.metadata?.size);
-  if (Number.isFinite(metadataSize) && metadataSize >= 0 && bytes.byteLength !== metadataSize) {
+  const metadataSize = expectedStorageObjectSize(object?.metadata);
+  if (metadataSize !== null && bytes.byteLength !== metadataSize) {
     fail(`Storage object size mismatch: expected ${metadataSize}, received ${bytes.byteLength}; object name withheld.`);
   }
   const id = String(object.id ?? "");
