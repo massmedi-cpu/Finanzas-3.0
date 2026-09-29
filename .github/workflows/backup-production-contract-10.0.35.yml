@@ -131,6 +131,40 @@ jobs:
           fi
           echo "missing restored row detection passed"
 
+      - name: Failed restore must not expose row contents in public logs
+        shell: bash
+        env:
+          EXPECTED_APP_VERSION: "10.0.34"
+          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const root = path.join(process.env.RUNNER_TEMP, 'financial-app-invalid-private-row');
+          fs.cpSync(path.join(process.env.RUNNER_TEMP, 'financial-app-f13-v2-backup'), root, { recursive: true });
+          const file = path.join(root, 'data.sql');
+          const original = fs.readFileSync(file, 'utf8');
+          const invalid = original.replaceAll('\t-12345\t', '\tprivate-financial-sentinel\t');
+          if (original === invalid) throw new Error('synthetic amount fixture not found');
+          fs.writeFileSync(file, invalid);
+          const manifestPath = path.join(root, 'manifest.json');
+          const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+          manifest.files.data.bytes = Buffer.byteLength(invalid);
+          manifest.files.data.sha256 = crypto.createHash('sha256').update(invalid).digest('hex');
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+          NODE
+          if output="$(bash scripts/restore-verify-production-backup-v2.sh "$RUNNER_TEMP/financial-app-invalid-private-row" 2>&1)"; then
+            echo "invalid SQL data was incorrectly accepted"
+            exit 1
+          fi
+          if [[ "$output" != *"reason=database_restore_failed"* || "$output" == *"private-financial-sentinel"* ]]; then
+            echo "restore error redaction contract failed"
+            exit 1
+          fi
+          echo "private SQL row redaction passed"
+
       - name: Storage archive integrity and recovery contract
         shell: bash
         run: |

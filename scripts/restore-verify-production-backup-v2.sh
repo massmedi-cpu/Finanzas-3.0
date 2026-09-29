@@ -75,7 +75,12 @@ END;
 $$;
 SQL
 
-psql_db "$TARGET_URL" --single-transaction -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null
+# COPY errors can include complete financial rows. Public CI logs receive only
+# a failure code; the unencrypted dump stays on the isolated runner.
+if ! psql_db "$TARGET_URL" --single-transaction -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null 2>&1; then
+  echo "PRODUCTION_BACKUP_RESTORE|status=failed|reason=database_restore_failed"
+  exit 1
+fi
 
 # Compare every copied table against this backup's dump, not a later live count.
 node scripts/verify-backup-row-counts-v2.mjs --sql "$BACKUP_DIR" \

@@ -59,6 +59,9 @@ cifrado mediante GnuPG AES-256 y el hash del fichero cifrado. La recuperación
 descifra ese mismo artefacto en el runner aislado antes de comprobar PostgreSQL
 y Storage. Una contraseña errónea o un paquete alterado no dejan una salida
 descifrada aceptada. Los archivos sin cifrar no se incluyen en la subida.
+Los errores al cargar SQL se reducen a un código de fallo, porque PostgreSQL
+puede incluir valores de la fila fallida en su diagnóstico. CI lo comprueba
+con un importe sintético inválido y exige que su contenido no aparezca en logs.
 
 Configurar en [Secrets de GitHub Actions](https://github.com/massmedi-cpu/Finanzas-3.0/settings/secrets/actions):
 
