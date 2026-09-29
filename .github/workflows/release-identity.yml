@@ -1,4 +1,4 @@
-name: Release Identity 10.0.36
+name: Release Identity
 
 on:
   pull_request:
@@ -8,11 +8,9 @@ on:
       - "src/core/build-info.ts"
       - "package.json"
       - "package-lock.json"
-      - "scripts/verify-release-identity-10.0.36.mjs"
-      - ".github/workflows/release-identity-10.0.36.yml"
-  push:
-    branches:
-      - fix/release-identity-10.0.36
+      - "scripts/verify-release-identity.mjs"
+      - ".github/workflows/release-identity.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,12 +20,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: node scripts/verify-release-identity-10.0.36.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/verify-release-identity.mjs
       - run: npm run typecheck
       - run: npm run build

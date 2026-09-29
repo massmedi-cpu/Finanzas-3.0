@@ -1,4 +1,4 @@
-name: Release Operations Contract 10.0.37
+name: Release Operations Contract
 
 on:
   pull_request:
@@ -8,14 +8,12 @@ on:
       - ".github/workflows/production-postflight.yml"
       - ".github/workflows/production-backup-v2.yml"
       - ".github/workflows/backup-production-contract.yml"
-      - ".github/workflows/release-operations-contract-10.0.37.yml"
+      - ".github/workflows/release-operations-contract.yml"
       - "playwright.production-postflight.config.ts"
       - "tests/e2e/production-postflight.spec.ts"
       - "scripts/verify-production-data-readonly.mjs"
-      - "scripts/verify-release-operations-contract-10.0.37.mjs"
-  push:
-    branches:
-      - refactor/release-operations-10.0.37
+      - "scripts/verify-release-operations-contract.mjs"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -25,18 +23,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v6
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
       - uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-      - run: npm ci
-      - run: node scripts/verify-release-operations-contract-10.0.37.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node scripts/verify-release-operations-contract.mjs
       - run: npm run typecheck
       - name: Compile generic Production postflight suite without touching Production
         env:
           PRODUCTION_URL: https://example.invalid
-          EXPECTED_APP_VERSION: "10.0.37"
+          EXPECTED_APP_VERSION: "0.0.0"
           EXPECTED_COMMIT_SHA: "0000000000000000000000000000000000000000"
           EXPECTED_DEPLOYMENT_ID: dpl_ContractOnly
         run: npx playwright test --list --config=playwright.production-postflight.config.ts
