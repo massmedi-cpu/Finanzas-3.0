@@ -1,0 +1,33 @@
+name: Release Identity 10.0.36
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/core/build-info.ts"
+      - "package.json"
+      - "package-lock.json"
+      - "scripts/verify-release-identity-10.0.36.mjs"
+      - ".github/workflows/release-identity-10.0.36.yml"
+  push:
+    branches:
+      - fix/release-identity-10.0.36
+
+permissions:
+  contents: read
+
+jobs:
+  release-identity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node scripts/verify-release-identity-10.0.36.mjs
+      - run: npm run typecheck
+      - run: npm run build
