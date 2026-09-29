@@ -22,6 +22,9 @@ export function resolveStorageServerCredential({ secretKey = "", serviceRoleKey 
 export function expectedStorageObjectSize(metadata) {
   const rawSize = metadata?.size;
   if (rawSize === null || rawSize === undefined) return null;
+  if (typeof rawSize === "string" && rawSize.trim() === "") {
+    throw new Error("Storage object metadata contains an invalid size.");
+  }
 
   const size = Number(rawSize);
   if (!Number.isSafeInteger(size) || size < 0) {
