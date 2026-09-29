@@ -21,7 +21,7 @@ jobs:
           ref: feature/transactions-bulk-10.0.43
           fetch-depth: 0
       - name: Apply fail-closed client patch
-        shell: python
+        shell: python {0}
         run: |
           from pathlib import Path
           path = Path("app/transactions/transactions-client.tsx")
