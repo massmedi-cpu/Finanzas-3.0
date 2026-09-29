@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { verifyStorageBackupConsistency } from "./verify-storage-backup-consistency-v2.mjs";
 
 const backupDir = resolve(process.argv[2] ?? "backups/financial-app-v2");
 const manifestPath = resolve(backupDir, "manifest.json");
@@ -77,7 +78,8 @@ if (
   restoreSafety?.workspaceMembershipsRequireReprovisioning !== true ||
   restoreSafety?.deletionIntentsAreNotRestored !== true ||
   restoreSafety?.deletionRuntimePolicyIsNotRestored !== true ||
-  restoreSafety?.deletionMustBeReapprovedAfterRestore !== true
+  restoreSafety?.deletionMustBeReapprovedAfterRestore !== true ||
+  restoreSafety?.dataTriggersDisabledDuringRestore !== true
 ) {
   fail("restore_safety");
 }
@@ -111,6 +113,9 @@ for (const table of requiredTables) {
   if (!tablePattern.test(schemaSql)) fail("schema_table_missing", table);
 }
 
+if (!/DISABLE\s+TRIGGER\s+ALL/i.test(dataSql) || !/ENABLE\s+TRIGGER\s+ALL/i.test(dataSql)) {
+  fail("restore_trigger_guard");
+}
 for (const table of REQUIRED_DATA_ANCHORS) {
   const dataPattern = new RegExp(`(?:COPY|INSERT\\s+INTO)[\\s\\S]{0,160}(?:financial_app[\\".]*)?\\"?${table}\\"?`, "i");
   if (!dataPattern.test(dataSql)) fail("essential_data_missing", table);
@@ -140,6 +145,14 @@ if (storageInventory.buckets.length !== bucketCount || storageInventory.objects.
 if (objectCount > 0) {
   if (!manifest?.storage?.archive) fail("storage_archive_required");
   verifyEvidence(manifest.storage.archive, "storage_archive");
+  try {
+    verifyStorageBackupConsistency(
+      storageInventory,
+      resolve(backupDir, manifest.storage.archive.file),
+    );
+  } catch (error) {
+    fail("storage_inventory_archive_mismatch", error instanceof Error ? error.message : String(error));
+  }
 } else if (manifest?.storage?.archive) {
   verifyEvidence(manifest.storage.archive, "storage_archive");
 }
@@ -179,6 +192,7 @@ console.log(JSON.stringify({
   sourceCommit: manifest.sourceCommit,
   workspaceTenancy: capabilities.workspaceTenancy,
   deletionRuntime: capabilities.deletionRuntime,
+  triggerSafeRestore: true,
   storageBuckets: bucketCount,
   storageObjects: objectCount,
   bankSourcePolicy: manifest.bankSourcePolicy,
