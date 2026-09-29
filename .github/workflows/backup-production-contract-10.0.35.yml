@@ -10,6 +10,8 @@ on:
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
+      - "scripts/verify-backup-row-counts-v2.mjs"
+      - "tests/backup/**"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
@@ -20,6 +22,8 @@ on:
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
+      - "scripts/verify-backup-row-counts-v2.mjs"
+      - "tests/backup/**"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
@@ -64,11 +68,12 @@ jobs:
           node --check scripts/archive-supabase-storage-v2.mjs
           node --check scripts/validate-storage-archive-v2.mjs
           node --check scripts/verify-storage-backup-consistency-v2.mjs
+          node --check scripts/verify-backup-row-counts-v2.mjs
           bash -n scripts/restore-verify-production-backup-v2.sh
           bash -n scripts/phase13-restore-rehearsal-v2.sh
 
-      - name: Storage inventory and archive must identify the same objects
-        run: node --test tests/backup/storage-backup-consistency-v2.test.mjs
+      - name: Backup row counts and Storage identity contracts
+        run: node --test tests/backup/*.test.mjs
 
       - name: Install PostgreSQL 17 client
         shell: bash
@@ -96,6 +101,25 @@ jobs:
         run: |
           set -euo pipefail
           bash scripts/restore-verify-production-backup-v2.sh "$RUNNER_TEMP/financial-app-f13-v2-backup"
+
+      - name: Reject a recovery that loses a non-core financial row
+        shell: bash
+        run: |
+          set -euo pipefail
+          backup="$RUNNER_TEMP/financial-app-f13-v2-backup"
+          target="postgresql://postgres:postgres@127.0.0.1:5432/financial_app_production_backup_restore_check"
+          psql "$target" -X -v ON_ERROR_STOP=1 -c "DELETE FROM financial_app.transaction_overrides WHERE id='13000000-0000-4000-8000-000000000013';"
+          if output="$(node scripts/verify-backup-row-counts-v2.mjs --sql "$backup" \
+            | psql "$target" -X -v ON_ERROR_STOP=1 -At \
+            | node scripts/verify-backup-row-counts-v2.mjs --verify "$backup" 2>&1)"; then
+            echo "incomplete recovery was incorrectly accepted"
+            exit 1
+          fi
+          if [[ "$output" != *"backup_v2_row_count_mismatch: financial_app.transaction_overrides"* ]]; then
+            echo "recovery failed for a reason other than the missing row"
+            exit 1
+          fi
+          echo "missing restored row detection passed"
 
       - name: Storage archive integrity and recovery contract
         shell: bash

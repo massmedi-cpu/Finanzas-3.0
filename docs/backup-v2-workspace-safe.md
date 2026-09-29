@@ -39,6 +39,13 @@ basta para aceptar la copia. El postflight de Production toma el commit y el ID
 del deployment realmente servido, incluso si `main` recibió después el commit
 que vuelve a cerrar los despliegues automáticos.
 
+La recuperación también coteja el número de filas de **cada tabla exportada**
+contra los bloques `COPY` del `data.sql` cuyo hash ya se ha validado. Los recuentos
+pertenecen así a la propia copia, no a una consulta posterior sobre Production.
+Se incluyen las tablas vacías. CI elimina una fila de ajustes en la base sintética
+recuperada y exige que la comprobación la rechace. Este control de cardinalidad
+complementa los hashes y las comprobaciones de integridad; no compara cada valor.
+
 ## Evidencia local previa a CI
 
 Se verificaron dos escenarios sintéticos del creador/validador v2: pre-workspace y post-workspace. También se comprobó que falla ante `data.sql` manipulado, ante datos de `workspace_deletion_runtime_policy`, y ante Storage con objetos sin archivo; con archivo de Storage presente y hash válido, el paquete se acepta.

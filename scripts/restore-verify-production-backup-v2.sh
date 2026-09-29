@@ -77,6 +77,11 @@ SQL
 
 psql_db "$TARGET_URL" --single-transaction -f "$BACKUP_DIR/schema.sql" -f "$BACKUP_DIR/data.sql" >/dev/null
 
+# Compare every copied table against this backup's dump, not a later live count.
+node scripts/verify-backup-row-counts-v2.mjs --sql "$BACKUP_DIR" \
+  | psql_db "$TARGET_URL" -At \
+  | node scripts/verify-backup-row-counts-v2.mjs --verify "$BACKUP_DIR"
+
 restored="$(psql_db "$TARGET_URL" -At <<'SQL'
 WITH checks AS (
   SELECT
