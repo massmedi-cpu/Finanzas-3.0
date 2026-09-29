@@ -224,6 +224,22 @@ function formatReceiptProduct(description: string, quantity: string, price: stri
   return `${description.padEnd(34)} ${quantity.padStart(3)} ${price.padStart(8)} ${amount.padStart(8)}`.trimEnd();
 }
 
+function receiptDescriptionText(words: OcrWord[], rightEdge: number) {
+  const tokens = [...words]
+    .sort((a, b) => a.box.x - b.box.x)
+    .filter((word) => word.box.x < rightEdge)
+    .map((word) => word.text.trim())
+    .filter((text) => text && visibleChars(text) >= 1);
+
+  // OCR often leaves one isolated glyph at the end of the description column (for example
+  // a clipped numeric cell or a single letter). Keep meaningful internal one-character words,
+  // but remove only trailing residues so the original wording is otherwise preserved.
+  while (tokens.length > 1 && visibleChars(tokens[tokens.length - 1]) <= 1) tokens.pop();
+
+  const description = tokens.join(" ").replace(/\s+/g, " ").trim();
+  return (description.match(/\p{L}/gu) ?? []).length >= 2 ? description : "";
+}
+
 function receiptMetadataAnchor(line: OcrLine) {
   const tokens = line.words.map((word) => receiptToken(word.text)).filter(Boolean);
   return tokens.some((token) => (
@@ -342,14 +358,8 @@ function buildReceiptReviewText(lines: OcrLine[]) {
         .filter((word) => /^\d{1,2}$/.test(word.text.trim()) && word.box.x < firstMoneyX)
         .sort((a, b) => b.box.x - a.box.x)[0] ?? null;
       if (quantity) {
-        const description = ordered
-          .filter((word) => word.box.x < quantity.box.x)
-          .map((word) => word.text.trim())
-          .filter((text) => text && (text.match(/[\p{L}\p{N}]/gu) ?? []).length >= 1)
-          .join(" ")
-          .replace(/\s+/g, " ")
-          .trim();
-        if ((description.match(/\p{L}/gu) ?? []).length >= 2) {
+        const description = receiptDescriptionText(ordered, quantity.box.x);
+        if (description) {
           const price = normalizeReceiptMoneyEs(monies[monies.length - 2].text) ?? monies[monies.length - 2].text;
           const amount = normalizeReceiptMoneyEs(monies[monies.length - 1].text) ?? monies[monies.length - 1].text;
           output.push(formatReceiptProduct(description, quantity.text.trim(), price, amount));
@@ -359,9 +369,12 @@ function buildReceiptReviewText(lines: OcrLine[]) {
       }
     }
 
-    const fallback = line.text.trim();
-    const usefulChars = (fallback.match(/[\p{L}\p{N}]/gu) ?? []).length;
-    if (usefulChars >= 4) output.push(fallback);
+    // A product row must remain visible even when OCR loses every numeric cell. Because this
+    // loop is already bounded by the receipt header and the first summary line, preserving a
+    // meaningful description here lets integrity checks classify the row as unresolved instead
+    // of incorrectly comparing a partial subtotal with the printed total.
+    const fallbackDescription = receiptDescriptionText(ordered, unitsHeader.box.x);
+    if (fallbackDescription) output.push(fallbackDescription);
   }
 
   // Require more than one structured item before replacing geometric review.
@@ -450,11 +463,12 @@ function buildReceiptIntegrity(reviewText: string): OcrReceiptIntegrity | undefi
 
   if (productRows.length < 2) return undefined;
 
-  const candidateProductRows = productSection.filter((line) => {
-    const letters = (line.match(/\p{L}/gu) ?? []).length;
-    const moneyTokens = line.split(/\s+/).filter((token) => isReceiptMoney(token.replace(/:$/, "")));
-    return letters >= 2 && moneyTokens.length >= 1;
-  }).length;
+  // Every meaningful line between the product header and the first summary is a candidate row.
+  // Requiring a money token here hid rows whose numeric cells were precisely what OCR failed to
+  // read, causing a partial subtotal to be reported as a contradiction against the document total.
+  const candidateProductRows = productSection.filter((line) => (
+    (line.match(/\p{L}/gu) ?? []).length >= 2
+  )).length;
   const unresolvedProductRows = Math.max(0, candidateProductRows - productRows.length);
 
   const arithmeticRowsChecked = productRows.length;
