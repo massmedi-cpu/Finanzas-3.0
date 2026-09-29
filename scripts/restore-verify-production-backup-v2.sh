@@ -4,8 +4,8 @@ set -euo pipefail
 BACKUP_DIR="${1:?backup directory is required}"
 : "${F13_POSTGRES_ADMIN_URL:=postgresql://postgres:postgres@127.0.0.1:5432/postgres}"
 : "${EXPECTED_APP_VERSION:?expected app version is required}"
-: "${FINANCIAL_APP_SOURCE_COMMIT:?financial app source commit is required}"
-EXPECTED_SOURCE_COMMIT="${EXPECTED_SOURCE_COMMIT:-$FINANCIAL_APP_SOURCE_COMMIT}"
+EXPECTED_SOURCE_COMMIT="${EXPECTED_SOURCE_COMMIT:-${FINANCIAL_APP_SOURCE_COMMIT:-}}"
+: "${EXPECTED_SOURCE_COMMIT:?expected source commit is required}"
 TARGET_DB="financial_app_production_backup_restore_check"
 TARGET_URL="postgresql://postgres:postgres@127.0.0.1:5432/${TARGET_DB}"
 
