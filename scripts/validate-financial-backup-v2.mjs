@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { verifyStorageBackupConsistency } from "./verify-storage-backup-consistency-v2.mjs";
 
 const backupDir = resolve(process.argv[2] ?? "backups/financial-app-v2");
 const manifestPath = resolve(backupDir, "manifest.json");
@@ -144,6 +145,14 @@ if (storageInventory.buckets.length !== bucketCount || storageInventory.objects.
 if (objectCount > 0) {
   if (!manifest?.storage?.archive) fail("storage_archive_required");
   verifyEvidence(manifest.storage.archive, "storage_archive");
+  try {
+    verifyStorageBackupConsistency(
+      storageInventory,
+      resolve(backupDir, manifest.storage.archive.file),
+    );
+  } catch (error) {
+    fail("storage_inventory_archive_mismatch", error instanceof Error ? error.message : String(error));
+  }
 } else if (manifest?.storage?.archive) {
   verifyEvidence(manifest.storage.archive, "storage_archive");
 }

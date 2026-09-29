@@ -32,6 +32,13 @@ El manifest v2 incluye flags de capacidades para distinguir una copia anterior a
 6. Regresión E2E completa del SHA exacto.
 7. Sólo después puede sustituir al backup F13 v1 en el corte de Production.
 
+El gate de 10.0.35 coteja la identidad de cada objeto del archivo de Storage
+con el inventario SQL de la misma copia: ID, bucket, nombre, privacidad y tamaño
+cuando Storage informa de él. Una coincidencia en el número total de objetos no
+basta para aceptar la copia. El postflight de Production toma el commit y el ID
+del deployment realmente servido, incluso si `main` recibió después el commit
+que vuelve a cerrar los despliegues automáticos.
+
 ## Evidencia local previa a CI
 
 Se verificaron dos escenarios sintéticos del creador/validador v2: pre-workspace y post-workspace. También se comprobó que falla ante `data.sql` manipulado, ante datos de `workspace_deletion_runtime_policy`, y ante Storage con objetos sin archivo; con archivo de Storage presente y hash válido, el paquete se acepta.

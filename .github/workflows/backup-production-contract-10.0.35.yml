@@ -9,6 +9,7 @@ on:
       - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
+      - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
@@ -18,6 +19,7 @@ on:
       - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
+      - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
@@ -61,8 +63,12 @@ jobs:
           node --check scripts/validate-financial-backup-v2.mjs
           node --check scripts/archive-supabase-storage-v2.mjs
           node --check scripts/validate-storage-archive-v2.mjs
+          node --check scripts/verify-storage-backup-consistency-v2.mjs
           bash -n scripts/restore-verify-production-backup-v2.sh
           bash -n scripts/phase13-restore-rehearsal-v2.sh
+
+      - name: Storage inventory and archive must identify the same objects
+        run: node --test tests/backup/storage-backup-consistency-v2.test.mjs
 
       - name: Install PostgreSQL 17 client
         shell: bash

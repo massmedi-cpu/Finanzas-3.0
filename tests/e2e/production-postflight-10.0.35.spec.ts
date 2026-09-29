@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 
 const EXPECTED_VERSION = process.env.EXPECTED_APP_VERSION?.trim() ?? "10.0.35";
 const EXPECTED_COMMIT = process.env.EXPECTED_COMMIT_SHA?.trim() ?? "";
+const EXPECTED_DEPLOYMENT_ID = process.env.EXPECTED_DEPLOYMENT_ID?.trim() ?? "";
 
 function expectExactCommit(value: unknown) {
   expect(typeof value).toBe("string");
@@ -10,6 +11,7 @@ function expectExactCommit(value: unknown) {
 
 test("10.0.35 · identidad exacta del deployment de producción", async ({ request }) => {
   expect(EXPECTED_COMMIT).toMatch(/^[0-9a-f]{40}$/i);
+  expect(EXPECTED_DEPLOYMENT_ID).toMatch(/^dpl_[A-Za-z0-9]+$/);
 
   const response = await request.get("/api/build", { failOnStatusCode: false });
   expect(response.status()).toBe(200);
@@ -20,8 +22,7 @@ test("10.0.35 · identidad exacta del deployment de producción", async ({ reque
   expect(build.targetVersion).toBe(EXPECTED_VERSION);
   expect(build.environment).toBe("production");
   expectExactCommit(build.commit);
-  expect(typeof build.deploymentId).toBe("string");
-  expect(String(build.deploymentId)).not.toHaveLength(0);
+  expect(build.deploymentId).toBe(EXPECTED_DEPLOYMENT_ID);
 });
 
 test("10.0.35 · la aplicación privada redirige al acceso y las APIs quedan cerradas", async ({ page, request }) => {
