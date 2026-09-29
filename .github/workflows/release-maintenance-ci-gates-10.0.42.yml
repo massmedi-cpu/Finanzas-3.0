@@ -1,0 +1,54 @@
+name: Release Maintenance CI Gates 10.0.42
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/final-cleanup.yml"
+      - ".github/workflows/release-identity.yml"
+      - ".github/workflows/release-operations-contract.yml"
+      - ".github/workflows/release-maintenance-ci-gates-10.0.42.yml"
+      - "scripts/verify-final-cleanup.mjs"
+      - "scripts/verify-release-identity.mjs"
+      - "scripts/verify-release-operations-contract.mjs"
+      - "scripts/verify-release-maintenance-ci-gates-10.0.42.mjs"
+      - "package.json"
+      - "package-lock.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Reusable gate structure
+        run: node scripts/verify-release-maintenance-ci-gates-10.0.42.mjs
+      - name: Release identity contract
+        run: node scripts/verify-release-identity.mjs
+      - name: Final cleanup contract
+        run: node scripts/verify-final-cleanup.mjs
+      - name: Release operations contract
+        run: node scripts/verify-release-operations-contract.mjs
+      - run: npm run typecheck
+      - run: npm run build
+      - name: Compile Production postflight without touching Production
+        env:
+          PRODUCTION_URL: https://example.invalid
+          EXPECTED_APP_VERSION: "0.0.0"
+          EXPECTED_COMMIT_SHA: "0000000000000000000000000000000000000000"
+          EXPECTED_DEPLOYMENT_ID: dpl_ContractOnly
+        run: npx playwright test --list --config=playwright.production-postflight.config.ts
