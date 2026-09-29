@@ -1,0 +1,43 @@
+name: Sync release lock 10.0.35
+
+on:
+  push:
+    branches:
+      - feature/backup-production-10.0.35
+    paths:
+      - ".github/workflows/sync-release-lock-10.0.35.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout release branch
+        uses: actions/checkout@v6
+        with:
+          ref: feature/backup-production-10.0.35
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Regenerate lock metadata and self-remove
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./package.json').version")" = "10.0.35"
+          npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.35"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.35"
+          git diff --exit-code -- package.json
+          git rm .github/workflows/sync-release-lock-10.0.35.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(release): sync package lock for 10.0.35"
+          git push origin HEAD:feature/backup-production-10.0.35
