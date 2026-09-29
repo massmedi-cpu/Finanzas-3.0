@@ -13,11 +13,22 @@ function forbidText(source, needle, label) {
   if (source.includes(needle)) throw new Error(`release_operations_stale:${label}`);
 }
 
+function requireAbsent(path) {
+  if (existsSync(path)) throw new Error(`legacy_release_operation_still_present:${path}`);
+}
+
 const postflightWorkflow = read(".github/workflows/production-postflight.yml");
 const backupWorkflow = read(".github/workflows/production-backup-v2.yml");
 const postflightConfig = read("playwright.production-postflight.config.ts");
 const postflightSpec = read("tests/e2e/production-postflight.spec.ts");
 const readonlyVerifier = read("scripts/verify-production-data-readonly.mjs");
+
+for (const legacyPath of [
+  ".github/workflows/production-postflight-10.0.35.yml",
+  ".github/workflows/production-backup-v2-10.0.35.yml",
+  "tests/e2e/production-postflight-10.0.35.spec.ts",
+  "scripts/verify-production-data-readonly-10.0.35.mjs",
+]) requireAbsent(legacyPath);
 
 for (const [label, source] of [
   ["postflight_workflow", postflightWorkflow],
@@ -47,7 +58,9 @@ requireText(postflightWorkflow, "playwright.production-postflight.config.ts", "p
 requireText(backupWorkflow, "workflow_dispatch:", "backup_dispatch_only");
 requireText(backupWorkflow, "source_commit:", "backup_source_commit_input");
 requireText(backupWorkflow, "expected_app_version:", "backup_expected_version_input");
+requireText(backupWorkflow, "test \"${GITHUB_REF_NAME}\" = \"main\"", "backup_main_guard");
 requireText(backupWorkflow, "ref: ${{ inputs.source_commit }}", "backup_exact_source_checkout");
+requireText(backupWorkflow, 'test "$GITHUB_SHA" = "$FINANCIAL_APP_SOURCE_COMMIT"', "backup_dispatch_sha_guard");
 requireText(backupWorkflow, "manifest.appVersion !== process.env.EXPECTED_APP_VERSION", "backup_manifest_version_guard");
 requireText(backupWorkflow, "manifest.sourceCommit !== process.env.FINANCIAL_APP_SOURCE_COMMIT", "backup_manifest_commit_guard");
 requireText(backupWorkflow, "protect-backup-artifact-v2.sh encrypt", "backup_encryption");
@@ -70,6 +83,7 @@ console.log(JSON.stringify({
   status: "release_operations_contract_ok",
   postflight: "version_agnostic",
   backup: "version_agnostic",
+  legacyReleaseFiles: 0,
   bankSourcePolicy: "read_only",
   productionMutation: false,
 }));
