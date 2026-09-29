@@ -8,6 +8,7 @@ on:
       - "scripts/create-financial-backup-v2.mjs"
       - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
+      - "scripts/supabase-storage-credential-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/verify-backup-row-counts-v2.mjs"
@@ -22,6 +23,7 @@ on:
       - "scripts/create-financial-backup-v2.mjs"
       - "scripts/validate-financial-backup-v2.mjs"
       - "scripts/archive-supabase-storage-v2.mjs"
+      - "scripts/supabase-storage-credential-v2.mjs"
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/verify-backup-row-counts-v2.mjs"
@@ -70,6 +72,7 @@ jobs:
           node --check scripts/create-financial-backup-v2.mjs
           node --check scripts/validate-financial-backup-v2.mjs
           node --check scripts/archive-supabase-storage-v2.mjs
+          node --check scripts/supabase-storage-credential-v2.mjs
           node --check scripts/validate-storage-archive-v2.mjs
           node --check scripts/verify-storage-backup-consistency-v2.mjs
           node --check scripts/verify-backup-row-counts-v2.mjs
