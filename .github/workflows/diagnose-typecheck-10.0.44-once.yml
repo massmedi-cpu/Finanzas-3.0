@@ -1,0 +1,37 @@
+name: Diagnose Search Typecheck 10.0.44 Once
+
+on:
+  push:
+    branches:
+      - feature/global-search-10.0.44
+    paths:
+      - ".github/workflows/diagnose-typecheck-10.0.44-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/global-search-10.0.44
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Capture TypeScript diagnostics
+        run: |
+          mkdir -p diagnostics
+          npm run typecheck > diagnostics/typecheck-10.0.44.txt 2>&1 || true
+      - name: Commit diagnostic and retire workflow
+        run: |
+          rm .github/workflows/diagnose-typecheck-10.0.44-once.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add diagnostics/typecheck-10.0.44.txt .github/workflows/diagnose-typecheck-10.0.44-once.yml
+          git commit -m "chore(search): capture 10.0.44 typecheck diagnostic"
+          git push origin HEAD:feature/global-search-10.0.44
