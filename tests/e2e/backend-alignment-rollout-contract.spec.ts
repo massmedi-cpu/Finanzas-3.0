@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 
-const bridge = readFileSync("ops/backend-alignment/workspace-context-rollout-bridge.ts.template", "utf8");
+const retiredBridgePath = "ops/backend-alignment/workspace-context-rollout-bridge.ts.template";
 const strict = readFileSync("supabase/functions/financial-app-db-gateway/workspace-context.ts", "utf8");
 const runbook = readFileSync("docs/production-backend-alignment.md", "utf8");
 const reconciliation = JSON.parse(readFileSync("ops/backend-alignment/production-migration-reconciliation.json", "utf8"));
@@ -10,17 +10,8 @@ const historyFingerprint = readFileSync("scripts/production-backend-alignment-hi
 const preflight = readFileSync("scripts/production-backend-alignment-preflight.sql", "utf8").toLowerCase();
 const postflight = readFileSync("scripts/production-backend-alignment-postflight.sql", "utf8").toLowerCase();
 
-test("backend alignment · el bridge sólo acepta estados completos de rollout", () => {
-  expect(bridge).toContain("to_regrole('financial_app_gateway')");
-  expect(bridge).toContain("to_regprocedure('financial_app.require_current_workspace_id()')");
-  expect(bridge).toContain("state.gatewayRoleExists !== state.isolationMarkerExists");
-  expect(bridge).toContain('"workspace_isolation_state_inconsistent"');
-  expect(bridge).toContain("state.gatewayRoleExists && state.isolationMarkerExists");
-  expect(bridge).toContain('set role financial_app_gateway');
-  expect(bridge).toContain("workspace_memberships");
-});
-
-test("backend alignment · el gateway permanente sigue siendo estricto y no contiene fallback bridge", () => {
+test("backend alignment · el bridge temporal retirado no reaparece y el gateway permanente sigue estricto", () => {
+  expect(existsSync(retiredBridgePath)).toBe(false);
   expect(strict).toContain('await sql.unsafe("set role financial_app_gateway")');
   expect(strict).not.toContain("detectIsolationState");
   expect(strict).not.toContain("workspace_isolation_state_inconsistent");
