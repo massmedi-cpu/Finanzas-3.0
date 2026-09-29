@@ -1,21 +1,18 @@
-name: Production Postflight 10.0.35
+name: Production Postflight
 
 on:
-  push:
-    branches:
-      - feature/backup-production-10.0.35
-    paths:
-      - "playwright.production-postflight.config.ts"
-      - "tests/e2e/production-postflight-10.0.35.spec.ts"
-      - ".github/workflows/production-postflight-10.0.35.yml"
   workflow_dispatch:
     inputs:
       production_url:
         description: "Exact HTTPS Production origin to certify"
         required: true
         type: string
+      expected_version:
+        description: "Exact deployed application SemVer"
+        required: true
+        type: string
       deployment_commit:
-        description: "Exact deployed commit SHA from Vercel /api/build"
+        description: "Exact deployed commit SHA from /api/build"
         required: true
         type: string
       deployment_id:
@@ -31,72 +28,54 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  certify-current-production:
-    if: github.event_name == 'push'
+  validate-dispatch:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
-    env:
-      PRODUCTION_URL: https://financialapp-home.vercel.app
-      EXPECTED_APP_VERSION: "10.0.30"
-      EXPECTED_COMMIT_SHA: 8113431f869ca6d26a43abc95920c84abb4ecdfd
-      EXPECTED_DEPLOYMENT_ID: dpl_5ygkd3xhLo8bnMdwwnVv6hojWraJ
+    timeout-minutes: 5
     steps:
-      - name: Checkout postflight candidate
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Verify read-only postflight against the known 10.0.30 deployment
-        run: npx playwright test --config=playwright.production-postflight.config.ts
-
-  desktop-mobile-security-pwa:
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    env:
-      PRODUCTION_URL: ${{ inputs.production_url }}
-      EXPECTED_APP_VERSION: "10.0.35"
-      EXPECTED_COMMIT_SHA: ${{ inputs.deployment_commit }}
-      EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
-    steps:
-      - name: Checkout exact main commit
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.sha }}
-          fetch-depth: 0
-
-      - name: Require exact release version
+      - name: Require main and validate immutable release identity
+        env:
+          PRODUCTION_URL: ${{ inputs.production_url }}
+          EXPECTED_APP_VERSION: ${{ inputs.expected_version }}
+          EXPECTED_COMMIT_SHA: ${{ inputs.deployment_commit }}
+          EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
         shell: bash
         run: |
           set -euo pipefail
-          version="$(node -p "require('./package.json').version")"
-          test "$version" = "10.0.35"
+          test "${GITHUB_REF_NAME}" = "main"
+          [[ "$EXPECTED_APP_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
           [[ "$EXPECTED_COMMIT_SHA" =~ ^[0-9a-f]{40}$ ]]
           [[ "$EXPECTED_DEPLOYMENT_ID" =~ ^dpl_[A-Za-z0-9]+$ ]]
-          git merge-base --is-ancestor "$EXPECTED_COMMIT_SHA" "$GITHUB_SHA"
-          deployed_version="$(git show "$EXPECTED_COMMIT_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
-          test "$deployed_version" = "10.0.35"
-
-      - name: Validate Production origin
-        shell: bash
-        run: |
-          set -euo pipefail
           node - <<'NODE'
           const u = new URL(process.env.PRODUCTION_URL);
           if (u.protocol !== 'https:' || u.username || u.password || u.search || u.hash || u.pathname !== '/') {
             throw new Error('production_url_must_be_clean_https_origin');
           }
           NODE
+
+  desktop-mobile-security-pwa:
+    needs: validate-dispatch
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PRODUCTION_URL: ${{ inputs.production_url }}
+      EXPECTED_APP_VERSION: ${{ inputs.expected_version }}
+      EXPECTED_COMMIT_SHA: ${{ inputs.deployment_commit }}
+      EXPECTED_DEPLOYMENT_ID: ${{ inputs.deployment_id }}
+    steps:
+      - name: Checkout exact main tooling commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Require deployed commit to match requested version and current history
+        shell: bash
+        run: |
+          set -euo pipefail
+          git cat-file -e "$EXPECTED_COMMIT_SHA^{commit}"
+          git merge-base --is-ancestor "$EXPECTED_COMMIT_SHA" "$GITHUB_SHA"
+          deployed_version="$(git show "$EXPECTED_COMMIT_SHA:package.json" | node -p "JSON.parse(require('fs').readFileSync(0,'utf8')).version")"
+          test "$deployed_version" = "$EXPECTED_APP_VERSION"
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -125,14 +104,14 @@ jobs:
           retention-days: 14
 
   real-data-readonly:
-    if: github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
+    needs: validate-dispatch
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
       FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
     steps:
-      - name: Checkout exact main commit
+      - name: Checkout exact main tooling commit
         uses: actions/checkout@v6
         with:
           ref: ${{ github.sha }}
@@ -208,22 +187,25 @@ jobs:
           NODE
 
       - name: Verify real financial data with forced read-only session
-        run: node scripts/verify-production-data-readonly-10.0.35.mjs
+        run: node scripts/verify-production-data-readonly.mjs
 
   postflight-complete:
-    if: always() && github.event_name == 'workflow_dispatch' && github.ref_name == 'main'
+    if: always()
     needs:
+      - validate-dispatch
       - desktop-mobile-security-pwa
       - real-data-readonly
     runs-on: ubuntu-latest
     steps:
       - name: Require every Production postflight gate
         env:
+          VALIDATION_RESULT: ${{ needs.validate-dispatch.result }}
           BROWSER_RESULT: ${{ needs.desktop-mobile-security-pwa.result }}
           DATA_RESULT: ${{ needs.real-data-readonly.result }}
         shell: bash
         run: |
           set -euo pipefail
+          test "$VALIDATION_RESULT" = "success"
           test "$BROWSER_RESULT" = "success"
           test "$DATA_RESULT" = "success"
-          echo "production_postflight_10_0_35=success"
+          echo "production_postflight=success"

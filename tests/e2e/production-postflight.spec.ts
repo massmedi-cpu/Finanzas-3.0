@@ -1,17 +1,22 @@
 import { expect, test } from "@playwright/test";
 
-const EXPECTED_VERSION = process.env.EXPECTED_APP_VERSION?.trim() ?? "10.0.35";
+const EXPECTED_VERSION = process.env.EXPECTED_APP_VERSION?.trim() ?? "";
 const EXPECTED_COMMIT = process.env.EXPECTED_COMMIT_SHA?.trim() ?? "";
 const EXPECTED_DEPLOYMENT_ID = process.env.EXPECTED_DEPLOYMENT_ID?.trim() ?? "";
+
+function requireReleaseIdentity() {
+  expect(EXPECTED_VERSION).toMatch(/^\d+\.\d+\.\d+$/);
+  expect(EXPECTED_COMMIT).toMatch(/^[0-9a-f]{40}$/i);
+  expect(EXPECTED_DEPLOYMENT_ID).toMatch(/^dpl_[A-Za-z0-9]+$/);
+}
 
 function expectExactCommit(value: unknown) {
   expect(typeof value).toBe("string");
   expect(value).toBe(EXPECTED_COMMIT);
 }
 
-test("10.0.35 · identidad exacta del deployment de producción", async ({ request }) => {
-  expect(EXPECTED_COMMIT).toMatch(/^[0-9a-f]{40}$/i);
-  expect(EXPECTED_DEPLOYMENT_ID).toMatch(/^dpl_[A-Za-z0-9]+$/);
+test("identidad exacta del deployment de producción", async ({ request }) => {
+  requireReleaseIdentity();
 
   const response = await request.get("/api/build", { failOnStatusCode: false });
   expect(response.status()).toBe(200);
@@ -25,7 +30,8 @@ test("10.0.35 · identidad exacta del deployment de producción", async ({ reque
   expect(build.deploymentId).toBe(EXPECTED_DEPLOYMENT_ID);
 });
 
-test("10.0.35 · la aplicación privada redirige al acceso y las APIs quedan cerradas", async ({ page, request }) => {
+test("la aplicación privada redirige al acceso y las APIs quedan cerradas", async ({ page, request }) => {
+  requireReleaseIdentity();
   const navigation = await page.goto("/", { waitUntil: "domcontentloaded" });
   expect(navigation?.status()).toBe(200);
   await expect(page).toHaveURL(/\/login(?:\?|$)/);
@@ -39,7 +45,8 @@ test("10.0.35 · la aplicación privada redirige al acceso y las APIs quedan cer
   expect(body.error).toBe("authentication_required");
 });
 
-test("10.0.35 · manifest, service worker e iconos PWA son públicos y coherentes", async ({ request }) => {
+test("manifest, service worker e iconos PWA son públicos y coherentes", async ({ request }) => {
+  requireReleaseIdentity();
   const manifestResponse = await request.get("/manifest.webmanifest", { failOnStatusCode: false });
   expect(manifestResponse.status()).toBe(200);
   const manifest = await manifestResponse.json() as Record<string, unknown>;
@@ -61,7 +68,8 @@ test("10.0.35 · manifest, service worker e iconos PWA son públicos y coherente
   }
 });
 
-test("10.0.35 · el acceso no desborda horizontalmente en el viewport certificado", async ({ page }) => {
+test("el acceso no desborda horizontalmente en el viewport certificado", async ({ page }) => {
+  requireReleaseIdentity();
   await page.goto("/login", { waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
 
@@ -74,7 +82,8 @@ test("10.0.35 · el acceso no desborda horizontalmente en el viewport certificad
   expect(dimensions.bodyWidth).toBeLessThanOrEqual(dimensions.viewport + 1);
 });
 
-test("10.0.35 · cabeceras de seguridad esenciales permanecen activas", async ({ page }) => {
+test("cabeceras de seguridad esenciales permanecen activas", async ({ page }) => {
+  requireReleaseIdentity();
   const response = await page.goto("/login", { waitUntil: "domcontentloaded" });
   expect(response?.status()).toBe(200);
   const headers = response?.headers() ?? {};

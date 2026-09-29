@@ -1,23 +1,6 @@
-name: Backup Production Contract 10.0.35
+name: Backup Production Contract
 
 on:
-  push:
-    branches:
-      - feature/backup-production-10.0.35
-    paths:
-      - "scripts/create-financial-backup-v2.mjs"
-      - "scripts/validate-financial-backup-v2.mjs"
-      - "scripts/archive-supabase-storage-v2.mjs"
-      - "scripts/supabase-storage-credential-v2.mjs"
-      - "scripts/validate-storage-archive-v2.mjs"
-      - "scripts/verify-storage-backup-consistency-v2.mjs"
-      - "scripts/verify-backup-row-counts-v2.mjs"
-      - "scripts/protect-backup-artifact-v2.sh"
-      - "tests/backup/**"
-      - "scripts/restore-verify-production-backup-v2.sh"
-      - "scripts/phase13-restore-rehearsal-v2.sh"
-      - ".github/workflows/backup-production-contract-10.0.35.yml"
-      - ".github/workflows/production-backup-v2-10.0.35.yml"
   pull_request:
     paths:
       - "scripts/create-financial-backup-v2.mjs"
@@ -31,8 +14,9 @@ on:
       - "tests/backup/**"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
-      - ".github/workflows/backup-production-contract-10.0.35.yml"
-      - ".github/workflows/production-backup-v2-10.0.35.yml"
+      - ".github/workflows/backup-production-contract.yml"
+      - ".github/workflows/production-backup-v2.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -106,13 +90,12 @@ jobs:
         shell: bash
         run: bash scripts/phase13-restore-rehearsal-v2.sh
 
-      - name: Restore-verify generated backup with the new production verifier
+      - name: Restore-verify generated backup with the reusable production verifier
         shell: bash
-        env:
-          EXPECTED_APP_VERSION: "10.0.35"
-          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
+          export EXPECTED_APP_VERSION="$(node -p "require('./package.json').version")"
+          export EXPECTED_SOURCE_COMMIT="$GITHUB_SHA"
           bash scripts/restore-verify-production-backup-v2.sh "$RUNNER_TEMP/financial-app-f13-v2-backup"
 
       - name: Reject a recovery that loses a non-core financial row
@@ -136,11 +119,10 @@ jobs:
 
       - name: Failed restore must not expose row contents in public logs
         shell: bash
-        env:
-          EXPECTED_APP_VERSION: "10.0.35"
-          EXPECTED_SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
+          export EXPECTED_APP_VERSION="$(node -p "require('./package.json').version")"
+          export EXPECTED_SOURCE_COMMIT="$GITHUB_SHA"
           node <<'NODE'
           const fs = require('node:fs');
           const path = require('node:path');
