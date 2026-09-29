@@ -21,8 +21,8 @@ jobs:
           ref: feature/transactions-bulk-10.0.43
           fetch-depth: 0
       - name: Apply fail-closed client patch
-        shell: python {0}
         run: |
+          python - <<'PY'
           from pathlib import Path
           path = Path("app/transactions/transactions-client.tsx")
           text = path.read_text()
@@ -125,6 +125,7 @@ jobs:
             text = text.replace(old, new, 1)
 
           path.write_text(text)
+          PY
       - name: Retire one-shot workflow and commit checkpoint
         run: |
           rm .github/workflows/apply-transactions-bulk-10.0.43-once.yml
