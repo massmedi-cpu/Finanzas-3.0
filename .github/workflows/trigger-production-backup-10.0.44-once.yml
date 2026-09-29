@@ -21,8 +21,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          echo "Dispatching immutable Financial App 10.0.44 production backup"
+          echo "Dispatching immutable Financial App 10.0.44 production backup for $GITHUB_SHA"
           gh workflow run production-backup-v2.yml \
             --ref main \
-            -f source_commit=d84cf69e6bd51a47c58c35eeef55130f5b8ca770 \
+            -f source_commit="$GITHUB_SHA" \
             -f expected_app_version=10.0.44
