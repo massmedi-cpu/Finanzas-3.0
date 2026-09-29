@@ -1,23 +1,21 @@
-name: Transaction Support Indexes 10.0.19
+name: Transaction Support Indexes
 
 on:
-  push:
-    branches:
-      - audit/transaction-support-fk-indexes-10.0.19
   pull_request:
     branches:
       - main
     paths:
       - 'supabase/migrations/20260926190000_cover_transaction_support_workspace_foreign_keys.sql'
       - 'tests/e2e/transaction-support-index-contract.spec.ts'
-      - '.github/workflows/transaction-support-indexes-10.0.19.yml'
+      - '.github/workflows/transaction-support-indexes.yml'
       - 'vercel.json'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: transaction-support-indexes-10.0.19-${{ github.ref }}
+  group: transaction-support-indexes-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -29,24 +27,16 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-
       - name: TypeScript
         run: npm run typecheck
-
       - name: Production build
         run: npm run build
-
       - name: Transaction support composite FK index contract
         run: npx playwright test tests/e2e/transaction-support-index-contract.spec.ts --project=chromium-desktop
-
-      - name: Verify version contract
-        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<19||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"

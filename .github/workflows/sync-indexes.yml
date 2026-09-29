@@ -1,23 +1,21 @@
-name: Sync Indexes 10.0.17
+name: Sync Indexes
 
 on:
-  push:
-    branches:
-      - audit/sync-fk-indexes-10.0.17
   pull_request:
     branches:
       - main
     paths:
       - 'supabase/migrations/20260926184000_cover_sync_workspace_foreign_keys.sql'
       - 'tests/e2e/sync-index-contract.spec.ts'
-      - '.github/workflows/sync-indexes-10.0.17.yml'
+      - '.github/workflows/sync-indexes.yml'
       - 'vercel.json'
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: sync-indexes-10.0.17-${{ github.ref }}
+  group: sync-indexes-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -29,21 +27,16 @@ jobs:
         uses: actions/checkout@v6
         with:
           fetch-depth: 1
-
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
         with:
           node-version: 24
           cache: npm
-
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-
       - name: TypeScript
         run: npm run typecheck
-
       - name: Production build
         run: npm run build
-
       - name: Sync composite FK index contract
         run: npx playwright test tests/e2e/sync-index-contract.spec.ts --project=chromium-desktop
