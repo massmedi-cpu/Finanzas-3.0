@@ -18,6 +18,8 @@ on:
       - 'tests/e2e/*index-contract.spec.ts'
       - 'tests/e2e/category-lifecycle-integrity.spec.ts'
       - 'supabase/migrations/**'
+      - 'package.json'
+      - 'package-lock.json'
   push:
     branches:
       - refactor/ci-db-gates-10.0.38
