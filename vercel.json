@@ -1,6 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "alias": ["financialapp-home.vercel.app"],
+  "alias": [
+    "financialapp-home.vercel.app"
+  ],
   "git": {
     "deploymentEnabled": {
       "**": false,
