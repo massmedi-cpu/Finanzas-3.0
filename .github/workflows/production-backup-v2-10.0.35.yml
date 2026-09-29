@@ -21,6 +21,7 @@ jobs:
       FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}
+      FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
     steps:
       - name: Checkout exact backup tooling commit
         uses: actions/checkout@v6
@@ -28,7 +29,7 @@ jobs:
           ref: ${{ github.sha }}
           fetch-depth: 0
 
-      - name: Verify raw database password secret exists
+      - name: Verify database and backup protection secrets exist
         shell: bash
         run: |
           set -euo pipefail
@@ -36,6 +37,11 @@ jobs:
             echo "FINANCIAL_APP_DB_PASSWORD is not configured."
             exit 1
           fi
+          if [ "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -lt 32 ]; then
+            echo "FINANCIAL_APP_BACKUP_PASSPHRASE must be configured with at least 32 random characters."
+            exit 1
+          fi
+          echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
           echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
           if [ -n "$SUPABASE_SERVICE_ROLE_KEY" ]; then echo "::add-mask::$SUPABASE_SERVICE_ROLE_KEY"; fi
           if [ -n "$SUPABASE_SECRET_KEY" ]; then echo "::add-mask::$SUPABASE_SECRET_KEY"; fi
@@ -150,21 +156,22 @@ jobs:
           }));
           NODE
 
-      - name: Package validated backup
+      - name: Package and encrypt validated backup
         shell: bash
         run: |
           set -euo pipefail
           archive="financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
           tar -czf "$archive" -C backups "production-v2-${FINANCIAL_APP_SOURCE_COMMIT}"
-          sha256sum "$archive" | tee "${archive}.sha256"
+          bash scripts/protect-backup-artifact-v2.sh encrypt "$archive" "${archive}.gpg"
+          sha256sum "${archive}.gpg" | tee "${archive}.gpg.sha256"
 
-      - name: Upload validated backup artifact
+      - name: Upload encrypted backup artifact only
         uses: actions/upload-artifact@v4
         with:
           name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
           path: |
-            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz
-            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.sha256
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.gpg
+            financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}.tgz.gpg.sha256
           if-no-files-found: error
           retention-days: 7
 
@@ -174,6 +181,7 @@ jobs:
     timeout-minutes: 20
     env:
       FINANCIAL_APP_SOURCE_COMMIT: 00e7879decdab3a62b6b8e325b4f04b2004bfe96
+      FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
     services:
       postgres:
         image: postgres:17
@@ -212,18 +220,21 @@ jobs:
           sudo apt-get install --yes postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
 
-      - name: Download exact validated backup artifact
+      - name: Download exact encrypted backup artifact
         uses: actions/download-artifact@v5
         with:
           name: financial-app-production-v2-${{ env.FINANCIAL_APP_SOURCE_COMMIT }}
           path: restore-artifact
 
-      - name: Verify package hash and extract backup
+      - name: Verify ciphertext hash, decrypt and extract backup
         shell: bash
         run: |
           set -euo pipefail
           cd restore-artifact
-          sha256sum -c "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.sha256"
+          sha256sum -c "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.gpg.sha256"
+          bash "$GITHUB_WORKSPACE/scripts/protect-backup-artifact-v2.sh" decrypt \
+            "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz.gpg" \
+            "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz"
           mkdir extracted
           tar -xzf "financial-app-production-v2-${FINANCIAL_APP_SOURCE_COMMIT}.tgz" -C extracted
 

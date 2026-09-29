@@ -11,10 +11,12 @@ on:
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/verify-backup-row-counts-v2.mjs"
+      - "scripts/protect-backup-artifact-v2.sh"
       - "tests/backup/**"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
+      - ".github/workflows/production-backup-v2-10.0.35.yml"
   pull_request:
     paths:
       - "scripts/create-financial-backup-v2.mjs"
@@ -23,10 +25,12 @@ on:
       - "scripts/validate-storage-archive-v2.mjs"
       - "scripts/verify-storage-backup-consistency-v2.mjs"
       - "scripts/verify-backup-row-counts-v2.mjs"
+      - "scripts/protect-backup-artifact-v2.sh"
       - "tests/backup/**"
       - "scripts/restore-verify-production-backup-v2.sh"
       - "scripts/phase13-restore-rehearsal-v2.sh"
       - ".github/workflows/backup-production-contract-10.0.35.yml"
+      - ".github/workflows/production-backup-v2-10.0.35.yml"
 
 permissions:
   contents: read
@@ -70,6 +74,8 @@ jobs:
           node --check scripts/verify-storage-backup-consistency-v2.mjs
           node --check scripts/verify-backup-row-counts-v2.mjs
           bash -n scripts/restore-verify-production-backup-v2.sh
+          bash -n scripts/protect-backup-artifact-v2.sh
+          bash -n tests/backup/protected-backup-artifact-v2.test.sh
           bash -n scripts/phase13-restore-rehearsal-v2.sh
 
       - name: Backup row counts and Storage identity contracts
@@ -88,6 +94,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client-17
           echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+
+      - name: Encrypted artifact recovery and tamper rejection
+        shell: bash
+        run: bash tests/backup/protected-backup-artifact-v2.test.sh
 
       - name: Existing backup v2 restore rehearsal
         shell: bash

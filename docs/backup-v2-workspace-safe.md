@@ -49,3 +49,31 @@ complementa los hashes y las comprobaciones de integridad; no compara cada valor
 ## Evidencia local previa a CI
 
 Se verificaron dos escenarios sintéticos del creador/validador v2: pre-workspace y post-workspace. También se comprobó que falla ante `data.sql` manipulado, ante datos de `workspace_deletion_runtime_policy`, y ante Storage con objetos sin archivo; con archivo de Storage presente y hash válido, el paquete se acepta.
+
+## Protección del artefacto y desbloqueo de Task 30
+
+El repositorio es público. Los usuarios con acceso de lectura pueden descargar
+[artefactos de Actions](https://docs.github.com/actions/managing-workflow-runs/downloading-workflow-artifacts).
+Por ello el workflow de producción sube exclusivamente un paquete `.tgz.gpg`
+cifrado mediante GnuPG AES-256 y el hash del fichero cifrado. La recuperación
+descifra ese mismo artefacto en el runner aislado antes de comprobar PostgreSQL
+y Storage. Una contraseña errónea o un paquete alterado no dejan una salida
+descifrada aceptada. Los archivos sin cifrar no se incluyen en la subida.
+
+Configurar en [Secrets de GitHub Actions](https://github.com/massmedi-cpu/Finanzas-3.0/settings/secrets/actions):
+
+- `FINANCIAL_APP_DB_PASSWORD`: contraseña de PostgreSQL; ya estaba configurada
+  en el último intento de backup real.
+- `SUPABASE_SECRET_KEY` o `SUPABASE_SERVICE_ROLE_KEY`: una credencial de servidor
+  con acceso al objeto privado de Storage. El último intento no disponía de ninguna.
+- `FINANCIAL_APP_BACKUP_PASSPHRASE`: secreto dedicado, aleatorio, de al menos
+  32 caracteres en una sola línea. Guardar una copia en el gestor de contraseñas
+  para recuperar los backups aunque se pierda acceso a GitHub. No reutilizar
+  la contraseña de PostgreSQL ni las claves de Supabase.
+
+No incluir los valores en PRs, comentarios, capturas ni conversaciones.
+Después, ejecutar **Production Backup v2 10.0.35** desde la rama de trabajo y
+exigir que terminen correctamente los jobs de creación y recuperación del
+paquete descargado. El artefacto de Actions caduca a los siete días: conservar
+el paquete cifrado y su hash en un destino de backup duradero antes del corte.
+Task 30 permanece abierta hasta disponer de esa copia completa recuperada.
