@@ -1,6 +1,7 @@
-name: Document OCR Edge Cases 10.0.33
+name: Document OCR Edge Cases
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -15,9 +16,8 @@ on:
       - "tests/e2e/document-ocr-natural-review.spec.ts"
       - "tests/e2e/document-ocr-service.spec.ts"
       - "tests/e2e/documents.spec.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/document-ocr-edge-cases-10.0.33.yml"
+      - ".github/workflows/document-ocr-edge-cases.yml"
+      - ".github/workflows/quality-edge-ci-gates-10.0.41.yml"
 
 permissions:
   contents: read

@@ -1,6 +1,7 @@
-name: Extreme Financial Edge Cases 10.0.32
+name: Extreme Financial Edge Cases
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -13,9 +14,8 @@ on:
       - "tests/e2e/analysis-history-integrity.spec.ts"
       - "tests/e2e/safe-reversible-edits.spec.ts"
       - "tests/e2e/recurrences.spec.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/extreme-financial-edge-cases-10.0.32.yml"
+      - ".github/workflows/extreme-financial-edge-cases.yml"
+      - ".github/workflows/quality-edge-ci-gates-10.0.41.yml"
 
 permissions:
   contents: read

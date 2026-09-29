@@ -1,6 +1,7 @@
-name: Navigation Performance 10.0.30
+name: Navigation Performance
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -10,9 +11,8 @@ on:
       - "app/mobile-navigation.tsx"
       - "tests/e2e/navigation-performance-10.0.30.spec.ts"
       - "scripts/verify-navigation-performance-10.0.30.mjs"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/navigation-performance-10.0.30.yml"
+      - ".github/workflows/navigation-performance.yml"
+      - ".github/workflows/quality-edge-ci-gates-10.0.41.yml"
 
 permissions:
   contents: read
