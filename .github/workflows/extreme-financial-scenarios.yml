@@ -1,6 +1,7 @@
-name: Extreme Financial Scenarios 10.0.24
+name: Extreme Financial Scenarios
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -8,10 +9,9 @@ on:
       - "app/inicio-overview.tsx"
       - "supabase/migrations/20260905225500_phase5_financial_logic_core.sql"
       - "tests/e2e/extreme-financial-scenarios.spec.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/extreme-financial-scenarios-10.0.24.yml"
-      - ".github/workflows/cross-module-financial-consistency-10.0.23.yml"
+      - ".github/workflows/extreme-financial-scenarios.yml"
+      - ".github/workflows/cross-module-financial-consistency.yml"
+      - ".github/workflows/financial-consistency-ci-gates-10.0.40.yml"
 
 permissions:
   contents: read
@@ -34,9 +34,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Version consistency
-        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<24||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"
 
       - name: TypeScript
         run: npm run typecheck

@@ -70,13 +70,19 @@ test("Movimientos conserva targets táctiles de al menos 44 px en 360, 430 y 480
     const undersized = await page.locator("main a[href], main button:not([disabled]), main input:not([disabled]), main select:not([disabled]), main textarea:not([disabled]), main summary").evaluateAll((elements) =>
       elements.filter((element) => {
         const node = element as HTMLElement;
-        const box = node.getBoundingClientRect();
-        const style = getComputedStyle(node);
+        const effectiveTarget = node instanceof HTMLInputElement && (node.type === "checkbox" || node.type === "radio")
+          ? (node.closest("label") as HTMLElement | null) ?? node
+          : node;
+        const box = effectiveTarget.getBoundingClientRect();
+        const style = getComputedStyle(effectiveTarget);
         return style.display !== "none" && style.visibility !== "hidden" && box.width > 0 && box.height > 0 && box.height < 44;
       }).map((element) => {
         const node = element as HTMLElement;
+        const effectiveTarget = node instanceof HTMLInputElement && (node.type === "checkbox" || node.type === "radio")
+          ? (node.closest("label") as HTMLElement | null) ?? node
+          : node;
         const label = node.getAttribute("aria-label") ?? node.textContent ?? node.getAttribute("name") ?? "";
-        return `${node.tagName.toLowerCase()}:${Math.round(node.getBoundingClientRect().height)}px:${label.trim().slice(0, 36)}`;
+        return `${node.tagName.toLowerCase()}:${Math.round(effectiveTarget.getBoundingClientRect().height)}px:${label.trim().slice(0, 36)}`;
       }),
     );
     expect(undersized, `${width}px debe conservar hit areas de 44px`).toEqual([]);

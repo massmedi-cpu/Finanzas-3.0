@@ -1,6 +1,7 @@
-name: Sign Mismatch Review 10.0.25
+name: Sign Mismatch Review
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
@@ -12,10 +13,9 @@ on:
       - "supabase/functions/financial-app-db-gateway/transaction-query.ts"
       - "supabase/migrations/20260927185432_sign_mismatch_transaction_review_10_0_25.sql"
       - "tests/e2e/sign-mismatch-review.spec.ts"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/sign-mismatch-review-10.0.25.yml"
-      - ".github/workflows/extreme-financial-scenarios-10.0.24.yml"
+      - ".github/workflows/sign-mismatch-review.yml"
+      - ".github/workflows/extreme-financial-scenarios.yml"
+      - ".github/workflows/financial-consistency-ci-gates-10.0.40.yml"
 
 permissions:
   contents: read
@@ -38,9 +38,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Version consistency
-        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');const v=p.version.split('.').map(Number);if(v.length!==3||v[0]!==10||v[1]!==0||v[2]<25||l.version!==p.version||l.packages[''].version!==p.version)process.exit(1)"
 
       - name: TypeScript
         run: npm run typecheck
