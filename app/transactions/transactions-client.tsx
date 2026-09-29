@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { MAX_TRANSACTION_PATCH_SIZE } from "../../src/core/transaction-limits";
+import { buildBulkTransactionPatch, type BulkReviewState } from "../../src/application/transaction-bulk-edit";
 import { FormEvent, Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatInteger } from "../../src/core/formatters";
 import { formatMoneyCents } from "../../src/core/money";
@@ -138,6 +139,8 @@ const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
 const NONE = "__none__";
 const UNCHANGED = "__unchanged__";
+const ANALYTICS_INCLUDE = "__include__";
+const ANALYTICS_EXCLUDE = "__exclude__";
 const CONCEPT_ERROR_ID = "transaction-concept-error";
 
 const EMPTY_FILTERS: Filters = {
@@ -320,6 +323,9 @@ export default function TransactionsClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkCategory, setBulkCategory] = useState(UNCHANGED);
+  const [bulkMerchant, setBulkMerchant] = useState(UNCHANGED);
+  const [bulkReviewState, setBulkReviewState] = useState(UNCHANGED);
+  const [bulkAnalytics, setBulkAnalytics] = useState(UNCHANGED);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [conceptError, setConceptError] = useState("");
@@ -652,15 +658,20 @@ async function saveEdit(row: TransactionRow) {
 
   async function applyBulk() {
     if (selectedIds.length === 0 || selectedIds.length > MAX_TRANSACTION_PATCH_SIZE || loading || saving) return;
-    const patch: Record<string, unknown> = {};
-    if (bulkCategory !== UNCHANGED) {
-      if (bulkCategory === INHERIT) {
-        patch.categoryMode = "inherit";
-      } else {
-        patch.categoryMode = "set";
-        patch.categoryId = bulkCategory === NONE ? null : bulkCategory;
-      }
-    }
+    const patch = buildBulkTransactionPatch({
+      category: bulkCategory === UNCHANGED
+        ? { mode: "unchanged" }
+        : bulkCategory === INHERIT
+          ? { mode: "inherit" }
+          : { mode: "set", id: bulkCategory === NONE ? null : bulkCategory },
+      merchant: bulkMerchant === UNCHANGED
+        ? { mode: "unchanged" }
+        : bulkMerchant === INHERIT
+          ? { mode: "inherit" }
+          : { mode: "set", id: bulkMerchant === NONE ? null : bulkMerchant },
+      reviewState: bulkReviewState === UNCHANGED ? null : bulkReviewState as BulkReviewState,
+      analytics: bulkAnalytics === ANALYTICS_INCLUDE ? "include" : bulkAnalytics === ANALYTICS_EXCLUDE ? "exclude" : "unchanged",
+    });
     if (Object.keys(patch).length === 0) {
       setError("Selecciona al menos un cambio para aplicar en bloque.");
       return;
@@ -668,6 +679,9 @@ async function saveEdit(row: TransactionRow) {
     const ok = await patchTransactions(selectedIds, patch, "Edición masiva completada");
     if (ok) {
       setBulkCategory(UNCHANGED);
+      setBulkMerchant(UNCHANGED);
+      setBulkReviewState(UNCHANGED);
+      setBulkAnalytics(UNCHANGED);
     }
   }
 
@@ -760,7 +774,18 @@ async function saveEdit(row: TransactionRow) {
             <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar automática</option><option value={NONE}>Sin categoría</option>
             {facets.categories.filter((category) => category.lifecycle === "active").map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </select></label>
-          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || loading || bulkCategory === UNCHANGED}>Aplicar cambios</button>
+          <label><span>Comercio</span><select data-testid="bulk-merchant" value={bulkMerchant} disabled={saving || loading} onChange={(event) => setBulkMerchant(event.target.value)}>
+            <option value={UNCHANGED}>Sin cambiar</option><option value={INHERIT}>Restaurar detectado</option><option value={NONE}>Sin comercio</option>
+            {facets.merchants.filter((merchant) => merchant.lifecycle === "active").map((merchant) => <option key={merchant.id} value={merchant.id}>{merchant.name}</option>)}
+          </select></label>
+          <label><span>Revisión</span><select data-testid="bulk-review-state" value={bulkReviewState} disabled={saving || loading} onChange={(event) => setBulkReviewState(event.target.value)}>
+            <option value={UNCHANGED}>Sin cambiar</option>
+            {(Object.entries(REVIEW_STATE_LABELS) as Array<[ReviewState, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select></label>
+          <label><span>Analítica</span><select data-testid="bulk-analytics" value={bulkAnalytics} disabled={saving || loading} onChange={(event) => setBulkAnalytics(event.target.value)}>
+            <option value={UNCHANGED}>Sin cambiar</option><option value={ANALYTICS_INCLUDE}>Incluir en analítica</option><option value={ANALYTICS_EXCLUDE}>Excluir de analítica</option>
+          </select></label>
+          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || loading || (bulkCategory === UNCHANGED && bulkMerchant === UNCHANGED && bulkReviewState === UNCHANGED && bulkAnalytics === UNCHANGED)}>Aplicar cambios</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setSelectedIds([])} disabled={saving || loading}>Quitar selección</button>
         </section>
       )}
