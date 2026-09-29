@@ -15,7 +15,7 @@ if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed
 
 export default defineConfig({
   testDir: "./tests/e2e",
-  testMatch: "production-postflight-10.0.35.spec.ts",
+  testMatch: "production-postflight.spec.ts",
   fullyParallel: false,
   forbidOnly: true,
   retries: 1,
