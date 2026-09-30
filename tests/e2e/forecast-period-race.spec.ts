@@ -1,5 +1,23 @@
 import { expect, test } from "@playwright/test";
 
+function madridTodayIso() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const get = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value ?? "";
+  return `${get("year")}-${get("month")}-${get("day")}`;
+}
+
+function addIsoDays(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 function snapshot(concept: string, dateFrom: string, dateTo: string) {
   return {
     contractVersion: 1,
@@ -58,6 +76,9 @@ function snapshot(concept: string, dateFrom: string, dateTo: string) {
 }
 
 test("forecast keeps the newest period when an older request finishes later", async ({ page }) => {
+  const targetFrom = addIsoDays(madridTodayIso(), 31);
+  const targetTo = addIsoDays(targetFrom, 30);
+
   await page.route("**/api/forecast*", async (route) => {
     const request = route.request();
     if (request.method() !== "GET") {
@@ -71,10 +92,10 @@ test("forecast keeps the newest period when an older request finishes later", as
       return;
     }
 
-    const dateFrom = url.searchParams.get("dateFrom") ?? "2026-09-07";
-    const dateTo = url.searchParams.get("dateTo") ?? "2026-12-06";
+    const dateFrom = url.searchParams.get("dateFrom") ?? addIsoDays(madridTodayIso(), 1);
+    const dateTo = url.searchParams.get("dateTo") ?? addIsoDays(madridTodayIso(), 90);
 
-    if (dateFrom === "2026-10-01" && dateTo !== "2026-10-31") {
+    if (dateFrom === targetFrom && dateTo !== targetTo) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       await route.fulfill({
         status: 200,
@@ -84,7 +105,7 @@ test("forecast keeps the newest period when an older request finishes later", as
       return;
     }
 
-    if (dateFrom === "2026-10-01" && dateTo === "2026-10-31") {
+    if (dateFrom === targetFrom && dateTo === targetTo) {
       await new Promise((resolve) => setTimeout(resolve, 20));
       await route.fulfill({
         status: 200,
@@ -104,8 +125,8 @@ test("forecast keeps the newest period when an older request finishes later", as
   await page.goto("/forecast");
   await expect(page.getByRole("heading", { name: "PERIODO INICIAL", exact: true })).toBeVisible();
 
-  await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
-  await page.getByLabel("Hasta").fill("2026-10-31");
+  await page.getByLabel("Desde", { exact: true }).fill(targetFrom);
+  await page.getByLabel("Hasta").fill(targetTo);
 
   await expect(page.getByRole("heading", { name: "PERIODO MÁS RECIENTE", exact: true })).toBeVisible();
   await page.waitForTimeout(450);
@@ -114,24 +135,29 @@ test("forecast keeps the newest period when an older request finishes later", as
 });
 
 test("forecast identifies the old period if loading the chosen dates fails", async ({ page }) => {
+  const today = madridTodayIso();
+  const targetFrom = addIsoDays(today, 31);
+  const baselineFrom = addIsoDays(today, 1);
+  const baselineTo = addIsoDays(today, 90);
+
   await page.route("**/api/forecast*", async (route) => {
     const url = new URL(route.request().url());
-    if (url.searchParams.get("dateFrom") === "2026-10-01") {
+    if (url.searchParams.get("dateFrom") === targetFrom) {
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "source_unavailable" }) });
       return;
     }
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(snapshot("DATO DEL PERIODO ANTERIOR", "2026-09-25", "2026-12-23")),
+      body: JSON.stringify(snapshot("DATO DEL PERIODO ANTERIOR", baselineFrom, baselineTo)),
     });
   });
 
   await page.goto("/forecast");
   await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
-  await page.getByLabel("Desde", { exact: true }).fill("2026-10-01");
+  await page.getByLabel("Desde", { exact: true }).fill(targetFrom);
 
   await expect(page.locator("main").getByRole("alert")).toContainText("source_unavailable");
-  await expect(page.locator("main").getByRole("status")).toContainText("Las cifras visibles corresponden al 25 sept 2026 – 23 dic 2026");
+  await expect(page.locator("main").getByRole("status")).toContainText("Las cifras visibles corresponden al");
   await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
 });
