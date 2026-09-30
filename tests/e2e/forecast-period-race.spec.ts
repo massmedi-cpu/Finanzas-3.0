@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 
+const FIXED_TEST_NOW = new Date("2026-09-29T10:00:00.000Z");
+
 function snapshot(concept: string, dateFrom: string, dateTo: string) {
   return {
     contractVersion: 1,
@@ -58,6 +60,7 @@ function snapshot(concept: string, dateFrom: string, dateTo: string) {
 }
 
 test("forecast keeps the newest period when an older request finishes later", async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_TEST_NOW);
   await page.route("**/api/forecast*", async (route) => {
     const request = route.request();
     if (request.method() !== "GET") {
@@ -114,6 +117,7 @@ test("forecast keeps the newest period when an older request finishes later", as
 });
 
 test("forecast identifies the old period if loading the chosen dates fails", async ({ page }) => {
+  await page.clock.setFixedTime(FIXED_TEST_NOW);
   await page.route("**/api/forecast*", async (route) => {
     const url = new URL(route.request().url());
     if (url.searchParams.get("dateFrom") === "2026-10-01") {
