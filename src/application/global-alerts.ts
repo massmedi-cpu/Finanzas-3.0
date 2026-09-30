@@ -189,7 +189,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       tone: "warning",
       title: `${uncategorizedCount} ${plural(uncategorizedCount, "movimiento sin categorizar", "movimientos sin categorizar")}`,
       detail: "Clasificarlos mejora presupuestos, análisis y previsiones sin modificar la fuente bancaria.",
-      href: "/transactions?categoryId=__uncategorized__",
+      href: "/transactions?uncategorized=true",
       action: "Categorizar",
     });
   }
@@ -241,7 +241,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       tone: "warning",
       title: `${pendingDocumentReviewCount} ${plural(pendingDocumentReviewCount, "documento pendiente de revisar", "documentos pendientes de revisar")}`,
       detail: "La revisión humana sigue siendo obligatoria antes de confirmar datos extraídos o asociaciones.",
-      href: "/documents?status=pending_review",
+      href: "/documents",
       action: "Abrir revisión",
     });
   }
