@@ -16,11 +16,21 @@ const requiredWorkflowFragments = [
   'FINANCIAL_APP_QA_EMAIL: ${{ secrets.FINANCIAL_APP_QA_EMAIL }}',
   'FINANCIAL_APP_QA_PASSWORD: ${{ secrets.FINANCIAL_APP_QA_PASSWORD }}',
   'FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}',
+  '+financialapp-cr008-qa',
   'default_transaction_read_only=on',
   'size_bytes = 2258072',
   "lower(coalesce(mime_type, '')) = 'image/jpeg'",
-  'canonical_document_resolution=unique_read_only_match',
-  'FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}',
+  'QA identity must be inactive before replay',
+  'QA identity must have no active workspace membership before replay',
+  'insert into financial_app.authorized_users',
+  'insert into financial_app.workspace_memberships',
+  "'member', true, true",
+  'qa_authorization=temporary_active',
+  "if: always() && steps.authorize.outputs.activated == 'true'",
+  'set active = false, is_default = false',
+  'set active = false, updated_at = now()',
+  'qa_authorization=revoked_verified',
+  'FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.context.outputs.document_id }}',
   'bash -n scripts/cr008-authenticated-replay.sh',
   'run: bash scripts/cr008-authenticated-replay.sh',
   'Upload sanitized replay evidence',
@@ -108,4 +118,4 @@ if (!workflow.includes("github.event_name == 'push'")) {
   throw new Error('pre-merge push mode is required so CR-008 can close before this gate reaches main');
 }
 
-console.log('CR008_AUTHENTICATED_REPLAY_CONTRACT|status=pass|premerge_push=enabled|manual_dispatch=retained|internal_session=required|canonical_document=auto_resolved_read_only|financial_writes=false|bank_source=read_only|raw_document_in_repo=false');
+console.log('CR008_AUTHENTICATED_REPLAY_CONTRACT|status=pass|premerge_push=enabled|manual_dispatch=retained|internal_session=required|qa_authorization=temporary_and_revoked|canonical_document=auto_resolved_read_only|financial_writes=false|bank_source=read_only|raw_document_in_repo=false');
