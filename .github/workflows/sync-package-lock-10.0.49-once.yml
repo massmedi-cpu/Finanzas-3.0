@@ -1,0 +1,58 @@
+name: Sync package-lock 10.0.49 Once
+
+on:
+  push:
+    branches:
+      - pre030/responsive-matrix-10.0.49
+    paths:
+      - "package.json"
+      - ".github/workflows/sync-package-lock-10.0.49-once.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lock:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v6
+        with:
+          ref: pre030/responsive-matrix-10.0.49
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Regenerate lock metadata without installing scripts
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+
+      - name: Require synchronized candidate version
+        shell: bash
+        run: |
+          node - <<'NODE'
+          const pkg = require('./package.json');
+          const lock = require('./package-lock.json');
+          if (pkg.version !== '10.0.49') throw new Error(`package_version=${pkg.version}`);
+          if (lock.version !== pkg.version) throw new Error(`lock_version=${lock.version}`);
+          if (lock.packages?.['']?.version !== pkg.version) throw new Error(`lock_root_version=${lock.packages?.['']?.version}`);
+          console.log(`candidate_version=${pkg.version}`);
+          NODE
+
+      - name: Commit synchronized lock when changed
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "PRE-030: sync package-lock for 10.0.49"
+          git push origin HEAD:pre030/responsive-matrix-10.0.49
