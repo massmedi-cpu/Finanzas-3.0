@@ -1,0 +1,135 @@
+name: CR008 QA Capability Probe
+
+on:
+  push:
+    branches:
+      - 'ci/cr008-authenticated-replay-gate'
+    paths:
+      - '.github/workflows/cr008-qa-capability-probe.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cr008-qa-capability-probe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
+      FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
+      FINANCIAL_APP_SUPABASE_URL: https://btzukbfesxdratqnxuoj.supabase.co
+    steps:
+      - name: Checkout exact probe commit
+        uses: actions/checkout@v6
+
+      - name: Require existing production DB credential without exposing it
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$FINANCIAL_APP_DB_PASSWORD" || { echo 'FINANCIAL_APP_DB_PASSWORD secret is unavailable'; exit 1; }
+          echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+
+      - name: Inspect public Supabase Auth capability
+        shell: bash
+        run: |
+          set -euo pipefail
+          publishable_key="$(node - <<'NODE'
+          const fs = require('node:fs');
+          const text = fs.readFileSync('src/infrastructure/auth/supabase-auth.ts', 'utf8');
+          const match = text.match(/sb_publishable_[A-Za-z0-9_-]+/);
+          if (!match) process.exit(2);
+          process.stdout.write(match[0]);
+          NODE
+          )"
+          status="$(curl --silent --show-error --output /tmp/cr008-auth-settings.json --write-out '%{http_code}' \
+            -H "apikey: $publishable_key" \
+            "$FINANCIAL_APP_SUPABASE_URL/auth/v1/settings")"
+          test "$status" = "200" || { echo "auth_settings_http=$status"; exit 1; }
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const value = JSON.parse(fs.readFileSync('/tmp/cr008-auth-settings.json', 'utf8'));
+          const pick = (...keys) => {
+            for (const key of keys) if (Object.prototype.hasOwnProperty.call(value, key)) return value[key];
+            return 'unknown';
+          };
+          console.log(`auth_disable_signup=${pick('disable_signup', 'disableSignup')}`);
+          console.log(`auth_mailer_autoconfirm=${pick('mailer_autoconfirm', 'mailerAutoconfirm')}`);
+          console.log(`auth_phone_autoconfirm=${pick('phone_autoconfirm', 'phoneAutoconfirm')}`);
+          NODE
+
+      - name: Install PostgreSQL client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Resolve production database route and inspect QA topology read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGPASSWORD="$FINANCIAL_APP_DB_PASSWORD"
+          export PGSSLMODE=require
+          export PGOPTIONS='-c default_transaction_read_only=on'
+
+          direct_host="db.${FINANCIAL_APP_SUPABASE_PROJECT_REF}.supabase.co"
+          pooler_host="aws-1-eu-west-3.pooler.supabase.com"
+          selected_host=''
+          selected_user=''
+
+          if psql --host "$direct_host" --port 5432 --username postgres --dbname postgres --no-password --tuples-only --command 'select 1;' >/dev/null 2>&1; then
+            selected_host="$direct_host"
+            selected_user='postgres'
+            echo 'production_db_route=direct'
+          else
+            for attempt in 1 2 3 4 5; do
+              if psql --host "$pooler_host" --port 5432 --username "postgres.${FINANCIAL_APP_SUPABASE_PROJECT_REF}" --dbname postgres --no-password --tuples-only --command 'select 1;' >/dev/null 2>&1; then
+                selected_host="$pooler_host"
+                selected_user="postgres.${FINANCIAL_APP_SUPABASE_PROJECT_REF}"
+                echo 'production_db_route=session_pooler'
+                break
+              fi
+              sleep 5
+            done
+          fi
+
+          test -n "$selected_host" || { echo 'production_database_route_unavailable'; exit 1; }
+
+          psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password \
+            --no-align --tuples-only --set ON_ERROR_STOP=1 <<'SQL'
+          begin read only;
+          select 'auth_users_total=' || count(*) from auth.users;
+          select 'auth_users_qa_like=' || count(*)
+            from auth.users
+            where lower(coalesce(email, '')) ~ '(qa|test|cr008)';
+          select 'authorized_active=' || count(*)
+            from financial_app.authorized_users
+            where active = true;
+          select 'active_memberships=' || count(*)
+            from financial_app.workspace_memberships
+            where active = true;
+          select 'personal_workspace_memberships=' || count(*)
+            from financial_app.workspace_memberships
+            where workspace_id = '00000000-0000-4000-8000-000000000101'::uuid
+              and active = true;
+          select 'documents_total=' || count(*) from financial_app.documents;
+          select 'document_columns=' || string_agg(column_name, ',' order by ordinal_position)
+            from information_schema.columns
+            where table_schema = 'financial_app' and table_name = 'documents';
+          select 'storage_object_columns=' || string_agg(column_name, ',' order by ordinal_position)
+            from information_schema.columns
+            where table_schema = 'storage' and table_name = 'objects';
+          select 'storage_objects_2258072_bytes=' || count(*)
+            from storage.objects
+            where metadata ->> 'size' = '2258072';
+          rollback;
+          SQL
+
+      - name: Confirm probe remained read-only
+        shell: bash
+        run: echo 'cr008_qa_capability_probe=read_only_success'
