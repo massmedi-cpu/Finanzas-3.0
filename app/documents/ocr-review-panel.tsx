@@ -6,6 +6,7 @@ import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-r
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
 import ocrStyles from "./ocr-review.module.css";
+import { OcrPageReviewWorkbench } from "./ocr-page-review-workbench";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = DocumentOcrResult["status"];
@@ -299,6 +300,12 @@ export function OcrReviewPanel({
                     </div>
                   ) : null}
                   {page.reviewText || page.layoutText ? <pre className={ocrStyles.layout}>{page.reviewText || page.layoutText}</pre> : <p className={styles.muted}>Sin texto reconstruible en esta página.</p>}
+                  <OcrPageReviewWorkbench
+                    page={page}
+                    preservesGeometry={result.principles.preservesGeometry}
+                    openingOriginal={openingOriginal}
+                    onOpenOriginal={() => void openOriginal()}
+                  />
                 </details>
               );
             })}
