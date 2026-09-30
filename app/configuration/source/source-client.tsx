@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { normalizeSourceSyncIncidents } from "../../../src/application/source-sync-incidents";
 import { formatMoneyCents } from "../../../src/core/money";
+import { useActionFeedback } from "../../action-feedback";
 import styles from "./source.module.css";
 
 type GoogleConnection = {
@@ -209,6 +210,7 @@ async function jsonOrEmpty<T>(response: Response): Promise<T> {
 }
 
 export default function SourceClient() {
+  const actionFeedback = useActionFeedback();
   const [google, setGoogle] = useState<GoogleStatus | null>(null);
   const [runtime, setRuntime] = useState<RuntimeHealth | null>(null);
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(EMPTY_SYNC_STATUS);
@@ -295,6 +297,8 @@ export default function SourceClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const feedbackId = "source:preflight";
+    actionFeedback.begin(feedbackId, "Validando la fuente bancaria en modo solo lectura…");
 
     try {
       const response = await fetch("/api/source/google/preflight", { method: "POST" });
@@ -302,13 +306,14 @@ export default function SourceClient() {
       if (!response.ok) throw new Error(sourceActionErrorMessage(payload.error));
 
       setPreflight(payload);
-      setNotice({
-        message: `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`,
-        tone: "success",
-      });
+      const message = `Prevalidación correcta: ${payload.totalAuthoritativeRows} movimientos autoritativos y ${payload.accounts.length} productos, sin escribir en la base de datos.`;
+      setNotice({ message, tone: "success" });
+      actionFeedback.success(feedbackId, message);
     } catch (cause) {
       setPreflight(null);
-      setError(cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.");
+      const message = cause instanceof Error ? cause.message : "La prevalidación no se ha podido completar.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
@@ -320,6 +325,8 @@ export default function SourceClient() {
     setError(null);
     setNotice(null);
     setSyncResult(null);
+    const feedbackId = "source:sync";
+    actionFeedback.begin(feedbackId, "Sincronizando desde Google en modo solo lectura…");
 
     try {
       const response = await fetch("/api/source/google/sync", { method: "POST" });
@@ -334,10 +341,12 @@ export default function SourceClient() {
         tone: incident ? "warning" : "success",
       });
       await load();
+      actionFeedback.success(feedbackId, summary);
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "La actualización no se ha podido completar.";
       await load();
       setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
@@ -348,19 +357,22 @@ export default function SourceClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const feedbackId = "source:disconnect";
+    actionFeedback.begin(feedbackId, "Desconectando Google…");
 
     try {
       const response = await fetch("/api/source/google/status", { method: "DELETE" });
       if (!response.ok) throw new Error("No se ha podido desconectar Google.");
       setSyncResult(null);
       setPreflight(null);
-      setNotice({
-        message: "Conexión Google eliminada. Los movimientos ya importados permanecen intactos.",
-        tone: "success",
-      });
+      const message = "Conexión Google eliminada. Los movimientos ya importados permanecen intactos.";
+      setNotice({ message, tone: "success" });
       await load();
+      actionFeedback.success(feedbackId, message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se ha podido desconectar Google.");
+      const message = cause instanceof Error ? cause.message : "No se ha podido desconectar Google.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { APP_VERSION } from "../src/core/build-info";
+import { ActionFeedbackProvider } from "./action-feedback";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import { PwaRuntimeProvider } from "./pwa-runtime";
 import "./globals.css";
@@ -11,6 +12,7 @@ import "./premium-theme.css";
 import "./premium-hardening.css";
 import "./accessibility-forced-colors.css";
 import "./accessibility-live-regions.css";
+import "./action-feedback.css";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +41,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es">
       <body>
-        <PwaRuntimeProvider>{children}</PwaRuntimeProvider>
+        <ActionFeedbackProvider><PwaRuntimeProvider>{children}</PwaRuntimeProvider></ActionFeedbackProvider>
         <OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />
       </body>
     </html>

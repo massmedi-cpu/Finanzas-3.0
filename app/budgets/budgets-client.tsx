@@ -11,6 +11,7 @@ import {
   type BudgetSnapshot,
 } from "../../src/application/budgets/budget-planning";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
+import { useActionFeedback } from "../action-feedback";
 import styles from "./budgets.module.css";
 
 type BudgetIconName = Extract<
@@ -335,6 +336,7 @@ function BudgetCard({
 }
 
 export default function BudgetsClient() {
+  const actionFeedback = useActionFeedback();
   const [month, setMonth] = useState(currentMonthMadrid);
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -387,6 +389,8 @@ export default function BudgetsClient() {
     setError("");
     setNotice("");
     setFieldError("");
+    const feedbackId = method === "POST" ? "budgets:refresh" : "budgets:save-limit";
+    actionFeedback.begin(feedbackId, method === "POST" ? "Actualizando referencias del presupuesto…" : "Guardando límite de presupuesto…");
     try {
       const response = await fetch("/api/budgets", {
         method,
@@ -399,14 +403,17 @@ export default function BudgetsClient() {
       setEditingKey(null);
       setEditValue("");
       setNotice(successMessage);
+      actionFeedback.success(feedbackId, successMessage);
       return true;
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "No se pudo actualizar el presupuesto.");
+      const message = caught instanceof Error ? caught.message : "No se pudo actualizar el presupuesto.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
       return false;
     } finally {
       setBusy(false);
     }
-  }, []);
+  }, [actionFeedback]);
 
   const handleRefresh = useCallback(() => {
     void mutate("POST", { month }, `Referencias históricas de ${formatMonth(month)} actualizadas.`);
