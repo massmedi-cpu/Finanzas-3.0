@@ -17,7 +17,9 @@ test("Inicio prioriza decisiones y deja de abrir con un saldo total aislado", ()
   expect(inicioSource).toContain("Gasto medio mensual");
   expect(inicioSource).toContain("Necesita tu atención");
   expect(inicioSource).not.toContain("Por revisar");
-  expect(inicioSource).not.toContain("Revisar movimientos");
+  expect(inicioSource).toContain('const signMismatchRows = financial?.period.quality.signMismatchRows ?? 0;');
+  expect(inicioSource).toContain("if (signMismatchRows > 0) {");
+  expect(inicioSource).toContain('action: "Revisar movimientos"');
   expect(inicioSource).not.toContain("pendingRecent");
   expect(inicioSource).not.toContain("balanceSummary");
   expect(inicioSource).not.toContain("Tu dinero, claro en segundos");
