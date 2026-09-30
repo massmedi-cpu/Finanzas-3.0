@@ -122,9 +122,7 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
   await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
-  await expect(panel.getByText(/5\/5 filas estructuradas/)).toBeVisible();
-  await expect(panel.getByText(/5\/5 líneas cuadran/)).toBeVisible();
-  await expect(panel.getByText(/suma de líneas = total/)).toBeVisible();
+  await expect(panel.getByText(/5\/5 filas estructuradas · 5\/5 líneas cuadran · suma de líneas = total/)).toBeVisible();
   await expect(panel.getByText("Los datos editables siguen arriba y requieren guardado explícito.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
