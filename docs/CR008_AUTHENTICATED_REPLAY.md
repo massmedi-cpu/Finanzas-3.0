@@ -23,9 +23,19 @@ El workflow no crea usuarios ni inserta filas directamente en `auth.users`. Tamp
 
 `VERCEL_AUTOMATION_BYPASS_SECRET` es opcional y sólo cruza la protección de hosting. Si no existe, el workflow usa un token GitHub OIDC efímero. Ninguno de esos mecanismos sustituye al login interno.
 
-## Ejecución
+## Ejecución pre-merge
 
-El job de contrato se ejecuta automáticamente cuando cambia este gate. El replay con datos reales sólo puede arrancarse mediante `workflow_dispatch`, indicando la URL de Preview y el SHA exacto que debe estar desplegado. Si falta cualquier secreto, el SHA no coincide, el documento es inaccesible, la sesión no es válida, OCR no devuelve evidencia revisable o se rompe una invariancia de seguridad, el workflow termina en fallo.
+GitHub sólo entrega eventos `workflow_dispatch` cuando el workflow existe en la rama por defecto. Para no tener que fusionar este gate antes de cerrar CR-008, la rama técnica admite un segundo disparador explícito y restringido: un push cuyo mensaje contenga `[cr008-auth-replay]`.
+
+En ese modo el job usa el SHA exacto del push y busca en GitHub Deployments una Preview Vercel `success` asociada a ese mismo SHA. No acepta una Preview aproximada ni una URL de otro commit. Si el proyecto necesita el marcador habitual para construir Preview, el commit de ejecución debe incluir también `[vercel-preview]`. Si no aparece una Preview exacta, el gate falla cerrado.
+
+No se debe usar el marcador mientras falten los secretos QA legítimos: el job fallaría correctamente antes del login. El marcador no contiene credenciales ni identificadores privados.
+
+## Ejecución tras integrar el gate
+
+Cuando el workflow exista en la rama por defecto, `workflow_dispatch` seguirá disponible. En ese modo se introducen la URL de Preview y el SHA completo esperado; el gate vuelve a comprobar ambos antes de iniciar sesión.
+
+En cualquiera de los dos modos, si falta un secreto, el SHA no coincide, el documento es inaccesible, la sesión no es válida, OCR no devuelve evidencia revisable o se rompe una invariancia de seguridad, el workflow termina en fallo.
 
 ## Regla de promoción
 
