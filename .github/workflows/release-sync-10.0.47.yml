@@ -1,0 +1,55 @@
+name: Release Sync 10.0.47
+
+on:
+  push:
+    branches:
+      - feature/global-alerts-10.0.47
+    paths:
+      - ".github/workflows/release-sync-10.0.47.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  sync-version:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact branch head
+        uses: actions/checkout@v6
+        with:
+          ref: feature/global-alerts-10.0.47
+          fetch-depth: 0
+
+      - name: Synchronize canonical release version only
+        shell: bash
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const target = '10.0.47';
+          const packagePath = 'package.json';
+          const lockPath = 'package-lock.json';
+          const pkg = JSON.parse(fs.readFileSync(packagePath, 'utf8'));
+          const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+          if (pkg.version !== '10.0.46') throw new Error(`unexpected package version ${pkg.version}`);
+          if (lock.version !== '10.0.46') throw new Error(`unexpected lock version ${lock.version}`);
+          if (lock.packages?.['']?.version !== '10.0.46') throw new Error(`unexpected root lock version ${lock.packages?.['']?.version}`);
+          pkg.version = target;
+          lock.version = target;
+          lock.packages[''].version = target;
+          fs.writeFileSync(packagePath, `${JSON.stringify(pkg, null, 2)}\n`);
+          fs.writeFileSync(lockPath, `${JSON.stringify(lock, null, 2)}\n`);
+          NODE
+          git diff --check
+          test "$(git diff --name-only | sort | tr '\n' ' ')" = "package-lock.json package.json "
+
+      - name: Commit synchronized version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore(release): set Financial App 10.0.47"
+          git push origin HEAD:feature/global-alerts-10.0.47

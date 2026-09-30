@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
+import { navigationItems } from "../../app/navigation-items";
 
 async function fulfillJson(route: Route, status: number, body: unknown) {
   await route.fulfill({
@@ -19,14 +20,16 @@ async function isolateData(page: Page) {
   });
 }
 
-test("10.0.30 · el menú superior expone las trece secciones y controles de desplazamiento", async ({ page }) => {
+const EXPECTED_NAVIGATION_LINKS = navigationItems.length;
+
+test("10.0.30+ · el menú superior expone todas las secciones y controles de desplazamiento", async ({ page }) => {
   await isolateData(page);
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto("/");
 
   const navigation = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("link")).toHaveCount(13);
+  await expect(navigation.getByRole("link")).toHaveCount(EXPECTED_NAVIGATION_LINKS);
 
   const nextButton = page.getByRole("button", { name: "Ver más secciones del menú" });
   await expect(nextButton).toBeVisible();
@@ -37,14 +40,14 @@ test("10.0.30 · el menú superior expone las trece secciones y controles de des
   await expect.poll(() => navigation.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
 });
 
-test("10.0.30 · la rueda vertical desplaza horizontalmente el menú cuando hay contenido oculto", async ({ page }) => {
+test("10.0.30+ · la rueda vertical desplaza horizontalmente el menú cuando hay contenido oculto", async ({ page }) => {
   await isolateData(page);
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto("/");
 
   const navigation = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole("link")).toHaveCount(13);
+  await expect(navigation.getByRole("link")).toHaveCount(EXPECTED_NAVIGATION_LINKS);
 
   const nextButton = page.getByRole("button", { name: "Ver más secciones del menú" });
   await expect(nextButton).toBeVisible();
@@ -55,7 +58,7 @@ test("10.0.30 · la rueda vertical desplaza horizontalmente el menú cuando hay 
   await expect.poll(() => navigation.evaluate((element) => element.scrollLeft)).toBeGreaterThan(before);
 });
 
-test("10.0.30 · el enlace activo vuelve a quedar visible tras cambiar de sección", async ({ page }) => {
+test("10.0.30+ · el enlace activo vuelve a quedar visible tras cambiar de sección", async ({ page }) => {
   await isolateData(page);
   await page.setViewportSize({ width: 1024, height: 800 });
   await page.goto("/configuration");
@@ -71,7 +74,7 @@ test("10.0.30 · el enlace activo vuelve a quedar visible tras cambiar de secci�
   })).toBe(true);
 });
 
-test("10.0.30 · móvil conserva el dock y Más da acceso a las secciones secundarias", async ({ page }) => {
+test("10.0.30+ · móvil conserva el dock y Más da acceso a las secciones secundarias", async ({ page }) => {
   await isolateData(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
@@ -85,4 +88,5 @@ test("10.0.30 · móvil conserva el dock y Más da acceso a las secciones secund
   await expect(more).toBeVisible();
   await expect(more.getByRole("link", { name: "Configuración" })).toBeVisible();
   await expect(more.getByRole("link", { name: "Documentos" })).toBeVisible();
+  await expect(more.getByRole("link", { name: "Alertas" })).toBeVisible();
 });

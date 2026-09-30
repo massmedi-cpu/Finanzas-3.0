@@ -12,6 +12,7 @@ export const navigationItems = [
   { href: "/cash-flow", label: "Cash Flow", icon: "future" },
   { href: "/onboarding", label: "Primeros pasos", icon: "onboarding" },
   { href: "/review", label: "Para revisar", shortLabel: "Revisar", icon: "review" },
+  { href: "/alerts", label: "Alertas", icon: "review" },
   { href: "/transactions", label: "Movimientos", shortLabel: "Movs.", icon: "transactions" },
   { href: "/analysis", label: "Análisis", icon: "analysis" },
   { href: "/compare", label: "Comparador", shortLabel: "Comparar", icon: "balance" },

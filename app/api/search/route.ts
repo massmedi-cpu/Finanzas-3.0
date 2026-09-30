@@ -65,6 +65,7 @@ const SECTIONS = [
   { id: "forecast", title: "Previsión", keywords: "prevision futuros proximos pagos ingresos", href: "/forecast" },
   { id: "documents", title: "Documentos", keywords: "documentos facturas tickets recibos pdf ocr", href: "/documents" },
   { id: "review", title: "Para revisar", keywords: "revisar duplicados pendientes incidencias", href: "/review" },
+  { id: "alerts", title: "Alertas", keywords: "alertas avisos incidencias presupuesto duplicados pagos documentos sincronizacion", href: "/alerts" },
   { id: "configuration", title: "Configuración", keywords: "configuracion ajustes fuente drive", href: "/configuration" },
 ] as const;
 

@@ -19,6 +19,7 @@ const HIGH_VALUE_PREFETCH_ROUTES = [
   "/accounts",
   "/budgets",
   "/forecast",
+  "/alerts",
 ] as const;
 
 export default function AppShell({ children }: { children: ReactNode }) {
