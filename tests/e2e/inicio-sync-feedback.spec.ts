@@ -91,6 +91,7 @@ async function mockInicio(page: Page, mode: SyncMode) {
           rowsRevised: 0,
           rowsSkipped: 10,
           rowsFailed: 0,
+          rowsMissing: warned && mode === "missing-after-sync" ? 1 : 0,
           duplicatesDetected: warned && mode === "duplicates-persisted" ? 2 : 0,
           warningsCount: warned && mode === "missing-after-sync" ? 1 : 0,
           errorCode: null,
@@ -148,7 +149,7 @@ test("Actualizar datos no llama «sin cambios» a una sincronización con filas 
 
   await page.reload();
   await expect(sourceHealth.getByText("Sincronización completada con avisos", { exact: true })).toBeVisible();
-  await expect(sourceHealth).toContainText("1 aviso de sincronización requiere revisión. Revisa la fuente.");
+  await expect(sourceHealth).toContainText("1 movimiento importado anteriormente ya no aparece en la fuente. Revisa la fuente.");
 });
 
 test("Inicio conserva tras recarga los posibles duplicados de la última sincronización", async ({ page }) => {
