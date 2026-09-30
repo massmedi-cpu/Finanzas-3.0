@@ -26,6 +26,25 @@ const viewports: ViewportCase[] = [
   { name: "pantalla ancha", width: 2560, height: 1440, mode: "desktop" },
 ];
 
+const tabletRouteSweep = [
+  "/",
+  "/cash-flow",
+  "/review",
+  "/alerts",
+  "/transactions",
+  "/analysis",
+  "/accounts",
+  "/budgets",
+  "/forecast",
+  "/documents",
+] as const;
+
+const tabletViewports: ViewportCase[] = [
+  { name: "tablet límite móvil", width: 768, height: 1024, mode: "mobile" },
+  { name: "tablet vertical", width: 820, height: 1180, mode: "desktop" },
+  { name: "tablet horizontal", width: 1024, height: 768, mode: "desktop" },
+];
+
 async function isolateShell(page: Page) {
   await page.route("**/api/**", async (route) => {
     await route.fulfill({
@@ -36,7 +55,14 @@ async function isolateShell(page: Page) {
   });
 }
 
+async function settleLayout(page: Page) {
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+  }));
+}
+
 async function expectNoViewportOverflow(page: Page, width: number) {
+  await settleLayout(page);
   const dimensions = await page.evaluate(() => ({
     htmlClient: document.documentElement.clientWidth,
     htmlScroll: document.documentElement.scrollWidth,
@@ -103,6 +129,25 @@ test.describe("Financial App 10.0.49 · contrato responsive Axioma §§72–76",
         await expectMobileNavigation(page);
       } else {
         await expectDesktopNavigation(page, viewport.width);
+      }
+    });
+  }
+
+  for (const viewport of tabletViewports) {
+    test(`${viewport.name}: rutas financieras principales respetan ${viewport.width}px`, async ({ page }) => {
+      await isolateShell(page);
+      await page.setViewportSize({ width: viewport.width, height: viewport.height });
+
+      for (const href of tabletRouteSweep) {
+        await page.goto(href);
+        await expect(page.locator("#main-content"), `${href} debe montar el contenido principal`).toBeVisible();
+        await expectNoViewportOverflow(page, viewport.width);
+
+        if (viewport.mode === "mobile") {
+          await expectMobileNavigation(page);
+        } else {
+          await expectDesktopNavigation(page, viewport.width);
+        }
       }
     });
   }
