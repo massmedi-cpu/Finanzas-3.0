@@ -1,0 +1,32 @@
+name: Trigger Production Backup 10.0.47 for REL-048 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trigger-production-backup-10.0.47-for-rel048-once.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch exact stable Financial App 10.0.47 Production backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/production-backup-v2.yml/dispatches" \
+            -f ref=main \
+            -f 'inputs[source_commit]=b1eb6edd872732dc6c954ad3913fae91ae48283c' \
+            -f 'inputs[expected_app_version]=10.0.47'
+          echo "production_backup_dispatch=10.0.47-for-rel048"
