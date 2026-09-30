@@ -1,4 +1,4 @@
-name: Trigger Production Backup 10.0.44 Once
+name: Trigger Production Backup 10.0.46 Once
 
 on:
   push:
@@ -21,8 +21,8 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          echo "Dispatching verified immutable Financial App 10.0.44 production backup for $GITHUB_SHA"
+          echo "Dispatching verified immutable Financial App 10.0.46 production backup for $GITHUB_SHA"
           gh workflow run production-backup-v2.yml \
             --ref main \
             -f source_commit="$GITHUB_SHA" \
-            -f expected_app_version=10.0.44
+            -f expected_app_version=10.0.46
