@@ -1,6 +1,20 @@
 import { expect, test, type Page } from "@playwright/test";
 
+function madridDatePlus(days: number) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    timeZone: "Europe/Madrid",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, Number(part.value)]));
+  const shifted = new Date(Date.UTC(values.year, values.month - 1, values.day + days, 12));
+  return shifted.toISOString().slice(0, 10);
+}
+
 async function mockAlerts(page: Page) {
+  const upcomingPaymentDate = madridDatePlus(2);
+
   await page.route("**/api/dashboard?scope=all", async (route) => {
     await route.fulfill({
       status: 200,
@@ -23,7 +37,7 @@ async function mockAlerts(page: Page) {
           forecast: {
             summary: { projectedClosingBalanceCents: 300_00, plannedItems: 1 },
             items: [
-              { date: "2026-10-02", concept: "Recibo", amountCents: -35_00, status: "planned", affectsProjection: true },
+              { date: upcomingPaymentDate, concept: "Recibo", amountCents: -35_00, status: "planned", affectsProjection: true },
             ],
           },
         },
