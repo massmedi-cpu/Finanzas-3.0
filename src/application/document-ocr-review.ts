@@ -1,6 +1,6 @@
 import type { DocumentOcrResult } from "../domain/document-ocr";
 
-const REVIEW_CONFIDENCE = 0.65;
+export const DOCUMENT_OCR_REVIEW_CONFIDENCE = 0.65;
 
 export type DocumentOcrReviewSummary = {
   lowConfidenceLines: number;
@@ -11,9 +11,46 @@ export type DocumentOcrReviewSummary = {
   nextActionDetail: string;
 };
 
+export type DocumentOcrPageReviewSummary = {
+  lowConfidenceLines: DocumentOcrResult["pages"][number]["lines"];
+  candidateProductRows: number | null;
+  structuredProductRows: number | null;
+  unresolvedProductRows: number | null;
+  arithmeticRowsChecked: number | null;
+  arithmeticRowsMatching: number | null;
+  lineTotalMatchesDocumentTotal: boolean | null;
+  basePlusTaxMatchesTotal: boolean | null;
+  requiresAttention: boolean;
+};
+
+export function summarizeDocumentOcrPageReview(page: DocumentOcrResult["pages"][number]): DocumentOcrPageReviewSummary {
+  const lowConfidenceLines = page.lines.filter((line) => line.confidence < DOCUMENT_OCR_REVIEW_CONFIDENCE);
+  const integrity = page.receiptIntegrity;
+  const candidateProductRows = integrity?.candidateProductRows ?? null;
+  const structuredProductRows = integrity?.productRows ?? null;
+  const unresolvedProductRows = integrity?.unresolvedProductRows ?? null;
+  const arithmeticRowsChecked = integrity?.arithmeticRowsChecked ?? null;
+  const arithmeticRowsMatching = integrity?.arithmeticRowsMatching ?? null;
+  const lineTotalMatchesDocumentTotal = integrity?.lineTotalMatchesDocumentTotal ?? null;
+  const basePlusTaxMatchesTotal = integrity?.basePlusTaxMatchesTotal ?? null;
+  const integrityNeedsAttention = integrity?.status === "issues" || integrity?.status === "partial" || (unresolvedProductRows ?? 0) > 0;
+
+  return {
+    lowConfidenceLines,
+    candidateProductRows,
+    structuredProductRows,
+    unresolvedProductRows,
+    arithmeticRowsChecked,
+    arithmeticRowsMatching,
+    lineTotalMatchesDocumentTotal,
+    basePlusTaxMatchesTotal,
+    requiresAttention: lowConfidenceLines.length > 0 || integrityNeedsAttention,
+  };
+}
+
 export function summarizeDocumentOcrReview(result: DocumentOcrResult): DocumentOcrReviewSummary {
   const lines = result.pages.flatMap((page) => page.lines);
-  const lowConfidenceLines = lines.filter((line) => line.confidence < REVIEW_CONFIDENCE).length;
+  const lowConfidenceLines = lines.filter((line) => line.confidence < DOCUMENT_OCR_REVIEW_CONFIDENCE).length;
   const emptyPages = result.pages.filter((page) => !page.plainText.trim()).length;
 
   if (result.status === "empty") {
