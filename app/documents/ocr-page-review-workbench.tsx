@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrPageReview } from "../../src/application/document-ocr-review";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
@@ -23,6 +24,7 @@ export function OcrPageReviewWorkbench({
   openingOriginal: boolean;
   onOpenOriginal: () => void;
 }) {
+  const [traceOpen, setTraceOpen] = useState(false);
   const review = summarizeDocumentOcrPageReview(page);
   const coverageKnown = review.candidateProductRows !== null;
   const coverageLabel = coverageKnown
@@ -86,18 +88,24 @@ export function OcrPageReviewWorkbench({
         <div className={styles.emptyAttention}>No hay líneas por debajo del umbral técnico de revisión en esta página.</div>
       )}
 
-      <details className={styles.trace} data-testid={`ocr-trace-${page.pageNumber}`}>
+      <details
+        className={styles.trace}
+        data-testid={`ocr-trace-${page.pageNumber}`}
+        onToggle={(event) => setTraceOpen(event.currentTarget.open)}
+      >
         <summary>Comparar trazabilidad OCR</summary>
-        <div className={styles.traceGrid}>
-          <div className={styles.tracePane}>
-            <strong>{hasTraceDifference ? "Reconstrucción geométrica original" : "Texto reconstruido"}</strong>
-            <pre>{page.layoutText || page.plainText || "Sin texto"}</pre>
+        {traceOpen ? (
+          <div className={styles.traceGrid}>
+            <div className={styles.tracePane}>
+              <strong>{hasTraceDifference ? "Reconstrucción geométrica original" : "Texto reconstruido"}</strong>
+              <pre>{page.layoutText || page.plainText || "Sin texto"}</pre>
+            </div>
+            <div className={styles.tracePane}>
+              <strong>Texto OCR bruto</strong>
+              <pre>{page.plainText || "Sin texto"}</pre>
+            </div>
           </div>
-          <div className={styles.tracePane}>
-            <strong>Texto OCR bruto</strong>
-            <pre>{page.plainText || "Sin texto"}</pre>
-          </div>
-        </div>
+        ) : null}
       </details>
     </section>
   );
