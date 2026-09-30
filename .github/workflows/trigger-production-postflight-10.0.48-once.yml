@@ -1,0 +1,34 @@
+name: Trigger Production Postflight 10.0.48 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trigger-production-postflight-10.0.48-once.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch exact Financial App 10.0.48 Production postflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "/repos/${GITHUB_REPOSITORY}/actions/workflows/production-postflight.yml/dispatches" \
+            -f ref=main \
+            -f 'inputs[production_url]=https://financialapp-home.vercel.app/' \
+            -f 'inputs[expected_version]=10.0.48' \
+            -f 'inputs[deployment_commit]=a652177fa721381f2e80f205171008fd14a06de6' \
+            -f 'inputs[deployment_id]=dpl_HNkodi5Pwyd4YhHNUzfYJy8PMgwQ'
+          echo "production_postflight_dispatch=10.0.48"
