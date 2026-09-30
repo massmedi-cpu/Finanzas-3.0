@@ -1,0 +1,56 @@
+name: CR-008 Browser Matrix
+
+on:
+  push:
+    branches:
+      - 'rebuild/phase-cr008-10.0.45'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cr008-browser-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  browser-project:
+    name: browser-${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        project:
+          - chromium-desktop
+          - chromium-mobile
+    steps:
+      - name: Checkout branch commit
+        uses: actions/checkout@v6
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Build production bundle
+        run: npm run build
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+      - name: Run complete browser project
+        run: npm run test:e2e -- --project=${{ matrix.project }}
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cr008-${{ matrix.project }}-report
+          path: playwright-report/
+          retention-days: 7
