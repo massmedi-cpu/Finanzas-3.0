@@ -58,7 +58,7 @@ jobs:
       (github.event_name == 'push' && contains(github.event.head_commit.message, '[cr008-auth-replay]'))
     needs: contract
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     permissions:
       contents: read
       deployments: read
@@ -66,7 +66,8 @@ jobs:
     env:
       FINANCIAL_APP_QA_EMAIL: ${{ secrets.FINANCIAL_APP_QA_EMAIL }}
       FINANCIAL_APP_QA_PASSWORD: ${{ secrets.FINANCIAL_APP_QA_PASSWORD }}
-      FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ secrets.FINANCIAL_APP_CR008_DOCUMENT_ID }}
+      FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}
+      FINANCIAL_APP_SUPABASE_PROJECT_REF: btzukbfesxdratqnxuoj
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - name: Checkout gate source
@@ -129,10 +130,59 @@ jobs:
             }
             core.setFailed(`No successful Vercel Preview was found for exact SHA ${expectedSha}.`);
 
+      - name: Install PostgreSQL client for canonical document lookup
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Resolve unique canonical CR-008 document read-only
+        id: document
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$FINANCIAL_APP_DB_PASSWORD" || { echo 'FINANCIAL_APP_DB_PASSWORD secret is required'; exit 1; }
+          echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
+          export PGPASSWORD="$FINANCIAL_APP_DB_PASSWORD"
+          export PGSSLMODE=require
+          export PGOPTIONS='-c default_transaction_read_only=on'
+
+          direct_host="db.${FINANCIAL_APP_SUPABASE_PROJECT_REF}.supabase.co"
+          pooler_host="aws-1-eu-west-3.pooler.supabase.com"
+          selected_host=''
+          selected_user=''
+
+          if psql --host "$direct_host" --port 5432 --username postgres --dbname postgres --no-password --tuples-only --command 'select 1;' >/dev/null 2>&1; then
+            selected_host="$direct_host"
+            selected_user='postgres'
+          else
+            for attempt in 1 2 3 4 5; do
+              if psql --host "$pooler_host" --port 5432 --username "postgres.${FINANCIAL_APP_SUPABASE_PROJECT_REF}" --dbname postgres --no-password --tuples-only --command 'select 1;' >/dev/null 2>&1; then
+                selected_host="$pooler_host"
+                selected_user="postgres.${FINANCIAL_APP_SUPABASE_PROJECT_REF}"
+                break
+              fi
+              sleep 5
+            done
+          fi
+
+          test -n "$selected_host" || { echo 'production_database_route_unavailable'; exit 1; }
+          document_id="$(psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password \
+            --no-align --tuples-only --set ON_ERROR_STOP=1 \
+            --command "select id::text from financial_app.documents where workspace_id = '00000000-0000-4000-8000-000000000101'::uuid and size_bytes = 2258072 and lower(coalesce(mime_type, '')) = 'image/jpeg';")"
+          match_count="$(printf '%s\n' "$document_id" | grep -Ec '^[0-9a-fA-F-]{36}$' || true)"
+          test "$match_count" = '1' || { echo "canonical_document_match_count=$match_count"; exit 1; }
+          [[ "$document_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]] || { echo 'canonical document id is not a UUID'; exit 1; }
+          echo "::add-mask::$document_id"
+          echo "document_id=$document_id" >> "$GITHUB_OUTPUT"
+          echo 'canonical_document_resolution=unique_read_only_match'
+
       - name: Fail closed unless legitimate replay inputs exist
         env:
           PREVIEW_URL: ${{ steps.target.outputs.url }}
           EXPECTED_SHA: ${{ steps.target.outputs.sha }}
+          RESOLVED_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}
         shell: bash
         run: |
           set -euo pipefail
@@ -140,12 +190,13 @@ jobs:
           test -n "$EXPECTED_SHA" || { echo 'resolved expected SHA is required'; exit 1; }
           test -n "$FINANCIAL_APP_QA_EMAIL" || { echo 'FINANCIAL_APP_QA_EMAIL secret is required'; exit 1; }
           test -n "$FINANCIAL_APP_QA_PASSWORD" || { echo 'FINANCIAL_APP_QA_PASSWORD secret is required'; exit 1; }
-          test -n "$FINANCIAL_APP_CR008_DOCUMENT_ID" || { echo 'FINANCIAL_APP_CR008_DOCUMENT_ID secret is required'; exit 1; }
+          test -n "$RESOLVED_DOCUMENT_ID" || { echo 'resolved canonical document id is required'; exit 1; }
 
       - name: Replay canonical document through real Financial App session
         env:
           PREVIEW_URL: ${{ steps.target.outputs.url }}
           EXPECTED_SHA: ${{ steps.target.outputs.sha }}
+          FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: bash scripts/cr008-authenticated-replay.sh
