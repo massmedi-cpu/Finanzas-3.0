@@ -3,7 +3,7 @@ name: OCR Review Workbench 10.0.46
 on:
   pull_request:
     branches:
-      - fix/cr-008-ocr-10.0.45
+      - main
     paths:
       - "app/documents/**"
       - "src/application/document-ocr-review.ts"
