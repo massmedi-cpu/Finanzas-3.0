@@ -58,7 +58,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_SHA" = "$FINANCIAL_APP_SOURCE_COMMIT"
+          test "$(git rev-parse HEAD)" = "$FINANCIAL_APP_SOURCE_COMMIT"
           version="$(node -p "require('./package.json').version")"
           test "$version" = "$EXPECTED_APP_VERSION"
           test -n "$FINANCIAL_APP_DB_PASSWORD"
@@ -228,7 +228,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$GITHUB_SHA" = "$FINANCIAL_APP_SOURCE_COMMIT"
+          test "$(git rev-parse HEAD)" = "$FINANCIAL_APP_SOURCE_COMMIT"
           version="$(node -p "require('./package.json').version")"
           test "$version" = "$EXPECTED_APP_VERSION"
           test "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -ge 32
