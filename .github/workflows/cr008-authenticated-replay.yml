@@ -130,19 +130,22 @@ jobs:
             }
             core.setFailed(`No successful Vercel Preview was found for exact SHA ${expectedSha}.`);
 
-      - name: Install PostgreSQL client for canonical document lookup
+      - name: Install PostgreSQL client for safe QA lookup
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install --yes postgresql-client
 
-      - name: Resolve unique canonical CR-008 document read-only
-        id: document
+      - name: Resolve isolated QA identity and canonical document read-only
+        id: context
         shell: bash
         run: |
           set -euo pipefail
           test -n "$FINANCIAL_APP_DB_PASSWORD" || { echo 'FINANCIAL_APP_DB_PASSWORD secret is required'; exit 1; }
+          test -n "$FINANCIAL_APP_QA_EMAIL" || { echo 'FINANCIAL_APP_QA_EMAIL secret is required'; exit 1; }
+          test -n "$FINANCIAL_APP_QA_PASSWORD" || { echo 'FINANCIAL_APP_QA_PASSWORD secret is required'; exit 1; }
+          [[ "$FINANCIAL_APP_QA_EMAIL" =~ ^[^@+]+\+financialapp-cr008-qa@gmail\.com$ ]] || { echo 'QA email must be the dedicated +financialapp-cr008-qa Gmail alias'; exit 1; }
           echo "::add-mask::$FINANCIAL_APP_DB_PASSWORD"
           export PGPASSWORD="$FINANCIAL_APP_DB_PASSWORD"
           export PGSSLMODE=require
@@ -152,7 +155,6 @@ jobs:
           pooler_host="aws-1-eu-west-3.pooler.supabase.com"
           selected_host=''
           selected_user=''
-
           if psql --host "$direct_host" --port 5432 --username postgres --dbname postgres --no-password --tuples-only --command 'select 1;' >/dev/null 2>&1; then
             selected_host="$direct_host"
             selected_user='postgres'
@@ -166,37 +168,66 @@ jobs:
               sleep 5
             done
           fi
-
           test -n "$selected_host" || { echo 'production_database_route_unavailable'; exit 1; }
+
+          qa_user_id="$(psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password \
+            --no-align --tuples-only --set ON_ERROR_STOP=1 --set qa_email="$FINANCIAL_APP_QA_EMAIL" \
+            --command "select id::text from auth.users where lower(email) = lower(:'qa_email');")"
+          qa_count="$(printf '%s\n' "$qa_user_id" | grep -Ec '^[0-9a-fA-F-]{36}$' || true)"
+          test "$qa_count" = '1' || { echo "qa_auth_identity_match_count=$qa_count"; exit 1; }
+          echo "::add-mask::$qa_user_id"
+
+          active_allowlist="$(psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password --no-align --tuples-only --set ON_ERROR_STOP=1 \
+            --command "select count(*) from financial_app.authorized_users where user_id = '$qa_user_id'::uuid and active;")"
+          active_memberships="$(psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password --no-align --tuples-only --set ON_ERROR_STOP=1 \
+            --command "select count(*) from financial_app.workspace_memberships where user_id = '$qa_user_id'::uuid and active;")"
+          test "$active_allowlist" = '0' || { echo 'QA identity must be inactive before replay'; exit 1; }
+          test "$active_memberships" = '0' || { echo 'QA identity must have no active workspace membership before replay'; exit 1; }
+
           document_id="$(psql --host "$selected_host" --port 5432 --username "$selected_user" --dbname postgres --no-password \
             --no-align --tuples-only --set ON_ERROR_STOP=1 \
             --command "select id::text from financial_app.documents where workspace_id = '00000000-0000-4000-8000-000000000101'::uuid and size_bytes = 2258072 and lower(coalesce(mime_type, '')) = 'image/jpeg';")"
-          match_count="$(printf '%s\n' "$document_id" | grep -Ec '^[0-9a-fA-F-]{36}$' || true)"
-          test "$match_count" = '1' || { echo "canonical_document_match_count=$match_count"; exit 1; }
-          [[ "$document_id" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$ ]] || { echo 'canonical document id is not a UUID'; exit 1; }
+          document_count="$(printf '%s\n' "$document_id" | grep -Ec '^[0-9a-fA-F-]{36}$' || true)"
+          test "$document_count" = '1' || { echo "canonical_document_match_count=$document_count"; exit 1; }
           echo "::add-mask::$document_id"
-          echo "document_id=$document_id" >> "$GITHUB_OUTPUT"
-          echo 'canonical_document_resolution=unique_read_only_match'
 
-      - name: Fail closed unless legitimate replay inputs exist
+          echo "db_host=$selected_host" >> "$GITHUB_OUTPUT"
+          echo "db_user=$selected_user" >> "$GITHUB_OUTPUT"
+          echo "qa_user_id=$qa_user_id" >> "$GITHUB_OUTPUT"
+          echo "document_id=$document_id" >> "$GITHUB_OUTPUT"
+          echo 'qa_context_resolution=isolated_read_only_success'
+
+      - name: Temporarily authorize QA identity for the replay only
+        id: authorize
         env:
-          PREVIEW_URL: ${{ steps.target.outputs.url }}
-          EXPECTED_SHA: ${{ steps.target.outputs.sha }}
-          RESOLVED_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}
+          DB_HOST: ${{ steps.context.outputs.db_host }}
+          DB_USER: ${{ steps.context.outputs.db_user }}
+          QA_USER_ID: ${{ steps.context.outputs.qa_user_id }}
         shell: bash
         run: |
           set -euo pipefail
-          test -n "$PREVIEW_URL" || { echo 'resolved preview URL is required'; exit 1; }
-          test -n "$EXPECTED_SHA" || { echo 'resolved expected SHA is required'; exit 1; }
-          test -n "$FINANCIAL_APP_QA_EMAIL" || { echo 'FINANCIAL_APP_QA_EMAIL secret is required'; exit 1; }
-          test -n "$FINANCIAL_APP_QA_PASSWORD" || { echo 'FINANCIAL_APP_QA_PASSWORD secret is required'; exit 1; }
-          test -n "$RESOLVED_DOCUMENT_ID" || { echo 'resolved canonical document id is required'; exit 1; }
+          unset PGOPTIONS
+          export PGPASSWORD="$FINANCIAL_APP_DB_PASSWORD"
+          export PGSSLMODE=require
+          psql --host "$DB_HOST" --port 5432 --username "$DB_USER" --dbname postgres --no-password --set ON_ERROR_STOP=1 --set qa_user_id="$QA_USER_ID" <<'SQL'
+          begin;
+          insert into financial_app.authorized_users(user_id, active)
+          values (:'qa_user_id'::uuid, true)
+          on conflict (user_id) do update set active = true, updated_at = now();
+          insert into financial_app.workspace_memberships(workspace_id, user_id, role, active, is_default)
+          values ('00000000-0000-4000-8000-000000000101'::uuid, :'qa_user_id'::uuid, 'member', true, true)
+          on conflict (workspace_id, user_id) do update
+            set role = 'member', active = true, is_default = true, updated_at = now();
+          commit;
+          SQL
+          echo 'activated=true' >> "$GITHUB_OUTPUT"
+          echo 'qa_authorization=temporary_active'
 
       - name: Replay canonical document through real Financial App session
         env:
           PREVIEW_URL: ${{ steps.target.outputs.url }}
           EXPECTED_SHA: ${{ steps.target.outputs.sha }}
-          FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}
+          FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.context.outputs.document_id }}
           VERCEL_TRUSTED_OIDC_TOKEN: ${{ steps.oidc.outputs.token }}
         shell: bash
         run: bash scripts/cr008-authenticated-replay.sh
@@ -208,3 +239,33 @@ jobs:
           path: cr008-authenticated-replay-evidence.json
           retention-days: 30
           if-no-files-found: error
+
+      - name: Revoke QA app authorization even when replay fails
+        if: always() && steps.authorize.outputs.activated == 'true'
+        env:
+          DB_HOST: ${{ steps.context.outputs.db_host }}
+          DB_USER: ${{ steps.context.outputs.db_user }}
+          QA_USER_ID: ${{ steps.context.outputs.qa_user_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          unset PGOPTIONS
+          export PGPASSWORD="$FINANCIAL_APP_DB_PASSWORD"
+          export PGSSLMODE=require
+          psql --host "$DB_HOST" --port 5432 --username "$DB_USER" --dbname postgres --no-password --set ON_ERROR_STOP=1 --set qa_user_id="$QA_USER_ID" <<'SQL'
+          begin;
+          update financial_app.workspace_memberships
+             set active = false, is_default = false, updated_at = now()
+           where user_id = :'qa_user_id'::uuid
+             and workspace_id = '00000000-0000-4000-8000-000000000101'::uuid;
+          update financial_app.authorized_users
+             set active = false, updated_at = now()
+           where user_id = :'qa_user_id'::uuid;
+          commit;
+          SQL
+          export PGOPTIONS='-c default_transaction_read_only=on'
+          active_allowlist="$(psql --host "$DB_HOST" --port 5432 --username "$DB_USER" --dbname postgres --no-password --no-align --tuples-only --command "select count(*) from financial_app.authorized_users where user_id = '$QA_USER_ID'::uuid and active;")"
+          active_memberships="$(psql --host "$DB_HOST" --port 5432 --username "$DB_USER" --dbname postgres --no-password --no-align --tuples-only --command "select count(*) from financial_app.workspace_memberships where user_id = '$QA_USER_ID'::uuid and active;")"
+          test "$active_allowlist" = '0'
+          test "$active_memberships" = '0'
+          echo 'qa_authorization=revoked_verified'
