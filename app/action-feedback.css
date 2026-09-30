@@ -1,0 +1,129 @@
+.action-feedback-stack {
+  position: fixed;
+  right: max(1rem, env(safe-area-inset-right));
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 1000;
+  display: grid;
+  width: min(26rem, calc(100vw - 2rem));
+  gap: .65rem;
+  pointer-events: none;
+}
+
+.action-feedback {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: .75rem;
+  min-height: 3.25rem;
+  padding: .85rem .9rem;
+  border: 1px solid rgba(255, 255, 255, .13);
+  border-radius: 1rem;
+  background: rgba(8, 14, 27, .96);
+  box-shadow: 0 18px 55px rgba(0, 0, 0, .42), inset 0 1px rgba(255, 255, 255, .055);
+  color: #f7f9fc;
+  backdrop-filter: blur(18px);
+  pointer-events: auto;
+}
+
+.action-feedback--pending {
+  border-color: rgba(106, 170, 255, .38);
+}
+
+.action-feedback--success {
+  border-color: rgba(92, 220, 163, .34);
+}
+
+.action-feedback--error {
+  border-color: rgba(255, 103, 130, .45);
+}
+
+.action-feedback__icon {
+  display: grid;
+  place-items: center;
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .075);
+  font-weight: 850;
+  line-height: 1;
+}
+
+.action-feedback--success .action-feedback__icon {
+  color: #70e4b2;
+}
+
+.action-feedback--error .action-feedback__icon {
+  color: #ff8ca1;
+}
+
+.action-feedback__message {
+  min-width: 0;
+  font-size: .92rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.action-feedback__close {
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: .65rem;
+  background: transparent;
+  color: rgba(255, 255, 255, .72);
+  font: inherit;
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+
+.action-feedback__close:hover,
+.action-feedback__close:focus-visible {
+  background: rgba(255, 255, 255, .09);
+  color: #fff;
+}
+
+.action-feedback__spinner {
+  width: .88rem;
+  height: .88rem;
+  border: 2px solid rgba(151, 197, 255, .28);
+  border-top-color: #97c5ff;
+  border-radius: 50%;
+  animation: action-feedback-spin .8s linear infinite;
+}
+
+@keyframes action-feedback-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 640px) {
+  .action-feedback-stack {
+    left: max(.75rem, env(safe-area-inset-left));
+    right: max(.75rem, env(safe-area-inset-right));
+    bottom: max(.75rem, env(safe-area-inset-bottom));
+    width: auto;
+  }
+
+  .action-feedback {
+    border-radius: .9rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .action-feedback__spinner {
+    animation-duration: 1.8s;
+  }
+}
+
+@media (forced-colors: active) {
+  .action-feedback {
+    border: 1px solid CanvasText;
+    background: Canvas;
+    color: CanvasText;
+  }
+
+  .action-feedback__close,
+  .action-feedback__icon {
+    color: CanvasText;
+  }
+}

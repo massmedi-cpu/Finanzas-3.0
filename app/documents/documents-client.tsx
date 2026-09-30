@@ -9,6 +9,7 @@ import {
   requestErrorCode,
   type AuthRecoveryState,
 } from "../../src/application/auth-recovery";
+import { useActionFeedback } from "../action-feedback";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
@@ -197,11 +198,36 @@ function friendlyError(error: unknown) {
   return labels[code] ?? "No se pudo completar la operación documental.";
 }
 
+function documentActionPendingLabel(action: string) {
+  if (action === "upload") return "Guardando documento de forma privada…";
+  if (action === "metadata") return "Guardando metadatos revisados…";
+  if (action.startsWith("status-")) return "Actualizando estado documental…";
+  if (action === "open") return "Abriendo documento…";
+  if (action === "candidates") return "Buscando movimientos candidatos…";
+  if (action.startsWith("associate-")) return "Asociando movimiento…";
+  if (action.startsWith("unassociate-")) return "Eliminando asociación…";
+  if (action === "manual-search") return "Buscando movimientos…";
+  return "Procesando operación documental…";
+}
+
+function documentActionSuccessLabel(action: string) {
+  if (action === "upload") return "Documento guardado de forma privada.";
+  if (action === "metadata") return "Metadatos guardados.";
+  if (action.startsWith("status-")) return "Estado documental actualizado.";
+  if (action === "open") return "Documento abierto.";
+  if (action === "candidates") return "Búsqueda de movimientos completada.";
+  if (action.startsWith("associate-")) return "Movimiento asociado. La fuente bancaria no se ha modificado.";
+  if (action.startsWith("unassociate-")) return "Asociación eliminada. La fuente bancaria no se ha modificado.";
+  if (action === "manual-search") return "Búsqueda de movimientos completada.";
+  return "Operación documental completada.";
+}
+
 function StatusBadge({ status }: { status: DocumentStatus }) {
   return <span className={`${styles.status} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>;
 }
 
 export function DocumentsClient() {
+  const actionFeedback = useActionFeedback();
   const [list, setList] = useState<DocumentList | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
@@ -223,6 +249,7 @@ export function DocumentsClient() {
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
+  const feedbackActionRef = useRef<string | null>(null);
   selectedIdRef.current = selectedId;
 
   const listUrl = useMemo(() => {
@@ -277,6 +304,19 @@ export function DocumentsClient() {
 
   useEffect(() => { void loadList(); }, [loadList]);
   useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId, loadDetail]);
+  useEffect(() => {
+    if (busy) {
+      feedbackActionRef.current = busy;
+      actionFeedback.begin(`documents:${busy}`, documentActionPendingLabel(busy));
+      return;
+    }
+    const completed = feedbackActionRef.current;
+    if (!completed) return;
+    const feedbackId = `documents:${completed}`;
+    if (error) actionFeedback.error(feedbackId, error);
+    else actionFeedback.success(feedbackId, documentActionSuccessLabel(completed));
+    feedbackActionRef.current = null;
+  }, [actionFeedback, busy, error]);
 
   const selectDocument = (id: string) => {
     setAuthRecovery(null);

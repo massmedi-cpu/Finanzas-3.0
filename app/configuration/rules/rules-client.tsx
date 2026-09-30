@@ -3,6 +3,7 @@
 import { formatMoneyInputCents, parseMoneyInputToCents } from "../../../src/core/money";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { useActionFeedback } from "../../action-feedback";
 import styles from "./rules.module.css";
 
 type Rule = {
@@ -128,6 +129,7 @@ function describeTarget(rule: Rule) {
 }
 
 export default function RulesClient() {
+  const actionFeedback = useActionFeedback();
   const [data, setData] = useState<Payload>({ rules: [], accounts: [], categories: [], merchants: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -202,6 +204,8 @@ export default function RulesClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const feedbackId = editingId ? "rules:update" : "rules:create";
+    actionFeedback.begin(feedbackId, editingId ? "Guardando cambios de la regla…" : "Creando regla…");
     try {
       const priority = Number(form.priority);
       if (!Number.isInteger(priority)) throw new Error("La prioridad debe ser un número entero.");
@@ -224,9 +228,13 @@ export default function RulesClient() {
       await load();
       setEditingId(null);
       setForm(EMPTY_FORM);
-      setNotice("Regla guardada en el motor central. No se ha escrito nada en la fuente bancaria.");
+      const message = "Regla guardada en el motor central. No se ha escrito nada en la fuente bancaria.";
+      setNotice(message);
+      actionFeedback.success(feedbackId, message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo guardar la regla.");
+      const message = cause instanceof Error ? cause.message : "No se pudo guardar la regla.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
@@ -236,6 +244,8 @@ export default function RulesClient() {
     setBusy(true);
     setError(null);
     setNotice(null);
+    const feedbackId = `rules:toggle:${rule.id}`;
+    actionFeedback.begin(feedbackId, rule.status === "active" ? "Desactivando regla…" : "Activando regla…");
     try {
       await ruleRequest("rule.save", {
         id: rule.id,
@@ -252,9 +262,13 @@ export default function RulesClient() {
         targetMerchantId: rule.target_merchant_id,
       });
       await load();
-      setNotice(rule.status === "active" ? "Regla desactivada." : "Regla activada.");
+      const message = rule.status === "active" ? "Regla desactivada." : "Regla activada.";
+      setNotice(message);
+      actionFeedback.success(feedbackId, message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo cambiar el estado de la regla.");
+      const message = cause instanceof Error ? cause.message : "No se pudo cambiar el estado de la regla.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
@@ -265,11 +279,16 @@ export default function RulesClient() {
     setBusy(true);
     setError(null);
     setExplanation(null);
+    const feedbackId = "rules:evaluate";
+    actionFeedback.begin(feedbackId, "Probando regla con el movimiento…");
     try {
       const result = await ruleRequest("rule.evaluate", { transactionId });
       setExplanation(result.result ?? null);
+      actionFeedback.success(feedbackId, "Prueba de regla completada. Revisa el resultado antes de aplicarlo.");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo simular el movimiento.");
+      const message = cause instanceof Error ? cause.message : "No se pudo simular el movimiento.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
@@ -280,14 +299,20 @@ export default function RulesClient() {
     setError(null);
     setNotice(null);
     setApplyResult(null);
+    const feedbackId = "rules:apply-all";
+    actionFeedback.begin(feedbackId, "Aplicando reglas en Financial App…");
     try {
       const result = await ruleRequest("rule.apply_all", { limit: 10000 });
       setApplyResult(result.result ?? null);
       const evaluated = result.result?.evaluated ?? 0;
       const matched = result.result?.matched ?? 0;
-      setNotice(`Motor aplicado: ${evaluated} movimientos evaluados y ${matched} coincidencias. Los cambios quedan en Financial App, nunca en la fuente bancaria.`);
+      const message = `Motor aplicado: ${evaluated} movimientos evaluados y ${matched} coincidencias. Los cambios quedan en Financial App, nunca en la fuente bancaria.`;
+      setNotice(message);
+      actionFeedback.success(feedbackId, message);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudieron aplicar las reglas.");
+      const message = cause instanceof Error ? cause.message : "No se pudieron aplicar las reglas.";
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }

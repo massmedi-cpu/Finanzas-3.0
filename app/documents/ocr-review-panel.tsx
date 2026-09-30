@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
+import { useActionFeedback } from "../action-feedback";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
 import ocrStyles from "./ocr-review.module.css";
@@ -155,6 +156,7 @@ export function OcrReviewPanel({
   storageProvider: StorageProvider;
   mimeType: string;
 }) {
+  const actionFeedback = useActionFeedback();
   const [result, setResult] = useState<OcrResult | null>(null);
   const [busy, setBusy] = useState(false);
   const [openingOriginal, setOpeningOriginal] = useState(false);
@@ -177,12 +179,18 @@ export function OcrReviewPanel({
     setBusy(true);
     setError(null);
     setCopyState("idle");
+    const feedbackId = `documents:ocr:${documentId}`;
+    actionFeedback.begin(feedbackId, "Analizando documento con OCR…");
     try {
       const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" }));
-      setResult(parseOcrResult(data));
+      const parsed = parseOcrResult(data);
+      setResult(parsed);
+      actionFeedback.success(feedbackId, "Lectura OCR completada. Revisa el resultado antes de usar sus datos.");
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
-      setError(errorLabel(code));
+      const message = errorLabel(code);
+      setError(message);
+      actionFeedback.error(feedbackId, message);
     } finally {
       setBusy(false);
     }
