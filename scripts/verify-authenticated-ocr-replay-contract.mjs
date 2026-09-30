@@ -15,7 +15,12 @@ const requiredWorkflowFragments = [
   'context.sha',
   'FINANCIAL_APP_QA_EMAIL: ${{ secrets.FINANCIAL_APP_QA_EMAIL }}',
   'FINANCIAL_APP_QA_PASSWORD: ${{ secrets.FINANCIAL_APP_QA_PASSWORD }}',
-  'FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ secrets.FINANCIAL_APP_CR008_DOCUMENT_ID }}',
+  'FINANCIAL_APP_DB_PASSWORD: ${{ secrets.FINANCIAL_APP_DB_PASSWORD }}',
+  'default_transaction_read_only=on',
+  'size_bytes = 2258072',
+  "lower(coalesce(mime_type, '')) = 'image/jpeg'",
+  'canonical_document_resolution=unique_read_only_match',
+  'FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ steps.document.outputs.document_id }}',
   'bash -n scripts/cr008-authenticated-replay.sh',
   'run: bash scripts/cr008-authenticated-replay.sh',
   'Upload sanitized replay evidence',
@@ -57,6 +62,11 @@ const forbiddenFragments = [
   '/auth/v1/admin/users',
   'INSERT INTO auth.users',
   'insert into auth.users',
+  'UPDATE auth.users',
+  'update auth.users',
+  'DELETE FROM auth.users',
+  'delete from auth.users',
+  'FINANCIAL_APP_CR008_DOCUMENT_ID: ${{ secrets.FINANCIAL_APP_CR008_DOCUMENT_ID }}',
   'financialWrites: true',
   'requiresHumanReview: false',
   'bankSource: write',
@@ -98,4 +108,4 @@ if (!workflow.includes("github.event_name == 'push'")) {
   throw new Error('pre-merge push mode is required so CR-008 can close before this gate reaches main');
 }
 
-console.log('CR008_AUTHENTICATED_REPLAY_CONTRACT|status=pass|premerge_push=enabled|manual_dispatch=retained|internal_session=required|financial_writes=false|bank_source=read_only|raw_document_in_repo=false');
+console.log('CR008_AUTHENTICATED_REPLAY_CONTRACT|status=pass|premerge_push=enabled|manual_dispatch=retained|internal_session=required|canonical_document=auto_resolved_read_only|financial_writes=false|bank_source=read_only|raw_document_in_repo=false');
