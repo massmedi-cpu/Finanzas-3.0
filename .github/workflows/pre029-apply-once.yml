@@ -44,10 +44,8 @@ jobs:
           fs.writeFileSync(path, source);
           NODE
 
-      - name: Remove one-shot infrastructure
-        run: |
-          rm scripts/apply-pre029-action-feedback.mjs
-          rm .github/workflows/pre029-apply-once.yml
+      - name: Remove codemod source only
+        run: rm scripts/apply-pre029-action-feedback.mjs
 
       - name: Commit exact 10.0.48 candidate
         shell: bash
