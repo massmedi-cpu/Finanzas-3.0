@@ -18,6 +18,7 @@ export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const TYPES = new Set(["ticket", "invoice", "other"]);
 const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
@@ -55,10 +56,22 @@ function nullableDate(value: unknown, code: string) {
   return value;
 }
 
+function nullableTime(value: unknown, code: string) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !TIME.test(value)) throw new Error(code);
+  return value;
+}
+
 function integer(value: unknown, code: string, min?: number, max?: number, nullable = false) {
   if (nullable && (value === null || value === undefined || value === "")) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(code);
   if ((min !== undefined && value < min) || (max !== undefined && value > max)) throw new Error(code);
+  return value;
+}
+
+function jsonArray(value: unknown, code: string, max = 100) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > max) throw new Error(code);
   return value;
 }
 
@@ -242,8 +255,16 @@ export async function PATCH(request: Request) {
         id: uuid(row.id, "invalid_document_id"),
         type: typeValue(row.type),
         documentDate: nullableDate(row.documentDate, "invalid_document_date"),
+        documentTime: nullableTime(row.documentTime, "invalid_document_time"),
         issuerName: nullableText(row.issuerName, "invalid_document_issuer", 300),
+        issuerTaxId: nullableText(row.issuerTaxId, "invalid_document_tax_id", 40),
+        documentNumber: nullableText(row.documentNumber, "invalid_document_number", 100),
+        documentPeriod: nullableText(row.documentPeriod, "invalid_document_period", 100),
+        baseCents: integer(row.baseCents, "invalid_document_base", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true),
+        taxCents: integer(row.taxCents, "invalid_document_tax", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true),
         totalCents: integer(row.totalCents, "invalid_document_total", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true),
+        paymentMethod: nullableText(row.paymentMethod, "invalid_document_payment_method", 100),
+        lineItems: jsonArray(row.lineItems, "invalid_document_line_items"),
         notes: row.notes === null || row.notes === undefined ? "" : text(String(row.notes), "invalid_document_notes", 2000, true),
       };
       const result = await callPersistenceGateway("document.update", payload);
