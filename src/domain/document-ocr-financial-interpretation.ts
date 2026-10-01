@@ -56,7 +56,6 @@ export type DocumentOcrFinancialInterpretation = {
 type LocatedLine = { pageNumber: number; line: OcrLine };
 
 const RELIABLE_CONFIDENCE = 0.82;
-const DOUBTFUL_CONFIDENCE = 0.55;
 
 function normalizeToken(value: string) {
   return value
@@ -125,9 +124,18 @@ function findLabelled(lines: LocatedLine[], labels: RegExp[]) {
 }
 
 function valueAfterLabel(text: string) {
-  const split = text.split(/[:\-]/, 2);
-  if (split.length === 2 && split[1].trim()) return split[1].trim();
-  const tokens = text.trim().split(/\s+/);
+  const trimmed = text.trim();
+  const colonIndex = trimmed.indexOf(":");
+  if (colonIndex >= 0) {
+    const value = trimmed.slice(colonIndex + 1).trim();
+    return value || null;
+  }
+  const separator = trimmed.match(/\s[-–—]\s/);
+  if (separator?.index !== undefined) {
+    const value = trimmed.slice(separator.index + separator[0].length).trim();
+    return value || null;
+  }
+  const tokens = trimmed.split(/\s+/);
   return tokens.length > 1 ? tokens.slice(1).join(" ").trim() : null;
 }
 
@@ -200,7 +208,7 @@ function extractPaymentMethod(lines: LocatedLine[]) {
     { pattern: /\befectivo\b|\bcash\b/, value: "Efectivo" },
     { pattern: /\btransferencia\b/, value: "Transferencia" },
     { pattern: /\bbizum\b/, value: "Bizum" },
-    { pattern: /\bdomiciliaci[oó]n\b|\brecibo\b/, value: "Domiciliación" },
+    { pattern: /\bdomiciliacion\b|\brecibo\b/, value: "Domiciliación" },
   ];
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
@@ -318,5 +326,4 @@ export function ocrTrustFromConfidence(confidence: number | null, detected = tru
 
 export const DOCUMENT_OCR_INTERPRETATION_THRESHOLDS = {
   reliable: RELIABLE_CONFIDENCE,
-  doubtful: DOUBTFUL_CONFIDENCE,
 } as const;
