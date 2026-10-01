@@ -24,6 +24,7 @@ import {
 import { formatMoneyCents, parseMoneyInputToCents } from "../../src/core/money";
 import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
+import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
 import styles from "./forecast.module.css";
 
@@ -714,7 +715,7 @@ export function ForecastClient({
                           <div className={styles.itemMeta}>
                             <span className={styles.statusPill}>{statusLabel(item.status)}</span>
                             {item.accountName ? <span>{item.accountName}</span> : <span>Todas las cuentas</span>}
-                            {item.categoryName ? <span>{item.categoryName}</span> : null}
+                            {item.categoryId ? <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} /> : null}
                             {item.merchantName ? <span>{item.merchantName}</span> : null}
                           </div>
                           {item.affectsProjection ? (

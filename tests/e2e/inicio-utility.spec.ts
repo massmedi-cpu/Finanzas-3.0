@@ -74,6 +74,7 @@ async function json(route: Route, body: unknown, status = 200) {
 }
 
 async function mockInicio(page: Page) {
+  await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   let postCount = 0;
   await page.route("**/*", async (route) => {
     const request = route.request();

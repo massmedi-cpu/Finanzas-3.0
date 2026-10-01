@@ -12,6 +12,7 @@ import {
 } from "../../src/application/budgets/budget-planning";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
 import { useActionFeedback } from "../action-feedback";
+import { CategoryIdentity } from "../category-identity";
 import styles from "./budgets.module.css";
 
 type BudgetIconName = Extract<
@@ -196,7 +197,7 @@ function BudgetCard({
     >
       <div className={styles.cardTop}>
         <div className={styles.cardTitle}>
-          <span className={styles.cardIcon}><Icon name={total ? "wallet" : "category"} /></span>
+          <span className={styles.cardIcon}>{total ? <Icon name="wallet" /> : <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} iconOnly />}</span>
           <div>
             <h3>{total ? "Presupuesto mensual total" : item.categoryName ?? "Categoría"}</h3>
             <p>
