@@ -23,6 +23,7 @@ import {
 } from "../../src/application/analysis/analysis-presentation";
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
+import { CategoryIdentity } from "../category-identity";
 import AnalysisMovementInsights from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
 
@@ -240,7 +241,7 @@ function DriverRanking({
             <li key={`${title}-${item.id ?? "none"}-${item.name}`}>
               <span className={styles.rank}>{index + 1}</span>
               <div className={styles.rankMain}>
-                <strong>{item.name}</strong>
+                <strong>{merchant ? item.name : <CategoryIdentity categoryId={item.id} name={item.name} />}</strong>
                 <span>
                   {formatInteger(item.rows)} mov. · {formatPercentBps(item.shareBps)} del gasto
                   {merchant && "habitualVariationBps" in item && item.habitualVariationBps !== null
@@ -285,7 +286,7 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       {strongest ? (
         <Link prefetch={false} className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
           <span>Mayor cambio</span>
-          <strong>{strongest.name}</strong>
+          <strong><CategoryIdentity categoryId={strongest.id} name={strongest.name} /></strong>
           <small className={strongest.deltaCents > 0 ? styles.badDelta : styles.goodDelta}>{deltaText(strongest.deltaCents)}</small>
         </Link>
       ) : (
@@ -552,7 +553,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                 {deltaText(expenseDirection)}
               </span>
             </div>
-            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} />
+            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />
           </section>
 
           <div className={styles.twoColumn}>
@@ -573,7 +574,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                   {currentCategoryDrivers.slice(0, 6).map((item) => (
                     <Link prefetch={false} href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                       <div>
-                        <strong>{item.name}</strong>
+                        <strong><CategoryIdentity categoryId={item.id} name={item.name} /></strong>
                         <span>{formatMoney(item.expenseCents)} · {formatPercentBps(item.shareBps)}</span>
                       </div>
                       <div className={styles.breakdownTrack} aria-hidden="true">
@@ -632,7 +633,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                     <Link prefetch={false} href={item.href} key={item.transactionId} className={styles.anomaly}>
                       <div>
                         <strong>{item.merchantName}</strong>
-                        <span>{formatDate(item.bankDate)} · {item.categoryName}</span>
+                        <span>{formatDate(item.bankDate)} · <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} /></span>
                       </div>
                       <div>
                         <strong>{formatMoney(item.amountCents)}</strong>
@@ -664,7 +665,7 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
                     <ul className={styles.contextAlerts}>
                       {snapshot.budget.overCategories.slice(0, 3).map((item) => (
                         <li key={item.categoryId ?? item.categoryName ?? "budget"}>
-                          <span>{item.categoryName ?? "Categoría"}</span>
+                          <span><CategoryIdentity categoryId={item.categoryId} name={item.categoryName} fallback="Categoría" /></span>
                           <strong>{formatMoney(Math.abs(item.remainingCents))} por encima</strong>
                         </li>
                       ))}

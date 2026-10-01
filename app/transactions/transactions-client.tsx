@@ -13,6 +13,7 @@ import {
   type AuthRecoveryState,
 } from "../../src/application/auth-recovery";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
+import { CategoryIdentity } from "../category-identity";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -828,7 +829,7 @@ async function saveEdit(row: TransactionRow) {
                         </dl></details>
                       </td>
                       <td data-label="Cuenta">{row.account.name}</td>
-                      <td data-label="Categoría">{row.category.effectiveName ?? <span className={styles.muted}>Sin categoría</span>}</td>
+                      <td data-label="Categoría"><CategoryIdentity categoryId={row.category.effectiveId} name={row.category.effectiveName} /></td>
                       <td data-label="Importe" className={`${styles.amount} ${row.amountCents >= 0 ? styles.positive : styles.negative}`}>{formatMoney(row.amountCents)}</td>
                       <td data-label="Gestión"><div className={styles.rowActions}>
                         <button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button>

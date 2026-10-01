@@ -453,7 +453,7 @@ check("§64", "identidad visual resuelta desde Configuración sin inventar valor
 for (const [path, source] of surfaces) check("§64", \`identidad de categoría propagada: \${path}\`, source.includes("CategoryIdentity") || path.includes("contribution-chart"));
 check("§65", "iconografía vectorial coherente", categoryGlyph.includes("<svg") && read("src/design/product-icons.tsx").includes("export function ProductIcon"));
 check("§66", "tarjetas y paneles usan sistema estable de radios/superficies", hasAll(globals, ["--radius-md:", "--radius-lg:", "--radius-panel:", "--shadow-panel:"]));
-check("§67", "gráficos principales mantienen contratos accesibles", [contribution, trend, forecastChart].every((source) => source.includes("aria-label") || source.includes("role=\"img\"")));
+check("§67", "gráficos principales mantienen contratos accesibles", [contribution, trend, forecastChart].every((source) => source.includes("aria-label") || source.includes('role="img"')));
 check("§68", "jerarquía visual con títulos y contenido principal accesible", shell.includes('href="#main-content"') && shell.includes('id="main-content"') && globals.includes("--font-page-title:"));
 check("§69", "sistema tipográfico único centralizado", hasAll(globals, ["--font-page-title:", "--font-section-title:", "--font-kpi-primary:", "--font-body:", "--font-label:", "--font-helper:"]));
 check("§70", "legibilidad base no reducida para resolver espacio", /--font-body:\\s*1rem/.test(globals) && /--font-helper:\\s*0\\.8125rem/.test(globals));
@@ -486,22 +486,22 @@ La corrección no borra el historial de PR #444: lo enmienda de forma explícita
 
 ## Gap funcional real encontrado
 
-§64 exige que cada categoría conserve exactamente su color e icono en Inicio, Movimientos, Presupuestos, Análisis, Previsión, Documentos y gráficos. Financial App ya persistía `iconKey` y `colorToken` y permitía editarlos en Configuración, pero los demás módulos reducían la categoría a nombre/id o usaban iconos genéricos.
+§64 exige que cada categoría conserve exactamente su color e icono en Inicio, Movimientos, Presupuestos, Análisis, Previsión, Documentos y gráficos. Financial App ya persistía 'iconKey' y 'colorToken' y permitía editarlos en Configuración, pero los demás módulos reducían la categoría a nombre/id o usaban iconos genéricos.
 
 PRE-032 / Financial App 10.0.50 introduce un proveedor visual común de solo lectura que obtiene la identidad desde Configuración y la representa de forma consistente en las siete superficies. No cambia cálculos, datos bancarios, reglas de categorización ni persistencia financiera.
 
 ## Estrategia
 
 - Fuente única: categorías persistidas ya existentes.
-- Endpoint de lectura dedicado: `/api/category-identity`.
+- Endpoint de lectura dedicado: '/api/category-identity'.
 - Sin colores inventados: si la identidad no está disponible, se conserva el texto sin mostrar un icono/color incorrecto.
 - Refresco al cambiar de ruta para no arrastrar una identidad antigua después de editar Configuración.
 - Los gráficos conservan el color semántico de variación/estado; la identidad de categoría se expresa en su etiqueta mediante el color/icono de la categoría, evitando confundir semántica financiera con branding categorial.
-- Guardrails intactos: `bankSource=read_only`, `financialWrites=false`, `requiresHumanReview=true`.
+- Guardrails intactos: 'bankSource=read_only', 'financialWrites=false', 'requiresHumanReview=true'.
 
 ## Evidencia automática
 
-`scripts/audit-axioma-62-71.mjs` queda corregido con la numeración real y añade el contrato transversal del §64. La certificación automática no pretende decidir cuestiones subjetivas como calma visual, densidad ideal o belleza; esas siguen requiriendo inspección humana.
+'scripts/audit-axioma-62-71.mjs' queda corregido con la numeración real y añade el contrato transversal del §64. La certificación automática no pretende decidir cuestiones subjetivas como calma visual, densidad ideal o belleza; esas siguen requiriendo inspección humana.
 `;
 write("docs/audits/axioma-62-71-20261001.md", auditDoc);
 

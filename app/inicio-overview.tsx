@@ -11,6 +11,7 @@ import { formatBasisPoints } from "../src/core/formatters";
 import { formatMoneyCents } from "../src/core/money";
 import { FinancialBarChart } from "../src/design/financial-bar-chart";
 import HomeSmartBrief from "./home-smart-brief";
+import { CategoryIdentity } from "./category-identity";
 import styles from "./inicio-overview.module.css";
 
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
@@ -70,6 +71,8 @@ type ForecastItem = {
   date: string;
   concept: string;
   amountCents: number;
+  categoryId: string | null;
+  categoryName: string | null;
   status: "planned" | "excluded" | "confirmed";
   affectsProjection: boolean;
 };
@@ -98,7 +101,7 @@ type TransactionRow = {
   account: { id: string; name: string };
   concept: { effective: string };
   merchant?: { effectiveName: string | null };
-  category: { effectiveName: string | null };
+  category: { effectiveId: string | null; effectiveName: string | null };
   kind: { effective: TransactionKind };
   duplicateState: "none" | "suspected" | "confirmed";
   excludedFromAnalytics: boolean;
@@ -780,7 +783,7 @@ export default function InicioOverview() {
               <ul className={styles.compactList}>
                 {upcomingItems.map((item) => (
                   <li key={item.id}>
-                    <div><strong>{item.concept}</strong><span>{formatDate(item.date)}</span></div>
+                    <div><strong>{item.concept}</strong><span>{formatDate(item.date)}{item.categoryId ? <> · <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} /></> : null}</span></div>
                     <b className={item.amountCents < 0 ? styles.negative : styles.positive}>{displayMoney(item.amountCents)}</b>
                   </li>
                 ))}
@@ -842,7 +845,7 @@ export default function InicioOverview() {
                 <ul className={styles.simpleRows}>
                   {topBudgetCategories.map((item) => (
                     <li key={item.categoryId ?? item.categoryName ?? "total"}>
-                      <span>{item.categoryName}</span><b>{displayMoney(item.actualExpenseCents)}</b>
+                      <span><CategoryIdentity categoryId={item.categoryId} name={item.categoryName} fallback="Categoría" /></span><b>{displayMoney(item.actualExpenseCents)}</b>
                     </li>
                   ))}
                 </ul>
@@ -870,7 +873,7 @@ export default function InicioOverview() {
                   <li key={row.id}>
                     <div className={styles.activityMain}>
                       <strong>{mainLabel}</strong>
-                      <span>{row.category.effectiveName ?? kindLabel(row.kind.effective)} · {row.account.name}</span>
+                      <span><CategoryIdentity categoryId={row.category.effectiveId} name={row.category.effectiveName} fallback={kindLabel(row.kind.effective)} /> · {row.account.name}</span>
                     </div>
                     <span className={styles.activityDate}>{formatDate(row.bankDate)}</span>
                     <b className={row.amountCents < 0 ? styles.negative : styles.positive}>{displayMoney(row.amountCents)}</b>
