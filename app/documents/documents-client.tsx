@@ -356,7 +356,7 @@ export function DocumentsClient() {
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
     if (!file) {
-      setError("Selecciona primero un PDF o una imagen.");
+      setError("Selecciona un PDF, una imagen o haz una foto.");
       return;
     }
     if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
@@ -387,11 +387,13 @@ export function DocumentsClient() {
       const id = finalized?.document?.id;
       if (!id) throw new Error("document_upload_not_found");
       setFile(null);
-      const input = document.getElementById("document-file") as HTMLInputElement | null;
-      if (input) input.value = "";
+      for (const inputId of ["document-file", "document-camera"]) {
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (input) input.value = "";
+      }
       selectDocument(id);
       await loadList();
-      setNotice("Documento guardado de forma privada. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+      setNotice("Original guardado de forma privada e intacta. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
     } catch (caught) {
       setError(friendlyError(caught));
     } finally {
@@ -526,9 +528,9 @@ export function DocumentsClient() {
           <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
           <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
-          <p className={styles.heroText}>Guarda facturas y tickets, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
+          <p className={styles.heroText}>Guarda facturas y tickets desde cámara, galería, archivos o Drive, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
           <div className={styles.pills}>
-            <span>Storage privado</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
+            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
           </div>
         </div>
         <a className={styles.driveLink} href={DRIVE_FOLDER_URL} target="_blank" rel="noreferrer">Abrir carpeta Documentos en Drive ↗</a>
@@ -543,7 +545,7 @@ export function DocumentsClient() {
           <div>
             <p className={styles.sectionEyebrow}>IMPORTACIÓN SEGURA</p>
             <h2 id="upload-title">Añadir documento</h2>
-            <p>PDF o imagen, hasta 15 MB. Se almacena de forma privada; el OCR nunca se ejecuta automáticamente al subir.</p>
+            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada y el OCR nunca se ejecuta automáticamente al subir.</p>
           </div>
           <form className={styles.uploadForm} onSubmit={uploadDocument}>
             <label>Tipo
@@ -551,11 +553,15 @@ export function DocumentsClient() {
                 <option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option>
               </select>
             </label>
-            <label className={styles.fileField}>Archivo
-              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
-              <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "Selecciona PDF, JPG, PNG o WebP"}</span>
+            <label className={styles.fileField}>Cámara
+              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy === "upload"} />
+              <span>Hacer foto con la cámara trasera</span>
             </label>
-            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar documento"}</button>
+            <label className={styles.fileField}>Galería o archivo
+              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
+              <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "PDF, JPG, PNG o WebP"}</span>
+            </label>
+            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
           </form>
         </section>
 
@@ -581,7 +587,7 @@ export function DocumentsClient() {
                   </button>
                 ))}
               </div>
-            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Sube el primero arriba; podrás analizarlo después desde su panel OCR.</p></div>}
+            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p></div>}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
@@ -589,7 +595,11 @@ export function DocumentsClient() {
               <>
                 <header className={styles.detailHeader}>
                   <div><p className={styles.sectionEyebrow}>{TYPE_LABELS[detail.document.type].toUpperCase()}</p><h2>{detail.document.originalFileName}</h2><p>{formatBytes(detail.document.sizeBytes)} · {detail.document.storageProvider === "supabase" ? "Storage privado" : "Google Drive"}</p></div>
-                  <div className={styles.detailActions}><StatusBadge status={detail.document.status} /><button className={styles.secondaryButton} onClick={() => void openDocument()} disabled={busy === "open"}>Abrir documento ↗</button></div>
+                  <div className={styles.detailActions}>
+                    <StatusBadge status={detail.document.status} />
+                    <button className={styles.secondaryButton} onClick={() => void openDocument()} disabled={busy === "open"}>Abrir documento ↗</button>
+                    <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
+                  </div>
                 </header>
 
                 <form className={styles.editor} onSubmit={saveMetadata}>
