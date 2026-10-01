@@ -187,12 +187,24 @@ function extractTime(lines: LocatedLine[]) {
 }
 
 function extractDocumentNumber(lines: LocatedLine[]) {
-  const item = findLabelled(lines, [/\bfactura\b/, /\bticket\b/, /\bn(?:o|º|um|umero)\b/, /\bnumero\b/]);
-  if (!item) return emptyField<string>();
-  const raw = valueAfterLabel(item.line.text);
-  if (!raw) return emptyField<string>();
-  const cleaned = raw.replace(/^n(?:o|º|um|umero)?\.?\s*/i, "").trim();
-  return fieldFrom(item, raw, cleaned || null);
+  const patterns = [
+    /\b(?:factura|ticket)\s*(?:n(?:[ºo]|um(?:ero)?)?\.?|numero)?\s*[:#-]\s*([A-Z0-9][A-Z0-9._/-]{1,119})\b/i,
+    /\b(?:factura|ticket)\s+(?:n(?:[ºo]|um(?:ero)?)?\.?\s*)?([A-Z0-9][A-Z0-9._/-]{1,119})\b/i,
+    /\b(?:n(?:[ºo]|um(?:ero)?)?\.?|numero)\s*(?:de\s+)?(?:factura|ticket)?\s*[:#-]?\s*([A-Z0-9][A-Z0-9._/-]{1,119})\b/i,
+  ];
+
+  for (const item of lines) {
+    const text = item.line.text.trim();
+    for (const pattern of patterns) {
+      const match = text.match(pattern);
+      const candidate = match?.[1]?.trim() ?? "";
+      // Un título genérico como “Factura simplificada” no es un número de documento.
+      // Exigimos una señal estructural mínima (al menos un dígito) para no inventarlo.
+      if (!candidate || !/\d/.test(candidate)) continue;
+      return fieldFrom(item, match![0], candidate);
+    }
+  }
+  return emptyField<string>();
 }
 
 function extractPeriod(lines: LocatedLine[]) {
