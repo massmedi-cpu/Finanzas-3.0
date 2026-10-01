@@ -2,21 +2,32 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
+import { formatMoneyCents } from "../../src/core/money";
 import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
 import { useActionFeedback } from "../action-feedback";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
+import type { DocumentOcrInterpretation, OcrField, OcrFieldConfidence } from "../../src/domain/document-ocr-interpretation";
 import styles from "./documents.module.css";
 import ocrStyles from "./ocr-review.module.css";
 import { OcrPageReviewWorkbench } from "./ocr-page-review-workbench";
 
 type StorageProvider = "supabase" | "google_drive";
 type OcrStatus = DocumentOcrResult["status"];
-type OcrResult = DocumentOcrResult;
+type OcrResult = DocumentOcrResult & {
+  interpretation: DocumentOcrInterpretation;
+  persisted?: boolean;
+};
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
   ready: "Lectura disponible",
   needs_review: "Revisión necesaria",
   empty: "Sin texto recuperable",
+};
+
+const FIELD_CONFIDENCE_LABELS: Record<OcrFieldConfidence, string> = {
+  reliable: "Fiable",
+  doubtful: "Dudoso",
+  not_detected: "No detectado",
 };
 
 const WARNING_LABELS: Record<string, string> = {
@@ -47,11 +58,59 @@ function confidenceLabel(value: number | null) {
   return `${formatNumberWithDigits(value * 100, 0)} %`;
 }
 
+function fieldConfidenceLabel(field: OcrField<unknown>) {
+  const qualitative = FIELD_CONFIDENCE_LABELS[field.confidence];
+  return field.score === null ? qualitative : `${qualitative} · ${confidenceLabel(field.score)}`;
+}
+
 function sourceLabel(source: OcrResult["source"]) {
   if (source === "pdf_text") return "Texto nativo PDF";
   if (source === "pdf_ocr") return "PDF escaneado · OCR visual";
   if (source === "hybrid") return "PDF híbrido · texto + OCR";
   return "OCR de imagen";
+}
+
+function displayText(field: OcrField<string>) {
+  return field.value?.trim() || "No detectado";
+}
+
+function displayMoney(field: OcrField<number>) {
+  return field.value === null ? "No detectado" : formatMoneyCents(field.value);
+}
+
+function displayDate(field: OcrField<string>) {
+  if (!field.value) return "No detectado";
+  const [year, month, day] = field.value.split("-");
+  return year && month && day ? `${day}/${month}/${year}` : field.value;
+}
+
+function isOcrField(value: unknown): value is OcrField<unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Partial<OcrField<unknown>>;
+  if (row.confidence !== "reliable" && row.confidence !== "doubtful" && row.confidence !== "not_detected") return false;
+  if (row.score !== null && (typeof row.score !== "number" || !Number.isFinite(row.score) || row.score < 0 || row.score > 1)) return false;
+  return Array.isArray(row.evidence);
+}
+
+function parseInterpretation(value: unknown): DocumentOcrInterpretation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("ocr_response_invalid");
+  const row = value as Partial<DocumentOcrInterpretation>;
+  if (row.contractVersion !== 1) throw new Error("ocr_response_invalid");
+  const fields = [
+    row.issuerName,row.taxId,row.documentDate,row.documentTime,row.documentNumber,row.period,
+    row.baseCents,row.taxCents,row.totalCents,row.paymentMethod,
+  ];
+  if (!fields.every(isOcrField) || !Array.isArray(row.lines) || !row.validation || typeof row.validation !== "object") {
+    throw new Error("ocr_response_invalid");
+  }
+  for (const field of fields) {
+    for (const evidence of field!.evidence) {
+      if (!evidence || typeof evidence !== "object" || !Number.isSafeInteger(evidence.pageNumber) || typeof evidence.lineId !== "string" || typeof evidence.text !== "string") {
+        throw new Error("ocr_response_invalid");
+      }
+    }
+  }
+  return row as DocumentOcrInterpretation;
 }
 
 async function readJson(response: Response) {
@@ -102,6 +161,7 @@ function parseOcrResult(value: unknown): OcrResult {
   if (!row.principles || row.principles.bankSource !== "read_only" || row.principles.financialWrites !== false || row.principles.requiresHumanReview !== true || typeof row.principles.preservesGeometry !== "boolean") {
     throw new Error("ocr_response_invalid");
   }
+  parseInterpretation(row.interpretation);
   return row as OcrResult;
 }
 
@@ -126,7 +186,8 @@ function errorLabel(code: string) {
     ocr_worker_timeout: "El motor OCR no ha podido iniciarse a tiempo.",
     ocr_recognize_timeout: "La lectura OCR ha superado el tiempo máximo de seguridad.",
     unsupported_ocr_mime_type: "Este formato todavía no admite OCR.",
-    ocr_response_invalid: "La lectura terminó, pero la respuesta OCR no tiene el formato esperado. No se ha guardado ningún dato.",
+    ocr_persistence_failed: "La lectura se completó, pero no se pudo guardar de forma segura. Puedes reintentar sin perder el original.",
+    ocr_response_invalid: "La lectura terminó, pero la respuesta OCR no tiene el formato esperado. No se ha guardado ningún dato revisado.",
   };
   return labels[code] ?? "No se ha podido completar la lectura OCR de este documento.";
 }
@@ -180,12 +241,17 @@ export function OcrReviewPanel({
     setError(null);
     setCopyState("idle");
     const feedbackId = `documents:ocr:${documentId}`;
-    actionFeedback.begin(feedbackId, "Analizando documento con OCR…");
+    actionFeedback.begin(feedbackId, "Analizando y guardando la lectura OCR…");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" }));
+      const data = await readJson(await fetch("/api/documents/ocr/persist", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ id: documentId }),
+      }));
       const parsed = parseOcrResult(data);
+      if (parsed.persisted !== true) throw new Error("ocr_persistence_failed");
       setResult(parsed);
-      actionFeedback.success(feedbackId, "Lectura OCR completada. Revisa el resultado antes de usar sus datos.");
+      actionFeedback.success(feedbackId, "Lectura OCR guardada como dato derivado. Revisa los campos antes de confirmar datos del documento.");
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = errorLabel(code);
@@ -225,13 +291,15 @@ export function OcrReviewPanel({
     }
   }
 
+  const interpretation = result?.interpretation ?? null;
+
   return (
     <section className={`${styles.subsection} ${ocrStyles.section}`} aria-labelledby="ocr-review-title" data-testid="ocr-review-panel">
       <div className={styles.subsectionHeading}>
         <div>
           <p className={styles.sectionEyebrow}>LECTURA DEL DOCUMENTO</p>
           <h3 id="ocr-review-title">Revisar con OCR</h3>
-          <p>Lee el original, reconstruye su texto y te señala qué necesita revisión. No guarda importes, fechas ni emisores por su cuenta.</p>
+          <p>Separa la lectura bruta de la interpretación financiera, conserva la evidencia y guarda ambas como datos derivados. Los datos revisados siguen necesitando confirmación explícita.</p>
         </div>
         <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
@@ -244,13 +312,13 @@ export function OcrReviewPanel({
           <button type="button" onClick={() => void openOriginal()} disabled={openingOriginal}>{openingOriginal ? "Abriendo…" : "Abrir"}</button>
         </li>
         <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
-          <span>2</span><div><strong>Lectura</strong><small>{result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
+          <span>2</span><div><strong>Reconocimiento</strong><small>{result ? "Texto y geometría guardados." : "Ejecuta OCR cuando quieras."}</small></div>
         </li>
         <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
-          <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura con el original."}</small></div>
+          <span>3</span><div><strong>Interpretación</strong><small>{review ? review.nextActionLabel : "Compara cada campo con su evidencia."}</small></div>
         </li>
         <li className={ocrStyles.flowItem}>
-          <span>4</span><div><strong>Datos</strong><small>Corrige y guarda sólo lo comprobado en el formulario superior.</small></div>
+          <span>4</span><div><strong>Revisión</strong><small>Corrige y confirma únicamente datos comprobados; el OCR original queda intacto.</small></div>
         </li>
       </ol>
 
@@ -258,7 +326,7 @@ export function OcrReviewPanel({
       {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>Drive se lee mediante Financial App Reader con permiso de solo lectura sobre el archivo original. Si la carpeta Documentos aún no está compartida con esa identidad, el análisis se detendrá sin usar vistas previas ni ampliar permisos.</div> : null}
       {error ? <div className={ocrStyles.error} role="alert">{error}</div> : null}
 
-      {result && review ? (
+      {result && review && interpretation ? (
         <div className={ocrStyles.result} aria-live="polite">
           <div className={`${ocrStyles.nextAction} ${ocrStyles[`next_${review.nextAction}`]}`}>
             <div><span>Siguiente paso</span><strong>{review.nextActionLabel}</strong><p>{review.nextActionDetail}</p></div>
@@ -266,14 +334,35 @@ export function OcrReviewPanel({
               <span>{review.totalLines} líneas</span>
               <span>{review.lowConfidenceLines} a revisar</span>
               {review.emptyPages ? <span>{review.emptyPages} páginas vacías</span> : null}
+              <span>OCR persistido</span>
             </div>
           </div>
 
           <div className={ocrStyles.metrics}>
             <div><span>Estado</span><strong>{STATUS_LABELS[result.status]}</strong></div>
-            <div><span>Confianza</span><strong>{confidenceLabel(result.confidence)}</strong></div>
+            <div><span>Confianza global</span><strong>{confidenceLabel(result.confidence)}</strong></div>
             <div><span>Origen</span><strong>{sourceLabel(result.source)}</strong></div>
             <div><span>Páginas</span><strong>{result.pages.length}</strong></div>
+          </div>
+
+          <div className={ocrStyles.warnings} data-testid="ocr-structured-fields">
+            <strong>Datos financieros detectados</strong>
+            <p>“Fiable” indica evidencia suficiente del OCR; sigue siendo un dato derivado hasta que lo revises y guardes.</p>
+            <div className={ocrStyles.metrics}>
+              <div><span>Emisor</span><strong>{displayText(interpretation.issuerName)}</strong><small>{fieldConfidenceLabel(interpretation.issuerName)}</small></div>
+              <div><span>CIF/NIF</span><strong>{displayText(interpretation.taxId)}</strong><small>{fieldConfidenceLabel(interpretation.taxId)}</small></div>
+              <div><span>Fecha</span><strong>{displayDate(interpretation.documentDate)}</strong><small>{fieldConfidenceLabel(interpretation.documentDate)}</small></div>
+              <div><span>Hora</span><strong>{displayText(interpretation.documentTime)}</strong><small>{fieldConfidenceLabel(interpretation.documentTime)}</small></div>
+              <div><span>Número</span><strong>{displayText(interpretation.documentNumber)}</strong><small>{fieldConfidenceLabel(interpretation.documentNumber)}</small></div>
+              <div><span>Periodo</span><strong>{displayText(interpretation.period)}</strong><small>{fieldConfidenceLabel(interpretation.period)}</small></div>
+              <div><span>Base</span><strong>{displayMoney(interpretation.baseCents)}</strong><small>{fieldConfidenceLabel(interpretation.baseCents)}</small></div>
+              <div><span>Impuestos</span><strong>{displayMoney(interpretation.taxCents)}</strong><small>{fieldConfidenceLabel(interpretation.taxCents)}</small></div>
+              <div><span>Total</span><strong>{displayMoney(interpretation.totalCents)}</strong><small>{fieldConfidenceLabel(interpretation.totalCents)}</small></div>
+              <div><span>Método de pago</span><strong>{displayText(interpretation.paymentMethod)}</strong><small>{fieldConfidenceLabel(interpretation.paymentMethod)}</small></div>
+            </div>
+            {interpretation.validation.basePlusTaxMatchesTotal === false ? <p role="alert">⚠ La base y los impuestos detectados no cuadran con el total.</p> : null}
+            {interpretation.validation.lineTotalMatchesTotal === false ? <p role="alert">⚠ La suma de líneas detectadas no cuadra con el total.</p> : null}
+            <p>{interpretation.lines.length ? `${interpretation.lines.length} líneas financieras detectadas.` : "No se han detectado líneas financieras con estructura suficiente."}</p>
           </div>
 
           {result.warnings.length ? (
@@ -287,7 +376,7 @@ export function OcrReviewPanel({
             <button className={styles.secondaryButton} type="button" onClick={() => void copyReading()} disabled={!result.plainText.trim()}>
               {copyState === "copied" ? "Texto copiado ✓" : "Copiar texto leído"}
             </button>
-            <span>Los datos editables siguen arriba y requieren guardado explícito.</span>
+            <span>La lectura OCR queda guardada aparte de tus correcciones.</span>
             {copyState === "error" ? <span role="status">No se pudo copiar. Puedes seleccionar el texto por página.</span> : null}
           </div>
 
@@ -320,6 +409,8 @@ export function OcrReviewPanel({
           </div>
 
           <div className={ocrStyles.principles}>
+            <span>✓ Original intacto</span>
+            <span>✓ OCR derivado persistido</span>
             <span>✓ Sin escrituras financieras</span>
             <span>{result.principles.preservesGeometry ? "✓ Geometría preservada" : "⚠ Geometría requiere revisión"}</span>
             <span>✓ Revisión humana obligatoria</span>
