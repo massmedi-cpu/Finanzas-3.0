@@ -44,8 +44,7 @@ export type RunDocumentOcrInput = {
   now?: () => Date;
 };
 
-export type EnrichedDocumentOcrResult = Omit<DocumentOcrResult, "contractVersion"> & {
-  contractVersion: 2;
+export type EnrichedDocumentOcrResult = DocumentOcrResult & {
   interpretation: DocumentOcrInterpretation;
 };
 
@@ -97,7 +96,6 @@ export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<Enrich
 
   return {
     ...recognition,
-    contractVersion: 2,
     interpretation: interpretDocumentOcr(recognition.pages),
   };
 }
