@@ -61,17 +61,14 @@ test("PRE-036 · móvil 320 px no desborda y mantiene targets táctiles", async 
   }
 });
 
-test("PRE-036 · la fuente usa snapshot seguro cuando cae la red", async ({ page, context }) => {
+test("PRE-036 · la fuente conserva en memoria la última comprobación segura al caer la red", async ({ page, context }) => {
   await isolateData(page);
   await page.goto("/transactions");
   await expect(page.getByText("Fuente comprobada")).toBeVisible();
 
-  const safeSnapshot = await page.evaluate(() => window.localStorage.getItem("financial-app:source-trust-safe-v1"));
-  expect(safeSnapshot).toBeTruthy();
-  expect(safeSnapshot).not.toMatch(/importe|concepto|iban|amount/i);
-
   await context.setOffline(true);
   await expect(page.getByText("Fuente sin conexión")).toBeVisible();
   await expect(page.getByText(/Última comprobación segura/)).toBeVisible();
+  await expect(page.getByText(/Fuente comprobada/)).toBeVisible();
   await context.setOffline(false);
 });
