@@ -1,8 +1,9 @@
 name: Dispatch Production Backup 10.0.51
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - "ops/dispatch-backup-10.0.51"
     paths:
       - ".github/workflows/dispatch-production-backup-10.0.51.yml"
 
@@ -12,7 +13,6 @@ permissions:
 
 jobs:
   dispatch:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
