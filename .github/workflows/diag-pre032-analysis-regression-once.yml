@@ -1,0 +1,55 @@
+name: Diagnose PRE-032 Analysis Regression Once
+
+on:
+  push:
+    branches:
+      - diag/pre032-analysis-regression
+    paths:
+      - ".github/diag-pre032-analysis-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: diag/pre032-analysis-regression
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Capture exact Analysis regression output
+        shell: bash
+        run: |
+          set +e
+          npm run test:e2e -- \
+            tests/e2e/analysis.spec.ts \
+            tests/e2e/analysis-contract-navigation.spec.ts \
+            tests/e2e/analysis-history-integrity.spec.ts \
+            tests/e2e/analysis-presentation-states.spec.ts \
+            tests/e2e/analysis-presentation-v6.spec.ts \
+            tests/e2e/analysis-redesign-gates.spec.ts \
+            tests/e2e/analysis-redesign-cardinality.spec.ts \
+            tests/e2e/premium-analysis-visual.spec.ts \
+            --project=chromium-desktop \
+            --project=chromium-mobile \
+            --reporter=line > .github/diag-pre032-analysis-output.txt 2>&1
+          status=$?
+          printf '\nEXIT_STATUS=%s\n' "$status" >> .github/diag-pre032-analysis-output.txt
+          exit 0
+      - name: Publish diagnostic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add .github/diag-pre032-analysis-output.txt
+          git commit -m "diag: capture PRE-032 analysis regression output"
+          git push origin HEAD:diag/pre032-analysis-regression
