@@ -1,0 +1,139 @@
+name: Fix PRE-032 Calendar Determinism Once
+
+on:
+  push:
+    branches:
+      - fix/pre032-calendar-determinism
+    paths:
+      - ".github/fix-pre032-calendar-determinism-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/pre032-calendar-determinism
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Patch calendar-sensitive fixtures deterministically
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path, before, after):
+              p = Path(path)
+              source = p.read_text()
+              count = source.count(before)
+              if count != 1:
+                  raise SystemExit(f'{path}: expected one match, found {count}')
+              p.write_text(source.replace(before, after, 1))
+
+          # Analysis: permit the initial real current-month request, but require the selected Sep/1m request.
+          replace_once(
+              'tests/e2e/analysis.spec.ts',
+              '''async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+            await page.route(/\\/api\\/analysis(?:\\?.*)?$/, async (route: any) => {
+              const url = new URL(route.request().url());
+              expect(url.pathname).toBe("/api/analysis");
+              expect(url.searchParams.get("month")).toBe("2026-09");
+              expect(url.searchParams.get("range")).toBe("1m");
+              await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+            });
+          }
+
+          async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
+            await mockAnalysisApi(page, snapshot);
+            await page.goto("/analysis");
+            await page.getByLabel("Mes de referencia").fill("2026-09");
+            await page.getByRole("button", { name: "1 mes" }).click();
+            await page.getByRole("button", { name: "Aplicar" }).click();
+            await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+          }
+          ''',
+              '''async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+            let selectedRequestSeen = false;
+            await page.route(/\\/api\\/analysis(?:\\?.*)?$/, async (route: any) => {
+              const url = new URL(route.request().url());
+              expect(url.pathname).toBe("/api/analysis");
+              if (url.searchParams.get("month") === "2026-09") {
+                expect(url.searchParams.get("range")).toBe("1m");
+                selectedRequestSeen = true;
+              }
+              await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+            });
+            return () => selectedRequestSeen;
+          }
+
+          async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
+            const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
+            await page.goto("/analysis");
+            await page.getByLabel("Mes de referencia").fill("2026-09");
+            await page.getByRole("button", { name: "1 mes" }).click();
+            await page.getByRole("button", { name: "Aplicar" }).click();
+            await expect.poll(selectedRequestSeen).toBe(true);
+            await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+          }
+          ''',
+          )
+
+          frozen = '  await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));\n'
+          replacements = [
+              ('tests/e2e/inicio-smart-brief.spec.ts', 'async function mockInicio(page: Page) {\n  await page.route("**/*", async (route) => {', 'async function mockInicio(page: Page) {\n' + frozen + '  await page.route("**/*", async (route) => {'),
+              ('tests/e2e/dashboard-number-explanations.spec.ts', 'async function mockDashboard(page: Page) {\n  await page.route("**/*", async (route) => {', 'async function mockDashboard(page: Page) {\n' + frozen + '  await page.route("**/*", async (route) => {'),
+              ('tests/e2e/inicio-utility.spec.ts', 'async function mockInicio(page: Page) {\n  let postCount = 0;', 'async function mockInicio(page: Page) {\n' + frozen + '  let postCount = 0;'),
+              ('tests/e2e/premium-dashboard-visual.spec.ts', 'async function mockDashboard(page: Page) {\n  await page.route("**/*", async (route) => {', 'async function mockDashboard(page: Page) {\n' + frozen + '  await page.route("**/*", async (route) => {'),
+          ]
+          for args in replacements:
+              replace_once(*args)
+
+          replace_once(
+              'tests/e2e/dashboard-orchestration-contract.spec.ts',
+              '''async function installDashboardMocks(
+            page: Page,
+            secondaryGate?: Promise<void>,
+            overrides: Partial<{ financial: typeof financial; monthly: typeof monthly; budgets: typeof budgets }> = {},
+          ) {
+            await page.route("**/*", async (route) => {''',
+              '''async function installDashboardMocks(
+            page: Page,
+            secondaryGate?: Promise<void>,
+            overrides: Partial<{ financial: typeof financial; monthly: typeof monthly; budgets: typeof budgets }> = {},
+          ) {
+            await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
+            await page.route("**/*", async (route) => {''',
+          )
+          PY
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Verify Analysis calendar rollover on desktop and mobile
+        run: npm run test:e2e -- tests/e2e/analysis.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=1
+      - name: Verify affected Inicio/UX fixtures on desktop and mobile
+        run: >-
+          npm run test:e2e --
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/inicio-utility.spec.ts
+          tests/e2e/premium-dashboard-visual.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+          --workers=1
+      - name: Commit only verified test repairs and remove one-shot tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git rm .github/workflows/fix-pre032-calendar-determinism-once.yml .github/fix-pre032-calendar-determinism-trigger
+          git add tests/e2e/analysis.spec.ts tests/e2e/inicio-smart-brief.spec.ts tests/e2e/dashboard-number-explanations.spec.ts tests/e2e/dashboard-orchestration-contract.spec.ts tests/e2e/inicio-utility.spec.ts tests/e2e/premium-dashboard-visual.spec.ts
+          git commit -m "fix(test): make September fixtures deterministic across month rollover"
+          git push origin HEAD:fix/pre032-calendar-determinism
