@@ -11,6 +11,7 @@ import { isNavigationActive, navigationItems } from "./navigation-items";
 import { PwaInstallButton } from "./pwa-install-button";
 import { usePwaRuntime } from "./pwa-runtime";
 import SourceTrustStatus from "./source-trust-status";
+import connectivityStyles from "./connectivity-status.module.css";
 import styles from "./app-shell.module.css";
 
 const HIGH_VALUE_PREFETCH_ROUTES = [
@@ -186,7 +187,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         {pendingHref && <span className={styles.navigationProgress} aria-hidden="true" />}
       </div>
       {!online && (
-        <div className={styles.offlineBanner} role="status" aria-live="polite" data-testid="offline-status">
+        <div className={connectivityStyles.offlineBanner} role="status" aria-live="polite" data-testid="offline-status">
           <strong>Sin conexión</strong>
           <span>Se muestra la última información segura disponible. Al volver la red se revalidará automáticamente.</span>
         </div>
