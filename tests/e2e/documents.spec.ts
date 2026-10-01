@@ -135,10 +135,14 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
   await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
   await expect(page.getByText(/OCR revisable/).first()).toBeVisible();
+  await expect(page.locator("#document-camera")).toHaveAttribute("accept", "image/*");
+  await expect(page.locator("#document-camera")).toHaveAttribute("capture", "environment");
+  await expect(page.locator("#document-file")).toHaveAttribute("accept", ACCEPT);
   expect(ocrReads).toHaveLength(0);
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Descargar original" })).toHaveAttribute("href", `/api/documents/download?id=${documentId}`);
   expect(ocrReads).toHaveLength(0);
   const pendingReview = page.getByText("Pendiente de revisar", { exact: true }).first();
   await expect(pendingReview).toBeVisible();
@@ -146,7 +150,7 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await expect(page.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Ejecuta OCR cuando quieras.");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
-  const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
+  const undersized = await page.locator("main button, main input, main select, main a.secondaryButton").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
   expect(undersized).toBe(0);
 });
 
@@ -196,8 +200,8 @@ test("Documentos uploads through private signed storage and leaves OCR for expli
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
   await page.goto("/documents");
-  await page.getByLabel("Archivo").setInputFiles({ name: "nueva-factura.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
-  await page.getByRole("button", { name: "Guardar documento" }).click();
+  await page.getByLabel("Galería o archivo").setInputFiles({ name: "nueva-factura.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test") });
+  await page.getByRole("button", { name: "Guardar original" }).click();
   await expect.poll(() => writes.some((write) => write.action === "upload_sign")).toBe(true);
   await expect.poll(() => writes.some((write) => write.action === "upload_finalize")).toBe(true);
   await expect(page.getByRole("status").filter({ hasText: "sólo se ejecutará si lo solicitas" })).toBeVisible();
