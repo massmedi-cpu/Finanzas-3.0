@@ -38,16 +38,22 @@ const budgets = {
     categoryId: null,
     categoryName: null,
     effectiveAmountCents: 100000,
-    actualExpenseCents: 60000,
-    remainingCents: 40000,
-    progressBps: 6000,
+    actualExpenseCents: 70000,
+    remainingCents: 30000,
+    progressBps: 7000,
     status: "on_track",
   },
   categories: [],
 };
 
 const forecast = {
+  period: {
+    dateFrom: "2026-09-16",
+    dateTo: "2026-10-16",
+    accountId: null,
+  },
   summary: {
+    openingBalanceCents: 30000,
     projectedIncomeCents: 0,
     projectedExpenseCents: 0,
     projectedNetCents: 0,
@@ -80,6 +86,7 @@ async function json(route: Route, body: unknown) {
 }
 
 async function mockInicio(page: Page) {
+  await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
     if (url.pathname === "/api/source/google/sync") {
@@ -166,7 +173,7 @@ test("Inicio muestra cambios útiles desde la última visita y conserva una memo
       expenseCents: 50000,
       operatingNetCents: 60000,
       activeBalanceCents: 25000,
-      budgetProgressBps: 4000,
+      budgetProgressBps: 5000,
       budgetStatus: "on_track",
       projectedNetCents: -1000,
       plannedItems: 1,

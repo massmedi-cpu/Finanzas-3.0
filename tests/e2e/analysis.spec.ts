@@ -173,21 +173,26 @@ function mockSnapshot(): AnalysisSnapshot {
 }
 
 async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+  let selectedRequestSeen = false;
   await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
     const url = new URL(route.request().url());
     expect(url.pathname).toBe("/api/analysis");
-    expect(url.searchParams.get("month")).toBe("2026-09");
-    expect(url.searchParams.get("range")).toBe("1m");
+    if (url.searchParams.get("month") === "2026-09") {
+      expect(url.searchParams.get("range")).toBe("1m");
+      selectedRequestSeen = true;
+    }
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
   });
+  return () => selectedRequestSeen;
 }
 
 async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
-  await mockAnalysisApi(page, snapshot);
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: "1 mes" }).click();
   await page.getByRole("button", { name: "Aplicar" }).click();
+  await expect.poll(selectedRequestSeen).toBe(true);
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
 
