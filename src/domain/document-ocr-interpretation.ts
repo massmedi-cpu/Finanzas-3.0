@@ -1,4 +1,4 @@
-import type { OcrBoundingBox, OcrLine, OcrPage } from "./document-ocr";
+import type { OcrBoundingBox, OcrLine, OcrPage, OcrWord } from "./document-ocr";
 import { receiptMoneyCents } from "./receipt-money";
 
 export type OcrFieldConfidence = "reliable" | "doubtful" | "not_detected";
@@ -49,6 +49,8 @@ export type DocumentOcrInterpretation = {
 
 type LocatedLine = { pageNumber: number; line: OcrLine };
 
+// Internal product threshold. The Axioma defines the three qualitative states,
+// not a mandatory numerical threshold.
 const RELIABLE_SCORE = 0.82;
 const MAX_TEXT_FIELD = 300;
 
@@ -150,15 +152,19 @@ function labelledMoney(lines: LocatedLine[], matcher: RegExp, exclude?: RegExp) 
   return value === null ? emptyField<number>() : field(value, item, 0.05);
 }
 
-function labelledValue(lines: LocatedLine[], matcher: RegExp) {
+function labelledValue(lines: LocatedLine[], matcher: RegExp, originalMatcher = matcher) {
   const item = firstMatch(lines, ({ line }) => matcher.test(normalized(line.text)));
   if (!item) return { item: null, value: null as string | null };
-  const value = cleanValue(item.line.text.replace(matcher, " "));
+  const value = cleanValue(item.line.text.replace(originalMatcher, " "));
   return { item, value: value || null };
 }
 
 function findIssuer(lines: LocatedLine[]) {
-  const labelled = labelledValue(lines, /\b(?:razon\s+social|emisor|empresa|comercio)\b\s*[:\-]?/iu);
+  const labelled = labelledValue(
+    lines,
+    /\b(?:razon\s+social|emisor|empresa|comercio)\b\s*[:\-]?/iu,
+    /\b(?:raz[oó]n\s+social|emisor|empresa|comercio)\b\s*[:\-]?/iu,
+  );
   if (labelled.item && labelled.value) return field(labelled.value, labelled.item, 0.08);
 
   const candidate = lines.slice(0, 12).find(({ line }) => {
@@ -214,7 +220,7 @@ function findDocumentNumber(lines: LocatedLine[]) {
 function findPeriod(lines: LocatedLine[]) {
   const item = firstMatch(lines, ({ line }) => /\bperiodo\b/u.test(normalized(line.text)));
   if (!item) return emptyField<string>();
-  const value = cleanValue(item.line.text.replace(/\bperiodo\b\s*[:\-]?/iu, " "));
+  const value = cleanValue(item.line.text.replace(/\bper[ií]odo\b\s*[:\-]?/iu, " "));
   return value ? field(value, item, 0.06) : emptyField<string>();
 }
 
@@ -242,7 +248,7 @@ function lineItems(lines: LocatedLine[]) {
     const words = [...item.line.words].sort((a, b) => a.box.x - b.box.x);
     const moneyWords = words
       .map((word) => ({ word, cents: receiptMoneyCents(word.text) }))
-      .filter((entry): entry is { word: typeof words[number]; cents: number } => entry.cents !== null);
+      .filter((entry) => entry.cents !== null) as Array<{ word: OcrWord; cents: number }>;
     if (!moneyWords.length) continue;
     const firstMoneyX = moneyWords[0].word.box.x;
     const description = words.filter((word) => word.box.x < firstMoneyX).map((word) => word.text).join(" ").trim();
@@ -254,7 +260,7 @@ function lineItems(lines: LocatedLine[]) {
     const score = clampScore(item.line.confidence);
     output.push({
       description: description.slice(0, 300),
-      quantity: Number.isSafeInteger(quantity) && quantity! > 0 ? quantity : null,
+      quantity: quantity !== null && Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null,
       unitPriceCents,
       totalCents,
       confidence: confidence(score),
