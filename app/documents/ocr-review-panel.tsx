@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
-import { summarizeDocumentOcrReview } from "../../src/application/document-ocr-review";
+import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { useActionFeedback } from "../action-feedback";
 import type { DocumentOcrResult } from "../../src/domain/document-ocr";
 import styles from "./documents.module.css";
@@ -31,6 +31,9 @@ const WARNING_LABELS: Record<string, string> = {
   receipt_structure_incomplete: "Hay filas de producto que no se han podido estructurar por completo: la lectura queda pendiente de revisión.",
   incomplete_page_coverage: "No se ha podido cubrir todas las páginas del documento.",
   pdf_page_limit_reached: "El PDF supera el límite de páginas procesadas en una sola lectura.",
+  base_plus_tax_mismatch: "La base imponible y los impuestos detectados no cuadran con el total. No confirmes los importes sin revisar el original.",
+  ocr_empty: "El OCR no ha recuperado texto utilizable.",
+  ocr_needs_review: "El OCR ha marcado esta lectura como pendiente de revisión.",
 };
 
 function warningLabel(warning: string) {
@@ -45,6 +48,18 @@ function warningLabel(warning: string) {
 function confidenceLabel(value: number | null) {
   if (value === null) return "No disponible";
   return `${formatNumberWithDigits(value * 100, 0)} %`;
+}
+
+function financialFieldValue(field: DocumentOcrReviewField) {
+  if (field.value === null) return "No detectado";
+  if (field.key === "taxBaseCents" || field.key === "taxesCents" || field.key === "totalCents") {
+    return `${formatNumberWithDigits(Number(field.value) / 100, 2)} €`;
+  }
+  if (field.key === "date" && typeof field.value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(field.value)) {
+    const [year, month, day] = field.value.split("-");
+    return `${day}/${month}/${year}`;
+  }
+  return String(field.value);
 }
 
 function sourceLabel(source: OcrResult["source"]) {
@@ -231,7 +246,7 @@ export function OcrReviewPanel({
         <div>
           <p className={styles.sectionEyebrow}>LECTURA DEL DOCUMENTO</p>
           <h3 id="ocr-review-title">Revisar con OCR</h3>
-          <p>Lee el original, reconstruye su texto y te señala qué necesita revisión. No guarda importes, fechas ni emisores por su cuenta.</p>
+          <p>Lee el original, reconstruye su texto e interpreta los datos financieros sin sustituir la evidencia OCR. Nada se confirma sin revisión humana.</p>
         </div>
         <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
@@ -247,10 +262,10 @@ export function OcrReviewPanel({
           <span>2</span><div><strong>Lectura</strong><small>{result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
         </li>
         <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
-          <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura con el original."}</small></div>
+          <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura y los campos con el original."}</small></div>
         </li>
         <li className={ocrStyles.flowItem}>
-          <span>4</span><div><strong>Datos</strong><small>Corrige y guarda sólo lo comprobado en el formulario superior.</small></div>
+          <span>4</span><div><strong>Confirmación</strong><small>Los datos interpretados siguen siendo derivados hasta que los confirmes.</small></div>
         </li>
       </ol>
 
@@ -264,7 +279,8 @@ export function OcrReviewPanel({
             <div><span>Siguiente paso</span><strong>{review.nextActionLabel}</strong><p>{review.nextActionDetail}</p></div>
             <div className={ocrStyles.reviewStats}>
               <span>{review.totalLines} líneas</span>
-              <span>{review.lowConfidenceLines} a revisar</span>
+              <span>{review.detectedFinancialFields} campos detectados</span>
+              <span>{review.doubtfulFinancialFields} dudosos</span>
               {review.emptyPages ? <span>{review.emptyPages} páginas vacías</span> : null}
             </div>
           </div>
@@ -276,18 +292,44 @@ export function OcrReviewPanel({
             <div><span>Páginas</span><strong>{result.pages.length}</strong></div>
           </div>
 
+          <div className={ocrStyles.pages} data-testid="ocr-financial-fields">
+            <div className={ocrStyles.page}>
+              <div className={ocrStyles.pageHeader}>
+                <strong>Datos financieros detectados</strong>
+                <span>{review.detectedFinancialFields} detectados · {review.missingFinancialFields} no detectados</span>
+              </div>
+              <div className={ocrStyles.metrics}>
+                {review.financialFields.map((field) => (
+                  <div key={field.key} data-testid={`ocr-field-${field.key}`}>
+                    <span>{field.label}</span>
+                    <strong>{financialFieldValue(field)}</strong>
+                    <small>{field.trustLabel}{field.confidence !== null ? ` · ${confidenceLabel(field.confidence)}` : ""}{field.evidenceCount ? ` · ${field.evidenceCount} evidencia` : ""}</small>
+                  </div>
+                ))}
+              </div>
+              <p className={styles.muted}>Fiable, Dudoso o No detectado describe la evidencia OCR. No equivale a una confirmación del usuario.</p>
+            </div>
+          </div>
+
+          {review.financialWarnings.length ? (
+            <div className={ocrStyles.warnings} data-testid="ocr-financial-warnings">
+              <strong>Validación financiera pendiente</strong>
+              <ul>{review.financialWarnings.map((warning) => <li key={warning}>{warningLabel(warning)}</li>)}</ul>
+            </div>
+          ) : null}
+
           {result.warnings.length ? (
             <div className={ocrStyles.warnings}>
               <strong>Revisar antes de usar</strong>
               <ul>{result.warnings.map((warning) => <li key={warning}>{warningLabel(warning)}</li>)}</ul>
             </div>
-          ) : <div className={ocrStyles.success}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de guardar datos.</div>}
+          ) : <div className={ocrStyles.success}>Lectura completada sin avisos técnicos. Aun así, comprueba el documento original antes de confirmar datos.</div>}
 
           <div className={ocrStyles.readingActions}>
             <button className={styles.secondaryButton} type="button" onClick={() => void copyReading()} disabled={!result.plainText.trim()}>
               {copyState === "copied" ? "Texto copiado ✓" : "Copiar texto leído"}
             </button>
-            <span>Los datos editables siguen arriba y requieren guardado explícito.</span>
+            <span>El original y la lectura OCR permanecen separados de cualquier corrección posterior.</span>
             {copyState === "error" ? <span role="status">No se pudo copiar. Puedes seleccionar el texto por página.</span> : null}
           </div>
 
@@ -320,6 +362,7 @@ export function OcrReviewPanel({
           </div>
 
           <div className={ocrStyles.principles}>
+            <span>✓ Fuente bancaria solo lectura</span>
             <span>✓ Sin escrituras financieras</span>
             <span>{result.principles.preservesGeometry ? "✓ Geometría preservada" : "⚠ Geometría requiere revisión"}</span>
             <span>✓ Revisión humana obligatoria</span>
