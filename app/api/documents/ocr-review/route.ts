@@ -8,6 +8,7 @@ export const runtime = "nodejs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
 
@@ -48,10 +49,39 @@ function nullableDate(value: unknown) {
   return value;
 }
 
+function nullableTime(value: unknown) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !TIME.test(value)) throw new Error("invalid_document_time");
+  return value;
+}
+
 function nullableMoney(value: unknown, field: string) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`invalid_${field}`);
   return value;
+}
+
+function nullableQuantity(value: unknown, field: string) {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > 1_000_000) throw new Error(`invalid_${field}`);
+  return value;
+}
+
+function lineItems(value: unknown) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 200) throw new Error("invalid_document_line_items");
+  return value.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid_document_line_items");
+    const row = raw as Record<string, unknown>;
+    const description = nullableText(row.description, `document_line_${index}_description`, 500);
+    if (!description) throw new Error("invalid_document_line_items");
+    return {
+      description,
+      quantity: nullableQuantity(row.quantity, `document_line_${index}_quantity`),
+      unitPriceCents: nullableMoney(row.unitPriceCents, `document_line_${index}_unit_price`),
+      totalCents: nullableMoney(row.totalCents, `document_line_${index}_total`),
+    };
+  });
 }
 
 export async function GET(request: Request) {
@@ -81,6 +111,7 @@ export async function PATCH(request: Request) {
       ocrRunId,
       type: input.type,
       documentDate: nullableDate(input.documentDate),
+      documentTime: nullableTime(input.documentTime),
       issuerName: nullableText(input.issuerName, "document_issuer", 300),
       issuerTaxId: nullableText(input.issuerTaxId, "document_issuer_tax_id", 40),
       documentNumber: nullableText(input.documentNumber, "document_number", 120),
@@ -89,6 +120,7 @@ export async function PATCH(request: Request) {
       taxesCents: nullableMoney(input.taxesCents, "document_taxes"),
       totalCents: nullableMoney(input.totalCents, "document_total"),
       paymentMethod: nullableText(input.paymentMethod, "document_payment_method", 120),
+      lineItems: lineItems(input.lineItems),
       notes,
     };
 
