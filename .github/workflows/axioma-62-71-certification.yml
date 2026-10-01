@@ -1,0 +1,38 @@
+name: Axioma 62-71 Certification
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "src/design/**"
+      - "package.json"
+      - "scripts/audit-axioma-62-71.mjs"
+      - ".github/workflows/axioma-62-71-certification.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "src/design/**"
+      - "package.json"
+      - "scripts/audit-axioma-62-71.mjs"
+      - ".github/workflows/axioma-62-71-certification.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  objective-contract:
+    name: Objective UX contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Certify Axioma §§62–71 objective invariants
+        run: node scripts/audit-axioma-62-71.mjs
+      - name: TypeScript guard
+        run: npm run typecheck
