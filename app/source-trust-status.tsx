@@ -5,16 +5,20 @@ import { useEffect, useMemo, useState } from "react";
 import { normalizeSourceSyncIncidents } from "../src/application/source-sync-incidents";
 import {
   getCachedSourceTrust,
+  getLastSafeSourceTrust,
   invalidateSourceTrustCache,
   loadSourceTrustFreshness,
   shouldRevalidateSourceTrust,
   type SourceFreshness,
 } from "./source-trust-cache";
+import { usePwaRuntime } from "./pwa-runtime";
 import styles from "./source-trust-status.module.css";
 
 type RequestState =
   | { kind: "loading" }
   | { kind: "ready"; payload: SourceFreshness }
+  | { kind: "offline"; payload: SourceFreshness; checkedAt: number }
+  | { kind: "offline-empty" }
   | { kind: "unknown" };
 
 type Tone = "ok" | "warning" | "danger" | "unknown";
@@ -59,6 +63,11 @@ function formatMovementDate(value: string | null) {
 
 function formatSyncDate(value: string | null) {
   if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : dateTimeFormatter.format(date).replace(".", "");
+}
+
+function formatCheckedAt(value: number) {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : dateTimeFormatter.format(date).replace(".", "");
 }
@@ -162,6 +171,7 @@ function summarize(payload: SourceFreshness): Summary {
 
 export default function SourceTrustStatus({ pathname }: { pathname: string }) {
   const visible = useMemo(() => shouldShowSourceTrust(pathname), [pathname]);
+  const { online } = usePwaRuntime();
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<RequestState>(() => {
     const cached = getCachedSourceTrust();
@@ -176,17 +186,34 @@ export default function SourceTrustStatus({ pathname }: { pathname: string }) {
 
   useEffect(() => {
     function revalidateAfterFocus() {
-      if (visible && shouldRevalidateSourceTrust()) {
+      if (visible && online && shouldRevalidateSourceTrust()) {
         setAttempt((value) => value + 1);
       }
     }
+    function revalidateAfterConnectivity() {
+      if (!visible) return;
+      invalidateSourceTrustCache();
+      setAttempt((value) => value + 1);
+    }
 
     window.addEventListener("focus", revalidateAfterFocus);
-    return () => window.removeEventListener("focus", revalidateAfterFocus);
-  }, [visible]);
+    window.addEventListener("financial-app:source-revalidate", revalidateAfterConnectivity);
+    return () => {
+      window.removeEventListener("focus", revalidateAfterFocus);
+      window.removeEventListener("financial-app:source-revalidate", revalidateAfterConnectivity);
+    };
+  }, [online, visible]);
 
   useEffect(() => {
     if (!visible) return;
+
+    if (!online) {
+      const snapshot = getLastSafeSourceTrust();
+      setState(snapshot
+        ? { kind: "offline", payload: snapshot.payload, checkedAt: snapshot.checkedAt }
+        : { kind: "offline-empty" });
+      return;
+    }
 
     const cached = getCachedSourceTrust();
     if (cached) {
@@ -209,25 +236,47 @@ export default function SourceTrustStatus({ pathname }: { pathname: string }) {
     return () => {
       active = false;
     };
-  }, [attempt, visible, pathname]);
+  }, [attempt, visible, pathname, online]);
 
   if (!visible) return null;
 
   const summary: Summary = state.kind === "ready"
     ? summarize(state.payload)
-    : state.kind === "loading"
-      ? {
-          label: "Comprobando fuente",
-          detail: "Verificando el estado real de sincronización…",
-          tone: "unknown",
-          showReviewLink: false,
-        }
-      : {
-          label: "Fuente no comprobable",
-          detail: "No se ha podido verificar el estado real de la fuente. No se asume que esté actualizada.",
-          tone: "unknown",
-          showReviewLink: true,
-        };
+    : state.kind === "offline"
+      ? (() => {
+          const previous = summarize(state.payload);
+          const checkedAt = formatCheckedAt(state.checkedAt);
+          return {
+            label: "Fuente sin conexión",
+            detail: [
+              checkedAt ? `Última comprobación segura ${checkedAt}` : "Última comprobación segura disponible",
+              previous.label,
+              previous.detail,
+            ].filter(Boolean).join(" · "),
+            tone: "warning" as const,
+            showReviewLink: false,
+          };
+        })()
+      : state.kind === "offline-empty"
+        ? {
+            label: "Fuente sin conexión",
+            detail: "No hay una comprobación segura guardada en este dispositivo.",
+            tone: "unknown" as const,
+            showReviewLink: false,
+          }
+        : state.kind === "loading"
+          ? {
+              label: "Comprobando fuente",
+              detail: "Verificando el estado real de sincronización…",
+              tone: "unknown" as const,
+              showReviewLink: false,
+            }
+          : {
+              label: "Fuente no comprobable",
+              detail: "No se ha podido verificar el estado real de la fuente. No se asume que esté actualizada.",
+              tone: "unknown" as const,
+              showReviewLink: true,
+            };
 
   return (
     <section className={styles.frame} aria-label="Estado de la fuente bancaria">

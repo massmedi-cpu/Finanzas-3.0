@@ -15,15 +15,19 @@ export type SourceFreshness = {
   };
 };
 
-type CacheEntry = {
+export type SafeSourceTrustSnapshot = {
   payload: SourceFreshness;
   checkedAt: number;
 };
 
+type CacheEntry = SafeSourceTrustSnapshot;
+
 const SOURCE_TRUST_CACHE_TTL_MS = 20_000;
 const SOURCE_TRUST_TRANSIENT_TTL_MS = 2_500;
+const SAFE_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
 
 let cacheEntry: CacheEntry | null = null;
+let lastSafeSnapshot: SafeSourceTrustSnapshot | null = null;
 let inFlightRequest: Promise<SourceFreshness | null> | null = null;
 let generation = 0;
 
@@ -72,6 +76,11 @@ export function getCachedSourceTrust(now = Date.now()) {
   return cacheEntry.payload;
 }
 
+export function getLastSafeSourceTrust(now = Date.now()): SafeSourceTrustSnapshot | null {
+  if (!lastSafeSnapshot || now - lastSafeSnapshot.checkedAt > SAFE_SNAPSHOT_MAX_AGE_MS) return null;
+  return lastSafeSnapshot;
+}
+
 export function shouldRevalidateSourceTrust(now = Date.now()) {
   return getCachedSourceTrust(now) === null;
 }
@@ -103,6 +112,7 @@ export function loadSourceTrustFreshness() {
         return null;
       }
       cacheEntry = { payload, checkedAt: Date.now() };
+      if (payload.available) lastSafeSnapshot = cacheEntry;
       return payload;
     })
     .catch(() => {

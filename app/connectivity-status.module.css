@@ -1,0 +1,41 @@
+.offlineBanner {
+  width: min(var(--content-max), calc(100% - 2rem));
+  min-height: 2.75rem;
+  margin: 0.35rem auto 0;
+  padding: 0.65rem 0.85rem;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+  border: 1px solid rgba(255, 190, 92, 0.34);
+  border-radius: 0.85rem;
+  background: rgba(91, 54, 8, 0.34);
+  color: var(--color-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.offlineBanner strong {
+  flex: 0 0 auto;
+  color: #fff0c8;
+  font-weight: 800;
+}
+
+.offlineBanner span {
+  min-width: 0;
+}
+
+@media (max-width: 48rem) {
+  .offlineBanner {
+    width: calc(100% - 1.5rem);
+    margin-top: 0.2rem;
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .offlineBanner {
+    scroll-behavior: auto;
+  }
+}
