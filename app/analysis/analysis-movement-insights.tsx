@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import { formatInteger, formatNumberWithDigits } from "../../src/core/formatters";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
+import { CategoryIdentity } from "../category-identity";
 import styles from "./analysis-movement-insights.module.css";
 
 const shortDateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -656,7 +657,7 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
             <Link prefetch={false} key={row.transactionId} href={transactionHref(snapshot, row)} className={styles.transactionRow}>
               <div className={styles.transactionMain}>
                 <strong>{row.conceptNormalized}</strong>
-                <span>{formatDate(row.bankDate)} · {row.merchantName} · {row.categoryName}</span>
+                <span>{formatDate(row.bankDate)} · {row.merchantName} · <CategoryIdentity categoryId={row.categoryId} name={row.categoryName} /></span>
                 <small>{row.accountName}</small>
                 {showOriginalConcept && <small>Concepto bancario: {originalConcept}</small>}
                 {hasBalance && <small>Saldo tras movimiento: {formatMoney(row.balanceAfterCents as number)}</small>}

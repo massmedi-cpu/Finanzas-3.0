@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { APP_VERSION } from "../src/core/build-info";
 import { ActionFeedbackProvider } from "./action-feedback";
+import { CategoryIdentityProvider } from "./category-identity";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import { PwaRuntimeProvider } from "./pwa-runtime";
 import "./globals.css";
@@ -41,7 +42,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es">
       <body>
-        <ActionFeedbackProvider><PwaRuntimeProvider>{children}</PwaRuntimeProvider></ActionFeedbackProvider>
+        <ActionFeedbackProvider><PwaRuntimeProvider><CategoryIdentityProvider>{children}</CategoryIdentityProvider></PwaRuntimeProvider></ActionFeedbackProvider>
         <OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />
       </body>
     </html>

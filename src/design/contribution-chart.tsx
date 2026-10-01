@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import styles from "./contribution-chart.module.css";
 
 export type ContributionPoint = {
@@ -17,6 +17,7 @@ type Props = {
   rows: ContributionPoint[];
   formatMoney: (cents: number) => string;
   limit?: number;
+  renderLabel?: (row: ContributionPoint) => ReactNode;
 };
 
 type ViewMode = "change" | "compare";
@@ -26,7 +27,7 @@ function comparisonBarWidth(value: number, maximum: number) {
   return Math.max(2, Math.round((value / maximum) * 100));
 }
 
-export function ContributionChart({ rows, formatMoney, limit = 6 }: Props) {
+export function ContributionChart({ rows, formatMoney, limit = 6, renderLabel }: Props) {
   const [view, setView] = useState<ViewMode>("change");
   const visible = useMemo(
     () => rows.filter((row) => row.deltaCents !== 0 || row.expenseCents > 0 || row.previousExpenseCents > 0).slice(0, limit),
@@ -71,7 +72,7 @@ export function ContributionChart({ rows, formatMoney, limit = 6 }: Props) {
           return (
             <div key={`${row.id ?? "none"}-${row.name}`} className={styles.row} role="listitem" aria-label={accessible}>
               <div className={styles.label}>
-                <strong>{row.name}</strong>
+                <strong>{renderLabel ? renderLabel(row) : row.name}</strong>
                 <span>{row.deltaCents === 0 ? "Sin cambio" : `${increased ? "+" : "−"}${formatMoney(Math.abs(row.deltaCents))}`}</span>
               </div>
 

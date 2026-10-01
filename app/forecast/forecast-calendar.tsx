@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import type { ForecastItem } from "../../src/application/forecast/forecast-contract";
 import { formatMoneyCents } from "../../src/core/money";
+import { CategoryIdentity } from "../category-identity";
 import styles from "./forecast-calendar.module.css";
 
 const dateLabel = new Intl.DateTimeFormat("es-ES", {
@@ -134,7 +135,7 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
               <ul>
                 {selectedItems.map((item) => (
                   <li key={item.id}>
-                    <div><strong>{item.concept}</strong><span>{statusText(item)}</span></div>
+                    <div><strong>{item.concept}</strong><span>{statusText(item)}</span>{item.categoryId ? <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} /> : null}</div>
                     <div className={styles.detailEnd}><strong className={item.amountCents < 0 ? styles.negative : styles.positive}>{formatMoneyCents(item.amountCents)}</strong><a href={`#forecast-item-${item.id}`}>Ver detalle</a></div>
                     {item.actual ? <small>Movimiento real: {formattedDate(item.actual.date)} · {formatMoneyCents(item.actual.amountCents)}</small> : null}
                   </li>
