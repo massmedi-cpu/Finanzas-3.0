@@ -3,10 +3,12 @@ import { documentBytesMatchMimeType } from "../../../src/domain/document-content
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^([01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 const STORAGE_PATH = /^uploads\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.(pdf|jpg|png|webp)$/i;
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
 const DOCUMENT_STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
 const DOCUMENT_METHODS = new Set(["manual", "suggested"]);
+const OCR_STATUSES = new Set(["ready", "needs_review", "empty"]);
 const MIME_EXTENSIONS = new Map([
   ["application/pdf", "pdf"],
   ["image/jpeg", "jpg"],
@@ -56,6 +58,12 @@ function nullableDate(value: unknown, field: string): string | null {
   return value;
 }
 
+function nullableTime(value: unknown, field: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !TIME.test(value)) throw new Error(`invalid_${field}`);
+  return value;
+}
+
 function safeInteger(value: unknown, field: string, nullable = false): number | null {
   if (nullable && (value === null || value === undefined || value === "")) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`invalid_${field}`);
@@ -83,6 +91,29 @@ function documentStatus(value: unknown, nullable = false): string | null {
 function documentMethod(value: unknown): string {
   if (typeof value !== "string" || !DOCUMENT_METHODS.has(value)) throw new Error("invalid_document_association_method");
   return value;
+}
+
+function ocrStatus(value: unknown): string {
+  if (typeof value !== "string" || !OCR_STATUSES.has(value)) throw new Error("invalid_ocr_status");
+  return value;
+}
+
+function jsonObject(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`invalid_${field}`);
+  return value as Record<string, unknown>;
+}
+
+function jsonArray(value: unknown, field: string): unknown[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) throw new Error(`invalid_${field}`);
+  return value;
+}
+
+function isoTimestamp(value: unknown, field: string): string {
+  const result = text(value, field, 80);
+  const parsed = new Date(result);
+  if (Number.isNaN(parsed.getTime())) throw new Error(`invalid_${field}`);
+  return parsed.toISOString();
 }
 
 function mimeType(value: unknown): string {
@@ -130,11 +161,11 @@ function databaseError(error: unknown) {
   if (message.includes("document_not_found") || message.includes("document_transaction_not_found") || message.includes("document_association_not_found")) {
     return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_not_found" }, 404);
   }
-  if (message.includes("document_suggestion_not_current") || message.includes("document_suggestion_metadata_required")) {
-    return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_conflict" }, 409);
+  if (message.includes("document_suggestion_not_current") || message.includes("document_suggestion_metadata_required") || message.includes("ocr_document_mismatch")) {
+    return json({ error: message.match(/(?:document|ocr)_[a-z_]+/)?.[0] ?? "document_conflict" }, 409);
   }
-  if (message.includes("invalid_document_") || message.includes("unsupported_document_")) {
-    return json({ error: message.match(/(invalid|unsupported)_document_[a-z_]+/)?.[0] ?? "invalid_document_request" }, 400);
+  if (message.includes("invalid_document_") || message.includes("unsupported_document_") || message.includes("invalid_ocr_") || message.includes("ocr_payload_too_large")) {
+    return json({ error: message.match(/(?:invalid|unsupported)_(?:document|ocr)_[a-z_]+|ocr_payload_too_large/)?.[0] ?? "invalid_document_request" }, 400);
   }
   console.error("document-logic-database", error instanceof Error ? error.name : typeof error);
   return json({ error: "document_internal_error" }, 500);
@@ -199,9 +230,36 @@ export async function handleDocumentLogicAction(input: {
     const totalCents = safeInteger(payload.totalCents, "document_total", true);
     const notes = payload.notes === undefined || payload.notes === null ? "" : String(payload.notes);
     if (notes.length > 2000) throw new Error("invalid_document_notes");
+    const issuerTaxId = nullableText(payload.issuerTaxId, "document_tax_id", 40);
+    const documentTime = nullableTime(payload.documentTime, "document_time");
+    const documentNumber = nullableText(payload.documentNumber, "document_number", 100);
+    const documentPeriod = nullableText(payload.documentPeriod, "document_period", 100);
+    const baseCents = safeInteger(payload.baseCents, "document_base", true);
+    const taxCents = safeInteger(payload.taxCents, "document_tax", true);
+    const paymentMethod = nullableText(payload.paymentMethod, "document_payment_method", 100);
+    const lineItems = jsonArray(payload.lineItems, "document_line_items");
     return documentQuery(() => sql`
-      select financial_app.update_document_metadata(
-        ${id}::uuid,${type},${date}::date,${issuer},${totalCents}::bigint,${notes}
+      select financial_app.update_document_metadata_v2(
+        ${id}::uuid,${type},${date}::date,${issuer},${totalCents}::bigint,${notes},
+        ${issuerTaxId},${documentTime}::time,${documentNumber},${documentPeriod},
+        ${baseCents}::bigint,${taxCents}::bigint,${paymentMethod},${JSON.stringify(lineItems)}::jsonb
+      ) as result
+    `);
+  }
+
+  if (action === "document.ocr_save") {
+    const id = uuid(payload.id, "document_id");
+    const recognition = jsonObject(payload.recognition, "ocr_recognition");
+    const interpretation = jsonObject(payload.interpretation, "ocr_interpretation");
+    const status = ocrStatus(payload.status);
+    const extractedAt = isoTimestamp(payload.extractedAt, "ocr_extracted_at");
+    return documentQuery(() => sql`
+      select financial_app.save_document_ocr_result(
+        ${id}::uuid,
+        ${JSON.stringify(recognition)}::jsonb,
+        ${JSON.stringify(interpretation)}::jsonb,
+        ${status},
+        ${extractedAt}::timestamptz
       ) as result
     `);
   }
@@ -368,6 +426,7 @@ export async function handleDocumentLogicAction(input: {
     let documentId: string | null = null;
     let transactionId: string | null = null;
     let verified = false;
+    let ocrVerified = false;
 
     try {
       await sql.begin(async (tx: any) => {
@@ -384,17 +443,63 @@ export async function handleDocumentLogicAction(input: {
 
         const registeredRows = await tx`
           select financial_app.register_document(
-            'invoice','PHASE9 PREVIEW ROLLBACK.pdf','application/pdf','supabase',
-            ${`__phase9_preview_${crypto.randomUUID()}__`},null,1234,now()
+            'invoice','PRE034 PREVIEW ROLLBACK.pdf','application/pdf','supabase',
+            ${`__pre034_preview_${crypto.randomUUID()}__`},null,1234,now()
           ) as result
         `;
         documentId = registeredRows[0]?.result?.document?.id ?? null;
         if (!documentId) throw new Error("test_document_register_failed");
 
+        const recognition = {
+          contractVersion: 1,
+          documentId,
+          status: "ready",
+          source: "pdf_text",
+          extractor: "pre034-preview-fixture",
+          extractedAt: new Date().toISOString(),
+          confidence: 0.99,
+          plainText: "FACTURA PRE034 TOTAL 12,10",
+          pages: [],
+          warnings: [],
+          principles: {
+            bankSource: "read_only",
+            financialWrites: false,
+            requiresHumanReview: true,
+            preservesGeometry: true,
+          },
+        };
+        const interpretation = {
+          contractVersion: 1,
+          issuerName: { value: "PRE034 PREVIEW", confidence: "reliable", score: 0.99, evidence: [] },
+          taxId: { value: null, confidence: "not_detected", score: null, evidence: [] },
+          documentDate: { value: actual.bank_date, confidence: "reliable", score: 0.99, evidence: [] },
+          documentTime: { value: null, confidence: "not_detected", score: null, evidence: [] },
+          documentNumber: { value: "PRE034-1", confidence: "reliable", score: 0.99, evidence: [] },
+          period: { value: null, confidence: "not_detected", score: null, evidence: [] },
+          baseCents: { value: 1000, confidence: "reliable", score: 0.99, evidence: [] },
+          taxCents: { value: 210, confidence: "reliable", score: 0.99, evidence: [] },
+          totalCents: { value: 1210, confidence: "reliable", score: 0.99, evidence: [] },
+          paymentMethod: { value: null, confidence: "not_detected", score: null, evidence: [] },
+          lines: [],
+          validation: { basePlusTaxMatchesTotal: true, lineTotalMatchesTotal: null },
+        };
+
+        const ocrRows = await tx`
+          select financial_app.save_document_ocr_result(
+            ${documentId}::uuid,${JSON.stringify(recognition)}::jsonb,${JSON.stringify(interpretation)}::jsonb,
+            'ready',now()
+          ) as result
+        `;
+        ocrVerified =
+          ocrRows[0]?.result?.document?.ocrStatus === 'ready' &&
+          ocrRows[0]?.result?.document?.ocrInterpretation?.documentNumber?.value === 'PRE034-1' &&
+          ocrRows[0]?.result?.document?.issuerName == null;
+
         const updatedRows = await tx`
-          select financial_app.update_document_metadata(
-            ${documentId}::uuid,'invoice',${actual.bank_date}::date,'PHASE9 PREVIEW',
-            ${Math.abs(Number(actual.amount_cents))}::bigint,'rollback-only'
+          select financial_app.update_document_metadata_v2(
+            ${documentId}::uuid,'invoice',${actual.bank_date}::date,'PRE034 PREVIEW',
+            ${Math.abs(Number(actual.amount_cents))}::bigint,'rollback-only',
+            null,null,'PRE034-1',null,1000,210,null,'[]'::jsonb
           ) as result
         `;
         const candidateRows = await tx`
@@ -412,14 +517,17 @@ export async function handleDocumentLogicAction(input: {
         const statusRows = await tx`
           select financial_app.set_document_status(${documentId}::uuid,'confirmed') as result
         `;
-        const listRows = await tx`select financial_app.document_list('confirmed','PHASE9 PREVIEW',20,0) as result`;
+        const listRows = await tx`select financial_app.document_list('confirmed','PRE034 PREVIEW',20,0) as result`;
         const auditRows = await tx`
           select count(*)::int as count from financial_app.audit_changes
           where entity_type='document' and entity_id=${documentId}::uuid
         `;
 
         verified =
+          ocrVerified &&
           updatedRows[0]?.result?.document?.status === 'pending_review' &&
+          updatedRows[0]?.result?.document?.ocrInterpretation?.issuerName?.value === 'PRE034 PREVIEW' &&
+          updatedRows[0]?.result?.document?.issuerName === 'PRE034 PREVIEW' &&
           candidateRows[0]?.result?.principles?.bankSource === 'read_only' &&
           candidateRows[0]?.result?.principles?.suggestionsPersisted === false &&
           candidate.transactionId === transactionId &&
@@ -427,7 +535,8 @@ export async function handleDocumentLogicAction(input: {
           removedRows[0]?.result?.associations?.length === 0 &&
           statusRows[0]?.result?.document?.status === 'confirmed' &&
           listRows[0]?.result?.total >= 1 &&
-          auditRows[0]?.count >= 6;
+          listRows[0]?.result?.principles?.ocrEnabled === true &&
+          auditRows[0]?.count >= 8;
         if (!verified) throw new Error("test_document_engine_failed");
         throw new Error("__ROLLBACK_DOCUMENT_TEST__");
       });
@@ -459,7 +568,17 @@ export async function handleDocumentLogicAction(input: {
     const residue = { ...(residueRows[0] ?? {}), storage_objects: storageObjects };
     const clean = ["documents", "associations", "audit_changes", "storage_objects"].every((key) => residue[key] === 0);
 
-    return json({ verified, clean, storageVerified, residue, ocrUsed: false, suggestionsPersisted: false, bankSource: "read_only" });
+    return json({
+      verified,
+      clean,
+      storageVerified,
+      residue,
+      ocrUsed: ocrVerified,
+      ocrPersistedSeparately: ocrVerified,
+      suggestionsPersisted: false,
+      bankSource: "read_only",
+      financialWrites: false,
+    });
   }
 
   return null;
