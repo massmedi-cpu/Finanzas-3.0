@@ -1,0 +1,1039 @@
+
+> financial-app@10.0.50 test:e2e
+> playwright test tests/e2e/analysis.spec.ts tests/e2e/analysis-contract-navigation.spec.ts tests/e2e/analysis-history-integrity.spec.ts tests/e2e/analysis-presentation-states.spec.ts tests/e2e/analysis-presentation-v6.spec.ts tests/e2e/analysis-redesign-gates.spec.ts tests/e2e/analysis-redesign-cardinality.spec.ts tests/e2e/premium-analysis-visual.spec.ts --project=chromium-desktop --project=chromium-mobile --reporter=line
+
+
+Running 86 tests using 1 worker
+
+[1/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:106:5 › Análisis v3 · el estado de URL conserva mes, rango y cuenta sin mezclar valores repetidos
+[2/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:118:5 › Análisis · el cliente acepta sólo snapshots completos, reconciliados y con principios intactos
+[3/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:157:5 › Análisis v5 · el shell queda fuera de la espera del snapshot financiero
+[4/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:171:5 › Análisis v5 · un fallo de recuperación no deja un esqueleto infinito
+[5/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:179:5 › Análisis v6 · los fallos del gateway conservan status y código hasta los logs de diagnóstico
+[6/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:195:5 › Análisis · la frescura de fuente admite sincronización parcial y conserva la fecha bancaria útil
+[7/86] [chromium-desktop] › tests/e2e/analysis-contract-navigation.spec.ts:231:5 › Análisis v5 · un ingreso residual o todavía inexistente no fabrica una tasa parcial
+[8/86] [chromium-desktop] › tests/e2e/analysis-history-integrity.spec.ts:76:5 › Análisis · la tendencia de tasa exige seis meses consecutivos válidos
+[9/86] [chromium-desktop] › tests/e2e/analysis-history-integrity.spec.ts:101:5 › Análisis · la comparación visual no fabrica barra para un valor de cero
+[10/86] [chromium-desktop] › tests/e2e/analysis-history-integrity.spec.ts:108:5 › Análisis · el loader valida el snapshot completo antes de entregarlo
+[11/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:35:5 › E2 · gastos sin periodo previo explican por qué no hay porcentaje comparable
+[12/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:56:5 › E2 · gastos con base previa conservan el porcentaje real
+[13/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:70:5 › E2 · concentración sin gasto elegible muestra un estado explícito en lugar de un guion
+[14/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:88:5 › E2 · concentración conserva porcentaje y número real de grupos cuando hay gasto
+[15/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:113:5 › E2 · grupos presentes sólo en el periodo anterior no contaminan composición ni rankings actuales
+[16/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:135:5 › E2 · presupuesto automático con referencia cero explica empty y unfunded sin mostrar un porcentaje indefinido
+[17/86] [chromium-desktop] › tests/e2e/analysis-presentation-states.spec.ts:181:5 › E2 · un límite manual explícito de cero no se confunde con ausencia de presupuesto
+[18/86] [chromium-desktop] › tests/e2e/analysis-presentation-v6.spec.ts:105:5 › Análisis v6 · un ingreso residual parcial conserva el importe pero no fabrica un porcentaje
+[19/86] [chromium-desktop] › tests/e2e/analysis-presentation-v6.spec.ts:120:5 › Análisis v6 · un ingreso parcial ya representativo conserva su comparación real
+[20/86] [chromium-desktop] › tests/e2e/analysis-presentation-v6.spec.ts:128:5 › Análisis v7 · la concentración visible usa sólo grupos con gasto actual y no presupone siempre tres
+[21/86] [chromium-desktop] › tests/e2e/analysis-presentation-v6.spec.ts:142:5 › Análisis v7 · la UI explica por qué la comparación de ingresos parciales está pendiente
+[22/86] [chromium-desktop] › tests/e2e/analysis-presentation-v6.spec.ts:150:5 › Análisis · los estados auxiliares evitan guiones ambiguos y usan lenguaje de comercios
+[23/86] [chromium-desktop] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 1 dato conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[24/86] [chromium-desktop] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 2 datos conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[25/86] [chromium-desktop] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 5 datos conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[26/86] [chromium-desktop] › tests/e2e/analysis-redesign-gates.spec.ts:209:7 › Rediseño Análisis · 390px mantiene pocos datos legibles y sin overflow
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[27/86] [chromium-desktop] › tests/e2e/analysis-redesign-gates.spec.ts:209:7 › Rediseño Análisis · 1440px mantiene pocos datos legibles y sin overflow
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[28/86] [chromium-desktop] › tests/e2e/analysis-redesign-gates.spec.ts:278:5 › Rediseño Análisis · 390px mantiene el estado sin movimientos compacto y explícito
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[29/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:194:5 › E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down
+[30/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:211:5 › E2 · el presupuesto conserva y presenta su procedencia sin recalcular
+[31/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:238:5 › E2 · la consulta del gateway expone la procedencia presupuestaria ya calculada
+[32/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:256:5 › E2 · el motor v2 falla cerrado si los drivers no reconcilian con el motor financiero
+[33/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:274:5 › E2 · los rangos completos comparan ventanas equivalentes y rechazan meses futuros
+[34/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[35/86] (retries) [chromium-desktop] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React (retry #1)
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+  1) [chromium-desktop] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:291:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:291:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-desktop-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[36/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[37/86] (retries) [chromium-desktop] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente (retry #1)
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+  2) [chromium-desktop] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:325:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:325:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-desktop-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[38/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:333:5 › E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[39/86] (retries) [chromium-desktop] › tests/e2e/analysis.spec.ts:333:5 › E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px (retry #1)
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+  3) [chromium-desktop] › tests/e2e/analysis.spec.ts:333:5 › E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:338:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:338:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-man-a0d72-430-768-1024-1280-y-1440-px-chromium-desktop-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[40/86] [chromium-desktop] › tests/e2e/analysis.spec.ts:352:5 › E2 · Preview protegido conserva contrato v2 y falla cerrado sin workspace autenticado
+[41/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 360px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[42/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 430px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[43/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 768px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[44/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1024px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[45/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1280px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[46/86] [chromium-desktop] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1440px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[47/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:106:5 › Análisis v3 · el estado de URL conserva mes, rango y cuenta sin mezclar valores repetidos
+[48/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:118:5 › Análisis · el cliente acepta sólo snapshots completos, reconciliados y con principios intactos
+[49/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:157:5 › Análisis v5 · el shell queda fuera de la espera del snapshot financiero
+[50/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:171:5 › Análisis v5 · un fallo de recuperación no deja un esqueleto infinito
+[51/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:179:5 › Análisis v6 · los fallos del gateway conservan status y código hasta los logs de diagnóstico
+[52/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:195:5 › Análisis · la frescura de fuente admite sincronización parcial y conserva la fecha bancaria útil
+[53/86] [chromium-mobile] › tests/e2e/analysis-contract-navigation.spec.ts:231:5 › Análisis v5 · un ingreso residual o todavía inexistente no fabrica una tasa parcial
+[54/86] [chromium-mobile] › tests/e2e/analysis-history-integrity.spec.ts:76:5 › Análisis · la tendencia de tasa exige seis meses consecutivos válidos
+[55/86] [chromium-mobile] › tests/e2e/analysis-history-integrity.spec.ts:101:5 › Análisis · la comparación visual no fabrica barra para un valor de cero
+[56/86] [chromium-mobile] › tests/e2e/analysis-history-integrity.spec.ts:108:5 › Análisis · el loader valida el snapshot completo antes de entregarlo
+[57/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:35:5 › E2 · gastos sin periodo previo explican por qué no hay porcentaje comparable
+[58/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:56:5 › E2 · gastos con base previa conservan el porcentaje real
+[59/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:70:5 › E2 · concentración sin gasto elegible muestra un estado explícito en lugar de un guion
+[60/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:88:5 › E2 · concentración conserva porcentaje y número real de grupos cuando hay gasto
+[61/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:113:5 › E2 · grupos presentes sólo en el periodo anterior no contaminan composición ni rankings actuales
+[62/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:135:5 › E2 · presupuesto automático con referencia cero explica empty y unfunded sin mostrar un porcentaje indefinido
+[63/86] [chromium-mobile] › tests/e2e/analysis-presentation-states.spec.ts:181:5 › E2 · un límite manual explícito de cero no se confunde con ausencia de presupuesto
+[64/86] [chromium-mobile] › tests/e2e/analysis-presentation-v6.spec.ts:105:5 › Análisis v6 · un ingreso residual parcial conserva el importe pero no fabrica un porcentaje
+[65/86] [chromium-mobile] › tests/e2e/analysis-presentation-v6.spec.ts:120:5 › Análisis v6 · un ingreso parcial ya representativo conserva su comparación real
+[66/86] [chromium-mobile] › tests/e2e/analysis-presentation-v6.spec.ts:128:5 › Análisis v7 · la concentración visible usa sólo grupos con gasto actual y no presupone siempre tres
+[67/86] [chromium-mobile] › tests/e2e/analysis-presentation-v6.spec.ts:142:5 › Análisis v7 · la UI explica por qué la comparación de ingresos parciales está pendiente
+[68/86] [chromium-mobile] › tests/e2e/analysis-presentation-v6.spec.ts:150:5 › Análisis · los estados auxiliares evitan guiones ambiguos y usan lenguaje de comercios
+[69/86] [chromium-mobile] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 1 dato conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[70/86] [chromium-mobile] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 2 datos conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[71/86] [chromium-mobile] › tests/e2e/analysis-redesign-cardinality.spec.ts:134:7 › Rediseño Análisis · 5 datos conserva gráficas válidas
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[72/86] [chromium-mobile] › tests/e2e/analysis-redesign-gates.spec.ts:209:7 › Rediseño Análisis · 390px mantiene pocos datos legibles y sin overflow
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[73/86] [chromium-mobile] › tests/e2e/analysis-redesign-gates.spec.ts:209:7 › Rediseño Análisis · 1440px mantiene pocos datos legibles y sin overflow
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[74/86] [chromium-mobile] › tests/e2e/analysis-redesign-gates.spec.ts:278:5 › Rediseño Análisis · 390px mantiene el estado sin movimientos compacto y explícito
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[75/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:194:5 › E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down
+[76/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:211:5 › E2 · el presupuesto conserva y presenta su procedencia sin recalcular
+[77/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:238:5 › E2 · la consulta del gateway expone la procedencia presupuestaria ya calculada
+[78/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:256:5 › E2 · el motor v2 falla cerrado si los drivers no reconcilian con el motor financiero
+[79/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:274:5 › E2 · los rangos completos comparan ventanas equivalentes y rechazan meses futuros
+[80/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[81/86] (retries) [chromium-mobile] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React (retry #1)
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+  4) [chromium-mobile] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:291:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:291:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-Análisis-v2--aba97-own-sin-recalcular-en-React-chromium-mobile-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[82/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[83/86] (retries) [chromium-mobile] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente (retry #1)
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+  5) [chromium-mobile] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente 
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:325:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Retry #1 ───────────────────────────────────────────────────────────────────────────────────────
+
+    Error: expect(received).toBe(expected) // Object.is equality
+
+    Expected: "2026-09"
+    Received: "2026-10"
+
+      177 |     const url = new URL(route.request().url());
+      178 |     expect(url.pathname).toBe("/api/analysis");
+    > 179 |     expect(url.searchParams.get("month")).toBe("2026-09");
+          |                                           ^
+      180 |     expect(url.searchParams.get("range")).toBe("1m");
+      181 |     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+      182 |   });
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:179:43
+
+    Error: locator.fill: Test ended.
+    Call log:
+      - waiting for getByLabel('Mes de referencia')
+
+
+      186 |   await mockAnalysisApi(page, snapshot);
+      187 |   await page.goto("/analysis");
+    > 188 |   await page.getByLabel("Mes de referencia").fill("2026-09");
+          |                                              ^
+      189 |   await page.getByRole("button", { name: "1 mes" }).click();
+      190 |   await page.getByRole("button", { name: "Aplicar" }).click();
+      191 |   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
+        at loadMockAnalysis (/home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:188:46)
+        at /home/runner/work/Finanzas-3.0/Finanzas-3.0/tests/e2e/analysis.spec.ts:325:3
+
+    attachment #1: screenshot (image/png) ──────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile-retry1/test-failed-1.png
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    attachment #2: video (video/webm) ──────────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile-retry1/video.webm
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+    Error Context: test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile-retry1/error-context.md
+
+    attachment #4: trace (application/zip) ─────────────────────────────────────────────────────────
+    test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile-retry1/trace.zip
+    Usage:
+
+        npx playwright show-trace test-results/analysis-E2-·-ingresos-par-a271c-comparación-queda-pendiente-chromium-mobile-retry1/trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+[84/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:333:5 › E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px
+[85/86] [chromium-mobile] › tests/e2e/analysis.spec.ts:352:5 › E2 · Preview protegido conserva contrato v2 y falla cerrado sin workspace autenticado
+[86/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 360px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[87/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 430px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[88/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 768px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[89/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1024px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[90/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1280px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[91/86] [chromium-mobile] › tests/e2e/premium-analysis-visual.spec.ts:155:7 › Premium Análisis v5 · 1440px sin overflow y con jerarquía financiera completa
+[WebServer] analysis-initial-snapshot The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] category-identity-api The 'x-vercel-oidc-token' header is missing from the request.
+[WebServer] No authentication found. Please log in with the Vercel CLI (vercel login).
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+[WebServer] [browser] Service Worker registration blocked by Playwright (<anonymous>:3:87)
+
+  5 failed
+    [chromium-desktop] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React 
+    [chromium-desktop] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente 
+    [chromium-desktop] › tests/e2e/analysis.spec.ts:333:5 › E2 · Análisis mantiene la composición responsive en 360, 430, 768, 1024, 1280 y 1440 px 
+    [chromium-mobile] › tests/e2e/analysis.spec.ts:287:5 › E2 · Análisis v2 representa decisiones, gráficas y drill-down sin recalcular en React 
+    [chromium-mobile] › tests/e2e/analysis.spec.ts:319:5 › E2 · ingresos parciales no representativos explican por qué la comparación queda pendiente 
+  3 skipped
+  78 passed (2.3m)
+
+EXIT_STATUS=1
