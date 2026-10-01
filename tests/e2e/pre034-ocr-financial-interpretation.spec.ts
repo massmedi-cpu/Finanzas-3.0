@@ -50,7 +50,7 @@ test("extracts the Axioma financial fields without mutating raw OCR", async () =
   expect(interpretation.date.value).toBe("2026-10-01");
   expect(interpretation.time.value).toBe("13:45");
   expect(interpretation.documentNumber.value).toBe("F-2026-0042");
-  expect(interpretation.period.value).toContain("01/09/2026");
+  expect(interpretation.period.value).toBe("01/09/2026 - 30/09/2026");
   expect(interpretation.taxBaseCents.value).toBe(10000);
   expect(interpretation.taxesCents.value).toBe(2100);
   expect(interpretation.totalCents.value).toBe(12100);
