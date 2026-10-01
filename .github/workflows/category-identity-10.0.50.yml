@@ -1,0 +1,47 @@
+name: Category Identity 10.0.50
+
+on:
+  pull_request:
+    paths:
+      - "app/**"
+      - "src/domain/category-visuals.ts"
+      - "src/ui/category-glyph.tsx"
+      - "src/design/**"
+      - "scripts/audit-axioma-62-71.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/category-identity-10.0.50.yml"
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - "src/domain/category-visuals.ts"
+      - "src/ui/category-glyph.tsx"
+      - "src/design/**"
+      - "scripts/audit-axioma-62-71.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/category-identity-10.0.50.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    name: Axioma §64 cross-surface identity
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install exact dependencies
+        run: npm ci --ignore-scripts
+      - name: Certify corrected Axioma §§62–71
+        run: node scripts/audit-axioma-62-71.mjs
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Production build
+        run: npm run build
