@@ -1,0 +1,47 @@
+name: PRE-032 Diagnose Axioma Once
+
+on:
+  push:
+    branches:
+      - pre032/category-identity-10.0.50
+    paths:
+      - ".github/pre032-diagnose-axioma-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: pre032/category-identity-10.0.50
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Build uncommitted PRE-032 working tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/fix-pre032-patcher-source.mjs
+          node scripts/apply-pre032-category-identity.mjs
+      - name: Capture corrected Axioma output
+        shell: bash
+        run: |
+          set +e
+          node scripts/audit-axioma-62-71.mjs > .github/pre032-audit-output.txt 2>&1
+          status=$?
+          printf '\nEXIT_STATUS=%s\n' "$status" >> .github/pre032-audit-output.txt
+          exit 0
+      - name: Publish diagnostic only
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git add .github/pre032-audit-output.txt
+          git commit -m "PRE-032: capture Axioma diagnostic output"
+          git push origin HEAD:pre032/category-identity-10.0.50
