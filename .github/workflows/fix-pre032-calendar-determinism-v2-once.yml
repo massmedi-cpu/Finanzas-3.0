@@ -1,0 +1,63 @@
+name: Fix PRE-032 Calendar Determinism V2 Once
+
+on:
+  push:
+    branches:
+      - fix/pre032-calendar-determinism
+    paths:
+      - ".github/fix-pre032-calendar-determinism-v2-trigger"
+
+permissions:
+  contents: write
+
+jobs:
+  fix-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: fix/pre032-calendar-determinism
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Apply deterministic, consistency-safe fixture repairs
+        run: python scripts/fix-pre032-ci-fixtures.py
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Verify Analysis calendar rollover on desktop and mobile
+        run: npm run test:e2e -- tests/e2e/analysis.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=1
+      - name: Verify affected Inicio/UX fixtures on desktop and mobile
+        run: >-
+          npm run test:e2e --
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/inicio-utility.spec.ts
+          tests/e2e/premium-dashboard-visual.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+          --workers=1
+      - name: Commit only verified test repairs and remove one-shot tooling
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "financial-app-ci"
+          git config user.email "financial-app-ci@users.noreply.github.com"
+          git rm \
+            .github/workflows/fix-pre032-calendar-determinism-once.yml \
+            .github/fix-pre032-calendar-determinism-trigger \
+            .github/workflows/fix-pre032-calendar-determinism-v2-once.yml \
+            .github/fix-pre032-calendar-determinism-v2-trigger \
+            scripts/fix-pre032-ci-fixtures.py
+          git add \
+            tests/e2e/analysis.spec.ts \
+            tests/e2e/inicio-smart-brief.spec.ts \
+            tests/e2e/dashboard-number-explanations.spec.ts \
+            tests/e2e/dashboard-orchestration-contract.spec.ts \
+            tests/e2e/inicio-utility.spec.ts \
+            tests/e2e/premium-dashboard-visual.spec.ts
+          git commit -m "fix(test): stabilize September dashboard fixtures across calendar rollover"
+          git push origin HEAD:fix/pre032-calendar-determinism
