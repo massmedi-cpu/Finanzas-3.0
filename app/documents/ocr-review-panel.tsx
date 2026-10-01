@@ -334,7 +334,7 @@ export function OcrReviewPanel({
     const feedbackId = `documents:ocr:${documentId}`;
     actionFeedback.begin(feedbackId, "Analizando documento con OCR…");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { cache: "no-store" }));
+      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { method: "POST", cache: "no-store" }));
       const parsed = parseOcrResult(data);
       const interpretation = interpretDocumentOcrFinancially(parsed);
       setResult(parsed);
@@ -537,7 +537,6 @@ export function OcrReviewPanel({
                 <label>Total (€)<input inputMode="decimal" value={draft.total} onChange={(event) => updateDraft("total", event.target.value)} /></label>
                 <label>Método de pago<input value={draft.paymentMethod} maxLength={120} onChange={(event) => updateDraft("paymentMethod", event.target.value)} /></label>
               </div>
-
               <label>Notas<textarea rows={3} value={draft.notes} maxLength={2000} onChange={(event) => updateDraft("notes", event.target.value)} /></label>
 
               <div className={ocrStyles.pages} data-testid="ocr-confirmation-lines">
