@@ -25,8 +25,8 @@ jobs:
           gh workflow run production-postflight.yml \
             --repo "$GITHUB_REPOSITORY" \
             --ref main \
-            -f production_url=https://finanzas-3-0-refbwlkq8-massmedi-9832s-projects.vercel.app/ \
+            -f production_url=https://financialapp-home.vercel.app/ \
             -f expected_version=10.0.51 \
             -f deployment_commit=9ac33645d39d6a709bc9c0f3f2adef5106d90d71 \
             -f deployment_id=dpl_T8wWD3wLxS5QVSrQqM1aQc9TcB9H
-          echo "production_postflight_dispatch_requested version=10.0.51 deployment=dpl_T8wWD3wLxS5QVSrQqM1aQc9TcB9H"
+          echo "production_postflight_dispatch_requested origin=https://financialapp-home.vercel.app/ version=10.0.51 deployment=dpl_T8wWD3wLxS5QVSrQqM1aQc9TcB9H"
