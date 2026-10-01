@@ -5,6 +5,10 @@ import {
   type OcrSource,
   type OcrWord,
 } from "../domain/document-ocr";
+import {
+  interpretDocumentOcr,
+  type DocumentOcrInterpretation,
+} from "../domain/document-ocr-interpretation";
 
 const MAX_DOCUMENT_BYTES = 15 * 1024 * 1024;
 const MAX_PAGES = 16;
@@ -40,6 +44,11 @@ export type RunDocumentOcrInput = {
   now?: () => Date;
 };
 
+export type EnrichedDocumentOcrResult = Omit<DocumentOcrResult, "contractVersion"> & {
+  contractVersion: 2;
+  interpretation: DocumentOcrInterpretation;
+};
+
 function cleanMime(value: string) {
   return value.trim().toLowerCase();
 }
@@ -50,7 +59,7 @@ function cleanFileName(value: string) {
   return result;
 }
 
-export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<DocumentOcrResult> {
+export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<EnrichedDocumentOcrResult> {
   if (!(input.bytes instanceof Uint8Array) || input.bytes.byteLength < 1 || input.bytes.byteLength > MAX_DOCUMENT_BYTES) {
     throw new Error("invalid_ocr_file_size");
   }
@@ -77,7 +86,7 @@ export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<Docume
     ? ["incomplete_page_coverage"]
     : [];
 
-  return buildDocumentOcrResult({
+  const recognition = buildDocumentOcrResult({
     documentId: input.documentId,
     source: output.source,
     extractor: output.extractor,
@@ -85,4 +94,10 @@ export async function runDocumentOcr(input: RunDocumentOcrInput): Promise<Docume
     pages,
     warnings: [...(output.warnings ?? []), ...coverageWarnings],
   });
+
+  return {
+    ...recognition,
+    contractVersion: 2,
+    interpretation: interpretDocumentOcr(recognition.pages),
+  };
 }
