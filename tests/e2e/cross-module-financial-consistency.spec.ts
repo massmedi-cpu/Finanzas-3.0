@@ -105,3 +105,32 @@ test("10.0.23 alinea Inicio, Análisis, Presupuestos y Previsión con las fuente
   expect(home).toContain("const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;");
   expect(home).toContain("const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;");
 });
+
+test("Axioma §119 mantiene el gate transversal conectado a todos los módulos financieros", () => {
+  const workflow = read(".github/workflows/cross-module-financial-consistency.yml");
+  const requiredPaths = [
+    "app/inicio-overview.tsx",
+    "app/accounts/**",
+    "app/transactions/**",
+    "app/analysis/**",
+    "app/budgets/**",
+    "app/forecast/**",
+    "app/api/financial/**",
+    "app/api/transactions/**",
+    "app/api/budgets/**",
+    "app/api/forecast/**",
+    "src/application/dashboard/**",
+    "supabase/functions/financial-app-db-gateway/**",
+    "supabase/migrations/20260905225500_phase5_financial_logic_core.sql",
+    "supabase/migrations/20260906085704_phase6_budget_engine_core.sql",
+    "supabase/migrations/20260906171000_phase8_forecast_engine_core.sql",
+    "supabase/migrations/20260927100500_cross_module_financial_consistency.sql",
+    "tests/e2e/forecast-period-integrity.spec.ts",
+  ];
+
+  for (const path of requiredPaths) {
+    expect(workflow, `el gate transversal debe vigilar ${path}`).toContain(`'${path}'`);
+  }
+
+  expect(workflow).toContain("tests/e2e/forecast-period-integrity.spec.ts --project=chromium-desktop");
+});
