@@ -24,7 +24,18 @@ const TYPES = new Set(["ticket", "invoice", "other"]);
 const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
 const METHODS = new Set(["manual", "suggested"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+const MAX_FILE_BYTES = 15 * 1024 * 1024;
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
+
+type DownloadDetail = {
+  document: {
+    id: string;
+    originalFileName: string;
+    mimeType: string;
+    storageProvider: "supabase" | "google_drive";
+    sourceDriveFileId: string | null;
+  };
+};
 
 function objectBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_document_body");
@@ -96,6 +107,22 @@ function mimeValue(value: unknown) {
   return value.toLowerCase();
 }
 
+function safeDownloadName(value: string) {
+  const clean = value.replace(/[\r\n"\\/]/g, "_").trim().slice(0, 240);
+  return clean || "documento";
+}
+
+function attachmentHeaders(fileName: string, mimeType: string) {
+  const safeName = safeDownloadName(fileName);
+  const encoded = encodeURIComponent(safeName);
+  return {
+    ...HEADERS,
+    "content-type": mimeType,
+    "content-disposition": `attachment; filename="${safeName}"; filename*=UTF-8''${encoded}`,
+    "x-content-type-options": "nosniff",
+  };
+}
+
 function driveDownloader() {
   if (!googleDriveDownloader) {
     const credentials = getGoogleServiceAccountCredentialsFromEnvironment();
@@ -108,6 +135,42 @@ function driveDownloader() {
     googleDriveDownloader = new GoogleDriveDocumentDownloader(accessTokens);
   }
   return googleDriveDownloader;
+}
+
+async function downloadDocument(id: string) {
+  const detail = await callPersistenceGateway<DownloadDetail>("document.detail", { id });
+  const document = detail.document;
+  if (!document || !MIMES.has(document.mimeType.toLowerCase())) throw new Error("unsupported_document_mime_type");
+
+  if (document.storageProvider === "google_drive") {
+    const fileId = document.sourceDriveFileId?.trim();
+    if (!fileId) throw new Error("invalid_document_drive_file_id");
+    const downloaded = await driveDownloader().download({ fileId, expectedMimeType: document.mimeType.toLowerCase() });
+    if (!downloaded.bytes.byteLength || downloaded.bytes.byteLength > MAX_FILE_BYTES) throw new Error("invalid_document_size");
+    return new Response(downloaded.bytes, {
+      status: 200,
+      headers: attachmentHeaders(downloaded.fileName ?? document.originalFileName, downloaded.mimeType),
+    });
+  }
+
+  const opened = await callPersistenceGateway<{ url?: unknown }>("document.open", { id });
+  if (typeof opened.url !== "string") throw new Error("invalid_document_download_url");
+  let signedUrl: URL;
+  try {
+    signedUrl = new URL(opened.url);
+  } catch {
+    throw new Error("invalid_document_download_url");
+  }
+  if (signedUrl.protocol !== "https:" || !signedUrl.hostname.endsWith(".supabase.co")) {
+    throw new Error("invalid_document_download_url");
+  }
+  const response = await fetch(signedUrl, { cache: "no-store", redirect: "error" }).catch(() => null);
+  if (!response?.ok) throw new Error("document_download_failed");
+  const declared = Number(response.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_FILE_BYTES) throw new Error("invalid_document_size");
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (!bytes.byteLength || bytes.byteLength > MAX_FILE_BYTES) throw new Error("invalid_document_size");
+  return new Response(bytes, { status: 200, headers: attachmentHeaders(document.originalFileName, document.mimeType) });
 }
 
 function apiError(error: unknown) {
@@ -139,6 +202,9 @@ function apiError(error: unknown) {
   if (error instanceof Error && (error.message.startsWith("invalid_document_") || error.message.startsWith("unsupported_document_"))) {
     return Response.json({ error: "invalid_request", code: error.message }, { status: 400, headers: HEADERS });
   }
+  if (error instanceof Error && error.message === "document_download_failed") {
+    return Response.json({ error: "document_download_failed", code: error.message }, { status: 503, headers: HEADERS });
+  }
   console.error("documents-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json({ error: "internal_error", code: null }, { status: 500, headers: HEADERS });
 }
@@ -163,6 +229,7 @@ export async function GET(request: Request) {
         const result = await callPersistenceGateway("document.open", { id });
         return Response.json(result, { headers: HEADERS });
       }
+      if (mode === "download") return downloadDocument(id);
       if (mode) throw new Error("invalid_document_mode");
       const result = await callPersistenceGateway("document.detail", { id });
       return Response.json(result, { headers: HEADERS });
@@ -192,7 +259,7 @@ export async function POST(request: Request) {
         type: typeValue(row.type),
         originalFileName: text(row.originalFileName, "invalid_document_file_name", 500),
         mimeType: mimeValue(row.mimeType),
-        sizeBytes: integer(row.sizeBytes, "invalid_document_size", 1, 15 * 1024 * 1024),
+        sizeBytes: integer(row.sizeBytes, "invalid_document_size", 1, MAX_FILE_BYTES),
       };
       const result = await callPersistenceGateway("document.upload_sign", payload);
       return Response.json(result, { headers: HEADERS });
