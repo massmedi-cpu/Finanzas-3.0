@@ -31,10 +31,12 @@ const principles = {
 
 test("Documentos convierte OCR en un recorrido de revisión humana sin escrituras automáticas", async ({ page }) => {
   const writes: string[] = [];
-  let ocrReads = 0;
+  let ocrRuns = 0;
+  let ocrMethod: string | null = null;
 
   await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
-    ocrReads += 1;
+    ocrRuns += 1;
+    ocrMethod = route.request().method();
     await route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -116,11 +118,13 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(panel.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Original");
   await expect(panel.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Revisión");
   await expect(panel.getByRole("button", { name: /Analizar/ })).toBeEnabled();
-  expect(ocrReads).toBe(0);
+  expect(ocrRuns).toBe(0);
+  expect(ocrMethod).toBeNull();
   expect(writes).toHaveLength(0);
 
   await panel.getByRole("button", { name: /Analizar/ }).click();
-  await expect.poll(() => ocrReads).toBe(1);
+  await expect.poll(() => ocrRuns).toBe(1);
+  expect(ocrMethod).toBe("POST");
   await expect(panel.getByText("Compara la lectura y los campos detectados con el original", { exact: true }).last()).toBeVisible();
   await expect(panel.getByText("1 a revisar", { exact: true }).first()).toBeVisible();
   await expect(panel.getByText(/TOTAL:\s+24,50 EUR/).last()).toBeVisible();
