@@ -33,7 +33,7 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   const writes: string[] = [];
   let ocrReads = 0;
 
-  await page.route("**/api/documents/ocr*", async (route) => {
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
     ocrReads += 1;
     await route.fulfill({
       status: 200,
@@ -86,6 +86,10 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
       await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "unexpected_write" }) });
       return;
     }
+    if (url.pathname === "/api/documents/ocr-review") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ runs: [], reviews: [] }) });
+      return;
+    }
     if (url.searchParams.get("id") === documentId && url.searchParams.get("mode") === "open") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: "https://example.test/factura.pdf" }) });
       return;
@@ -110,7 +114,7 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
 
   const panel = page.getByTestId("ocr-review-panel");
   await expect(panel.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Original");
-  await expect(panel.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Datos");
+  await expect(panel.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Revisión");
   await expect(panel.getByRole("button", { name: /Analizar/ })).toBeEnabled();
   expect(ocrReads).toBe(0);
   expect(writes).toHaveLength(0);
@@ -123,6 +127,6 @@ test("Documentos convierte OCR en un recorrido de revisión humana sin escritura
   await expect(panel.getByText("GEOMETRIA BRUTA", { exact: true })).toHaveCount(0);
   await expect(panel.getByText("Coherencia numérica verificada", { exact: true })).toBeVisible();
   await expect(panel.getByText(/5\/5 filas estructuradas · 5\/5 líneas cuadran · suma de líneas = total/)).toBeVisible();
-  await expect(panel.getByText("Los datos editables siguen arriba y requieren guardado explícito.", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Corrige y guarda solo lo comprobado en el formulario superior. La lectura OCR original permanece separada y sin sobrescribirse.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(0);
 });
