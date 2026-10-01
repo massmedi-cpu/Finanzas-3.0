@@ -68,6 +68,7 @@ async function fulfillJson(route: Route, body: unknown) {
 }
 
 async function mockDashboard(page: Page) {
+  await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 

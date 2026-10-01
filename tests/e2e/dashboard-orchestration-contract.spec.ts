@@ -133,6 +133,7 @@ async function installDashboardMocks(
   secondaryGate?: Promise<void>,
   overrides: Partial<{ financial: typeof financial; monthly: typeof monthly; budgets: typeof budgets }> = {},
 ) {
+  await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
 
