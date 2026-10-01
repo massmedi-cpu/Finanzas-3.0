@@ -1,7 +1,7 @@
 import {
   callPersistenceGateway,
   PersistenceGatewayError,
-} from "../../../../../src/infrastructure/persistence/vercel-supabase-gateway";
+} from "../../../../src/infrastructure/persistence/vercel-supabase-gateway";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
