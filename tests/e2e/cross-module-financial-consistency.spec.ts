@@ -126,11 +126,10 @@ test("Axioma §119 mantiene el gate transversal conectado a todos los módulos f
     "supabase/migrations/20260906171000_phase8_forecast_engine_core.sql",
     "supabase/migrations/20260927100500_cross_module_financial_consistency.sql",
     "tests/e2e/forecast-period-integrity.spec.ts",
+    ".github/workflows/forecast-period-integrity-certification.yml",
   ];
 
   for (const path of requiredPaths) {
     expect(workflow, `el gate transversal debe vigilar ${path}`).toContain(`'${path}'`);
   }
-
-  expect(workflow).toContain("tests/e2e/forecast-period-integrity.spec.ts --project=chromium-desktop");
 });
