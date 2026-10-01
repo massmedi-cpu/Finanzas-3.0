@@ -140,13 +140,10 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
   expect(ocrReads).toHaveLength(0);
-  for (const label of [
-    page.getByText("Pendiente de revisar", { exact: true }).first(),
-    page.getByText("Corrige y guarda sólo lo comprobado en el formulario superior.", { exact: true }),
-  ]) {
-    await expect(label).toBeVisible();
-    expect(await label.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
-  }
+  const pendingReview = page.getByText("Pendiente de revisar", { exact: true }).first();
+  await expect(pendingReview).toBeVisible();
+  expect(await pendingReview.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize))).toBeGreaterThanOrEqual(14);
+  await expect(page.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Ejecuta OCR cuando quieras.");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
   const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
