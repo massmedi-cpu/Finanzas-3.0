@@ -70,8 +70,10 @@ test("manifest, service worker e iconos PWA son públicos y coherentes", async (
 
 test("el acceso no desborda horizontalmente en el viewport certificado", async ({ page }) => {
   requireReleaseIdentity();
-  await page.goto("/login", { waitUntil: "networkidle" });
+  const navigation = await page.goto("/login", { waitUntil: "domcontentloaded" });
+  expect(navigation?.status()).toBe(200);
   await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
 
   const dimensions = await page.evaluate(() => ({
     viewport: window.innerWidth,
