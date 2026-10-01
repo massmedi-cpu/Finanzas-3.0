@@ -3,6 +3,7 @@ import { documentBytesMatchMimeType } from "../../../src/domain/document-content
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 const STORAGE_PATH = /^uploads\/([0-9a-f-]{36})\/([0-9a-f-]{36})\.(pdf|jpg|png|webp)$/i;
 const DOCUMENT_TYPES = new Set(["ticket", "invoice", "other"]);
 const DOCUMENT_STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
@@ -54,6 +55,12 @@ function nullableDate(value: unknown, field: string): string | null {
   return value;
 }
 
+function nullableTime(value: unknown, field: string): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "string" || !TIME.test(value)) throw new Error(`invalid_${field}`);
+  return value;
+}
+
 function safeInteger(value: unknown, field: string, nullable = false): number | null {
   if (nullable && (value === null || value === undefined || value === "")) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`invalid_${field}`);
@@ -70,6 +77,28 @@ function boundedInteger(value: unknown, field: string, min: number, max: number,
 function jsonObject(value: unknown, field: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`invalid_${field}`);
   return value as Record<string, unknown>;
+}
+
+function nullableFiniteNumber(value: unknown, field: string): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > 1_000_000) throw new Error(`invalid_${field}`);
+  return value;
+}
+
+function confirmedLineItems(value: unknown) {
+  if (value === null || value === undefined) return [];
+  if (!Array.isArray(value) || value.length > 200) throw new Error("invalid_document_line_items");
+  return value.map((raw, index) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid_document_line_items");
+    const row = raw as Record<string, unknown>;
+    const description = text(row.description, `document_line_${index}_description`, 500);
+    return {
+      description,
+      quantity: nullableFiniteNumber(row.quantity, `document_line_${index}_quantity`),
+      unitPriceCents: safeInteger(row.unitPriceCents, `document_line_${index}_unit_price`, true),
+      totalCents: safeInteger(row.totalCents, `document_line_${index}_total`, true),
+    };
+  });
 }
 
 function documentType(value: unknown): string {
@@ -125,7 +154,7 @@ function databaseError(error: unknown) {
   if (message.includes("document_not_found") || message.includes("document_transaction_not_found") || message.includes("document_association_not_found") || message.includes("document_ocr_run_not_found")) {
     return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_not_found" }, 404);
   }
-  if (message.includes("document_suggestion_not_current") || message.includes("document_suggestion_metadata_required")) {
+  if (message.includes("document_suggestion_not_current") || message.includes("document_suggestion_metadata_required") || message.includes("document_ocr_evidence_is_immutable")) {
     return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_conflict" }, 409);
   }
   if (message.includes("invalid_document_") || message.includes("unsupported_document_")) {
@@ -179,6 +208,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const ocrRunId = payload.ocrRunId === null || payload.ocrRunId === undefined || payload.ocrRunId === "" ? null : uuid(payload.ocrRunId, "document_ocr_run_id");
     const type = documentType(payload.type);
     const date = nullableDate(payload.documentDate, "document_date");
+    const time = nullableTime(payload.documentTime, "document_time");
     const issuerName = nullableText(payload.issuerName, "document_issuer", 300);
     const issuerTaxId = nullableText(payload.issuerTaxId, "document_issuer_tax_id", 40);
     const documentNumber = nullableText(payload.documentNumber, "document_number", 120);
@@ -187,12 +217,15 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const taxesCents = safeInteger(payload.taxesCents, "document_taxes", true);
     const totalCents = safeInteger(payload.totalCents, "document_total", true);
     const paymentMethod = nullableText(payload.paymentMethod, "document_payment_method", 120);
+    const lineItems = confirmedLineItems(payload.lineItems);
     const notes = payload.notes === undefined || payload.notes === null ? "" : String(payload.notes);
     if (notes.length > 2000) throw new Error("invalid_document_notes");
     return documentQuery(() => sql`
       select financial_app.confirm_document_ocr_review(
-        ${documentId}::uuid,${ocrRunId}::uuid,${type},${date}::date,${issuerName},${issuerTaxId},${documentNumber},${billingPeriod},
-        ${taxBaseCents}::bigint,${taxesCents}::bigint,${totalCents}::bigint,${paymentMethod},${notes}
+        ${documentId}::uuid,${ocrRunId}::uuid,${type},${date}::date,${time}::time,
+        ${issuerName},${issuerTaxId},${documentNumber},${billingPeriod},
+        ${taxBaseCents}::bigint,${taxesCents}::bigint,${totalCents}::bigint,${paymentMethod},
+        ${JSON.stringify(lineItems)}::jsonb,${notes}
       ) as result
     `);
   }
