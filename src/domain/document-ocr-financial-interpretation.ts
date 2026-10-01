@@ -272,7 +272,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   for (const item of lines) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
-    if (!text || /\b(total|subtotal|base|iva|impuesto|cambio|efectivo|tarjeta)\b/.test(normalized)) continue;
+    if (!text || /\b(total|subtotal|base|iva|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized)) continue;
     const moneyMatches = text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g) ?? [];
     if (!moneyMatches.length) continue;
     const lastMoney = moneyMatches.at(-1) ?? null;
