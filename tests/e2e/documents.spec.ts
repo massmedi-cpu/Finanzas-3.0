@@ -137,12 +137,14 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await expect(page.getByText(/OCR revisable/).first()).toBeVisible();
   await expect(page.locator("#document-camera")).toHaveAttribute("accept", "image/*");
   await expect(page.locator("#document-camera")).toHaveAttribute("capture", "environment");
-  await expect(page.locator("#document-file")).toHaveAttribute("accept", ACCEPT);
+  await expect(page.locator("#document-file")).toHaveAttribute("accept", ".pdf,.jpg,.jpeg,.png,.webp");
   expect(ocrReads).toHaveLength(0);
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Descargar original" })).toHaveAttribute("href", `/api/documents/download?id=${documentId}`);
+  const download = page.getByRole("link", { name: "Descargar original" });
+  await expect(download).toHaveAttribute("href", `/api/documents/download?id=${documentId}`);
+  expect(await download.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
   expect(ocrReads).toHaveLength(0);
   const pendingReview = page.getByText("Pendiente de revisar", { exact: true }).first();
   await expect(pendingReview).toBeVisible();
@@ -150,7 +152,7 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   await expect(page.getByRole("list", { name: "Proceso de revisión OCR" })).toContainText("Ejecuta OCR cuando quieras.");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(overflow).toBe(false);
-  const undersized = await page.locator("main button, main input, main select, main a.secondaryButton").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
+  const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
   expect(undersized).toBe(0);
 });
 
