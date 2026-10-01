@@ -269,10 +269,12 @@ export function OcrReviewPanel({
   documentId,
   storageProvider,
   mimeType,
+  onConfirmed,
 }: {
   documentId: string;
   storageProvider: StorageProvider;
   mimeType: string;
+  onConfirmed?: () => Promise<void> | void;
 }) {
   const actionFeedback = useActionFeedback();
   const [result, setResult] = useState<OcrResult | null>(null);
@@ -387,6 +389,7 @@ export function OcrReviewPanel({
       }));
       const revision = typeof saved?.revision === "number" ? saved.revision : null;
       setConfirmedRevision(revision);
+      if (onConfirmed) await onConfirmed();
       actionFeedback.success(feedbackId, revision ? `Revisión OCR confirmada · revisión ${revision}.` : "Revisión OCR confirmada.");
     } catch (caught) {
       const code = caught instanceof Error ? caught.message : "request_failed";
