@@ -1,5 +1,6 @@
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
 import type { OcrWord } from "../../../../src/domain/document-ocr";
+import { interpretDocumentOcrFinancially } from "../../../../src/domain/document-ocr-financial-interpretation";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -434,6 +435,13 @@ export async function GET(request: Request) {
       mimeType,
       originalFileName: detail.document.originalFileName,
       provider,
+    });
+    const interpretation = interpretDocumentOcrFinancially(result);
+
+    await callPersistenceGateway("document.ocr_store", {
+      documentId: id,
+      rawResult: result,
+      interpretation,
     });
 
     return Response.json(result, { headers: HEADERS });
