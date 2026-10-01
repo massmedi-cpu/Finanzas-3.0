@@ -1,0 +1,30 @@
+name: Trigger Production Postflight 10.0.49 Once
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/trigger-production-postflight-10.0.49-once.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch exact Production Postflight
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-postflight.yml \
+            --ref main \
+            -f production_url="https://financialapp-home.vercel.app/" \
+            -f expected_version="10.0.49" \
+            -f deployment_commit="22c6ffe7b66fe03b087c2b10928ca80e3062f8a3" \
+            -f deployment_id="dpl_Gk3XZPZE4ZsodQHUuJY82Cno1GrS"
