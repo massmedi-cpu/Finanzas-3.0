@@ -22,7 +22,9 @@ requireMatch("public/sw.js", /method:\s*"GET"/, "revalidación solo GET");
 requireMatch("public/sw.js", /cache:\s*"no-store"/, "revalidación sin caché privado");
 requireAbsent("public/sw.js", /caches\.(open|match|put)|cache\.put\(/, "el SW no debe persistir respuestas financieras");
 requireAbsent("public/sw.js", /method:\s*"(POST|PUT|PATCH|DELETE)"/, "el SW no debe reintentar mutaciones");
-requireMatch("app/source-trust-cache.ts", /financial-app:source-trust-safe-v1/, "snapshot seguro persistente");
+requireMatch("app/source-trust-cache.ts", /let lastSafeSnapshot: SafeSourceTrustSnapshot \| null = null/, "snapshot seguro efímero");
+requireMatch("app/source-trust-cache.ts", /if \(payload\.available\) lastSafeSnapshot = cacheEntry/, "última confianza segura solo tras payload válido");
+requireAbsent("app/source-trust-cache.ts", /localStorage|sessionStorage|indexedDB/, "la confianza de fuente no debe persistirse en almacenamiento local");
 requireAbsent("app/source-trust-cache.ts", /\b(amount|importe|concept|accountNumber|iban)\b/i, "el snapshot no debe contener datos financieros de detalle");
 requireMatch("app/loading.tsx", /export default/, "estado de carga estructural");
 requireAbsent("app/layout.tsx", /user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i, "zoom no bloqueado");
@@ -35,4 +37,4 @@ if (failures.length) {
 }
 
 console.log("PRE-036 · contrato Axioma §§77–90: OK");
-console.log("Seguridad: solo lectura, sin replay de mutaciones y sin Cache Storage para respuestas bancarias.");
+console.log("Seguridad: solo lectura, sin replay de mutaciones, sin Cache Storage bancario y sin persistencia local de confianza.");
