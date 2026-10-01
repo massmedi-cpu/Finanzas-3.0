@@ -50,9 +50,7 @@ function nullableDate(value: unknown, field: string): string | null {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || !DATE.test(value)) throw new Error(`invalid_${field}`);
   const parsed = new Date(`${value}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
-    throw new Error(`invalid_${field}`);
-  }
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) throw new Error(`invalid_${field}`);
   return value;
 }
 
@@ -67,6 +65,11 @@ function boundedInteger(value: unknown, field: string, min: number, max: number,
   const result = safeInteger(value, field) as number;
   if (result < min || result > max) throw new Error(`invalid_${field}`);
   return result;
+}
+
+function jsonObject(value: unknown, field: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`invalid_${field}`);
+  return value as Record<string, unknown>;
 }
 
 function documentType(value: unknown): string {
@@ -101,9 +104,7 @@ function storageClient() {
 async function currentWorkspaceId(sql: any): Promise<string> {
   const rows = await sql`select financial_app.require_current_workspace_id() as workspace_id`;
   const workspaceId = rows[0]?.workspace_id;
-  if (typeof workspaceId !== "string" || !UUID.test(workspaceId)) {
-    throw new Error("workspace_context_required");
-  }
+  if (typeof workspaceId !== "string" || !UUID.test(workspaceId)) throw new Error("workspace_context_required");
   return workspaceId;
 }
 
@@ -112,22 +113,16 @@ async function removeRejectedUpload(supabase: ReturnType<typeof storageClient>, 
   if (removed.error) console.error("document-storage-rejected-cleanup", removed.error.name ?? "unknown");
 }
 
-async function storageObjectMetadata(
-  supabase: ReturnType<typeof storageClient>,
-  workspaceId: string,
-  path: string,
-) {
+async function storageObjectMetadata(supabase: ReturnType<typeof storageClient>, workspaceId: string, path: string) {
   const fileName = path.split("/").pop() ?? "";
-  const listed = await supabase.storage
-    .from(BUCKET)
-    .list(`uploads/${workspaceId}`, { limit: 2, search: fileName });
+  const listed = await supabase.storage.from(BUCKET).list(`uploads/${workspaceId}`, { limit: 2, search: fileName });
   if (listed.error) throw new Error("document_upload_content_unavailable");
   return listed.data?.find((item: any) => item?.name === fileName) ?? null;
 }
 
 function databaseError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
-  if (message.includes("document_not_found") || message.includes("document_transaction_not_found") || message.includes("document_association_not_found")) {
+  if (message.includes("document_not_found") || message.includes("document_transaction_not_found") || message.includes("document_association_not_found") || message.includes("document_ocr_run_not_found")) {
     return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_not_found" }, 404);
   }
   if (message.includes("document_suggestion_not_current") || message.includes("document_suggestion_metadata_required")) {
@@ -149,12 +144,7 @@ async function documentQuery(run: () => Promise<any>) {
   }
 }
 
-export async function handleDocumentLogicAction(input: {
-  action: unknown;
-  payload: any;
-  sql: any;
-  environment: unknown;
-}): Promise<Response | null> {
+export async function handleDocumentLogicAction(input: { action: unknown; payload: any; sql: any; environment: unknown }): Promise<Response | null> {
   const { action, payload, sql, environment } = input;
 
   if (action === "document.list") {
@@ -162,14 +152,49 @@ export async function handleDocumentLogicAction(input: {
     const query = nullableText(payload.query, "document_query", 200);
     const limit = boundedInteger(payload.limit, "document_limit", 1, 100, 50);
     const offset = boundedInteger(payload.offset, "document_offset", 0, 100000, 0);
-    return documentQuery(() => sql`
-      select financial_app.document_list(${status},${query},${limit}::integer,${offset}::integer) as result
-    `);
+    return documentQuery(() => sql`select financial_app.document_list(${status},${query},${limit}::integer,${offset}::integer) as result`);
   }
 
   if (action === "document.detail") {
     const id = uuid(payload.id, "document_id");
     return documentQuery(() => sql`select financial_app.document_detail(${id}::uuid) as result`);
+  }
+
+  if (action === "document.ocr_store") {
+    const documentId = uuid(payload.documentId, "document_id");
+    const rawResult = jsonObject(payload.rawResult, "document_ocr_result");
+    const interpretation = jsonObject(payload.interpretation, "document_ocr_interpretation");
+    return documentQuery(() => sql`
+      select financial_app.store_document_ocr_run(${documentId}::uuid,${JSON.stringify(rawResult)}::jsonb,${JSON.stringify(interpretation)}::jsonb) as result
+    `);
+  }
+
+  if (action === "document.ocr_history") {
+    const id = uuid(payload.id, "document_id");
+    return documentQuery(() => sql`select financial_app.document_ocr_history(${id}::uuid) as result`);
+  }
+
+  if (action === "document.ocr_confirm") {
+    const documentId = uuid(payload.documentId, "document_id");
+    const ocrRunId = payload.ocrRunId === null || payload.ocrRunId === undefined || payload.ocrRunId === "" ? null : uuid(payload.ocrRunId, "document_ocr_run_id");
+    const type = documentType(payload.type);
+    const date = nullableDate(payload.documentDate, "document_date");
+    const issuerName = nullableText(payload.issuerName, "document_issuer", 300);
+    const issuerTaxId = nullableText(payload.issuerTaxId, "document_issuer_tax_id", 40);
+    const documentNumber = nullableText(payload.documentNumber, "document_number", 120);
+    const billingPeriod = nullableText(payload.billingPeriod, "document_billing_period", 200);
+    const taxBaseCents = safeInteger(payload.taxBaseCents, "document_tax_base", true);
+    const taxesCents = safeInteger(payload.taxesCents, "document_taxes", true);
+    const totalCents = safeInteger(payload.totalCents, "document_total", true);
+    const paymentMethod = nullableText(payload.paymentMethod, "document_payment_method", 120);
+    const notes = payload.notes === undefined || payload.notes === null ? "" : String(payload.notes);
+    if (notes.length > 2000) throw new Error("invalid_document_notes");
+    return documentQuery(() => sql`
+      select financial_app.confirm_document_ocr_review(
+        ${documentId}::uuid,${ocrRunId}::uuid,${type},${date}::date,${issuerName},${issuerTaxId},${documentNumber},${billingPeriod},
+        ${taxBaseCents}::bigint,${taxesCents}::bigint,${totalCents}::bigint,${paymentMethod},${notes}
+      ) as result
+    `);
   }
 
   if (action === "document.register") {
@@ -184,10 +209,7 @@ export async function handleDocumentLogicAction(input: {
     if (sizeBytes !== null && sizeBytes < 0) throw new Error("invalid_document_size");
     const sourceModifiedAt = nullableText(payload.sourceModifiedAt, "document_source_modified_at", 80);
     return documentQuery(() => sql`
-      select financial_app.register_document(
-        ${type},${originalFileName},${mime},${provider},${storageKey},${driveFileId},
-        ${sizeBytes}::bigint,${sourceModifiedAt}::timestamptz
-      ) as result
+      select financial_app.register_document(${type},${originalFileName},${mime},${provider},${storageKey},${driveFileId},${sizeBytes}::bigint,${sourceModifiedAt}::timestamptz) as result
     `);
   }
 
@@ -200,9 +222,7 @@ export async function handleDocumentLogicAction(input: {
     const notes = payload.notes === undefined || payload.notes === null ? "" : String(payload.notes);
     if (notes.length > 2000) throw new Error("invalid_document_notes");
     return documentQuery(() => sql`
-      select financial_app.update_document_metadata(
-        ${id}::uuid,${type},${date}::date,${issuer},${totalCents}::bigint,${notes}
-      ) as result
+      select financial_app.update_document_metadata(${id}::uuid,${type},${date}::date,${issuer},${totalCents}::bigint,${notes}) as result
     `);
   }
 
@@ -216,26 +236,20 @@ export async function handleDocumentLogicAction(input: {
     const id = uuid(payload.id, "document_id");
     const days = boundedInteger(payload.days, "document_candidate_days", 0, 31, 7);
     const limit = boundedInteger(payload.limit, "document_candidate_limit", 1, 20, 8);
-    return documentQuery(() => sql`
-      select financial_app.document_transaction_candidates(${id}::uuid,${days}::integer,${limit}::integer) as result
-    `);
+    return documentQuery(() => sql`select financial_app.document_transaction_candidates(${id}::uuid,${days}::integer,${limit}::integer) as result`);
   }
 
   if (action === "document.associate") {
     const documentId = uuid(payload.documentId, "document_id");
     const transactionId = uuid(payload.transactionId, "document_transaction_id");
     const method = documentMethod(payload.method);
-    return documentQuery(() => sql`
-      select financial_app.confirm_document_transaction(${documentId}::uuid,${transactionId}::uuid,${method}) as result
-    `);
+    return documentQuery(() => sql`select financial_app.confirm_document_transaction(${documentId}::uuid,${transactionId}::uuid,${method}) as result`);
   }
 
   if (action === "document.unassociate") {
     const documentId = uuid(payload.documentId, "document_id");
     const transactionId = uuid(payload.transactionId, "document_transaction_id");
-    return documentQuery(() => sql`
-      select financial_app.remove_document_transaction(${documentId}::uuid,${transactionId}::uuid) as result
-    `);
+    return documentQuery(() => sql`select financial_app.remove_document_transaction(${documentId}::uuid,${transactionId}::uuid) as result`);
   }
 
   if (action === "document.upload_sign") {
@@ -253,16 +267,7 @@ export async function handleDocumentLogicAction(input: {
       console.error("document-storage-sign", error?.name ?? "unknown");
       return json({ error: "document_upload_sign_failed" }, 503);
     }
-    return json({
-      bucket: BUCKET,
-      path,
-      token: data.token,
-      signedUrl: data.signedUrl,
-      originalFileName,
-      mimeType: mime,
-      sizeBytes,
-      maxFileBytes: MAX_FILE_BYTES,
-    });
+    return json({ bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl, originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES });
   }
 
   if (action === "document.upload_finalize") {
@@ -272,17 +277,12 @@ export async function handleDocumentLogicAction(input: {
     const path = text(payload.path, "document_storage_key", 1000);
     const workspaceId = await currentWorkspaceId(sql);
     const pathMatch = path.match(STORAGE_PATH);
-    if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) {
-      throw new Error("invalid_document_storage_key");
-    }
+    if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) throw new Error("invalid_document_storage_key");
 
     const supabase = storageClient();
     let stored: any;
-    try {
-      stored = await storageObjectMetadata(supabase, workspaceId, path);
-    } catch {
-      return json({ error: "document_upload_content_unavailable" }, 503);
-    }
+    try { stored = await storageObjectMetadata(supabase, workspaceId, path); }
+    catch { return json({ error: "document_upload_content_unavailable" }, 503); }
     if (!stored) return json({ error: "document_upload_not_found" }, 404);
 
     const metadata = stored.metadata ?? {};
@@ -311,20 +311,14 @@ export async function handleDocumentLogicAction(input: {
     }
 
     return documentQuery(() => sql`
-      select financial_app.register_document(
-        ${type},${originalFileName},${mime},'supabase',${path},null,
-        ${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz
-      ) as result
+      select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
     `);
   }
 
   if (action === "document.open") {
     const id = uuid(payload.id, "document_id");
     try {
-      const rows = await sql`
-        select storage_provider,storage_key,source_drive_file_id
-        from financial_app.documents where id=${id}::uuid
-      `;
+      const rows = await sql`select storage_provider,storage_key,source_drive_file_id from financial_app.documents where id=${id}::uuid`;
       const row = rows[0];
       if (!row) return json({ error: "document_not_found" }, 404);
       if (row.storage_provider === "google_drive") {
@@ -335,15 +329,11 @@ export async function handleDocumentLogicAction(input: {
       const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(row.storage_key, 300);
       if (error || !data?.signedUrl) return json({ error: "document_open_failed" }, 503);
       return json({ provider: "supabase", url: data.signedUrl, expiresInSeconds: 300 });
-    } catch (error) {
-      return databaseError(error);
-    }
+    } catch (error) { return databaseError(error); }
   }
 
   if (action === "document.drive_batch") {
-    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) {
-      throw new Error("invalid_document_drive_batch");
-    }
+    if (!Array.isArray(payload.files) || payload.files.length < 1 || payload.files.length > 200) throw new Error("invalid_document_drive_batch");
     let imported = 0;
     for (const raw of payload.files) {
       const type = documentType(raw?.type ?? "other");
@@ -352,11 +342,7 @@ export async function handleDocumentLogicAction(input: {
       const fileId = text(raw?.fileId, "document_drive_file_id", 300);
       const size = safeInteger(raw?.sizeBytes, "document_size", true);
       const modifiedTime = nullableText(raw?.modifiedTime, "document_source_modified_at", 80);
-      await sql`
-        select financial_app.register_document(
-          ${type},${name},${mime},'google_drive',${fileId},${fileId},${size}::bigint,${modifiedTime}::timestamptz
-        )
-      `;
+      await sql`select financial_app.register_document(${type},${name},${mime},'google_drive',${fileId},${fileId},${size}::bigint,${modifiedTime}::timestamptz)`;
       imported += 1;
     }
     return json({ imported, total: payload.files.length, ocrUsed: false });
@@ -364,7 +350,6 @@ export async function handleDocumentLogicAction(input: {
 
   if (action === "test.document_engine") {
     if (environment !== "preview") return json({ error: "test_document_engine_preview_only" }, 403);
-
     let documentId: string | null = null;
     let transactionId: string | null = null;
     let verified = false;
@@ -372,62 +357,41 @@ export async function handleDocumentLogicAction(input: {
     try {
       await sql.begin(async (tx: any) => {
         const actualRows = await tx`
-          select f.transaction_id,f.bank_date,f.amount_cents
-          from financial_app.financial_transaction_facts() f
+          select f.transaction_id,f.bank_date,f.amount_cents from financial_app.financial_transaction_facts() f
           where f.analytics_eligible=true and f.effective_kind='expense' and f.amount_cents<0
-          order by f.bank_date desc,f.transaction_id
-          limit 1
+          order by f.bank_date desc,f.transaction_id limit 1
         `;
         const actual = actualRows[0];
         transactionId = actual?.transaction_id ?? null;
         if (!transactionId) throw new Error("test_document_transaction_unavailable");
 
         const registeredRows = await tx`
-          select financial_app.register_document(
-            'invoice','PHASE9 PREVIEW ROLLBACK.pdf','application/pdf','supabase',
-            ${`__phase9_preview_${crypto.randomUUID()}__`},null,1234,now()
-          ) as result
+          select financial_app.register_document('invoice','PHASE9 PREVIEW ROLLBACK.pdf','application/pdf','supabase',${`__phase9_preview_${crypto.randomUUID()}__`},null,1234,now()) as result
         `;
         documentId = registeredRows[0]?.result?.document?.id ?? null;
         if (!documentId) throw new Error("test_document_register_failed");
 
         const updatedRows = await tx`
-          select financial_app.update_document_metadata(
-            ${documentId}::uuid,'invoice',${actual.bank_date}::date,'PHASE9 PREVIEW',
-            ${Math.abs(Number(actual.amount_cents))}::bigint,'rollback-only'
-          ) as result
+          select financial_app.update_document_metadata(${documentId}::uuid,'invoice',${actual.bank_date}::date,'PHASE9 PREVIEW',${Math.abs(Number(actual.amount_cents))}::bigint,'rollback-only') as result
         `;
-        const candidateRows = await tx`
-          select financial_app.document_transaction_candidates(${documentId}::uuid,7,8) as result
-        `;
+        const candidateRows = await tx`select financial_app.document_transaction_candidates(${documentId}::uuid,7,8) as result`;
         const candidate = candidateRows[0]?.result?.candidates?.find((row: any) => row.transactionId === transactionId);
         if (!candidate) throw new Error("test_document_candidate_failed");
-
-        const associatedRows = await tx`
-          select financial_app.confirm_document_transaction(${documentId}::uuid,${transactionId}::uuid,'suggested') as result
-        `;
-        const removedRows = await tx`
-          select financial_app.remove_document_transaction(${documentId}::uuid,${transactionId}::uuid) as result
-        `;
-        const statusRows = await tx`
-          select financial_app.set_document_status(${documentId}::uuid,'confirmed') as result
-        `;
+        const associatedRows = await tx`select financial_app.confirm_document_transaction(${documentId}::uuid,${transactionId}::uuid,'suggested') as result`;
+        const removedRows = await tx`select financial_app.remove_document_transaction(${documentId}::uuid,${transactionId}::uuid) as result`;
+        const statusRows = await tx`select financial_app.set_document_status(${documentId}::uuid,'confirmed') as result`;
         const listRows = await tx`select financial_app.document_list('confirmed','PHASE9 PREVIEW',20,0) as result`;
-        const auditRows = await tx`
-          select count(*)::int as count from financial_app.audit_changes
-          where entity_type='document' and entity_id=${documentId}::uuid
-        `;
+        const auditRows = await tx`select count(*)::int as count from financial_app.audit_changes where entity_type='document' and entity_id=${documentId}::uuid`;
 
-        verified =
-          updatedRows[0]?.result?.document?.status === 'pending_review' &&
-          candidateRows[0]?.result?.principles?.bankSource === 'read_only' &&
-          candidateRows[0]?.result?.principles?.suggestionsPersisted === false &&
-          candidate.transactionId === transactionId &&
-          associatedRows[0]?.result?.associations?.length === 1 &&
-          removedRows[0]?.result?.associations?.length === 0 &&
-          statusRows[0]?.result?.document?.status === 'confirmed' &&
-          listRows[0]?.result?.total >= 1 &&
-          auditRows[0]?.count >= 6;
+        verified = updatedRows[0]?.result?.document?.status === 'pending_review'
+          && candidateRows[0]?.result?.principles?.bankSource === 'read_only'
+          && candidateRows[0]?.result?.principles?.suggestionsPersisted === false
+          && candidate.transactionId === transactionId
+          && associatedRows[0]?.result?.associations?.length === 1
+          && removedRows[0]?.result?.associations?.length === 0
+          && statusRows[0]?.result?.document?.status === 'confirmed'
+          && listRows[0]?.result?.total >= 1
+          && auditRows[0]?.count >= 6;
         if (!verified) throw new Error("test_document_engine_failed");
         throw new Error("__ROLLBACK_DOCUMENT_TEST__");
       });
@@ -458,7 +422,6 @@ export async function handleDocumentLogicAction(input: {
     `;
     const residue = { ...(residueRows[0] ?? {}), storage_objects: storageObjects };
     const clean = ["documents", "associations", "audit_changes", "storage_objects"].every((key) => residue[key] === 0);
-
     return json({ verified, clean, storageVerified, residue, ocrUsed: false, suggestionsPersisted: false, bankSource: "read_only" });
   }
 
