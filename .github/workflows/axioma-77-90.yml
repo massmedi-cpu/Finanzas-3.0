@@ -1,0 +1,58 @@
+name: PRE-036 Axioma 77-90
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/app-shell.tsx"
+      - "app/connectivity-status.module.css"
+      - "app/pwa-runtime.tsx"
+      - "app/source-trust-cache.ts"
+      - "app/source-trust-status.tsx"
+      - "app/app-shell.module.css"
+      - "app/layout.tsx"
+      - "app/loading.tsx"
+      - "public/sw.js"
+      - "scripts/verify-axioma-77-90.mjs"
+      - "tests/e2e/axioma-77-90.spec.ts"
+      - ".github/workflows/axioma-77-90.yml"
+      - ".github/workflows/navigation-performance.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Axioma 77-90 static contract
+        run: node scripts/verify-axioma-77-90.mjs
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Offline and responsive certification
+        run: npx playwright test tests/e2e/axioma-77-90.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=1
