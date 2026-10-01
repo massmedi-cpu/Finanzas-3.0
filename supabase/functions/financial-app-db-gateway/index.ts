@@ -268,7 +268,7 @@ Deno.serve(async (req) => {
     if (action === "account.save") {
       accountPayload(payload.account);
       const a = payload.account;
-      return json({ rows: await sql`insert into financial_app.accounts (id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at) values (${a.id}::uuid,${a.name},${a.institution},${a.type},${a.openingBalanceCents},'EUR',${a.lifecycle},${a.sortOrder},${a.createdAt}::timestamptz,${a.updatedAt}::timestamptz) on conflict (id) do update set name=excluded.name,institution=excluded.institution,type=excluded.type,opening_balance_cents=excluded.opening_balance_cents,currency='EUR',lifecycle=excluded.lifecycle,sort_order=excluded.sortOrder,updated_at=excluded.updatedAt returning id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at` });
+      return json({ rows: await sql`insert into financial_app.accounts (id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at) values (${a.id}::uuid,${a.name},${a.institution},${a.type},${a.openingBalanceCents},'EUR',${a.lifecycle},${a.sortOrder},${a.createdAt}::timestamptz,${a.updatedAt}::timestamptz) on conflict (id) do update set name=excluded.name,institution=excluded.institution,type=excluded.type,opening_balance_cents=excluded.opening_balance_cents,currency='EUR',lifecycle=excluded.lifecycle,sort_order=excluded.sort_order,updated_at=excluded.updated_at returning id,name,institution,type,opening_balance_cents,currency,lifecycle,sort_order,created_at,updated_at` });
     }
     if (action === "account.reorder") {
       orderedIds(payload.orderedIds);
