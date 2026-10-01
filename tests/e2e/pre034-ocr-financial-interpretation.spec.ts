@@ -89,3 +89,52 @@ test("flags inconsistent base plus tax instead of coercing the source", async ()
   expect(interpretation.totalCents.value).toBe(13000);
   expect(raw.plainText).toContain("TOTAL 130,00");
 });
+
+test("does not turn a generic invoice title into a document number", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("title", "FACTURA SIMPLIFICADA", 0.99, 0.05),
+    line("issuer", "SUPERMERCADO DEL SUR SL", 0.97, 0.10),
+    line("date", "01/10/2026 18:07", 0.95, 0.15),
+    line("item", "PAN DE MOLDE 1,85", 0.94, 0.50),
+    line("total", "TOTAL 1,85 €", 0.98, 0.85),
+  ]));
+
+  expect(interpretation.documentNumber.value).toBeNull();
+  expect(interpretation.documentNumber.trust).toBe("not_detected");
+  expect(interpretation.date.value).toBe("2026-10-01");
+  expect(interpretation.time.value).toBe("18:07");
+  expect(interpretation.lines.some((item) => item.description.includes("PAN DE MOLDE") && item.totalCents === 185)).toBeTruthy();
+});
+
+test("recognizes a compact ticket layout with an explicit numbered label", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("issuer", "CAFETERIA CENTRAL", 0.93, 0.05),
+    line("number", "Nº ticket: 00048321", 0.91, 0.12),
+    line("date", "01-10-2026 08:31", 0.96, 0.18),
+    line("item1", "Cafe con leche 1,60", 0.91, 0.45),
+    line("item2", "Tostada aceite 2,40", 0.90, 0.52),
+    line("total", "A PAGAR 4,00", 0.97, 0.80),
+    line("payment", "Efectivo", 0.94, 0.86),
+  ]));
+
+  expect(interpretation.documentNumber.value).toBe("00048321");
+  expect(interpretation.totalCents.value).toBe(400);
+  expect(interpretation.paymentMethod.value).toBe("Efectivo");
+  expect(interpretation.taxBaseCents.value).toBeNull();
+  expect(interpretation.taxesCents.value).toBeNull();
+  expect(interpretation.lines.filter((item) => item.totalCents !== null)).toHaveLength(2);
+});
+
+test("keeps ambiguous weak receipt evidence doubtful instead of promoting it", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("issuer", "KIOSKO PLAZA", 0.61, 0.05),
+    line("number", "Ticket Nº 77-19", 0.58, 0.10),
+    line("item", "Refresco 2,50", 0.57, 0.55),
+    line("total", "TOTAL 2,50", 0.59, 0.85),
+  ]));
+
+  expect(interpretation.documentNumber.value).toBe("77-19");
+  expect(interpretation.documentNumber.trust).toBe("doubtful");
+  expect(interpretation.totalCents.trust).toBe("doubtful");
+  expect(interpretation.issuer.trust).toBe("doubtful");
+});
