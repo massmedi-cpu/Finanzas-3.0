@@ -1,0 +1,30 @@
+name: Dispatch Production Backup 10.0.51
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - ".github/workflows/dispatch-production-backup-10.0.51.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch:
+    if: github.event.pull_request.head.repo.full_name == github.repository && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch official Production Backup v2 on exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-backup-v2.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f source_commit=3463431fa1f86b5c92b6b72439852baf92facd9a \
+            -f expected_app_version=10.0.51
+          echo "production_backup_v2_dispatch_requested source_commit=3463431fa1f86b5c92b6b72439852baf92facd9a version=10.0.51"
