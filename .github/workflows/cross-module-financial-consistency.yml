@@ -7,12 +7,29 @@ on:
       - main
     paths:
       - 'app/inicio-overview.tsx'
-      - 'src/application/dashboard/home-consistency.ts'
+      - 'app/accounts/**'
+      - 'app/transactions/**'
+      - 'app/analysis/**'
+      - 'app/budgets/**'
+      - 'app/forecast/**'
+      - 'app/api/financial/**'
+      - 'app/api/transactions/**'
+      - 'app/api/budgets/**'
+      - 'app/api/forecast/**'
+      - 'src/application/dashboard/**'
+      - 'src/application/financial/**'
+      - 'src/domain/financial/**'
+      - 'supabase/functions/financial-app-db-gateway/**'
+      - 'supabase/migrations/20260905225500_phase5_financial_logic_core.sql'
+      - 'supabase/migrations/20260906085704_phase6_budget_engine_core.sql'
+      - 'supabase/migrations/20260906171000_phase8_forecast_engine_core.sql'
       - 'supabase/migrations/20260927100500_cross_module_financial_consistency.sql'
       - 'tests/e2e/cross-module-financial-consistency.spec.ts'
       - 'tests/e2e/regional-home-consistency.spec.ts'
+      - 'tests/e2e/forecast-period-integrity.spec.ts'
       - '.github/workflows/cross-module-financial-consistency.yml'
       - '.github/workflows/financial-consistency-ci-gates-10.0.40.yml'
+      - '.github/workflows/forecast-period-integrity-certification.yml'
 
 permissions:
   contents: read
