@@ -9,6 +9,7 @@ import GlobalSearch from "./global-search";
 import MobileNavigation from "./mobile-navigation";
 import { isNavigationActive, navigationItems } from "./navigation-items";
 import { PwaInstallButton } from "./pwa-install-button";
+import { usePwaRuntime } from "./pwa-runtime";
 import SourceTrustStatus from "./source-trust-status";
 import styles from "./app-shell.module.css";
 
@@ -25,6 +26,7 @@ const HIGH_VALUE_PREFETCH_ROUTES = [
 export default function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const { online } = usePwaRuntime();
   const navigationRef = useRef<HTMLElement>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -183,6 +185,12 @@ export default function AppShell({ children }: { children: ReactNode }) {
         </div>
         {pendingHref && <span className={styles.navigationProgress} aria-hidden="true" />}
       </div>
+      {!online && (
+        <div className={styles.offlineBanner} role="status" aria-live="polite" data-testid="offline-status">
+          <strong>Sin conexión</strong>
+          <span>Se muestra la última información segura disponible. Al volver la red se revalidará automáticamente.</span>
+        </div>
+      )}
       <SourceTrustStatus pathname={pathname} />
       <div id="main-content" tabIndex={-1} className={styles.content}>{children}</div>
       <MobileNavigation />
