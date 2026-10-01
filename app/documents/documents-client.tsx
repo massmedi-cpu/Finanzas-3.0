@@ -39,6 +39,13 @@ type DocumentItem = {
   sourceDriveFileId: string | null;
 };
 
+type DocumentLineItem = {
+  description: string;
+  quantity: number | null;
+  unitPriceCents: number | null;
+  totalCents: number | null;
+};
+
 type Association = {
   id: string;
   date: string;
@@ -57,15 +64,25 @@ type Association = {
 };
 
 type DocumentDetail = {
-  contractVersion: 1;
-  document: Omit<DocumentItem, "associationCount"> & { storageKey?: string };
+  contractVersion: 1 | 2;
+  document: Omit<DocumentItem, "associationCount"> & {
+    storageKey?: string;
+    documentTime?: string | null;
+    issuerTaxId?: string | null;
+    documentNumber?: string | null;
+    billingPeriod?: string | null;
+    taxBaseCents?: number | null;
+    taxesCents?: number | null;
+    paymentMethod?: string | null;
+    lineItems?: DocumentLineItem[];
+  };
   associations: Association[];
   principles: DocumentPrinciples;
 };
 
 type DocumentPrinciples = {
   bankSource: "read_only";
-  ocrEnabled: false;
+  ocrEnabled: boolean;
   getHasSideEffects: false;
   suggestionsPersisted: false;
   associationsRequireConfirmation: true;
@@ -260,9 +277,9 @@ export function DocumentsClient() {
     return `/api/documents?${params}`;
   }, [query, statusFilter]);
 
-  const loadList = useCallback(async (url = listUrl) => {
+  const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
-    setLoadingList(true);
+    if (!silent) setLoadingList(true);
     setError(null);
     try {
       const data = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
@@ -275,16 +292,18 @@ export function DocumentsClient() {
     } catch (caught) {
       if (sequence === listSequence.current) setError(friendlyError(caught));
     } finally {
-      if (sequence === listSequence.current) setLoadingList(false);
+      if (!silent && sequence === listSequence.current) setLoadingList(false);
     }
   }, [listUrl]);
 
-  const loadDetail = useCallback(async (id: string) => {
+  const loadDetail = useCallback(async (id: string, silent = false) => {
     const sequence = ++detailSequence.current;
-    setLoadingDetail(true);
+    if (!silent) setLoadingDetail(true);
     setError(null);
-    setCandidates(null);
-    setTransactions(null);
+    if (!silent) {
+      setCandidates(null);
+      setTransactions(null);
+    }
     try {
       const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
@@ -299,7 +318,7 @@ export function DocumentsClient() {
     } catch (caught) {
       if (sequence === detailSequence.current) setError(friendlyError(caught));
     } finally {
-      if (sequence === detailSequence.current) setLoadingDetail(false);
+      if (!silent && sequence === detailSequence.current) setLoadingDetail(false);
     }
   }, []);
 
@@ -328,6 +347,11 @@ export function DocumentsClient() {
   const refreshAfterMutation = useCallback(async (id: string) => {
     await Promise.all([loadList(), loadDetail(id)]);
   }, [loadList, loadDetail]);
+
+  const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
+    await Promise.all([loadList(listUrl, true), loadDetail(id, true)]);
+    setNotice("Revisión OCR confirmada y documento sincronizado.");
+  }, [listUrl, loadList, loadDetail]);
 
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
@@ -579,7 +603,14 @@ export function DocumentsClient() {
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
-                <OcrReviewBoundary key={detail.document.id}><OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} /></OcrReviewBoundary>
+                <OcrReviewBoundary key={detail.document.id}>
+                  <OcrReviewPanel
+                    documentId={detail.document.id}
+                    storageProvider={detail.document.storageProvider}
+                    mimeType={detail.document.mimeType}
+                    onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
+                  />
+                </OcrReviewBoundary>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
@@ -602,7 +633,7 @@ export function DocumentsClient() {
                   {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
-                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR temporal y revisable</span></div>
+                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR persistente, revisable y trazable</span></div>
               </>
             )}
           </section>
