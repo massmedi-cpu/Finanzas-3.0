@@ -25,9 +25,9 @@ type CacheEntry = SafeSourceTrustSnapshot;
 const SOURCE_TRUST_CACHE_TTL_MS = 20_000;
 const SOURCE_TRUST_TRANSIENT_TTL_MS = 2_500;
 const SAFE_SNAPSHOT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1_000;
-const SAFE_SNAPSHOT_STORAGE_KEY = "financial-app:source-trust-safe-v1";
 
 let cacheEntry: CacheEntry | null = null;
+let lastSafeSnapshot: SafeSourceTrustSnapshot | null = null;
 let inFlightRequest: Promise<SourceFreshness | null> | null = null;
 let generation = 0;
 
@@ -70,46 +70,15 @@ function cacheTtl(payload: SourceFreshness) {
     : SOURCE_TRUST_CACHE_TTL_MS;
 }
 
-function readPersistedSnapshot(): SafeSourceTrustSnapshot | null {
-  if (typeof window === "undefined") return null;
-  try {
-    const raw = window.localStorage.getItem(SAFE_SNAPSHOT_STORAGE_KEY);
-    if (!raw) return null;
-    const parsed: unknown = JSON.parse(raw);
-    if (!record(parsed) || typeof parsed.checkedAt !== "number" || !Number.isFinite(parsed.checkedAt)) return null;
-    if (!isSourceFreshness(parsed.payload)) return null;
-    return { payload: parsed.payload, checkedAt: parsed.checkedAt };
-  } catch {
-    return null;
-  }
-}
-
-function persistSafeSnapshot(snapshot: SafeSourceTrustSnapshot) {
-  if (typeof window === "undefined" || !snapshot.payload.available) return;
-  try {
-    // Solo se persiste metadato de confianza de la fuente: nunca importes,
-    // conceptos, cuentas ni filas bancarias.
-    window.localStorage.setItem(SAFE_SNAPSHOT_STORAGE_KEY, JSON.stringify(snapshot));
-  } catch {
-    // El almacenamiento puede estar bloqueado por el navegador. La app sigue
-    // funcionando con el caché efímero en memoria.
-  }
-}
-
 export function getCachedSourceTrust(now = Date.now()) {
-  if (!cacheEntry) {
-    const persisted = readPersistedSnapshot();
-    if (persisted && now - persisted.checkedAt < cacheTtl(persisted.payload)) cacheEntry = persisted;
-  }
   if (!cacheEntry) return null;
   if (now - cacheEntry.checkedAt >= cacheTtl(cacheEntry.payload)) return null;
   return cacheEntry.payload;
 }
 
 export function getLastSafeSourceTrust(now = Date.now()): SafeSourceTrustSnapshot | null {
-  const candidate = cacheEntry ?? readPersistedSnapshot();
-  if (!candidate || now - candidate.checkedAt > SAFE_SNAPSHOT_MAX_AGE_MS) return null;
-  return candidate;
+  if (!lastSafeSnapshot || now - lastSafeSnapshot.checkedAt > SAFE_SNAPSHOT_MAX_AGE_MS) return null;
+  return lastSafeSnapshot;
 }
 
 export function shouldRevalidateSourceTrust(now = Date.now()) {
@@ -142,9 +111,8 @@ export function loadSourceTrustFreshness() {
         cacheEntry = null;
         return null;
       }
-      const snapshot = { payload, checkedAt: Date.now() };
-      cacheEntry = snapshot;
-      persistSafeSnapshot(snapshot);
+      cacheEntry = { payload, checkedAt: Date.now() };
+      if (payload.available) lastSafeSnapshot = cacheEntry;
       return payload;
     })
     .catch(() => {
