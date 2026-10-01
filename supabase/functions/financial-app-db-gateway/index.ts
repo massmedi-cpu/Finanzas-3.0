@@ -4,6 +4,7 @@ import { createRemoteJWKSet, decodeJwt, jwtVerify } from "jose";
 import postgres from "postgres";
 import { handleBudgetLogicAction } from "./budget-logic.ts";
 import { handleCategorizationRuleAction } from "./categorization-rules.ts";
+import { handleDocumentDeleteAction } from "./document-delete-logic.ts";
 import { handleDocumentLogicAction } from "./document-logic.ts";
 import { handleFinancialLogicAction } from "./financial-logic.ts";
 import { handleForecastLogicAction } from "./forecast-logic.ts";
@@ -66,6 +67,7 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "document.detail",
   "document.candidates",
   "document.open",
+  "document.delete_preflight",
   "source.google_policy",
   "source.google_connection_status",
   "source.status",
@@ -325,6 +327,9 @@ Deno.serve(async (req) => {
 
     const forecastLogicResponse = await handleForecastLogicAction({ action, payload, sql, environment: identity.environment });
     if (forecastLogicResponse) return forecastLogicResponse;
+
+    const documentDeleteResponse = await handleDocumentDeleteAction({ action, payload, sql, environment: identity.environment });
+    if (documentDeleteResponse) return documentDeleteResponse;
 
     const documentLogicResponse = await handleDocumentLogicAction({ action, payload, sql, environment: identity.environment });
     if (documentLogicResponse) return documentLogicResponse;

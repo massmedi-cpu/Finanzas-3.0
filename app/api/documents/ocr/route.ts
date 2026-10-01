@@ -1,5 +1,6 @@
 import { runDocumentOcr, type DocumentOcrProvider } from "../../../../src/application/document-ocr-service";
 import type { OcrWord } from "../../../../src/domain/document-ocr";
+import { interpretDocumentOcrFinancially } from "../../../../src/domain/document-ocr-financial-interpretation";
 import {
   GoogleDriveDocumentDownloader,
   GoogleDriveDocumentError,
@@ -417,25 +418,44 @@ async function documentBytes(detail: DocumentDetail) {
   return downloadPrivateDocument(opened.url);
 }
 
+async function executeOcr(request: Request) {
+  const { searchParams } = new URL(request.url);
+  const id = searchParams.get("id");
+  if (!id || !UUID.test(id)) throw new OcrApiError("invalid_ocr_document_id", 400);
+  if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
+
+  const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
+  const mimeType = detail.document.mimeType.toLowerCase();
+  const provider = providerForMime(mimeType);
+  const bytes = await documentBytes(detail);
+  const result = await runDocumentOcr({
+    documentId: id,
+    bytes,
+    mimeType,
+    originalFileName: detail.document.originalFileName,
+    provider,
+  });
+  return { id, result };
+}
+
 export async function GET(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get("id");
-    if (!id || !UUID.test(id)) throw new OcrApiError("invalid_ocr_document_id", 400);
-    if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
+    const { result } = await executeOcr(request);
+    return Response.json(result, { headers: HEADERS });
+  } catch (error) {
+    return apiError(error);
+  }
+}
 
-    const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
-    const mimeType = detail.document.mimeType.toLowerCase();
-    const provider = providerForMime(mimeType);
-    const bytes = await documentBytes(detail);
-    const result = await runDocumentOcr({
+export async function POST(request: Request) {
+  try {
+    const { id, result } = await executeOcr(request);
+    const interpretation = interpretDocumentOcrFinancially(result);
+    await callPersistenceGateway("document.ocr_store", {
       documentId: id,
-      bytes,
-      mimeType,
-      originalFileName: detail.document.originalFileName,
-      provider,
+      rawResult: result,
+      interpretation,
     });
-
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

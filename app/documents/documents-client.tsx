@@ -39,6 +39,13 @@ type DocumentItem = {
   sourceDriveFileId: string | null;
 };
 
+type DocumentLineItem = {
+  description: string;
+  quantity: number | null;
+  unitPriceCents: number | null;
+  totalCents: number | null;
+};
+
 type Association = {
   id: string;
   date: string;
@@ -57,15 +64,25 @@ type Association = {
 };
 
 type DocumentDetail = {
-  contractVersion: 1;
-  document: Omit<DocumentItem, "associationCount"> & { storageKey?: string };
+  contractVersion: 1 | 2;
+  document: Omit<DocumentItem, "associationCount"> & {
+    storageKey?: string;
+    documentTime?: string | null;
+    issuerTaxId?: string | null;
+    documentNumber?: string | null;
+    billingPeriod?: string | null;
+    taxBaseCents?: number | null;
+    taxesCents?: number | null;
+    paymentMethod?: string | null;
+    lineItems?: DocumentLineItem[];
+  };
   associations: Association[];
   principles: DocumentPrinciples;
 };
 
 type DocumentPrinciples = {
   bankSource: "read_only";
-  ocrEnabled: false;
+  ocrEnabled: boolean;
   getHasSideEffects: false;
   suggestionsPersisted: false;
   associationsRequireConfirmation: true;
@@ -260,9 +277,9 @@ export function DocumentsClient() {
     return `/api/documents?${params}`;
   }, [query, statusFilter]);
 
-  const loadList = useCallback(async (url = listUrl) => {
+  const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
-    setLoadingList(true);
+    if (!silent) setLoadingList(true);
     setError(null);
     try {
       const data = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
@@ -275,16 +292,18 @@ export function DocumentsClient() {
     } catch (caught) {
       if (sequence === listSequence.current) setError(friendlyError(caught));
     } finally {
-      if (sequence === listSequence.current) setLoadingList(false);
+      if (!silent && sequence === listSequence.current) setLoadingList(false);
     }
   }, [listUrl]);
 
-  const loadDetail = useCallback(async (id: string) => {
+  const loadDetail = useCallback(async (id: string, silent = false) => {
     const sequence = ++detailSequence.current;
-    setLoadingDetail(true);
+    if (!silent) setLoadingDetail(true);
     setError(null);
-    setCandidates(null);
-    setTransactions(null);
+    if (!silent) {
+      setCandidates(null);
+      setTransactions(null);
+    }
     try {
       const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
@@ -299,7 +318,7 @@ export function DocumentsClient() {
     } catch (caught) {
       if (sequence === detailSequence.current) setError(friendlyError(caught));
     } finally {
-      if (sequence === detailSequence.current) setLoadingDetail(false);
+      if (!silent && sequence === detailSequence.current) setLoadingDetail(false);
     }
   }, []);
 
@@ -329,10 +348,15 @@ export function DocumentsClient() {
     await Promise.all([loadList(), loadDetail(id)]);
   }, [loadList, loadDetail]);
 
+  const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
+    await Promise.all([loadList(listUrl, true), loadDetail(id, true)]);
+    setNotice("Revisión OCR confirmada y documento sincronizado.");
+  }, [listUrl, loadList, loadDetail]);
+
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
     if (!file) {
-      setError("Selecciona primero un PDF o una imagen.");
+      setError("Selecciona un PDF, una imagen o haz una foto.");
       return;
     }
     if (file.size <= 0 || file.size > MAX_FILE_BYTES) {
@@ -363,11 +387,13 @@ export function DocumentsClient() {
       const id = finalized?.document?.id;
       if (!id) throw new Error("document_upload_not_found");
       setFile(null);
-      const input = document.getElementById("document-file") as HTMLInputElement | null;
-      if (input) input.value = "";
+      for (const inputId of ["document-file", "document-camera"]) {
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (input) input.value = "";
+      }
       selectDocument(id);
       await loadList();
-      setNotice("Documento guardado de forma privada. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+      setNotice("Original guardado de forma privada e intacta. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
     } catch (caught) {
       setError(friendlyError(caught));
     } finally {
@@ -502,9 +528,9 @@ export function DocumentsClient() {
           <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
           <p className={styles.eyebrow}>FINANCIAL APP · DOCUMENTOS</p>
           <h1>Documentos</h1>
-          <p className={styles.heroText}>Guarda facturas y tickets, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
+          <p className={styles.heroText}>Guarda facturas y tickets desde cámara, galería, archivos o Drive, revisa sus metadatos y relaciónalos con movimientos reales sin alterar nunca la fuente bancaria.</p>
           <div className={styles.pills}>
-            <span>Storage privado</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
+            <span>Original privado</span><span>Cámara y galería</span><span>Asociaciones reversibles</span><span>OCR revisable · sin escrituras automáticas</span>
           </div>
         </div>
         <a className={styles.driveLink} href={DRIVE_FOLDER_URL} target="_blank" rel="noreferrer">Abrir carpeta Documentos en Drive ↗</a>
@@ -519,7 +545,7 @@ export function DocumentsClient() {
           <div>
             <p className={styles.sectionEyebrow}>IMPORTACIÓN SEGURA</p>
             <h2 id="upload-title">Añadir documento</h2>
-            <p>PDF o imagen, hasta 15 MB. Se almacena de forma privada; el OCR nunca se ejecuta automáticamente al subir.</p>
+            <p>Usa cámara, galería/archivos o Drive. PDF o imagen, hasta 15 MB. El original se almacena de forma privada y el OCR nunca se ejecuta automáticamente al subir.</p>
           </div>
           <form className={styles.uploadForm} onSubmit={uploadDocument}>
             <label>Tipo
@@ -527,11 +553,15 @@ export function DocumentsClient() {
                 <option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option>
               </select>
             </label>
-            <label className={styles.fileField}>Archivo
-              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
-              <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "Selecciona PDF, JPG, PNG o WebP"}</span>
+            <label className={styles.fileField}>Cámara
+              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy === "upload"} />
+              <span>Hacer foto con la cámara trasera</span>
             </label>
-            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar documento"}</button>
+            <label className={styles.fileField}>Galería o archivo
+              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
+              <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "PDF, JPG, PNG o WebP"}</span>
+            </label>
+            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
           </form>
         </section>
 
@@ -557,7 +587,7 @@ export function DocumentsClient() {
                   </button>
                 ))}
               </div>
-            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Sube el primero arriba; podrás analizarlo después desde su panel OCR.</p></div>}
+            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p></div>}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
@@ -565,7 +595,11 @@ export function DocumentsClient() {
               <>
                 <header className={styles.detailHeader}>
                   <div><p className={styles.sectionEyebrow}>{TYPE_LABELS[detail.document.type].toUpperCase()}</p><h2>{detail.document.originalFileName}</h2><p>{formatBytes(detail.document.sizeBytes)} · {detail.document.storageProvider === "supabase" ? "Storage privado" : "Google Drive"}</p></div>
-                  <div className={styles.detailActions}><StatusBadge status={detail.document.status} /><button className={styles.secondaryButton} onClick={() => void openDocument()} disabled={busy === "open"}>Abrir documento ↗</button></div>
+                  <div className={styles.detailActions}>
+                    <StatusBadge status={detail.document.status} />
+                    <button className={styles.secondaryButton} onClick={() => void openDocument()} disabled={busy === "open"}>Abrir documento ↗</button>
+                    <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
+                  </div>
                 </header>
 
                 <form className={styles.editor} onSubmit={saveMetadata}>
@@ -579,7 +613,14 @@ export function DocumentsClient() {
                   <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
-                <OcrReviewBoundary key={detail.document.id}><OcrReviewPanel documentId={detail.document.id} storageProvider={detail.document.storageProvider} mimeType={detail.document.mimeType} /></OcrReviewBoundary>
+                <OcrReviewBoundary key={detail.document.id}>
+                  <OcrReviewPanel
+                    documentId={detail.document.id}
+                    storageProvider={detail.document.storageProvider}
+                    mimeType={detail.document.mimeType}
+                    onConfirmed={() => refreshAfterOcrConfirmation(detail.document.id)}
+                  />
+                </OcrReviewBoundary>
 
                 <section className={styles.subsection}>
                   <div className={styles.subsectionHeading}><div><h3>Estado documental</h3><p>Los cambios son reversibles y auditables.</p></div></div>
@@ -602,7 +643,7 @@ export function DocumentsClient() {
                   {transactions ? transactions.rows.length ? <div className={styles.candidateList}>{transactions.rows.map((transaction) => <article key={transaction.id} className={styles.candidate}><div><strong>{transaction.concept.effective}</strong><p>{formatDate(transaction.bankDate)} · {transaction.account.name}</p>{transaction.category.effectiveId ? <CategoryIdentity categoryId={transaction.category.effectiveId} name={transaction.category.effectiveName} /> : null}<small>{formatMoneyCents(transaction.amountCents)} · {transaction.kind.effective}</small></div><button className={styles.secondaryButton} onClick={() => void associate(transaction.id, "manual")} disabled={busy !== null}>Asociar</button></article>)}</div> : <p className={styles.muted}>No hay movimientos que coincidan con la búsqueda.</p> : null}
                 </section>
 
-                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR temporal y revisable</span></div>
+                <div className={styles.principles}><span>✓ Fuente bancaria solo lectura</span><span>✓ Sugerencias no persistidas</span><span>✓ Confirmación explícita</span><span>✓ OCR persistente, revisable y trazable</span></div>
               </>
             )}
           </section>
