@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { APP_VERSION } from "../src/core/build-info";
 import { ActionFeedbackProvider } from "./action-feedback";
+import AppShell from "./app-shell";
 import { CategoryIdentityProvider } from "./category-identity";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import { PwaRuntimeProvider } from "./pwa-runtime";
@@ -48,7 +49,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <VisualPreferencesProvider>
           <ActionFeedbackProvider>
             <PwaRuntimeProvider>
-              <CategoryIdentityProvider>{children}</CategoryIdentityProvider>
+              <CategoryIdentityProvider>
+                <AppShell>{children}</AppShell>
+              </CategoryIdentityProvider>
             </PwaRuntimeProvider>
           </ActionFeedbackProvider>
         </VisualPreferencesProvider>
