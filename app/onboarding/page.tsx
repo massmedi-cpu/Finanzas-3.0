@@ -1,4 +1,3 @@
-import AppShell from "../app-shell";
 import OnboardingClient from "./onboarding-client";
 
 export const metadata = {
@@ -7,9 +6,5 @@ export const metadata = {
 };
 
 export default function OnboardingPage() {
-  return (
-    <AppShell>
-      <OnboardingClient />
-    </AppShell>
-  );
+  return <OnboardingClient />;
 }

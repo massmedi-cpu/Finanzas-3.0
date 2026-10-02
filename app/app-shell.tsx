@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode, type WheelEvent } from "react";
 import { APP_VERSION } from "../src/core/build-info";
 import { ProductIcon } from "../src/design/product-icons";
 import GlobalSearch from "./global-search";
@@ -25,7 +25,23 @@ const HIGH_VALUE_PREFETCH_ROUTES = [
   "/alerts",
 ] as const;
 
+const AppShellBoundaryContext = createContext(false);
+
 export default function AppShell({ children }: { children: ReactNode }) {
+  const alreadyInsideSharedShell = useContext(AppShellBoundaryContext);
+
+  if (alreadyInsideSharedShell) {
+    return <>{children}</>;
+  }
+
+  return (
+    <AppShellBoundaryContext.Provider value={true}>
+      <AppShellFrame>{children}</AppShellFrame>
+    </AppShellBoundaryContext.Provider>
+  );
+}
+
+function AppShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { online } = usePwaRuntime();
@@ -107,7 +123,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   const activePath = pendingHref ?? pathname;
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-app-shell="shared">
       <a
         className={styles.skipLink}
         href="#main-content"

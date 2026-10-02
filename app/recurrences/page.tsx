@@ -1,4 +1,3 @@
-import AppShell from "../app-shell";
 import {
   recurrenceContextFromSearchParams,
   type FlowSearchParams,
@@ -12,9 +11,5 @@ export default async function RecurrencesPage({
 }) {
   const forecastContext = recurrenceContextFromSearchParams(await searchParams);
 
-  return (
-    <AppShell>
-      <RecurrencesClient forecastContext={forecastContext} />
-    </AppShell>
-  );
+  return <RecurrencesClient forecastContext={forecastContext} />;
 }

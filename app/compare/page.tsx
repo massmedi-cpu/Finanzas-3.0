@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import AppShell from "../app-shell";
 import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadComparisonSnapshot,
@@ -82,10 +81,8 @@ export default function ComparisonPage({
   searchParams: Promise<ComparisonSearchParams>;
 }) {
   return (
-    <AppShell>
-      <Suspense fallback={<ComparisonLoadingFrame />}>
-        <ComparisonData searchParams={searchParams} />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<ComparisonLoadingFrame />}>
+      <ComparisonData searchParams={searchParams} />
+    </Suspense>
   );
 }

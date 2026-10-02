@@ -1,24 +1,29 @@
 import { expect, test } from "@playwright/test";
 
+async function dispatchInstallPrompt(page: import("@playwright/test").Page) {
+  await page.evaluate(() => {
+    const target = window as Window & { __pwaPromptCalls?: number };
+    target.__pwaPromptCalls = 0;
+
+    const event = new Event("beforeinstallprompt", { cancelable: true }) as Event & {
+      prompt: () => Promise<void>;
+      userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
+    };
+    event.prompt = async () => {
+      target.__pwaPromptCalls = (target.__pwaPromptCalls ?? 0) + 1;
+    };
+    event.userChoice = Promise.resolve({ outcome: "accepted" });
+    window.dispatchEvent(event);
+  });
+}
+
 test.describe("PWA Android install", () => {
   test("captures the Chromium install prompt on login before authentication", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-pwa-runtime-ready", "true");
 
-    await page.evaluate(() => {
-      const target = window as Window & { __pwaPromptCalls?: number };
-      target.__pwaPromptCalls = 0;
-
-      const event = new Event("beforeinstallprompt", { cancelable: true }) as Event & {
-        prompt: () => Promise<void>;
-        userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
-      };
-      event.prompt = async () => {
-        target.__pwaPromptCalls = (target.__pwaPromptCalls ?? 0) + 1;
-      };
-      event.userChoice = Promise.resolve({ outcome: "accepted" });
-      window.dispatchEvent(event);
-    });
+    await dispatchInstallPrompt(page);
 
     const installButton = page.getByRole("button", { name: "Instalar Financial App en este dispositivo" });
     await expect(installButton).toBeVisible();
@@ -31,6 +36,7 @@ test.describe("PWA Android install", () => {
   test("does not advertise installation on login without a native install prompt", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+    await expect(page.locator("html")).toHaveAttribute("data-pwa-runtime-ready", "true");
     await expect(page.getByRole("button", { name: "Instalar Financial App en este dispositivo" })).toHaveCount(0);
   });
 });

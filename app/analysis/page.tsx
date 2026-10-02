@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import AppShell from "../app-shell";
 import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadAnalysisSnapshot,
@@ -90,10 +89,8 @@ export default function AnalysisPage({
   searchParams: Promise<AnalysisSearchParams>;
 }) {
   return (
-    <AppShell>
-      <Suspense fallback={<AnalysisLoadingFrame />}>
-        <AnalysisData searchParams={searchParams} />
-      </Suspense>
-    </AppShell>
+    <Suspense fallback={<AnalysisLoadingFrame />}>
+      <AnalysisData searchParams={searchParams} />
+    </Suspense>
   );
 }

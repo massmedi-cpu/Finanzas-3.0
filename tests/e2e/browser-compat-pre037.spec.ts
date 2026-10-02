@@ -6,6 +6,24 @@ test("PRE-037 · preferencias funcionan con interacción accesible", async ({ pa
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
+  await page.addInitScript(() => {
+    const nativeFetch = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof URL
+          ? input.href
+          : input.url;
+      if (new URL(url, window.location.href).pathname === "/api/category-identity") {
+        return Promise.resolve(new Response(JSON.stringify({ categories: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }));
+      }
+      return nativeFetch(input, init);
+    }) as typeof window.fetch;
+  });
+
   await page.goto("/configuration/appearance");
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
   await page.reload();
