@@ -19,6 +19,7 @@ const HIGH_VALUE_PREFETCH_ROUTES = [
   "/analysis",
   "/cash-flow",
   "/accounts",
+  "/net-worth",
   "/budgets",
   "/forecast",
   "/alerts",
