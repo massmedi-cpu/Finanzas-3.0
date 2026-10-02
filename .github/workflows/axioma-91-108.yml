@@ -11,9 +11,11 @@ on:
       - "app/visual-preferences.css"
       - "app/configuration/appearance/**"
       - "app/configuration/configuration-area-nav.tsx"
+      - "playwright.compat.config.ts"
       - "scripts/verify-axioma-91-108.mjs"
       - "scripts/verify-bundle-budget.mjs"
       - "tests/e2e/visual-preferences-pre037.spec.ts"
+      - "tests/e2e/browser-compat-pre037.spec.ts"
       - ".github/workflows/axioma-91-108.yml"
       - ".github/workflows/navigation-performance.yml"
       - ".github/workflows/responsive-matrix-10.0.49.yml"
@@ -63,3 +65,36 @@ jobs:
           --project=chromium-desktop
           --project=chromium-mobile
           --workers=2
+
+  compatibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install WebKit
+        run: npx playwright install --with-deps webkit
+
+      - name: Install Microsoft Edge
+        run: npx playwright install --with-deps msedge
+
+      - name: WebKit iOS and Edge desktop smoke
+        run: >-
+          npx playwright test
+          tests/e2e/browser-compat-pre037.spec.ts
+          --config=playwright.compat.config.ts
+          --project=webkit-ios
+          --project=edge-desktop
+          --workers=1
