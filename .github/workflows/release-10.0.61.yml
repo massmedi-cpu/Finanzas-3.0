@@ -1,0 +1,86 @@
+name: Release 10.0.61
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "app/layout.tsx"
+      - "app/app-background.css"
+      - "scripts/verify-background-composition.mjs"
+      - "tests/e2e/background-composition-10.0.61.spec.ts"
+      - "docs/precommercial-audit/07i-background-composition-10.0.61.md"
+      - ".github/workflows/release-10.0.61.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-10.0.61-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Require exact 10.0.61 package identity
+        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');if(p.version!=='10.0.61'||l.version!=='10.0.61'||l.packages[''].version!=='10.0.61')process.exit(1)"
+
+      - name: Background composition guard
+        run: npm run verify:background
+
+      - name: Typography runtime guard
+        run: npm run verify:typography
+
+      - name: Shared AppShell guard
+        run: npm run verify:app-shell
+
+      - name: Product icon system guard
+        run: npm run verify:product-icons
+
+      - name: Surface hierarchy guard
+        run: npm run verify:surface-hierarchy
+
+      - name: Responsive breakpoint governance
+        run: npm run verify:responsive-breakpoints
+
+      - name: Semantic design token guard
+        run: npm run verify:semantic-design
+
+      - name: Premium design guard
+        run: npm run verify:premium-design
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Background browser regression
+        run: npm run test:background
+
+      - name: Responsive regression matrix
+        run: npm run test:responsive-matrix
+
+      - name: Global search regression
+        run: npx playwright test tests/e2e/global-search.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
