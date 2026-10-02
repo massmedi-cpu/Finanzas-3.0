@@ -22,7 +22,7 @@
 .eyebrow {
   margin: .6rem 0 .4rem;
   letter-spacing: .12em;
-  font-size: .76rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   opacity: .64;
 }
