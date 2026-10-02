@@ -197,7 +197,7 @@ export default function SourceOverviewClient() {
     <main className="configuration-shell">
       <header className="configuration-hero">
         <div>
-          <Link className="back-link" href="/configuration">← Configuración</Link>
+          <Link prefetch={false} className="back-link" href="/configuration">← Configuración</Link>
           <p className="eyebrow">FINANCIAL APP · DATOS</p>
           <h1>Fuente bancaria</h1>
           <p className="hero-copy">Conecta y actualiza tus movimientos sin modificar el archivo original de Google.</p>
@@ -273,7 +273,7 @@ export default function SourceOverviewClient() {
               <button className="secondary-button" type="button" disabled={busy} onClick={() => void load()}>
                 Comprobar estado
               </button>
-              <Link className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
+              <Link prefetch={false} className={styles.technicalLink} href="/configuration/source/diagnostics">Detalles técnicos</Link>
             </div>
           </section>
 
