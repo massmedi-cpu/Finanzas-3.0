@@ -109,6 +109,7 @@ test("Fuente bancaria prioriza estado y acciones y relega el diagnóstico técni
   await mockSourceOverview(page);
   await page.goto("/configuration/source");
 
+  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByText("Movimientos bancarios - fuente")).toBeVisible();
   await expect(page.getByText("Fuente conectada")).toBeVisible();
@@ -154,6 +155,7 @@ test("Detalles técnicos conserva la superficie de diagnóstico avanzada", async
   await mockSourceOverview(page);
   await page.goto("/configuration/source/diagnostics");
 
+  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
   await expect(page.getByText("TRAZABILIDAD")).toBeVisible();
   await expect(page.getByText("Pestañas físicas")).toBeVisible();
