@@ -81,7 +81,7 @@ test("Patrimonio derives assets and liabilities from central balances without ar
   await expect(page.getByText(/No incluye todavía vivienda, vehículos/)).toBeVisible();
 });
 
-test("Fuente bancaria defaults to plain-language status and keeps diagnostics collapsed", async ({ page }) => {
+test("Fuente bancaria defaults to plain-language status and separates technical diagnostics", async ({ page }) => {
   await mockSource(page);
   await page.goto("/configuration/source");
 
@@ -90,9 +90,10 @@ test("Fuente bancaria defaults to plain-language status and keeps diagnostics co
   await expect(page.getByText("Solo lectura", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Actualizar datos" })).toBeEnabled();
 
-  const diagnostics = page.locator("details");
-  await expect(diagnostics).not.toHaveAttribute("open", "");
-  await expect(page.getByText("Diagnóstico técnico y opciones avanzadas")).toBeVisible();
+  const diagnosticsLink = page.getByRole("link", { name: "Abrir diagnóstico técnico" });
+  await expect(diagnosticsLink).toHaveAttribute("href", "/configuration/source/diagnostics");
+  await expect(page.getByText("PREVALIDACIÓN READ-ONLY")).toHaveCount(0);
+  await expect(page.getByText("CURSORES")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Actualizar datos" }).click();
   await expect(page.getByRole("status")).toContainText("no hay cambios nuevos");
