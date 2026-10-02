@@ -1,0 +1,44 @@
+name: Sync Version 10.0.57
+
+on:
+  push:
+    branches:
+      - release/rel-057-art-004
+    paths:
+      - .github/workflows/sync-version-10.0.57.yml
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v6
+        with:
+          ref: release/rel-057-art-004
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Align package identity
+        run: npm version 10.0.57 --no-git-tag-version --ignore-scripts
+
+      - name: Commit aligned package files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "Package identity already aligned."
+            exit 0
+          fi
+          git commit -m "Financial App 10.0.57 · alinear identidad de paquete"
+          git push origin HEAD:release/rel-057-art-004
