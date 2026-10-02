@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import SourceClient from "./source-client";
 
 type GoogleStatus = {
   configured: boolean;
@@ -171,13 +170,16 @@ export default function SourceSimpleClient() {
         </div>
       </section>
 
-      <details className="config-panel" style={{ marginTop: "1rem" }}>
-        <summary style={{ cursor: "pointer", fontWeight: 700 }}>Diagnóstico técnico y opciones avanzadas</summary>
-        <p style={{ marginTop: ".75rem" }}>
-          Aquí se muestran prevalidación, cursores, revisiones de fuente, conexión y trazabilidad completa para diagnóstico.
-        </p>
-        <SourceClient />
-      </details>
+      <section className="config-panel" style={{ marginTop: "1rem" }} aria-labelledby="source-diagnostics-heading">
+        <div className="panel-heading">
+          <div>
+            <p className="panel-kicker">AVANZADO</p>
+            <h2 id="source-diagnostics-heading">Diagnóstico técnico</h2>
+          </div>
+        </div>
+        <p>Prevalidación, cursores, revisiones de fuente, conexión y trazabilidad completa quedan fuera de la vista principal.</p>
+        <a className="secondary-button" href="/configuration/source/diagnostics">Abrir diagnóstico técnico</a>
+      </section>
     </main>
   );
 }
