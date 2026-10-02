@@ -19,9 +19,9 @@
 .statusGrid > div {
   min-width: 0;
   padding: .9rem 1rem;
-  border: 1px solid rgba(255, 255, 255, .09);
-  border-radius: .9rem;
-  background: rgba(255, 255, 255, .025);
+  border: 1px solid var(--border-card);
+  border-radius: var(--radius-card-compact);
+  background: var(--surface-card);
 }
 
 .statusGrid dt {
@@ -42,9 +42,9 @@
 .firstImport {
   margin-top: 1rem;
   padding: .95rem 1rem;
-  border-radius: .9rem;
-  border: 1px solid rgba(255, 179, 71, .24);
-  background: rgba(255, 179, 71, .07);
+  border-radius: var(--radius-card-compact);
+  border: 1px solid var(--border-warning-soft);
+  background: var(--surface-warning-soft);
 }
 
 .warning p,
@@ -55,8 +55,8 @@
 }
 
 .firstImport {
-  border-color: rgba(111, 168, 255, .2);
-  background: rgba(111, 168, 255, .06);
+  border-color: var(--border-info-soft);
+  background: var(--surface-info-soft);
 }
 
 .actions {
