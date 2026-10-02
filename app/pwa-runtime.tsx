@@ -97,9 +97,11 @@ export function PwaRuntimeProvider({ children }: { children: ReactNode }) {
     window.addEventListener("online", onOnline);
     displayMode.addEventListener("change", refreshInstalled);
     navigator.serviceWorker?.addEventListener("message", onServiceWorkerMessage);
+    document.documentElement.dataset.pwaRuntimeReady = "true";
 
     return () => {
       active = false;
+      delete document.documentElement.dataset.pwaRuntimeReady;
       window.removeEventListener("load", registerServiceWorker);
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onInstalled);
