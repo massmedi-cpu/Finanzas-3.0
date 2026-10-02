@@ -44,6 +44,12 @@ Cerrar ART-004 sin introducir una segunda biblioteca ni alterar reglas financier
 
 El guard se limita deliberadamente a las superficies compartidas cerradas en esta release. No convierte gráficas u otros SVG de datos en iconos ni fuerza iconografía donde el texto ya es la representación correcta.
 
+## Certificación del candidato
+
+El candidato REL-057 mantiene identidad exacta `10.0.57` en `package.json` y `package-lock.json`. El gate `Release 10.0.57` debe validar, sobre el SHA exacto que vaya a integrarse: identidad de paquete, sistema de iconografía, breakpoints responsive gobernados, tokens semánticos, diseño premium, TypeScript, build de producción, matriz responsive y regresión del buscador global en escritorio y móvil.
+
+No se considera certificada la release por el mero hecho de que el PR sea mergeable: el gate debe ejecutarse sobre el candidato exacto y terminar correctamente antes de integrar.
+
 ## Riesgo y alcance
 
 - Sin cambios en importes, categorías, previsiones, persistencia, OCR, autenticación o fuente bancaria.
