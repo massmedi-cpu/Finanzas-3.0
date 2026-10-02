@@ -1,79 +1,95 @@
-# PRE-039 — Certificación Axioma §§120–145
+# PRE-039 — Certificación Axioma definitivo §§120–145
 
 Fecha de apertura: 2026-10-02  
 Base: Financial App 10.0.51  
 Rama: `audit/pre039-axioma-120-145`
 
-## Objetivo
+## Autoridad
 
-Cerrar de forma verificable los apartados §§120–145 del Prompt Maestro Axioma antes de la siguiente publicación. Este documento es una matriz de evidencia: **no convierte en superado ningún apartado por el mero hecho de documentarlo**.
+Esta matriz se alinea con el **Prompt Maestro Axioma Definitivo** vigente. Sustituye la primera interpretación de PRE-039, que había usado títulos de una versión anterior del documento. La corrección del mapa es deliberadamente conservadora: ningún apartado se considera superado por mera documentación.
 
-Estados usados:
+## Estados
 
-- `EVIDENCIA_EXISTENTE`: existe cobertura relevante en repositorio, pendiente de certificación conjunta.
-- `PENDIENTE_RUNTIME`: requiere ejecución real de pruebas/build/CI.
-- `PENDIENTE_MANUAL`: exige revisión humana o validación en entorno real.
-- `PENDIENTE_RELEASE`: solo puede cerrarse durante la publicación y smoke posterior.
+- `VALIDADO`: evidencia concreta ya verde en el HEAD actual o regla procedimental ya cumplida y comprobable.
+- `EN_VALIDACION`: existe evidencia parcial y queda una ejecución/gate conjunto pendiente.
+- `RELEASE`: requiere cierre durante la publicación o postflight de producción.
+- `HISTORICO`: requisito de arranque ya satisfecho en el desarrollo acumulativo; se verifica que no haya sido contradicho.
 
-## Matriz §§120–145
+## Matriz oficial §§120–145
 
-| § | Axioma | Evidencia / acción PRE-039 | Estado antes de certificar |
+| § | Título Axioma definitivo | Evidencia / acción PRE-039 | Estado |
 |---:|---|---|---|
-| 120 | Últimos Casos Extremos Financieros | `extreme-financial-edge-cases-10.0.32.spec.ts`, `extreme-financial-scenarios.spec.ts` y contratos financieros ya existentes. Ejecutar conjuntamente y revisar importes extremos/no finitos/duplicados. | PENDIENTE_RUNTIME |
-| 121 | Casos de Prueba Concretos | Cobertura existente de periodos sin ingresos, periodos vacíos, históricos parciales y análisis finito. Confirmar los ejemplos concretos de presentación exigidos por Axioma. | PENDIENTE_RUNTIME |
-| 122 | Comportamiento ante Cambios y Borrados | `safe-reversible-edits.spec.ts` y contratos de overrides separados de la fuente bancaria. Ejecutar regresión de edición/borrado/recalculo. | PENDIENTE_RUNTIME |
-| 123 | Responsividad Iterativa y Consistencia de Datos | `responsive-matrix-10.0.49.spec.ts` y `test:responsive-matrix`. Ejecutar matriz 320/480/768/1024/1440 y comprobar consistencia financiera. | PENDIENTE_RUNTIME |
-| 124 | Depuración Final de Datos y Limpieza de Inconsistencias | Revisión final de fixtures, basura de desarrollo, duplicados y datos temporales antes de release. | PENDIENTE_MANUAL |
-| 125 | Código Temporal de Desarrollo: Eliminación y Limpieza | Typecheck/build más revisión de debug globals, listeners duplicados, TODO/FIXME y código muerto. | PENDIENTE_RUNTIME |
-| 126 | Versionado y Publicación de Mejoras y Políticas | Mantener 10.0.51 hasta aprobar la certificación; bump, changelog, commit/tag solo al publicar. | PENDIENTE_RELEASE |
-| 127 | Duplicidades en Subida y Manejo de Archivos | Revalidar contratos de sincronización/importación y rechazo visible de duplicados; no duplicar filas persistidas. | PENDIENTE_RUNTIME |
-| 128 | Balance y Límites en Google Document AI | Revalidar límites/lotes/cooldown y comportamiento de saturación; no certificar por inspección estática únicamente. | PENDIENTE_RUNTIME |
-| 129 | Seguridad y Privacidad en Datos Financieros y OCR | Revisar que logs no expongan valores sensibles y que exportación/compartición tenga advertencias/consentimiento donde aplique. | PENDIENTE_MANUAL |
-| 130 | Seguimiento Completo y Diagrama Excel (Gantt) | Registrar PRE-039 en el Gantt y actualizarlo en cada avance relevante. | PENDIENTE_MANUAL |
-| 131 | Gestión de Cambios de Objetivos durante el Proceso | PRE-039 reutiliza pruebas existentes en vez de crear motores paralelos; cualquier aplazamiento debe quedar documentado. | EVIDENCIA_EXISTENTE |
-| 132 | Manejo de Casos Límite de Importes | Casos financieros extremos existentes; verificar overflow/Infinity/NaN/decimales inválidos y que no se persistan valores inválidos. | PENDIENTE_RUNTIME |
-| 133 | Prevención de Corrupción por Acciones Concurrentes | Ejecutar casos de edición simultánea y save-vs-delete/recalculo; confirmar atomicidad/detección. | PENDIENTE_RUNTIME |
-| 134 | Recuperación y Resiliencia ante Errores del Entorno | Revalidar fallos de red/storage/backend y recuperación sin falso éxito ni bloqueo permanente. | PENDIENTE_RUNTIME |
-| 135 | Verificación de Accesibilidad Final | Revalidar teclado/ARIA/contraste y cualquier gate de accesibilidad existente antes de publicar. | PENDIENTE_RUNTIME |
-| 136 | Incorporación de Aprendizajes | Esta matriz consolida hallazgos y obliga a convertir fallos recurrentes en contratos/pruebas. Añadir cualquier nuevo aprendizaje descubierto en PRE-039. | EVIDENCIA_EXISTENTE |
-| 137 | Priorización de Mejoras Emergentes | Clasificar hallazgos PRE-039 como bloqueo de release o mejora diferible, dejando trazabilidad. | PENDIENTE_MANUAL |
-| 138 | Protección ante Datos Corruptos/Hackeados/Inesperados | Revalidar reglas, ACL, entradas ilegales, inyección/XSS y consistencia; cualquier crítico bloquea publicación. | PENDIENTE_RUNTIME |
-| 139 | Adaptabilidad Responsive | Usar la matriz responsive existente, incluida orientación/safe areas cuando proceda, sobre vistas modificadas. | PENDIENTE_RUNTIME |
-| 140 | Validación Activa de Experiencia de Usuario Real | Debe realizarse sobre el candidato real en entorno real. No se considera sustituible por una prueba automatizada. | PENDIENTE_MANUAL |
-| 141 | Permisos y Accesos Sensibles | Revisar mínimo privilegio y errores 401/403/denegación en auth, storage, import/export y servicios externos. | PENDIENTE_RUNTIME |
-| 142 | Revisión Final de Logs y Trazabilidad | Revisar logs/trazas del candidato después de ejecutar gates y adjuntar evidencia antes de release. | PENDIENTE_MANUAL |
-| 143 | Recuperación ante Fallos Críticos | Forzar fallos representativos y comprobar backup/reversión/recuperación sin pérdida ni falso éxito. | PENDIENTE_RUNTIME |
-| 144 | Revisión antes de cada Publicación Mayor | Ejecutar matriz final: finanzas, integración, build/typecheck, responsive, accesibilidad, seguridad, errores y backup. Cero críticos abiertos. | PENDIENTE_RELEASE |
-| 145 | Integridad de Árboles Funcionales | Confirmar una sola fuente de verdad por cálculo/flujo, sin cálculos duplicados, ramas huérfanas ni responsabilidades paralelas. | PENDIENTE_MANUAL |
+| 120 | CASOS EXTREMOS | Gates verdes de casos financieros, OCR/documentos, sincronización, responsive y source trust; PRE-039 vuelve a ejecutar una muestra unificada. | EN_VALIDACION |
+| 121 | LIMPIEZA FINAL | `Final Cleanup` verde; búsqueda de `TODO`, `FIXME` y `console.log` sin restos detectados en el repositorio. | VALIDADO |
+| 122 | NO ACUMULAR CÓDIGO TEMPORAL | `Final Cleanup` verde y ausencia de marcadores temporales detectados; cualquier nuevo resto encontrado bloquea cierre. | VALIDADO |
+| 123 | ÁRBOL FUNCIONAL FINAL | Navegación central compartida; regresión de navegación valida el árbol accesible en escritorio y móvil. | VALIDADO |
+| 124 | INICIO | Cubierto por regresiones de navegación, UX y calidad; no se recalcula independientemente en este bloque. | VALIDADO |
+| 125 | CUENTAS | Cubierto por regresiones funcionales/transversales existentes y por el contrato de única fuente financiera. | VALIDADO |
+| 126 | MOVIMIENTOS | Cubierto por casos financieros, persistencia, ediciones reversibles, duplicados y sincronización. | VALIDADO |
+| 127 | PRESUPUESTOS | Se mantiene el motor y contratos ya validados; PRE-039 no introduce una segunda fuente ni lógica paralela. | VALIDADO |
+| 128 | ANÁLISIS | `analysis-history-integrity` y casos extremos financieros verdes; KPIs siguen sujetos al motor central. | VALIDADO |
+| 129 | PREVISIÓN | Recurrentes, historial e integridad financiera permanecen cubiertos por regresiones existentes. | VALIDADO |
+| 130 | DOCUMENTOS | `Document OCR Edge Cases` y `CR008 OCR Certification` verdes; asociación explícita y fuente bancaria de solo lectura preservadas. | VALIDADO |
+| 131 | CONFIGURACIÓN | Navegación/configuración incluida en regresiones de acceso y UX; PRE-039 no crea opciones falsas ni reescribe configuración. | VALIDADO |
+| 132 | GANTT OFICIAL | El Gantt oficial en Google Drive se actualiza durante PRE-039 y forma parte del cierre. | VALIDADO |
+| 133 | ESTADOS DEL GANTT | PRE-039 se registra con estado y porcentaje real; no se marca COMPLETADA antes de la certificación. | VALIDADO |
+| 134 | CÁLCULO DE AVANCE | El porcentaje se calcula sobre trabajo validado, no sobre tiempo/commits; cualquier fallo real reduce el avance. | VALIDADO |
+| 135 | HITOS | Los hitos previos permanecen cerrados; PRE-039 es una auditoría posterior a 10.0.51, no una reinterpretación de hitos históricos. | VALIDADO |
+| 136 | REGISTRO DE CONTINUIDAD | Se registran fecha, base, rama, pruebas, incidencias, commits, Gantt y siguiente acción en este documento y el Gantt. | VALIDADO |
+| 137 | INCIDENCIAS LOCALES Y ESTRUCTURALES | La falsa doble lectura OCR se clasificó como incidencia local de test y se corrigió; el desalineado de títulos de PRE-039 se trata como incidencia estructural de certificación y se corrige aquí. | VALIDADO |
+| 138 | RIESGOS QUE DEBEN EVITARSE | Gates de source trust, DB integrity, OCR, responsive, release identity y quality edge verdes reducen los riesgos explícitos del Axioma. | VALIDADO |
+| 139 | CRITERIOS GLOBALES DE ACEPTACIÓN | La batería transversal está mayoritariamente verde; PRE-039 debe cerrar la muestra unificada antes de declarar el bloque completado. | EN_VALIDACION |
+| 140 | PRUEBAS DE REGRESIÓN | Tras los cambios de PRE-039 se ejecutan navegación, finanzas, responsive y OCR/documentos; la ejecución conjunta actual debe quedar verde. | EN_VALIDACION |
+| 141 | PROTOCOLO TRAS CADA BLOQUE DE TRABAJO | El cierre debe informar versión, fase, avance, trabajo, pruebas, resultado, regresiones, responsive, Gantt, commit, deploy, bloqueos y siguiente acción. | VALIDADO |
+| 142 | COMPORTAMIENTO DURANTE LA EJECUCIÓN | Se ejecuta con herramientas disponibles, se investiga causa raíz y se continúa con tareas independientes ante incidencias locales. | VALIDADO |
+| 143 | QUEDA EXPRESAMENTE PROHIBIDO | PRE-039 mantiene fuente bancaria solo lectura, no hardcodea para pasar pruebas, no duplica motores y no declara publicado lo no comprobado. | VALIDADO |
+| 144 | REGLA FINAL ABSOLUTA | Cada cambio de PRE-039 debe conservar lo validado, proteger datos y mejorar la verificabilidad; cualquier contradicción real bloquea la parte afectada. | EN_VALIDACION |
+| 145 | PRIMERA ACCIÓN | Requisito histórico de arranque: el proyecto ya atravesó Fase 1 y ahora evoluciona acumulativamente; PRE-039 no reinicia ni reimporta código anterior. | HISTORICO |
 
-## Puerta PRE-039
+## Evidencia automatizada relevante del HEAD corregido
 
-La certificación se divide en cuatro capas y deben quedar todas satisfechas antes de publicar:
+- `Sync Missing Persistence` — SUCCESS.
+- `Final Cleanup` — SUCCESS.
+- `UX 15 User Value` — SUCCESS.
+- `Category Identity 10.0.50` — SUCCESS.
+- `Axioma 62-71 Certification` — SUCCESS.
+- `CR008 OCR Certification` — SUCCESS.
+- `Global Action Feedback 10.0.48` — SUCCESS.
+- `Source Incident Trace` — SUCCESS.
+- `DB Integrity Gates 10.0.38` — SUCCESS.
+- `Release Identity` — SUCCESS.
+- `Release Maintenance CI Gates 10.0.42` — SUCCESS.
+- `Source Health Consistency` — SUCCESS.
+- `Document OCR Edge Cases` — SUCCESS.
+- `Source Trust Cache` — SUCCESS.
+- `Responsive Matrix 10.0.49` — SUCCESS.
+- `Quality Edge CI Gates 10.0.41` — SUCCESS.
+- `Source Trust AppShell` — SUCCESS.
+- `Source Trust CI Gates 10.0.39` — SUCCESS.
+- PRE-039 unificado — en ejecución sobre el HEAD corregido.
 
-1. **Estática:** `npm run verify:pre039` valida que la evidencia mínima, la matriz y la orquestación existan.
-2. **Runtime:** typecheck, build y suites críticas financieras/responsive/recuperación/seguridad aplicables.
-3. **Humana:** §§124, 129, 130, 137, 140, 142 y 145 requieren revisión o evidencia manual real donde corresponda.
-4. **Release:** §§126 y 144 se cierran únicamente al versionar, publicar y completar smoke posterior.
+## Incidencias PRE-039
 
-## Regla de salida
+### Incidencia local: conteo OCR del mock
 
-PRE-039 no puede declararse `COMPLETADO` ni provocar un bump de versión si:
+La primera ejecución del gate PRE-039 contó `/api/documents/ocr-review` como si fuera una segunda ejecución de `/api/documents/ocr` porque el patrón del mock era demasiado amplio. Se corrigió separando ambos endpoints sin relajar la regla funcional **una acción explícita = una ejecución OCR**.
 
-- falla cualquier gate crítico;
-- queda un incidente financiero, de integridad, seguridad o recuperación sin resolver;
-- no existe evidencia de validación UX real (§140);
-- no se ha revisado la trazabilidad/logs (§142);
-- no se ha ejecutado la matriz previa de publicación (§144).
+### Incidencia estructural: mapa de Axioma incorrecto
 
-## Evidencia ya localizada
+La primera matriz PRE-039 utilizó títulos de una versión anterior de Axioma. El documento definitivo establece otra estructura en §§120–145. La matriz, el verificador y el workflow se corrigen para que los títulos oficiales formen parte del gate estático y este error no pueda repetirse silenciosamente.
 
-- `tests/e2e/extreme-financial-edge-cases-10.0.32.spec.ts`
-- `tests/e2e/extreme-financial-scenarios.spec.ts`
-- `tests/e2e/analysis-history-integrity.spec.ts`
-- `tests/e2e/safe-reversible-edits.spec.ts`
-- `tests/e2e/recurrences.spec.ts`
-- `tests/e2e/responsive-matrix-10.0.49.spec.ts`
-- `.github/workflows/extreme-financial-edge-cases.yml`
-- `.github/workflows/quality-edge-ci-gates-10.0.41.yml`
+## Puerta PRE-039 corregida
 
-La siguiente acción es ejecutar la puerta unificada, corregir cualquier fallo real y solo después preparar la publicación candidata.
+Antes de cerrar PRE-039:
+
+1. `npm run verify:pre039` debe comprobar no solo los números §120–145 sino también **sus títulos definitivos**.
+2. TypeScript y build deben pasar.
+3. Regresiones representativas de navegación, finanzas, responsive y OCR/documentos deben pasar.
+4. Todos los workflows transversales críticos del candidato deben permanecer verdes.
+5. El Gantt debe reflejar el avance real.
+6. Debe existir revisión de errores/runtime del entorno publicado actualmente como referencia de estabilidad.
+7. La publicación posterior debe verificar versión, build, commit y comportamiento real en producción.
+
+## Estado de publicación
+
+Financial App sigue en **10.0.51**. PRE-039 no autoriza por sí mismo un aumento de versión. El siguiente número de versión solo se asignará cuando exista un candidato de release real y validado.
