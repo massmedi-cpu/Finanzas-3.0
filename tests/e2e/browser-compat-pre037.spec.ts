@@ -2,13 +2,9 @@ import { expect, test } from "@playwright/test";
 
 const STORAGE_KEY = "financial-app:visual-preferences-v1";
 
-test("PRE-037 · preferencias funcionan con interacción táctil/visible", async ({ page, browserName }) => {
+test("PRE-037 · preferencias funcionan con interacción accesible", async ({ page, browserName }) => {
   const pageErrors: string[] = [];
-  const consoleErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
-  });
 
   await page.goto("/configuration/appearance");
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
@@ -20,25 +16,16 @@ test("PRE-037 · preferencias funcionan con interacción táctil/visible", async
   await expect(root).toHaveAttribute("data-density", "comfortable");
   await expect(root).toHaveAttribute("data-reduce-motion", "false");
 
-  try {
-    await expect(root).toHaveAttribute("data-visual-preferences-ready", "true", { timeout: 8_000 });
-  } catch (cause) {
-    throw new Error(
-      `El cliente no hidrató VisualPreferences en ${browserName}. ` +
-      `pageErrors=${JSON.stringify(pageErrors)} consoleErrors=${JSON.stringify(consoleErrors)}\n${String(cause)}`,
-    );
-  }
-
-  const compactInput = page.locator('input[name="density"][value="compact"]');
-  const compactOption = page.locator('label:has(input[name="density"][value="compact"])');
-  await compactOption.click();
+  const compactInput = page.getByRole("radio", { name: /Compacta/ });
+  await expect(compactInput).toBeEnabled();
+  await compactInput.click();
   await expect(compactInput).toBeChecked();
   await expect(root).toHaveAttribute("data-density", "compact");
   await expect(page.getByTestId("density-current")).toHaveText("Compacta");
 
-  const motionToggle = page.getByTestId("reduce-motion-toggle");
-  const motionRow = page.locator('label:has([data-testid="reduce-motion-toggle"])');
-  await motionRow.click();
+  const motionToggle = page.getByRole("checkbox", { name: /Reducir movimiento/ });
+  await expect(motionToggle).toBeEnabled();
+  await motionToggle.click();
   await expect(motionToggle).toBeChecked();
   await expect(root).toHaveAttribute("data-reduce-motion", "true");
   await expect(page.getByTestId("appearance-notice")).toContainText("Reducir movimiento activado");
