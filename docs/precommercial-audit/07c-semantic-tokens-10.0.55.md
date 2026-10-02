@@ -1,6 +1,6 @@
 # Financial App 10.0.55 · ART-001 · contrato de tokens semánticos
 
-Estado: **candidato en construcción**.
+Estado: **candidato versionado en recertificación final**.
 
 ## Objetivo
 
@@ -17,7 +17,7 @@ Cerrar ART-001 sobre el código real actual sin introducir deriva visual: los va
 
 ## Guard permanente
 
-`scripts/verify-semantic-design-tokens.mjs` exige el conjunto mínimo de roles ART-001, verifica la carga global del contrato, comprueba usos semánticos representativos y rechaza colores literales `#hex`, `rgb()` o `rgba()` en las cuatro superficies protegidas.
+`scripts/verify-semantic-design-tokens.mjs` exige 45 roles ART-001, verifica la carga global del contrato, comprueba usos semánticos representativos y rechaza colores literales `#hex`, `rgb()` o `rgba()` en las cuatro superficies protegidas.
 
 La intención es que futuras mejoras modifiquen un rol semántico compartido en vez de volver a dispersar decisiones visuales por los componentes.
 
@@ -30,9 +30,9 @@ La intención es que futuras mejoras modifiquen un rol semántico compartido en 
 - Google Drive/Sheets y la fuente bancaria oficial permanecen estrictamente en solo lectura.
 - No hay cambio de apariencia intencionado: los nuevos tokens conservan los valores que tenían los estilos migrados.
 
-## Certificación requerida
+## Certificación
 
-Antes de considerar 10.0.55 candidata a integración deben pasar, sobre el mismo HEAD:
+El candidato funcional previo al versionado superó sobre el mismo HEAD:
 
 1. guard ART-001 semántico;
 2. guard premium heredado de 10.0.54;
@@ -41,7 +41,7 @@ Antes de considerar 10.0.55 candidata a integración deben pasar, sobre el mismo
 5. matriz responsive;
 6. regresión Fuente simple + Diagnóstico en escritorio y móvil.
 
-El versionado a `10.0.55` se realizará únicamente después de que el candidato funcional haya superado estas puertas y se recertificará de nuevo con `package.json` y `package-lock.json` alineados.
+`package.json`, `package-lock.json` y la entrada raíz del lock están ahora alineados en `10.0.55`. El workflow efímero utilizado exclusivamente para ese alineado ya ha sido retirado. Este cambio documental fuerza una nueva ejecución de `Release 10.0.55` para certificar el HEAD final limpio y versionado antes de integrar.
 
 ## Fuera de REL-055
 
