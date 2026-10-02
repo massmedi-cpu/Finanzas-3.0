@@ -31,9 +31,9 @@ CSS no permite consumir de forma interoperable una custom property en la condici
 
 ## Inventario real de excepciones de contenido
 
-El primer guard de 10.0.56 se ejecutó deliberadamente en modo estricto para inventariar todos los valores reales existentes. La auditoría de septiembre citaba 420px, 600px, 680px, 900px, 1050px y 1180px como ejemplos históricos; esos valores **no se permiten por defecto si ya no existen en el CSS actual**.
+El guard de 10.0.56 se ejecutó deliberadamente en modo estricto para inventariar todos los valores reales existentes. La primera pasada detectó la dispersión moderna y una segunda pasada sobre el candidato exacto confirmó además cinco valores históricos todavía activos: 600px, 680px, 900px, 1050px y 1180px. El valor histórico 420px citado por la auditoría ya no aparece en el CSS actual y, por tanto, **no queda permitido**.
 
-La línea base real de 10.0.56 conserva exclusivamente estas excepciones existentes, con su necesidad de contenido:
+La línea base real de 10.0.56 conserva exclusivamente estas 36 excepciones existentes, con su necesidad de contenido:
 
 - 352px — gráfica de barras en móvil mínimo.
 - 384px — análisis compacto.
@@ -46,10 +46,12 @@ La línea base real de 10.0.56 conserva exclusivamente estas excepciones existen
 - 544px — Apariencia y navegación contextual.
 - 560px — Fuente simple compacta.
 - 576px — explicación de cifras compacta.
+- 600px — recuperación de borradores y movimientos compactos.
 - 608px — Comparador compacto.
 - 620px — Presupuestos, comercios y Fuente.
 - 640px — feedback global y Recurrentes.
 - 672px — Revisión y gráfica de contribución.
+- 680px — Inicio, reglas y gráfica financiera compactos.
 - 700px — Documentos y OCR.
 - 720px — Cuentas, Cash Flow y Previsiones.
 - 760px — Alertas.
@@ -59,11 +61,14 @@ La línea base real de 10.0.56 conserva exclusivamente estas excepciones existen
 - 850px — revisión OCR.
 - 860px — Fuente simple.
 - 880px — Comercios.
+- 900px — reglas, revisión OCR y movimientos.
 - 928px — Análisis, navegación contextual y Recurrentes.
 - 980px — Presupuestos, Fuente y OCR.
+- 1050px — Cuentas y Documentos.
 - 1080px — Previsiones.
 - 1120px — Cash Flow e Inicio.
 - 1152px — Análisis y tema premium.
+- 1180px — Movimientos en escritorio estrecho.
 - 1216px — Recurrentes.
 - 1248px — controles de categoría y Comparador.
 
