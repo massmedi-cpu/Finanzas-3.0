@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const baseURL = process.env.VERCEL_PREVIEW_URL ?? "http://127.0.0.1:3000";
+const baseURL = "https://localhost:3000";
 
 export default defineConfig({
   testDir: "./tests/e2e",
@@ -11,6 +11,7 @@ export default defineConfig({
   reporter: "list",
   use: {
     baseURL,
+    ignoreHTTPSErrors: true,
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     serviceWorkers: "block",
@@ -30,8 +31,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "npm run dev -- --hostname 127.0.0.1",
+    command: "npm run dev -- --hostname localhost --experimental-https",
     url: baseURL,
+    ignoreHTTPSErrors: true,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
