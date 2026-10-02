@@ -22,6 +22,7 @@
   --surface-interactive-muted: rgba(255, 255, 255, 0.018);
   --surface-primary-subtle: rgba(77, 141, 255, 0.08);
   --surface-primary-soft: rgba(31, 107, 255, 0.16);
+  --surface-primary-progress: rgba(77, 141, 255, 0.12);
 
   /* ART-001 · semantic borders */
   --border-card: rgba(255, 255, 255, 0.09);
@@ -30,6 +31,7 @@
   --border-navigation: rgba(137, 173, 255, 0.2);
   --border-navigation-soft: rgba(137, 173, 255, 0.16);
   --border-navigation-subtle: rgba(137, 173, 255, 0.1);
+  --border-navigation-scrollbar: rgba(137, 173, 255, 0.38);
   --border-primary-soft: rgba(77, 141, 255, 0.38);
   --border-primary-strong: rgba(77, 141, 255, 0.48);
   --border-primary-mobile: rgba(77, 141, 255, 0.32);
