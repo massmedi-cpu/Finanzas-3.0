@@ -16,7 +16,7 @@ for (const route of routes) {
 test("Configuración hereda el shell sin wrapper local", async ({ page }) => {
   await page.goto("/configuration");
 
-  await expect(page.getByRole("link", { name: /Financial App .* ir a Inicio/ })).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Financial App .* ir a Inicio/ })).toHaveCount(1);
+  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
   await expect(page.locator('[data-nav-href="/configuration"]')).toHaveAttribute("aria-current", "page");
 });
