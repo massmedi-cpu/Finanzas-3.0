@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { ProductIcon } from "../src/design/product-icons";
 import { usePwaRuntime } from "./pwa-runtime";
 import styles from "./pwa-install-button.module.css";
 
@@ -73,7 +74,9 @@ export function PwaInstallButton({ className, promptOnly = false }: Props) {
                 <span>APLICACIÓN INSTALABLE</span>
                 <h2 id="pwa-install-title">{help.title}</h2>
               </div>
-              <button type="button" className={styles.close} aria-label="Cerrar instrucciones de instalación" onClick={() => setShowHelp(false)}>×</button>
+              <button type="button" className={styles.close} aria-label="Cerrar instrucciones de instalación" onClick={() => setShowHelp(false)}>
+                <ProductIcon name="close" size="1.15em" />
+              </button>
             </div>
             <ol className={styles.steps}>
               {help.steps.map((step, index) => <li key={step}><span>{index + 1}</span><p>{step}</p></li>)}

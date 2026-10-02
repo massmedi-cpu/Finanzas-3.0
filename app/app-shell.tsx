@@ -141,7 +141,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               disabled={!canScrollLeft}
               aria-label="Ver secciones anteriores del menú"
             >
-              ‹
+              <ProductIcon name="chevron-left" size="1.1em" />
             </button>
             <nav
               ref={navigationRef}
@@ -181,7 +181,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
               disabled={!canScrollRight}
               aria-label="Ver más secciones del menú"
             >
-              ›
+              <ProductIcon name="chevron-right" size="1.1em" />
             </button>
           </div>
         </div>

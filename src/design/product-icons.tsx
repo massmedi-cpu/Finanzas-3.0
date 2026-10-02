@@ -25,7 +25,15 @@ export type ProductIconName =
   | "spark"
   | "category"
   | "refresh"
-  | "warning";
+  | "warning"
+  | "search"
+  | "close"
+  | "more"
+  | "chevron-left"
+  | "chevron-right";
+
+export const PRODUCT_ICON_STROKE_WIDTH = 1.8;
+export const PRODUCT_ICON_DEFAULT_SIZE = "1em";
 
 const iconPaths: Record<ProductIconName, ReactNode> = {
   home: <><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10.5V20h13v-9.5"/><path d="M9 20v-6h6v6"/></>,
@@ -53,26 +61,52 @@ const iconPaths: Record<ProductIconName, ReactNode> = {
   category: <><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></>,
   refresh: <><path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18.5 9A7 7 0 0 0 6.4 6.4L4 9"/><path d="M5.5 15A7 7 0 0 0 17.6 17.6L20 15"/></>,
   warning: <><path d="M12 3 2.5 20h19Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></>,
+  search: <><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></>,
+  close: <><path d="M6 6l12 12"/><path d="M18 6 6 18"/></>,
+  more: <><circle cx="5" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.25" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.25" fill="currentColor" stroke="none"/></>,
+  "chevron-left": <path d="m15 6-6 6 6 6"/>,
+  "chevron-right": <path d="m9 6 6 6-6 6"/>,
 };
 
-type ProductIconProps = Omit<SVGProps<SVGSVGElement>, "name"> & {
+type ProductIconBaseProps = Omit<SVGProps<SVGSVGElement>, "name" | "aria-hidden" | "aria-label" | "role"> & {
   name: ProductIconName;
   size?: number | string;
 };
 
-export function ProductIcon({ name, size = "1em", ...props }: ProductIconProps) {
+type DecorativeProductIconProps = ProductIconBaseProps & {
+  decorative?: true;
+  label?: never;
+};
+
+type AccessibleProductIconProps = ProductIconBaseProps & {
+  decorative: false;
+  label: string;
+};
+
+export type ProductIconProps = DecorativeProductIconProps | AccessibleProductIconProps;
+
+export function ProductIcon({
+  name,
+  size = PRODUCT_ICON_DEFAULT_SIZE,
+  decorative = true,
+  label,
+  ...props
+}: ProductIconProps) {
   return (
     <svg
-      aria-hidden="true"
+      aria-hidden={decorative ? "true" : undefined}
+      aria-label={decorative ? undefined : label}
+      role={decorative ? undefined : "img"}
       focusable="false"
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.8"
+      strokeWidth={PRODUCT_ICON_STROKE_WIDTH}
       strokeLinecap="round"
       strokeLinejoin="round"
       width={size}
       height={size}
+      data-product-icon={name}
       {...props}
     >
       {iconPaths[name]}

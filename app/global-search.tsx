@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
 import { formatMoneyCents } from "../src/core/money";
+import { ProductIcon } from "../src/design/product-icons";
 import { MAX_GLOBAL_SEARCH_QUERY_LENGTH, moveGlobalSearchIndex, prepareGlobalSearchQuery } from "./global-search-policy";
 import { shouldOpenGlobalSearchShortcut } from "./global-search-shortcut";
 import styles from "./global-search.module.css";
@@ -219,7 +220,7 @@ export default function GlobalSearch() {
   return (
     <>
       <button type="button" className={styles.trigger} onClick={openSearch} aria-label="Buscar en Financial App">
-        <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+        <ProductIcon name="search" />
         <span>Buscar</span><kbd>/</kbd>
       </button>
       {open && (
@@ -230,7 +231,7 @@ export default function GlobalSearch() {
               <button type="button" onClick={() => close()} aria-label="Cerrar buscador">Esc</button>
             </div>
             <label className={styles.searchBox} htmlFor={inputId}>
-              <svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6"/><path d="m16 16 4 4"/></svg>
+              <ProductIcon name="search" />
               <input
                 ref={inputRef}
                 id={inputId}

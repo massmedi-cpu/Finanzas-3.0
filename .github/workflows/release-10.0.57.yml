@@ -1,22 +1,26 @@
-name: Release 10.0.56
+name: Release 10.0.57
 
 on:
   pull_request:
     branches:
       - main
     paths:
-      - "app/**/*.css"
-      - "src/**/*.css"
-      - "src/design/responsive-breakpoints.ts"
-      - "scripts/verify-responsive-breakpoints.mjs"
-      - "docs/precommercial-audit/07d-responsive-breakpoints-10.0.56.md"
-      - "tests/e2e/responsive-matrix-10.0.49.spec.ts"
+      - "app/app-shell.tsx"
+      - "app/mobile-navigation.tsx"
+      - "app/global-search.tsx"
+      - "app/pwa-install-button.tsx"
+      - "src/design/product-icons.tsx"
+      - "scripts/verify-product-icon-system.mjs"
+      - "docs/precommercial-audit/07e-iconography-system-10.0.57.md"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/release-10.0.57.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-10.0.56-${{ github.ref }}
+  group: release-10.0.57-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -38,10 +42,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Require exact 10.0.56 package identity
+      - name: Require exact 10.0.57 package identity
         shell: bash
         run: |
-          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!=='10.0.56'||l.version!=='10.0.56'||l.packages[''].version!=='10.0.56'){console.error({package:p.version,lock:l.version,root:l.packages[''].version});process.exit(1)}"
+          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!=='10.0.57'||l.version!=='10.0.57'||l.packages[''].version!=='10.0.57'){console.error({package:p.version,lock:l.version,root:l.packages[''].version});process.exit(1)}"
+
+      - name: Product icon system guard
+        run: npm run verify:product-icons
 
       - name: Responsive breakpoint governance
         run: npm run verify:responsive-breakpoints
@@ -61,8 +68,8 @@ jobs:
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
 
-      - name: Responsive regression matrix
+      - name: Responsive and mobile navigation regression
         run: npm run test:responsive-matrix
 
-      - name: Source overview and diagnostics regression
-        run: npx playwright test tests/e2e/source-incident-trace.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+      - name: Global search regression
+        run: npx playwright test tests/e2e/global-search.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
