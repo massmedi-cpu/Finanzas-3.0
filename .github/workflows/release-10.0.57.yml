@@ -12,9 +12,6 @@ on:
       - "src/design/product-icons.tsx"
       - "scripts/verify-product-icon-system.mjs"
       - "docs/precommercial-audit/07e-iconography-system-10.0.57.md"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/release-10.0.57.yml"
 
 permissions:
   contents: read
