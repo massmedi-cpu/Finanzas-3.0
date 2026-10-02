@@ -12,6 +12,8 @@ const illumination = read("src/infrastructure/ocr/receipt-illumination.ts");
 const paddedConsensus = read("src/infrastructure/ocr/receipt-padded-cell-consensus-provider.ts");
 const reviewWorkbench = read("app/documents/ocr-page-review-workbench.tsx");
 const ocrConfig = read("playwright.ocr.config.ts");
+const heterogeneousMatrix = read("tests/e2e/document-ocr-heterogeneous-matrix.spec.ts");
+const ocrContract = read("tests/e2e/document-ocr-contract.spec.ts");
 
 test("PRE-038 §110 converges camera, gallery/files and Drive into the document OCR surface", () => {
   expect(documentsClient).toContain('id="document-camera"');
@@ -53,6 +55,7 @@ test("PRE-038 §115 keeps a visual reconstruction workbench backed by OCR geomet
 });
 
 test("PRE-038 §116 keeps the dedicated OCR regression pack and native illumination case", () => {
+  expect(ocrConfig).toContain("document-ocr-heterogeneous-matrix");
   expect(ocrConfig).toContain("document-ocr-illumination-native");
   expect(ocrConfig).toContain("document-ocr-row-geometry");
   expect(ocrConfig).toContain("document-ocr-columns-native");
@@ -74,9 +77,23 @@ test("PRE-038 §111 perspective/keystone evaluation is explicit before G5", () =
   expect(illumination).toContain("perspectiveConfidence");
 });
 
-test.fixme("PRE-038 §116 must name every heterogeneous physical/source fixture before G5", () => {
-  const regressionSurface = `${ocrConfig}\n${read("tests/e2e/document-ocr-illumination-native.spec.ts")}`;
-  for (const expected of ["thermal", "wrinkled", "perspective", "screenshot", "camera", "gallery", "drive"]) {
-    expect(regressionSurface.toLowerCase()).toContain(expected);
+test("PRE-038 §116 covers heterogeneous physical fixtures plus Camera, Gallery, Drive, PDF and invoice semantics", () => {
+  const physical = heterogeneousMatrix.toLowerCase();
+  for (const expected of [
+    "good-regular-photo",
+    "thermal-small-receipt",
+    "wrinkled-long-receipt",
+    "bad-light-tilted-camera",
+    "perspective-photo",
+    "screenshot-gallery",
+  ]) {
+    expect(physical).toContain(expected);
   }
+
+  expect(documentsClient).toContain('id="document-camera"');
+  expect(documentsClient).toContain('id="document-file"');
+  expect(ocrRoute).toContain("GoogleDriveDocumentDownloader");
+  expect(ocrRoute).toContain('storageProvider: "supabase" | "google_drive"');
+  expect(ocrRoute).toContain("new PdfTextOcrProvider()");
+  expect(ocrContract).toContain('word("FACTURA"');
 });
