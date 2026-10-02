@@ -23,7 +23,22 @@ async function mockDocumentApi(
 ) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
 
-  await page.route("**/api/documents/ocr*", async (route) => {
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        runs: [{
+          id: "98000000-0000-4000-8000-000000000098",
+          extractor: "pdfjs-6.2.108-native-text",
+          extractedAt: "2026-09-07T07:00:00.000Z",
+        }],
+        reviews: [],
+      }),
+    });
+  });
+
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
     const url = new URL(route.request().url());
     ocrReads.push(url.searchParams.get("id") ?? "");
     await route.fulfill({
