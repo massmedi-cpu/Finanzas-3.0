@@ -1,0 +1,71 @@
+name: Release 10.0.56
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/**/*.css"
+      - "src/**/*.css"
+      - "src/design/responsive-breakpoints.ts"
+      - "scripts/verify-responsive-breakpoints.mjs"
+      - "docs/precommercial-audit/07d-responsive-breakpoints-10.0.56.md"
+      - "tests/e2e/responsive-matrix-10.0.49.spec.ts"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/release-10.0.56.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-10.0.56-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Require exact 10.0.56 package identity
+        shell: bash
+        run: |
+          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!=='10.0.56'||l.version!=='10.0.56'||l.packages[''].version!=='10.0.56'){console.error({package:p.version,lock:l.version,root:l.packages[''].version});process.exit(1)}"
+
+      - name: Responsive breakpoint governance
+        run: npm run verify:responsive-breakpoints
+
+      - name: Semantic design token guard
+        run: npm run verify:semantic-design
+
+      - name: Premium design guard
+        run: npm run verify:premium-design
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Responsive regression matrix
+        run: npm run test:responsive-matrix
+
+      - name: Source overview and diagnostics regression
+        run: npx playwright test tests/e2e/source-incident-trace.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
