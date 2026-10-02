@@ -1,0 +1,74 @@
+:root {
+  /* ART-001 · semantic surfaces */
+  --surface-card: rgba(255, 255, 255, 0.025);
+  --surface-card-muted: rgba(7, 14, 29, 0.56);
+  --surface-card-hover: rgba(10, 19, 39, 0.78);
+  --surface-empty: rgba(7, 14, 29, 0.36);
+  --surface-info-soft: rgba(111, 168, 255, 0.06);
+  --surface-success-soft: rgba(53, 208, 127, 0.05);
+  --surface-success-muted: rgba(53, 208, 127, 0.045);
+  --surface-success-strong: rgba(53, 208, 127, 0.06);
+  --surface-warning-soft: rgba(255, 191, 71, 0.07);
+  --surface-warning-muted: rgba(255, 179, 71, 0.06);
+  --surface-navigation: rgba(10, 17, 34, 0.9);
+  --surface-navigation-strong: rgba(10, 17, 34, 0.98);
+  --surface-navigation-frame-start: rgba(5, 9, 20, 0.96);
+  --surface-navigation-frame-mid: rgba(5, 9, 20, 0.84);
+  --surface-navigation-frame-end: rgba(5, 9, 20, 0);
+  --surface-mobile-dock: rgba(7, 13, 27, 0.96);
+  --surface-mobile-panel: rgba(7, 13, 27, 0.985);
+  --surface-control-strong: rgba(9, 17, 35, 0.96);
+  --surface-interactive-soft: rgba(255, 255, 255, 0.04);
+  --surface-interactive-muted: rgba(255, 255, 255, 0.018);
+  --surface-primary-subtle: rgba(77, 141, 255, 0.08);
+  --surface-primary-soft: rgba(31, 107, 255, 0.16);
+  --surface-primary-progress: rgba(77, 141, 255, 0.12);
+
+  /* ART-001 · semantic borders */
+  --border-card: rgba(255, 255, 255, 0.09);
+  --border-card-accent: rgba(137, 173, 255, 0.12);
+  --border-card-soft: rgba(137, 173, 255, 0.1);
+  --border-navigation: rgba(137, 173, 255, 0.2);
+  --border-navigation-soft: rgba(137, 173, 255, 0.16);
+  --border-navigation-subtle: rgba(137, 173, 255, 0.1);
+  --border-navigation-scrollbar: rgba(137, 173, 255, 0.38);
+  --border-primary-soft: rgba(77, 141, 255, 0.38);
+  --border-primary-strong: rgba(77, 141, 255, 0.48);
+  --border-primary-mobile: rgba(77, 141, 255, 0.32);
+  --border-accent-strong: rgba(43, 217, 247, 0.5);
+  --border-accent-soft: rgba(43, 217, 247, 0.28);
+  --border-info-soft: rgba(111, 168, 255, 0.2);
+  --border-success-soft: rgba(53, 208, 127, 0.12);
+  --border-success-muted: rgba(53, 208, 127, 0.14);
+  --border-success-strong: rgba(53, 208, 127, 0.16);
+  --border-warning-soft: rgba(255, 191, 71, 0.24);
+  --border-warning-muted: rgba(255, 179, 71, 0.25);
+
+  /* ART-001 · semantic text */
+  --text-on-strong: #ffffff;
+  --text-warning-soft: #f3d49b;
+  --text-success-soft: #a8e9c2;
+
+  /* ART-001 · semantic gradients and effects */
+  --gradient-navigation-frame: linear-gradient(180deg, var(--surface-navigation-frame-start) 0%, var(--surface-navigation-frame-mid) 72%, var(--surface-navigation-frame-end) 100%);
+  --gradient-primary-active: linear-gradient(135deg, rgba(31, 107, 255, 0.28), rgba(43, 217, 247, 0.09));
+  --gradient-primary-pending: linear-gradient(135deg, rgba(31, 107, 255, 0.34), rgba(43, 217, 247, 0.14));
+  --gradient-primary-install: linear-gradient(135deg, rgba(31, 107, 255, 0.2), rgba(43, 217, 247, 0.08));
+  --gradient-primary-mobile: linear-gradient(135deg, rgba(31, 107, 255, 0.22), rgba(43, 217, 247, 0.07));
+  --gradient-progress: linear-gradient(90deg, transparent, var(--color-primary-bright), rgba(43, 217, 247, 0.9), transparent);
+  --shadow-navigation: 0 14px 38px rgba(0, 0, 0, 0.24);
+  --shadow-mobile-dock: 0 -8px 34px rgba(0, 0, 0, 0.34);
+  --shadow-mobile-panel: 0 -12px 42px rgba(0, 0, 0, 0.4);
+  --shadow-primary-inset: inset 0 0 0 1px rgba(77, 141, 255, 0.08);
+
+  /* ART-001 · semantic shape */
+  --radius-card: 1.1rem;
+  --radius-card-compact: 0.9rem;
+  --radius-item: 0.85rem;
+  --radius-navigation-link: 0.8rem;
+  --radius-mobile-dock: 1.15rem;
+  --radius-mobile-panel: 1rem;
+  --radius-control: 0.7rem;
+  --radius-control-compact: 0.65rem;
+  --radius-mobile-item: 0.78rem;
+}
