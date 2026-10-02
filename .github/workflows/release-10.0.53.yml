@@ -1,18 +1,7 @@
 name: Release 10.0.53
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "app/configuration/source/**"
-      - "app/net-worth/**"
-      - "app/navigation-items.ts"
-      - "src/application/net-worth/**"
-      - "tests/e2e/source-overview-10.0.53.spec.ts"
-      - "tests/e2e/net-worth-10.0.53.spec.ts"
-      - "docs/precommercial-audit/05a-product-gap-closure-10.0.53.md"
-      - ".github/workflows/release-10.0.53.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,7 +18,7 @@ jobs:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
