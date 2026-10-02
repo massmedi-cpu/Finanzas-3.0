@@ -1,0 +1,34 @@
+:root {
+  /* ART-001 · semantic surfaces */
+  --surface-card: rgba(255, 255, 255, 0.025);
+  --surface-card-muted: rgba(7, 14, 29, 0.56);
+  --surface-card-hover: rgba(10, 19, 39, 0.78);
+  --surface-empty: rgba(7, 14, 29, 0.36);
+  --surface-info-soft: rgba(111, 168, 255, 0.06);
+  --surface-success-soft: rgba(53, 208, 127, 0.05);
+  --surface-success-muted: rgba(53, 208, 127, 0.045);
+  --surface-success-strong: rgba(53, 208, 127, 0.06);
+  --surface-warning-soft: rgba(255, 191, 71, 0.07);
+  --surface-warning-muted: rgba(255, 179, 71, 0.06);
+
+  /* ART-001 · semantic borders */
+  --border-card: rgba(255, 255, 255, 0.09);
+  --border-card-accent: rgba(137, 173, 255, 0.12);
+  --border-card-soft: rgba(137, 173, 255, 0.1);
+  --border-info-soft: rgba(111, 168, 255, 0.2);
+  --border-success-soft: rgba(53, 208, 127, 0.12);
+  --border-success-muted: rgba(53, 208, 127, 0.14);
+  --border-success-strong: rgba(53, 208, 127, 0.16);
+  --border-warning-soft: rgba(255, 191, 71, 0.24);
+  --border-warning-muted: rgba(255, 179, 71, 0.25);
+
+  /* ART-001 · semantic text */
+  --text-on-strong: #ffffff;
+  --text-warning-soft: #f3d49b;
+  --text-success-soft: #a8e9c2;
+
+  /* ART-001 · semantic shape */
+  --radius-card: 1.1rem;
+  --radius-card-compact: 0.9rem;
+  --radius-item: 0.85rem;
+}
