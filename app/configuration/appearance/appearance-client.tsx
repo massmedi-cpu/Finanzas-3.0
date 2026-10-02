@@ -22,7 +22,7 @@ const DENSITIES: Array<{
 ];
 
 export default function AppearanceClient() {
-  const { density, reduceMotion, setDensity, setReduceMotion, reset } = useVisualPreferences();
+  const { density, reduceMotion, ready, setDensity, setReduceMotion, reset } = useVisualPreferences();
   const [notice, setNotice] = useState("Preferencias visuales cargadas.");
 
   function changeDensity(value: VisualDensity) {
@@ -64,7 +64,7 @@ export default function AppearanceClient() {
             </span>
           </div>
 
-          <fieldset className={styles.options}>
+          <fieldset className={styles.options} disabled={!ready}>
             <legend className={styles.srOnly}>Selecciona densidad visual</legend>
             {DENSITIES.map((option) => (
               <label
@@ -105,6 +105,7 @@ export default function AppearanceClient() {
             <input
               type="checkbox"
               checked={reduceMotion}
+              disabled={!ready}
               onChange={(event) => changeMotion(event.currentTarget.checked)}
               aria-describedby="motion-help"
               data-testid="reduce-motion-toggle"
@@ -141,7 +142,7 @@ export default function AppearanceClient() {
 
       <div className={styles.footer}>
         <p role="status" aria-live="polite" data-testid="appearance-notice">{notice}</p>
-        <button type="button" className="secondary-button" onClick={resetPreferences}>
+        <button type="button" className="secondary-button" disabled={!ready} onClick={resetPreferences}>
           Restablecer preferencias
         </button>
       </div>
