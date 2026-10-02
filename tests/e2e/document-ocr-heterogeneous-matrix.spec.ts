@@ -54,17 +54,19 @@ function receiptSvg(options: {
 }
 
 async function buildFixtures(): Promise<Fixture[]> {
+  // Build on a complete 980 px receipt canvas first, then downscale the degraded fixtures.
+  // That keeps every printed field physically inside the source while still exercising low resolution.
   const good = Buffer.from(receiptSvg({ width: 980, height: 1150, merchant: "MERCADO NORTE" }));
-  const thermal = Buffer.from(receiptSvg({ width: 720, height: 980, merchant: "TERMICO SUR", paper: "#dedbd1", ink: "#5b5b5b" }));
-  const wrinkled = Buffer.from(receiptSvg({ width: 880, height: 1900, merchant: "TIENDA LARGA", background: "#c8c8c2", long: true }));
+  const thermal = Buffer.from(receiptSvg({ width: 980, height: 1334, merchant: "TERMICO SUR", paper: "#dedbd1", ink: "#5b5b5b" }));
+  const wrinkled = Buffer.from(receiptSvg({ width: 980, height: 2116, merchant: "TIENDA LARGA", background: "#c8c8c2", long: true }));
   const badLightTilt = Buffer.from(receiptSvg({ width: 980, height: 1250, merchant: "LUZ IRREGULAR", background: "#b0b0aa", transform: "rotate(3 490 625)" }));
   const perspective = Buffer.from(receiptSvg({ width: 980, height: 1250, merchant: "ANGULO MARKET", transform: "translate(55 0) skewX(-5)" }));
   const screenshot = Buffer.from(receiptSvg({ width: 1100, height: 900, merchant: "CAPTURA DIGITAL", paper: "#ffffff", ink: "#000000" }));
 
   return [
     { name: "good-regular-photo.jpg", mimeType: "image/jpeg", bytes: await sharp(good).jpeg({ quality: 88 }).toBuffer() },
-    { name: "thermal-small-receipt.jpg", mimeType: "image/jpeg", bytes: await sharp(thermal).jpeg({ quality: 64 }).toBuffer() },
-    { name: "wrinkled-long-receipt.jpg", mimeType: "image/jpeg", bytes: await sharp(wrinkled).jpeg({ quality: 76 }).toBuffer() },
+    { name: "thermal-small-receipt.jpg", mimeType: "image/jpeg", bytes: await sharp(thermal).resize({ width: 720 }).jpeg({ quality: 64 }).toBuffer() },
+    { name: "wrinkled-long-receipt.jpg", mimeType: "image/jpeg", bytes: await sharp(wrinkled).resize({ width: 880 }).jpeg({ quality: 76 }).toBuffer() },
     { name: "bad-light-tilted-camera.jpg", mimeType: "image/jpeg", bytes: await sharp(badLightTilt).jpeg({ quality: 80 }).toBuffer() },
     { name: "perspective-photo.jpg", mimeType: "image/jpeg", bytes: await sharp(perspective).jpeg({ quality: 82 }).toBuffer() },
     { name: "screenshot-gallery.png", mimeType: "image/png", bytes: await sharp(screenshot).png().toBuffer() },
