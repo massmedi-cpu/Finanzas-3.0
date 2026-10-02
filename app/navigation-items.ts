@@ -17,6 +17,7 @@ export const navigationItems = [
   { href: "/analysis", label: "Análisis", icon: "analysis" },
   { href: "/compare", label: "Comparador", shortLabel: "Comparar", icon: "balance" },
   { href: "/accounts", label: "Cuentas", icon: "accounts" },
+  { href: "/net-worth", label: "Patrimonio", icon: "balance" },
   { href: "/budgets", label: "Presupuestos", icon: "budgets" },
   { href: "/recurrences", label: "Recurrentes", icon: "recurrences" },
   { href: "/forecast", label: "Previsión", icon: "forecast" },
