@@ -6,6 +6,7 @@ import { OperationalTelemetryReporter } from "./operational-telemetry";
 import { PwaRuntimeProvider } from "./pwa-runtime";
 import { VisualPreferencesProvider } from "./visual-preferences";
 import "./globals.css";
+import "./semantic-tokens.css";
 import "./touch-targets.css";
 import "./premium-states.css";
 import "./visual-density.css";
