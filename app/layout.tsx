@@ -4,10 +4,12 @@ import { ActionFeedbackProvider } from "./action-feedback";
 import { CategoryIdentityProvider } from "./category-identity";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
 import { PwaRuntimeProvider } from "./pwa-runtime";
+import { VisualPreferencesProvider } from "./visual-preferences";
 import "./globals.css";
 import "./touch-targets.css";
 import "./premium-states.css";
 import "./visual-density.css";
+import "./visual-preferences.css";
 import "./category-controls.css";
 import "./premium-theme.css";
 import "./premium-hardening.css";
@@ -42,7 +44,13 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
   return (
     <html lang="es">
       <body>
-        <ActionFeedbackProvider><PwaRuntimeProvider><CategoryIdentityProvider>{children}</CategoryIdentityProvider></PwaRuntimeProvider></ActionFeedbackProvider>
+        <VisualPreferencesProvider>
+          <ActionFeedbackProvider>
+            <PwaRuntimeProvider>
+              <CategoryIdentityProvider>{children}</CategoryIdentityProvider>
+            </PwaRuntimeProvider>
+          </ActionFeedbackProvider>
+        </VisualPreferencesProvider>
         <OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />
       </body>
     </html>
