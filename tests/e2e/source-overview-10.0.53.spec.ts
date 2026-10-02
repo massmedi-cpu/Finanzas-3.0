@@ -157,6 +157,6 @@ test("Detalles técnicos conserva la superficie de diagnóstico avanzada", async
 
   await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
   await expect(page.getByRole("heading", { name: "Fuente bancaria", level: 1 })).toBeVisible();
-  await expect(page.getByText("TRAZABILIDAD")).toBeVisible();
-  await expect(page.getByText("Pestañas físicas")).toBeVisible();
+  await expect(page.getByText("TRAZABILIDAD", { exact: true })).toBeVisible();
+  await expect(page.getByText("Pestañas físicas", { exact: true })).toBeVisible();
 });
