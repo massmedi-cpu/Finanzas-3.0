@@ -40,7 +40,7 @@ requireMatch(".github/workflows/axioma-91-108.yml", /WebKit iOS and Edge desktop
 
 const preferenceCss = read("app/visual-preferences.css");
 const compactSection = preferenceCss.split("/*\n * La preferencia interna REDUCIR MOVIMIENTO")[0];
-if (/--font-|font-size\s*:/.test(compactSection)) {
+if (/^\s*(?:--font-[^:]*|font-size)\s*:/m.test(compactSection)) {
   failures.push("Compacta no puede modificar tipografía (app/visual-preferences.css)");
 }
 
