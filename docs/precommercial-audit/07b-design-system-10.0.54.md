@@ -74,17 +74,27 @@ El workflow `Release 10.0.54` ejecuta sobre el SHA exacto del PR:
 - matriz responsive existente en Chromium;
 - regresión de Fuente simple + Diagnóstico en escritorio y móvil.
 
-El primer candidato confirmó guard visual, typecheck, build y responsive, y reveló dos gates heredados de Fuente que todavía apuntaban a la UI anterior a REL-053. Esos tests se han alineado con la arquitectura canónica y deben volver a verde antes de materializar la versión.
+El candidato funcional `6644ea9fcb20eeaafadd972232885357cbcda051` quedó completamente verde en ese workflow, incluida la regresión de Fuente ya adaptada a la arquitectura canónica REL-053.
 
-No se hará bump a `10.0.54`, merge, backup, publicación ni postflight hasta que el candidato funcional exacto esté certificado.
+## Materialización de versión
+
+Después de certificar el candidato funcional, la identidad se materializó de forma conjunta con `npm version 10.0.54 --no-git-tag-version`, modificando únicamente `package.json` y `package-lock.json`.
+
+Comprobaciones explícitas de identidad:
+
+- `package.json.version = 10.0.54`;
+- `package-lock.json.version = 10.0.54`;
+- `package-lock.json.packages[""].version = 10.0.54`.
+
+El lanzador efímero usado para realizar ese bump atómico fue retirado inmediatamente de la rama y no forma parte del candidato final. Esta actualización documental fuerza una nueva certificación del SHA final limpio y versionado antes de cualquier backup, merge o despliegue.
 
 ## Pendiente del frente visual
 
-Este bloque no declara cerrada toda la auditoría de arte. Siguen fuera de alcance inmediato:
+Este bloque visual está cerrado al 100% para el alcance de REL-054, pero no declara cerrada toda la auditoría de arte. Siguen fuera de alcance inmediato:
 
 - migración completa de literales de color/radio/sombra a tokens semánticos (ART-001);
 - racionalización de breakpoints históricos restantes (ART-003);
 - reducción de superficies anidadas por módulo (ART-005);
 - revisión final de backgrounds semánticos y tema (ART-008/ART-010).
 
-REL-054 debe cerrarse con CI exacta verde, materialización de versión sólo después de esa certificación, backup restaurable, publicación controlada y Production Postflight.
+REL-054 sólo se considerará publicada cuando el SHA final versionado tenga CI exacta verde, exista backup restaurable, se publique de forma controlada y el Production Postflight termine correctamente.
