@@ -6,9 +6,12 @@ on:
       - main
     paths:
       - "app/app-shell.tsx"
+      - "app/app-shell.module.css"
       - "app/globals.css"
       - "app/navigation-items.ts"
       - "app/net-worth/net-worth.module.css"
+      - "app/configuration/source/source-overview.module.css"
+      - "app/configuration/source/source.module.css"
       - "tests/e2e/source-incident-trace.spec.ts"
       - "scripts/verify-premium-design-system.mjs"
       - "docs/precommercial-audit/07b-design-system-10.0.54.md"
