@@ -85,6 +85,7 @@ async function mockReviewSources(
 test("10.0.27 transporta incidencias persistidas sin crear otra fuente de verdad", () => {
   const route = readFileSync(resolve(process.cwd(), "app/api/source/google/sync/route.ts"), "utf8");
   const source = readFileSync(resolve(process.cwd(), "app/configuration/source/source-client.tsx"), "utf8");
+  const overview = readFileSync(resolve(process.cwd(), "app/configuration/source/source-overview-client.tsx"), "utf8");
   const review = readFileSync(resolve(process.cwd(), "app/review/review-client.tsx"), "utf8");
   const incidents = readFileSync(resolve(process.cwd(), "src/application/source-sync-incidents.ts"), "utf8");
 
@@ -94,6 +95,8 @@ test("10.0.27 transporta incidencias persistidas sin crear otra fuente de verdad
   expect(source).toContain("Ya no están en la fuente");
   expect(source).toContain("sourceIncidentMessage(syncStatus.run)");
   expect(source).toContain("normalizeSourceSyncIncidents");
+  expect(overview).toContain("normalizeSourceSyncIncidents");
+  expect(overview).toContain('href="/configuration/source/diagnostics"');
   expect(review).toContain("hasSourceSyncIncidents(syncStatus.run)");
   expect(incidents).toContain("rowsMissing?: number | null;");
   expect(incidents).toContain("duplicatesDetected?: number | null;");
@@ -120,7 +123,7 @@ test("Para revisar mantiene alertada la fuente ante duplicados aunque warningsCo
     .toHaveCount(0);
 });
 
-test("Configuración explica las incidencias persistidas y las conserva tras recargar", async ({ page }) => {
+test("Diagnóstico explica las incidencias persistidas y las conserva tras recargar", async ({ page }) => {
   await mockConnectedConfiguration(page);
   await page.route("**/api/source/google/sync", (route) => json(route, {
     run: {
@@ -132,7 +135,7 @@ test("Configuración explica las incidencias persistidas y las conserva tras rec
     cursors: CURSORS,
   }));
 
-  await page.goto("/configuration/source");
+  await page.goto("/configuration/source/diagnostics");
   const trace = page.getByRole("region", { name: "Última sincronización persistida" });
   await expect(trace.locator("dl div").filter({ hasText: "Ya no están en la fuente" })).toContainText("2");
   await expect(trace.locator("dl div").filter({ hasText: "Duplicados detectados en esa ejecución" })).toContainText("1");
@@ -149,7 +152,7 @@ test("Configuración explica las incidencias persistidas y las conserva tras rec
     .toContainText("2 movimientos importados anteriormente ya no aparecen en la fuente");
 });
 
-test("una sincronización correcta con incidencias usa feedback de advertencia y cifras exactas", async ({ page }) => {
+test("la vista simple resume una sincronización con incidencias y mantiene solo lectura", async ({ page }) => {
   let synchronized = false;
   await mockConnectedConfiguration(page);
   await page.route("**/api/source/google/sync", async (route) => {
@@ -183,9 +186,11 @@ test("una sincronización correcta con incidencias usa feedback de advertencia y
   await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
   const warning = page.locator(".config-message.warning");
-  await expect(warning).toContainText("Actualización completada: 0 nuevos, 0 revisados y 12 sin cambios");
-  await expect(warning).toContainText("1 movimiento importado anteriormente ya no aparece en la fuente");
-  await expect(warning).toContainText("2 posibles duplicados detectados");
-  await expect(warning).toContainText("la fuente bancaria original no se ha modificado");
+  await expect(warning).toContainText("Actualización completada con avisos");
+  await expect(warning).toContainText("1 movimiento ya no aparece en la fuente");
+  await expect(warning).toContainText("2 posibles duplicados");
+  await expect(warning).toContainText("El archivo original no se ha modificado");
   await expect(page.locator(".config-message.success")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Detalles técnicos" }))
+    .toHaveAttribute("href", "/configuration/source/diagnostics");
 });
