@@ -1,18 +1,7 @@
 name: Release 10.0.58
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "package.json"
-      - "package-lock.json"
-      - "app/inicio-overview.module.css"
-      - "app/transactions/transactions.module.css"
-      - "app/globals.css"
-      - "scripts/verify-surface-hierarchy.mjs"
-      - "docs/precommercial-audit/07f-surface-hierarchy-10.0.58.md"
-      - ".github/workflows/release-10.0.58.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -29,7 +18,7 @@ jobs:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
