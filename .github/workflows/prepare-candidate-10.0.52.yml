@@ -1,0 +1,66 @@
+name: Prepare Financial App 10.0.52 candidate
+
+on:
+  push:
+    branches:
+      - release/candidate-10.0.52
+    paths:
+      - ".github/workflows/prepare-candidate-10.0.52.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-financial-app-10.0.52
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate branch
+        uses: actions/checkout@v6
+        with:
+          ref: release/candidate-10.0.52
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Synchronize package and lock version
+        run: npm version 10.0.52 --no-git-tag-version
+
+      - name: Verify version identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p "require('./package.json').version")" = "10.0.52"
+          test "$(node -p "require('./package-lock.json').version")" = "10.0.52"
+          test "$(node -p "require('./package-lock.json').packages[''].version")" = "10.0.52"
+
+      - name: Install exact dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Commit synchronized candidate version
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          if git diff --cached --quiet; then
+            echo "candidate version already synchronized"
+            exit 0
+          fi
+          git commit -m "chore(release): prepare Financial App 10.0.52"
+          git push origin HEAD:release/candidate-10.0.52
