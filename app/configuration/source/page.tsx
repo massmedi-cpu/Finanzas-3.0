@@ -1,4 +1,4 @@
-import SourceClient from "./source-client";
+import SourceSimpleClient from "./source-simple-client";
 
 export const metadata = {
   title: "Fuente bancaria · Configuración · Financial App",
@@ -6,5 +6,5 @@ export const metadata = {
 };
 
 export default function SourceConfigurationPage() {
-  return <SourceClient />;
+  return <SourceSimpleClient />;
 }
