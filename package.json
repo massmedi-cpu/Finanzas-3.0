@@ -17,6 +17,7 @@
     "test:comparison:ui": "playwright test tests/e2e/comparison-ui.spec.ts --project=chromium-desktop",
     "verify:pre039": "node scripts/verify-pre039-axioma-120-145.mjs",
     "verify:premium-design": "node scripts/verify-premium-design-system.mjs",
+    "verify:semantic-design": "node scripts/verify-semantic-design-tokens.mjs",
     "performance:report": "node scripts/report-web-vitals.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
