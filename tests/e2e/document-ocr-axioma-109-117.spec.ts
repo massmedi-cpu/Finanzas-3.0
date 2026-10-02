@@ -46,27 +46,35 @@ test("PRE-038 §111 has conservative rotation, framing, illumination and perspec
   expect(paddedConsensus).toContain("normalizeReceiptIllumination(bytes, glyphHeight, 0)");
   expect(paddedConsensus).toContain("normalizeReceiptIllumination(bytes, glyphHeight, 1)");
   expect(paddedConsensus).toContain("choosePaddedNumericConsensus");
-  expect(ocrConfig).toContain("document-ocr-image-quality");
+  expect(ocrConfig).toContain("image-quality|heterogeneous-matrix");
 });
 
 test("PRE-038 §115 keeps a visual reconstruction workbench backed by OCR geometry", () => {
-  expect(reviewWorkbench).toMatch(/box\.(x|y|width|height)/);
-  expect(reviewWorkbench).toMatch(/layoutText|plainText/);
+  expect(reviewWorkbench).toContain("preservesGeometry");
+  expect(reviewWorkbench).toContain("page.layoutText");
+  expect(reviewWorkbench).toContain("page.plainText");
+  expect(reviewWorkbench).toContain("Abrir original");
+  expect(ocrContract).toContain("F11 OCR contract reconstructs skewed receipt rows while preserving columns");
 });
 
 test("PRE-038 §116 keeps the dedicated OCR regression pack and native illumination case", () => {
-  expect(ocrConfig).toContain("document-ocr-heterogeneous-matrix");
-  expect(ocrConfig).toContain("document-ocr-illumination-native");
-  expect(ocrConfig).toContain("document-ocr-row-geometry");
-  expect(ocrConfig).toContain("document-ocr-columns-native");
-  expect(ocrConfig).toContain("document-ocr-cell-recovery");
-  expect(ocrConfig).toContain("document-ocr-financial-interpretation");
+  for (const suite of [
+    "heterogeneous-matrix",
+    "illumination-native",
+    "row-geometry",
+    "columns-native",
+    "cell-recovery",
+    "financial-interpretation",
+  ]) {
+    expect(ocrConfig).toContain(suite);
+  }
 });
 
 test("PRE-038 §117 keeps OCR review-only and associations explicit", () => {
   expect(documentsClient).toContain("El OCR sólo se ejecutará si lo solicitas");
-  expect(documentsClient).toContain('method: "suggested"');
-  expect(documentsClient).toContain('method: "manual"');
+  expect(documentsClient).toContain('method: "manual" | "suggested"');
+  expect(documentsClient).toContain('associate(transactionId: string, method: "manual" | "suggested")');
+  expect(documentsClient).toContain("Sugerencia confirmada explícitamente");
   expect(documentsClient).not.toContain('method: "automatic"');
 });
 
