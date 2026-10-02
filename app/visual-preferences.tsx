@@ -48,6 +48,7 @@ function applyPreferences(preferences: VisualPreferences) {
   const root = document.documentElement;
   root.dataset.density = preferences.density;
   root.dataset.reduceMotion = preferences.reduceMotion ? "true" : "false";
+  root.dataset.visualPreferencesReady = "true";
 }
 
 export function VisualPreferencesProvider({ children }: { children: ReactNode }) {
