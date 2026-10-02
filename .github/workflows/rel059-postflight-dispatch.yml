@@ -14,11 +14,12 @@ jobs:
   dispatch:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch canonical Production Postflight for 10.0.59
+      - name: Dispatch canonical Production Postflight for 10.0.59 retry
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
+          # Retry uses the same immutable Production deployment; only postflight tooling changed.
           gh workflow run production-postflight.yml \
             --repo "${GITHUB_REPOSITORY}" \
             --ref main \
