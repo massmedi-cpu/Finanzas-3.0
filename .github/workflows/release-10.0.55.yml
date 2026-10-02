@@ -14,8 +14,6 @@ on:
       - "scripts/verify-semantic-design-tokens.mjs"
       - "scripts/verify-premium-design-system.mjs"
       - "docs/precommercial-audit/07c-semantic-tokens-10.0.55.md"
-      - "package.json"
-      - "package-lock.json"
       - ".github/workflows/release-10.0.55.yml"
 
 permissions:
