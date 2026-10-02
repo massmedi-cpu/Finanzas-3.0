@@ -1,11 +1,11 @@
 {
   "name": "financial-app",
-  "version": "10.0.57",
+  "version": "10.0.58",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs",
+    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs && node scripts/verify-surface-hierarchy.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
@@ -20,6 +20,7 @@
     "verify:semantic-design": "node scripts/verify-semantic-design-tokens.mjs",
     "verify:responsive-breakpoints": "node scripts/verify-responsive-breakpoints.mjs",
     "verify:product-icons": "node scripts/verify-product-icon-system.mjs",
+    "verify:surface-hierarchy": "node scripts/verify-surface-hierarchy.mjs",
     "performance:report": "node scripts/report-web-vitals.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
