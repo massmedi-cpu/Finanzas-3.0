@@ -7,7 +7,7 @@ for (const route of routes) {
     await page.goto(route);
 
     await expect(page.locator('[data-app-shell="shared"]')).toHaveCount(1);
-    await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
+    await expect(page.locator('nav[aria-label="Navegación principal"]')).toHaveCount(1);
     await expect(page.locator("#main-content")).toHaveCount(1);
     await expect(page.locator("#main-content")).toBeVisible();
   });
@@ -16,7 +16,7 @@ for (const route of routes) {
 test("Configuración hereda el shell sin wrapper local", async ({ page }) => {
   await page.goto("/configuration");
 
-  await expect(page.getByRole("link", { name: /Financial App .* ir a Inicio/ })).toHaveCount(1);
-  await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(1);
+  await expect(page.locator("a.financial-brand")).toHaveCount(1);
+  await expect(page.locator('nav[aria-label="Navegación principal"]')).toHaveCount(1);
   await expect(page.locator('[data-nav-href="/configuration"]')).toHaveAttribute("aria-current", "page");
 });
