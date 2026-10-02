@@ -1,17 +1,7 @@
 name: Release 10.0.60
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "package.json"
-      - "package-lock.json"
-      - "app/globals.css"
-      - "scripts/verify-typography-runtime.mjs"
-      - "tests/e2e/typography-runtime-10.0.60.spec.ts"
-      - "docs/precommercial-audit/07h-typography-runtime-10.0.60.md"
-      - ".github/workflows/release-10.0.60.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -27,8 +17,6 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
