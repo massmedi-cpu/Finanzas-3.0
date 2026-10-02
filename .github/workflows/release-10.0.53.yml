@@ -12,7 +12,6 @@ on:
       - "tests/e2e/source-overview-10.0.53.spec.ts"
       - "tests/e2e/net-worth-10.0.53.spec.ts"
       - "docs/precommercial-audit/05a-product-gap-closure-10.0.53.md"
-      - "package.json"
       - ".github/workflows/release-10.0.53.yml"
 
 permissions:
