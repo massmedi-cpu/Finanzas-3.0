@@ -7,6 +7,7 @@ const read = (path) => readFileSync(resolve(root, path), "utf8");
 const globals = read("app/globals.css");
 const appShell = read("app/app-shell.tsx");
 const navigation = read("app/navigation-items.ts");
+const netWorthStyles = read("app/net-worth/net-worth.module.css");
 
 const failures = [];
 const assert = (condition, message) => {
@@ -37,6 +38,14 @@ for (const selector of [".panel-kicker", ".status-chip, .lifecycle", ".field-hin
   assert(block.includes("font-size: var(--font-helper)"), `${selector} debe usar --font-helper.`);
 }
 
+assert(
+  globals.includes(".premium-primary-nav [data-nav-href] { font-size: var(--font-helper); }"),
+  "La navegación principal debe impedir reducciones por debajo de --font-helper.",
+);
+
+const netWorthEyebrow = netWorthStyles.match(/\.eyebrow\s*\{[^}]*\}/m)?.[0] ?? "";
+assert(netWorthEyebrow.includes("font-size: var(--font-helper)"), "El kicker de Patrimonio debe usar --font-helper.");
+
 assert(navigation.includes('{ href: "/net-worth", label: "Patrimonio"'), "Patrimonio debe seguir presente en la navegación principal.");
 
 const prefetchBlock = appShell.match(/const HIGH_VALUE_PREFETCH_ROUTES = \[[\s\S]*?\] as const;/)?.[0] ?? "";
@@ -51,4 +60,5 @@ if (failures.length) {
 console.log("Premium design system guard: OK");
 console.log(`- helper mínimo: ${helperRem}rem`);
 console.log("- fuente UI explícita: system-ui");
-console.log("- Patrimonio integrado en navegación y precarga");
+console.log("- navegación principal protegida contra reducción tipográfica");
+console.log("- Patrimonio integrado en navegación, precarga y mínimo tipográfico");
