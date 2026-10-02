@@ -6,6 +6,14 @@ test("PRE-037 · preferencias funcionan con interacción accesible", async ({ pa
   const pageErrors: string[] = [];
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
+  await page.route("**/api/category-identity", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ categories: [] }),
+    });
+  });
+
   await page.goto("/configuration/appearance");
   await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
   await page.reload();
