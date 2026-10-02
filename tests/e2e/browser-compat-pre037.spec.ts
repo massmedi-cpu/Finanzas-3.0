@@ -9,18 +9,22 @@ test("PRE-037 · preferencias funcionan con interacción táctil/visible", async
 
   await expect(page.getByRole("heading", { name: "Apariencia y accesibilidad" })).toBeVisible();
 
+  const root = page.locator("html");
+  await expect(root).toHaveAttribute("data-density", "comfortable");
+  await expect(root).toHaveAttribute("data-reduce-motion", "false");
+
   const compactInput = page.locator('input[name="density"][value="compact"]');
   const compactOption = page.locator('label:has(input[name="density"][value="compact"])');
   await compactOption.click();
   await expect(compactInput).toBeChecked();
-  await expect(page.locator("html")).toHaveAttribute("data-density", "compact");
+  await expect(root).toHaveAttribute("data-density", "compact");
   await expect(page.getByTestId("density-current")).toHaveText("Compacta");
 
   const motionToggle = page.getByTestId("reduce-motion-toggle");
   const motionRow = page.locator('label:has([data-testid="reduce-motion-toggle"])');
   await motionRow.click();
   await expect(motionToggle).toBeChecked();
-  await expect(page.locator("html")).toHaveAttribute("data-reduce-motion", "true");
+  await expect(root).toHaveAttribute("data-reduce-motion", "true");
   await expect(page.getByTestId("appearance-notice")).toContainText("Reducir movimiento activado");
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
