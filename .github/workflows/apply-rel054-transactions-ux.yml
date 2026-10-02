@@ -1,0 +1,39 @@
+name: Apply REL-054 transactions UX
+
+on:
+  push:
+    branches:
+      - release/10.0.54-ux-continuity
+    paths:
+      - .github/workflows/apply-rel054-transactions-ux.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: release/10.0.54-ux-continuity
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+      - name: Apply exact guarded patch
+        run: node scripts/apply-rel054-transactions-ux.mjs
+      - name: Remove temporary codemod and commit result
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/transactions/transactions-client.tsx
+          git rm scripts/apply-rel054-transactions-ux.mjs .github/workflows/apply-rel054-transactions-ux.yml
+          git commit -m "fix(rel054): preserve transaction context and clarify pending filters"
+          git push origin HEAD:release/10.0.54-ux-continuity
