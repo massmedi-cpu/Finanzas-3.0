@@ -1,17 +1,7 @@
 name: Release 10.0.57
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "app/app-shell.tsx"
-      - "app/mobile-navigation.tsx"
-      - "app/global-search.tsx"
-      - "app/pwa-install-button.tsx"
-      - "src/design/product-icons.tsx"
-      - "scripts/verify-product-icon-system.mjs"
-      - "docs/precommercial-audit/07e-iconography-system-10.0.57.md"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -28,7 +18,7 @@ jobs:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
