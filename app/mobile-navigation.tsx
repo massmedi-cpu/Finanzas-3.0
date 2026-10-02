@@ -63,7 +63,9 @@ export default function MobileNavigation() {
         {moreOpen && <>
           <div className={styles.mobileMoreHeader}>
             <strong>Más secciones</strong>
-            <button type="button" onClick={() => setMoreOpen(false)} aria-label="Cerrar más secciones">×</button>
+            <button type="button" onClick={() => setMoreOpen(false)} aria-label="Cerrar más secciones">
+              <ProductIcon name="close" size="1.15em" />
+            </button>
           </div>
           <nav className={styles.mobileMoreGrid} aria-label="Más secciones">
             {secondary.map((item) => {
@@ -129,7 +131,7 @@ export default function MobileNavigation() {
           aria-controls="mobile-more-navigation"
           onClick={() => setMoreOpen((value) => !value)}
         >
-          <span className={styles.mobileMoreGlyph} aria-hidden="true">•••</span>
+          <span className={styles.mobileMoreGlyph}><ProductIcon name="more" /></span>
           <span>Más</span>
         </button>
       </nav>
