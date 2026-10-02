@@ -54,4 +54,6 @@ Esta política favorece una cifra incompleta pero auditable antes que una cifra 
 
 El workflow `Release 10.0.53` se creó específicamente para este bloque y ejecuta typecheck, build y las regresiones `source-overview-10.0.53.spec.ts` + `net-worth-10.0.53.spec.ts`.
 
-La identidad de aplicación permanece en `10.0.52` durante el desarrollo. Esto es intencional: el número `10.0.53` sólo se materializa cuando el candidato funcional esté certificado y se entre en la fase de release.
+El candidato funcional `117afe805485c0e657ed1ddbd9f4cb65280f0b85` quedó certificado antes del bump, incluidos `Release 10.0.53`, UX15, Responsive, PRE-039 y gates transversales. Después se materializó la identidad `10.0.53` de forma consistente en `package.json` y `package-lock.json`; el commit generado automáticamente fue `454fba347fc5d4a65f8423596894ba1e3f54d1a1`.
+
+GitHub dejó los workflows asociados directamente a ese commit automatizado en estado `action_required`, no `failure`. Este commit documental posterior sirve exclusivamente para producir un SHA versionado normal sobre la misma lógica y disparar la recertificación exacta sin relajar ningún gate. La publicación sigue bloqueada hasta que la recertificación del nuevo HEAD, el merge, el deployment y el Production Postflight estén completados.
