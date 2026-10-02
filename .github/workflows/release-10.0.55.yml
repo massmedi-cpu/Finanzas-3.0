@@ -1,22 +1,7 @@
 name: Release 10.0.55
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "app/app-shell.module.css"
-      - "app/layout.tsx"
-      - "app/semantic-tokens.css"
-      - "app/net-worth/net-worth.module.css"
-      - "app/configuration/source/source-overview.module.css"
-      - "app/configuration/source/source.module.css"
-      - "scripts/verify-semantic-design-tokens.mjs"
-      - "scripts/verify-premium-design-system.mjs"
-      - "docs/precommercial-audit/07c-semantic-tokens-10.0.55.md"
-      - "package.json"
-      - "package-lock.json"
-      - ".github/workflows/release-10.0.55.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -33,7 +18,7 @@ jobs:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          ref: ${{ github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6

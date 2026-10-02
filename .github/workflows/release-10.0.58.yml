@@ -1,24 +1,35 @@
-name: Release 10.0.56
+name: Release 10.0.58
 
 on:
-  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "package.json"
+      - "package-lock.json"
+      - "app/inicio-overview.module.css"
+      - "app/transactions/transactions.module.css"
+      - "app/globals.css"
+      - "scripts/verify-surface-hierarchy.mjs"
+      - "docs/precommercial-audit/07f-surface-hierarchy-10.0.58.md"
+      - ".github/workflows/release-10.0.58.yml"
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-10.0.56-${{ github.ref }}
+  group: release-10.0.58-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   certify:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 40
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
@@ -29,10 +40,13 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Require exact 10.0.56 package identity
+      - name: Require exact 10.0.58 package identity
         shell: bash
         run: |
-          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!=='10.0.56'||l.version!=='10.0.56'||l.packages[''].version!=='10.0.56'){console.error({package:p.version,lock:l.version,root:l.packages[''].version});process.exit(1)}"
+          node -e "const p=require('./package.json'); const l=require('./package-lock.json'); if(p.version!=='10.0.58'||l.version!=='10.0.58'||l.packages[''].version!=='10.0.58'){console.error({package:p.version,lock:l.version,root:l.packages[''].version});process.exit(1)}"
+
+      - name: Surface hierarchy guard
+        run: npm run verify:surface-hierarchy
 
       - name: Responsive breakpoint governance
         run: npm run verify:responsive-breakpoints
@@ -42,6 +56,9 @@ jobs:
 
       - name: Premium design guard
         run: npm run verify:premium-design
+
+      - name: Product icon system guard
+        run: npm run verify:product-icons
 
       - name: TypeScript
         run: npm run typecheck
