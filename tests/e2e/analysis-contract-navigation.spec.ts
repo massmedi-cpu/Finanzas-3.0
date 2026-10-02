@@ -154,17 +154,18 @@ test("Análisis · el cliente acepta sólo snapshots completos, reconciliados y 
   })).toBe(false);
 });
 
-test("Análisis v5 · el shell queda fuera de la espera del snapshot financiero", () => {
-  const source = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
+test("Análisis v5 · el shell compartido queda fuera de la espera del snapshot financiero", () => {
+  const pageSource = readFileSync(resolve(process.cwd(), "app/analysis/page.tsx"), "utf8");
+  const layoutSource = readFileSync(resolve(process.cwd(), "app/layout.tsx"), "utf8");
 
-  expect(source).toMatch(/async function AnalysisData[\s\S]*loadAnalysisSnapshot\(fallbackSelection\)/);
-  expect(source).toMatch(/<AppShell>[\s\S]*<Suspense fallback=\{<AnalysisLoadingFrame \/>}?>[\s\S]*<AnalysisData searchParams=\{searchParams\} \/>/);
+  expect(pageSource).toMatch(/async function AnalysisData[\s\S]*loadAnalysisSnapshot\(fallbackSelection\)/);
+  expect(pageSource).toMatch(/<Suspense fallback=\{<AnalysisLoadingFrame \/>}?>[\s\S]*<AnalysisData searchParams=\{searchParams\} \/>/);
+  expect(pageSource).not.toContain("<AppShell>");
+  expect(layoutSource).toContain("<AppShell>{children}</AppShell>");
 
-  const shellIndex = source.indexOf("<AppShell>");
-  const suspenseIndex = source.indexOf("<Suspense");
-  const dataIndex = source.indexOf("<AnalysisData");
-  expect(shellIndex).toBeGreaterThanOrEqual(0);
-  expect(suspenseIndex).toBeGreaterThan(shellIndex);
+  const suspenseIndex = pageSource.indexOf("<Suspense");
+  const dataIndex = pageSource.indexOf("<AnalysisData");
+  expect(suspenseIndex).toBeGreaterThanOrEqual(0);
   expect(dataIndex).toBeGreaterThan(suspenseIndex);
 });
 
