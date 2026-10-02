@@ -55,18 +55,10 @@
   color: #f3d49b;
 }
 
-.missingBox strong {
-  display: block;
-}
-
+.missingBox strong { display: block; }
 .missingBox p,
-.missingBox ul {
-  margin: 0.5rem 0 0;
-}
-
-.missingBox ul {
-  padding-left: 1.15rem;
-}
+.missingBox ul { margin: 0.5rem 0 0; }
+.missingBox ul { padding-left: 1.15rem; }
 
 .actions {
   display: flex;
@@ -75,9 +67,7 @@
   margin-top: 1rem;
 }
 
-.buttonLink {
-  text-decoration: none;
-}
+.buttonLink { text-decoration: none; }
 
 :global(.back-link) {
   min-height: 2.75rem;
@@ -123,9 +113,7 @@
   overflow-wrap: anywhere;
 }
 
-.preflightProducts small + small {
-  margin-top: 0.2rem;
-}
+.preflightProducts small + small { margin-top: 0.2rem; }
 
 .guarantees {
   display: grid;
@@ -256,37 +244,70 @@
   color: color-mix(in srgb, var(--color-warning) 78%, white);
 }
 
+.diagnosticsPanel {
+  grid-column: 1 / -1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.technicalDetails > summary {
+  cursor: pointer;
+  list-style: none;
+  min-height: 3.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  color: var(--color-text);
+  font-weight: 800;
+}
+
+.technicalDetails > summary::-webkit-details-marker { display: none; }
+.technicalDetails > summary::after {
+  content: "+";
+  color: var(--color-text-muted);
+  font-size: 1.35rem;
+  line-height: 1;
+}
+.technicalDetails[open] > summary::after { content: "−"; }
+.technicalDetails > summary:focus-visible {
+  outline: 2px solid var(--color-accent, #8eb3ff);
+  outline-offset: -3px;
+}
+
+.technicalIntro {
+  margin: 0;
+  padding: 0 1.25rem 1rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-body-secondary);
+}
+
+.diagnosticsSection {
+  margin: 0 1.25rem 1.25rem;
+  padding-top: 1.15rem;
+  border-top: 1px solid rgba(137, 173, 255, 0.12);
+}
+
+.diagnosticsSection h3 {
+  margin: 0.15rem 0 0;
+  font-size: var(--font-subtitle);
+}
+
 @media (max-width: 980px) {
-  .grid {
-    grid-template-columns: 1fr;
-  }
-
+  .grid { grid-template-columns: 1fr; }
   .statusList,
-  .preflightProducts {
-    grid-template-columns: 1fr;
-  }
-
-  .metrics {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
+  .preflightProducts { grid-template-columns: 1fr; }
+  .metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .diagnosticsPanel { grid-column: auto; }
 }
 
 @media (max-width: 620px) {
-  .metrics {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .actions > * {
-    width: 100%;
-  }
-
-  .metaRows p {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .metaRows strong {
-    max-width: 100%;
-    text-align: left;
-  }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .actions > * { width: 100%; }
+  .metaRows p { display: grid; gap: 0.25rem; }
+  .metaRows strong { max-width: 100%; text-align: left; }
+  .technicalDetails > summary { padding-inline: 1rem; }
+  .technicalIntro,
+  .diagnosticsSection { margin-inline: 1rem; padding-inline: 0; }
 }
