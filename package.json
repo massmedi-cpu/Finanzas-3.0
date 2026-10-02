@@ -1,11 +1,11 @@
 {
   "name": "financial-app",
-  "version": "10.0.55",
+  "version": "10.0.56",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node scripts/verify-vercel-source-runtime.mjs",
+    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
@@ -18,6 +18,7 @@
     "verify:pre039": "node scripts/verify-pre039-axioma-120-145.mjs",
     "verify:premium-design": "node scripts/verify-premium-design-system.mjs",
     "verify:semantic-design": "node scripts/verify-semantic-design-tokens.mjs",
+    "verify:responsive-breakpoints": "node scripts/verify-responsive-breakpoints.mjs",
     "performance:report": "node scripts/report-web-vitals.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
