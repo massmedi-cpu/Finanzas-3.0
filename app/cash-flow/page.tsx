@@ -1,4 +1,3 @@
-import AppShell from "../app-shell";
 import { loadCashFlow } from "../../src/application/cash-flow/cash-flow-loader";
 import { CashFlowClient } from "./cash-flow-client";
 
@@ -13,5 +12,5 @@ export default async function CashFlowPage({
   const month = typeof params.month === "string" ? params.month : null;
   const view = await loadCashFlow(month);
 
-  return <AppShell><CashFlowClient view={view} /></AppShell>;
+  return <CashFlowClient view={view} />;
 }

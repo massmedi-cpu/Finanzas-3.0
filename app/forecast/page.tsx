@@ -1,4 +1,3 @@
-import AppShell from "../app-shell";
 import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadForecastSnapshot,
@@ -62,18 +61,16 @@ export default async function ForecastPage({
     : null;
 
   return (
-    <AppShell>
-      <div className={premium.root}>
-        <ModuleContextNavigation
-          links={forecastModuleLinks(resolvedSelection)}
-          ariaLabel="Continuar desde Previsión"
-        />
-        <ForecastClient
-          initialSnapshot={initialSnapshot}
-          initialSelection={resolvedSelection}
-          recurrenceHandoff={recurrenceHandoff}
-        />
-      </div>
-    </AppShell>
+    <div className={premium.root}>
+      <ModuleContextNavigation
+        links={forecastModuleLinks(resolvedSelection)}
+        ariaLabel="Continuar desde Previsión"
+      />
+      <ForecastClient
+        initialSnapshot={initialSnapshot}
+        initialSelection={resolvedSelection}
+        recurrenceHandoff={recurrenceHandoff}
+      />
+    </div>
   );
 }
