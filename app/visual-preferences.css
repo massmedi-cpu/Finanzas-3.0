@@ -1,0 +1,59 @@
+/*
+ * PRE-037 · Preferencias visuales globales.
+ *
+ * La densidad modifica únicamente espacio y separación. No redefine ningún
+ * token --font-* para cumplir Axioma §92: compacta no significa letra pequeña.
+ */
+html[data-density="compact"] {
+  --space-2: 0.375rem;
+  --space-3: 0.625rem;
+  --space-4: 0.8rem;
+  --space-5: 1rem;
+  --space-6: 1.15rem;
+  --space-8: 1.5rem;
+  --space-10: 2rem;
+  --space-12: 2.35rem;
+}
+
+html[data-density="compact"] .configuration-shell {
+  padding: clamp(0.8rem, 1.9vw, 2rem);
+}
+
+html[data-density="compact"] .config-panel,
+html[data-density="compact"] main [class*="Card"],
+html[data-density="compact"] main [class*="card"],
+html[data-density="compact"] main [class*="Panel"],
+html[data-density="compact"] main [class*="panel"] {
+  --density-card-padding: 0.8rem;
+}
+
+html[data-density="compact"] main :where(table th, table td) {
+  padding-block: min(0.65rem, var(--space-3));
+}
+
+/*
+ * La preferencia interna REDUCIR MOVIMIENTO complementa, no sustituye,
+ * prefers-reduced-motion. Se mantiene el feedback de estado sin animaciones
+ * decorativas ni desplazamientos suaves.
+ */
+html[data-reduce-motion="true"] *,
+html[data-reduce-motion="true"] *::before,
+html[data-reduce-motion="true"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  transition-delay: 0ms !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+}
