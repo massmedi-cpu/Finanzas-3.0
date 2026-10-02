@@ -26,13 +26,15 @@ test("PRE-038 §110 converges camera, gallery/files and Drive into the document 
   expect(ocrRoute).toContain("runDocumentOcr");
 });
 
-test("PRE-038 §111 has conservative rotation, framing and illumination recovery", () => {
+test("PRE-038 §111 has conservative rotation, framing, illumination and perspective evaluation", () => {
   expect(tesseract).toContain("rotateAuto: true");
   expect(tesseract).toContain("needsOrientationFallback");
   expect(tesseract).toContain("refineBackgroundContamination");
   expect(tesseract).toContain("refinementIsSafe");
   expect(tesseract).toContain("MAX_PIXELS");
 
+  expect(illumination).toContain("assessReceiptImageQuality");
+  expect(illumination).toContain("needsPerspectiveCorrection");
   expect(illumination).toContain('.removeAlpha().grayscale().raw()');
   expect(illumination).toContain(".blur(");
   expect(illumination).toContain(".median(");
@@ -42,6 +44,7 @@ test("PRE-038 §111 has conservative rotation, framing and illumination recovery
   expect(paddedConsensus).toContain("normalizeReceiptIllumination(bytes, glyphHeight, 0)");
   expect(paddedConsensus).toContain("normalizeReceiptIllumination(bytes, glyphHeight, 1)");
   expect(paddedConsensus).toContain("choosePaddedNumericConsensus");
+  expect(ocrConfig).toContain("document-ocr-image-quality");
 });
 
 test("PRE-038 §115 keeps a visual reconstruction workbench backed by OCR geometry", () => {
@@ -64,9 +67,11 @@ test("PRE-038 §117 keeps OCR review-only and associations explicit", () => {
   expect(documentsClient).not.toContain('method: "automatic"');
 });
 
-test.fixme("PRE-038 §111 perspective/keystone evaluation must be explicit before G5", () => {
+test("PRE-038 §111 perspective/keystone evaluation is explicit before G5", () => {
   const preprocessingSurface = `${tesseract}\n${illumination}\n${paddedConsensus}`;
   expect(preprocessingSurface).toMatch(/perspective|keystone|projective|homography/i);
+  expect(illumination).toContain("perspectiveFromDarkExtents");
+  expect(illumination).toContain("perspectiveConfidence");
 });
 
 test.fixme("PRE-038 §116 must name every heterogeneous physical/source fixture before G5", () => {
