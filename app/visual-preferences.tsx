@@ -10,6 +10,7 @@ type VisualPreferences = {
 };
 
 type VisualPreferencesValue = VisualPreferences & {
+  ready: boolean;
   setDensity: (density: VisualDensity) => void;
   setReduceMotion: (reduceMotion: boolean) => void;
   reset: () => void;
@@ -48,22 +49,21 @@ function applyPreferences(preferences: VisualPreferences) {
   const root = document.documentElement;
   root.dataset.density = preferences.density;
   root.dataset.reduceMotion = preferences.reduceMotion ? "true" : "false";
-  root.dataset.visualPreferencesReady = "true";
 }
 
 export function VisualPreferencesProvider({ children }: { children: ReactNode }) {
   const [preferences, setPreferences] = useState<VisualPreferences>(DEFAULT_PREFERENCES);
-  const [hydrated, setHydrated] = useState(false);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
     const stored = readStoredPreferences();
     setPreferences(stored);
     applyPreferences(stored);
-    setHydrated(true);
+    setReady(true);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!ready) return;
     applyPreferences(preferences);
     try {
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
@@ -71,14 +71,15 @@ export function VisualPreferencesProvider({ children }: { children: ReactNode })
       // Las preferencias visuales siguen activas durante la sesión aunque el
       // navegador bloquee almacenamiento local.
     }
-  }, [hydrated, preferences]);
+  }, [ready, preferences]);
 
   const value = useMemo<VisualPreferencesValue>(() => ({
     ...preferences,
+    ready,
     setDensity: (density) => setPreferences((current) => ({ ...current, density })),
     setReduceMotion: (reduceMotion) => setPreferences((current) => ({ ...current, reduceMotion })),
     reset: () => setPreferences(DEFAULT_PREFERENCES),
-  }), [preferences]);
+  }), [preferences, ready]);
 
   return <VisualPreferencesContext.Provider value={value}>{children}</VisualPreferencesContext.Provider>;
 }
