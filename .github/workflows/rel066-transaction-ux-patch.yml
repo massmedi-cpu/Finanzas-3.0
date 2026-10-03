@@ -1,0 +1,79 @@
+name: REL-066 Transaction UX Patch
+
+on:
+  push:
+    branches:
+      - release/10.0.66-ux-quality
+    paths:
+      - .github/workflows/rel066-transaction-ux-patch.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout REL-066
+        uses: actions/checkout@v4
+        with:
+          ref: release/10.0.66-ux-quality
+          fetch-depth: 0
+
+      - name: Apply UX-005 and UX-007
+        shell: python
+        run: |
+          from pathlib import Path
+
+          path = Path("app/transactions/transactions-client.tsx")
+          text = path.read_text()
+
+          replacements = [
+            (
+              '  const listRequestSequence = useRef(0);\n  const conceptInputRef = useRef<HTMLInputElement>(null);',
+              '  const listRequestSequence = useRef(0);\n  const conceptInputRef = useRef<HTMLInputElement>(null);\n  const pendingFocusId = useRef<string | null>(null);'
+            ),
+            (
+              '''  const activeFilterCount = useMemo(\n    () => Object.values(appliedFilters).filter((value) => value.trim() !== "").length,\n    [appliedFilters],\n  );''',
+              '''  const activeFilterCount = useMemo(\n    () => Object.values(appliedFilters).filter((value) => value.trim() !== "").length,\n    [appliedFilters],\n  );\n\n  const filtersDirty = useMemo(\n    () => (Object.keys(EMPTY_FILTERS) as Array<keyof Filters>).some(\n      (key) => draftFilters[key] !== appliedFilters[key],\n    ),\n    [appliedFilters, draftFilters],\n  );'''
+            ),
+            (
+              '''  function updateFilter(field: keyof Filters, value: string) {\n    setDraftFilters((current) => ({ ...current, [field]: value }));\n  }''',
+              '''  useEffect(() => {\n    const id = pendingFocusId.current;\n    if (!id || loading) return;\n    pendingFocusId.current = null;\n    const target = document.querySelector<HTMLElement>(`[data-transaction-id="${id}"]`);\n    if (target) {\n      target.focus({ preventScroll: true });\n      target.scrollIntoView({ block: "center", behavior: "smooth" });\n      return;\n    }\n    setNotice((current) => {\n      const context = "El movimiento guardado ya no está en el tramo visible o dejó de coincidir con los filtros actuales.";\n      return current ? `${current} ${context}` : context;\n    });\n  }, [loading, rows]);\n\n  function updateFilter(field: keyof Filters, value: string) {\n    setDraftFilters((current) => ({ ...current, [field]: value }));\n  }'''
+            ),
+            (
+              '''      setSelectedIds([]);\n      closeReview();\n      await fetchPage(appliedFilters, null, false);''',
+              '''      setSelectedIds([]);\n      closeReview();\n      if (ids.length === 1) pendingFocusId.current = ids[0];\n      await fetchPage(appliedFilters, null, false);'''
+            ),
+            (
+              '''      setNotice(message);\n      closeReview();\n      await fetchPage(appliedFilters, null, false);''',
+              '''      setNotice(message);\n      closeReview();\n      const focusId = typeof command.transactionId === "string" ? command.transactionId : null;\n      if (focusId) pendingFocusId.current = focusId;\n      await fetchPage(appliedFilters, null, false);'''
+            ),
+            (
+              '''        <div className={styles.filterActions}>\n          <button className={styles.primaryButton} type="submit" disabled={saving}>Aplicar filtros</button>\n          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={saving}>Limpiar</button>\n        </div>''',
+              '''        <div className={styles.filterActions}>\n          <span className={styles.resultCount} role="status" aria-live="polite">\n            {filtersDirty ? "Cambios sin aplicar" : "La tabla refleja estos filtros"}\n          </span>\n          <button className={styles.primaryButton} type="submit" disabled={saving || !filtersDirty}>\n            {filtersDirty ? "Aplicar filtros" : "Filtros aplicados"}\n          </button>\n          <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={saving}>Limpiar</button>\n        </div>'''
+            ),
+            (
+              '''                    <tr className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>''',
+              '''                    <tr\n                      className={selectedSet.has(row.id) ? styles.selectedRow : undefined}\n                      data-transaction-id={row.id}\n                      tabIndex={-1}\n                    >'''
+            ),
+          ]
+
+          for old, new in replacements:
+            count = text.count(old)
+            if count != 1:
+              raise SystemExit(f"Expected exactly one match, found {count}: {old[:80]!r}")
+            text = text.replace(old, new)
+
+          path.write_text(text)
+
+      - name: Commit UX continuity patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/transactions/transactions-client.tsx
+          git diff --cached --quiet && exit 0
+          git commit -m "REL-066 · preservar contexto y estado de filtros"
+          git push origin HEAD:release/10.0.66-ux-quality
