@@ -104,6 +104,32 @@ async function mockDashboard(page: Page) {
     }
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "critical",
+          asOfDate: "2026-09-16",
+          dataThroughDate: null,
+          generatedAt: "2026-09-16T20:00:00.000Z",
+          requestedSources: ["financial"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions: null },
+        });
+        return;
+      }
+      if (scope === "activity") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "activity",
+          asOfDate: "2026-09-16",
+          dataThroughDate: "2026-09-16",
+          generatedAt: "2026-09-16T20:00:00.000Z",
+          requestedSources: ["transactions"],
+          failedSources: [],
+          data: { financial: null, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
       if (scope === "primary") {
         await json(route, {
           contractVersion: 1,
