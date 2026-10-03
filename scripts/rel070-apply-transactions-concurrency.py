@@ -1,0 +1,139 @@
+from pathlib import Path
+
+path = Path('app/transactions/transactions-client.tsx')
+text = path.read_text()
+
+old_refs = '''  const listRequestSequence = useRef(0);
+  const conceptInputRef = useRef<HTMLInputElement>(null);'''
+new_refs = '''  const replaceRequestSequence = useRef(0);
+  const appendRequestSequence = useRef(0);
+  const replaceAbortController = useRef<AbortController | null>(null);
+  const appendAbortController = useRef<AbortController | null>(null);
+  const conceptInputRef = useRef<HTMLInputElement>(null);'''
+if old_refs not in text:
+    raise SystemExit('REL-070 refs anchor not found')
+text = text.replace(old_refs, new_refs, 1)
+
+old_fetch = '''  const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
+    const requestSequence = ++listRequestSequence.current;
+    if (append) {
+      setLoadingMore(true);
+    } else {
+      setLoading(true);
+      setLoadingMore(false);
+    }
+    setError(null);
+    try {
+      const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, { cache: "no-store" });
+      const payload = await response.json().catch(() => ({}));
+      if (requestSequence !== listRequestSequence.current) return;
+      if (!response.ok) throw new Error(readableError(payload));
+      const result = payload as QueryResponse;
+      const incoming = Array.isArray(result.rows) ? result.rows : [];
+      setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
+      setTotalCount(Number.isInteger(result.totalCount) ? result.totalCount : 0);
+      setHasMore(result.hasMore === true);
+      setNextCursor(result.nextCursor ?? null);
+      if (!append) setSelectedIds([]);
+    } catch (cause) {
+      if (requestSequence !== listRequestSequence.current) return;
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
+      if (!append) {
+        setRows([]);
+        setTotalCount(0);
+        setHasMore(false);
+        setNextCursor(null);
+        setSelectedIds([]);
+      }
+    } finally {
+      if (requestSequence !== listRequestSequence.current) return;
+      if (append) setLoadingMore(false);
+      else setLoading(false);
+    }
+  }, []);'''
+new_fetch = '''  const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
+    const replaceEpochAtStart = replaceRequestSequence.current;
+    const requestSequence = append
+      ? ++appendRequestSequence.current
+      : ++replaceRequestSequence.current;
+    const controller = new AbortController();
+
+    if (append) {
+      appendAbortController.current?.abort();
+      appendAbortController.current = controller;
+      setLoadingMore(true);
+    } else {
+      replaceAbortController.current?.abort();
+      appendAbortController.current?.abort();
+      appendRequestSequence.current += 1;
+      replaceAbortController.current = controller;
+      appendAbortController.current = null;
+      setLoading(true);
+      setLoadingMore(false);
+    }
+
+    const isCurrentRequest = () => append
+      ? requestSequence === appendRequestSequence.current && replaceEpochAtStart === replaceRequestSequence.current
+      : requestSequence === replaceRequestSequence.current;
+
+    setError(null);
+    try {
+      const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!isCurrentRequest()) return;
+      if (!response.ok) throw new Error(readableError(payload));
+      const result = payload as QueryResponse;
+      const incoming = Array.isArray(result.rows) ? result.rows : [];
+      setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
+      setTotalCount(Number.isInteger(result.totalCount) ? result.totalCount : 0);
+      setHasMore(result.hasMore === true);
+      setNextCursor(result.nextCursor ?? null);
+      if (!append) setSelectedIds([]);
+    } catch (cause) {
+      if (controller.signal.aborted || !isCurrentRequest()) return;
+      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
+      if (!append) {
+        setRows([]);
+        setTotalCount(0);
+        setHasMore(false);
+        setNextCursor(null);
+        setSelectedIds([]);
+      }
+    } finally {
+      if (!isCurrentRequest()) return;
+      if (append) {
+        if (appendAbortController.current === controller) appendAbortController.current = null;
+        setLoadingMore(false);
+      } else {
+        if (replaceAbortController.current === controller) replaceAbortController.current = null;
+        setLoading(false);
+      }
+    }
+  }, []);'''
+if old_fetch not in text:
+    raise SystemExit('REL-070 fetchPage anchor not found')
+text = text.replace(old_fetch, new_fetch, 1)
+
+old_cleanup = '''    return () => {
+      listRequestSequence.current += 1;
+    };'''
+new_cleanup = '''    return () => {
+      replaceRequestSequence.current += 1;
+      appendRequestSequence.current += 1;
+      replaceAbortController.current?.abort();
+      appendAbortController.current?.abort();
+    };'''
+if old_cleanup not in text:
+    raise SystemExit('REL-070 cleanup anchor not found')
+text = text.replace(old_cleanup, new_cleanup, 1)
+
+path.write_text(text)
+for temporary in [
+    Path('.github/workflows/rel070-apply-transactions-concurrency.yml'),
+    Path('scripts/rel070-apply-transactions-concurrency.py'),
+]:
+    if temporary.exists():
+        temporary.unlink()
