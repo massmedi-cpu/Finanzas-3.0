@@ -4,4 +4,30 @@
     display: inline-flex;
     align-items: center;
   }
+
+  /* MOB-001 · cualquier control operativo del contenido debe conservar una hit area táctil mínima. */
+  #main-content button,
+  #main-content [role="button"] {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  #main-content input:not([type="checkbox"]):not([type="radio"]),
+  #main-content select,
+  #main-content textarea {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  /* MOB-003 · metadata/estado/ayuda decisional no puede caer por debajo del helper de producto. */
+  #main-content small,
+  #main-content [class*="Meta"],
+  #main-content [class*="meta"],
+  #main-content [class*="Status"],
+  #main-content [class*="status"],
+  #main-content [class*="Summary"] span,
+  #main-content [class*="summary"] span {
+    font-size: max(var(--font-helper), 1em);
+    line-height: 1.35;
+  }
 }
