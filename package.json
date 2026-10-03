@@ -1,6 +1,6 @@
 {
   "name": "financial-app",
-  "version": "10.0.63",
+  "version": "10.0.64",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -36,7 +36,8 @@
     "backup:create": "node scripts/create-financial-backup.mjs",
     "backup:validate": "node scripts/validate-financial-backup.mjs",
     "backup:create:v2": "node scripts/create-financial-backup-v2.mjs",
-    "backup:validate:v2": "node scripts/validate-financial-backup-v2.mjs"
+    "backup:validate:v2": "node scripts/validate-financial-backup-v2.mjs",
+    "verify:data-visualization": "node scripts/verify-data-visualization-10.0.64.mjs"
   },
   "engines": {
     "node": "24.x"
