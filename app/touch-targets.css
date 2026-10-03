@@ -5,11 +5,20 @@
     align-items: center;
   }
 
-  /* MOB-001 · cualquier control operativo del contenido debe conservar una hit area táctil mínima. */
+  /* MOB-001 · todo control operativo conserva al menos 44px de altura táctil. */
   #main-content button,
   #main-content [role="button"] {
-    min-width: 44px;
     min-height: 44px;
+  }
+
+  /*
+   * Los controles ordinarios conservan además 44px de ancho. Las visualizaciones
+   * densas declaran data-dense-target="true": mantienen 44px de alto, pero pueden
+   * repartir su ancho entre puntos contiguos para no forzar scroll horizontal.
+   */
+  #main-content button:not([data-dense-target="true"]),
+  #main-content [role="button"]:not([data-dense-target="true"]) {
+    min-width: 44px;
   }
 
   #main-content input:not([type="checkbox"]):not([type="radio"]),
