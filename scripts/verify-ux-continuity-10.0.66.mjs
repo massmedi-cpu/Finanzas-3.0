@@ -10,6 +10,7 @@ function requireMatch(source, pattern, message) {
 
 const review = read("app/review/review-client.tsx");
 const shell = read("app/app-shell.tsx");
+const mobileNavigation = read("app/mobile-navigation.tsx");
 const recurrences = read("app/recurrences/recurrences-client.tsx");
 const transactions = read("app/transactions/transactions-client.tsx");
 const errorBoundary = read("app/error.tsx");
@@ -20,7 +21,8 @@ requireMatch(review, /\/transactions\?reviewState=needs_review/, "UX-002: falta 
 requireMatch(review, /\/configuration\/source/, "UX-002: falta señal de fuente bancaria");
 
 requireMatch(shell, /Navegación principal/, "UX-003: falta navegación primaria persistente");
-requireMatch(shell, /Navegación móvil/, "UX-003: falta navegación móvil persistente");
+requireMatch(shell, /<MobileNavigation\s*\/>/, "UX-003: AppShell no monta navegación móvil persistente");
+requireMatch(mobileNavigation, /Navegación móvil/, "UX-003: falta navegación móvil persistente");
 
 requireMatch(recurrences, /Actualizar y ver impacto en Previsión/, "UX-004: falta retorno contextual a Previsión");
 requireMatch(recurrences, /forecastImpactHref/, "UX-004: falta deep-link de impacto de recurrencia");
