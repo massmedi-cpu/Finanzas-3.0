@@ -143,6 +143,7 @@ const UNCHANGED = "__unchanged__";
 const ANALYTICS_INCLUDE = "__include__";
 const ANALYTICS_EXCLUDE = "__exclude__";
 const CONCEPT_ERROR_ID = "transaction-concept-error";
+const SUBCATEGORY_ERROR_ID = "transaction-subcategory-error";
 
 const EMPTY_FILTERS: Filters = {
   q: "",
@@ -338,7 +339,14 @@ export default function TransactionsClient() {
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   const listRequestSequence = useRef(0);
   const conceptInputRef = useRef<HTMLInputElement>(null);
+  const subcategorySelectRef = useRef<HTMLSelectElement>(null);
   const pendingFocusId = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!editingId) return;
+    const frame = window.requestAnimationFrame(() => conceptInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [editingId]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
     const requestSequence = ++listRequestSequence.current;
@@ -677,6 +685,7 @@ async function saveEdit(row: TransactionRow) {
   if (editor.categoryMode === "set" && editor.categoryRoot !== NONE && children.length > 0 && !editor.categoryLeaf) {
     setError(null);
     setCategoryError("Selecciona una subcategoría.");
+    window.requestAnimationFrame(() => subcategorySelectRef.current?.focus());
     return;
   }
   setConceptError("");
@@ -839,7 +848,7 @@ async function saveEdit(row: TransactionRow) {
         {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th className={styles.selectHeading}>Sel.</th><th>Fecha</th><th>Concepto y trazabilidad</th><th>Cuenta</th><th>Categoría</th><th className={styles.amountHeading}>Importe</th><th>Gestión</th></tr></thead>
+              <thead><tr><th scope="col" className={styles.selectHeading}>Sel.</th><th scope="col">Fecha</th><th scope="col">Concepto y trazabilidad</th><th scope="col">Cuenta</th><th scope="col">Categoría</th><th scope="col" className={styles.amountHeading}>Importe</th><th scope="col">Gestión</th></tr></thead>
               <tbody>
                 {rows.map((row) => (
                   <Fragment key={row.id}>
@@ -900,10 +909,10 @@ async function saveEdit(row: TransactionRow) {
                     setEditor({ ...editor, categoryMode: "set", categoryRoot, categoryLeaf: "" });
                     setCategoryError("");
                   }}><option value={NONE}>Sin categoría</option>{activeRootCategories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</select><small className={styles.assignmentHint}>{editor.categoryMode === "inherit" ? "Origen: clasificación detectada" : "Origen: ajuste manual"}</small></label>
-                  <label className={`${styles.editorField} ${styles.subcategoryField}`}><span>Subcategoría</span><select data-testid="edit-subcategory" value={editor.categoryLeaf} disabled={editor.categoryRoot === NONE || activeSubcategories(facets.categories, editor.categoryRoot).length === 0} aria-invalid={categoryError ? "true" : "false"} onChange={(event) => {
+                  <label className={`${styles.editorField} ${styles.subcategoryField}`}><span>Subcategoría</span><select ref={subcategorySelectRef} data-testid="edit-subcategory" value={editor.categoryLeaf} disabled={editor.categoryRoot === NONE || activeSubcategories(facets.categories, editor.categoryRoot).length === 0} aria-invalid={categoryError ? "true" : "false"} aria-describedby={categoryError ? SUBCATEGORY_ERROR_ID : undefined} onChange={(event) => {
                     setEditor({ ...editor, categoryMode: "set", categoryLeaf: event.target.value });
                     setCategoryError("");
-                  }}>{activeSubcategories(facets.categories, editor.categoryRoot).length > 0 ? <><option value="">Selecciona una subcategoría</option>{activeSubcategories(facets.categories, editor.categoryRoot).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</> : <option value="">No hay subcategorías</option>}</select>{categoryError ? <small className={styles.fieldError} role="alert">{categoryError}</small> : null}</label>
+                  }}>{activeSubcategories(facets.categories, editor.categoryRoot).length > 0 ? <><option value="">Selecciona una subcategoría</option>{activeSubcategories(facets.categories, editor.categoryRoot).map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}</> : <option value="">No hay subcategorías</option>}</select>{categoryError ? <small id={SUBCATEGORY_ERROR_ID} className={styles.fieldError} role="alert">{categoryError}</small> : null}</label>
                   <div className={styles.categoryAssignment}>
                     <small>Clasificación detectada: {row.category.originalName ?? "Sin categoría"}</small>
                     {editor.categoryMode === "set" ? <button data-testid="reset-category-auto" className={styles.secondaryButton} type="button" disabled={saving} onClick={() => {
