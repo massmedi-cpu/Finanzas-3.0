@@ -255,6 +255,8 @@ test("F · Análisis ofrece visualización accesible, tabla alternativa, tooltip
 test("F · Presupuestos representa la magnitud del exceso y enlaza con los movimientos causantes", async ({ page }) => {
   await rejectUnexpectedWrites(page, "/api/budgets", budgetSnapshot);
   await page.goto("/budgets");
+  await page.getByLabel("Mes").fill("2026-09");
+  await page.getByRole("button", { name: "Actualizar referencias" }).click();
 
   const magnitude = page.getByRole("group", { name: "Magnitud del presupuesto · Supermercado" });
   await expect(magnitude).toBeVisible();
