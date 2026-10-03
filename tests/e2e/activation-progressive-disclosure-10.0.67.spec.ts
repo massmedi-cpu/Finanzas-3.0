@@ -67,7 +67,7 @@ test.describe("Financial App 10.0.67 · activación y divulgación progresiva", 
     const main = page.locator("main[data-activation-complete]");
     await expect(main).toHaveAttribute("data-activation-complete", "true");
     await expect(page.getByRole("heading", { name: "Empieza por lo que importa hoy" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Ver mi resumen", exact: true })).toHaveAttribute("href", "/");
+    await expect(page.getByRole("link", { name: "Ver mi resumen", exact: true }).first()).toHaveAttribute("href", "/");
     await expect(page.getByRole("link", { name: "Ver pendientes", exact: true })).toHaveAttribute("href", "/review");
 
     await expect(page.getByText("2 cuentas activas están preparadas", { exact: false })).toBeVisible();
