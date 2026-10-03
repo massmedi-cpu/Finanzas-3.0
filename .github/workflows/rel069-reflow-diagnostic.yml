@@ -1,0 +1,37 @@
+name: REL-069 Reflow Diagnostic
+
+on:
+  push:
+    branches:
+      - release/10.0.69-reflow-accessibility
+    paths:
+      - .github/workflows/rel069-reflow-diagnostic.yml
+
+permissions:
+  contents: read
+
+jobs:
+  reflow:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Reflow accessibility diagnostic
+        run: npx playwright test tests/e2e/reflow-accessibility-10.0.69.spec.ts --project=chromium-desktop --workers=1
