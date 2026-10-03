@@ -56,10 +56,25 @@ El formulario mantiene mensajes genéricos para no enumerar cuentas o credencial
 - un fallo de credenciales se anuncia, recibe foco y queda asociado a ambos campos;
 - un 503 se anuncia y recibe foco sin marcar las credenciales como inválidas.
 
+## Evidencia de cierre REL-066
+
+- candidato funcional certificado: `f68e87018a76e4a851db5a7d0a4663fe9b9b909e`;
+- PR de release: `#528`;
+- candidatura exacta previa al merge: `3f6d20516a48e93e86ee0a3e0291043d89226755`;
+- los 22 workflows de certificación de la candidatura terminaron en `success`, incluido `Release 10.0.66` (run `37133349242`) y `UX 15 User Value`;
+- `Production Backup v2` ejecutado sobre el commit funcional exacto, run `37133779151`: validación de identidad, backup, cifrado, Storage y restauración aislada en PostgreSQL 17 completados con éxito;
+- commit de publicación: `a97545ef75d654467e4a466b737089c6d98130e9`;
+- deployment de producción: `dpl_934XNmy4wzaJ4Vs5PaYD7teH9b2J`;
+- URL estable: `https://financialapp-home.vercel.app/`;
+- `/api/build` certificó `version=10.0.66`, `targetVersion=10.0.66`, `branch=main`, el commit de publicación y el deployment exacto, con `releaseDeployable=true`;
+- Git deployments se cerraron de nuevo tras verificar Producción en el commit `1b0dfb22ae7bfe2f374050cd0b7f4a3122b2fcd2`;
+- `Production Postflight` exacto, run `37134103874`: identidad, recorrido desktop/móvil/PWA, seguridad y lectura de datos reales con sesión forzada a solo lectura terminaron en `success`;
+- los dispatchers temporales de backup y postflight fueron retirados después de su uso.
+
 ## Próximo bloque UX
 
 UX-001 y UX-008 se mantienen explícitamente fuera de esta release para tratarlos juntos como arquitectura de activación y divulgación progresiva, no como parches de copy aislados.
 
 ## Estado
 
-REL-066: **PENDIENTE DE CERTIFICACIÓN CI**.
+REL-066: **CERRADA, CERTIFICADA Y PUBLICADA EN PRODUCCIÓN**.
