@@ -33,7 +33,7 @@ async function mockOnboarding(page: Page, state: "new" | "ready") {
     });
   });
 
-  await page.route("**/api/financial?mode=snapshot", async (route) => {
+  await page.route("**/api/financial**", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
