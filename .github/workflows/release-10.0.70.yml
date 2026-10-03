@@ -1,0 +1,54 @@
+name: Release 10.0.70
+
+on:
+  push:
+    branches:
+      - release/10.0.70-transactions-concurrency
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-transactions-concurrency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify REL-070 static contract
+        run: node scripts/verify-transactions-concurrency-10.0.70.mjs
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Transactions concurrency browser gate
+        run: npx playwright test tests/e2e/transactions-concurrency-10.0.70.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+
+      - name: Full Transactions regression
+        run: npx playwright test tests/e2e/transactions.spec.ts --project=chromium-desktop --workers=1
+
+      - name: Accessibility regression from REL-068
+        run: npx playwright test tests/e2e/accessibility-transactions-10.0.68.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+
+      - name: UX continuity gate
+        run: npm run test:ux-continuity
+
+      - name: Responsive matrix
+        run: npm run test:responsive-matrix
