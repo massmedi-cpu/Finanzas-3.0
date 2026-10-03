@@ -7,6 +7,7 @@ const preferences = read("app/visual-preferences.tsx");
 const layout = read("app/layout.tsx");
 const themeCss = read("app/theme-system.css");
 const appearance = read("app/configuration/appearance/appearance-client.tsx");
+const bootstrap = read("public/theme-init.js");
 
 function fail(message) {
   console.error(`❌ ART-010 theme guard: ${message}`);
@@ -30,14 +31,20 @@ if (!preferences.includes("root.dataset.themePreference") || !preferences.includ
 if (!preferences.includes("root.style.colorScheme = resolvedTheme")) {
   fail("controles nativos deben recibir el color-scheme resuelto");
 }
-if (!layout.includes('import "./theme-system.css"')) {
-  fail("RootLayout debe cargar el contrato ART-010");
-}
-if (!layout.includes('colorScheme: "light dark"')) {
-  fail("viewport no puede declarar exclusivamente dark");
-}
+
+if (!layout.includes('import "./theme-system.css"')) fail("RootLayout debe cargar el contrato ART-010");
+if (!layout.includes('colorScheme: "light dark"')) fail("viewport no puede declarar exclusivamente dark");
 if (!layout.includes('data-theme-preference="system"') || !layout.includes('data-theme="dark"')) {
   fail("RootLayout debe tener fallback SSR explícito y preferencia system");
+}
+if (!layout.includes('<script src="/theme-init.js" />')) {
+  fail("la preferencia guardada debe resolverse antes del primer paint");
+}
+if (!bootstrap.includes("financial-app:visual-preferences-v1") || !bootstrap.includes("prefers-color-scheme: dark")) {
+  fail("theme-init debe resolver almacenamiento local y preferencia del sistema");
+}
+if (!bootstrap.includes("root.dataset.themePreference") || !bootstrap.includes("root.dataset.theme = resolved")) {
+  fail("theme-init debe aplicar preferencia y tema efectivo antes de hidratar");
 }
 
 for (const selector of ['html[data-theme="dark"]', 'html[data-theme="light"]']) {
@@ -60,18 +67,22 @@ if (!themeCss.includes('html[data-theme="light"] .premium-primary-nav')) {
 if (!themeCss.includes('html[data-theme="light"] .configuration-hero')) {
   fail("Configuración debe entrar en el contrato de tema claro");
 }
-
-for (const testId of ["theme-system", "theme-light", "theme-dark", "theme-resolved"]) {
-  if (!appearance.includes(`data-testid=${testId.startsWith("theme-") && testId !== "theme-resolved" ? "{`" : "\""}`)) {
-    // Los radio buttons se construyen dinámicamente; el guard exacto se hace debajo.
-    break;
-  }
+if (!themeCss.includes('form[aria-label="Filtros de movimientos"]')) {
+  fail("Movimientos debe tener una superficie clara gobernada y verificable");
 }
+if (!themeCss.includes('section[aria-labelledby="transaction-list-heading"]')) {
+  fail("el listado de Movimientos debe entrar en ART-010");
+}
+
 if (!appearance.includes('data-testid={`theme-${option.value}`}')) fail("faltan test ids de selección de tema");
 if (!appearance.includes('data-testid="theme-resolved"')) fail("falta estado del tema efectivo");
+if (!appearance.includes("setTheme") || !appearance.includes("resolvedTheme")) {
+  fail("Apariencia debe controlar la preferencia y mostrar el tema efectivo");
+}
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("✅ ART-010 adaptive theme guard: OK");
 console.log("- preferencias: system / light / dark con persistencia local");
-console.log("- system sigue prefers-color-scheme en vivo");
-console.log("- tema resuelto gobierna color-scheme, tokens, fondo, AppShell y Configuración");
+console.log("- resolución previa al primer paint + seguimiento en vivo del sistema");
+console.log("- tema resuelto gobierna color-scheme, tokens, fondo, navegación y superficies críticas");
+console.log("- Inicio, Configuración y Movimientos quedan dentro del contrato representativo");
