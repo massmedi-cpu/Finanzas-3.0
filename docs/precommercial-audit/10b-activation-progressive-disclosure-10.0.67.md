@@ -52,6 +52,21 @@ REL-067 no se considerará cerrada hasta demostrar conjuntamente:
 
 Workflow: `.github/workflows/release-10.0.67.yml`.
 
+## Evidencia de cierre REL-067
+
+- candidatura exacta previa al merge: `2367b66ee39a8f78b1c967879c24d3046674402f`;
+- PR de release: `#529`;
+- commit funcional estable integrado y protegido por backup: `af950ba86156d4b5f0c4dad97b76ecc4cba8c381`;
+- los workflows de certificación de la candidatura terminaron en `success`, incluidos `Release 10.0.67` (run `37135392553`) y `UX 15 User Value`;
+- `Production Backup v2` ejecutado sobre el commit funcional exacto, run `37135719112`: identidad, copia de PostgreSQL y Storage, cifrado, validación del artefacto y restauración aislada en PostgreSQL 17 completados con éxito;
+- commit de publicación: `e4b6fe1db6de9385edd10b25c96da89b69b4035e`;
+- deployment de producción: `dpl_3DWXTFRU7iX7o1RQ4c5hUCwMtHsM`;
+- URL estable: `https://financialapp-home.vercel.app/`;
+- `/api/build` certificó `version=10.0.67`, `targetVersion=10.0.67`, `branch=main`, el commit de publicación y el deployment exacto, con `releaseDeployable=true`;
+- Git deployments se cerraron de nuevo tras verificar Producción en el commit `e073002b828758b9e16458562db006f62b610d03`;
+- `Production Postflight` exacto, run `37137131491`: identidad, recorrido desktop/móvil/PWA, seguridad y lectura de datos reales con sesión forzada a solo lectura terminaron en `success`;
+- los dispatchers temporales de backup y postflight fueron retirados después de su uso.
+
 ## Estado
 
-REL-067: **EN CERTIFICACIÓN**.
+REL-067: **CERRADA, CERTIFICADA Y PUBLICADA EN PRODUCCIÓN**.
