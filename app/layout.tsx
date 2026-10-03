@@ -19,6 +19,7 @@ import "./accessibility-forced-colors.css";
 import "./accessibility-live-regions.css";
 import "./action-feedback.css";
 import "./app-background.css";
+import "./theme-system.css";
 
 export const dynamic = "force-dynamic";
 
@@ -39,13 +40,23 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#030711",
-  colorScheme: "dark",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#edf2f9" },
+    { media: "(prefers-color-scheme: dark)", color: "#030711" },
+  ],
+  colorScheme: "light dark",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="es" data-density="comfortable" data-reduce-motion="false">
+    <html
+      lang="es"
+      data-density="comfortable"
+      data-reduce-motion="false"
+      data-theme-preference="system"
+      data-theme="dark"
+      suppressHydrationWarning
+    >
       <body>
         <VisualPreferencesProvider>
           <ActionFeedbackProvider>
