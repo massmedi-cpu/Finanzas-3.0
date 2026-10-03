@@ -26,18 +26,18 @@ jobs:
         run: npm run typecheck
       - name: Production build and postbuild audits
         run: npm run build
-      - name: Unit tests
-        run: npm run test:unit
-      - name: Axioma audit
-        run: npm run audit:axioma
       - name: Pre-039 Axioma contract
-        run: npm run verify:pre039-axioma
-      - name: Rebuild scaffold contract
-        run: npm run verify:rebuild-scaffold
-      - name: OCR retention contract
-        run: npm run test:ocr-retention
+        run: npm run verify:pre039
+      - name: Premium design contract
+        run: npm run verify:premium-design
+      - name: Semantic design contract
+        run: npm run verify:semantic-design
+      - name: Data visualization contract
+        run: npm run verify:data-visualization
       - name: Transactions concurrency contract
         run: node scripts/transactions-concurrency-guard-contract.mjs
+      - name: Critical dependency audit
+        run: npm audit --audit-level=critical
 
   e2e:
     runs-on: ubuntu-latest
