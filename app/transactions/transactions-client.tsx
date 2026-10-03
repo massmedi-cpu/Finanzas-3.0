@@ -352,6 +352,8 @@ export default function TransactionsClient() {
   }, [editingId]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
+    if (append && replaceAbortController.current) return;
+
     const replaceEpochAtStart = replaceRequestSequence.current;
     const requestSequence = append
       ? ++appendRequestSequence.current
