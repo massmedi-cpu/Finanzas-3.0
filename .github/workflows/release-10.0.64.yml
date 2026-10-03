@@ -1,70 +1,14 @@
 name: Release 10.0.64
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "package.json"
-      - "package-lock.json"
-      - "src/design/financial-bar-chart.tsx"
-      - "app/accounts/accounts-client.tsx"
-      - "scripts/verify-data-visualization-10.0.64.mjs"
-      - "docs/precommercial-audit/08a-data-visualization-10.0.64.md"
-      - ".github/workflows/release-10.0.64.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
 
-concurrency:
-  group: release-10.0.64-${{ github.ref }}
-  cancel-in-progress: true
-
 jobs:
-  certify:
+  historical-certification:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
     steps:
-      - name: Checkout exact candidate
-        uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-
-      - name: Setup Node.js 24
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci --ignore-scripts --no-audit --no-fund
-
-      - name: Require exact 10.0.64 package identity
-        run: node -e "const p=require('./package.json');const l=require('./package-lock.json');if(p.version!=='10.0.64'||l.version!=='10.0.64'||l.packages[''].version!=='10.0.64')process.exit(1)"
-
-      - name: Data visualization scale and accessibility contract
-        run: node scripts/verify-data-visualization-10.0.64.mjs
-
-      - name: Semantic design token guard
-        run: npm run verify:semantic-design
-
-      - name: Responsive breakpoint governance
-        run: npm run verify:responsive-breakpoints
-
-      - name: Shared AppShell guard
-        run: npm run verify:app-shell
-
-      - name: TypeScript
-        run: npm run typecheck
-
-      - name: Production build
-        run: npm run build
-
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Responsive regression matrix
-        run: npm run test:responsive-matrix
-
-      - name: Premium visual system regression
-        run: npx playwright test tests/e2e/premium-visual-system.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+      - name: Historical release notice
+        run: echo "Financial App 10.0.64 was certified before merge; this workflow is archived for manual historical use."
