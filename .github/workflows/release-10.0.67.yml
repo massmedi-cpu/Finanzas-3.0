@@ -1,0 +1,51 @@
+name: Release 10.0.67
+
+on:
+  push:
+    branches:
+      - release/10.0.67-activation-progressive-disclosure
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-activation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v4
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify activation and progressive disclosure contract
+        run: npm run verify:activation
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build
+        run: npm run build
+
+      - name: Focused activation browser gate
+        run: npm run test:activation
+
+      - name: Existing UX continuity gate
+        run: npm run test:ux-continuity
+
+      - name: Existing responsive matrix
+        run: npm run test:responsive-matrix
