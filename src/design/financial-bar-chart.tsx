@@ -67,6 +67,7 @@ export function FinancialBarChart({
               type="button"
               key={row.monthStart}
               className={`${styles.column}${active ? ` ${styles.active}` : ""}${partial ? ` ${styles.partial}` : ""}`}
+              data-dense-target="true"
               aria-pressed={active}
               aria-label={valuesVisible
                 ? `${label}${partial ? ", mes parcial" : ""}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(
