@@ -57,6 +57,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       data-theme="dark"
       suppressHydrationWarning
     >
+      <head>
+        <script src="/theme-init.js" />
+      </head>
       <body>
         <VisualPreferencesProvider>
           <ActionFeedbackProvider>
