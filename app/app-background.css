@@ -12,7 +12,7 @@ html {
 
 body {
   background: var(--gradient-app-canvas);
-  background-attachment: fixed;
+  background-attachment: fixed, fixed, fixed;
 }
 
 /*
@@ -22,6 +22,18 @@ body {
  */
 [data-app-shell="shared"],
 #main-content,
-#main-content > main {
+#main-content > * {
   background-color: transparent;
+}
+
+@media (max-width: 48rem) {
+  body {
+    background-attachment: scroll, scroll, scroll;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-attachment: scroll, scroll, scroll;
+  }
 }
