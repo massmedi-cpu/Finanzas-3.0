@@ -1,25 +1,10 @@
 name: Release 10.0.61
 
 on:
-  pull_request:
-    branches:
-      - main
-    paths:
-      - "package.json"
-      - "package-lock.json"
-      - "app/layout.tsx"
-      - "app/app-background.css"
-      - "scripts/verify-background-composition.mjs"
-      - "tests/e2e/background-composition-10.0.61.spec.ts"
-      - "docs/precommercial-audit/07i-background-composition-10.0.61.md"
-      - ".github/workflows/release-10.0.61.yml"
+  workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  group: release-10.0.61-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   certify:
@@ -28,8 +13,6 @@ jobs:
     steps:
       - name: Checkout exact candidate
         uses: actions/checkout@v6
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
 
       - name: Setup Node.js 24
         uses: actions/setup-node@v6
