@@ -337,7 +337,10 @@ export default function TransactionsClient() {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [duplicateGroup, setDuplicateGroup] = useState<DuplicateGroupRow[]>([]);
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
-  const listRequestSequence = useRef(0);
+  const replaceRequestSequence = useRef(0);
+  const appendRequestSequence = useRef(0);
+  const replaceAbortController = useRef<AbortController | null>(null);
+  const appendAbortController = useRef<AbortController | null>(null);
   const conceptInputRef = useRef<HTMLInputElement>(null);
   const subcategorySelectRef = useRef<HTMLSelectElement>(null);
   const pendingFocusId = useRef<string | null>(null);
@@ -349,18 +352,40 @@ export default function TransactionsClient() {
   }, [editingId]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
-    const requestSequence = ++listRequestSequence.current;
+    if (append && replaceAbortController.current) return;
+
+    const replaceEpochAtStart = replaceRequestSequence.current;
+    const requestSequence = append
+      ? ++appendRequestSequence.current
+      : ++replaceRequestSequence.current;
+    const controller = new AbortController();
+
     if (append) {
+      appendAbortController.current?.abort();
+      appendAbortController.current = controller;
       setLoadingMore(true);
     } else {
+      replaceAbortController.current?.abort();
+      appendAbortController.current?.abort();
+      appendRequestSequence.current += 1;
+      replaceAbortController.current = controller;
+      appendAbortController.current = null;
       setLoading(true);
       setLoadingMore(false);
     }
+
+    const isCurrentRequest = () => append
+      ? requestSequence === appendRequestSequence.current && replaceEpochAtStart === replaceRequestSequence.current
+      : requestSequence === replaceRequestSequence.current;
+
     setError(null);
     try {
-      const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, { cache: "no-store" });
+      const response = await fetch(`/api/transactions?${buildQuery(filters, cursor)}`, {
+        cache: "no-store",
+        signal: controller.signal,
+      });
       const payload = await response.json().catch(() => ({}));
-      if (requestSequence !== listRequestSequence.current) return;
+      if (!isCurrentRequest()) return;
       if (!response.ok) throw new Error(readableError(payload));
       const result = payload as QueryResponse;
       const incoming = Array.isArray(result.rows) ? result.rows : [];
@@ -370,7 +395,7 @@ export default function TransactionsClient() {
       setNextCursor(result.nextCursor ?? null);
       if (!append) setSelectedIds([]);
     } catch (cause) {
-      if (requestSequence !== listRequestSequence.current) return;
+      if (controller.signal.aborted || !isCurrentRequest()) return;
       setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
         setRows([]);
@@ -380,9 +405,14 @@ export default function TransactionsClient() {
         setSelectedIds([]);
       }
     } finally {
-      if (requestSequence !== listRequestSequence.current) return;
-      if (append) setLoadingMore(false);
-      else setLoading(false);
+      if (!isCurrentRequest()) return;
+      if (append) {
+        if (appendAbortController.current === controller) appendAbortController.current = null;
+        setLoadingMore(false);
+      } else {
+        if (replaceAbortController.current === controller) replaceAbortController.current = null;
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -449,7 +479,10 @@ export default function TransactionsClient() {
     setNotice(null);
     void fetchPage(initialFilters, null, false);
     return () => {
-      listRequestSequence.current += 1;
+      replaceRequestSequence.current += 1;
+      appendRequestSequence.current += 1;
+      replaceAbortController.current?.abort();
+      appendAbortController.current?.abort();
     };
   }, [fetchPage, filterSearch]);
 

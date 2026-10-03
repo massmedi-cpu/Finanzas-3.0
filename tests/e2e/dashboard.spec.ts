@@ -136,6 +136,48 @@ async function mockDashboard(
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical") {
+        const requested: DashboardSource[] = ["financial"];
+        const failedRequested = requested.filter((source) => failed.has(source));
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "critical",
+          asOfDate: "2026-09-07",
+          dataThroughDate: null,
+          generatedAt: "2026-09-07T12:00:00.000Z",
+          requestedSources: requested,
+          failedSources: failedRequested,
+          data: {
+            financial: failed.has("financial") ? null : financial,
+            monthly: null,
+            budgets: null,
+            forecast: null,
+            transactions: null,
+          },
+        }, failedRequested.length === requested.length ? 503 : 200);
+        return;
+      }
+      if (scope === "activity") {
+        const requested: DashboardSource[] = ["transactions"];
+        const failedRequested = requested.filter((source) => failed.has(source));
+        await fulfillJson(route, {
+          contractVersion: 1,
+          scope: "activity",
+          asOfDate: "2026-09-07",
+          dataThroughDate: failed.has("transactions") ? null : options.dataThroughDate === undefined ? "2026-09-06" : options.dataThroughDate,
+          generatedAt: "2026-09-07T12:00:00.000Z",
+          requestedSources: requested,
+          failedSources: failedRequested,
+          data: {
+            financial: null,
+            monthly: null,
+            budgets: null,
+            forecast: null,
+            transactions: failed.has("transactions") ? null : mockTransactions,
+          },
+        }, failedRequested.length === requested.length ? 503 : 200);
+        return;
+      }
       if (scope === "primary") {
         const requested: DashboardSource[] = ["financial", "transactions"];
         const failedRequested = requested.filter((source) => failed.has(source));
@@ -333,7 +375,7 @@ test("Inicio mantiene una salida comprensible ante indisponibilidad total", asyn
   await expect(page.getByText("Las cuentas no están disponibles ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("El presupuesto no está disponible ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("La previsión no está disponible.", { exact: true })).toBeVisible();
-  await expect(page.getByText("La actividad reciente no está disponible ahora.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La actividad reciente no está disponible ahora. El resto del resumen sigue operativo.", { exact: true })).toBeVisible();
   await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
