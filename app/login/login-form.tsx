@@ -1,6 +1,8 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+
+const LOGIN_ERROR_ID = "login-error";
 
 type Props = {
   nextPath: string;
@@ -9,6 +11,12 @@ type Props = {
 export default function LoginForm({ nextPath }: Props) {
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState("");
+  const [credentialError, setCredentialError] = useState(false);
+  const errorRef = useRef<HTMLParagraphElement>(null);
+
+  useEffect(() => {
+    if (message) errorRef.current?.focus();
+  }, [message]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -19,6 +27,7 @@ export default function LoginForm({ nextPath }: Props) {
     const password = String(form.get("password") ?? "");
     setPending(true);
     setMessage("");
+    setCredentialError(false);
 
     try {
       const response = await fetch("/api/auth/login", {
@@ -42,8 +51,10 @@ export default function LoginForm({ nextPath }: Props) {
         setMessage("El acceso seguro no está disponible temporalmente.");
       } else if (response.status === 403) {
         setMessage("Esta cuenta no tiene acceso autorizado a Financial App.");
+        setCredentialError(true);
       } else {
         setMessage("Correo o contraseña incorrectos.");
+        setCredentialError(true);
       }
     } catch {
       setMessage("No se ha podido conectar con el acceso seguro.");
@@ -53,7 +64,12 @@ export default function LoginForm({ nextPath }: Props) {
   }
 
   return (
-    <form className="config-form" onSubmit={submit} noValidate>
+    <form
+      className="config-form"
+      onSubmit={submit}
+      noValidate
+      aria-describedby={message ? LOGIN_ERROR_ID : undefined}
+    >
       <label>
         Correo electrónico
         <input
@@ -64,6 +80,8 @@ export default function LoginForm({ nextPath }: Props) {
           required
           maxLength={254}
           disabled={pending}
+          aria-invalid={credentialError ? "true" : undefined}
+          aria-describedby={message ? LOGIN_ERROR_ID : undefined}
         />
       </label>
       <label>
@@ -75,9 +93,21 @@ export default function LoginForm({ nextPath }: Props) {
           required
           maxLength={512}
           disabled={pending}
+          aria-invalid={credentialError ? "true" : undefined}
+          aria-describedby={message ? LOGIN_ERROR_ID : undefined}
         />
       </label>
-      {message ? <p role="alert" className="field-hint">{message}</p> : null}
+      {message ? (
+        <p
+          ref={errorRef}
+          id={LOGIN_ERROR_ID}
+          role="alert"
+          tabIndex={-1}
+          className="field-hint"
+        >
+          {message}
+        </p>
+      ) : null}
       <div className="form-actions">
         <button className="primary-button" type="submit" disabled={pending}>
           {pending ? "Comprobando…" : "Entrar"}

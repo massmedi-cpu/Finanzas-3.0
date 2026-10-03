@@ -338,6 +338,7 @@ export default function TransactionsClient() {
   const [transferCandidates, setTransferCandidates] = useState<TransferCandidate[]>([]);
   const listRequestSequence = useRef(0);
   const conceptInputRef = useRef<HTMLInputElement>(null);
+  const pendingFocusId = useRef<string | null>(null);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
     const requestSequence = ++listRequestSequence.current;
@@ -449,6 +450,13 @@ export default function TransactionsClient() {
     [appliedFilters],
   );
 
+  const filtersDirty = useMemo(
+    () => (Object.keys(EMPTY_FILTERS) as Array<keyof Filters>).some(
+      (key) => draftFilters[key] !== appliedFilters[key],
+    ),
+    [appliedFilters, draftFilters],
+  );
+
   const activeRootCategories = useMemo(
   () => facets.categories
     .filter((category) => category.lifecycle === "active" && category.parent_category_id === null)
@@ -465,6 +473,22 @@ export default function TransactionsClient() {
     if (rows.length === totalCount) return `${formatInteger(totalCount)} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
     return `${formatInteger(rows.length)} de ${formatInteger(totalCount)}`;
   }, [loading, rows.length, totalCount]);
+
+  useEffect(() => {
+    const id = pendingFocusId.current;
+    if (!id || loading) return;
+    pendingFocusId.current = null;
+    const target = document.querySelector<HTMLElement>(`[data-transaction-id="${id}"]`);
+    if (target) {
+      target.focus({ preventScroll: true });
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+      return;
+    }
+    setNotice((current) => {
+      const context = "El movimiento guardado ya no está en el tramo visible o dejó de coincidir con los filtros actuales.";
+      return current ? `${current} ${context}` : context;
+    });
+  }, [loading, rows]);
 
   function updateFilter(field: keyof Filters, value: string) {
     setDraftFilters((current) => ({ ...current, [field]: value }));
@@ -556,6 +580,7 @@ export default function TransactionsClient() {
       setEditor(null);
       setSelectedIds([]);
       closeReview();
+      if (ids.length === 1) pendingFocusId.current = ids[0];
       await fetchPage(appliedFilters, null, false);
       return true;
     } catch (cause) {
@@ -611,6 +636,8 @@ export default function TransactionsClient() {
       if (!response.ok) throw new Error(readableError(payload));
       setNotice(message);
       closeReview();
+      const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
+      if (focusId) pendingFocusId.current = focusId;
       await fetchPage(appliedFilters, null, false);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
@@ -763,7 +790,12 @@ async function saveEdit(row: TransactionRow) {
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
         <div className={styles.filterActions}>
-          <button className={styles.primaryButton} type="submit" disabled={saving}>Aplicar filtros</button>
+          <span className={styles.resultCount} role="status" aria-live="polite">
+            {filtersDirty ? "Cambios sin aplicar" : "La tabla refleja estos filtros"}
+          </span>
+          <button className={styles.primaryButton} type="submit" disabled={saving || !filtersDirty}>
+            {filtersDirty ? "Aplicar filtros" : "Filtros aplicados"}
+          </button>
           <button className={styles.secondaryButton} type="button" onClick={clearFilters} disabled={saving}>Limpiar</button>
         </div>
       </form>
@@ -811,7 +843,11 @@ async function saveEdit(row: TransactionRow) {
               <tbody>
                 {rows.map((row) => (
                   <Fragment key={row.id}>
-                    <tr className={selectedSet.has(row.id) ? styles.selectedRow : undefined}>
+                    <tr
+                      className={selectedSet.has(row.id) ? styles.selectedRow : undefined}
+                      data-transaction-id={row.id}
+                      tabIndex={-1}
+                    >
                       <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} disabled={saving || (!selectedSet.has(row.id) && selectedIds.length >= MAX_TRANSACTION_PATCH_SIZE)} onChange={() => toggleRow(row.id)} /></label></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>

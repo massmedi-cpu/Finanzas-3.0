@@ -107,7 +107,7 @@ test("Reglas permite definir condiciones y destino sin duplicar la lógica en cl
   await page.getByLabel("Asignar comercio").selectOption(merchantId);
   await page.getByLabel("Asignar categoría").selectOption(categoryId);
   await page.getByRole("button", { name: "Crear regla" }).click();
-  await expect(page.getByRole("status")).toContainText("Regla guardada en el motor central");
+  await expect(page.locator('[data-action-id="rules:create"]')).toContainText("Regla guardada en el motor central");
 });
 
 test("Reglas expone aplicación explícita y explicación auditable", async ({ page }) => {
@@ -115,7 +115,7 @@ test("Reglas expone aplicación explícita y explicación auditable", async ({ p
   await page.goto("/configuration/rules");
 
   await page.getByRole("button", { name: "Aplicar reglas" }).click();
-  await expect(page.getByRole("status")).toContainText("3172 movimientos evaluados");
+  await expect(page.locator('[data-action-id="rules:apply-all"]')).toContainText("3172 movimientos evaluados");
   await expect(page.getByText("48", { exact: true })).toBeVisible();
 
   await page.getByLabel("ID del movimiento").fill("60000000-0000-4000-8000-000000000001");
