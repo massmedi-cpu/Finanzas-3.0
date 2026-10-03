@@ -18,8 +18,8 @@ import "./premium-hardening.css";
 import "./accessibility-forced-colors.css";
 import "./accessibility-live-regions.css";
 import "./action-feedback.css";
-import "./app-background.css";
 import "./theme-system.css";
+import "./app-background.css";
 
 export const dynamic = "force-dynamic";
 
