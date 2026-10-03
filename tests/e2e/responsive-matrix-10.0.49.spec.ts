@@ -37,6 +37,7 @@ const tabletRouteSweep = [
   "/budgets",
   "/forecast",
   "/documents",
+  "/configuration/source",
 ] as const;
 
 const tabletViewports: ViewportCase[] = [

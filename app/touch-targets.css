@@ -4,4 +4,39 @@
     display: inline-flex;
     align-items: center;
   }
+
+  /* MOB-001 · todo control operativo conserva al menos 44px de altura táctil. */
+  #main-content button,
+  #main-content [role="button"] {
+    min-height: 44px;
+  }
+
+  /*
+   * Los controles ordinarios conservan además 44px de ancho. Las visualizaciones
+   * densas declaran data-dense-target="true": mantienen 44px de alto, pero pueden
+   * repartir su ancho entre puntos contiguos para no forzar scroll horizontal.
+   */
+  #main-content button:not([data-dense-target="true"]),
+  #main-content [role="button"]:not([data-dense-target="true"]) {
+    min-width: 44px;
+  }
+
+  #main-content input:not([type="checkbox"]):not([type="radio"]),
+  #main-content select,
+  #main-content textarea {
+    min-height: 44px;
+    font-size: 1rem;
+  }
+
+  /* MOB-003 · metadata/estado/ayuda decisional no puede caer por debajo del helper de producto. */
+  #main-content small,
+  #main-content [class*="Meta"],
+  #main-content [class*="meta"],
+  #main-content [class*="Status"],
+  #main-content [class*="status"],
+  #main-content [class*="Summary"] span,
+  #main-content [class*="summary"] span {
+    font-size: max(var(--font-helper), 1em);
+    line-height: 1.35;
+  }
 }
