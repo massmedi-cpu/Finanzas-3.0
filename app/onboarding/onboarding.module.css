@@ -375,7 +375,7 @@
   text-underline-offset: 0.18em;
 }
 
-@media (max-width: 74rem) {
+@media (max-width: 80rem) {
   .steps {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
