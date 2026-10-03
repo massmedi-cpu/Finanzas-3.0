@@ -168,6 +168,57 @@ html[data-theme="light"] .config-tabs button.active {
   background: var(--gradient-primary-active);
 }
 
+/* Superficie financiera representativa: Movimientos. Se ancla a semántica
+   estable, no a nombres generados por CSS Modules. */
+html[data-theme="light"] #main-content main:has(form[aria-label="Filtros de movimientos"]) > header,
+html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"],
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"],
+html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] {
+  border-color: var(--color-border) !important;
+  background: radial-gradient(circle at 92% 0%, rgba(49, 95, 206, 0.055), transparent 18rem), linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(245, 248, 253, 0.92)) !important;
+  color: var(--color-text) !important;
+  box-shadow: var(--shadow-card) !important;
+}
+
+html[data-theme="light"] #main-content main:has(form[aria-label="Filtros de movimientos"]) > header a[href="/"],
+html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] label,
+html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] label > span,
+html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] label,
+html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] label > span {
+  color: var(--color-text-secondary) !important;
+}
+
+html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] :is(input, select),
+html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] select,
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] :is(input, select, textarea) {
+  border-color: var(--color-border) !important;
+  background: var(--surface-control-strong) !important;
+  color: var(--color-text) !important;
+}
+
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] table :is(th, td),
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] td[data-label="Concepto"] strong,
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] details :is(summary, dd) {
+  color: var(--color-text) !important;
+}
+
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] table th,
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] details dt {
+  color: var(--color-text-muted) !important;
+}
+
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] tbody tr:hover,
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] tbody tr:has(input:checked) {
+  background: var(--surface-primary-subtle) !important;
+}
+
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] section[aria-label^="Editar "],
+html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] section[aria-label^="Revisar "] {
+  border-color: var(--border-primary-soft) !important;
+  background: transparent !important;
+  color: var(--color-text) !important;
+}
+
 html[data-theme="light"] :is(input, select, textarea) {
   color-scheme: light;
 }
