@@ -39,7 +39,7 @@ test("PRE-037 · Compacta persiste, reduce espacio y no reduce tipografía", asy
   expect(await fontSize(page, "body")).toBe(bodyFont);
 
   const saved = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), STORAGE_KEY);
-  expect(saved).toEqual({ density: "compact", reduceMotion: false });
+  expect(saved).toEqual({ density: "compact", reduceMotion: false, theme: "system" });
 
   const densityLabels = page.locator('label:has(input[name="density"])');
   for (let index = 0; index < await densityLabels.count(); index += 1) {

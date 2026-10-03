@@ -54,5 +54,5 @@ test("PRE-037 · preferencias funcionan con interacción accesible", async ({ pa
   expect(overflow, `${browserName}: scroll horizontal global`).toBeLessThanOrEqual(1);
 
   const persisted = await page.evaluate((key) => JSON.parse(window.localStorage.getItem(key) ?? "null"), STORAGE_KEY);
-  expect(persisted).toEqual({ density: "compact", reduceMotion: true });
+  expect(persisted).toEqual({ density: "compact", reduceMotion: true, theme: "system" });
 });

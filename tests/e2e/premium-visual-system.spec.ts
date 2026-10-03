@@ -66,7 +66,10 @@ test("login conserva legibilidad y recibe el tratamiento premium real", async ({
   expect(visual.boxShadow).not.toBe("none");
   expect(visual.borderColor).not.toBe("rgba(0, 0, 0, 0)");
 
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#030711");
+  await expect(page.locator('meta[name="theme-color"][media="(prefers-color-scheme: light)"]'))
+    .toHaveAttribute("content", "#edf2f9");
+  await expect(page.locator('meta[name="theme-color"][media="(prefers-color-scheme: dark)"]'))
+    .toHaveAttribute("content", "#030711");
 });
 
 test("el fondo premium evita attachment fijo en móvil y lo conserva en escritorio", async ({ page }) => {
