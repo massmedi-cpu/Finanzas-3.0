@@ -22,6 +22,8 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
+      - name: Critical dependency audit
+        run: npm audit --audit-level=critical
       - name: TypeScript
         run: npm run typecheck
       - name: Production build and postbuild audits
@@ -35,9 +37,7 @@ jobs:
       - name: Data visualization contract
         run: npm run verify:data-visualization
       - name: Transactions concurrency contract
-        run: node scripts/transactions-concurrency-guard-contract.mjs
-      - name: Critical dependency audit
-        run: npm audit --audit-level=critical
+        run: node scripts/verify-transactions-concurrency-10.0.70.mjs
 
   e2e:
     runs-on: ubuntu-latest
