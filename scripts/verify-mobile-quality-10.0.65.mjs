@@ -13,9 +13,12 @@ const shell = read("app/app-shell.module.css");
 const matrix = read("tests/e2e/responsive-matrix-10.0.49.spec.ts");
 const mobileGate = read("tests/e2e/mobile-quality-10.0.65.spec.ts");
 const forecast = read("app/forecast/forecast.module.css");
+const financialChart = read("src/design/financial-bar-chart.tsx");
 
 requireMatch(touch, /@media\s*\(max-width:\s*480px\)/, "MOB-001: falta el contrato móvil <=480px");
-requireMatch(touch, /#main-content button[\s\S]*?min-width:\s*44px;[\s\S]*?min-height:\s*44px;/, "MOB-001: los botones del contenido no garantizan 44x44");
+requireMatch(touch, /#main-content button,[\s\S]*?#main-content \[role="button"\][\s\S]*?min-height:\s*44px;/, "MOB-001: los controles táctiles del contenido no garantizan 44px de alto");
+requireMatch(touch, /button:not\(\[data-dense-target="true"\]\)[\s\S]*?min-width:\s*44px;/, "MOB-001: los controles ordinarios no garantizan 44px de ancho");
+requireMatch(financialChart, /data-dense-target="true"/, "MOB-001: la visualización financiera densa no declara su excepción explícita");
 requireMatch(touch, /input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\)[\s\S]*?min-height:\s*44px;/, "MOB-001: los campos móviles no garantizan 44px");
 requireMatch(touch, /font-size:\s*max\(var\(--font-helper\),\s*1em\)/, "MOB-003: falta el mínimo tipográfico móvil para metadata/estado");
 requireMatch(forecast, /\.primaryButton,[\s\S]*?\.textButton\s*\{[\s\S]*?min-height:\s*44px;/, "MOB-001: Previsión perdió el mínimo táctil común");
