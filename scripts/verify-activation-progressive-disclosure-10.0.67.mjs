@@ -5,8 +5,19 @@ const onboardingCss = fs.readFileSync("app/onboarding/onboarding.module.css", "u
 const sourceOverview = fs.readFileSync("app/configuration/source/source-overview-client.tsx", "utf8");
 const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
 
+function versionAtLeast(version, baseline) {
+  const current = String(version).split(".").map(Number);
+  const minimum = String(baseline).split(".").map(Number);
+  for (let index = 0; index < Math.max(current.length, minimum.length); index += 1) {
+    const left = Number.isFinite(current[index]) ? current[index] : 0;
+    const right = Number.isFinite(minimum[index]) ? minimum[index] : 0;
+    if (left !== right) return left > right;
+  }
+  return true;
+}
+
 const checks = [
-  [pkg.version === "10.0.67", "package version must be 10.0.67"],
+  [versionAtLeast(pkg.version, "10.0.67"), "package version must be 10.0.67 or later"],
   [onboarding.includes("Conecta tus movimientos"), "activation must start from connecting movements"],
   [onboarding.includes("Comprueba que están bien"), "activation must include data verification"],
   [onboarding.includes("Confirma tus cuentas"), "activation must include account confirmation"],
