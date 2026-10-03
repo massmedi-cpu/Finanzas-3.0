@@ -1,0 +1,179 @@
+/* ART-010 · tema visual gobernado por preferencia system/dark/light. */
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+html[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: #edf2f9;
+  --color-bg-elevated: #f7f9fd;
+  --color-surface: rgba(255, 255, 255, 0.88);
+  --color-surface-strong: #ffffff;
+  --color-border: rgba(42, 66, 101, 0.16);
+  --color-border-strong: rgba(42, 66, 101, 0.3);
+  --color-text: #14233b;
+  --color-text-secondary: #43536d;
+  --color-text-muted: #64738a;
+  --color-primary: #315fce;
+  --color-primary-bright: #315fce;
+  --color-on-primary: #ffffff;
+  --color-gold: #8a641f;
+  --color-gold-bright: #9c7227;
+  --color-gold-muted: rgba(156, 114, 39, 0.11);
+  --color-cyan: #087f9e;
+  --color-success: #16834d;
+  --color-warning: #996200;
+  --color-danger: #bd3853;
+
+  --surface-card: rgba(255, 255, 255, 0.72);
+  --surface-card-muted: rgba(245, 248, 253, 0.86);
+  --surface-card-hover: rgba(255, 255, 255, 0.96);
+  --surface-empty: rgba(238, 243, 250, 0.8);
+  --surface-info-soft: rgba(49, 95, 206, 0.07);
+  --surface-success-soft: rgba(22, 131, 77, 0.06);
+  --surface-success-muted: rgba(22, 131, 77, 0.05);
+  --surface-success-strong: rgba(22, 131, 77, 0.08);
+  --surface-warning-soft: rgba(153, 98, 0, 0.07);
+  --surface-warning-muted: rgba(153, 98, 0, 0.06);
+  --surface-navigation: rgba(255, 255, 255, 0.9);
+  --surface-navigation-strong: rgba(255, 255, 255, 0.98);
+  --surface-navigation-frame-start: rgba(237, 242, 249, 0.98);
+  --surface-navigation-frame-mid: rgba(237, 242, 249, 0.88);
+  --surface-navigation-frame-end: rgba(237, 242, 249, 0);
+  --surface-mobile-dock: rgba(255, 255, 255, 0.97);
+  --surface-mobile-panel: rgba(250, 252, 255, 0.99);
+  --surface-control-strong: rgba(255, 255, 255, 0.98);
+  --surface-interactive-soft: rgba(20, 35, 59, 0.045);
+  --surface-interactive-muted: rgba(20, 35, 59, 0.025);
+  --surface-primary-subtle: rgba(49, 95, 206, 0.07);
+  --surface-primary-soft: rgba(49, 95, 206, 0.12);
+  --surface-primary-progress: rgba(49, 95, 206, 0.1);
+
+  --border-card: rgba(42, 66, 101, 0.14);
+  --border-card-accent: rgba(49, 95, 206, 0.15);
+  --border-card-soft: rgba(42, 66, 101, 0.11);
+  --border-navigation: rgba(42, 66, 101, 0.18);
+  --border-navigation-soft: rgba(42, 66, 101, 0.14);
+  --border-navigation-subtle: rgba(42, 66, 101, 0.09);
+  --border-navigation-scrollbar: rgba(49, 95, 206, 0.34);
+  --border-primary-soft: rgba(49, 95, 206, 0.3);
+  --border-primary-strong: rgba(49, 95, 206, 0.42);
+  --border-primary-mobile: rgba(49, 95, 206, 0.26);
+  --border-accent-strong: rgba(8, 127, 158, 0.38);
+  --border-accent-soft: rgba(8, 127, 158, 0.24);
+  --border-info-soft: rgba(49, 95, 206, 0.18);
+  --border-success-soft: rgba(22, 131, 77, 0.16);
+  --border-success-muted: rgba(22, 131, 77, 0.16);
+  --border-success-strong: rgba(22, 131, 77, 0.2);
+  --border-warning-soft: rgba(153, 98, 0, 0.22);
+  --border-warning-muted: rgba(153, 98, 0, 0.2);
+
+  --text-on-strong: #14233b;
+  --text-warning-soft: #79510b;
+  --text-success-soft: #16663f;
+
+  --gradient-navigation-frame: linear-gradient(180deg, var(--surface-navigation-frame-start) 0%, var(--surface-navigation-frame-mid) 72%, var(--surface-navigation-frame-end) 100%);
+  --gradient-primary-active: linear-gradient(135deg, rgba(49, 95, 206, 0.16), rgba(8, 127, 158, 0.08));
+  --gradient-primary-pending: linear-gradient(135deg, rgba(49, 95, 206, 0.2), rgba(8, 127, 158, 0.1));
+  --gradient-primary-install: linear-gradient(135deg, rgba(49, 95, 206, 0.14), rgba(8, 127, 158, 0.07));
+  --gradient-primary-mobile: linear-gradient(135deg, rgba(49, 95, 206, 0.13), rgba(8, 127, 158, 0.06));
+  --gradient-progress: linear-gradient(90deg, transparent, #315fce, #087f9e, transparent);
+
+  --shadow-panel: 0 22px 70px rgba(42, 66, 101, 0.12), 0 0 0 1px rgba(42, 66, 101, 0.025);
+  --shadow-card: 0 12px 36px rgba(42, 66, 101, 0.1);
+  --shadow-card-hover: 0 18px 42px rgba(42, 66, 101, 0.14), 0 0 24px rgba(49, 95, 206, 0.05);
+  --shadow-glow: 0 0 0 1px rgba(49, 95, 206, 0.06), 0 16px 48px rgba(49, 95, 206, 0.09);
+  --shadow-navigation: 0 12px 32px rgba(42, 66, 101, 0.12);
+  --shadow-mobile-dock: 0 -8px 28px rgba(42, 66, 101, 0.15);
+  --shadow-mobile-panel: 0 -12px 38px rgba(42, 66, 101, 0.16);
+  --shadow-primary-inset: inset 0 0 0 1px rgba(49, 95, 206, 0.05);
+  --focus-ring: 0 0 0 3px rgba(49, 95, 206, 0.28);
+
+  --gradient-app-canvas:
+    radial-gradient(circle at 16% -12%, rgba(91, 130, 222, 0.13), transparent 30rem),
+    radial-gradient(circle at 88% 0%, rgba(63, 167, 193, 0.08), transparent 26rem),
+    linear-gradient(180deg, #f7f9fd 0%, var(--color-bg) 58%, #e8eef7 100%);
+}
+
+html[data-theme="light"],
+html[data-theme="light"] body {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+}
+
+html[data-theme="light"] .financial-brand {
+  border-color: var(--border-navigation);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(242, 246, 252, 0.94));
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+html[data-theme="light"] .financial-brand__mark {
+  border-color: rgba(156, 114, 39, 0.3);
+  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.7), transparent 52%), linear-gradient(145deg, #f4e8c9, #e8d49d 62%);
+  color: #725315;
+  box-shadow: inset 0 0 0 1px rgba(138, 100, 31, 0.08), 0 7px 18px rgba(42, 66, 101, 0.12);
+}
+
+html[data-theme="light"] .premium-primary-nav {
+  border-color: var(--border-navigation) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.94)) !important;
+  box-shadow: var(--shadow-navigation), inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
+}
+
+html[data-theme="light"] nav[aria-label="Navegación principal"] a[aria-current="page"] {
+  border-color: var(--border-primary-strong) !important;
+  background: radial-gradient(circle at 50% 0%, rgba(49, 95, 206, 0.12), transparent 70%), linear-gradient(135deg, rgba(49, 95, 206, 0.16), rgba(8, 127, 158, 0.07)) !important;
+  color: var(--color-text);
+  box-shadow: inset 0 0 0 1px rgba(49, 95, 206, 0.06), 0 7px 22px rgba(49, 95, 206, 0.08);
+}
+
+html[data-theme="light"] main[aria-busy] > section[aria-label="Estado de los datos bancarios"],
+html[data-theme="light"] main[aria-busy] > section[aria-label="Resumen financiero principal"] > article,
+html[data-theme="light"] main[aria-busy] article,
+html[data-theme="light"] .reset-card,
+html[data-theme="light"] .configuration-hero,
+html[data-theme="light"] .config-panel {
+  border-color: var(--color-border);
+  background: radial-gradient(circle at 92% 0%, rgba(49, 95, 206, 0.055), transparent 18rem), linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 248, 253, 0.9));
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+
+html[data-theme="light"] .entity-card {
+  border-color: var(--border-card);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(242, 246, 252, 0.74));
+}
+
+html[data-theme="light"] .secondary-button,
+html[data-theme="light"] .icon-button {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(238, 243, 250, 0.86));
+  color: var(--color-text-secondary);
+}
+
+html[data-theme="light"] .config-tabs {
+  border-color: var(--color-border);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+html[data-theme="light"] .config-tabs button {
+  color: var(--color-text-secondary);
+}
+
+html[data-theme="light"] .config-tabs button.active {
+  color: var(--color-text);
+  background: var(--gradient-primary-active);
+}
+
+html[data-theme="light"] :is(input, select, textarea) {
+  color-scheme: light;
+}
+
+@media (forced-colors: active) {
+  html[data-theme] {
+    color-scheme: light dark;
+  }
+}
