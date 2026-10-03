@@ -1,8 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { useVisualPreferences, type VisualDensity } from "../../visual-preferences";
+import {
+  useVisualPreferences,
+  type VisualDensity,
+  type VisualTheme,
+} from "../../visual-preferences";
 import styles from "./appearance.module.css";
+
+const THEMES: Array<{
+  value: VisualTheme;
+  title: string;
+  description: string;
+}> = [
+  {
+    value: "system",
+    title: "Sistema",
+    description: "Sigue automáticamente el modo claro u oscuro configurado en este dispositivo.",
+  },
+  {
+    value: "light",
+    title: "Claro",
+    description: "Usa superficies claras con contraste financiero y mantiene los mismos estados y jerarquía.",
+  },
+  {
+    value: "dark",
+    title: "Oscuro",
+    description: "Mantiene la dirección visual oscura original independientemente del sistema operativo.",
+  },
+];
 
 const DENSITIES: Array<{
   value: VisualDensity;
@@ -21,9 +47,30 @@ const DENSITIES: Array<{
   },
 ];
 
+function themeLabel(theme: VisualTheme) {
+  if (theme === "light") return "Claro";
+  if (theme === "dark") return "Oscuro";
+  return "Sistema";
+}
+
 export default function AppearanceClient() {
-  const { density, reduceMotion, ready, setDensity, setReduceMotion, reset } = useVisualPreferences();
+  const {
+    density,
+    reduceMotion,
+    theme,
+    resolvedTheme,
+    ready,
+    setDensity,
+    setReduceMotion,
+    setTheme,
+    reset,
+  } = useVisualPreferences();
   const [notice, setNotice] = useState("Preferencias visuales cargadas.");
+
+  function changeTheme(value: VisualTheme) {
+    setTheme(value);
+    setNotice(`Tema ${themeLabel(value).toLocaleLowerCase("es-ES")} activado.`);
+  }
 
   function changeDensity(value: VisualDensity) {
     setDensity(value);
@@ -37,7 +84,7 @@ export default function AppearanceClient() {
 
   function resetPreferences() {
     reset();
-    setNotice("Preferencias visuales restablecidas.");
+    setNotice("Preferencias visuales restablecidas. El tema vuelve a seguir al sistema.");
   }
 
   return (
@@ -47,12 +94,51 @@ export default function AppearanceClient() {
           <p className="eyebrow">Configuración</p>
           <h1>Apariencia y accesibilidad</h1>
           <p className="hero-copy">
-            Ajusta la densidad visual y el movimiento de la interfaz. Estas preferencias son locales del dispositivo y no modifican datos financieros.
+            Ajusta tema, densidad visual y movimiento. Estas preferencias son locales del dispositivo y no modifican datos financieros.
           </p>
         </div>
       </section>
 
       <div className={styles.grid}>
+        <section className={`config-panel ${styles.panel} ${styles.themePanel}`} aria-labelledby="theme-title">
+          <div className={styles.heading}>
+            <div>
+              <p className="panel-kicker">Tema</p>
+              <h2 id="theme-title">Sistema, claro u oscuro</h2>
+            </div>
+            <span className={styles.current} data-testid="theme-current">
+              {themeLabel(theme)} · {resolvedTheme === "light" ? "claro activo" : "oscuro activo"}
+            </span>
+          </div>
+
+          <fieldset className={`${styles.options} ${styles.themeOptions}`} disabled={!ready}>
+            <legend className={styles.srOnly}>Selecciona tema visual</legend>
+            {THEMES.map((option) => (
+              <label
+                key={option.value}
+                className={`${styles.option} ${theme === option.value ? styles.selected : ""}`}
+              >
+                <input
+                  type="radio"
+                  name="theme"
+                  value={option.value}
+                  checked={theme === option.value}
+                  onChange={() => changeTheme(option.value)}
+                  data-testid={`theme-${option.value}`}
+                />
+                <span className={styles.optionCopy}>
+                  <strong>{option.title}</strong>
+                  <small>{option.description}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+          <p className={styles.helper} data-testid="theme-resolved">
+            Tema efectivo ahora: <strong>{resolvedTheme === "light" ? "claro" : "oscuro"}</strong>.
+            {theme === "system" ? " Se actualizará si cambia la preferencia del sistema." : " Esta elección prevalece sobre el sistema."}
+          </p>
+        </section>
+
         <section className={`config-panel ${styles.panel}`} aria-labelledby="density-title">
           <div className={styles.heading}>
             <div>
