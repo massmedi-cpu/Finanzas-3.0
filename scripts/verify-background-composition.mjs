@@ -21,11 +21,17 @@ const tokenMatches = background.match(/--gradient-app-canvas\s*:/g) ?? [];
 if (tokenMatches.length !== 1) {
   fail("--gradient-app-canvas debe tener exactamente una definición canónica");
 }
-if (!/body\s*\{[\s\S]*?background:\s*var\(--gradient-app-canvas\);[\s\S]*?background-attachment:\s*fixed;[\s\S]*?\}/.test(background)) {
-  fail("body debe consumir el fondo canónico y mantenerlo fijo");
+if (!/body\s*\{[\s\S]*?background:\s*var\(--gradient-app-canvas\);[\s\S]*?background-attachment:\s*fixed,\s*fixed,\s*fixed;[\s\S]*?\}/.test(background)) {
+  fail("body debe consumir el fondo canónico con tres capas fijas en escritorio");
 }
-if (!/\[data-app-shell="shared"\][\s\S]*?#main-content[\s\S]*?#main-content\s*>\s*main[\s\S]*?background-color:\s*transparent;/.test(background)) {
-  fail("AppShell, main-content y la página deben conservar el lienzo global transparente");
+if (!/@media\s*\(max-width:\s*48rem\)[\s\S]*?background-attachment:\s*scroll,\s*scroll,\s*scroll;/.test(background)) {
+  fail("móvil debe desplazar las tres capas y evitar background-attachment fixed");
+}
+if (!/@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*?background-attachment:\s*scroll,\s*scroll,\s*scroll;/.test(background)) {
+  fail("reduced-motion debe desplazar las tres capas del fondo");
+}
+if (!/\[data-app-shell="shared"\][\s\S]*?#main-content[\s\S]*?#main-content\s*>\s*\*[\s\S]*?background-color:\s*transparent;/.test(background)) {
+  fail("AppShell, main-content y la raíz real de cada página deben conservar el lienzo global transparente");
 }
 if ((background.match(/radial-gradient\(/g) ?? []).length !== 2) {
   fail("el lienzo canónico debe tener exactamente dos luces radiales");
@@ -51,4 +57,5 @@ if (process.exitCode) process.exit(process.exitCode);
 console.log("✅ ART-008 background composition guard: OK");
 console.log("- app-background.css gobierna la última capa global");
 console.log("- 2 luces radiales + 1 base lineal; sin rejilla ni dorado ambiental");
+console.log("- 3 capas: fixed en escritorio, scroll en móvil y reduced-motion");
 console.log("- AppShell, main-content e Inicio permanecen transparentes como página");
