@@ -12,8 +12,8 @@ const HEADERS = {
   "x-robots-tag": "noindex",
 };
 
-const SCOPES = new Set(["primary", "secondary", "all"] as const);
-type DashboardScope = "primary" | "secondary" | "all";
+const SCOPES = new Set(["critical", "activity", "primary", "secondary", "all"] as const);
+type DashboardScope = "critical" | "activity" | "primary" | "secondary" | "all";
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
 
 type NamedOperation = PersistenceGatewayOperation & {
@@ -111,6 +111,8 @@ function operationsForScope(scope: DashboardScope, today: string): NamedOperatio
     },
   ];
 
+  if (scope === "critical") return [financial];
+  if (scope === "activity") return [transactions];
   if (scope === "primary") return [financial, transactions];
   if (scope === "secondary") return secondary;
   return [financial, transactions, ...secondary];

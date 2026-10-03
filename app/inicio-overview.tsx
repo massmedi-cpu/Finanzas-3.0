@@ -15,7 +15,7 @@ import { CategoryIdentity } from "./category-identity";
 import styles from "./inicio-overview.module.css";
 
 type DashboardSource = "financial" | "monthly" | "budgets" | "forecast" | "transactions";
-type DashboardScope = "primary" | "secondary";
+type DashboardScope = "critical" | "activity" | "primary" | "secondary";
 type TransactionKind = "income" | "expense" | "transfer" | "refund" | "adjustment";
 
 type AccountBalance = {
@@ -338,6 +338,7 @@ export default function InicioOverview() {
   const [dataThroughDate, setDataThroughDate] = useState<string | null>(null);
   const [independentSources, setIndependentSources] = useState<DashboardSource[]>([]);
   const [primaryLoading, setPrimaryLoading] = useState(true);
+  const [activityLoading, setActivityLoading] = useState(true);
   const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [failed, setFailed] = useState<DashboardSource[]>([]);
   const [amountsVisible, setAmountsVisible] = useState(true);
@@ -378,7 +379,7 @@ export default function InicioOverview() {
   const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
-      if (scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
+      if (scope === "activity" || scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
       await Promise.all(sources.map(async (source) => {
         if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
           commit(source, envelope.data[source], false);
@@ -401,14 +402,20 @@ export default function InicioOverview() {
 
   const refreshDashboard = useCallback(async () => {
     setPrimaryLoading(true);
+    setActivityLoading(true);
+    setSecondaryLoading(true);
     setDataThroughDate(null);
     setIndependentSources([]);
+
     const statusPromise = loadSyncStatus();
-    await loadScope("primary", ["financial", "transactions"]);
+    const activityPromise = loadScope("activity", ["transactions"])
+      .finally(() => setActivityLoading(false));
+    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"])
+      .finally(() => setSecondaryLoading(false));
+
+    await loadScope("critical", ["financial"]);
     setPrimaryLoading(false);
-    setSecondaryLoading(true);
-    await Promise.all([loadScope("secondary", ["monthly", "budgets", "forecast"]), statusPromise]);
-    setSecondaryLoading(false);
+    await Promise.all([activityPromise, secondaryPromise, statusPromise]);
   }, [loadScope, loadSyncStatus]);
 
   useEffect(() => {
@@ -580,7 +587,7 @@ export default function InicioOverview() {
   }, [forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
 
   return (
-    <main className={styles.shell} aria-busy={primaryLoading || secondaryLoading}>
+    <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading}>
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Financial App</p>
@@ -640,13 +647,13 @@ export default function InicioOverview() {
         </div>
       </section>
 
-      {independentSources.length > 0 && !primaryLoading && !secondaryLoading && (
+      {independentSources.length > 0 && !primaryLoading && !activityLoading && !secondaryLoading && (
         <p className={styles.provenanceNotice} role="status">
           Resumen recuperado mediante consultas independientes. Algunas cifras pueden corresponder a instantes distintos; consulta cada módulo antes de compararlas.
         </p>
       )}
 
-      {!primaryLoading && !secondaryLoading && Object.values(consistency).some((matches) => !matches) && (
+      {!primaryLoading && !activityLoading && !secondaryLoading && Object.values(consistency).some((matches) => !matches) && (
         <p className={styles.provenanceNotice} role="alert">
           Hay datos que no cuadran entre las fuentes del resumen. Hemos ocultado las cifras afectadas; revisa Cuentas, Análisis y Presupuestos antes de tomar decisiones.
         </p>
@@ -654,7 +661,7 @@ export default function InicioOverview() {
 
       <HomeSmartBrief
         month={today.slice(0, 7)}
-        loading={primaryLoading || secondaryLoading}
+        loading={primaryLoading || activityLoading || secondaryLoading}
         transactionTotalCount={transactions?.totalCount ?? null}
         latestTransactionId={transactions?.rows?.[0]?.id ?? null}
         latestTransactionDate={latestDataDate}
@@ -881,10 +888,10 @@ export default function InicioOverview() {
                 );
               })}
             </ul>
-          ) : primaryLoading ? (
-            <div className={styles.skeleton} />
+          ) : activityLoading ? (
+            <div className={styles.skeleton} aria-label="Cargando actividad reciente" />
           ) : (
-            <p className={styles.empty}>{transactions ? "No hay actividad reciente." : "La actividad reciente no está disponible ahora."}</p>
+            <p className={styles.empty}>{transactions ? "No hay actividad reciente." : "La actividad reciente no está disponible ahora. El resto del resumen sigue operativo."}</p>
           )}
         </article>
       </section>
