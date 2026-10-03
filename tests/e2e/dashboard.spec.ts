@@ -222,7 +222,7 @@ test("Inicio compone decisiones y bloques útiles desde motores centrales", asyn
   await expect(summary(page).getByText("800,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("-20,00 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("53,3 %", { exact: false })).toBeVisible();
-  await expect(summary(page).getByText("500,00 €", { exact: true })).toBeVisible();
+  await expect(summary(page).getByText("516,67 €", { exact: true })).toBeVisible();
   await expect(summary(page).getByText("Gasto medio mensual", { exact: true })).toBeVisible();
   await expect(page.getByText("Por revisar", { exact: true })).toHaveCount(0);
   await expect(chart(page)).toBeVisible();
