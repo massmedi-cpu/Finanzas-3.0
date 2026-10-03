@@ -42,6 +42,9 @@ export function FinancialBarChart({
         <span><i className={styles.incomeDot} />Ingresos</span>
         <span><i className={styles.expenseDot} />Gastos</span>
         <span>{valuesVisible ? "Toca un mes para ver las cifras exactas" : "Importes ocultos · proporciones protegidas"}</span>
+        <span data-testid="financial-bar-scale-reference">
+          {valuesVisible ? `Escala máxima ${formatMoney(maxValue)}` : "Escala protegida por privacidad"}
+        </span>
       </div>
 
       <div
