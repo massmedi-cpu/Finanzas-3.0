@@ -1,0 +1,39 @@
+:root {
+  /* ART-008 · única composición ambiental de página */
+  --gradient-app-canvas:
+    radial-gradient(circle at 16% -12%, rgba(79, 124, 255, 0.18), transparent 30rem),
+    radial-gradient(circle at 88% 0%, rgba(65, 216, 242, 0.075), transparent 26rem),
+    linear-gradient(180deg, #040916 0%, var(--color-bg) 54%, #030711 100%);
+}
+
+html {
+  background: var(--color-bg);
+}
+
+body {
+  background: var(--gradient-app-canvas);
+  background-attachment: fixed, fixed, fixed;
+}
+
+/*
+ * El lienzo ambiental pertenece a la aplicación, no a cada módulo.
+ * Las páginas conservan fondos locales solo para superficies funcionales
+ * (hero, paneles, tarjetas, estados), nunca como segundo fondo de página.
+ */
+[data-app-shell="shared"],
+#main-content,
+#main-content > * {
+  background-color: transparent;
+}
+
+@media (max-width: 48rem) {
+  body {
+    background-attachment: scroll, scroll, scroll;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body {
+    background-attachment: scroll, scroll, scroll;
+  }
+}
