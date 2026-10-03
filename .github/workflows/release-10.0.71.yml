@@ -1,0 +1,53 @@
+name: Release 10.0.71
+
+on:
+  push:
+    branches:
+      - release/10.0.71-next-security
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-next-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Critical dependency audit
+        run: npm audit --audit-level=critical
+
+      - name: Verify REL-071 static security contract
+        run: node scripts/verify-next-security-10.0.71.mjs
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build and postbuild guards
+        run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Full E2E regression desktop and mobile
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-071-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
