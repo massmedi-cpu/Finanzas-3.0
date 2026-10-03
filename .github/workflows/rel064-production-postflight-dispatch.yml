@@ -1,0 +1,29 @@
+name: REL-064 Production Postflight Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rel064-production-postflight-dispatch.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch exact 10.0.64 production postflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-postflight.yml \
+            --ref main \
+            -f production_url=https://financialapp-home.vercel.app/ \
+            -f expected_version=10.0.64 \
+            -f deployment_commit=ad13be18299af2ab845c21fcc05452d65d4e4488 \
+            -f deployment_id=dpl_ePPeSH9hZKiPUEQM4EDDyUAxEsd2
