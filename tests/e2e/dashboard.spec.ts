@@ -375,7 +375,7 @@ test("Inicio mantiene una salida comprensible ante indisponibilidad total", asyn
   await expect(page.getByText("Las cuentas no están disponibles ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("El presupuesto no está disponible ahora.", { exact: true })).toBeVisible();
   await expect(page.getByText("La previsión no está disponible.", { exact: true })).toBeVisible();
-  await expect(page.getByText("La actividad reciente no está disponible ahora.", { exact: true })).toBeVisible();
+  await expect(page.getByText("La actividad reciente no está disponible ahora. El resto del resumen sigue operativo.", { exact: true })).toBeVisible();
   await expect(page.getByText("Parte del resumen no está disponible", { exact: true })).toBeVisible();
 });
 
