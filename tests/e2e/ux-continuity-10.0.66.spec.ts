@@ -15,10 +15,10 @@ test.describe("Financial App 10.0.66 · continuidad UX", () => {
     await page.getByLabel("Contraseña").fill("credencial-no-valida");
     await page.getByRole("button", { name: "Entrar" }).click();
 
-    const alert = page.getByRole("alert");
+    const alert = page.locator("#login-error");
+    await expect(alert).toHaveRole("alert");
     await expect(alert).toHaveText("Correo o contraseña incorrectos.");
     await expect(alert).toBeFocused();
-    await expect(alert).toHaveAttribute("id", "login-error");
 
     for (const field of [page.getByLabel("Correo electrónico"), page.getByLabel("Contraseña")]) {
       await expect(field).toHaveAttribute("aria-invalid", "true");
@@ -40,8 +40,10 @@ test.describe("Financial App 10.0.66 · continuidad UX", () => {
     await page.getByLabel("Contraseña").fill("cualquier-valor");
     await page.getByRole("button", { name: "Entrar" }).click();
 
-    await expect(page.getByRole("alert")).toHaveText("El acceso seguro no está disponible temporalmente.");
-    await expect(page.getByRole("alert")).toBeFocused();
+    const alert = page.locator("#login-error");
+    await expect(alert).toHaveRole("alert");
+    await expect(alert).toHaveText("El acceso seguro no está disponible temporalmente.");
+    await expect(alert).toBeFocused();
     await expect(page.getByLabel("Correo electrónico")).not.toHaveAttribute("aria-invalid", "true");
     await expect(page.getByLabel("Contraseña")).not.toHaveAttribute("aria-invalid", "true");
   });
