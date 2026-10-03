@@ -58,6 +58,12 @@ test.describe("ART-009 · navegación de producto única", () => {
 
     await moreNav.getByRole("link", { name: /Recurrentes/ }).click();
     await expect(page).toHaveURL(/\/recurrences$/);
-    await expect(page.getByRole("navigation", { name: "Navegación móvil" }).locator('[aria-current="page"]')).toHaveAttribute("href", "/recurrences");
+    await expect(moreButton).toHaveAttribute("aria-expanded", "false");
+
+    await moreButton.click();
+    await expect(moreButton).toHaveAttribute("aria-expanded", "true");
+    const reopenedMoreNav = page.getByRole("navigation", { name: "Más secciones" });
+    await expect(reopenedMoreNav.getByRole("link", { name: /Recurrentes/ })).toHaveAttribute("aria-current", "page");
+    await expect(reopenedMoreNav.getByRole("link", { name: /Recurrentes/ })).toHaveAttribute("href", "/recurrences");
   });
 });
