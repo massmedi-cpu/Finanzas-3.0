@@ -357,7 +357,7 @@ test("Transferencia interna solo ofrece contraparte equilibrada y envía el empa
 
   await expect.poll(() => reviews.length).toBe(1);
   expect(reviews[0]).toEqual({ action: "transfer-pair", transactionId: secondId, pairId: transferCandidateId });
-  await expect(page.getByText("Transferencia interna emparejada y auditada.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Transferencia interna emparejada y auditada." })).toBeVisible();
 });
 
 test("Preview protegido real expone el histórico persistido y revisiones en lectura sin escribir datos", async ({ request }) => {

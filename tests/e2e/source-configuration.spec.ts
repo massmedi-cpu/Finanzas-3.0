@@ -198,7 +198,7 @@ test.describe("Configuración · Fuente bancaria", () => {
     await page.goto("/configuration/source");
     await page.getByRole("button", { name: "Actualizar desde Google" }).click();
 
-    await expect(page.getByRole("alert")).toContainText("La fuente cambió mientras se estaba leyendo. Vuelve a intentarlo.");
+    await expect(page.locator("main").getByRole("alert")).toContainText("La fuente cambió mientras se estaba leyendo. Vuelve a intentarlo.");
     await expect(page.getByRole("heading", { name: "Google conectado" })).toBeVisible();
     await expect(page.getByText("alberto@example.test", { exact: true })).toBeVisible();
     await expect(page.getByText(/Actualización completada:/)).toHaveCount(0);
