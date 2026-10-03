@@ -1,22 +1,40 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-async function clearVisualPreferences(page: import("@playwright/test").Page) {
-  await page.addInitScript(() => {
-    window.localStorage.removeItem("financial-app:visual-preferences-v1");
+const STORAGE_KEY = "financial-app:visual-preferences-v1";
+
+async function resetVisualPreferences(page: Page) {
+  await page.goto("/configuration/appearance");
+  await page.evaluate((key) => window.localStorage.removeItem(key), STORAGE_KEY);
+  await page.reload();
+}
+
+async function expectLightSurface(page: Page, selector: string) {
+  const surface = page.locator(selector).first();
+  await expect(surface).toBeVisible();
+  const style = await surface.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return {
+      backgroundColor: computed.backgroundColor,
+      backgroundImage: computed.backgroundImage,
+      color: computed.color,
+    };
   });
+  expect(`${style.backgroundColor} ${style.backgroundImage}`).not.toContain("rgb(8, 15, 31)");
+  expect(`${style.backgroundColor} ${style.backgroundImage}`).not.toContain("rgb(7, 14, 29)");
+  expect(style.color).not.toBe("rgb(220, 229, 246)");
 }
 
 test.describe("ART-010 · tema system / light / dark", () => {
   test("Sistema sigue prefers-color-scheme y reacciona en vivo", async ({ page }) => {
-    await clearVisualPreferences(page);
     await page.emulateMedia({ colorScheme: "light" });
-    await page.goto("/configuration/appearance");
+    await resetVisualPreferences(page);
 
     const root = page.locator("html");
     await expect(root).toHaveAttribute("data-theme-preference", "system");
     await expect(root).toHaveAttribute("data-theme", "light");
     await expect(page.getByTestId("theme-current")).toContainText("Sistema");
     await expect(page.getByTestId("theme-resolved")).toContainText("claro");
+    await expectLightSurface(page, ".config-panel");
 
     await page.emulateMedia({ colorScheme: "dark" });
     await expect(root).toHaveAttribute("data-theme", "dark");
@@ -24,9 +42,8 @@ test.describe("ART-010 · tema system / light / dark", () => {
   });
 
   test("Claro y oscuro prevalecen sobre el sistema y persisten tras recarga", async ({ page }) => {
-    await clearVisualPreferences(page);
     await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto("/configuration/appearance");
+    await resetVisualPreferences(page);
 
     const root = page.locator("html");
     await page.getByTestId("theme-light").check();
@@ -37,6 +54,13 @@ test.describe("ART-010 · tema system / light / dark", () => {
     await expect(root).toHaveAttribute("data-theme-preference", "light");
     await expect(root).toHaveAttribute("data-theme", "light");
 
+    await page.goto("/transactions");
+    await expect(root).toHaveAttribute("data-theme", "light");
+    await expectLightSurface(page, 'main:has(form[aria-label="Filtros de movimientos"]) > header');
+    await expectLightSurface(page, 'form[aria-label="Filtros de movimientos"]');
+    await expectLightSurface(page, 'section[aria-labelledby="transaction-list-heading"]');
+
+    await page.goto("/configuration/appearance");
     await page.getByTestId("theme-dark").check();
     await expect(root).toHaveAttribute("data-theme-preference", "dark");
     await expect(root).toHaveAttribute("data-theme", "dark");
@@ -47,8 +71,7 @@ test.describe("ART-010 · tema system / light / dark", () => {
   });
 
   test("el cambio de tema no altera densidad ni preferencia de movimiento", async ({ page }) => {
-    await clearVisualPreferences(page);
-    await page.goto("/configuration/appearance");
+    await resetVisualPreferences(page);
 
     await page.getByRole("radio", { name: /Compacta/ }).check();
     await page.getByTestId("reduce-motion-toggle").check();
