@@ -38,10 +38,13 @@ export function FinancialBarChart({
 
   return (
     <div className={styles.wrapper}>
-      <div className={styles.legend} aria-hidden="true">
-        <span><i className={styles.incomeDot} />Ingresos</span>
-        <span><i className={styles.expenseDot} />Gastos</span>
+      <div className={styles.legend} aria-label="Leyenda y escala de ingresos y gastos">
+        <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos</span>
+        <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
         <span>{valuesVisible ? "Toca un mes para ver las cifras exactas" : "Importes ocultos · proporciones protegidas"}</span>
+        <span data-testid="financial-bar-scale-reference">
+          {valuesVisible ? `Escala máxima ${formatMoney(maxValue)}` : "Escala protegida por privacidad"}
+        </span>
       </div>
 
       <div

@@ -500,15 +500,21 @@ export default function AccountsClient() {
                       <span>{formatDate(snapshot.period.dateFrom)} — {formatDate(snapshot.period.dateTo)}</span>
                     </div>
 
-                    <div className={styles.legend} aria-hidden="true">
-                      <span><i className={styles.incomeDot} />Ingresos</span>
-                      <span><i className={styles.expenseDot} />Gastos</span>
-                      <span><i className={styles.netDot} />Neto</span>
+                    <div className={styles.legend} aria-label="Leyenda y escala de la actividad mensual">
+                      <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos</span>
+                      <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
+                      <span><i className={styles.netDot} aria-hidden="true" />Neto</span>
+                      <span data-testid="accounts-monthly-scale-reference">Escala máxima {formatMoney(scale)}</span>
                     </div>
 
                     <div className={styles.monthlyChart} role="list" aria-label="Ingresos, gastos y balance neto por mes">
                       {snapshot.monthly.rows.map((row) => (
-                        <div className={styles.monthRow} role="listitem" key={row.monthStart}>
+                        <div
+                          className={styles.monthRow}
+                          role="listitem"
+                          key={row.monthStart}
+                          aria-label={`${formatMonth(row.monthStart)}: ingresos ${formatMoney(row.incomeCents)}, gastos ${formatMoney(row.expenseCents)}, balance neto ${formatMoney(row.operatingNetCents)}`}
+                        >
                           <strong className={styles.monthLabel}>{formatMonth(row.monthStart)}</strong>
                           <div className={styles.bars}>
                             <div className={styles.barTrack} title={`Ingresos ${formatMoney(row.incomeCents)}`}>
