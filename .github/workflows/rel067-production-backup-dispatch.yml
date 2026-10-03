@@ -1,0 +1,27 @@
+name: REL-067 Production Backup Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rel067-production-backup-dispatch.yml
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch exact stable 10.0.67 backup
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-backup-v2.yml \
+            --ref main \
+            -f source_commit=af950ba86156d4b5f0c4dad97b76ecc4cba8c381 \
+            -f expected_app_version=10.0.67
