@@ -49,30 +49,54 @@ for (const href of requiredDestinations) {
   if (!navigationItems.includes(`href: "${href}"`)) fail(`falta el destino global ${href}`);
 }
 
-function collectPages(dir) {
-  const pages = [];
+function collectTsx(dir) {
+  const files = [];
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) pages.push(...collectPages(full));
-    else if (entry.isFile() && entry.name === "page.tsx") pages.push(full);
+    if (entry.isDirectory()) files.push(...collectTsx(full));
+    else if (entry.isFile() && entry.name.endsWith(".tsx")) files.push(full);
   }
-  return pages;
+  return files;
 }
 
-const pages = collectPages(path.join(root, "app"));
+const canonicalProductNavigation = new Set([
+  "app/app-shell.tsx",
+  "app/mobile-navigation.tsx",
+]);
+const tsxFiles = collectTsx(path.join(root, "app"));
+const pages = tsxFiles.filter((file) => path.basename(file) === "page.tsx");
+
+for (const absolute of tsxFiles) {
+  const relative = path.relative(root, absolute).replaceAll("\\", "/");
+  const source = fs.readFileSync(absolute, "utf8");
+
+  if (!canonicalProductNavigation.has(relative) && /\bnavigationItems\b/.test(source)) {
+    fail(`${relative} intenta consumir navigationItems fuera de la infraestructura global`);
+  }
+  if (!canonicalProductNavigation.has(relative) && /aria-label=["'](?:Navegación principal|Navegación móvil|Más secciones)["']/.test(source)) {
+    fail(`${relative} intenta recrear una superficie reservada a la navegación global`);
+  }
+}
+
 for (const absolute of pages) {
   const relative = path.relative(root, absolute).replaceAll("\\", "/");
   const source = fs.readFileSync(absolute, "utf8");
-  if (/<nav\b/i.test(source)) {
-    fail(`${relative} declara <nav>; la navegación de producto pertenece al AppShell`);
+  if (/from\s+["'][^"']*(?:app-shell|mobile-navigation)["']/.test(source)) {
+    fail(`${relative} monta infraestructura de navegación global de forma local`);
   }
-  if (/quickNav|Volver\s+a\s+Inicio/i.test(source)) {
-    fail(`${relative} reintroduce el patrón histórico de navegación local de ART-009`);
+  if (/Volver\s+a\s+Inicio/i.test(source)) {
+    fail(`${relative} reintroduce «Volver a Inicio» como sustituto del AppShell`);
   }
+}
+
+const inicioSources = [read("app/page.tsx"), read("app/inicio-overview.tsx")].join("\n");
+if (/quickNav|aria-label=["'][^"']*(?:navegación|secciones)[^"']*["']/i.test(inicioSources)) {
+  fail("Inicio reintroduce una barra de navegación local que compite con AppShell");
 }
 
 if (process.exitCode) process.exit(process.exitCode);
 console.log("✅ ART-009 product navigation guard: OK");
-console.log(`- ${pages.length} page.tsx sin barras de navegación locales`);
+console.log(`- ${pages.length} page.tsx sin infraestructura global duplicada`);
+console.log("- navegación contextual de módulos permitida; navegación de producto reservada a AppShell");
 console.log("- desktop y móvil derivan de navigationItems y exponen ruta activa");
 console.log("- destinos financieros principales presentes en la navegación persistente");
