@@ -1,0 +1,25 @@
+name: REL-071 Closure Dispatch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/rel071-closure-dispatch.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Production Backup v2 for 10.0.71
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run production-backup-v2.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f expected_app_version=10.0.71 \
+            -f expected_prod_commit=3807157e2febded6a8c4c863668883e136c697e0
