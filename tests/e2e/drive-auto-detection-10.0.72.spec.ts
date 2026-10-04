@@ -63,9 +63,11 @@ test.describe("Financial App 10.0.72 · Axioma §51 Drive automático", () => {
     await expect.poll(() => syncCalls).toBe(2);
   });
 
-  test("si Drive falla el módulo continúa disponible", async ({ page }) => {
+  test("si Drive falla el módulo continúa disponible sin reintentos automáticos en bucle", async ({ page }) => {
+    let syncCalls = 0;
     await mockDocumentList(page);
     await page.route("**/api/documents/drive-sync", async (route) => {
+      syncCalls += 1;
       await route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -76,5 +78,10 @@ test.describe("Financial App 10.0.72 · Axioma §51 Drive automático", () => {
     await page.goto("/documents");
     await expect(page.getByTestId("drive-auto-sync")).toContainText("Documentos sigue funcionando con normalidad");
     await expect(page.getByRole("button", { name: "Comprobar ahora" })).toBeEnabled();
+    await page.waitForTimeout(500);
+    expect(syncCalls).toBe(1);
+
+    await page.getByRole("button", { name: "Comprobar ahora" }).click();
+    await expect.poll(() => syncCalls).toBe(2);
   });
 });
