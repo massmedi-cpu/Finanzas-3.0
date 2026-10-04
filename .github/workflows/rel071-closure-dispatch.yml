@@ -11,15 +11,17 @@ permissions:
   actions: write
 
 jobs:
-  dispatch-backup:
+  dispatch-postflight:
     runs-on: ubuntu-latest
     steps:
-      - name: Dispatch Production Backup v2 for 10.0.71
+      - name: Dispatch Production Postflight for 10.0.71
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh workflow run production-backup-v2.yml \
+          gh workflow run production-postflight.yml \
             --repo "${{ github.repository }}" \
             --ref main \
-            -f source_commit=3807157e2febded6a8c4c863668883e136c697e0 \
-            -f expected_app_version=10.0.71
+            -f production_url=https://financialapp-home.vercel.app/ \
+            -f expected_version=10.0.71 \
+            -f deployment_commit=3807157e2febded6a8c4c863668883e136c697e0 \
+            -f deployment_id=dpl_CQLBS7pkKNKVdGoUvyfQpXEW9Lwd
