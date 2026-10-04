@@ -1,0 +1,96 @@
+name: Release 10.0.72
+
+on:
+  push:
+    branches:
+      - feat/axioma-51-drive-auto-detection-10.0.72
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-drive-auto-detection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Critical dependency audit
+        run: npm audit --audit-level=critical
+
+      - name: Verify Axioma 51 static contract
+        run: npm run verify:drive-auto-detection
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build and postbuild guards
+        run: npm run build
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Axioma 51 targeted E2E
+        run: npm run test:drive-auto-detection
+
+      - name: Current user-value regression desktop and mobile
+        run: >-
+          npm run test:e2e --
+          tests/e2e/global-search.spec.ts
+          tests/e2e/transactions-ux-comfort.spec.ts
+          tests/e2e/transactions-deeplink.spec.ts
+          tests/e2e/transactions.spec.ts
+          tests/e2e/transactions-race.spec.ts
+          tests/e2e/transactions-accessibility.spec.ts
+          tests/e2e/review-action-center.spec.ts
+          tests/e2e/dashboard-number-explanations.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/module-context-navigation.spec.ts
+          tests/e2e/document-ocr-natural-review.spec.ts
+          tests/e2e/mobile-direct-navigation.spec.ts
+          tests/e2e/mobile-personalization.spec.ts
+          tests/e2e/pwa-installability.spec.ts
+          tests/e2e/actionable-empty-states.spec.ts
+          tests/e2e/safe-reversible-edits.spec.ts
+          tests/e2e/perceived-speed.spec.ts
+          tests/e2e/navigation-demand-loading-contract.spec.ts
+          tests/e2e/personal-intelligence.spec.ts
+          tests/e2e/inicio-utility.spec.ts
+          tests/e2e/inicio-visual-restraint.spec.ts
+          tests/e2e/premium-dashboard-visual.spec.ts
+          tests/e2e/premium-visual-system.spec.ts
+          tests/e2e/release-version.spec.ts
+          tests/e2e/accounts.spec.ts
+          tests/e2e/forecast.spec.ts
+          tests/e2e/cr007-home-initial-paint.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/dashboard-performance-contract.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-072-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore

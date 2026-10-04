@@ -1,0 +1,68 @@
+.surface {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 0 0 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.22));
+  border-radius: 1rem;
+  background: var(--surface-raised, rgba(15, 23, 42, 0.68));
+  box-shadow: 0 0.75rem 2rem rgba(2, 6, 23, 0.08);
+}
+
+.copy {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.copy strong {
+  font-size: 0.92rem;
+  line-height: 1.35;
+}
+
+.copy span {
+  color: var(--text-secondary, #94a3b8);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.action {
+  flex: 0 0 auto;
+  min-height: 2.5rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid var(--border-strong, rgba(148, 163, 184, 0.34));
+  border-radius: 0.75rem;
+  background: var(--surface-interactive, rgba(30, 41, 59, 0.78));
+  color: inherit;
+  font: inherit;
+  font-size: 0.84rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.action:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.action:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.action:disabled {
+  cursor: progress;
+  opacity: 0.62;
+}
+
+@media (max-width: 640px) {
+  .surface {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .action {
+    width: 100%;
+  }
+}
