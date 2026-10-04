@@ -43,6 +43,7 @@ test("La inteligencia personal es determinista y no introduce un segundo motor n
   expect(combined).not.toMatch(/openai|chatgpt|generative ai|llm/i);
   expect(brief).not.toContain("fetch(");
   expect(overview).toContain('/api/dashboard?scope=${scope}');
-  expect(overview).toContain('loadScope("primary", ["financial", "transactions"])');
+  expect(overview).toContain('loadScope("critical", ["financial"])');
+  expect(overview).toContain('loadScope("activity", ["transactions"])');
   expect(overview).toContain('loadScope("secondary", ["monthly", "budgets", "forecast"])');
 });

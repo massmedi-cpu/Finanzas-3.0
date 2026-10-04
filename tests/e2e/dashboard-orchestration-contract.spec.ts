@@ -101,7 +101,7 @@ const transactions = {
 };
 
 function envelope(
-  scope: "primary" | "secondary",
+  scope: "critical" | "activity" | "primary" | "secondary",
   data: Record<string, unknown>,
   requestedSources: string[],
 ) {
@@ -144,6 +144,20 @@ async function installDashboardMocks(
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical") {
+        await fulfillJson(
+          route,
+          envelope("critical", { financial: overrides.financial ?? financial }, ["financial"]),
+        );
+        return;
+      }
+      if (scope === "activity") {
+        await fulfillJson(
+          route,
+          envelope("activity", { transactions }, ["transactions"]),
+        );
+        return;
+      }
       if (scope === "primary") {
         await fulfillJson(
           route,

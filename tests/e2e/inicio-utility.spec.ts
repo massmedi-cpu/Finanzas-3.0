@@ -107,6 +107,32 @@ async function mockInicio(page: Page) {
 
     if (url.pathname === "/api/dashboard") {
       const scope = url.searchParams.get("scope");
+      if (scope === "critical") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "critical",
+          asOfDate: "2026-09-11",
+          dataThroughDate: null,
+          generatedAt: "2026-09-15T09:04:08.000Z",
+          requestedSources: ["financial"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions: null },
+        });
+        return;
+      }
+      if (scope === "activity") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "activity",
+          asOfDate: "2026-09-11",
+          dataThroughDate: "2026-09-11",
+          generatedAt: "2026-09-15T09:04:08.000Z",
+          requestedSources: ["transactions"],
+          failedSources: [],
+          data: { financial: null, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
       if (scope === "primary") {
         await json(route, {
           contractVersion: 1,

@@ -110,6 +110,32 @@ async function mockInicio(page: Page) {
     }
 
     if (url.pathname === "/api/dashboard") {
+      if (url.searchParams.get("scope") === "critical") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "critical",
+          asOfDate: "2026-09-16",
+          dataThroughDate: null,
+          generatedAt: "2026-09-16T06:00:05.000Z",
+          requestedSources: ["financial"],
+          failedSources: [],
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions: null },
+        });
+        return;
+      }
+      if (url.searchParams.get("scope") === "activity") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "activity",
+          asOfDate: "2026-09-16",
+          dataThroughDate: "2026-09-16",
+          generatedAt: "2026-09-16T06:00:05.000Z",
+          requestedSources: ["transactions"],
+          failedSources: [],
+          data: { financial: null, monthly: null, budgets: null, forecast: null, transactions },
+        });
+        return;
+      }
       if (url.searchParams.get("scope") === "primary") {
         await json(route, {
           contractVersion: 1,

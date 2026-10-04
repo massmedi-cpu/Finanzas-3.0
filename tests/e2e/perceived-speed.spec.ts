@@ -22,13 +22,14 @@ test("Las transiciones de ruta ofrecen feedback inmediato, discreto y accesible"
 test("Inicio prioriza información útil antes de las fuentes secundarias", () => {
   const overview = source("app/inicio-overview.tsx");
 
-  expect(overview).toContain('await loadScope("primary", ["financial", "transactions"])');
+  expect(overview).toContain('await loadScope("critical", ["financial"])');
+  expect(overview).toContain('loadScope("activity", ["transactions"])');
   expect(overview).toContain("setPrimaryLoading(false)");
   expect(overview).toContain('loadScope("secondary", ["monthly", "budgets", "forecast"])');
   expect(overview).toContain('`/api/dashboard?scope=${scope}`');
   expect(overview).toContain("5_000");
   expect(overview).toContain("className={styles.skeleton}");
-  expect(overview).toContain("aria-busy={primaryLoading || secondaryLoading}");
+  expect(overview).toContain("aria-busy={primaryLoading || activityLoading || secondaryLoading}");
 });
 
 test("La mejora de velocidad percibida no crea llamadas financieras adicionales", () => {
