@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./drive-auto-sync.module.css";
 
 type DriveSyncResult = {
@@ -48,9 +48,11 @@ function summary(result: DriveSyncResult) {
 export function DriveAutoSync() {
   const [phase, setPhase] = useState<Phase>("idle");
   const [result, setResult] = useState<DriveSyncResult | null>(null);
+  const syncingRef = useRef(false);
+  const autoStartedRef = useRef(false);
 
   const run = useCallback(async (force = false) => {
-    if (phase === "syncing") return;
+    if (syncingRef.current) return;
     if (!force) {
       try {
         const raw = window.sessionStorage.getItem(SESSION_KEY);
@@ -61,10 +63,15 @@ export function DriveAutoSync() {
           return;
         }
       } catch {
-        window.sessionStorage.removeItem(SESSION_KEY);
+        try {
+          window.sessionStorage.removeItem(SESSION_KEY);
+        } catch {
+          // La detección automática no depende de que sessionStorage esté disponible.
+        }
       }
     }
 
+    syncingRef.current = true;
     setPhase("syncing");
     try {
       const response = await fetch("/api/documents/drive-sync", {
@@ -91,10 +98,14 @@ export function DriveAutoSync() {
       }
     } catch {
       setPhase("error");
+    } finally {
+      syncingRef.current = false;
     }
-  }, [phase]);
+  }, []);
 
   useEffect(() => {
+    if (autoStartedRef.current) return;
+    autoStartedRef.current = true;
     void run(false);
   }, [run]);
 
