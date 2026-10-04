@@ -1,0 +1,37 @@
+name: TEMP Sync 10.0.72 Lockfile
+
+on:
+  push:
+    branches:
+      - feat/axioma-51-drive-auto-detection-10.0.72
+
+permissions:
+  contents: write
+
+jobs:
+  sync-lockfile:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v6
+        with:
+          ref: feat/axioma-51-drive-auto-detection-10.0.72
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Regenerate lockfile identity
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Commit synchronized lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock.json already synchronized"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(release): align 10.0.72 lockfile identity"
+          git push origin HEAD:feat/axioma-51-drive-auto-detection-10.0.72
