@@ -1,0 +1,180 @@
+.section {
+  margin: 0 auto 24px;
+  width: min(100%, 1440px);
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--border, #d9dde5) 82%, transparent);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--surface, #fff) 94%, transparent);
+  box-shadow: 0 18px 60px rgb(15 23 42 / 7%);
+}
+
+.heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 20px;
+}
+
+.heading h2 {
+  margin: 3px 0 7px;
+  font-size: clamp(1.35rem, 2.3vw, 2rem);
+  line-height: 1.12;
+}
+
+.heading > div:first-child > p:last-child {
+  max-width: 760px;
+  margin: 0;
+  color: var(--text-secondary, #596273);
+  line-height: 1.55;
+}
+
+.eyebrow {
+  margin: 0;
+  font-size: .72rem;
+  font-weight: 800;
+  letter-spacing: .12em;
+  color: var(--text-secondary, #596273);
+}
+
+.openingBalance {
+  min-width: 180px;
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.openingBalance span,
+.openingBalance small {
+  color: var(--text-secondary, #596273);
+  font-size: .78rem;
+}
+
+.openingBalance strong {
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.card {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border, #d9dde5) 82%, transparent);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--surface, #fff) 97%, var(--text-primary, #101828) 3%);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.horizonLabel {
+  margin: 0;
+  font-weight: 800;
+}
+
+.horizonDate {
+  margin: 3px 0 0;
+  color: var(--text-secondary, #596273);
+  font-size: .75rem;
+}
+
+.confidence {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--surface, #fff) 80%, var(--text-primary, #101828) 8%);
+  color: var(--text-secondary, #596273);
+  font-size: .68rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.balanceBlock {
+  display: grid;
+  gap: 3px;
+  margin: 22px 0 18px;
+}
+
+.balanceBlock > span {
+  color: var(--text-secondary, #596273);
+  font-size: .76rem;
+}
+
+.balanceBlock strong {
+  overflow-wrap: anywhere;
+  font-size: clamp(1.35rem, 2vw, 1.8rem);
+  line-height: 1.08;
+  font-variant-numeric: tabular-nums;
+}
+
+.balanceBlock small {
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.positive { color: var(--success, #147a4b); }
+.negative { color: var(--danger, #b42318); }
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 0;
+}
+
+.metrics div {
+  min-width: 0;
+  padding: 9px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface, #fff) 84%, var(--text-primary, #101828) 5%);
+}
+
+.metrics dt {
+  color: var(--text-secondary, #596273);
+  font-size: .68rem;
+}
+
+.metrics dd {
+  margin: 3px 0 0;
+  overflow-wrap: anywhere;
+  font-size: .82rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.explain {
+  min-height: 34px;
+  margin: 14px 0 0;
+  color: var(--text-secondary, #596273);
+  font-size: .71rem;
+  line-height: 1.4;
+}
+
+.status {
+  padding: 18px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--surface, #fff) 86%, var(--text-primary, #101828) 4%);
+  color: var(--text-secondary, #596273);
+}
+
+@media (max-width: 1080px) {
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 680px) {
+  .section { padding: 18px 14px; border-radius: 20px; }
+  .heading { display: grid; gap: 12px; }
+  .openingBalance { text-align: left; }
+  .grid { grid-template-columns: 1fr; }
+  .card { padding: 16px; }
+  .cardHeader { align-items: center; }
+}

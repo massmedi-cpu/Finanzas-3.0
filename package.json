@@ -1,11 +1,11 @@
 {
   "name": "financial-app",
-  "version": "10.0.74",
+  "version": "10.0.75",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs && node scripts/verify-surface-hierarchy.mjs && node scripts/verify-shared-app-shell.mjs && node scripts/verify-typography-runtime.mjs && node scripts/verify-background-composition.mjs && node scripts/verify-product-navigation.mjs && node scripts/verify-theme-system.mjs && node scripts/verify-mobile-quality-10.0.65.mjs && node scripts/verify-ux-continuity-10.0.66.mjs && node scripts/verify-activation-progressive-disclosure-10.0.67.mjs && node scripts/verify-home-progressive-loading-10.0.69.mjs && node scripts/verify-drive-auto-detection-10.0.72.mjs && node scripts/verify-budget-engine-10.0.73.mjs && node scripts/verify-analysis-axioma53-10.0.74.mjs",
+    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs && node scripts/verify-surface-hierarchy.mjs && node scripts/verify-shared-app-shell.mjs && node scripts/verify-typography-runtime.mjs && node scripts/verify-background-composition.mjs && node scripts/verify-product-navigation.mjs && node scripts/verify-theme-system.mjs && node scripts/verify-mobile-quality-10.0.65.mjs && node scripts/verify-ux-continuity-10.0.66.mjs && node scripts/verify-activation-progressive-disclosure-10.0.67.mjs && node scripts/verify-home-progressive-loading-10.0.69.mjs && node scripts/verify-drive-auto-detection-10.0.72.mjs && node scripts/verify-budget-engine-10.0.73.mjs && node scripts/verify-analysis-axioma53-10.0.74.mjs && node scripts/verify-forecast-phase7-10.0.75.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
@@ -41,6 +41,7 @@
     "verify:drive-auto-detection": "node scripts/verify-drive-auto-detection-10.0.72.mjs",
     "verify:budget-engine": "node scripts/verify-budget-engine-10.0.73.mjs",
     "verify:analysis-engine": "node scripts/verify-analysis-axioma53-10.0.74.mjs",
+    "verify:forecast-phase7": "node scripts/verify-forecast-phase7-10.0.75.mjs",
     "performance:report": "node scripts/report-web-vitals.mjs",
     "release:manifest": "node scripts/create-release-manifest.mjs",
     "backup:create": "node scripts/create-financial-backup.mjs",
