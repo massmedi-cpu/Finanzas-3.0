@@ -8,8 +8,12 @@ import {
 } from "./analysis-engine";
 
 const MONTH = /^\d{4}-(0[1-9]|1[0-2])$/;
+const DATE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
+const YEAR = /^\d{4}$/;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const RANGES = new Set<AnalysisRange>(["1m", "3m", "6m", "12m", "ytd"]);
+const PERIOD_MODES = new Set(["preset", "month", "year", "custom"]);
+const COMPARISON_MODES = new Set(["previous", "year_ago", "custom"]);
 const RANGE_MONTHS: Record<Exclude<AnalysisRange, "ytd">, number> = {
   "1m": 1,
   "3m": 3,
@@ -57,17 +61,50 @@ function shiftDateMonths(date: string, deltaMonths: number) {
   return `${targetYear}-${String(targetMonth).padStart(2, "0")}-${String(Math.min(day, lastDay)).padStart(2, "0")}`;
 }
 
-function dayBefore(date: string) {
+function shiftDays(date: string, deltaDays: number) {
   const [year, month, day] = date.split("-").map(Number);
-  const value = new Date(Date.UTC(year, month - 1, day));
-  value.setUTCDate(value.getUTCDate() - 1);
-  return value.toISOString().slice(0, 10);
+  const shifted = new Date(Date.UTC(year, month - 1, day));
+  shifted.setUTCDate(shifted.getUTCDate() + deltaDays);
+  return shifted.toISOString().slice(0, 10);
+}
+
+function dayBefore(date: string) {
+  return shiftDays(date, -1);
+}
+
+function inclusiveDays(dateFrom: string, dateTo: string) {
+  const from = Date.parse(`${dateFrom}T00:00:00Z`);
+  const to = Date.parse(`${dateTo}T00:00:00Z`);
+  return Math.floor((to - from) / 86_400_000) + 1;
+}
+
+function validDate(value: string) {
+  if (!DATE.test(value)) return false;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function requireDate(value: string | null | undefined, code: string) {
+  const normalized = value?.trim() ?? "";
+  if (!validDate(normalized)) throw new Error(code);
+  return normalized;
+}
+
+function minDate(...values: string[]) {
+  return [...values].sort()[0];
 }
 
 export type AnalysisSelectionInput = {
   month?: string | null;
   range?: string | null;
   accountId?: string | null;
+  periodMode?: string | null;
+  year?: string | null;
+  dateFrom?: string | null;
+  dateTo?: string | null;
+  compareMode?: string | null;
+  compareDateFrom?: string | null;
+  compareDateTo?: string | null;
 };
 
 export type ResolvedAnalysisSelection = {
@@ -87,34 +124,85 @@ export type ResolvedAnalysisSelection = {
 export function resolveAnalysisSelection(input: AnalysisSelectionInput = {}): ResolvedAnalysisSelection {
   const today = madridToday();
   const currentMonth = today.slice(0, 7);
-  const month = input.month?.trim() || currentMonth;
-  if (!MONTH.test(month)) throw new Error("invalid_analysis_month");
-  if (month > currentMonth) throw new Error("invalid_analysis_future_month");
-
-  const rangeCandidate = input.range?.trim() || "1m";
-  if (!RANGES.has(rangeCandidate as AnalysisRange)) throw new Error("invalid_analysis_range");
-  const range = rangeCandidate as AnalysisRange;
-
+  const currentYear = today.slice(0, 4);
   const accountCandidate = input.accountId?.trim() || null;
   if (accountCandidate !== null && !UUID.test(accountCandidate)) throw new Error("invalid_analysis_account_id");
 
-  const endOfAnchorMonth = monthEnd(month);
-  const partial = month === currentMonth && today < endOfAnchorMonth;
-  const dateTo = partial ? today : endOfAnchorMonth;
+  const requestedPeriodMode = input.periodMode?.trim() || ((input.dateFrom || input.dateTo) ? "custom" : "preset");
+  if (!PERIOD_MODES.has(requestedPeriodMode)) throw new Error("invalid_analysis_period_mode");
+
+  let month = input.month?.trim() || currentMonth;
+  let range: AnalysisRange = "1m";
   let dateFrom: string;
+  let dateTo: string;
+  let partial = false;
+  let partialMonthStart: string | null = null;
+
+  if (requestedPeriodMode === "month") {
+    if (!MONTH.test(month) || month > currentMonth) throw new Error("invalid_analysis_month");
+    range = "1m";
+    dateFrom = monthStart(month);
+    const end = monthEnd(month);
+    partial = month === currentMonth && today < end;
+    dateTo = partial ? today : end;
+    partialMonthStart = partial ? monthStart(month) : null;
+  } else if (requestedPeriodMode === "year") {
+    const year = input.year?.trim() || month.slice(0, 4) || currentYear;
+    if (!YEAR.test(year) || year > currentYear) throw new Error("invalid_analysis_year");
+    dateFrom = `${year}-01-01`;
+    dateTo = year === currentYear ? today : `${year}-12-31`;
+    month = year === currentYear ? currentMonth : `${year}-12`;
+    range = "ytd";
+    partial = year === currentYear;
+    partialMonthStart = partial && today < monthEnd(currentMonth) ? monthStart(currentMonth) : null;
+  } else if (requestedPeriodMode === "custom") {
+    dateFrom = requireDate(input.dateFrom, "invalid_analysis_date_from");
+    dateTo = requireDate(input.dateTo, "invalid_analysis_date_to");
+    if (dateFrom > dateTo) throw new Error("invalid_analysis_date_range");
+    if (dateTo > today) throw new Error("invalid_analysis_future_date");
+    month = dateTo.slice(0, 7);
+    range = "12m";
+    partial = dateTo === today && month === currentMonth && today < monthEnd(currentMonth);
+    partialMonthStart = partial ? monthStart(currentMonth) : null;
+  } else {
+    if (!MONTH.test(month)) throw new Error("invalid_analysis_month");
+    if (month > currentMonth) throw new Error("invalid_analysis_future_month");
+
+    const rangeCandidate = input.range?.trim() || "1m";
+    if (!RANGES.has(rangeCandidate as AnalysisRange)) throw new Error("invalid_analysis_range");
+    range = rangeCandidate as AnalysisRange;
+
+    const endOfAnchorMonth = monthEnd(month);
+    partial = month === currentMonth && today < endOfAnchorMonth;
+    dateTo = partial ? today : endOfAnchorMonth;
+
+    if (range === "ytd") {
+      const year = Number(month.slice(0, 4));
+      dateFrom = `${year}-01-01`;
+    } else {
+      const months = RANGE_MONTHS[range];
+      dateFrom = shiftMonthStart(month, -(months - 1));
+    }
+    partialMonthStart = partial ? monthStart(month) : null;
+  }
+
+  const comparisonMode = input.compareMode?.trim() || "previous";
+  if (!COMPARISON_MODES.has(comparisonMode)) throw new Error("invalid_analysis_comparison_mode");
+
   let previousDateFrom: string;
   let previousDateTo: string;
-
-  if (range === "ytd") {
-    const year = Number(month.slice(0, 4));
-    dateFrom = `${year}-01-01`;
-    previousDateFrom = `${year - 1}-01-01`;
+  if (comparisonMode === "year_ago") {
+    previousDateFrom = shiftDateMonths(dateFrom, -12);
     previousDateTo = shiftDateMonths(dateTo, -12);
+  } else if (comparisonMode === "custom") {
+    previousDateFrom = requireDate(input.compareDateFrom, "invalid_analysis_compare_date_from");
+    previousDateTo = requireDate(input.compareDateTo, "invalid_analysis_compare_date_to");
+    if (previousDateFrom > previousDateTo) throw new Error("invalid_analysis_compare_date_range");
+    if (previousDateTo > today) throw new Error("invalid_analysis_compare_future_date");
   } else {
-    const months = RANGE_MONTHS[range];
-    dateFrom = shiftMonthStart(month, -(months - 1));
-    previousDateFrom = shiftMonthStart(dateFrom.slice(0, 7), -months);
-    previousDateTo = partial ? shiftDateMonths(dateTo, -months) : dayBefore(dateFrom);
+    const days = inclusiveDays(dateFrom, dateTo);
+    previousDateTo = dayBefore(dateFrom);
+    previousDateFrom = shiftDays(previousDateTo, -(days - 1));
   }
 
   return {
@@ -126,9 +214,9 @@ export function resolveAnalysisSelection(input: AnalysisSelectionInput = {}): Re
     dateTo,
     previousDateFrom,
     previousDateTo,
-    historyDateFrom: shiftMonthStart(month, -11),
+    historyDateFrom: minDate(shiftMonthStart(month, -11), monthStart(dateFrom.slice(0, 7))),
     partial,
-    partialMonthStart: partial ? monthStart(month) : null,
+    partialMonthStart,
   };
 }
 
