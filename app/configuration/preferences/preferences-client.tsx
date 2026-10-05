@@ -58,13 +58,13 @@ export default function PreferencesClient() {
 
         <section className="config-panel">
           <p className="panel-kicker">Inicio</p>
-          <h2>Destino del logotipo</h2>
-          <select value={homeDestination} onChange={(event) => change(() => setHomeDestination(event.currentTarget.value as "/" | "/analysis" | "/forecast"), "Destino principal actualizado.")}>
+          <h2>Página inicial al abrir</h2>
+          <select value={homeDestination} onChange={(event) => change(() => setHomeDestination(event.currentTarget.value as "/" | "/analysis" | "/forecast"), "Página inicial actualizada para el próximo arranque de sesión.")}>
             <option value="/">Inicio</option>
             <option value="/analysis">Análisis</option>
             <option value="/forecast">Previsión</option>
           </select>
-          <p>El logotipo de Financial App lleva directamente a la sección elegida.</p>
+          <p>Se aplica una sola vez al comenzar una sesión. Después puedes navegar a Inicio normalmente sin redirecciones inesperadas.</p>
         </section>
       </div>
 
