@@ -79,10 +79,10 @@
 .segment,
 .activeSegment {
   flex: 1 1 0;
-  min-height: 36px;
+  min-height: 44px;
   border: 0;
   border-radius: 9px;
-  padding: 6px 10px;
+  padding: 8px 10px;
   font: inherit;
   font-size: 0.82rem;
   font-weight: 720;
@@ -108,7 +108,7 @@
 .control input,
 .control select {
   width: 100%;
-  min-height: 42px;
+  min-height: 44px;
   box-sizing: border-box;
   border: 1px solid var(--border, #d6d7db);
   border-radius: 11px;
@@ -135,7 +135,7 @@
 }
 
 .apply {
-  min-height: 42px;
+  min-height: 44px;
   border: 0;
   border-radius: 12px;
   padding: 10px 17px;
