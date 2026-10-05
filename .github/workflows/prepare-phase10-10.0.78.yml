@@ -1,0 +1,66 @@
+name: Prepare Phase 10 10.0.78
+
+on:
+  push:
+    branches:
+      - rebuild/phase-10-transversals-10.0.78
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: prepare-phase10-10.0.78
+  cancel-in-progress: false
+
+jobs:
+  prepare-and-certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v6
+        with:
+          ref: rebuild/phase-10-transversals-10.0.78
+          fetch-depth: 0
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Synchronize package-lock release identity
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          const path = 'package-lock.json';
+          const lock = JSON.parse(fs.readFileSync(path, 'utf8'));
+          lock.version = '10.0.78';
+          if (lock.packages?.['']) lock.packages[''].version = '10.0.78';
+          fs.writeFileSync(path, JSON.stringify(lock, null, 2) + '\n');
+          NODE
+
+      - name: Commit synchronized lockfile
+        run: |
+          if git diff --quiet -- package-lock.json; then
+            echo "package-lock already synchronized"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "Fase 10: sincronizar identidad 10.0.78"
+            git push origin HEAD:rebuild/phase-10-transversals-10.0.78
+          fi
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Phase 10 static certification
+        run: npm run verify:transversals-phase10
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build with cumulative gates
+        run: npm run build
