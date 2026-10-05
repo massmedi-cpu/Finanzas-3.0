@@ -1,0 +1,39 @@
+name: Harden Budget ACL 10.0.73
+
+on:
+  push:
+    branches:
+      - feat/axioma-52-budget-engine-10.0.73
+    paths:
+      - .github/workflows/harden-budget-acl-10.0.73.yml
+
+permissions:
+  contents: write
+
+jobs:
+  harden:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: feat/axioma-52-budget-engine-10.0.73
+      - name: Make gateway-only ACL explicit
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = 'supabase/migrations/20261005041600_axioma52_budget_recommendation_engine.sql';
+          let sql = fs.readFileSync(path, 'utf8');
+          const marker = "revoke all on function financial_app.budget_month_snapshot(text) from public, anon, authenticated;";
+          if (!sql.includes(marker)) throw new Error('ACL marker not found');
+          if (!sql.includes('budget_month_recommendation(text,uuid) from service_role')) {
+            sql = sql.replace(marker, marker + "\nrevoke all on function financial_app.budget_month_recommendation(text,uuid) from service_role;\nrevoke all on function financial_app.budget_month_snapshot(text) from service_role;");
+            fs.writeFileSync(path, sql);
+          }
+          NODE
+          git rm .github/workflows/harden-budget-acl-10.0.73.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add supabase/migrations/20261005041600_axioma52_budget_recommendation_engine.sql
+          git commit -m 'security: enforce gateway-only budget execution'
+          git push origin HEAD:feat/axioma-52-budget-engine-10.0.73
