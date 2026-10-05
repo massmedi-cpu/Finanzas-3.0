@@ -26,10 +26,11 @@ test("Inicio prioriza información útil antes de las fuentes secundarias", () =
   expect(overview).toContain('loadScope("activity", ["transactions"])');
   expect(overview).toContain("setPrimaryLoading(false)");
   expect(overview).toContain('loadScope("secondary", ["monthly", "budgets", "forecast"])');
+  expect(overview).toContain('readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000)');
   expect(overview).toContain('`/api/dashboard?scope=${scope}`');
   expect(overview).toContain("5_000");
   expect(overview).toContain("className={styles.skeleton}");
-  expect(overview).toContain("aria-busy={primaryLoading || activityLoading || secondaryLoading}");
+  expect(overview).toContain("aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}");
 });
 
 test("La mejora de velocidad percibida no crea llamadas financieras adicionales", () => {
