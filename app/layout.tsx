@@ -4,6 +4,7 @@ import { ActionFeedbackProvider } from "./action-feedback";
 import AppShell from "./app-shell";
 import { CategoryIdentityProvider } from "./category-identity";
 import { OperationalTelemetryReporter } from "./operational-telemetry";
+import { ProductPreferencesProvider } from "./product-preferences";
 import { PwaRuntimeProvider } from "./pwa-runtime";
 import { VisualPreferencesProvider } from "./visual-preferences";
 import "./globals.css";
@@ -12,6 +13,7 @@ import "./touch-targets.css";
 import "./premium-states.css";
 import "./visual-density.css";
 import "./visual-preferences.css";
+import "./product-preferences.css";
 import "./category-controls.css";
 import "./premium-theme.css";
 import "./premium-hardening.css";
@@ -55,6 +57,8 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       data-reduce-motion="false"
       data-theme-preference="system"
       data-theme="dark"
+      data-privacy-on-blur="true"
+      data-budget-focus="all"
       suppressHydrationWarning
     >
       <head>
@@ -62,13 +66,15 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       </head>
       <body>
         <VisualPreferencesProvider>
-          <ActionFeedbackProvider>
-            <PwaRuntimeProvider>
-              <CategoryIdentityProvider>
-                <AppShell>{children}</AppShell>
-              </CategoryIdentityProvider>
-            </PwaRuntimeProvider>
-          </ActionFeedbackProvider>
+          <ProductPreferencesProvider>
+            <ActionFeedbackProvider>
+              <PwaRuntimeProvider>
+                <CategoryIdentityProvider>
+                  <AppShell>{children}</AppShell>
+                </CategoryIdentityProvider>
+              </PwaRuntimeProvider>
+            </ActionFeedbackProvider>
+          </ProductPreferencesProvider>
         </VisualPreferencesProvider>
         <OperationalTelemetryReporter enabled={process.env.VERCEL_ENV === "production"} />
       </body>
