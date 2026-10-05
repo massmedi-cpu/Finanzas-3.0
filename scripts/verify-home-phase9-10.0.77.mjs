@@ -59,7 +59,8 @@ for (const token of [
 ]) requireText(overview, token, "inicio-fase9");
 
 for (const token of [
-  "Inicio never computes a replacement balance",
+  "compare already calculated values",
+  "replacement balance, period total, budget actual or forecast opening balance",
   "balancesMatch",
   "budgetActualMatches",
   "forecastOpeningBalanceMatches",
