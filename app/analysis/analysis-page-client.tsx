@@ -26,6 +26,11 @@ function responseErrorCode(payload: unknown, status: number) {
   return `analysis_http_${status}`;
 }
 
+function appendParam(params: URLSearchParams, key: string, value: string | null | undefined) {
+  const normalized = value?.trim();
+  if (normalized) params.set(key, normalized);
+}
+
 export default function AnalysisPageClient({
   initialSnapshot,
   fallbackSelection = {},
@@ -40,12 +45,17 @@ export default function AnalysisPageClient({
     if (initialSnapshot) return;
 
     const controller = new AbortController();
-    const params = new URLSearchParams({
-      month: fallbackSelection.month?.trim() || currentMadridMonth(),
-      range: fallbackSelection.range?.trim() || "1m",
-    });
-    const accountId = fallbackSelection.accountId?.trim();
-    if (accountId) params.set("accountId", accountId);
+    const params = new URLSearchParams();
+    appendParam(params, "month", fallbackSelection.month || currentMadridMonth());
+    appendParam(params, "range", fallbackSelection.range || "1m");
+    appendParam(params, "accountId", fallbackSelection.accountId);
+    appendParam(params, "periodMode", fallbackSelection.periodMode);
+    appendParam(params, "year", fallbackSelection.year);
+    appendParam(params, "dateFrom", fallbackSelection.dateFrom);
+    appendParam(params, "dateTo", fallbackSelection.dateTo);
+    appendParam(params, "compareMode", fallbackSelection.compareMode);
+    appendParam(params, "compareDateFrom", fallbackSelection.compareDateFrom);
+    appendParam(params, "compareDateTo", fallbackSelection.compareDateTo);
 
     void fetch(`/api/analysis?${params.toString()}`, {
       cache: "no-store",
@@ -75,6 +85,13 @@ export default function AnalysisPageClient({
     fallbackSelection.month,
     fallbackSelection.range,
     fallbackSelection.accountId,
+    fallbackSelection.periodMode,
+    fallbackSelection.year,
+    fallbackSelection.dateFrom,
+    fallbackSelection.dateTo,
+    fallbackSelection.compareMode,
+    fallbackSelection.compareDateFrom,
+    fallbackSelection.compareDateTo,
   ]);
 
   if (!resolved) {

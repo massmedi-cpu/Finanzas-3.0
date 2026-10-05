@@ -11,13 +11,22 @@ const requireText = (source, needle, label) => {
 const forbidText = (source, needle, label) => {
   if (source.includes(needle)) fail(`${label}: no debe contener ${needle}`);
 };
+const versionAtLeast = (value, minimum) => {
+  const current = value.split(".").map(Number);
+  const floor = minimum.split(".").map(Number);
+  for (let index = 0; index < 3; index += 1) {
+    if ((current[index] ?? 0) > (floor[index] ?? 0)) return true;
+    if ((current[index] ?? 0) < (floor[index] ?? 0)) return false;
+  }
+  return true;
+};
 
 const pkg = JSON.parse(read("package.json"));
 const migration = read("supabase/migrations/20261005041600_axioma52_budget_recommendation_engine.sql");
 const planning = read("src/application/budgets/budget-planning.ts");
 const ui = read("app/budgets/budgets-client.tsx");
 
-if (pkg.version !== "10.0.73") fail(`package.json: versión esperada 10.0.73, recibida ${pkg.version}`);
+if (!versionAtLeast(pkg.version, "10.0.73")) fail(`package.json: la certificación §52 requiere 10.0.73 o posterior, recibida ${pkg.version}`);
 
 for (const token of [
   "axioma_52_budget_reference_v1",
@@ -61,5 +70,5 @@ for (const stale of [
 }
 
 if (!process.exitCode) {
-  console.log("✅ Financial App 10.0.73 · Axioma §52 certificado");
+  console.log(`✅ Financial App ${pkg.version} · Axioma §52 certificado`);
 }

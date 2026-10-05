@@ -1,0 +1,225 @@
+.panel {
+  box-sizing: border-box;
+  margin: 0 auto 18px;
+  width: min(1480px, calc(100% - 32px));
+  border: 1px solid color-mix(in srgb, var(--border, #c9cbd0) 82%, transparent);
+  border-radius: 22px;
+  background: color-mix(in srgb, var(--surface, #ffffff) 94%, transparent);
+  box-shadow: 0 18px 50px color-mix(in srgb, #000 8%, transparent);
+  padding: 22px;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 18px;
+}
+
+.heading > div {
+  display: grid;
+  gap: 5px;
+}
+
+.heading span {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary, #65676d);
+}
+
+.heading h2 {
+  margin: 0;
+  font-size: clamp(1.2rem, 2vw, 1.65rem);
+  line-height: 1.08;
+}
+
+.heading p {
+  margin: 0;
+  max-width: 560px;
+  color: var(--text-secondary, #65676d);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(300px, 1.35fr) minmax(280px, 1fr) minmax(210px, 0.75fr) auto;
+  align-items: end;
+  gap: 14px;
+}
+
+.fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.fieldset legend,
+.control > span {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 0.73rem;
+  font-weight: 760;
+  color: var(--text-secondary, #65676d);
+}
+
+.segmented,
+.quickRanges {
+  display: flex;
+  gap: 5px;
+  padding: 4px;
+  border: 1px solid var(--border, #d6d7db);
+  border-radius: 13px;
+  background: var(--surface-subtle, #f5f5f7);
+}
+
+.segmented {
+  margin-bottom: 9px;
+}
+
+.monthControls {
+  display: grid;
+  gap: 9px;
+}
+
+.segment,
+.activeSegment,
+.quickRange,
+.activeQuickRange {
+  flex: 1 1 0;
+  min-height: 44px;
+  border: 0;
+  border-radius: 9px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.quickRange,
+.activeQuickRange {
+  min-width: 74px;
+  font-size: 0.76rem;
+}
+
+.segment,
+.quickRange {
+  background: transparent;
+  color: var(--text-secondary, #65676d);
+}
+
+.activeSegment,
+.activeQuickRange {
+  background: var(--text-primary, #111216);
+  color: var(--surface, #ffffff);
+  box-shadow: 0 5px 13px color-mix(in srgb, #000 12%, transparent);
+}
+
+.control {
+  display: block;
+  min-width: 0;
+}
+
+.control input,
+.control select {
+  width: 100%;
+  min-height: 44px;
+  box-sizing: border-box;
+  border: 1px solid var(--border, #d6d7db);
+  border-radius: 11px;
+  background: var(--surface, #ffffff);
+  color: var(--text-primary, #111216);
+  padding: 8px 11px;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+.control input:focus-visible,
+.control select:focus-visible,
+.segment:focus-visible,
+.activeSegment:focus-visible,
+.quickRange:focus-visible,
+.activeQuickRange:focus-visible,
+.apply:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--accent, #78633a) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.datePair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.apply {
+  min-height: 44px;
+  border: 0;
+  border-radius: 12px;
+  padding: 10px 17px;
+  background: var(--text-primary, #111216);
+  color: var(--surface, #ffffff);
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 780;
+  white-space: nowrap;
+  cursor: pointer;
+  box-shadow: 0 9px 20px color-mix(in srgb, #000 13%, transparent);
+}
+
+.apply:hover,
+.activeSegment:hover,
+.activeQuickRange:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1080px) {
+  .form {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .apply {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .panel {
+    width: min(100% - 20px, 1480px);
+    border-radius: 18px;
+    padding: 16px;
+  }
+
+  .heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .form {
+    grid-template-columns: 1fr;
+  }
+
+  .datePair {
+    grid-template-columns: 1fr;
+  }
+
+  .segmented,
+  .quickRanges {
+    overflow-x: auto;
+  }
+
+  .segment,
+  .activeSegment {
+    min-width: 92px;
+  }
+
+  .quickRange,
+  .activeQuickRange {
+    flex: 0 0 auto;
+    min-width: 88px;
+  }
+}

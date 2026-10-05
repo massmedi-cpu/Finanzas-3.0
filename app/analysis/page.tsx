@@ -13,6 +13,9 @@ import {
 } from "../../src/application/analysis/analysis-query-state";
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
+import AnalysisAxioma53Controls from "./analysis-axioma53-controls";
+import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
+import shellStyles from "./analysis-axioma53-shell.module.css";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
 
@@ -61,7 +64,7 @@ async function AnalysisData({
     console.info("analysis-ssr-timing", {
       durationMs,
       hasSnapshot: Boolean(initialSnapshot),
-      range: fallbackSelection.range?.trim() || "1m",
+      range: fallbackSelection.range?.trim() || fallbackSelection.periodMode?.trim() || "1m",
       accountScoped: Boolean(fallbackSelection.accountId?.trim()),
     });
   }
@@ -75,10 +78,14 @@ async function AnalysisData({
   return (
     <>
       <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" />
-      <AnalysisPageClient
-        initialSnapshot={initialSnapshot}
-        fallbackSelection={fallbackSelection}
-      />
+      <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
+      {initialSnapshot && <AnalysisAxioma53Summary snapshot={initialSnapshot} />}
+      <div className={shellStyles.enhanced}>
+        <AnalysisPageClient
+          initialSnapshot={initialSnapshot}
+          fallbackSelection={fallbackSelection}
+        />
+      </div>
     </>
   );
 }

@@ -1,0 +1,169 @@
+.shell {
+  width: min(1480px, calc(100% - 32px));
+  margin: 0 auto 18px;
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid var(--border, #d6d7db);
+  border-radius: 20px;
+  background: var(--surface, #ffffff);
+  padding: 18px;
+  box-shadow: 0 14px 38px color-mix(in srgb, #000 6%, transparent);
+}
+
+.cardHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 8px;
+}
+
+.cardHeading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.cardHeading span {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary, #65676d);
+}
+
+.cardHeading h2 {
+  margin: 0;
+  font-size: clamp(1.05rem, 1.8vw, 1.35rem);
+  line-height: 1.12;
+}
+
+.total {
+  display: grid;
+  gap: 2px;
+  text-align: right;
+}
+
+.total span {
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: normal;
+}
+
+.total strong {
+  font-size: clamp(1rem, 2vw, 1.35rem);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.context {
+  max-width: 760px;
+  margin: 0 0 14px;
+  color: var(--text-secondary, #65676d);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.chartViewport {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-subtle, #f5f5f7) 82%, transparent);
+}
+
+.chartViewport svg {
+  display: block;
+  width: 100%;
+  min-width: 560px;
+  height: auto;
+}
+
+.grid line {
+  stroke: color-mix(in srgb, var(--border, #d6d7db) 76%, transparent);
+  stroke-width: 1;
+}
+
+.grid text,
+.axisLabel {
+  fill: var(--text-secondary, #65676d);
+  font-size: 10px;
+}
+
+.area {
+  fill: color-mix(in srgb, var(--accent, #9d8550) 14%, transparent);
+}
+
+.line {
+  fill: none;
+  stroke: var(--text-primary, #111216);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.point {
+  fill: var(--surface, #ffffff);
+  stroke: var(--text-primary, #111216);
+  stroke-width: 2.5;
+}
+
+.details {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #65676d);
+}
+
+.details summary {
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.tableViewport {
+  overflow-x: auto;
+  margin-top: 9px;
+}
+
+.tableViewport table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tableViewport th,
+.tableViewport td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #d6d7db);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tableViewport th:first-child,
+.tableViewport td:first-child {
+  text-align: left;
+}
+
+.empty {
+  margin: 26px 0;
+  color: var(--text-secondary, #65676d);
+  text-align: center;
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: min(100% - 20px, 1480px);
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 17px;
+  }
+
+  .cardHeading {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .total {
+    text-align: left;
+  }
+}

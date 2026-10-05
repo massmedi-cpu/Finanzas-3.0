@@ -1,0 +1,13 @@
+.enhanced :global(form[aria-label="Filtros del análisis"]) {
+  display: none;
+}
+
+.enhanced :global(main[aria-busy] > header) {
+  padding-bottom: 0;
+}
+
+@media (max-width: 720px) {
+  .enhanced :global(main[aria-busy] > header) {
+    margin-bottom: 8px;
+  }
+}

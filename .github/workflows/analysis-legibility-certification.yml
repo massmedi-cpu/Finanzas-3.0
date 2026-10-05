@@ -10,6 +10,11 @@ on:
       - "tests/e2e/analysis-chart-layout.spec.ts"
       - ".github/workflows/analysis-legibility-certification.yml"
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 concurrency:
   group: analysis-legibility-${{ github.ref }}
   cancel-in-progress: true
@@ -42,7 +47,54 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Analysis chart regression on desktop and mobile
-        run: npx playwright test tests/e2e/analysis-chart-layout.spec.ts tests/e2e/analysis-redesign-cardinality.spec.ts tests/e2e/premium-analysis-visual.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: test-results/analysis-legibility-results.json
+        run: npx playwright test tests/e2e/analysis-chart-layout.spec.ts tests/e2e/analysis-redesign-cardinality.spec.ts tests/e2e/premium-analysis-visual.spec.ts --project=chromium-desktop --project=chromium-mobile --workers=2 --reporter=line,json
+
+      - name: Publish exact failure diagnostics
+        if: failure() && github.event_name == 'pull_request'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const fs = require('node:fs');
+            const path = 'test-results/analysis-legibility-results.json';
+            if (!fs.existsSync(path)) return;
+            const report = JSON.parse(fs.readFileSync(path, 'utf8'));
+            const failures = [];
+            const walk = (suite, parents = []) => {
+              const next = suite.title ? [...parents, suite.title] : parents;
+              for (const spec of suite.specs || []) {
+                for (const test of spec.tests || []) {
+                  const bad = (test.results || []).find((result) => result.status && result.status !== 'passed' && result.status !== 'skipped');
+                  if (!bad) continue;
+                  failures.push({
+                    title: [...next, spec.title].filter(Boolean).join(' › '),
+                    project: test.projectName || 'unknown',
+                    error: bad.error?.stack || bad.error?.message || bad.errors?.[0]?.stack || bad.errors?.[0]?.message || bad.status,
+                  });
+                }
+              }
+              for (const child of suite.suites || []) walk(child, next);
+            };
+            for (const suite of report.suites || []) walk(suite);
+            const marker = '<!-- analysis-legibility-diagnostic -->';
+            const body = [
+              marker,
+              '### Diagnóstico temporal · Analysis Legibility',
+              ...failures.slice(0, 12).map((failure) => `- **${failure.project} · ${failure.title}**\n  \`${String(failure.error).replace(/`/g, "'").replace(/\s+/g, ' ').slice(0, 1800)}\``),
+            ].join('\n');
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const previous = comments.find((comment) => comment.body?.includes(marker));
+            if (previous) {
+              await github.rest.issues.updateComment({ owner: context.repo.owner, repo: context.repo.repo, comment_id: previous.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: context.issue.number, body });
+            }
 
       - name: Preserve Analysis visual evidence
         if: always()
