@@ -14,6 +14,7 @@ import "./premium-states.css";
 import "./visual-density.css";
 import "./visual-preferences.css";
 import "./product-preferences.css";
+import "./budget-focus-preference.css";
 import "./category-controls.css";
 import "./premium-theme.css";
 import "./premium-hardening.css";
