@@ -67,18 +67,24 @@ export default function AnalysisAxioma53Controls({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const params = new URLSearchParams({ periodMode, compareMode });
+    const params = new URLSearchParams();
 
     if (periodMode === "month") {
       params.set("month", month);
       params.set("range", "1m");
+      if (compareMode !== "previous") params.set("periodMode", "month");
     }
-    if (periodMode === "year") params.set("year", year);
+    if (periodMode === "year") {
+      params.set("periodMode", "year");
+      params.set("year", year);
+    }
     if (periodMode === "custom") {
+      params.set("periodMode", "custom");
       params.set("dateFrom", dateFrom);
       params.set("dateTo", dateTo);
     }
     if (accountId) params.set("accountId", accountId);
+    if (compareMode !== "previous") params.set("compareMode", compareMode);
     if (compareMode === "custom") {
       params.set("compareDateFrom", compareDateFrom);
       params.set("compareDateTo", compareDateTo);
