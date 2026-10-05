@@ -217,8 +217,8 @@ begin
   cross join seasonal s
   cross join last_three l;
 
-  -- Recurrentes conocidos: se usan como suelo, no se suman al histórico para no
-  -- contabilizar dos veces gastos que normalmente ya están presentes en él.
+  -- Recurrentes conocidos se usan como suelo, no como suma, para no contar dos veces
+  -- obligaciones que normalmente ya están presentes en el histórico.
   with recurring_occurrences as (
     select
       r.id,
@@ -421,7 +421,5 @@ revoke all on function financial_app.budget_month_recommendation(text,uuid) from
 revoke all on function financial_app.budget_month_snapshot(text) from public, anon, authenticated;
 grant execute on function financial_app.budget_month_recommendation(text,uuid) to financial_app_gateway;
 grant execute on function financial_app.budget_month_snapshot(text) to financial_app_gateway;
-grant execute on function financial_app.budget_month_recommendation(text,uuid) to service_role;
-grant execute on function financial_app.budget_month_snapshot(text) to service_role;
 
 commit;
