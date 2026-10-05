@@ -11,5 +11,12 @@ export function analysisSelectionFromSearchParams(params: AnalysisSearchParams):
     month: firstValue(params.month) ?? null,
     range: firstValue(params.range) ?? null,
     accountId: firstValue(params.accountId) ?? null,
+    periodMode: firstValue(params.periodMode) ?? null,
+    year: firstValue(params.year) ?? null,
+    dateFrom: firstValue(params.dateFrom) ?? null,
+    dateTo: firstValue(params.dateTo) ?? null,
+    compareMode: firstValue(params.compareMode) ?? null,
+    compareDateFrom: firstValue(params.compareDateFrom) ?? null,
+    compareDateTo: firstValue(params.compareDateTo) ?? null,
   };
 }
