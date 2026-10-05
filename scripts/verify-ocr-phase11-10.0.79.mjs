@@ -40,7 +40,7 @@ requireText("app/documents/ocr-page-review-workbench.tsx", [
 requireText("app/documents/ocr-review-workbench.module.css", [
   '.traceGridThree',
   'grid-template-columns:repeat(3,minmax(0,1fr))',
-  '@media(max-width:1100px)',
+  '@media(max-width:980px)',
   'white-space:pre-wrap',
 ]);
 
