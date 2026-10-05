@@ -100,6 +100,24 @@ const transactions = {
   totalCount: 1,
 };
 
+const homeAnalysis = {
+  contractVersion: 1,
+  source: "analysis",
+  period: {
+    month: "2026-08",
+    dateFrom: "2026-08-01",
+    dateTo: "2026-08-31",
+    previousDateFrom: "2026-07-01",
+    previousDateTo: "2026-07-31",
+  },
+  netComparison: {
+    currentNetCents: 60000,
+    previousNetCents: 45000,
+    deltaCents: 15000,
+  },
+  expenseAverage3m: { cents: 42500, months: 2 },
+};
+
 function envelope(
   scope: "critical" | "activity" | "primary" | "secondary",
   data: Record<string, unknown>,
@@ -139,6 +157,11 @@ async function installDashboardMocks(
 
     if (url.pathname === "/api/source/google/sync") {
       await fulfillJson(route, { run: null });
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard/analysis") {
+      await fulfillJson(route, homeAnalysis);
       return;
     }
 

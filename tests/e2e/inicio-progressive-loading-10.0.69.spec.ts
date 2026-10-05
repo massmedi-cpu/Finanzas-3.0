@@ -4,12 +4,28 @@ const emptyData = () => ({ financial: null, monthly: null, budgets: null, foreca
 
 async function mockProgressiveDashboard(page: Page) {
   const requestedScopes: string[] = [];
+  let releaseActivity!: () => void;
+  const activityGate = new Promise<void>((resolve) => {
+    releaseActivity = resolve;
+  });
+
   await page.route("**/api/source/google/sync", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ run: { id: "sync-1", status: "success", startedAt: "2026-10-03T08:00:00.000Z", finishedAt: "2026-10-03T08:00:01.000Z", rowsSeen: 1, rowsInserted: 0, rowsRevised: 0, rowsSkipped: 1, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0, errorCode: null, errorMessage: null }, cursors: [] }) });
   });
 
   await page.route("**/api/dashboard**", async (route) => {
     const url = new URL(route.request().url());
+
+    if (url.pathname === "/api/dashboard/analysis") {
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "home_analysis_unavailable", code: "test_unavailable" }) });
+      return;
+    }
+
+    if (url.pathname !== "/api/dashboard") {
+      await route.fallback();
+      return;
+    }
+
     const scope = url.searchParams.get("scope") ?? "all";
     requestedScopes.push(scope);
     const data: any = emptyData();
@@ -24,7 +40,7 @@ async function mockProgressiveDashboard(page: Page) {
       };
     } else if (scope === "activity") {
       requestedSources = ["transactions"];
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await activityGate;
       dataThroughDate = "2026-10-03";
       data.transactions = { rows: [{ id: "tx-late", bankDate: "2026-10-03", amountCents: -1250, account: { id: "acc-1", name: "Cuenta principal" }, concept: { effective: "Compra de prueba" }, merchant: { effectiveName: "Movimiento tardío" }, category: { effectiveId: null, effectiveName: null }, kind: { effective: "expense" }, duplicateState: "none", excludedFromAnalytics: false }], totalCount: 1 };
     } else if (scope === "secondary") {
@@ -36,17 +52,20 @@ async function mockProgressiveDashboard(page: Page) {
 
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, scope, asOfDate: "2026-10-03", dataThroughDate, generatedAt: "2026-10-03T08:00:00.000Z", requestedSources, failedSources: [], data }) });
   });
-  return requestedScopes;
+  return { requestedScopes, releaseActivity };
 }
 
 test.describe("Financial App 10.0.69 · carga progresiva de Inicio", () => {
   test("muestra el saldo crítico antes de que termine la actividad lenta", async ({ page }) => {
-    const requestedScopes = await mockProgressiveDashboard(page);
+    const { requestedScopes, releaseActivity } = await mockProgressiveDashboard(page);
     await page.goto("/");
     const balanceCard = page.locator("article").filter({ hasText: "Saldo total en cuentas" });
-    await expect(balanceCard.locator("strong")).not.toHaveText("—", { timeout: 1200 });
+    await expect(balanceCard.locator("strong")).not.toHaveText("—");
     await expect(page.getByText("Movimiento tardío", { exact: true })).toHaveCount(0);
     await expect(page.getByLabel("Cargando actividad reciente")).toBeVisible();
+
+    releaseActivity();
+
     await expect(page.getByText("Movimiento tardío", { exact: true })).toBeVisible({ timeout: 5000 });
     expect(requestedScopes).toContain("critical");
     expect(requestedScopes).toContain("activity");

@@ -69,6 +69,24 @@ const transactions = {
   ],
 };
 
+const homeAnalysis = {
+  contractVersion: 1,
+  source: "analysis",
+  period: {
+    month: "2026-08",
+    dateFrom: "2026-08-01",
+    dateTo: "2026-08-31",
+    previousDateFrom: "2026-07-01",
+    previousDateTo: "2026-07-31",
+  },
+  netComparison: {
+    currentNetCents: 90000,
+    previousNetCents: 150000,
+    deltaCents: -60000,
+  },
+  expenseAverage3m: { cents: 66667, months: 3 },
+};
+
 async function json(route: Route, body: unknown, status = 200) {
   await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
@@ -102,6 +120,11 @@ async function mockInicio(page: Page) {
           cursors: [],
         });
       }
+      return;
+    }
+
+    if (url.pathname === "/api/dashboard/analysis") {
+      await json(route, homeAnalysis);
       return;
     }
 
