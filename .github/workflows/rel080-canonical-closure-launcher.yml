@@ -1,0 +1,70 @@
+name: REL-080 Canonical Closure Launcher
+
+on:
+  push:
+    branches:
+      - rebuild/phase-ops-rel080-closure
+    paths:
+      - '.github/workflows/rel080-canonical-closure-launcher.yml'
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-and-wait:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_COMMIT: b3373ca03ce2fe42a29e62b26498065f72e0c15e
+      APP_VERSION: 10.0.80
+      PRODUCTION_URL: https://financialapp-home.vercel.app/
+      DEPLOYMENT_ID: dpl_4y4gmksxVTUddnAJwGVFvPYBNhnJ
+    steps:
+      - name: Dispatch canonical Production Backup v2 and wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow production-backup-v2.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run production-backup-v2.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f source_commit="$SOURCE_COMMIT" \
+            -f expected_app_version="$APP_VERSION"
+          backup_run_id=""
+          for _ in $(seq 1 60); do
+            latest="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow production-backup-v2.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$latest" != "0" ] && [ "$latest" != "$before" ]; then
+              backup_run_id="$latest"
+              break
+            fi
+            sleep 2
+          done
+          test -n "$backup_run_id"
+          echo "REL080_BACKUP_RUN_ID=$backup_run_id"
+          gh run watch "$backup_run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Dispatch canonical Production Postflight and wait
+        shell: bash
+        run: |
+          set -euo pipefail
+          before="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow production-postflight.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+          gh workflow run production-postflight.yml --repo "$GITHUB_REPOSITORY" --ref main \
+            -f production_url="$PRODUCTION_URL" \
+            -f expected_version="$APP_VERSION" \
+            -f deployment_commit="$SOURCE_COMMIT" \
+            -f deployment_id="$DEPLOYMENT_ID"
+          postflight_run_id=""
+          for _ in $(seq 1 60); do
+            latest="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow production-postflight.yml --branch main --event workflow_dispatch --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+            if [ "$latest" != "0" ] && [ "$latest" != "$before" ]; then
+              postflight_run_id="$latest"
+              break
+            fi
+            sleep 2
+          done
+          test -n "$postflight_run_id"
+          echo "REL080_POSTFLIGHT_RUN_ID=$postflight_run_id"
+          gh run watch "$postflight_run_id" --repo "$GITHUB_REPOSITORY" --exit-status
+
+      - name: Canonical closure complete
+        run: echo "REL-080 canonical Production Backup v2 and Production Postflight completed successfully."
