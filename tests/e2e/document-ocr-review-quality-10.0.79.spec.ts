@@ -81,6 +81,6 @@ test("10.0.79 mantiene separadas las tres capas de trazabilidad cuando existe te
   expect(component).toContain("ocr-trace-raw-");
   expect(component).toContain("No sustituye al OCR bruto");
   expect(css).toContain(".traceGridThree");
-  expect(css).toContain("@media(max-width:1100px)");
+  expect(css).toContain("@media(max-width:980px)");
   expect(css).toContain("white-space:pre-wrap");
 });
