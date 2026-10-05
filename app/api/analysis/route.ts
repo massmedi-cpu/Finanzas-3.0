@@ -15,6 +15,19 @@ const HEADERS = {
   "x-analysis-contract": "2",
 };
 
+const ALLOWED_QUERY_KEYS = new Set([
+  "month",
+  "range",
+  "accountId",
+  "periodMode",
+  "year",
+  "dateFrom",
+  "dateTo",
+  "compareMode",
+  "compareDateFrom",
+  "compareDateTo",
+]);
+
 function logGatewayError(scope: string, error: PersistenceGatewayError) {
   console.error(scope, {
     status: error.status,
@@ -49,13 +62,20 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     for (const key of searchParams.keys()) {
-      if (!new Set(["month", "range", "accountId"]).has(key)) throw new Error("invalid_analysis_parameter");
+      if (!ALLOWED_QUERY_KEYS.has(key)) throw new Error("invalid_analysis_parameter");
     }
 
     const input: AnalysisSelectionInput = {
       month: searchParams.get("month"),
       range: searchParams.get("range"),
       accountId: searchParams.get("accountId"),
+      periodMode: searchParams.get("periodMode"),
+      year: searchParams.get("year"),
+      dateFrom: searchParams.get("dateFrom"),
+      dateTo: searchParams.get("dateTo"),
+      compareMode: searchParams.get("compareMode"),
+      compareDateFrom: searchParams.get("compareDateFrom"),
+      compareDateTo: searchParams.get("compareDateTo"),
     };
     const snapshot = prepareAnalysisPresentationSnapshot(await loadAnalysisSnapshot(input));
     const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
