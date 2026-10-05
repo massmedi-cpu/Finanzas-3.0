@@ -1,0 +1,48 @@
+name: Home Phase 9 Certification
+
+on:
+  pull_request:
+    paths:
+      - "app/page.tsx"
+      - "app/inicio-overview.tsx"
+      - "app/home-smart-brief.tsx"
+      - "app/api/dashboard/**"
+      - "src/application/dashboard/**"
+      - "src/application/analysis/**"
+      - "scripts/verify-home-phase9-10.0.77.mjs"
+      - "package.json"
+      - ".github/workflows/home-phase9-certification.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: home-phase9-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Typecheck, build and Home Phase 9 regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Home Phase 9 contract
+        run: npm run verify:home-phase9
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build and accumulated regression
+        run: npm run build
