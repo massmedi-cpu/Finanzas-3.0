@@ -1,0 +1,30 @@
+name: Sync Lockfile 10.0.76
+
+on:
+  push:
+    branches:
+      - rebuild/phase-8-configuration-10.0.76
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: rebuild/phase-8-configuration-10.0.76
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - shell: bash
+        run: |
+          if git diff --quiet -- package-lock.json; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package-lock.json
+          git commit -m "chore(release): sincronizar package-lock 10.0.76"
+          git push origin HEAD:rebuild/phase-8-configuration-10.0.76
