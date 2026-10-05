@@ -13,6 +13,7 @@ import type { ForecastSnapshot } from "../../src/application/forecast/forecast-c
 import { forecastRecurrenceHandoffFromSearchParams } from "../../src/application/forecast/recurrence-flow";
 import { forecastModuleLinks } from "../../src/application/navigation/module-context";
 import { ForecastClient } from "./forecast-client";
+import { ForecastHorizonPanel } from "./forecast-horizon-panel";
 import premium from "./forecast-premium.module.css";
 
 export const dynamic = "force-dynamic";
@@ -65,6 +66,10 @@ export default async function ForecastPage({
       <ModuleContextNavigation
         links={forecastModuleLinks(resolvedSelection)}
         ariaLabel="Continuar desde Previsión"
+      />
+      <ForecastHorizonPanel
+        dateFrom={resolvedSelection.dateFrom}
+        accountId={resolvedSelection.accountId}
       />
       <ForecastClient
         initialSnapshot={initialSnapshot}
