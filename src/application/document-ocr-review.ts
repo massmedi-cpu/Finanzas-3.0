@@ -8,6 +8,14 @@ import {
 
 export const DOCUMENT_OCR_REVIEW_CONFIDENCE = 0.65;
 
+export type DocumentOcrReviewEvidence = {
+  pageNumber: number;
+  lineId: string;
+  rawText: string;
+};
+
+export type DocumentOcrReviewPriority = "high" | "standard" | "none";
+
 export type DocumentOcrReviewField = {
   key: keyof Pick<
     DocumentOcrFinancialInterpretation,
@@ -29,6 +37,9 @@ export type DocumentOcrReviewField = {
   trust: OcrFieldTrust;
   trustLabel: string;
   evidenceCount: number;
+  evidence: DocumentOcrReviewEvidence[];
+  requiresAttention: boolean;
+  priority: DocumentOcrReviewPriority;
 };
 
 export type DocumentOcrReviewSummary = {
@@ -39,6 +50,7 @@ export type DocumentOcrReviewSummary = {
   doubtfulFinancialFields: number;
   missingFinancialFields: number;
   financialFields: DocumentOcrReviewField[];
+  priorityReviewFields: DocumentOcrReviewField[];
   financialWarnings: string[];
   nextAction: "retry" | "review" | "confirm";
   nextActionLabel: string;
@@ -56,6 +68,12 @@ export type DocumentOcrPageReviewSummary = {
   basePlusTaxMatchesTotal: boolean | null;
   requiresAttention: boolean;
 };
+
+const HIGH_PRIORITY_FINANCIAL_FIELDS = new Set<DocumentOcrReviewField["key"]>([
+  "issuer",
+  "date",
+  "totalCents",
+]);
 
 export function summarizeDocumentOcrPageReview(page: DocumentOcrResult["pages"][number]): DocumentOcrPageReviewSummary {
   const lowConfidenceLines = page.lines.filter((line) => line.confidence < DOCUMENT_OCR_REVIEW_CONFIDENCE);
@@ -98,6 +116,12 @@ function reviewFields(interpretation: DocumentOcrFinancialInterpretation): Docum
 
   return definitions.map(([key, label]) => {
     const field = interpretation[key];
+    const requiresAttention = field.trust === "doubtful";
+    const priority: DocumentOcrReviewPriority = !requiresAttention
+      ? "none"
+      : HIGH_PRIORITY_FINANCIAL_FIELDS.has(key)
+        ? "high"
+        : "standard";
     return {
       key,
       label,
@@ -107,8 +131,23 @@ function reviewFields(interpretation: DocumentOcrFinancialInterpretation): Docum
       trust: field.trust,
       trustLabel: OCR_FIELD_TRUST_LABELS[field.trust],
       evidenceCount: field.evidence.length,
+      evidence: field.evidence.map((evidence) => ({
+        pageNumber: evidence.pageNumber,
+        lineId: evidence.lineId,
+        rawText: evidence.rawText,
+      })),
+      requiresAttention,
+      priority,
     };
   });
+}
+
+function priorityActionLabel(fields: DocumentOcrReviewField[]) {
+  const labels = fields.map((field) => field.label.toLowerCase());
+  if (!labels.length) return null;
+  if (labels.length === 1) return `Revisa primero ${labels[0]} con el original`;
+  const last = labels.at(-1);
+  return `Revisa primero ${labels.slice(0, -1).join(", ")} y ${last} con el original`;
 }
 
 export function summarizeDocumentOcrReview(result: DocumentOcrResult): DocumentOcrReviewSummary {
@@ -120,6 +159,7 @@ export function summarizeDocumentOcrReview(result: DocumentOcrResult): DocumentO
   const detectedFinancialFields = financialFields.filter((field) => field.trust !== "not_detected").length;
   const doubtfulFinancialFields = financialFields.filter((field) => field.trust === "doubtful").length;
   const missingFinancialFields = financialFields.filter((field) => field.trust === "not_detected").length;
+  const priorityReviewFields = financialFields.filter((field) => field.priority === "high");
   const common = {
     lowConfidenceLines,
     emptyPages,
@@ -128,6 +168,7 @@ export function summarizeDocumentOcrReview(result: DocumentOcrResult): DocumentO
     doubtfulFinancialFields,
     missingFinancialFields,
     financialFields,
+    priorityReviewFields,
     financialWarnings: interpretation.warnings,
   };
 
@@ -137,6 +178,16 @@ export function summarizeDocumentOcrReview(result: DocumentOcrResult): DocumentO
       nextAction: "retry",
       nextActionLabel: "Comprueba el original y vuelve a analizar",
       nextActionDetail: "La lectura no contiene texto utilizable. Revisa nitidez, encuadre o el archivo original antes de repetir.",
+    };
+  }
+
+  const priorityLabel = priorityActionLabel(priorityReviewFields);
+  if (priorityLabel) {
+    return {
+      ...common,
+      nextAction: "review",
+      nextActionLabel: priorityLabel,
+      nextActionDetail: "Estos datos afectan directamente a la identificación o al importe del documento y su evidencia OCR no alcanza confianza alta. Compara el texto literal mostrado con el original antes de confirmar.",
     };
   }
 

@@ -33,7 +33,9 @@ export function OcrPageReviewWorkbench({
   const arithmeticLabel = review.arithmeticRowsChecked === null
     ? "No aplica"
     : `${review.arithmeticRowsMatching}/${review.arithmeticRowsChecked} líneas cuadran`;
-  const hasTraceDifference = Boolean(page.reviewText?.trim()) && page.reviewText?.trim() !== page.layoutText.trim();
+  const structuredReview = page.reviewText?.trim() ?? "";
+  const geometricReview = page.layoutText.trim();
+  const hasStructuredReview = Boolean(structuredReview) && structuredReview !== geometricReview;
 
   return (
     <section className={styles.workbench} data-testid={`ocr-review-workbench-${page.pageNumber}`} aria-label={`Mesa de revisión OCR de la página ${page.pageNumber}`}>
@@ -95,14 +97,23 @@ export function OcrPageReviewWorkbench({
       >
         <summary>Comparar trazabilidad OCR</summary>
         {traceOpen ? (
-          <div className={styles.traceGrid}>
-            <div className={styles.tracePane}>
-              <strong>{hasTraceDifference ? "Reconstrucción geométrica original" : "Texto reconstruido"}</strong>
+          <div className={`${styles.traceGrid} ${hasStructuredReview ? styles.traceGridThree : ""}`}>
+            {hasStructuredReview ? (
+              <div className={styles.tracePane} data-testid={`ocr-trace-structured-${page.pageNumber}`}>
+                <strong>Texto estructurado para revisión</strong>
+                <pre>{structuredReview}</pre>
+                <small>Presentación derivada para facilitar la revisión. No sustituye al OCR bruto.</small>
+              </div>
+            ) : null}
+            <div className={styles.tracePane} data-testid={`ocr-trace-layout-${page.pageNumber}`}>
+              <strong>Reconstrucción geométrica</strong>
               <pre>{page.layoutText || page.plainText || "Sin texto"}</pre>
+              <small>Distribución reconstruida a partir de la posición de las palabras.</small>
             </div>
-            <div className={styles.tracePane}>
-              <strong>Texto OCR bruto</strong>
+            <div className={styles.tracePane} data-testid={`ocr-trace-raw-${page.pageNumber}`}>
+              <strong>OCR bruto</strong>
               <pre>{page.plainText || "Sin texto"}</pre>
+              <small>Evidencia literal conservada para auditoría y comparación.</small>
             </div>
           </div>
         ) : null}
