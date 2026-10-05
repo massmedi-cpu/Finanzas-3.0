@@ -1,0 +1,42 @@
+name: Version bump 10.0.81
+
+on:
+  push:
+    branches:
+      - fix/login-shell-10.0.81
+
+permissions:
+  contents: write
+
+jobs:
+  bump-version:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout candidate branch
+        uses: actions/checkout@v4
+        with:
+          ref: fix/login-shell-10.0.81
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Synchronize package identity
+        run: npm version 10.0.81 --no-git-tag-version
+
+      - name: Commit synchronized package files
+        shell: bash
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "Package identity already synchronized."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "chore: versionar candidato 10.0.81"
+          git push origin HEAD:fix/login-shell-10.0.81
