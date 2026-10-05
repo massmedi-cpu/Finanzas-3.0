@@ -9,7 +9,8 @@ const assertions = [
   [home.includes('loadScope("critical", ["financial"])'), "Inicio requests critical financial scope"],
   [home.includes('loadScope("activity", ["transactions"])'), "Inicio requests activity independently"],
   [home.includes('setActivityLoading(false)'), "activity has an independent loading lifecycle"],
-  [home.includes('aria-busy={primaryLoading || activityLoading || secondaryLoading}'), "busy state covers all progressive scopes"],
+  [home.includes('setAnalysisLoading(false)'), "analysis has an independent loading lifecycle"],
+  [home.includes('aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}'), "busy state covers all progressive scopes including Analysis"],
   [!home.includes('await loadScope("primary", ["financial", "transactions"])'), "Inicio no longer blocks financial data on transactions"],
 ];
 for (const [ok, label] of assertions) console.log(`${ok ? "PASS" : "FAIL"}: ${label}`);
