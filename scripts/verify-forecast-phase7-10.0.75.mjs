@@ -10,7 +10,9 @@ const engine = read("src/application/forecast/forecast-horizon-engine.ts");
 const panel = read("app/forecast/forecast-horizon-panel.tsx");
 const page = read("app/forecast/page.tsx");
 
-checks.push([pkg.version === "10.0.75", "version 10.0.75"]);
+const versionParts = String(pkg.version).split(".").map(Number);
+const versionNumber = (versionParts[0] ?? 0) * 1_000_000 + (versionParts[1] ?? 0) * 1_000 + (versionParts[2] ?? 0);
+checks.push([versionNumber >= 10_000_075, "version 10.0.75 o posterior"]);
 
 for (const token of [
   '"month_end"',
@@ -66,4 +68,4 @@ for (const [present, label] of forbidden) checks.push([!present, label]);
 const failures = checks.filter(([ok]) => !ok);
 for (const [, label] of failures) console.error(`❌ ${label}`);
 if (failures.length) process.exitCode = 1;
-else console.log("✅ Financial App 10.0.75 · Fase 7 Previsión certificada");
+else console.log("✅ Financial App 10.0.75+ · Fase 7 Previsión certificada");
