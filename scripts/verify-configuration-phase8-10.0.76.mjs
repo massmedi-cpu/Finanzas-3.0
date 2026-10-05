@@ -64,7 +64,7 @@ for (const token of [
   "Vista por defecto",
   "Intentar sincronizar una vez por sesión",
   "Ocultar la app cuando pierde el foco",
-  "Destino del logotipo",
+  "Página inicial al abrir",
   "Español (España) · EUR",
   "setBudgetFocus",
   "setSyncOnOpen",
