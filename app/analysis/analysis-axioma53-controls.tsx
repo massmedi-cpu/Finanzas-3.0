@@ -41,6 +41,11 @@ function inferredCompareMode(input: AnalysisSelectionInput): CompareMode {
   return "previous";
 }
 
+function formValue(data: FormData, name: string, fallback: string) {
+  const value = data.get(name);
+  return typeof value === "string" && value.trim() ? value.trim() : fallback;
+}
+
 export default function AnalysisAxioma53Controls({
   snapshot,
   requested,
@@ -67,27 +72,36 @@ export default function AnalysisAxioma53Controls({
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const data = new FormData(event.currentTarget);
     const params = new URLSearchParams();
+    const submittedMonth = formValue(data, "month", month);
+    const submittedYear = formValue(data, "year", year);
+    const submittedDateFrom = formValue(data, "dateFrom", dateFrom);
+    const submittedDateTo = formValue(data, "dateTo", dateTo);
+    const submittedAccountId = formValue(data, "accountId", accountId);
+    const submittedCompareMode = formValue(data, "compareMode", compareMode) as CompareMode;
+    const submittedCompareDateFrom = formValue(data, "compareDateFrom", compareDateFrom);
+    const submittedCompareDateTo = formValue(data, "compareDateTo", compareDateTo);
 
     if (periodMode === "month") {
-      params.set("month", month);
+      params.set("month", submittedMonth);
       params.set("range", "1m");
-      if (compareMode !== "previous") params.set("periodMode", "month");
+      if (submittedCompareMode !== "previous") params.set("periodMode", "month");
     }
     if (periodMode === "year") {
       params.set("periodMode", "year");
-      params.set("year", year);
+      params.set("year", submittedYear);
     }
     if (periodMode === "custom") {
       params.set("periodMode", "custom");
-      params.set("dateFrom", dateFrom);
-      params.set("dateTo", dateTo);
+      params.set("dateFrom", submittedDateFrom);
+      params.set("dateTo", submittedDateTo);
     }
-    if (accountId) params.set("accountId", accountId);
-    if (compareMode !== "previous") params.set("compareMode", compareMode);
-    if (compareMode === "custom") {
-      params.set("compareDateFrom", compareDateFrom);
-      params.set("compareDateTo", compareDateTo);
+    if (submittedAccountId) params.set("accountId", submittedAccountId);
+    if (submittedCompareMode !== "previous") params.set("compareMode", submittedCompareMode);
+    if (submittedCompareMode === "custom") {
+      params.set("compareDateFrom", submittedCompareDateFrom);
+      params.set("compareDateTo", submittedCompareDateTo);
     }
 
     window.location.assign(`/analysis?${params.toString()}`);
@@ -128,24 +142,24 @@ export default function AnalysisAxioma53Controls({
           {periodMode === "month" && (
             <label className={styles.control}>
               <span>Mes de referencia</span>
-              <input type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
+              <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
             </label>
           )}
           {periodMode === "year" && (
             <label className={styles.control}>
               <span>Año</span>
-              <input type="number" inputMode="numeric" min="2000" max={currentYear} step="1" value={year} onChange={(event) => setYear(event.target.value)} required />
+              <input name="year" type="number" inputMode="numeric" min="2000" max={currentYear} step="1" value={year} onChange={(event) => setYear(event.target.value)} required />
             </label>
           )}
           {periodMode === "custom" && (
             <div className={styles.datePair}>
               <label className={styles.control}>
                 <span>Desde</span>
-                <input type="date" value={dateFrom} max={dateTo || today} onChange={(event) => setDateFrom(event.target.value)} required />
+                <input name="dateFrom" type="date" value={dateFrom} max={dateTo || today} onChange={(event) => setDateFrom(event.target.value)} required />
               </label>
               <label className={styles.control}>
                 <span>Hasta</span>
-                <input type="date" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} required />
+                <input name="dateTo" type="date" value={dateTo} min={dateFrom} max={today} onChange={(event) => setDateTo(event.target.value)} required />
               </label>
             </div>
           )}
@@ -155,7 +169,7 @@ export default function AnalysisAxioma53Controls({
           <legend>Comparar con</legend>
           <label className={styles.control}>
             <span>Referencia</span>
-            <select value={compareMode} onChange={(event) => setCompareMode(event.target.value as CompareMode)}>
+            <select name="compareMode" value={compareMode} onChange={(event) => setCompareMode(event.target.value as CompareMode)}>
               <option value="previous">Periodo anterior</option>
               <option value="year_ago">Año anterior</option>
               <option value="custom">Otro periodo</option>
@@ -165,11 +179,11 @@ export default function AnalysisAxioma53Controls({
             <div className={styles.datePair}>
               <label className={styles.control}>
                 <span>Desde</span>
-                <input type="date" value={compareDateFrom} max={compareDateTo || customComparisonMax} onChange={(event) => setCompareDateFrom(event.target.value)} required />
+                <input name="compareDateFrom" type="date" value={compareDateFrom} max={compareDateTo || customComparisonMax} onChange={(event) => setCompareDateFrom(event.target.value)} required />
               </label>
               <label className={styles.control}>
                 <span>Hasta</span>
-                <input type="date" value={compareDateTo} min={compareDateFrom} max={customComparisonMax} onChange={(event) => setCompareDateTo(event.target.value)} required />
+                <input name="compareDateTo" type="date" value={compareDateTo} min={compareDateFrom} max={customComparisonMax} onChange={(event) => setCompareDateTo(event.target.value)} required />
               </label>
             </div>
           )}
@@ -177,7 +191,7 @@ export default function AnalysisAxioma53Controls({
 
         <label className={styles.control}>
           <span>Cuenta</span>
-          <select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+          <select name="accountId" value={accountId} onChange={(event) => setAccountId(event.target.value)}>
             <option value="">Todas las cuentas</option>
             {(snapshot?.accounts ?? []).map((account) => (
               <option value={account.id} key={account.id}>
