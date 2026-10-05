@@ -7,6 +7,15 @@ import styles from "./analysis-axioma53-controls.module.css";
 
 type PeriodMode = "month" | "year" | "custom";
 type CompareMode = "previous" | "year_ago" | "custom";
+type QuickRange = "1m" | "3m" | "6m" | "12m" | "ytd";
+
+const QUICK_RANGES: ReadonlyArray<{ value: QuickRange; label: string }> = [
+  { value: "1m", label: "1 mes" },
+  { value: "3m", label: "3 meses" },
+  { value: "6m", label: "6 meses" },
+  { value: "12m", label: "12 meses" },
+  { value: "ytd", label: "Año actual" },
+];
 
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -26,13 +35,15 @@ function previousDay(value: string) {
   return date.toISOString().slice(0, 10);
 }
 
-function inferredPeriodMode(input: AnalysisSelectionInput, snapshot: AnalysisSnapshot | null): PeriodMode {
+function isQuickRange(value: string | null | undefined): value is QuickRange {
+  return value === "1m" || value === "3m" || value === "6m" || value === "12m" || value === "ytd";
+}
+
+function inferredPeriodMode(input: AnalysisSelectionInput): PeriodMode {
   if (input.periodMode === "year") return "year";
   if (input.periodMode === "custom") return "custom";
   if (input.periodMode === "month") return "month";
   if (input.dateFrom || input.dateTo) return "custom";
-  if (input.range && input.range !== "1m") return "custom";
-  if (snapshot?.selection.range && snapshot.selection.range !== "1m") return "custom";
   return "month";
 }
 
@@ -58,17 +69,35 @@ export default function AnalysisAxioma53Controls({
   const currentYear = today.slice(0, 4);
   const resolved = snapshot?.selection;
 
-  const [periodMode, setPeriodMode] = useState<PeriodMode>(() => inferredPeriodMode(requested, snapshot));
-  const [month, setMonth] = useState(requested.month?.trim() || resolved?.month || currentMonth);
+  const initialPeriodMode = inferredPeriodMode(requested);
+  const initialRange: QuickRange = isQuickRange(requested.range)
+    ? requested.range
+    : isQuickRange(resolved?.range)
+      ? resolved.range
+      : "1m";
+  const initialMonth = requested.month?.trim() || resolved?.month || currentMonth;
+  const initialAccountId = requested.accountId?.trim() || resolved?.accountId || "";
+  const initialCompareMode = inferredCompareMode(requested);
+
+  const [periodMode, setPeriodMode] = useState<PeriodMode>(initialPeriodMode);
+  const [quickRange, setQuickRange] = useState<QuickRange>(initialRange);
+  const [month, setMonth] = useState(initialMonth);
   const [year, setYear] = useState(requested.year?.trim() || resolved?.dateFrom.slice(0, 4) || currentYear);
   const [dateFrom, setDateFrom] = useState(requested.dateFrom?.trim() || resolved?.dateFrom || `${currentYear}-01-01`);
   const [dateTo, setDateTo] = useState(requested.dateTo?.trim() || resolved?.dateTo || today);
-  const [accountId, setAccountId] = useState(requested.accountId?.trim() || resolved?.accountId || "");
-  const [compareMode, setCompareMode] = useState<CompareMode>(() => inferredCompareMode(requested));
+  const [accountId, setAccountId] = useState(initialAccountId);
+  const [compareMode, setCompareMode] = useState<CompareMode>(initialCompareMode);
   const [compareDateFrom, setCompareDateFrom] = useState(requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "");
   const [compareDateTo, setCompareDateTo] = useState(requested.compareDateTo?.trim() || resolved?.previousDateTo || "");
 
   const customComparisonMax = previousDay(periodMode === "custom" ? dateFrom : periodMode === "year" ? `${year}-01-01` : `${month}-01`);
+  const filtersDirty = periodMode !== initialPeriodMode
+    || (periodMode === "month" && quickRange !== initialRange)
+    || month !== initialMonth
+    || accountId !== initialAccountId
+    || compareMode !== initialCompareMode
+    || compareDateFrom !== (requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "")
+    || compareDateTo !== (requested.compareDateTo?.trim() || resolved?.previousDateTo || "");
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,7 +114,7 @@ export default function AnalysisAxioma53Controls({
 
     if (periodMode === "month") {
       params.set("month", submittedMonth);
-      params.set("range", "1m");
+      params.set("range", quickRange);
       if (submittedCompareMode !== "previous") params.set("periodMode", "month");
     }
     if (periodMode === "year") {
@@ -130,7 +159,6 @@ export default function AnalysisAxioma53Controls({
                 key={value}
                 type="button"
                 className={periodMode === value ? styles.activeSegment : styles.segment}
-                aria-label={value === "month" ? "1 mes" : label}
                 aria-pressed={periodMode === value}
                 onClick={() => setPeriodMode(value)}
               >
@@ -140,10 +168,25 @@ export default function AnalysisAxioma53Controls({
           </div>
 
           {periodMode === "month" && (
-            <label className={styles.control}>
-              <span>Mes de referencia</span>
-              <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
-            </label>
+            <div className={styles.monthControls}>
+              <div className={styles.quickRanges} aria-label="Rango temporal">
+                {QUICK_RANGES.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    className={quickRange === option.value ? styles.activeQuickRange : styles.quickRange}
+                    aria-pressed={quickRange === option.value}
+                    onClick={() => setQuickRange(option.value)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <label className={styles.control}>
+                <span>Mes de referencia</span>
+                <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
+              </label>
+            </div>
           )}
           {periodMode === "year" && (
             <label className={styles.control}>
@@ -201,7 +244,9 @@ export default function AnalysisAxioma53Controls({
           </select>
         </label>
 
-        <button className={styles.apply} type="submit" aria-label="Aplicar">Aplicar análisis</button>
+        <button className={styles.apply} type="submit" aria-label={filtersDirty ? "Aplicar cambios" : "Aplicar"}>
+          {filtersDirty ? "Aplicar cambios" : "Aplicar análisis"}
+        </button>
       </form>
     </section>
   );
