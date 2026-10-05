@@ -5,6 +5,22 @@ export type BudgetHistoryMonth = {
   expenseCents: number;
 };
 
+export type BudgetAutomaticFactors = {
+  algorithm: "axioma_52_budget_reference_v1";
+  mode: "fallback_3_month_average" | "axioma_52_weighted";
+  availableMonthCount: number;
+  trailing3AverageCents: number;
+  recentWeightedCents: number;
+  seasonalSameMonthCents: number;
+  seasonalMonthCount: number;
+  trendAdjustmentCents: number;
+  knownRecurringCents: number;
+  extraordinaryMonthCount: number;
+  extraordinaryCapCents: number | null;
+  recurrencePolicy: "floor_not_additive";
+  exclusionsSource: "financial_transaction_facts.analytics_eligible";
+};
+
 export type BudgetItem = {
   id: string | null;
   persisted: boolean;
@@ -19,6 +35,7 @@ export type BudgetItem = {
   progressBps: number | null;
   status: BudgetStatus;
   automaticExplanation: string;
+  automaticFactors?: BudgetAutomaticFactors | null;
   historyMonths: BudgetHistoryMonth[];
 };
 
@@ -48,7 +65,7 @@ export type BudgetPlanningContext = {
     incomeCents: number;
   }>;
   principles: {
-    historicalBaseline: "trailing_3_complete_month_expense_average";
+    historicalBaseline: "axioma_52_budget_reference";
     chosenLimit: "manual_total_budget_only";
     objective: "average_income_minus_chosen_limit";
     incomeSource: "financial_monthly_series";
@@ -141,6 +158,25 @@ function isNullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
+function isAutomaticFactors(value: unknown): value is BudgetAutomaticFactors {
+  if (!value || typeof value !== "object") return false;
+  const factors = value as Partial<BudgetAutomaticFactors>;
+  return factors.algorithm === "axioma_52_budget_reference_v1"
+    && (factors.mode === "fallback_3_month_average" || factors.mode === "axioma_52_weighted")
+    && isSafeInteger(factors.availableMonthCount) && factors.availableMonthCount >= 0
+    && isSafeInteger(factors.trailing3AverageCents) && factors.trailing3AverageCents >= 0
+    && isSafeInteger(factors.recentWeightedCents) && factors.recentWeightedCents >= 0
+    && isSafeInteger(factors.seasonalSameMonthCents) && factors.seasonalSameMonthCents >= 0
+    && isSafeInteger(factors.seasonalMonthCount) && factors.seasonalMonthCount >= 0
+    && isSafeInteger(factors.trendAdjustmentCents)
+    && isSafeInteger(factors.knownRecurringCents) && factors.knownRecurringCents >= 0
+    && isSafeInteger(factors.extraordinaryMonthCount) && factors.extraordinaryMonthCount >= 0
+    && (factors.extraordinaryCapCents === null
+      || (isSafeInteger(factors.extraordinaryCapCents) && factors.extraordinaryCapCents >= 0))
+    && factors.recurrencePolicy === "floor_not_additive"
+    && factors.exclusionsSource === "financial_transaction_facts.analytics_eligible";
+}
+
 function isBudgetItem(value: unknown): value is BudgetItem {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<BudgetItem>;
@@ -157,6 +193,7 @@ function isBudgetItem(value: unknown): value is BudgetItem {
     && (item.progressBps === null || isSafeInteger(item.progressBps))
     && ["empty", "unfunded", "on_track", "over"].includes(item.status ?? "")
     && typeof item.automaticExplanation === "string"
+    && (item.automaticFactors === undefined || item.automaticFactors === null || isAutomaticFactors(item.automaticFactors))
     && Array.isArray(item.historyMonths)
     && item.historyMonths.every((row) =>
       Boolean(row) && typeof row === "object"
@@ -241,7 +278,7 @@ function basePlanning(snapshot: BudgetSnapshot): BudgetPlanningContext {
     targetSavingsRateBps: null,
     incomeHistoryMonths: [],
     principles: {
-      historicalBaseline: "trailing_3_complete_month_expense_average",
+      historicalBaseline: "axioma_52_budget_reference",
       chosenLimit: "manual_total_budget_only",
       objective: "average_income_minus_chosen_limit",
       incomeSource: "financial_monthly_series",
@@ -252,9 +289,9 @@ function basePlanning(snapshot: BudgetSnapshot): BudgetPlanningContext {
 
 /**
  * Adds decision context without changing the canonical budget engine. The
- * historical expense reference remains descriptive; only a user-entered total
- * limit is treated as a goal. Income is read from the existing financial
- * monthly series and must reconcile month-by-month with the budget history.
+ * automatic expense reference is produced by Axioma §52; only a user-entered
+ * total limit is treated as a goal. Income remains the three-month monthly
+ * series used exclusively to estimate the consequence of the chosen limit.
  */
 export function assembleBudgetPlanning(
   snapshot: BudgetSnapshot,
@@ -267,16 +304,12 @@ export function assembleBudgetPlanning(
 
   const range = budgetPlanningRange(snapshot.month);
   const monthly = readMonthlySeries(monthlyValue, range);
-  const historyAverageCents = safeAverage(
-    snapshot.total.historyMonths.map((row) => row.expenseCents),
-  );
   const expenseHistoryMatches = monthly !== null
     && snapshot.total.historyMonths.length === range.months.length
     && snapshot.total.historyMonths.every((row, index) =>
       row.month === range.months[index]
       && row.expenseCents === monthly.rows[index]?.expenseCents,
     )
-    && historyAverageCents === snapshot.total.automaticAmountCents
     && snapshot.total.effectiveAmountCents
       === (snapshot.total.manualAmountCents ?? snapshot.total.automaticAmountCents);
 

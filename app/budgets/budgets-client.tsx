@@ -94,7 +94,7 @@ function Icon({ name }: { name: BudgetIconName }) {
 
 function statusLabel(item: BudgetItem) {
   const hasChosenLimit = item.manualAmountCents !== null;
-  if (item.status === "over") return hasChosenLimit ? "Límite superado" : "Sobre lo habitual";
+  if (item.status === "over") return hasChosenLimit ? "Límite superado" : "Sobre la referencia";
   if (item.status === "unfunded") return hasChosenLimit ? "Límite en cero" : "Sin referencia";
   if (item.status === "empty") return "Sin actividad";
   return hasChosenLimit ? "Dentro del límite" : "Dentro de referencia";
@@ -102,10 +102,10 @@ function statusLabel(item: BudgetItem) {
 
 function limitDifferenceText(planning: BudgetPlanningContext) {
   const difference = planning.differenceFromBaselineCents;
-  if (difference === null) return "Todavía no has convertido la referencia histórica en un límite propio.";
-  if (difference === 0) return "Coincide exactamente con tu gasto habitual de los tres meses anteriores.";
-  if (difference < 0) return `Reduce en ${formatMoney(Math.abs(difference))} tu gasto habitual mensual.`;
-  return `Permite ${formatMoney(difference)} más que tu gasto habitual mensual.`;
+  if (difference === null) return "Todavía no has convertido la referencia automática en un límite propio.";
+  if (difference === 0) return "Coincide exactamente con la referencia automática calculada para este mes.";
+  if (difference < 0) return `Reduce en ${formatMoney(Math.abs(difference))} la referencia automática mensual.`;
+  return `Permite ${formatMoney(difference)} más que la referencia automática mensual.`;
 }
 
 function objectiveValue(planning: BudgetPlanningContext) {
@@ -173,11 +173,11 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const hasChosenLimit = item.manualAmountCents !== null;
-  const referenceLabel = hasChosenLimit ? "Límite elegido" : "Gasto habitual";
+  const referenceLabel = hasChosenLimit ? "Límite elegido" : "Referencia automática";
   const remainingLabel = item.remainingCents >= 0
-    ? hasChosenLimit ? "Margen del límite" : "Margen histórico"
-    : hasChosenLimit ? "Exceso del límite" : "Sobre lo habitual";
-  const comparisonLabel = hasChosenLimit ? "Uso del límite" : "Comparación con lo habitual";
+    ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
+    : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
+  const comparisonLabel = hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
   const excessCents = Math.max(0, -item.remainingCents);
@@ -203,7 +203,7 @@ function BudgetCard({
             <p>
               {hasChosenLimit
                 ? "Límite elegido por ti"
-                : "Referencia histórica · media de 3 meses"}
+                : "Referencia automática · Axioma §52"}
               {!total && item.categoryLifecycle === "archived" ? " · categoría archivada" : ""}
             </p>
           </div>
@@ -257,7 +257,7 @@ function BudgetCard({
             <span style={{ fontVariantNumeric: "tabular-nums" }}>
               {excessPercent === null
                 ? "Sin base de comparación"
-                : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre lo habitual"}`}
+                : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
             </span>
           </div>
           <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
@@ -287,7 +287,7 @@ function BudgetCard({
         </button>
         {hasChosenLimit ? (
           <>
-            <span className={styles.manualBadge}>Gasto habitual {formatMoney(item.automaticAmountCents)}</span>
+            <span className={styles.manualBadge}>Referencia automática {formatMoney(item.automaticAmountCents)}</span>
             <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy}>
               Quitar límite elegido
             </button>
@@ -329,7 +329,7 @@ function BudgetCard({
 
       {total ? (
         <p className={styles.helper}>
-          El gasto mostrado procede de tus movimientos. La referencia histórica describe el pasado y no es una recomendación financiera.
+          El gasto procede de tus movimientos. La referencia automática combina señales históricas sin convertirse en una recomendación financiera.
         </p>
       ) : null}
     </article>
@@ -417,7 +417,7 @@ export default function BudgetsClient() {
   }, [actionFeedback]);
 
   const handleRefresh = useCallback(() => {
-    void mutate("POST", { month }, `Referencias históricas de ${formatMonth(month)} actualizadas.`);
+    void mutate("POST", { month }, `Referencia automática de ${formatMonth(month)} actualizada.`);
   }, [month, mutate]);
 
   const startEdit = useCallback((item: BudgetItem) => {
@@ -459,7 +459,7 @@ export default function BudgetsClient() {
     void mutate(
       "PATCH",
       { month, categoryId: item.categoryId, manualAmountCents: null },
-      "Se ha quitado el límite elegido. El histórico vuelve a usarse sólo como referencia.",
+      "Se ha quitado el límite elegido. La referencia automática vuelve a aplicarse.",
     );
   }, [month, mutate]);
 
@@ -485,7 +485,7 @@ export default function BudgetsClient() {
           <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
-            Distingue lo que sueles gastar, el límite que eliges y el ahorro que ese límite permitiría con tus ingresos reales.
+            Compara tu gasto con una referencia automática calculada por el motor Axioma §52, define tu límite y mide el ahorro que permitiría.
           </p>
         </div>
 
@@ -504,7 +504,7 @@ export default function BudgetsClient() {
           </label>
           <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading}>
             <Icon name="refresh" />
-            {busy ? "Actualizando…" : "Actualizar referencias"}
+            {busy ? "Actualizando…" : "Actualizar referencia"}
           </button>
         </div>
       </section>
@@ -531,14 +531,18 @@ export default function BudgetsClient() {
           <>
             <section className={styles.summaryGrid} aria-label="Resumen del presupuesto mensual">
               <article className={styles.metric}>
-                <span className={styles.metricLabel}><Icon name="wallet" /> Gasto habitual</span>
+                <span className={styles.metricLabel}><Icon name="wallet" /> Referencia automática</span>
                 <strong>{formatMoney(snapshot.total.automaticAmountCents)}</strong>
-                <small>Media real de los 3 meses completos anteriores</small>
+                <small>
+                  {snapshot.total.automaticFactors?.mode === "axioma_52_weighted"
+                    ? "Histórico, estacionalidad, tendencia y recurrentes conocidos"
+                    : "Media reciente mientras falta profundidad histórica"}
+                </small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="remaining" /> Límite elegido</span>
                 <strong>{snapshot.total.manualAmountCents === null ? "Sin definir" : formatMoney(snapshot.total.manualAmountCents)}</strong>
-                <small>{snapshot.total.manualAmountCents === null ? "El histórico no se presenta como recomendación" : "Objetivo mensual definido por ti"}</small>
+                <small>{snapshot.total.manualAmountCents === null ? "La referencia no se presenta como recomendación financiera" : "Objetivo mensual definido por ti"}</small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="spent" /> Gastado</span>
@@ -562,8 +566,8 @@ export default function BudgetsClient() {
                 <div className={styles.planningHeader}>
                   <div>
                     <p className={styles.planningEyebrow}>PLANIFICACIÓN CON DATOS REALES</p>
-                    <h2 id="budget-planning-title">De lo habitual a tu objetivo</h2>
-                    <p>Cada cifra cumple una función distinta: referencia, decisión y resultado esperado.</p>
+                    <h2 id="budget-planning-title">De la referencia a tu objetivo</h2>
+                    <p>Cada cifra cumple una función distinta: referencia automática, decisión y resultado esperado.</p>
                   </div>
                   <span className={`${styles.status} ${styles[snapshot.total.status]}`}>
                     {categorySummary.total
@@ -576,9 +580,9 @@ export default function BudgetsClient() {
                   <article className={styles.planningStep}>
                     <span className={styles.stepNumber}>1</span>
                     <div>
-                      <span className={styles.stepLabel}>Referencia histórica</span>
+                      <span className={styles.stepLabel}>Referencia automática</span>
                       <strong>{formatMoney(planning.historicalBaselineCents)}</strong>
-                      <p>Es lo que gastaste de media. Describe el pasado; no recomienda cuánto deberías gastar.</p>
+                      <p>El motor combina señales históricas para comparar tu gasto; no decide cuánto deberías gastar.</p>
                     </div>
                   </article>
 
@@ -616,7 +620,7 @@ export default function BudgetsClient() {
                 </div>
 
                 <p className={styles.planningNote}>
-                  Es una proyección determinista con tus tres meses completos anteriores; no es asesoramiento financiero ni modifica la fuente bancaria.
+                  La referencia usa el motor Axioma §52; la proyección de ahorro usa tus ingresos recientes. Ninguna modifica la fuente bancaria ni constituye asesoramiento financiero.
                 </p>
               </section>
             ) : null}
@@ -627,7 +631,7 @@ export default function BudgetsClient() {
                   <div className={styles.panelHeading}>
                     <div>
                       <h2>Límites y referencias del mes</h2>
-                      <p>Tu límite elegido tiene prioridad; sin él, el histórico se usa sólo para comparar.</p>
+                      <p>Tu límite elegido tiene prioridad; sin él, la referencia automática se usa para comparar.</p>
                     </div>
                     <span className={`${styles.status} ${styles[snapshot.total.status]}`}>{formatMonth(snapshot.month)}</span>
                   </div>
@@ -672,7 +676,7 @@ export default function BudgetsClient() {
                         <span className={styles.cardIcon} style={{ margin: "0 auto" }}><Icon name="category" /></span>
                         <strong>No hay categorías de gasto activas</strong>
                         <p>
-                          El total ya muestra gasto habitual, límite elegido y consumo real. Cuando existan categorías de gasto activas, aparecerán aquí con la misma separación.
+                          El total ya muestra referencia automática, límite elegido y consumo real. Cuando existan categorías de gasto activas, aparecerán aquí con la misma separación.
                         </p>
                         <Link prefetch={false} href="/configuration">Abrir Configuración</Link>
                       </div>
@@ -691,7 +695,7 @@ export default function BudgetsClient() {
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
 
-                  <div className={styles.history} aria-label="Histórico usado para calcular el gasto habitual">
+                  <div className={styles.history} aria-label="Tres meses recientes visibles de la referencia automática">
                     {snapshot.total.historyMonths.map((row) => {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
                       return (
@@ -709,9 +713,10 @@ export default function BudgetsClient() {
                   <div className={styles.principles}>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>La fuente bancaria se mantiene estrictamente en solo lectura.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>El gasto se calcula con los mismos movimientos efectivos que utiliza el resto de Financial App.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>El motor pondera recencia, estacionalidad, tendencia, extraordinarios y recurrentes conocidos cuando hay histórico suficiente.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>Las transferencias internas no consumen presupuesto.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>Los duplicados confirmados y las exclusiones manuales no consumen presupuesto.</span></div>
-                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite elegido tiene prioridad sin borrar la referencia histórica.</span></div>
+                    <div className={styles.principle}><span className={styles.check}>✓</span><span>Un límite elegido tiene prioridad sin borrar la referencia automática.</span></div>
                     <div className={styles.principle}><span className={styles.check}>✓</span><span>Las categorías padre incluyen sus subcategorías para evitar contar el mismo gasto dos veces.</span></div>
                   </div>
                 </div>
