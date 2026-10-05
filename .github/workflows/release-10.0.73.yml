@@ -1,0 +1,66 @@
+name: Release 10.0.73
+
+on:
+  push:
+    branches:
+      - feat/axioma-52-budget-engine-10.0.73
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-budget-intelligence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@v6
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies from lockfile
+        run: npm ci
+
+      - name: Critical dependency audit
+        run: npm audit --audit-level=critical
+
+      - name: Verify Axioma 52 budget contract
+        run: npm run verify:budget-engine
+
+      - name: TypeScript
+        run: npm run typecheck
+
+      - name: Production build and postbuild guards
+        run: npm run build
+
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+
+      - name: Budget and forecast user-value regression
+        run: >-
+          npm run test:e2e --
+          tests/e2e/forecast.spec.ts
+          tests/e2e/release-version.spec.ts
+          --project=chromium-desktop
+          --project=chromium-mobile
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rel-073-playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
