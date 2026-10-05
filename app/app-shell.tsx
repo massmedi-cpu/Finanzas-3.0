@@ -30,7 +30,12 @@ const STARTUP_DESTINATION_RESOLVED = "financial-app:startup-destination-resolved
 const AppShellBoundaryContext = createContext(false);
 
 export default function AppShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const alreadyInsideSharedShell = useContext(AppShellBoundaryContext);
+
+  if (pathname === "/login") {
+    return <>{children}</>;
+  }
 
   if (alreadyInsideSharedShell) {
     return <>{children}</>;
