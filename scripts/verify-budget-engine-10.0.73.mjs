@@ -34,6 +34,16 @@ for (const token of [
   requireText(migration, token, "migración §52");
 }
 forbidText(migration, "to service_role", "migración §52 ACL");
+requireText(
+  migration,
+  "revoke all on function financial_app.budget_month_recommendation(text,uuid) from service_role;",
+  "migración §52 ACL gateway-only",
+);
+requireText(
+  migration,
+  "revoke all on function financial_app.budget_month_snapshot(text) from service_role;",
+  "migración §52 ACL gateway-only",
+);
 
 requireText(planning, 'historicalBaseline: "axioma_52_budget_reference"', "contrato planificación");
 requireText(planning, "automaticFactors", "contrato planificación");
