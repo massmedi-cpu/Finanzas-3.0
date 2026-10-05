@@ -1,0 +1,44 @@
+name: Forecast Phase 7 Certification
+
+on:
+  pull_request:
+    paths:
+      - "app/forecast/**"
+      - "src/application/forecast/**"
+      - "scripts/verify-forecast-phase7-10.0.75.mjs"
+      - "package.json"
+      - ".github/workflows/forecast-phase7-certification.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forecast-phase7-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Typecheck, build and Forecast Phase 7 regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Forecast Phase 7 contract
+        run: npm run verify:forecast-phase7
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build and accumulated regression
+        run: npm run build
