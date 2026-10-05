@@ -1,0 +1,21 @@
+.financial-privacy-shield {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: grid;
+  place-content: center;
+  gap: .4rem;
+  padding: 2rem;
+  text-align: center;
+  background: color-mix(in srgb, var(--background, #030711) 96%, transparent);
+  backdrop-filter: blur(24px);
+}
+
+.financial-privacy-shield strong {
+  font-size: clamp(1.35rem, 4vw, 2.2rem);
+}
+
+.financial-privacy-shield span {
+  color: var(--text-secondary, #8d98aa);
+  max-width: 34rem;
+}

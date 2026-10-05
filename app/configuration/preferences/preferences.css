@@ -1,0 +1,63 @@
+.configuration-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.configuration-grid .config-panel,
+.configuration-shell > .config-panel {
+  display: grid;
+  gap: .75rem;
+}
+
+.configuration-grid .config-panel h2,
+.configuration-shell > .config-panel h2 {
+  margin: 0;
+}
+
+.configuration-grid .config-panel label {
+  display: flex;
+  align-items: flex-start;
+  gap: .65rem;
+  min-height: 2.75rem;
+  padding: .75rem;
+  border-radius: .9rem;
+  background: color-mix(in srgb, var(--surface, #0d1628) 88%, transparent);
+}
+
+.configuration-grid input,
+.configuration-grid select {
+  accent-color: currentColor;
+}
+
+.configuration-grid select {
+  min-height: 2.75rem;
+  padding: .55rem .7rem;
+  border-radius: .75rem;
+  border: 1px solid var(--border, rgba(137, 173, 255, .18));
+  background: var(--surface, #0d1628);
+  color: inherit;
+}
+
+.configuration-grid p,
+.configuration-shell > .config-panel p {
+  margin: 0;
+  color: var(--text-secondary, #8d98aa);
+  line-height: 1.5;
+}
+
+.configuration-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.configuration-footer p { margin: 0; }
+
+@media (max-width: 768px) {
+  .configuration-grid { grid-template-columns: 1fr; }
+  .configuration-footer { align-items: stretch; flex-direction: column; }
+}

@@ -1,0 +1,4 @@
+html[data-budget-focus="attention"] article[class*="budgetCard"]:not([class*="budgetCardPrimary"]):has(span[class*="on_track"]),
+html[data-budget-focus="attention"] article[class*="budgetCard"]:not([class*="budgetCardPrimary"]):has(span[class*="empty"]) {
+  display: none;
+}

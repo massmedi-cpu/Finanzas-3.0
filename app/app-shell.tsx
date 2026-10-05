@@ -8,6 +8,7 @@ import { ProductIcon } from "../src/design/product-icons";
 import GlobalSearch from "./global-search";
 import MobileNavigation from "./mobile-navigation";
 import { isNavigationActive, navigationItems } from "./navigation-items";
+import { useProductPreferences } from "./product-preferences";
 import { PwaInstallButton } from "./pwa-install-button";
 import { usePwaRuntime } from "./pwa-runtime";
 import SourceTrustStatus from "./source-trust-status";
@@ -24,6 +25,7 @@ const HIGH_VALUE_PREFETCH_ROUTES = [
   "/forecast",
   "/alerts",
 ] as const;
+const STARTUP_DESTINATION_RESOLVED = "financial-app:startup-destination-resolved-v1";
 
 const AppShellBoundaryContext = createContext(false);
 
@@ -45,6 +47,7 @@ function AppShellFrame({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { online } = usePwaRuntime();
+  const { homeDestination, ready: preferencesReady } = useProductPreferences();
   const navigationRef = useRef<HTMLElement>(null);
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
@@ -57,6 +60,16 @@ function AppShellFrame({ children }: { children: ReactNode }) {
     setCanScrollLeft(navigation.scrollLeft > 3);
     setCanScrollRight(navigation.scrollLeft < maxScroll - 3);
   }, []);
+
+  useEffect(() => {
+    if (!preferencesReady) return;
+    if (window.sessionStorage.getItem(STARTUP_DESTINATION_RESOLVED) === "true") return;
+    window.sessionStorage.setItem(STARTUP_DESTINATION_RESOLVED, "true");
+    if (pathname === "/" && homeDestination !== "/") {
+      setPendingHref(homeDestination);
+      router.replace(homeDestination);
+    }
+  }, [homeDestination, pathname, preferencesReady, router]);
 
   useEffect(() => {
     const navigation = navigationRef.current;
