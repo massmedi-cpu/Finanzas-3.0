@@ -1,0 +1,310 @@
+.shell {
+  width: min(1480px, calc(100% - 32px));
+  margin: 0 auto 18px;
+}
+
+.heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 12px;
+}
+
+.heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.heading span,
+.cardHeading span {
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary, #65676d);
+}
+
+.heading h2,
+.cardHeading h3 {
+  margin: 0;
+  line-height: 1.12;
+}
+
+.heading h2 {
+  font-size: clamp(1.12rem, 1.8vw, 1.45rem);
+}
+
+.heading p {
+  max-width: 500px;
+  margin: 0;
+  color: var(--text-secondary, #65676d);
+  font-size: 0.84rem;
+}
+
+.gridCards {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(340px, 0.8fr);
+  gap: 14px;
+}
+
+.card {
+  min-width: 0;
+  border: 1px solid var(--border, #d6d7db);
+  border-radius: 20px;
+  background: var(--surface, #ffffff);
+  padding: 18px;
+  box-shadow: 0 14px 38px color-mix(in srgb, #000 6%, transparent);
+}
+
+.cardHeading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 18px;
+  margin-bottom: 15px;
+}
+
+.cardHeading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.cardHeading h3 {
+  font-size: 1rem;
+}
+
+.cardHeading > strong {
+  font-size: 0.88rem;
+  white-space: nowrap;
+}
+
+.chartViewport {
+  width: 100%;
+  overflow-x: auto;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--surface-subtle, #f5f5f7) 82%, transparent);
+}
+
+.chartViewport svg {
+  display: block;
+  width: 100%;
+  min-width: 520px;
+  height: auto;
+}
+
+.grid line {
+  stroke: color-mix(in srgb, var(--border, #d6d7db) 76%, transparent);
+  stroke-width: 1;
+}
+
+.grid text,
+.axisLabel {
+  fill: var(--text-secondary, #65676d);
+  font-size: 10px;
+}
+
+.area {
+  fill: color-mix(in srgb, var(--accent, #9d8550) 14%, transparent);
+}
+
+.line {
+  fill: none;
+  stroke: var(--text-primary, #111216);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.point {
+  fill: var(--surface, #ffffff);
+  stroke: var(--text-primary, #111216);
+  stroke-width: 2.5;
+}
+
+.details {
+  margin-top: 10px;
+  font-size: 0.8rem;
+  color: var(--text-secondary, #65676d);
+}
+
+.details summary {
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.tableViewport {
+  overflow-x: auto;
+  margin-top: 9px;
+}
+
+.tableViewport table {
+  width: 100%;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.tableViewport th,
+.tableViewport td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border, #d6d7db);
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tableViewport th:first-child,
+.tableViewport td:first-child {
+  text-align: left;
+}
+
+.donutLayout {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.72fr) minmax(190px, 1fr);
+  align-items: center;
+  gap: 18px;
+}
+
+.donutWrap {
+  position: relative;
+  width: min(100%, 235px);
+  margin: 0 auto;
+}
+
+.donut {
+  display: block;
+  width: 100%;
+  transform: rotate(-90deg);
+}
+
+.donutTrack,
+.donutSlice {
+  fill: none;
+  stroke-width: 15;
+}
+
+.donutTrack {
+  stroke: color-mix(in srgb, var(--border, #d6d7db) 56%, transparent);
+}
+
+.donutSlice,
+.legendDot {
+  --slice-hue: calc(34 + (var(--slice-index) * 43));
+  stroke: hsl(var(--slice-hue) 46% 48%);
+  background: hsl(var(--slice-hue) 46% 48%);
+}
+
+.donutCenter {
+  position: absolute;
+  inset: 27%;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donutCenter span {
+  font-size: 0.68rem;
+  color: var(--text-secondary, #65676d);
+}
+
+.donutCenter strong {
+  margin-top: 2px;
+  font-size: clamp(0.82rem, 1.5vw, 1.05rem);
+}
+
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.legend li > a,
+.legend li > div {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 7px;
+  border-radius: 9px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.legend li > a:hover {
+  background: var(--surface-subtle, #f5f5f7);
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legendName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+}
+
+.legend strong {
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend small {
+  min-width: 45px;
+  text-align: right;
+  color: var(--text-secondary, #65676d);
+  font-size: 0.72rem;
+}
+
+.empty {
+  margin: 26px 0;
+  color: var(--text-secondary, #65676d);
+  text-align: center;
+}
+
+@media (max-width: 940px) {
+  .gridCards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .shell {
+    width: min(100% - 20px, 1480px);
+  }
+
+  .heading {
+    align-items: start;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .card {
+    padding: 14px;
+    border-radius: 17px;
+  }
+
+  .donutLayout {
+    grid-template-columns: 1fr;
+  }
+
+  .donutWrap {
+    width: min(66vw, 220px);
+  }
+
+  .legend li > a,
+  .legend li > div {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+
+  .legend small {
+    grid-column: 2 / 4;
+    text-align: left;
+  }
+}
