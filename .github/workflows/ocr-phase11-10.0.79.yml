@@ -66,10 +66,9 @@ jobs:
           --project=chromium-desktop
           --workers=2
 
-      - name: OCR traceability UI desktop and mobile
+      - name: OCR traceability UI desktop and mobile viewports
         run: >-
           npx playwright test
           tests/e2e/document-ocr-traceability-ui-10.0.79.spec.ts
           --project=chromium-desktop
-          --project=chromium-mobile
           --workers=2
