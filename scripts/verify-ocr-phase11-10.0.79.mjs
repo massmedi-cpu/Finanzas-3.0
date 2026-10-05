@@ -44,6 +44,14 @@ requireText("app/documents/ocr-review-workbench.module.css", [
   'white-space:pre-wrap',
 ]);
 
+// Los gates históricos deben seguir siendo acumulativos: una release nueva no puede
+// fallar sólo porque una certificación anterior haya fijado su número exacto.
+requireText("scripts/verify-transversals-phase10-10.0.78.mjs", [
+  'function versionAtLeast(actual, minimum)',
+  'versionAtLeast(pkg.version, "10.0.78")',
+  'Fase 10 / 10.0.78+ certificada',
+]);
+
 for (const path of [
   "tests/e2e/document-ocr-review-quality-10.0.79.spec.ts",
   "tests/e2e/document-ocr-traceability-ui-10.0.79.spec.ts",
