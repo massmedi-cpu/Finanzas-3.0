@@ -17,6 +17,18 @@ function requireText(path, needles) {
   }
 }
 
+function versionAtLeast(actual, minimum) {
+  const parse = (value) => String(value ?? "").split(".").map((part) => Number.parseInt(part, 10));
+  const a = parse(actual);
+  const b = parse(minimum);
+  if (a.length !== 3 || b.length !== 3 || [...a, ...b].some((part) => Number.isNaN(part))) return false;
+  for (let index = 0; index < 3; index += 1) {
+    if (a[index] > b[index]) return true;
+    if (a[index] < b[index]) return false;
+  }
+  return true;
+}
+
 requireText("src/application/document-ocr-review.ts", [
   'export type DocumentOcrReviewEvidence',
   'export type DocumentOcrReviewPriority = "high" | "standard" | "none"',
@@ -65,14 +77,16 @@ for (const path of [
 
 const pkg = JSON.parse(read("package.json"));
 const lock = JSON.parse(read("package-lock.json"));
-if (pkg.version !== "10.0.79") failures.push(`package.json debe declarar 10.0.79 y declara ${pkg.version}`);
-if (lock.version !== "10.0.79" || lock.packages?.[""]?.version !== "10.0.79") failures.push("package-lock.json debe declarar 10.0.79 en raíz y paquete principal");
+if (!versionAtLeast(pkg.version, "10.0.79")) failures.push(`package.json debe declarar 10.0.79+ y declara ${pkg.version}`);
+if (!versionAtLeast(lock.version, "10.0.79") || !versionAtLeast(lock.packages?.[""]?.version, "10.0.79")) {
+  failures.push("package-lock.json debe declarar 10.0.79+ en raíz y paquete principal");
+}
 if (!String(pkg.scripts?.postbuild || "").includes("verify-ocr-phase11-10.0.79.mjs")) failures.push("postbuild no ejecuta la certificación OCR 10.0.79");
 
 if (failures.length) {
-  console.error("OCR Fase 11 / 10.0.79 NO certificada:");
+  console.error("OCR Fase 11 / 10.0.79+ NO certificada:");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("OCR Fase 11 / 10.0.79 certificada: prioridad financiera, evidencia literal, trazabilidad en tres capas, responsive y regresión OCR acumulativa quedan bajo contrato.");
+console.log("OCR Fase 11 / 10.0.79+ certificada: prioridad financiera, evidencia literal, trazabilidad en tres capas, responsive y regresión OCR acumulativa quedan bajo contrato.");
