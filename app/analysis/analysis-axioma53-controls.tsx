@@ -69,7 +69,10 @@ export default function AnalysisAxioma53Controls({
     event.preventDefault();
     const params = new URLSearchParams({ periodMode, compareMode });
 
-    if (periodMode === "month") params.set("month", month);
+    if (periodMode === "month") {
+      params.set("month", month);
+      params.set("range", "1m");
+    }
     if (periodMode === "year") params.set("year", year);
     if (periodMode === "custom") {
       params.set("dateFrom", dateFrom);
@@ -107,6 +110,7 @@ export default function AnalysisAxioma53Controls({
                 key={value}
                 type="button"
                 className={periodMode === value ? styles.activeSegment : styles.segment}
+                aria-label={value === "month" ? "1 mes" : label}
                 aria-pressed={periodMode === value}
                 onClick={() => setPeriodMode(value)}
               >
@@ -117,7 +121,7 @@ export default function AnalysisAxioma53Controls({
 
           {periodMode === "month" && (
             <label className={styles.control}>
-              <span>Mes</span>
+              <span>Mes de referencia</span>
               <input type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
             </label>
           )}
@@ -177,7 +181,7 @@ export default function AnalysisAxioma53Controls({
           </select>
         </label>
 
-        <button className={styles.apply} type="submit">Aplicar análisis</button>
+        <button className={styles.apply} type="submit" aria-label="Aplicar">Aplicar análisis</button>
       </form>
     </section>
   );
