@@ -70,7 +70,7 @@ jobs:
                   failures.push({
                     title: [...next, spec.title].filter(Boolean).join(' › '),
                     project: test.projectName || 'unknown',
-                    error: bad.error?.message || bad.errors?.[0]?.message || bad.status,
+                    error: bad.error?.stack || bad.error?.message || bad.errors?.[0]?.stack || bad.errors?.[0]?.message || bad.status,
                   });
                 }
               }
@@ -81,7 +81,7 @@ jobs:
             const body = [
               marker,
               '### Diagnóstico temporal · Analysis Legibility',
-              ...failures.slice(0, 12).map((failure) => `- **${failure.project} · ${failure.title}**\n  \`${String(failure.error).replace(/`/g, "'").replace(/\s+/g, ' ').slice(0, 1400)}\``),
+              ...failures.slice(0, 12).map((failure) => `- **${failure.project} · ${failure.title}**\n  \`${String(failure.error).replace(/`/g, "'").replace(/\s+/g, ' ').slice(0, 1800)}\``),
             ].join('\n');
             const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
