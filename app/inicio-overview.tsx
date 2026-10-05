@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
+import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import {
   hasSourceSyncIncidents,
   normalizeSourceSyncIncidents,
@@ -345,6 +346,8 @@ export default function InicioOverview() {
   const [privacyReady, setPrivacyReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
+  const [analysisLoading, setAnalysisLoading] = useState(true);
 
   useEffect(() => {
     try {
@@ -400,6 +403,17 @@ export default function InicioOverview() {
     }
   }, []);
 
+  const loadHomeAnalysis = useCallback(async () => {
+    setAnalysisLoading(true);
+    try {
+      setHomeAnalysis(await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000));
+    } catch {
+      setHomeAnalysis(null);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  }, []);
+
   const refreshDashboard = useCallback(async () => {
     setPrimaryLoading(true);
     setActivityLoading(true);
@@ -408,6 +422,7 @@ export default function InicioOverview() {
     setIndependentSources([]);
 
     const statusPromise = loadSyncStatus();
+    const analysisPromise = loadHomeAnalysis();
     const activityPromise = loadScope("activity", ["transactions"])
       .finally(() => setActivityLoading(false));
     const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"])
@@ -415,8 +430,8 @@ export default function InicioOverview() {
 
     await loadScope("critical", ["financial"]);
     setPrimaryLoading(false);
-    await Promise.all([activityPromise, secondaryPromise, statusPromise]);
-  }, [loadScope, loadSyncStatus]);
+    await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise]);
+  }, [loadHomeAnalysis, loadScope, loadSyncStatus]);
 
   useEffect(() => {
     void refreshDashboard();
@@ -481,24 +496,14 @@ export default function InicioOverview() {
     () => Math.max(1, ...homeMonthlyRows.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)])),
     [homeMonthlyRows],
   );
-  const completedMonthlyRows = useMemo(
-    () => data.monthly?.rows.filter((row) => row.monthStart < currentMonthStart) ?? [],
-    [data.monthly, currentMonthStart],
-  );
-  const completedComparison = useMemo(() => {
-    if (!completedMonthlyRows.length) return null;
-    const current = completedMonthlyRows.at(-1)!;
-    const previous = completedMonthlyRows.length > 1 ? completedMonthlyRows.at(-2)! : null;
-    return { current, previous, delta: previous ? current.operatingNetCents - previous.operatingNetCents : null };
-  }, [completedMonthlyRows]);
-  const recentExpenseAverage = useMemo(() => {
-    const sample = completedMonthlyRows.slice(-3);
-    if (!sample.length) return null;
-    return {
-      cents: Math.round(sample.reduce((sum, row) => sum + row.expenseCents, 0) / sample.length),
-      months: sample.length,
-    };
-  }, [completedMonthlyRows]);
+  const completedComparison = useMemo(() => homeAnalysis ? {
+    current: {
+      monthStart: homeAnalysis.period.dateFrom,
+      operatingNetCents: homeAnalysis.netComparison.currentNetCents,
+    },
+    delta: homeAnalysis.netComparison.deltaCents,
+  } : null, [homeAnalysis]);
+  const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
 
   const topBudgetCategories = useMemo(
     () => budget?.categories
@@ -587,7 +592,7 @@ export default function InicioOverview() {
   }, [forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
 
   return (
-    <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading}>
+    <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}>
       <header className={styles.header}>
         <div>
           <p className={styles.eyebrow}>Financial App</p>
@@ -721,7 +726,7 @@ export default function InicioOverview() {
           <small>
             {recentExpenseAverage
               ? `Media de ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes completo" : "meses completos"}`
-              : "Histórico pendiente"}
+              : analysisLoading ? "Calculando desde Análisis…" : "Análisis no disponible"}
           </small>
           <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
         </article>
