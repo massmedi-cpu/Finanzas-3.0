@@ -1,0 +1,64 @@
+name: Post-OCR Consolidation 10.0.80
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/core/build-info.ts'
+      - 'scripts/verify-ocr-phase11-10.0.79.mjs'
+      - 'scripts/verify-post-ocr-consolidation-10.0.80.mjs'
+      - 'tests/e2e/**'
+      - '.github/workflows/post-ocr-consolidation-10.0.80.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-ocr-consolidation-10.0.80-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  certify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Release identity
+        run: node scripts/verify-release-identity.mjs
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Production build and cumulative gates
+        run: npm run build
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
+      - name: Financial consistency
+        run: npx playwright test tests/e2e/cross-module-financial-consistency.spec.ts --project=chromium-desktop --workers=1
+      - name: Persistent source sync
+        run: npx playwright test tests/e2e/sync-missing-persistence-contract.spec.ts --project=chromium-desktop --workers=1
+      - name: OCR financial review
+        run: npx playwright test tests/e2e/document-ocr-review-quality-10.0.79.spec.ts --project=chromium-desktop --workers=1
+      - name: Responsive matrix
+        run: npx playwright test tests/e2e/responsive-matrix-10.0.49.spec.ts --project=chromium-desktop --workers=1
