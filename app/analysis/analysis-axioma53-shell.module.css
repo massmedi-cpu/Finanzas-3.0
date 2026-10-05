@@ -1,5 +1,5 @@
 .enhanced :global(form[aria-label="Filtros del análisis"]) {
-  display: none !important;
+  display: none;
 }
 
 .enhanced :global(main[aria-busy] > header) {
