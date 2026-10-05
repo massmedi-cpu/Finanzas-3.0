@@ -17,6 +17,20 @@ function requireText(path, needles) {
   }
 }
 
+function versionAtLeast(actual, minimum) {
+  const parse = (value) => String(value).split(".").map((part) => Number(part));
+  const left = parse(actual);
+  const right = parse(minimum);
+  if (left.length !== 3 || right.length !== 3 || left.some((part) => !Number.isSafeInteger(part) || part < 0) || right.some((part) => !Number.isSafeInteger(part) || part < 0)) {
+    return false;
+  }
+  for (let index = 0; index < 3; index += 1) {
+    if (left[index] > right[index]) return true;
+    if (left[index] < right[index]) return false;
+  }
+  return true;
+}
+
 // Feedback global: estados reales, accesibles y no silenciosos.
 requireText("app/action-feedback.tsx", [
   '"pending" | "success" | "error"',
@@ -58,15 +72,15 @@ for (const path of [
 ]) requireFile(path);
 
 const pkg = JSON.parse(read("package.json"));
-if (pkg.version !== "10.0.78") failures.push(`package.json debe declarar 10.0.78 y declara ${pkg.version}`);
+if (!versionAtLeast(pkg.version, "10.0.78")) failures.push(`package.json debe declarar 10.0.78 o posterior y declara ${pkg.version}`);
 if (!String(pkg.scripts?.postbuild || "").includes("verify-transversals-phase10-10.0.78.mjs")) {
   failures.push("postbuild no ejecuta la certificación de Fase 10");
 }
 
 if (failures.length) {
-  console.error("Fase 10 / 10.0.78 NO certificada:");
+  console.error("Fase 10 / 10.0.78+ NO certificada:");
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }
 
-console.log("Fase 10 / 10.0.78 certificada: alertas, feedback, responsive, accesibilidad, navegación, estados globales, acabado y rendimiento quedan bajo gates acumulativos.");
+console.log("Fase 10 / 10.0.78+ certificada: alertas, feedback, responsive, accesibilidad, navegación, estados globales, acabado y rendimiento quedan bajo gates acumulativos.");
