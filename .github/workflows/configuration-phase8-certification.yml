@@ -1,0 +1,47 @@
+name: Configuration Phase 8 Certification
+
+on:
+  pull_request:
+    paths:
+      - "app/configuration/**"
+      - "app/product-preferences.tsx"
+      - "app/product-preferences.css"
+      - "app/budget-focus-preference.css"
+      - "app/layout.tsx"
+      - "app/app-shell.tsx"
+      - "scripts/verify-configuration-phase8-10.0.76.mjs"
+      - "scripts/verify-forecast-phase7-10.0.75.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/configuration-phase8-certification.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: configuration-phase8-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify:
+    name: Typecheck, build and Configuration Phase 8 regression
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Configuration Phase 8 contract
+        run: npm run verify:configuration-phase8
+      - name: Forecast Phase 7 accumulated contract
+        run: npm run verify:forecast-phase7
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Build and accumulated regression
+        run: npm run build
