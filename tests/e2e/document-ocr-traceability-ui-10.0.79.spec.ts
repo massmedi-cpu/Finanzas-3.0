@@ -114,20 +114,23 @@ test.describe("Financial App 10.0.79 · revisión OCR trazable", () => {
       await mockOcrReview(page);
       await page.goto("/documents");
       await page.getByRole("button", { name: /ticket-revision.jpg/i }).click();
-      await page.getByRole("button", { name: "Analizar documento" }).click();
+      const panel = page.getByTestId("ocr-review-panel");
+      await panel.getByRole("button", { name: "Analizar documento" }).click();
 
-      await expect(page.getByText(/Revisa primero comercio \/ emisor, fecha y total con el original/i)).toBeVisible();
-      await expect(page.getByTestId("ocr-field-issuer")).toContainText("Dudoso");
-      await expect(page.getByTestId("ocr-field-date")).toContainText("Dudoso");
-      await expect(page.getByTestId("ocr-field-totalCents")).toContainText("Dudoso");
-      await expect(page.getByTestId("ocr-low-confidence-1")).toContainText("4");
+      await expect(
+        panel.getByText("Revisa primero comercio / emisor, fecha y total con el original", { exact: true }).last(),
+      ).toBeVisible();
+      await expect(panel.getByTestId("ocr-field-issuer")).toContainText("Dudoso");
+      await expect(panel.getByTestId("ocr-field-date")).toContainText("Dudoso");
+      await expect(panel.getByTestId("ocr-field-totalCents")).toContainText("Dudoso");
+      await expect(panel.getByTestId("ocr-low-confidence-1")).toContainText("4");
 
-      await page.getByTestId("ocr-trace-1").getByText("Comparar trazabilidad OCR").click();
-      await expect(page.getByTestId("ocr-trace-structured-1")).toContainText("Texto estructurado para revisión");
-      await expect(page.getByTestId("ocr-trace-structured-1")).toContainText("Total: 17,50");
-      await expect(page.getByTestId("ocr-trace-layout-1")).toContainText("Reconstrucción geométrica");
-      await expect(page.getByTestId("ocr-trace-raw-1")).toContainText("OCR bruto");
-      await expect(page.getByTestId("ocr-trace-raw-1")).toContainText("4");
+      await panel.getByTestId("ocr-trace-1").getByText("Comparar trazabilidad OCR").click();
+      await expect(panel.getByTestId("ocr-trace-structured-1")).toContainText("Texto estructurado para revisión");
+      await expect(panel.getByTestId("ocr-trace-structured-1")).toContainText("Total: 17,50");
+      await expect(panel.getByTestId("ocr-trace-layout-1")).toContainText("Reconstrucción geométrica");
+      await expect(panel.getByTestId("ocr-trace-raw-1")).toContainText("OCR bruto");
+      await expect(panel.getByTestId("ocr-trace-raw-1")).toContainText("4");
 
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
     });
