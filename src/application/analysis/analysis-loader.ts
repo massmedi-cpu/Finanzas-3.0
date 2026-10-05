@@ -199,6 +199,7 @@ export function resolveAnalysisSelection(input: AnalysisSelectionInput = {}): Re
     previousDateTo = requireDate(input.compareDateTo, "invalid_analysis_compare_date_to");
     if (previousDateFrom > previousDateTo) throw new Error("invalid_analysis_compare_date_range");
     if (previousDateTo > today) throw new Error("invalid_analysis_compare_future_date");
+    if (previousDateTo >= dateFrom) throw new Error("invalid_analysis_compare_period_order");
   } else {
     const days = inclusiveDays(dateFrom, dateTo);
     previousDateTo = dayBefore(dateFrom);
