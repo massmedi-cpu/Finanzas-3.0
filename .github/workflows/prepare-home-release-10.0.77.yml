@@ -48,6 +48,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json package-lock.json vercel.json .github/workflows/patch-home-phase9-10.0.77.yml
+          git add -A
           git commit -m "chore(release): preparar Financial App 10.0.77"
           git push origin HEAD:rebuild/phase-9-home-10.0.77
