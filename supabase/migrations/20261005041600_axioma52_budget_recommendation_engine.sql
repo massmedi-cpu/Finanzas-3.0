@@ -419,6 +419,8 @@ $$;
 
 revoke all on function financial_app.budget_month_recommendation(text,uuid) from public, anon, authenticated;
 revoke all on function financial_app.budget_month_snapshot(text) from public, anon, authenticated;
+revoke all on function financial_app.budget_month_recommendation(text,uuid) from service_role;
+revoke all on function financial_app.budget_month_snapshot(text) from service_role;
 grant execute on function financial_app.budget_month_recommendation(text,uuid) to financial_app_gateway;
 grant execute on function financial_app.budget_month_snapshot(text) to financial_app_gateway;
 
