@@ -2,25 +2,34 @@
 
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
+export type BudgetFocus = "all" | "attention";
+export type HomeDestination = "/" | "/analysis" | "/forecast";
+
 type ProductPreferences = {
+  budgetFocus: BudgetFocus;
   syncOnOpen: boolean;
   privacyOnBlur: boolean;
+  homeDestination: HomeDestination;
 };
 
 type ProductPreferencesValue = ProductPreferences & {
   ready: boolean;
   privacyActive: boolean;
   lastAutomaticSyncAt: string | null;
+  setBudgetFocus: (value: BudgetFocus) => void;
   setSyncOnOpen: (value: boolean) => void;
   setPrivacyOnBlur: (value: boolean) => void;
+  setHomeDestination: (value: HomeDestination) => void;
   reset: () => void;
 };
 
 const STORAGE_KEY = "financial-app:product-preferences-v1";
 const SESSION_SYNC_KEY = "financial-app:auto-sync-attempted-v1";
 const DEFAULTS: ProductPreferences = {
+  budgetFocus: "all",
   syncOnOpen: false,
   privacyOnBlur: true,
+  homeDestination: "/",
 };
 
 const ProductPreferencesContext = createContext<ProductPreferencesValue | null>(null);
@@ -31,8 +40,12 @@ function readStoredPreferences(): ProductPreferences {
     const parsed = JSON.parse(window.localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<ProductPreferences> | null;
     if (!parsed) return DEFAULTS;
     return {
+      budgetFocus: parsed.budgetFocus === "attention" ? "attention" : "all",
       syncOnOpen: typeof parsed.syncOnOpen === "boolean" ? parsed.syncOnOpen : DEFAULTS.syncOnOpen,
       privacyOnBlur: typeof parsed.privacyOnBlur === "boolean" ? parsed.privacyOnBlur : DEFAULTS.privacyOnBlur,
+      homeDestination: parsed.homeDestination === "/analysis" || parsed.homeDestination === "/forecast"
+        ? parsed.homeDestination
+        : "/",
     };
   } catch {
     return DEFAULTS;
@@ -53,8 +66,13 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     if (!ready) return;
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    try {
+      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    } catch {
+      // Las preferencias siguen activas durante la sesión si el navegador bloquea almacenamiento local.
+    }
     document.documentElement.dataset.privacyOnBlur = preferences.privacyOnBlur ? "true" : "false";
+    document.documentElement.dataset.budgetFocus = preferences.budgetFocus;
   }, [preferences, ready]);
 
   useEffect(() => {
@@ -92,8 +110,10 @@ export function ProductPreferencesProvider({ children }: { children: ReactNode }
     ready,
     privacyActive,
     lastAutomaticSyncAt,
+    setBudgetFocus: (budgetFocus) => setPreferences((current) => ({ ...current, budgetFocus })),
     setSyncOnOpen: (syncOnOpen) => setPreferences((current) => ({ ...current, syncOnOpen })),
     setPrivacyOnBlur: (privacyOnBlur) => setPreferences((current) => ({ ...current, privacyOnBlur })),
+    setHomeDestination: (homeDestination) => setPreferences((current) => ({ ...current, homeDestination })),
     reset: () => setPreferences(DEFAULTS),
   }), [preferences, ready, privacyActive, lastAutomaticSyncAt]);
 
