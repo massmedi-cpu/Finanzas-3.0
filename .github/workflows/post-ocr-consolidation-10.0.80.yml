@@ -44,6 +44,16 @@ jobs:
         run: npm run typecheck
       - name: Production build and cumulative gates
         run: npm run build
+      - name: Install Chromium
+        shell: bash
+        run: |
+          set -euo pipefail
+          for source in /etc/apt/sources.list.d/*; do
+            if sudo grep -q 'dl.google.com/linux/chrome' "$source" 2>/dev/null; then
+              sudo mv "$source" "${source}.disabled"
+            fi
+          done
+          npx playwright install --with-deps chromium
       - name: Financial consistency
         run: npx playwright test tests/e2e/cross-module-financial-consistency.spec.ts --project=chromium-desktop --workers=1
       - name: Persistent source sync
