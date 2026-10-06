@@ -14,7 +14,7 @@ function snapshotFor(url: URL) {
     referenceFrom: url.searchParams.get("referenceFrom"),
     referenceTo: url.searchParams.get("referenceTo"),
     accountId: url.searchParams.get("accountId"),
-  }, "2026-09-25");
+  }, "2026-10-06");
   const gateway: AnalysisGatewaySnapshot = {
     current: {
       dateFrom: selection.primaryFrom,
