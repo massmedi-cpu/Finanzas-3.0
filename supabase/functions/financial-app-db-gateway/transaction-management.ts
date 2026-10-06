@@ -9,6 +9,7 @@ const PATCH_FIELDS = new Set([
   "reviewState",
   "excludedFromAnalytics",
   "note",
+  "tags",
 ]);
 
 function json(body: unknown, status = 200) {
@@ -54,6 +55,23 @@ function transactionPatch(value: unknown): Record<string, unknown> {
     throw new Error("invalid_transaction_patch");
   }
   return patch;
+}
+
+function transactionTags(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 12) throw new Error("invalid_transaction_tags");
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") throw new Error("invalid_transaction_tag");
+    const tag = raw.trim();
+    if (!tag || tag.length > 40) throw new Error("invalid_transaction_tag");
+    const key = tag.toLocaleLowerCase("es");
+    if (!seen.has(key)) {
+      seen.add(key);
+      tags.push(tag);
+    }
+  }
+  return tags.sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
 }
 
 export async function handleTransactionManagementAction(input: {
@@ -159,10 +177,45 @@ export async function handleTransactionManagementAction(input: {
   if (action === "transaction.patch") {
     const ids = transactionIds(payload.transactionIds);
     const patch = transactionPatch(payload.patch);
-    const rows = await sql`
-      select financial_app.apply_transaction_override_patch(${ids}::uuid[],${patch}::jsonb) as result
-    `;
-    return json({ result: rows[0]?.result ?? null });
+    const hasTags = Object.prototype.hasOwnProperty.call(patch, "tags");
+    const tags = hasTags ? transactionTags(patch.tags) : null;
+    const overridePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => key !== "tags"));
+
+    if (hasTags && ids.length !== 1) throw new Error("transaction_tags_single_edit_only");
+
+    const applyPatch = async (db: any) => {
+      let overrideResult: any = null;
+      let tagResult: any = null;
+
+      if (Object.keys(overridePatch).length > 0) {
+        const rows = await db`
+          select financial_app.apply_transaction_override_patch(${ids}::uuid[],${overridePatch}::jsonb) as result
+        `;
+        overrideResult = rows[0]?.result ?? null;
+      }
+
+      if (tags !== null) {
+        const rows = await db`
+          select financial_app.set_transaction_tags(${ids}::uuid[],${tags}::text[]) as result
+        `;
+        tagResult = rows[0]?.result ?? null;
+      }
+
+      if (overrideResult && !tagResult) return overrideResult;
+      if (tagResult && !overrideResult) return tagResult;
+
+      return {
+        requestedTransactions: ids.length,
+        changedTransactions:
+          (Number(overrideResult?.changedTransactions ?? 0) > 0 || Number(tagResult?.changedTransactions ?? 0) > 0) ? 1 : 0,
+        auditChanges: Number(overrideResult?.auditChanges ?? 0) + Number(tagResult?.auditChanges ?? 0),
+      };
+    };
+
+    const result = hasTags && Object.keys(overridePatch).length > 0
+      ? await sql.begin(async (tx: any) => applyPatch(tx))
+      : await applyPatch(sql);
+    return json({ result });
   }
 
   if (action === "test.transaction_management_engine") {
