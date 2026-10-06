@@ -60,7 +60,11 @@ for (const token of [
   "manifest.webmanifest",
   "service worker",
   "No es un acceso directo normal",
-]) requireText(pwa, token, "PWA instalación");
+  "PWA muestra estado offline y lo retira al recuperar la conexión",
+  'getByTestId("offline-status")',
+  "setOffline(true)",
+  "setOffline(false)",
+]) requireText(pwa, token, "PWA instalación/offline");
 requireText(pwaAndroid, "beforeinstallprompt", "PWA Android");
 
 for (const token of [

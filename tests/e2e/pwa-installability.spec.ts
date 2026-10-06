@@ -42,3 +42,26 @@ test("PWA expone manifiesto, service worker y una instalación guiada aunque no 
   await expect(dialog.getByText(/pantalla de inicio|menú del navegador/i).first()).toBeVisible();
   await expect(dialog).toContainText("No es un acceso directo normal");
 });
+
+
+test("PWA muestra estado offline y lo retira al recuperar la conexión", async ({ page, context }) => {
+  await page.route("**/api/**", async (route) => {
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "pwa_offline_isolated" }),
+    });
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Inicio", exact: true })).toBeVisible();
+  await expect(page.getByTestId("offline-status")).toHaveCount(0);
+
+  await context.setOffline(true);
+  await expect(page.getByTestId("offline-status")).toBeVisible();
+  await expect(page.getByTestId("offline-status")).toContainText("Sin conexión");
+  await expect(page.getByTestId("offline-status")).toContainText("última información segura disponible");
+
+  await context.setOffline(false);
+  await expect(page.getByTestId("offline-status")).toHaveCount(0);
+});
