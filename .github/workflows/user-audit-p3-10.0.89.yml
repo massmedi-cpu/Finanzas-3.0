@@ -4,6 +4,7 @@ on:
   pull_request:
     branches:
       - main
+      - "qa/user-audit-p2-10.0.88"
     paths:
       - "app/api/financial/**"
       - "app/analysis/**"
