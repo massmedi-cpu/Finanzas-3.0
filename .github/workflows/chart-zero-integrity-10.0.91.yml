@@ -1,4 +1,4 @@
-name: Evolution Integrity 10.0.91
+name: Cumulative QA 10.0.91
 
 on:
   pull_request:
@@ -10,7 +10,10 @@ on:
       - "src/design/financial-bar-chart.tsx"
       - "src/design/financial-bar-chart.module.css"
       - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "app/analysis/analysis-axioma53-controls.tsx"
+      - "tests/e2e/user-audit-p3-10.0.89.spec.ts"
       - "scripts/verify-chart-zero-integrity-10.0.91.mjs"
+      - "scripts/verify-analysis-filter-integrity-10.0.91.mjs"
       - "package.json"
       - "package-lock.json"
       - ".github/workflows/chart-zero-integrity-10.0.91.yml"
@@ -38,6 +41,7 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run typecheck
       - run: npm run verify:chart-zero-integrity
+      - run: npm run verify:analysis-filter-integrity
       - run: npm run build
 
   browser-regression:
@@ -51,8 +55,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - name: QA-11/12/13/14/15 · evolución, privacidad y cobertura desktop y móvil
+      - name: QA-11→17 · evolución, privacidad, cobertura y filtros desktop y móvil
         run: >-
-          npx playwright test tests/e2e/inicio-smart-brief.spec.ts
-          --grep "QA-11|QA-12|QA-13|QA-14|QA-15"
+          npx playwright test tests/e2e/inicio-smart-brief.spec.ts tests/e2e/user-audit-p3-10.0.89.spec.ts
+          --grep "QA-11|QA-12|QA-13|QA-14|QA-15|QA-16|QA-17"
           --project=chromium-desktop --project=chromium-mobile --workers=1

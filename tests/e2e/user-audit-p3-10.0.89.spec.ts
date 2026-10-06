@@ -24,3 +24,54 @@ test("QA-07 · Análisis muestra primero la lectura principal y deja filtros ava
   await advanced.click();
   await expect(page.getByText("Mes para análisis avanzado")).toBeVisible();
 });
+
+
+async function disableFreshnessNoise(page: Parameters<typeof test>[0]["page"]) {
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: false, latestMovementDate: null, sync: null }),
+    });
+  });
+}
+
+test("QA-16 · Análisis conserva 3 meses al usar comparación personalizada y evita solapamientos", async ({ page }) => {
+  await disableFreshnessNoise(page);
+  await page.goto("/analysis?month=2026-09&range=3m");
+
+  await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+  await expect(page.getByRole("button", { name: "3 meses" })).toHaveAttribute("aria-pressed", "true");
+  await page.getByLabel("Referencia").selectOption("custom");
+
+  const compareFrom = page.getByLabel("Desde");
+  const compareTo = page.getByLabel("Hasta");
+  await expect(compareTo).toHaveAttribute("max", "2026-06-30");
+
+  await compareFrom.fill("2026-04-01");
+  await compareTo.fill("2026-06-30");
+  await page.getByRole("button", { name: "Aplicar cambios" }).click();
+
+  await expect(page).toHaveURL(/\/analysis\?/);
+  const url = new URL(page.url());
+  expect(url.searchParams.get("month")).toBe("2026-09");
+  expect(url.searchParams.get("range")).toBe("3m");
+  expect(url.searchParams.get("compareMode")).toBe("custom");
+  expect(url.searchParams.get("compareDateFrom")).toBe("2026-04-01");
+  expect(url.searchParams.get("compareDateTo")).toBe("2026-06-30");
+  expect(url.searchParams.get("periodMode")).toBeNull();
+});
+
+test("QA-17 · cambios de año y fechas personalizadas activan Aplicar cambios", async ({ page }) => {
+  await disableFreshnessNoise(page);
+
+  await page.goto("/analysis?periodMode=year&year=2025");
+  await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+  await page.getByLabel("Año").fill("2024");
+  await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+
+  await page.goto("/analysis?periodMode=custom&dateFrom=2026-08-01&dateTo=2026-08-31");
+  await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+  await page.getByLabel("Hasta").first().fill("2026-08-30");
+  await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+});

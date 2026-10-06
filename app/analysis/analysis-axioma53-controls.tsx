@@ -17,6 +17,13 @@ const QUICK_RANGES: ReadonlyArray<{ value: QuickRange; label: string }> = [
   { value: "ytd", label: "Año actual" },
 ];
 
+const RANGE_MONTHS: Record<Exclude<QuickRange, "ytd">, number> = {
+  "1m": 1,
+  "3m": 3,
+  "6m": 6,
+  "12m": 12,
+};
+
 function madridToday() {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Europe/Madrid",
@@ -33,6 +40,20 @@ function previousDay(value: string) {
   const date = new Date(`${value}T00:00:00Z`);
   date.setUTCDate(date.getUTCDate() - 1);
   return date.toISOString().slice(0, 10);
+}
+
+function shiftMonth(month: string, deltaMonths: number) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return "";
+  const [year, monthNumber] = month.split("-").map(Number);
+  const shifted = new Date(Date.UTC(year, monthNumber - 1 + deltaMonths, 1));
+  return `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+function presetDateFrom(month: string, range: QuickRange) {
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) return "";
+  if (range === "ytd") return `${month.slice(0, 4)}-01-01`;
+  const shifted = shiftMonth(month, -(RANGE_MONTHS[range] - 1));
+  return shifted ? `${shifted}-01` : "";
 }
 
 function isQuickRange(value: string | null | undefined): value is QuickRange {
@@ -76,29 +97,43 @@ export default function AnalysisAxioma53Controls({
       ? resolved.range
       : "1m";
   const initialMonth = requested.month?.trim() || resolved?.month || currentMonth;
+  const initialYear = requested.year?.trim() || resolved?.dateFrom.slice(0, 4) || currentYear;
+  const initialDateFrom = requested.dateFrom?.trim() || resolved?.dateFrom || `${currentYear}-01-01`;
+  const initialDateTo = requested.dateTo?.trim() || resolved?.dateTo || today;
   const initialAccountId = requested.accountId?.trim() || resolved?.accountId || "";
   const initialCompareMode = inferredCompareMode(requested);
+  const initialCompareDateFrom = requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "";
+  const initialCompareDateTo = requested.compareDateTo?.trim() || resolved?.previousDateTo || "";
 
   const [periodMode, setPeriodMode] = useState<PeriodMode>(initialPeriodMode);
   const [quickRange, setQuickRange] = useState<QuickRange>(initialRange);
   const [month, setMonth] = useState(initialMonth);
-  const [year, setYear] = useState(requested.year?.trim() || resolved?.dateFrom.slice(0, 4) || currentYear);
-  const [dateFrom, setDateFrom] = useState(requested.dateFrom?.trim() || resolved?.dateFrom || `${currentYear}-01-01`);
-  const [dateTo, setDateTo] = useState(requested.dateTo?.trim() || resolved?.dateTo || today);
+  const [year, setYear] = useState(initialYear);
+  const [dateFrom, setDateFrom] = useState(initialDateFrom);
+  const [dateTo, setDateTo] = useState(initialDateTo);
   const [accountId, setAccountId] = useState(initialAccountId);
   const [compareMode, setCompareMode] = useState<CompareMode>(initialCompareMode);
-  const [compareDateFrom, setCompareDateFrom] = useState(requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "");
-  const [compareDateTo, setCompareDateTo] = useState(requested.compareDateTo?.trim() || resolved?.previousDateTo || "");
+  const [compareDateFrom, setCompareDateFrom] = useState(initialCompareDateFrom);
+  const [compareDateTo, setCompareDateTo] = useState(initialCompareDateTo);
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
-  const customComparisonMax = previousDay(periodMode === "custom" ? dateFrom : periodMode === "year" ? `${year}-01-01` : `${month}-01`);
+  const currentPeriodStart = periodMode === "custom"
+    ? dateFrom
+    : periodMode === "year"
+      ? `${year}-01-01`
+      : presetDateFrom(month, quickRange);
+  const customComparisonMax = previousDay(currentPeriodStart);
   const filtersDirty = periodMode !== initialPeriodMode
     || (periodMode === "month" && quickRange !== initialRange)
     || month !== initialMonth
+    || (periodMode === "year" && year !== initialYear)
+    || (periodMode === "custom" && (dateFrom !== initialDateFrom || dateTo !== initialDateTo))
     || accountId !== initialAccountId
     || compareMode !== initialCompareMode
-    || compareDateFrom !== (requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "")
-    || compareDateTo !== (requested.compareDateTo?.trim() || resolved?.previousDateTo || "");
+    || (compareMode === "custom" && (
+      compareDateFrom !== initialCompareDateFrom
+      || compareDateTo !== initialCompareDateTo
+    ));
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -116,7 +151,6 @@ export default function AnalysisAxioma53Controls({
     if (periodMode === "month") {
       params.set("month", submittedMonth);
       params.set("range", quickRange);
-      if (submittedCompareMode !== "previous") params.set("periodMode", "month");
     }
     if (periodMode === "year") {
       params.set("periodMode", "year");

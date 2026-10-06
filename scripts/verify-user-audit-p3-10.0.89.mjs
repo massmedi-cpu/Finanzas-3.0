@@ -55,7 +55,7 @@ for (const token of [
   ">Saldo<",
   ">Ingresos y gastos<",
   ">Flujo neto<",
-  "no reconstruye el saldo sumando el cash flow",
+  "No se reconstruye desde Cash Flow",
 ]) requireText(homeEvolution, token, "QA-08 Inicio");
 requireText(home, "<HomeEvolution", "QA-08 integración");
 
