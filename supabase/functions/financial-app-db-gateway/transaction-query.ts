@@ -177,7 +177,7 @@ export async function handleTransactionQueryAction(input: {
   }
 
   if (action === "transaction.facets") {
-    const [accounts, categories, merchants, channels, reconciliationStates] = await Promise.all([
+    const [accounts, categories, merchants, channels, reconciliationStates, years] = await Promise.all([
       sql`select id,name,lifecycle,sort_order from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id`,
       sql`select id,name,kind,lifecycle,parent_category_id,sort_order from financial_app.categories order by case lifecycle when 'active' then 0 else 1 end,kind,parent_category_id nulls first,sort_order,name,id`,
       sql`select id,name,lifecycle from financial_app.merchants order by case lifecycle when 'active' then 0 else 1 end,normalized_name,id`,
@@ -193,6 +193,11 @@ export async function handleTransactionQueryAction(input: {
         where nullif(pg_catalog.btrim(source_payload->>'Conciliado'),'') is not null
         order by value
       `,
+      sql`
+        select distinct pg_catalog.extract(year from bank_date)::integer as value
+        from financial_app.transactions
+        order by value desc
+      `,
     ]);
     return json({
       accounts,
@@ -200,6 +205,7 @@ export async function handleTransactionQueryAction(input: {
       merchants,
       channels: channels.map((row: any) => row.value).filter((value: unknown): value is string => typeof value === "string"),
       reconciliationStates: reconciliationStates.map((row: any) => row.value).filter((value: unknown): value is string => typeof value === "string"),
+      years: years.map((row: any) => row.value).filter((value: unknown): value is number => Number.isInteger(value)),
     });
   }
 
