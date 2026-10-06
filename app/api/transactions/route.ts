@@ -22,6 +22,7 @@ const PATCH_FIELDS = new Set([
   "reviewState",
   "excludedFromAnalytics",
   "note",
+  "tags",
 ]);
 
 function optionalText(params: URLSearchParams, key: string, maxLength = 200) {
@@ -110,6 +111,23 @@ function apiError(error: unknown) {
   );
 }
 
+function normalizeTransactionTags(value: unknown) {
+  if (!Array.isArray(value) || value.length > 12) throw new Error("invalid_transaction_tags");
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") throw new Error("invalid_transaction_tag");
+    const tag = raw.trim();
+    if (!tag || tag.length > 40) throw new Error("invalid_transaction_tag");
+    const key = tag.toLocaleLowerCase("es");
+    if (!seen.has(key)) {
+      seen.add(key);
+      tags.push(tag);
+    }
+  }
+  return tags.sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+}
+
 function validatePatchBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_patch_body");
   const body = value as Record<string, unknown>;
@@ -123,7 +141,12 @@ function validatePatchBody(value: unknown) {
 
   const keys = Object.keys(patch as Record<string, unknown>);
   if (keys.length < 1 || keys.some((key) => !PATCH_FIELDS.has(key))) throw new Error("invalid_transaction_patch");
-  return { transactionIds: ids as string[], patch: patch as Record<string, unknown> };
+  const validatedPatch = { ...(patch as Record<string, unknown>) };
+  if (Object.prototype.hasOwnProperty.call(validatedPatch, "tags")) {
+    if (ids.length !== 1) throw new Error("transaction_tags_single_edit_only");
+    validatedPatch.tags = normalizeTransactionTags(validatedPatch.tags);
+  }
+  return { transactionIds: ids as string[], patch: validatedPatch };
 }
 
 function splitBody(value: unknown) {
@@ -280,6 +303,8 @@ export async function GET(request: Request) {
       hasDocument: optionalBoolean(searchParams, "hasDocument"),
       documentQuery: optionalText(searchParams, "documentQuery", 200),
       splitLabel: optionalText(searchParams, "splitLabel", 200),
+      tag: optionalText(searchParams, "tag", 40),
+      ocrQuery: optionalText(searchParams, "ocrQuery", 200),
       cursorBankDate,
       cursorId,
       limit: pageLimit(searchParams),

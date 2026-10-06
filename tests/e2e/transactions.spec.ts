@@ -24,6 +24,7 @@ const firstRow = {
   transferPairId: null,
   excludedFromAnalytics: false,
   userNote: "Compra revisada",
+  tags: ["reembolsable", "viaje"],
   hasUserOverride: true,
   overriddenFields: ["concept", "merchant", "category", "reviewState", "note"],
   source: {
@@ -54,6 +55,7 @@ const secondRow = {
   hasUserOverride: false,
   overriddenFields: [],
   userNote: null,
+  tags: [],
   source: {
     ...firstRow.source,
     sourceRecordId: "70000000-0000-4000-8000-000000000112",
@@ -111,6 +113,10 @@ async function mockTransactionApi(
           accounts: [{ id: accountId, name: "Cuenta corriente Openbank · 3967", lifecycle: "active", sort_order: 0 }],
           categories: [{ id: categoryId, name: "Alimentación", kind: "expense", lifecycle: "active", parent_category_id: null, sort_order: 0 }],
           merchants: [{ id: merchantId, name: "Supermercado Demo", lifecycle: "active" }],
+          channels: ["Tarjeta"],
+          reconciliationStates: ["Sí"],
+          years: [2026],
+          tags: ["reembolsable", "viaje"],
         }),
       });
       return;
@@ -308,6 +314,51 @@ test("Edición individual envía un override no destructivo", async ({ page }) =
   });
   expect(patches[0].patch).not.toHaveProperty("reviewState");
   await expect(page.getByText(/Movimiento actualizado/)).toBeVisible();
+});
+
+test("10.0.86 · etiquetas generales y OCR son filtros combinables y la edición persiste etiquetas", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  await page.goto("/transactions");
+
+  await expect(page.getByTestId("tag-filter")).toContainText("reembolsable");
+  await page.getByTestId("tag-filter").selectOption("reembolsable");
+  await page.getByTestId("ocr-filter").fill("ticket supermercado");
+
+  const filteredRequest = page.waitForRequest((request) => {
+    const url = new URL(request.url());
+    return request.method() === "GET"
+      && url.pathname === "/api/transactions"
+      && url.searchParams.get("tag") === "reembolsable"
+      && url.searchParams.get("ocrQuery") === "ticket supermercado";
+  });
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await filteredRequest;
+
+  await page.getByTestId(`edit-${firstId}`).click();
+  await expect(page.getByTestId("edit-tags")).toHaveValue("reembolsable, viaje");
+  await page.getByTestId("edit-tags").fill("Viaje, fiscal, viaje");
+  await page.getByTestId("save-edit").click();
+
+  await expect.poll(() => patches.length).toBe(1);
+  expect(patches[0].transactionIds).toEqual([firstId]);
+  expect(patches[0].patch.tags).toEqual(["fiscal", "Viaje"]);
+  expect(patches[0].patch).not.toHaveProperty("source");
+});
+
+test("10.0.86 · edición de etiquetas valida el límite antes de escribir", async ({ page }) => {
+  const patches: PatchBody[] = [];
+  await mockTransactionApi(page, patches);
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+
+  await page.getByTestId("edit-tags").fill(
+    Array.from({ length: 13 }, (_, index) => `etiqueta-${index + 1}`).join(", "),
+  );
+  await page.getByTestId("save-edit").click();
+
+  await expect(page.locator("#transaction-tags-error")).toContainText("hasta 12 etiquetas");
+  expect(patches).toHaveLength(0);
 });
 
 test("Selección múltiple aplica categoría sin alterar el estado de revisión", async ({ page }) => {

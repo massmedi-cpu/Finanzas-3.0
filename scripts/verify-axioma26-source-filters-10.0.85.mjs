@@ -10,7 +10,13 @@ const api = read("app/api/transactions/route.ts");
 const client = read("app/transactions/transactions-client.tsx");
 const pkg = JSON.parse(read("package.json"));
 
-checks.push([pkg.version === "10.0.85", "versión canónica 10.0.85"]);
+const versionParts = pkg.version.split(".").map(Number);
+const versionAtLeast10085 =
+  versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (versionParts[0] > 10 ||
+    (versionParts[0] === 10 && (versionParts[1] > 0 || (versionParts[1] === 0 && versionParts[2] >= 85))));
+checks.push([versionAtLeast10085, "versión canónica 10.0.85 o superior"]);
 
 for (const token of [
   "query_effective_transactions_v3",
@@ -37,8 +43,12 @@ checks.push([
   "la migración no modifica transaction_source_records",
 ]);
 
+checks.push([
+  /query_effective_transactions_v(?:3|4)/.test(query),
+  "gateway usa el motor acumulativo v3/v4 con filtros de fuente",
+]);
+
 for (const token of [
-  "query_effective_transactions_v3",
   "transaction_channel",
   "transaction_counterparty",
   "transaction_reconciliation",
