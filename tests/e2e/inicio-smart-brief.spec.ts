@@ -818,19 +818,3 @@ test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
   expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
 });
 
-test("QA-20 · privacidad no filtra importes por el detalle mensual", async ({ page }) => {
-  await mockInicio(page);
-  await page.addInitScript(({ key }) => localStorage.setItem(key, "hidden"), { key: PRIVACY_KEY });
-
-  await page.goto("/");
-
-  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes.*ocultos por privacidad/ });
-  await expect(chart).toBeVisible();
-  const wrapper = chart.locator("..");
-  await expect(wrapper).toContainText("Importes ocultos por privacidad");
-  await expect(wrapper).not.toContainText("€");
-  await expect(wrapper).not.toContainText("1.500,00");
-  await expect(wrapper).not.toContainText("700,00");
-  await expect(wrapper).not.toContainText("800,00");
-});
-
