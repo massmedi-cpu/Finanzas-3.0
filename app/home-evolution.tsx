@@ -134,6 +134,10 @@ export default function HomeEvolution({
     () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
     [balanceRows],
   );
+  const balanceHasAccounts = useMemo(
+    () => balanceRows.some((row) => row.accounts > 0),
+    [balanceRows],
+  );
 
   return (
     <div className={styles.evolutionView}>
@@ -174,10 +178,10 @@ export default function HomeEvolution({
       {mode === "balance" && balanceError ? (
         <p className={styles.empty} role="status">No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles.</p>
       ) : null}
-      {mode === "balance" && !balanceLoading && !balanceError && balanceRows.length === 0 ? (
+      {mode === "balance" && !balanceLoading && !balanceError && !balanceHasAccounts ? (
         <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
       ) : null}
-      {mode === "balance" && !balanceLoading && !balanceError && balanceRows.length > 0 ? (
+      {mode === "balance" && !balanceLoading && !balanceError && balanceHasAccounts ? (
         <>
           <SingleSeriesBars
             rows={balanceRows}

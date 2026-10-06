@@ -554,7 +554,7 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
   await expect(zero).toHaveCSS("height", "0px");
 });
 
-test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el panel en blanco", async ({ page }) => {
+test("QA-13 · Saldo explica una serie sin cuentas en lugar de dibujar ceros falsos", async ({ page }) => {
   await mockInicio(page);
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
@@ -562,7 +562,32 @@ test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el pane
       dateFrom: "2026-07-01",
       dateTo: "2026-09-16",
       accountId: null,
-      rows: [],
+      rows: [
+        {
+          monthStart: "2026-07-01",
+          asOfDate: "2026-07-31",
+          balanceCents: 0,
+          accounts: 0,
+          explicitBalanceAccounts: 0,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-08-01",
+          asOfDate: "2026-08-31",
+          balanceCents: 0,
+          accounts: 0,
+          explicitBalanceAccounts: 0,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-09-01",
+          asOfDate: "2026-09-16",
+          balanceCents: 0,
+          accounts: 0,
+          explicitBalanceAccounts: 0,
+          reconstructedBalanceAccounts: 0,
+        },
+      ],
       principles: {
         bankSource: "read_only",
         balanceSource: "financial_account_balances",
@@ -575,6 +600,7 @@ test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el pane
   await page.goto("/");
   await page.getByRole("button", { name: "Saldo" }).click();
   await expect(page.getByRole("status")).toContainText("No hay saldos bancarios disponibles para este periodo.");
+  await expect(page.getByRole("group", { name: /Saldo bancario agregado por mes/ })).toHaveCount(0);
 });
 
 
