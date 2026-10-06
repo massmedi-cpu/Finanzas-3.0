@@ -1,0 +1,134 @@
+name: Transversal Certification 10.0.90
+
+on:
+  push:
+    branches:
+      - "qa/transversal-certification-10.0.90"
+  pull_request:
+    branches:
+      - "qa/user-audit-p3-10.0.89"
+    paths:
+      - "app/**"
+      - "public/**"
+      - "proxy.ts"
+      - "src/**"
+      - "supabase/functions/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/transversal-certification-10.0.90.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: transversal-10.0.90-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:transversal-certification
+      - run: npm run build
+
+  security-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - run: >-
+          npx playwright test
+          tests/e2e/production-auth.spec.ts
+          tests/e2e/auth-refresh-request-propagation.spec.ts
+          tests/e2e/content-security-policy.spec.ts
+          tests/e2e/security-headers.spec.ts
+          --project=chromium-desktop --workers=1
+
+  pwa-accessibility:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: PWA desktop
+        run: npx playwright test tests/e2e/pwa-installability.spec.ts --project=chromium-desktop --workers=1
+      - name: PWA Android
+        run: npx playwright test tests/e2e/pwa-android-install.spec.ts --project=chromium-mobile --workers=1
+      - name: Accesibilidad y reflow
+        run: >-
+          npx playwright test
+          tests/e2e/reflow-accessibility-10.0.69.spec.ts
+          tests/e2e/transactions-accessibility.spec.ts
+          tests/e2e/budgets-accessibility.spec.ts
+          tests/e2e/forecast-accessibility.spec.ts
+          --project=chromium-desktop --workers=1
+
+  write-integrity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright test tests/e2e/forecast-write-integrity.spec.ts tests/e2e/backup-restore-v2.spec.ts --project=chromium-desktop --workers=1
+      - run: node --test tests/backup/backup-row-counts-v2.test.mjs tests/backup/storage-backup-consistency-v2.test.mjs tests/backup/supabase-storage-credential-v2.test.mjs
+      - run: bash tests/backup/protected-backup-artifact-v2.test.sh
+
+  restore-rehearsal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: PostgreSQL 17 client
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - run: bash scripts/phase13-restore-rehearsal-v2.sh

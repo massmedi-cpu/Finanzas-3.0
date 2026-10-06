@@ -21,7 +21,13 @@ const documentTests = read("tests/e2e/documents.spec.ts");
 const p3Tests = read("tests/e2e/user-audit-p3-10.0.89.spec.ts");
 const searchTests = read("tests/e2e/global-search.spec.ts");
 
-checks.push([pkg.version === "10.0.89", "versión canónica 10.0.89"]);
+const versionParts = pkg.version.split(".").map(Number);
+const versionAtLeast10089 =
+  versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (versionParts[0] > 10 ||
+    (versionParts[0] === 10 && (versionParts[1] > 0 || (versionParts[1] === 0 && versionParts[2] >= 89))));
+checks.push([versionAtLeast10089, "versión canónica 10.0.89 o superior"]);
 checks.push([
   String(pkg.scripts?.postbuild ?? "").includes("verify-user-audit-p3-10.0.89.mjs"),
   "gate P3 incluido en postbuild",
