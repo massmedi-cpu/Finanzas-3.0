@@ -27,5 +27,10 @@ requireText(home, "No hay saldos bancarios disponibles para este periodo.", "est
 requireText(homeCss, ".evolutionSignedBar[data-sign=\"negative\"]", "negativos bajo línea cero");
 requireText(e2e, "QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero", "regresión QA-12");
 requireText(e2e, "QA-13 · Saldo explica una serie bancaria vacía", "regresión QA-13");
+requireText(home, "const valuesVisible = formatMoney(0) !== formatMoney(1)", "privacidad serie única");
+requireText(home, "const visualSigned = signed && valuesVisible", "privacidad signo");
+requireText(home, 'data-series-bar="true"', "marca de barra neutral");
+requireText(home, "Importes, signos y proporciones ocultos por privacidad.", "texto privacidad");
+requireText(e2e, "QA-14 · privacidad oculta también proporciones y signo", "regresión QA-14");
 
-console.log("Financial App 10.0.91 · coherencia de evolución QA-11/12/13: OK");
+console.log("Financial App 10.0.91 · coherencia de evolución QA-11/12/13/14: OK");

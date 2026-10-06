@@ -44,20 +44,27 @@ function SingleSeriesBars({
   signed?: boolean;
 }) {
   const max = Math.max(1, ...rows.map((row) => Math.abs(valueFor(row))));
+  const valuesVisible = formatMoney(0) !== formatMoney(1);
   return (
-    <div className={styles.evolutionSingle} role="group" aria-label={label}>
+    <div
+      className={styles.evolutionSingle}
+      role="group"
+      aria-label={valuesVisible ? label : `${label}. Importes, signos y proporciones ocultos por privacidad.`}
+    >
       {rows.map((row) => {
         const value = valueFor(row);
         const height = value === 0 ? 0 : Math.max(3, (Math.abs(value) / max) * 100);
-        const renderedHeight = signed ? height / 2 : height;
-        const sign = signed ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
+        const visualSigned = signed && valuesVisible;
+        const renderedHeight = valuesVisible ? (visualSigned ? height / 2 : height) : 36;
+        const sign = visualSigned ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
         return (
           <div className={styles.evolutionSingleColumn} key={row.monthStart}>
-            <div className={`${styles.evolutionBarArea}${signed ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
-              {signed ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
+            <div className={`${styles.evolutionBarArea}${visualSigned ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
+              {visualSigned ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
               <span
-                className={`${styles.evolutionSingleBar} ${signed ? styles.evolutionSignedBar : ""} ${signed && value < 0 ? styles.evolutionNegativeBar : ""}`}
-                data-zero={value === 0 ? "true" : undefined}
+                className={`${styles.evolutionSingleBar} ${visualSigned ? styles.evolutionSignedBar : ""} ${visualSigned && value < 0 ? styles.evolutionNegativeBar : ""}`}
+                data-series-bar="true"
+                data-zero={valuesVisible && value === 0 ? "true" : undefined}
                 data-sign={sign}
                 style={{ height: `${renderedHeight}%` }}
               />

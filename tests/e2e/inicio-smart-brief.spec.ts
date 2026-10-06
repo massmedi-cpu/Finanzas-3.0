@@ -576,3 +576,56 @@ test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el pane
   await page.getByRole("button", { name: "Saldo" }).click();
   await expect(page.getByRole("status")).toContainText("No hay saldos bancarios disponibles para este periodo.");
 });
+
+
+test("QA-14 · privacidad oculta también proporciones y signo en Saldo y Flujo neto", async ({ page }) => {
+  await mockInicio(page);
+  await page.addInitScript(({ key }) => localStorage.setItem(key, "hidden"), { key: PRIVACY_KEY });
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("scope") === "secondary") {
+      await json(route, {
+        contractVersion: 1,
+        scope: "secondary",
+        asOfDate: "2026-09-16",
+        dataThroughDate: "2026-09-16",
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"],
+        failedSources: [],
+        data: {
+          financial: null,
+          monthly: {
+            dateFrom: "2026-07-01",
+            dateTo: "2026-09-16",
+            rows: [
+              { monthStart: "2026-07-01", incomeCents: 30000, expenseCents: 10000, operatingNetCents: 20000 },
+              { monthStart: "2026-08-01", incomeCents: 10000, expenseCents: 25000, operatingNetCents: -15000 },
+              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+            ],
+          },
+          budgets,
+          forecast,
+          transactions: null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
+  await page.getByRole("button", { name: "Flujo neto" }).click();
+
+  const chart = page.getByRole("group", { name: /Flujo neto por mes/ });
+  const bars = chart.locator('[data-series-bar="true"]');
+  await expect(bars).toHaveCount(3);
+  await expect(chart.locator('[data-zero-line="true"]')).toHaveCount(0);
+  await expect(chart.locator("[data-sign]")).toHaveCount(0);
+  await expect(chart.locator('[data-zero="true"]')).toHaveCount(0);
+
+  const heights = await bars.evaluateAll((nodes) => nodes.map((node) => (node as HTMLElement).style.height));
+  expect(new Set(heights)).toEqual(new Set(["36%"]));
+  await expect(chart).toHaveAttribute("aria-label", /Importes, signos y proporciones ocultos por privacidad/);
+});
