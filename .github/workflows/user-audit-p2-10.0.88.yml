@@ -1,0 +1,79 @@
+name: User Audit P2 10.0.88
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/analysis/**"
+      - "app/cash-flow/**"
+      - "app/inicio-overview.tsx"
+      - "src/application/analysis/**"
+      - "tests/e2e/analysis-history-integrity.spec.ts"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "tests/e2e/cash-flow-accounting.spec.ts"
+      - "scripts/verify-user-audit-p2-10.0.88.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/user-audit-p2-10.0.88.yml"
+  push:
+    branches:
+      - "qa/user-audit-p2-10.0.88"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: user-audit-p2-10.0.88-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:user-audit-p2
+      - run: npm run build
+
+  qa04-06-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-04 y QA-06 Análisis
+        run: >-
+          npx playwright test
+          tests/e2e/premium-analysis-visual.spec.ts
+          --grep "QA-04|QA-06"
+          --project=chromium-desktop
+          --project=chromium-mobile
+          --workers=1
+      - name: QA-05 Inicio
+        run: >-
+          npx playwright test
+          tests/e2e/inicio-smart-brief.spec.ts
+          --grep "QA-05"
+          --project=chromium-desktop
+          --workers=1
+      - name: QA-04 Cash Flow y QA-06 motor
+        run: >-
+          npx playwright test
+          tests/e2e/cash-flow-accounting.spec.ts
+          tests/e2e/analysis-history-integrity.spec.ts
+          --grep "QA-04|QA-06"
+          --project=chromium-desktop
+          --workers=1

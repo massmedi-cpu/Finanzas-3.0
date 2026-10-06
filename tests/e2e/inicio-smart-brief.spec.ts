@@ -291,3 +291,50 @@ test("El resumen inteligente se adapta a móvil sin ensanchar Inicio", async ({ 
   await expect(page.getByRole("region", { name: "Resumen inteligente" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBe(true);
 });
+
+
+test("QA-05 · Inicio no atribuye al día de consulta un saldo agregado con fechas bancarias distintas", async ({ page }) => {
+  await mockInicio(page);
+  const mixedBalances = {
+    ...financial,
+    balances: {
+      asOfDate: "2026-09-16",
+      activeBalanceCents: 30000,
+      accounts: [
+        { id: "a", name: "Cuenta principal", type: "checking", lifecycle: "active", balanceCents: 10000, explicitBalanceDate: "2026-09-15" },
+        { id: "b", name: "Cuenta ahorro", type: "savings", lifecycle: "active", balanceCents: 20000, explicitBalanceDate: "2026-08-31" },
+      ],
+    },
+  };
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    const url = new URL(route.request().url());
+    const scope = url.searchParams.get("scope");
+    if (scope === "critical" || scope === "primary") {
+      await json(route, {
+        contractVersion: 1,
+        scope,
+        asOfDate: "2026-09-16",
+        dataThroughDate: scope === "primary" ? "2026-09-16" : null,
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: scope === "primary" ? ["financial", "transactions"] : ["financial"],
+        failedSources: [],
+        data: {
+          financial: mixedBalances,
+          monthly: null,
+          budgets: null,
+          forecast: null,
+          transactions: scope === "primary" ? transactions : null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  const balanceCard = page.getByRole("article").filter({ hasText: "Saldo total en cuentas" });
+  await expect(balanceCard).toContainText("Suma de saldos bancarios con fechas distintas");
+  await expect(balanceCard).toContainText("31 ago – 15 sept");
+  await expect(balanceCard).not.toContainText("Saldo a 16 sept");
+});

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { expect, test } from "@playwright/test";
 import {
   assembleCashFlow,
@@ -137,4 +139,12 @@ test("Cash Flow tampoco publica un neto previsto si los ítems discrepan del mot
 test("Cash Flow valida meses y febrero bisiesto sin adelantar la fecha bancaria", () => {
   expect(cashFlowMonth("2028-02", "2026-09-24").dateTo).toBe("2028-02-29");
   expect(cashFlowMonth("2026-13", "2026-09-24")).toMatchObject({ month: "2026-09", invalid: true });
+});
+
+
+test("QA-04 · Cash Flow plano usa una única referencia 0 € y no fabrica céntimos negativos", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/cash-flow/cash-flow-evolution.tsx"), "utf8");
+  expect(source).toContain("const flatZero = maximum === 0 && minimum === 0");
+  expect(source).toContain("flatZero\n      ? [0]");
+  expect(source).toContain("la escala se mantiene en 0 € sin fabricar céntimos");
 });
