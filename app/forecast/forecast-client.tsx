@@ -26,6 +26,7 @@ import { ForecastBalanceChart } from "../../src/design/forecast-balance-chart";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
+import { ForecastScenarios } from "./forecast-scenarios";
 import styles from "./forecast.module.css";
 
 type ManualErrors = {
@@ -660,6 +661,7 @@ export function ForecastClient({
             </article>
           </section>
 
+          <ForecastScenarios snapshot={snapshot} />
           <ForecastBalanceChart snapshot={snapshot} />
           <ForecastCalendar dateFrom={snapshot.period.dateFrom} dateTo={snapshot.period.dateTo} items={items} />
 
