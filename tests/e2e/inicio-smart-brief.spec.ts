@@ -706,7 +706,7 @@ test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas
 test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({ page }) => {
   await mockInicio(page);
 
-  await page.route(/\\/api\\/financial\\?mode=balance_series.*/, async (route) => {
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
       dateFrom: "2026-07-01",
       dateTo: "2026-09-16",
