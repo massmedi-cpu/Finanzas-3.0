@@ -1,4 +1,5 @@
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { buildAccumulatedDailySpend } from "../../src/application/analysis/analysis-calendar-series";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import styles from "./analysis-axioma53-summary.module.css";
 
@@ -12,18 +13,14 @@ function formatDate(value: string) {
   return compactDate.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
 }
 
-function accumulatedRows(snapshot: AnalysisSnapshot) {
-  let running = 0;
-  return snapshot.dailySpend.map((row) => {
-    running += row.expenseCents;
-    return { ...row, accumulatedCents: running };
-  });
-}
-
 export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const rows = accumulatedRows(snapshot);
+  const rows = buildAccumulatedDailySpend(
+    snapshot.dailySpend,
+    snapshot.selection.dateFrom,
+    snapshot.selection.dateTo,
+  );
 
-  if (rows.length === 0) {
+  if (snapshot.dailySpend.length === 0 || rows.length === 0) {
     return (
       <section className={styles.shell} aria-labelledby="axioma53-accumulated-heading">
         <article className={styles.card}>
@@ -73,7 +70,7 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
             <strong>{formatMoney(maximum)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye únicamente con el gasto diario elegible que ya cuadra con Movimientos; no introduce un segundo cálculo financiero.</p>
+        <p className={styles.context}>Se construye únicamente con el gasto diario elegible que ya cuadra con Movimientos. Los días sin gasto permanecen planos en su posición real del calendario; no introduce un segundo cálculo financiero.</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
           <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(maximum)}`}>
             {tickValues.map((value) => {
@@ -89,9 +86,11 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
             <path className={styles.line} d={path} />
             {points.map(({ x, y, row }, index) => (
               <g key={row.date}>
-                <circle className={styles.point} cx={x} cy={y} r="4">
-                  <title>{`${formatDate(row.date)} · acumulado ${formatMoney(row.accumulatedCents)}`}</title>
-                </circle>
+                {row.hasActivity && (
+                  <circle className={styles.point} cx={x} cy={y} r="4">
+                    <title>{`${formatDate(row.date)} · acumulado ${formatMoney(row.accumulatedCents)}`}</title>
+                  </circle>
+                )}
                 {(index === 0 || index === points.length - 1 || index === Math.floor(points.length / 2)) && (
                   <text className={styles.axisLabel} x={x} y={height - 10} textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}>
                     {formatDate(row.date)}

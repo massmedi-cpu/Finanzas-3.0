@@ -44,7 +44,7 @@ test("Buscador global está disponible desde AppShell y abre resultados útiles"
 
   const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
   await expect(dialog).toBeVisible();
-  const input = dialog.getByRole("combobox");
+  const input = dialog.getByRole("combobox", { name: "Buscar en Financial App" });
   await input.fill("Mercadona");
 
   const result = dialog.getByRole("option", { name: /Mercadona.*29,10/ }).first();

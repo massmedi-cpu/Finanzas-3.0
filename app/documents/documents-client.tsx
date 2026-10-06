@@ -263,6 +263,7 @@ export function DocumentsClient() {
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
   const [editor, setEditor] = useState({ type: "invoice" as DocumentType, documentDate: "", issuerName: "", total: "", notes: "" });
+  const hasActiveListFilters = Boolean(query.trim() || statusFilter);
 
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
@@ -587,7 +588,27 @@ export function DocumentsClient() {
                   </button>
                 ))}
               </div>
-            ) : <div className={styles.empty}><strong>No hay documentos</strong><p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p></div>}
+            ) : hasActiveListFilters ? (
+              <div className={styles.empty} data-testid="documents-filtered-empty">
+                <strong>No hay coincidencias</strong>
+                <p>No hay documentos que coincidan con los filtros actuales.</p>
+                <button
+                  className={styles.secondaryButton}
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setStatusFilter("");
+                  }}
+                >
+                  Limpiar filtros
+                </button>
+              </div>
+            ) : (
+              <div className={styles.empty} data-testid="documents-repository-empty">
+                <strong>No hay documentos</strong>
+                <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
+              </div>
+            )}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">

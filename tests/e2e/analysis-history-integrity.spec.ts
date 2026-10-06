@@ -73,7 +73,7 @@ function gatewayWithHistory(): AnalysisGatewaySnapshot {
   };
 }
 
-test("Análisis · la tendencia de tasa exige seis meses consecutivos válidos", () => {
+test("QA-06 · la tasa de ahorro usa ventanas agregadas y un mes sin ingresos no domina el trimestre", () => {
   const snapshot = buildAnalysisSnapshot({
     range: "6m",
     month: "2026-07",
@@ -87,14 +87,15 @@ test("Análisis · la tendencia de tasa exige seis meses consecutivos válidos",
     gateway: gatewayWithHistory(),
   });
 
+  expect(snapshot.averages.last3Months?.savingsRateBps).toBe(4_000);
+  expect(snapshot.averages.last6Months?.savingsRateBps).toBe(5_200);
   expect(snapshot.trends.savingsRate).toEqual({
-    direction: "insufficient",
-    delta: null,
-    recentAverage: null,
-    previousAverage: null,
-    sampleMonths: 5,
+    direction: "down",
+    delta: -2_000,
+    recentAverage: 4_000,
+    previousAverage: 6_000,
+    sampleMonths: 6,
   });
-  expect(snapshot.averages.last3Months?.savingsRateBps).toBeNull();
   expect(snapshot.trends.expense.sampleMonths).toBe(6);
 });
 

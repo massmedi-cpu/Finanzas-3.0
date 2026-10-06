@@ -304,6 +304,130 @@
   font-size: var(--font-helper);
 }
 
+.evolutionView {
+  min-width: 0;
+}
+
+.evolutionModes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 var(--space-3);
+  padding: 0.22rem;
+  width: fit-content;
+  max-width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface-strong) 68%, transparent);
+}
+
+.evolutionModes button {
+  min-height: 2.75rem;
+  padding: 0.46rem 0.72rem;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius-md) - 0.18rem);
+  background: transparent;
+  color: var(--color-text-secondary);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.evolutionModes button[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--color-primary) 38%, var(--color-border));
+  background: color-mix(in srgb, var(--color-primary) 13%, var(--color-surface));
+  color: var(--color-text);
+}
+
+.evolutionSingle {
+  min-width: 0;
+  min-height: 15rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(3.5rem, 1fr));
+  align-items: end;
+  gap: clamp(0.25rem, 1vw, 0.65rem);
+  padding: var(--space-3) 0 0;
+  overflow-x: auto;
+}
+
+.evolutionSingleColumn {
+  min-width: 3.5rem;
+  display: grid;
+  grid-template-rows: minmax(8rem, 1fr) auto auto;
+  align-items: end;
+  gap: 0.32rem;
+  text-align: center;
+}
+
+.evolutionBarArea {
+  height: 9rem;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.evolutionSingleBar {
+  width: min(2.4rem, 66%);
+  min-height: 0.2rem;
+  border-radius: 0.45rem 0.45rem 0 0;
+  background: var(--color-primary);
+}
+
+.evolutionSingleBar[data-zero="true"] {
+  min-height: 0;
+}
+
+.evolutionSignedArea {
+  position: relative;
+  align-items: initial;
+  border-bottom: 0;
+}
+
+.evolutionZeroLine {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.evolutionSignedBar {
+  position: absolute;
+  left: 50%;
+  max-height: 50%;
+  transform: translateX(-50%);
+}
+
+.evolutionSignedBar[data-sign="positive"],
+.evolutionSignedBar[data-sign="zero"] {
+  bottom: 50%;
+}
+
+.evolutionSignedBar[data-sign="negative"] {
+  top: 50%;
+  border-radius: 0 0 0.45rem 0.45rem;
+}
+
+.evolutionNegativeBar {
+  background: var(--color-danger);
+}
+
+.evolutionSingleColumn strong {
+  color: var(--color-text);
+  font-size: max(var(--font-helper), 0.72rem);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.evolutionSingleColumn > span {
+  color: var(--color-text-muted);
+  font-size: max(var(--font-helper), 0.68rem);
+  white-space: nowrap;
+}
+
 .comparison strong {
   font-size: var(--font-kpi-secondary);
   font-variant-numeric: tabular-nums;
@@ -513,6 +637,22 @@
 }
 
 @media (max-width: 42.5rem) {
+  .evolutionModes {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .evolutionModes button {
+    width: 100%;
+  }
+
+  .evolutionSingle {
+    grid-auto-columns: minmax(4.25rem, 1fr);
+    grid-template-columns: none;
+    grid-auto-flow: column;
+  }
+
   .shell {
     gap: var(--space-3);
     padding: var(--space-3);

@@ -10,8 +10,8 @@ import {
 } from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
 import { formatMoneyCents } from "../src/core/money";
-import { FinancialBarChart } from "../src/design/financial-bar-chart";
 import HomeSmartBrief from "./home-smart-brief";
+import HomeEvolution from "./home-evolution";
 import { CategoryIdentity } from "./category-identity";
 import styles from "./inicio-overview.module.css";
 
@@ -235,6 +235,30 @@ function accountType(type: string) {
   return labels[type] ?? "Cuenta";
 }
 
+function balanceCoverageLabel(accounts: AccountBalance[]) {
+  const active = accounts.filter((account) => account.lifecycle === "active");
+  if (active.length === 0) return "Fecha bancaria pendiente";
+
+  const dates = active
+    .map((account) => account.explicitBalanceDate)
+    .filter((date): date is string => Boolean(date))
+    .sort();
+
+  if (dates.length === 0) return "Fecha bancaria de los saldos pendiente";
+
+  const uniqueDates = [...new Set(dates)];
+  if (dates.length === active.length && uniqueDates.length === 1) {
+    return `Saldo bancario a ${formatDate(uniqueDates[0])}`;
+  }
+
+  const first = formatDate(uniqueDates[0]);
+  const last = formatDate(uniqueDates.at(-1));
+  const range = first === last ? first : `${first} – ${last}`;
+  return dates.length === active.length
+    ? `Suma de saldos bancarios con fechas distintas · ${range}`
+    : `Suma de saldos con cobertura de fechas parcial · ${range}`;
+}
+
 function kindLabel(kind: TransactionKind) {
   if (kind === "income") return "Ingreso";
   if (kind === "expense") return "Gasto";
@@ -346,6 +370,7 @@ export default function InicioOverview() {
   const [privacyReady, setPrivacyReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [evolutionRevision, setEvolutionRevision] = useState(0);
   const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
 
@@ -451,6 +476,7 @@ export default function InicioOverview() {
       if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
       setSyncFeedback(syncFeedbackFromResult(payload));
       await refreshDashboard();
+      setEvolutionRevision((current) => current + 1);
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
       await loadSyncStatus();
@@ -688,7 +714,7 @@ export default function InicioOverview() {
         <article className={styles.decisionCard}>
           <span>Saldo total en cuentas</span>
           <strong>{financial && consistency.balancesMatch ? displayMoney(financial.balances.activeBalanceCents) : "—"}</strong>
-          <small>{!consistency.balancesMatch ? "Saldo no conciliado" : financial?.balances.asOfDate ? `Saldo a ${formatDate(financial.balances.asOfDate)}` : "Fecha pendiente"}</small>
+          <small>{!consistency.balancesMatch ? "Saldo no conciliado" : financial ? balanceCoverageLabel(financial.balances.accounts) : "Fecha pendiente"}</small>
         </article>
         <article className={styles.decisionCard}>
           <span>Este mes</span>
@@ -768,12 +794,16 @@ export default function InicioOverview() {
             </div>
           )}
           {homeMonthlyRows.length > 0 ? (
-            <FinancialBarChart
+            <HomeEvolution
               rows={homeMonthlyRows}
+              dateFrom={homeMonthlyRows[0]?.monthStart ?? trailingMonthStart(today, 12)}
+              dateTo={today}
               maxValue={monthlyScale}
+              valuesVisible={revealAmounts}
               formatMoney={displayMoney}
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
+              refreshKey={evolutionRevision}
             />
           ) : secondaryLoading ? (
             <div className={styles.skeleton} />

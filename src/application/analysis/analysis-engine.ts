@@ -294,17 +294,23 @@ function average(values: number[]) {
   return Math.round(values.reduce((sum, value) => sum + value, 0) / values.length);
 }
 
+function aggregateSavingsRateBps(rows: AnalysisMonthlyRow[]) {
+  const incomeCents = rows.reduce((sum, row) => sum + row.incomeCents, 0);
+  if (incomeCents <= 0) return null;
+  const savingsCents = rows.reduce((sum, row) => sum + row.savingsCents, 0);
+  return Math.round((savingsCents * 10_000) / incomeCents);
+}
+
 function periodAverage(rows: AnalysisMonthlyRow[], months: number): AnalysisPeriodAverage | null {
   const sample = rows.slice(-months);
   if (sample.length < months) return null;
-  const rates = sample.map((row) => row.savingsRateBps).filter((value): value is number => value !== null);
   return {
     months,
     incomeCents: average(sample.map((row) => row.incomeCents)) ?? 0,
     expenseCents: average(sample.map((row) => row.expenseCents)) ?? 0,
     operatingNetCents: average(sample.map((row) => row.operatingNetCents)) ?? 0,
     savingsCents: average(sample.map((row) => row.savingsCents)) ?? 0,
-    savingsRateBps: rates.length === months ? average(rates) : null,
+    savingsRateBps: aggregateSavingsRateBps(sample),
   };
 }
 
@@ -369,6 +375,40 @@ function anomalyHref(
   if (anomaly.merchantId) params.set("merchantId", anomaly.merchantId);
   else if (anomaly.categoryId) params.set("categoryId", anomaly.categoryId);
   return `/transactions?${params.toString()}`;
+}
+
+function savingsRateTrend(rows: AnalysisMonthlyRow[]): AnalysisTrend {
+  const sampleRows = rows.slice(-6);
+  if (sampleRows.length < 6) {
+    return {
+      direction: "insufficient",
+      delta: null,
+      recentAverage: null,
+      previousAverage: null,
+      sampleMonths: sampleRows.length,
+    };
+  }
+
+  const previousRate = aggregateSavingsRateBps(sampleRows.slice(0, 3));
+  const recentRate = aggregateSavingsRateBps(sampleRows.slice(3));
+  if (previousRate === null || recentRate === null) {
+    return {
+      direction: "insufficient",
+      delta: null,
+      recentAverage: null,
+      previousAverage: null,
+      sampleMonths: sampleRows.filter((row) => row.incomeCents > 0).length,
+    };
+  }
+
+  const delta = recentRate - previousRate;
+  return {
+    direction: delta === 0 ? "stable" : delta > 0 ? "up" : "down",
+    delta,
+    recentAverage: recentRate,
+    previousAverage: previousRate,
+    sampleMonths: 6,
+  };
 }
 
 export function buildAnalysisSnapshot(input: {
@@ -501,7 +541,7 @@ export function buildAnalysisSnapshot(input: {
       expense: trend(completeHistory, (row) => row.expenseCents),
       savings: trend(completeHistory, (row) => row.savingsCents),
       net: trend(completeHistory, (row) => row.operatingNetCents),
-      savingsRate: trend(completeHistory, (row) => row.savingsRateBps),
+      savingsRate: savingsRateTrend(completeHistory),
     },
     categoryDrivers,
     merchantDrivers,

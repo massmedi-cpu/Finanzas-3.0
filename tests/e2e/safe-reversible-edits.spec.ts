@@ -12,7 +12,7 @@ test("Movimientos conserva el banco inmutable y hace reversibles los ajustes man
 
   expect(client).toContain("sin alterar el origen bancario");
   expect(client).toContain("Cada cambio manual se");
-  expect(client).toContain("guarda como override separado");
+  expect(client).toContain("guarda como cambio manual separado");
   expect(client).toContain("Restaurar valor detectado:");
   expect(client).toContain("Restaurar clasificación detectada");
   expect(client).toContain('merchantMode: "inherit"');

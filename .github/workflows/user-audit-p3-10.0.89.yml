@@ -1,0 +1,80 @@
+name: User Audit P3 10.0.89
+
+on:
+  pull_request:
+    branches:
+      - main
+      - "qa/user-audit-p2-10.0.88"
+    paths:
+      - "app/api/financial/**"
+      - "app/analysis/**"
+      - "app/configuration/preferences/**"
+      - "app/documents/**"
+      - "app/forecast/**"
+      - "app/global-search.tsx"
+      - "app/home-evolution.tsx"
+      - "app/inicio-overview.tsx"
+      - "app/inicio-overview.module.css"
+      - "app/transactions/**"
+      - "supabase/functions/financial-app-db-gateway/financial-logic.ts"
+      - "supabase/migrations/20261006160500_qa08_home_balance_series_10_0_89.sql"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "tests/e2e/documents.spec.ts"
+      - "tests/e2e/global-search.spec.ts"
+      - "tests/e2e/user-audit-p3-10.0.89.spec.ts"
+      - "scripts/verify-user-audit-p3-10.0.89.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/user-audit-p3-10.0.89.yml"
+  push:
+    branches:
+      - "qa/user-audit-p3-10.0.89"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: user-audit-p3-10.0.89-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:user-audit-p3
+      - run: npm run build
+
+  p3-browser-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-08 Inicio desktop y móvil
+        run: >-
+          npx playwright test tests/e2e/inicio-smart-brief.spec.ts
+          --grep "QA-08"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
+      - name: QA-09 Documentos desktop y móvil
+        run: >-
+          npx playwright test tests/e2e/documents.spec.ts
+          --grep "QA-09"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
+      - name: QA-07 y QA-10 jerarquía/accesibilidad
+        run: >-
+          npx playwright test tests/e2e/user-audit-p3-10.0.89.spec.ts tests/e2e/global-search.spec.ts
+          --grep "QA-07|QA-10|Buscador global está disponible"
+          --project=chromium-desktop --project=chromium-mobile --workers=1

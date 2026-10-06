@@ -92,6 +92,11 @@
   border-radius: 0.3rem 0.3rem 0.08rem 0.08rem;
 }
 
+.incomeBar[data-zero="true"],
+.expenseBar[data-zero="true"] {
+  min-height: 0;
+}
+
 .incomeBar {
   background: var(--color-success);
 }

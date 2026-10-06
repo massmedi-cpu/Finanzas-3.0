@@ -13,6 +13,7 @@ export type FinancialBarPoint = {
 type FinancialBarChartProps = {
   rows: FinancialBarPoint[];
   maxValue: number;
+  valuesVisible: boolean;
   formatMoney: (cents: number) => string;
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
@@ -21,6 +22,7 @@ type FinancialBarChartProps = {
 export function FinancialBarChart({
   rows,
   maxValue,
+  valuesVisible,
   formatMoney,
   formatMonth,
   partialMonthStart = null,
@@ -31,10 +33,8 @@ export function FinancialBarChart({
     [rows, selectedMonth],
   );
 
-  // Inicio injects the same formatter that masks monetary amounts. When the
-  // formatter cannot distinguish one cent from zero, the chart must not keep
-  // exposing the original values through relative bar heights.
-  const valuesVisible = formatMoney(0) !== formatMoney(1);
+  // La visibilidad se recibe explícitamente desde Inicio: no se deduce del
+  // formato monetario, porque 0 y 1 céntimo pueden redondearse igual.
 
   return (
     <div className={styles.wrapper}>
@@ -59,8 +59,12 @@ export function FinancialBarChart({
           const active = selected?.monthStart === row.monthStart;
           const partial = partialMonthStart === row.monthStart;
           const scale = Math.max(1, maxValue);
-          const incomeHeight = valuesVisible ? Math.max(3, (Math.abs(row.incomeCents) / scale) * 100) : 36;
-          const expenseHeight = valuesVisible ? Math.max(3, (Math.abs(row.expenseCents) / scale) * 100) : 36;
+          const incomeHeight = valuesVisible
+            ? (row.incomeCents === 0 ? 0 : Math.max(3, (Math.abs(row.incomeCents) / scale) * 100))
+            : 36;
+          const expenseHeight = valuesVisible
+            ? (row.expenseCents === 0 ? 0 : Math.max(3, (Math.abs(row.expenseCents) / scale) * 100))
+            : 36;
 
           return (
             <button
@@ -78,8 +82,8 @@ export function FinancialBarChart({
               onFocus={() => setSelectedMonth(row.monthStart)}
             >
               <span className={styles.bars} aria-hidden="true">
-                <span className={styles.incomeBar} style={{ height: `${incomeHeight}%` }} />
-                <span className={styles.expenseBar} style={{ height: `${expenseHeight}%` }} />
+                <span className={styles.incomeBar} data-zero={valuesVisible && row.incomeCents === 0 ? "true" : undefined} style={{ height: `${incomeHeight}%` }} />
+                <span className={styles.expenseBar} data-zero={valuesVisible && row.expenseCents === 0 ? "true" : undefined} style={{ height: `${expenseHeight}%` }} />
               </span>
               <span className={styles.month}>{label}</span>
               {partial && <span className={styles.partialLabel} aria-hidden="true">Par.</span>}

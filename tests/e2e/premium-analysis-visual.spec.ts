@@ -159,7 +159,7 @@ for (const width of WIDTHS) {
 
     await page.setViewportSize({ width, height: width <= 430 ? 900 : 1000 });
     await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-    await page.getByLabel("Mes de referencia").fill("2026-09");
+    await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
     await page.getByRole("button", { name: "Aplicar" }).click();
     await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m$/);
 
@@ -343,7 +343,7 @@ test("QA-02 · Análisis no convierte un periodo sin cobertura completa en tende
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
 
   await expect(page.getByRole("heading", { name: /Datos hasta 10 sept 2026: no interpretamos el periodo posterior como mejora ni empeoramiento/ })).toBeVisible();
@@ -367,7 +367,7 @@ test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema clar
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
@@ -392,4 +392,66 @@ test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema clar
 
   await quick.screenshot({ path: testInfo.outputPath("qa03-light-quick-read.png") });
   await patterns.screenshot({ path: testInfo.outputPath("qa03-light-patterns.png") });
+});
+
+
+test("QA-04 · acumulado y ritmo diario respetan el calendario y representan días sin gasto", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+
+  const accumulated = page.getByRole("region", { name: "Gráfica de gasto acumulado" });
+  const accumulatedXs = await accumulated.locator("circle").evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute("cx"))),
+  );
+  expect(accumulatedXs).toHaveLength(SNAPSHOT.dailySpend.length);
+  expect(accumulatedXs[1] - accumulatedXs[0]).toBeCloseTo(accumulatedXs[2] - accumulatedXs[1], 4);
+  expect(accumulatedXs.at(-1)! - accumulatedXs.at(-2)!).toBeGreaterThan((accumulatedXs[1] - accumulatedXs[0]) * 1.5);
+
+  const daily = page.getByRole("region", { name: "Gráfica de gasto diario" });
+  const dailyXs = await daily.locator("circle").evaluateAll((nodes) =>
+    nodes.map((node) => Number(node.getAttribute("cx"))),
+  );
+  expect(dailyXs).toHaveLength(SNAPSHOT.dailySpend.length);
+  expect(dailyXs.at(-1)! - dailyXs.at(-2)!).toBeGreaterThan((dailyXs[1] - dailyXs[0]) * 1.5);
+
+  const dailyDetails = page.getByText("Ver datos diarios", { exact: true });
+  await dailyDetails.click();
+  await expect(dailyDetails.locator("..").getByRole("table").locator("tbody tr")).toHaveCount(15);
+  const zeroDay = dailyDetails.locator("..").getByRole("table").getByRole("row", { name: /^2 sept / });
+  await expect(zeroDay).toContainText("0,00");
+  await expect(zeroDay.getByRole("cell").last()).toHaveText("0");
+});
+
+test("QA-06 · Análisis identifica la tasa histórica como agregada y no como media de porcentajes mensuales", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+
+  const rateKpi = page.getByLabel("Indicadores principales del periodo").locator("article").filter({ hasText: "Tasa de ahorro" });
+  await expect(rateKpi).toContainText("Tasa agregada");
+  await expect(rateKpi).toContainText(/Tasa de ahorro agregada (al alza|a la baja|estable)/);
+  await expect(rateKpi).not.toContainText("Media mensual · 3 m");
 });
