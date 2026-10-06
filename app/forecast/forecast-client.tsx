@@ -92,7 +92,11 @@ function periodErrorMessage(error: unknown) {
   if (code === "invalid_forecast_date_range_too_large") return "El periodo de previsión no puede superar 730 días.";
   if (code === "invalid_forecast_date_range") return "La fecha final debe ser igual o posterior a la inicial.";
   if (code === "invalid_forecast_date_from" || code === "invalid_forecast_date_to") return "Elige dos fechas válidas para la previsión.";
-  return error instanceof Error ? error.message : "No se pudo cargar la previsión";
+  if (code === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
+  if (code === "forecast_internal_error" || code === "persistence_failed" || code.startsWith("forecast_http_")) {
+    return "La previsión no ha podido calcularse. Los datos disponibles siguen intactos; puedes reintentar.";
+  }
+  return "No se pudo cargar la previsión. Los datos disponibles siguen intactos; puedes reintentar.";
 }
 
 function statusLabel(status: ForecastItem["status"]) {
