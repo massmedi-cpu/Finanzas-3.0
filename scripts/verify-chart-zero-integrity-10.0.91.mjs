@@ -12,9 +12,18 @@ const requireText = (text, token, label) => {
   if (!text.includes(token)) throw new Error(`${label}: falta ${token}`);
 };
 
-if (pkg.version !== "10.0.91") throw new Error(`version esperada 10.0.91, recibida ${pkg.version}`);
+const versionParts = String(pkg.version ?? "").split(".").map(Number);
+const minVersion = [10, 0, 91];
+const versionAtLeast = versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (
+    versionParts[0] > minVersion[0] ||
+    (versionParts[0] === minVersion[0] && versionParts[1] > minVersion[1]) ||
+    (versionParts[0] === minVersion[0] && versionParts[1] === minVersion[1] && versionParts[2] >= minVersion[2])
+  );
+if (!versionAtLeast) throw new Error(`version esperada 10.0.91+, recibida ${pkg.version}`);
 requireText(home, "value === 0 ? 0 : Math.max", "Inicio · serie única");
-requireText(home, 'data-zero={value === 0 ? "true" : undefined}', "Inicio · marca de cero");
+requireText(home, 'data-zero={valuesVisible && value === 0 ? "true" : undefined}', "Inicio · marca de cero protegida por privacidad");
 requireText(bars, "row.incomeCents === 0 ? 0 : Math.max", "Ingresos · cero");
 requireText(bars, "row.expenseCents === 0 ? 0 : Math.max", "Gastos · cero");
 requireText(bars, 'data-zero={valuesVisible && row.incomeCents === 0 ? "true" : undefined}', "Ingresos · marca de cero");
@@ -33,4 +42,4 @@ requireText(home, 'data-series-bar="true"', "marca de barra neutral");
 requireText(home, "Importes, signos y proporciones ocultos por privacidad.", "texto privacidad");
 requireText(e2e, "QA-14 · privacidad oculta también proporciones y signo", "regresión QA-14");
 
-console.log("Financial App 10.0.91 · coherencia de evolución QA-11/12/13/14: OK");
+console.log(`Financial App ${pkg.version} · coherencia de evolución 10.0.91+ QA-11/12/13/14: OK`);

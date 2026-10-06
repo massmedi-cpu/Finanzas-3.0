@@ -5,7 +5,16 @@ const pkg = JSON.parse(read("package.json"));
 const checks = [];
 const requireText = (source, token, label) => checks.push([source.includes(token), `${label}: ${token}`]);
 
-checks.push([pkg.version === "10.0.90", "versión canónica 10.0.90"]);
+const versionParts = String(pkg.version ?? "").split(".").map(Number);
+const minVersion = [10, 0, 90];
+const versionAtLeast = versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (
+    versionParts[0] > minVersion[0] ||
+    (versionParts[0] === minVersion[0] && versionParts[1] > minVersion[1]) ||
+    (versionParts[0] === minVersion[0] && versionParts[1] === minVersion[1] && versionParts[2] >= minVersion[2])
+  );
+checks.push([versionAtLeast, "versión canónica 10.0.90+"]);
 checks.push([
   String(pkg.scripts?.postbuild ?? "").includes("verify-transversal-certification-10.0.90.mjs"),
   "gate transversal incluido en postbuild",
@@ -125,4 +134,4 @@ checks.push([
 const failures = checks.filter(([ok]) => !ok);
 for (const [, label] of failures) console.error(`❌ ${label}`);
 if (failures.length) process.exitCode = 1;
-else console.log("✅ Certificación transversal 10.0.90 · persistencia, restore, PWA, seguridad y accesibilidad");
+else console.log(`✅ Certificación transversal 10.0.90+ · persistencia, restore, PWA, seguridad y accesibilidad · ${pkg.version}`);
