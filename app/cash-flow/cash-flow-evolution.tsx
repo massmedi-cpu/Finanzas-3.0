@@ -54,13 +54,16 @@ export function CashFlowEvolution({
     if (values.length === 0 || points.length === 0) return null;
     const maximum = Math.max(0, ...values);
     const minimum = Math.min(0, ...values);
+    const flatZero = maximum === 0 && minimum === 0;
     const span = Math.max(1, maximum - minimum);
     const innerWidth = width - left - right;
     const innerHeight = height - top - bottom;
     const x = (index: number) => points.length === 1
       ? left + innerWidth / 2
       : left + (index / (points.length - 1)) * innerWidth;
-    const y = (value: number) => top + ((maximum - value) / span) * innerHeight;
+    const y = (value: number) => flatZero
+      ? top + innerHeight / 2
+      : top + ((maximum - value) / span) * innerHeight;
     const paths = Object.fromEntries(series.map(({ key }) => {
       let started = false;
       const commands = points.flatMap((point, index) => {
@@ -71,8 +74,10 @@ export function CashFlowEvolution({
       });
       return [key, commands.join(" ")];
     })) as Record<SeriesKey, string>;
-    const ticks = Array.from({ length: 5 }, (_, index) => maximum - (span * index) / 4);
-    return { width, height, left, right, bottom, x, y, paths, ticks, zeroY: y(0) };
+    const ticks = flatZero
+      ? [0]
+      : Array.from({ length: 5 }, (_, index) => maximum - (span * index) / 4);
+    return { width, height, left, right, bottom, x, y, paths, ticks, zeroY: y(0), flatZero };
   }, [points]);
 
   if (!chart || !active) {
@@ -96,7 +101,7 @@ export function CashFlowEvolution({
           <p className={styles.eyebrow}>EVOLUCIÓN</p>
           <h2 id="cash-flow-evolution-title">Flujo acumulado del mes</h2>
         </div>
-        <p>No es el saldo de las cuentas: muestra cómo se forma el neto real y qué añadirían los eventos pendientes.</p>
+        <p>No es el saldo de las cuentas: muestra cómo se forma el neto real y qué añadirían los eventos pendientes. Si no hay variación, la escala se mantiene en 0 € sin fabricar céntimos.</p>
       </div>
 
       <div className={styles.evolutionLegend} aria-label="Series de la evolución">

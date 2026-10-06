@@ -111,10 +111,13 @@ function comparisonLabel(snapshot: AnalysisSnapshot) {
 function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "net" | "rate", coverageIncomplete = false) {
   if (coverageIncomplete) return "Cobertura incompleta: no interpretamos la variación como tendencia";
   if (trend.direction === "insufficient") return "Aún no hay 6 meses completos para confirmar tendencia";
-  if (trend.direction === "stable") return "Comportamiento estable en los últimos 6 meses";
-  const up = trend.direction === "up";
-  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : kind === "rate" ? "tasa de ahorro" : "neto";
-  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${up ? "al alza" : "a la baja"} frente al trimestre previo`;
+  if (kind === "rate") {
+    if (trend.direction === "stable") return "Tasa de ahorro agregada estable entre los dos últimos trimestres";
+    return `Tasa de ahorro agregada ${trend.direction === "up" ? "al alza" : "a la baja"} ${trend.delta === null ? "" : formatPointDeltaBps(trend.delta)} frente al trimestre previo`.replace("  ", " ");
+  }
+  const noun = kind === "income" ? "ingresos" : kind === "expense" ? "gasto" : "neto";
+  if (trend.direction === "stable") return `Media mensual de ${noun} estable en los últimos 6 meses`;
+  return `Media mensual de ${noun} ${trend.direction === "up" ? "al alza" : "a la baja"} frente al trimestre previo`;
 }
 
 function deltaText(cents: number) {
@@ -168,7 +171,7 @@ function HistoricalReference({ snapshot, metric }: {
 }) {
   const parts = historicalMetric(snapshot, metric);
   if (parts.length === 0) return <span>Histórico insuficiente</span>;
-  return <span>Media mensual · {parts.join(" · ")}</span>;
+  return <span>{metric === "savingsRateBps" ? "Tasa agregada" : "Media mensual"} · {parts.join(" · ")}</span>;
 }
 
 type AnalysisBudgetTotal = NonNullable<NonNullable<AnalysisSnapshot["budget"]>["total"]>;

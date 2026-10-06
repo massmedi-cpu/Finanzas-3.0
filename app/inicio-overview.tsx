@@ -235,6 +235,30 @@ function accountType(type: string) {
   return labels[type] ?? "Cuenta";
 }
 
+function balanceCoverageLabel(accounts: AccountBalance[]) {
+  const active = accounts.filter((account) => account.lifecycle === "active");
+  if (active.length === 0) return "Fecha bancaria pendiente";
+
+  const dates = active
+    .map((account) => account.explicitBalanceDate)
+    .filter((date): date is string => Boolean(date))
+    .sort();
+
+  if (dates.length === 0) return "Fecha bancaria de los saldos pendiente";
+
+  const uniqueDates = [...new Set(dates)];
+  if (dates.length === active.length && uniqueDates.length === 1) {
+    return `Saldo bancario a ${formatDate(uniqueDates[0])}`;
+  }
+
+  const first = formatDate(uniqueDates[0]);
+  const last = formatDate(uniqueDates.at(-1));
+  const range = first === last ? first : `${first} – ${last}`;
+  return dates.length === active.length
+    ? `Suma de saldos bancarios con fechas distintas · ${range}`
+    : `Suma de saldos con cobertura de fechas parcial · ${range}`;
+}
+
 function kindLabel(kind: TransactionKind) {
   if (kind === "income") return "Ingreso";
   if (kind === "expense") return "Gasto";
@@ -688,7 +712,7 @@ export default function InicioOverview() {
         <article className={styles.decisionCard}>
           <span>Saldo total en cuentas</span>
           <strong>{financial && consistency.balancesMatch ? displayMoney(financial.balances.activeBalanceCents) : "—"}</strong>
-          <small>{!consistency.balancesMatch ? "Saldo no conciliado" : financial?.balances.asOfDate ? `Saldo a ${formatDate(financial.balances.asOfDate)}` : "Fecha pendiente"}</small>
+          <small>{!consistency.balancesMatch ? "Saldo no conciliado" : financial ? balanceCoverageLabel(financial.balances.accounts) : "Fecha pendiente"}</small>
         </article>
         <article className={styles.decisionCard}>
           <span>Este mes</span>

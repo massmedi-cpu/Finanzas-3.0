@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import { buildDailySpendCalendar } from "../../src/application/analysis/analysis-calendar-series";
 import { formatInteger, formatNumberWithDigits } from "../../src/core/formatters";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import { CategoryIdentity } from "../category-identity";
@@ -151,8 +152,12 @@ function EmptyChartCard({ eyebrow, title, message }: { eyebrow: string; title: s
 }
 
 function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const rows = snapshot.dailySpend;
-  const { viewportRef, width } = useChartWidth(760, rows.length > 0);
+  const sourceRows = snapshot.dailySpend;
+  const rows = useMemo(
+    () => buildDailySpendCalendar(sourceRows, snapshot.selection.dateFrom, snapshot.selection.dateTo),
+    [sourceRows, snapshot.selection.dateFrom, snapshot.selection.dateTo],
+  );
+  const { viewportRef, width } = useChartWidth(760, sourceRows.length > 0);
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
     const height = 236;
@@ -173,19 +178,29 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     return { width, height, left, right, top, bottom, maximum: scale.maximum, ticks: scale.ticks, points, path };
   }, [rows, width]);
 
-  if (!chart) {
+  if (!chart || sourceRows.length === 0) {
     return <EmptyChartCard eyebrow="RITMO DIARIO" title="Cuándo se está concentrando el gasto" message="No hay gasto diario disponible en este periodo." />;
   }
-  const peakIndex = rows.findIndex((row) => row.expenseCents === Math.max(...rows.map((item) => item.expenseCents)));
+
+  const activityPoints = chart.points.filter((point) => point.row.hasActivity);
+  const peakPoint = activityPoints.reduce<typeof activityPoints[number] | null>(
+    (peak, point) => !peak || point.row.expenseCents > peak.row.expenseCents ? point : peak,
+    null,
+  );
+  const axisIndexes = chart.width < 480
+    ? [0, Math.floor((chart.points.length - 1) / 2), chart.points.length - 1]
+    : Array.from({ length: Math.min(6, chart.points.length) }, (_, index) =>
+        Math.round((index * (chart.points.length - 1)) / Math.max(1, Math.min(6, chart.points.length) - 1)));
+  const uniqueAxisIndexes = [...new Set(axisIndexes)];
 
   return (
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>RITMO DIARIO</span><strong>Cuándo se está concentrando el gasto</strong></div>
-        <small>{formatInteger(rows.reduce((sum, row) => sum + row.rows, 0))} movimientos</small>
+        <small>{formatInteger(sourceRows.reduce((sum, row) => sum + row.rows, 0))} movimientos · días sin gasto = 0 €</small>
       </div>
       <div ref={viewportRef} className={styles.svgViewport} role="region" aria-label="Gráfica de gasto diario" tabIndex={0}>
-        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo con escala en euros">
+        <svg className={styles.dailyChart} viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria del gasto del periodo con escala en euros y días sin gasto representados en cero">
           {chart.ticks.map((value) => {
             const y = chart.top + (1 - value / chart.maximum) * (chart.height - chart.top - chart.bottom);
             return (
@@ -199,23 +214,33 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
             <path className={styles.dailyArea} d={`${chart.path} L ${chart.points.at(-1)?.x} ${chart.height - chart.bottom} L ${chart.points[0].x} ${chart.height - chart.bottom} Z`} />
           )}
           <path className={styles.dailyLine} d={chart.path} />
-          {chart.points.map(({ x, y, row }, index) => (
+          {activityPoints.map(({ x, y, row }, index) => (
             <g key={row.date}>
-              <circle className={styles.dailyPoint} cx={x} cy={y} r={rows.length <= 5 ? "5" : "4"}>
+              <circle className={styles.dailyPoint} cx={x} cy={y} r={activityPoints.length <= 5 ? "5" : "4"}>
                 <title>{`${formatDate(row.date)} · ${formatMoney(row.expenseCents)} · ${row.rows} movimientos`}</title>
               </circle>
               {(chart.width < 480
-                ? (index === peakIndex || index === rows.length - 1)
-                : (rows.length <= 8 || index % Math.max(1, Math.ceil(rows.length / 6)) === 0)) && (
-                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor={index === rows.length - 1 ? "end" : "middle"}>{formatMoney(row.expenseCents)}</text>
-              )}
-              {(chart.width < 480
-                ? (index === 0 || index === Math.floor(rows.length / 2) || index === rows.length - 1)
-                : (index === 0 || index === chart.points.length - 1 || index % Math.max(1, Math.ceil(chart.points.length / 6)) === 0)) && (
-                <text className={styles.axisLabel} x={x} y={chart.height - 10} textAnchor={index === 0 ? "start" : index === rows.length - 1 ? "end" : "middle"}>{formatDate(row.date)}</text>
+                ? (row.date === peakPoint?.row.date || index === activityPoints.length - 1)
+                : (activityPoints.length <= 8 || index % Math.max(1, Math.ceil(activityPoints.length / 6)) === 0)) && (
+                <text className={styles.valueLabel} x={x} y={Math.max(chart.top + 10, y - 10)} textAnchor={index === activityPoints.length - 1 ? "end" : "middle"}>{formatMoney(row.expenseCents)}</text>
               )}
             </g>
           ))}
+          {uniqueAxisIndexes.map((index) => {
+            const point = chart.points[index];
+            if (!point) return null;
+            return (
+              <text
+                key={`axis-${point.row.date}`}
+                className={styles.axisLabel}
+                x={point.x}
+                y={chart.height - 10}
+                textAnchor={index === 0 ? "start" : index === chart.points.length - 1 ? "end" : "middle"}
+              >
+                {formatDate(point.row.date)}
+              </text>
+            );
+          })}
         </svg>
       </div>
       <ChartData
