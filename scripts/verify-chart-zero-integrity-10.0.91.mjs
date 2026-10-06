@@ -41,5 +41,9 @@ requireText(home, "const visualSigned = signed && valuesVisible", "privacidad si
 requireText(home, 'data-series-bar="true"', "marca de barra neutral");
 requireText(home, "Importes, signos y proporciones ocultos por privacidad.", "texto privacidad");
 requireText(e2e, "QA-14 · privacidad oculta también proporciones y signo", "regresión QA-14");
+requireText(home, "reconstructedBalancePoints", "cobertura de saldo reconstruido");
+requireText(home, "Cobertura mixta:", "aviso de cobertura mixta");
+requireText(home, "saldo inicial + movimientos", "origen de reconstrucción");
+requireText(e2e, "QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas", "regresión QA-15");
 
-console.log(`Financial App ${pkg.version} · coherencia de evolución 10.0.91+ QA-11/12/13/14: OK`);
+console.log(`Financial App ${pkg.version} · coherencia de evolución 10.0.91+ QA-11/12/13/14/15: OK`);

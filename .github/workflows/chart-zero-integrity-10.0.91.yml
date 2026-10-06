@@ -51,8 +51,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - name: QA-11/12/13/14 · evolución y privacidad desktop y móvil
+      - name: QA-11/12/13/14/15 · evolución, privacidad y cobertura desktop y móvil
         run: >-
           npx playwright test tests/e2e/inicio-smart-brief.spec.ts
-          --grep "QA-11|QA-12|QA-13|QA-14"
+          --grep "QA-11|QA-12|QA-13|QA-14|QA-15"
           --project=chromium-desktop --project=chromium-mobile --workers=1

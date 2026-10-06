@@ -130,6 +130,10 @@ export default function HomeEvolution({
   }, [balanceCache?.key, balanceKey, dateFrom, dateTo, mode]);
 
   const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
+  const reconstructedBalancePoints = useMemo(
+    () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
+    [balanceRows],
+  );
 
   return (
     <div className={styles.evolutionView}>
@@ -182,7 +186,11 @@ export default function HomeEvolution({
             formatMoney={formatMoney}
             formatMonth={formatMonth}
           />
-          <p className={styles.helper}>Saldo bancario disponible a cada cierre o fecha de corte. Usa el motor canónico de saldos y no reconstruye el saldo sumando el cash flow.</p>
+          <p className={styles.helper}>
+            {reconstructedBalancePoints === 0
+              ? `Cobertura: ${balanceRows.length} de ${balanceRows.length} puntos usan saldos bancarios explícitos. No se reconstruye desde Cash Flow.`
+              : `Cobertura mixta: ${reconstructedBalancePoints} de ${balanceRows.length} puntos incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos. No se reconstruye desde Cash Flow.`}
+          </p>
         </>
       ) : null}
     </div>

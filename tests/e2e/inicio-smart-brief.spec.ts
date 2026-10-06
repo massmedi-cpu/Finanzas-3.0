@@ -629,3 +629,47 @@ test("QA-14 · privacidad oculta también proporciones y signo en Saldo y Flujo 
   expect(new Set(heights)).toEqual(new Set(["36%"]));
   await expect(chart).toHaveAttribute("aria-label", /Importes, signos y proporciones ocultos por privacidad/);
 });
+
+
+test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    await json(route, {
+      dateFrom: "2026-08-01",
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: [
+        {
+          monthStart: "2026-08-01",
+          asOfDate: "2026-08-31",
+          balanceCents: 100000,
+          accounts: 2,
+          explicitBalanceAccounts: 2,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-09-01",
+          asOfDate: "2026-09-16",
+          balanceCents: 105000,
+          accounts: 2,
+          explicitBalanceAccounts: 1,
+          reconstructedBalanceAccounts: 1,
+        },
+      ],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Saldo" }).click();
+
+  await expect(page.getByText(/Cobertura mixta:/)).toContainText("1 de 2 puntos");
+  await expect(page.getByText(/Cobertura mixta:/)).toContainText("saldo inicial + movimientos");
+  await expect(page.getByText(/Cobertura mixta:/)).toContainText("No se reconstruye desde Cash Flow");
+});
