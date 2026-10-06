@@ -189,7 +189,7 @@ test("QA-09 · Documentos distingue filtros sin coincidencias de un repositorio 
   await page.goto("/documents");
   await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
 
-  await page.getByLabel("Buscar").fill("sin-coincidencias");
+  await page.getByRole("complementary", { name: "Listado de documentos" }).getByLabel("Buscar", { exact: true }).fill("sin-coincidencias");
   await expect(page.getByTestId("documents-filtered-empty")).toContainText("No hay coincidencias");
   await expect(page.getByTestId("documents-filtered-empty")).not.toContainText("Añade el primero");
 
