@@ -357,7 +357,7 @@ test("10.0.86 · edición de etiquetas valida el límite antes de escribir", asy
   );
   await page.getByTestId("save-edit").click();
 
-  await expect(page.getByRole("alert")).toContainText("hasta 12 etiquetas");
+  await expect(page.locator("#transaction-tags-error")).toContainText("hasta 12 etiquetas");
   expect(patches).toHaveLength(0);
 });
 
