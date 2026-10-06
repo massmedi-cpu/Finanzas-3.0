@@ -59,17 +59,18 @@ function SingleSeriesBars({
         const available = availableFor ? availableFor(row) : true;
         const value = available ? valueFor(row) : 0;
         const height = value === 0 ? 0 : Math.max(3, (Math.abs(value) / max) * 100);
-        const visualSigned = available && signed && valuesVisible;
-        const renderedHeight = valuesVisible ? (visualSigned ? height / 2 : height) : 36;
-        const sign = visualSigned ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
+        const visualSigned = signed && valuesVisible;
+        const renderedSigned = available && visualSigned;
+        const renderedHeight = valuesVisible ? (renderedSigned ? height / 2 : height) : 36;
+        const sign = renderedSigned ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
         return (
           <div className={styles.evolutionSingleColumn} key={row.monthStart}>
-            <div className={`${styles.evolutionBarArea}${visualSigned ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
+            <div className={`${styles.evolutionBarArea}${renderedSigned ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
               {available ? (
                 <>
-                  {visualSigned ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
+                  {renderedSigned ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
                   <span
-                    className={`${styles.evolutionSingleBar} ${visualSigned ? styles.evolutionSignedBar : ""} ${visualSigned && value < 0 ? styles.evolutionNegativeBar : ""}`}
+                    className={`${styles.evolutionSingleBar} ${renderedSigned ? styles.evolutionSignedBar : ""} ${renderedSigned && value < 0 ? styles.evolutionNegativeBar : ""}`}
                     data-series-bar="true"
                     data-zero={valuesVisible && value === 0 ? "true" : undefined}
                     data-sign={sign}
