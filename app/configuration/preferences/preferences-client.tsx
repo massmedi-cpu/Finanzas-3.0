@@ -27,7 +27,7 @@ export default function PreferencesClient() {
     <main className="configuration-shell">
       <section className="configuration-hero">
         <div>
-          <p className="eyebrow">Configuración · Fase 8</p>
+          <p className="eyebrow">Configuración · Preferencias</p>
           <h1>Preferencias generales</h1>
           <p className="hero-copy">Solo se muestran ajustes con efecto real en Financial App. El formato regional permanece fijado en Español (España) y EUR por contrato del producto.</p>
         </div>
@@ -59,7 +59,7 @@ export default function PreferencesClient() {
         <section className="config-panel">
           <p className="panel-kicker">Inicio</p>
           <h2>Página inicial al abrir</h2>
-          <select value={homeDestination} onChange={(event) => change(() => setHomeDestination(event.currentTarget.value as "/" | "/analysis" | "/forecast"), "Página inicial actualizada para el próximo arranque de sesión.")}>
+          <select aria-label="Página inicial al abrir" value={homeDestination} onChange={(event) => change(() => setHomeDestination(event.currentTarget.value as "/" | "/analysis" | "/forecast"), "Página inicial actualizada para el próximo arranque de sesión.")}>
             <option value="/">Inicio</option>
             <option value="/analysis">Análisis</option>
             <option value="/forecast">Previsión</option>
