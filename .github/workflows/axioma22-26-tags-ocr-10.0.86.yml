@@ -1,0 +1,48 @@
+name: Axioma 22 26 Tags OCR 10.0.86
+
+on:
+  pull_request:
+    paths:
+      - "app/api/transactions/**"
+      - "app/transactions/**"
+      - "supabase/functions/financial-app-db-gateway/transaction-management.ts"
+      - "supabase/functions/financial-app-db-gateway/transaction-query.ts"
+      - "supabase/migrations/20261006095500_axioma22_26_tags_ocr_10_0_86.sql"
+      - "tests/e2e/transactions.spec.ts"
+      - "scripts/verify-axioma22-26-tags-ocr-10.0.86.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/axioma22-26-tags-ocr-10.0.86.yml"
+  push:
+    branches:
+      - "audit/axioma-26-tags-ocr-10.0.86"
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-types:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run verify:axioma22-26-tags-ocr
+
+  transactions-desktop-mobile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test tests/e2e/transactions.spec.ts --grep "10.0.86" --project=chromium-desktop --project=chromium-mobile --workers=1
