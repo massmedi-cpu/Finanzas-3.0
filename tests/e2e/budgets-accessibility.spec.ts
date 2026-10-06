@@ -1,10 +1,25 @@
 import { expect, test } from "@playwright/test";
 
+function madridMonth() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric",
+    month: "2-digit",
+    timeZone: "Europe/Madrid",
+  }).formatToParts(new Date());
+  const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}`;
+}
+
+const TEST_MONTH = madridMonth();
+const [TEST_YEAR, TEST_MONTH_NUMBER] = TEST_MONTH.split("-").map(Number);
+const TEST_MONTH_START = `${TEST_MONTH}-01`;
+const TEST_MONTH_END = `${TEST_MONTH}-${String(new Date(Date.UTC(TEST_YEAR, TEST_MONTH_NUMBER, 0)).getUTCDate()).padStart(2, "0")}`;
+
 const snapshot = {
   contractVersion: 1,
-  month: "2026-09",
-  monthStart: "2026-09-01",
-  monthEnd: "2026-09-30",
+  month: TEST_MONTH,
+  monthStart: TEST_MONTH_START,
+  monthEnd: TEST_MONTH_END,
   total: {
     id: "10000000-0000-4000-8000-000000000001",
     persisted: true,
@@ -81,7 +96,6 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
 
   await page.goto("/budgets");
   await expect(page.getByRole("heading", { name: "Presupuestos" })).toBeVisible();
-  await page.getByLabel("Mes", { exact: true }).fill("2026-09");
   await expect(page.getByRole("button", { name: "Definir límite" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
@@ -105,9 +119,9 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
   await expect(fieldError).toHaveCount(0);
 
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
+  await expect(page.locator("#main-content").getByText("Límite elegido guardado.", { exact: true })).toBeVisible();
   expect(writes).toHaveLength(1);
-  expect(writes[0]).toMatchObject({ month: "2026-09", categoryId: null, manualAmountCents: 123456 });
+  expect(writes[0]).toMatchObject({ month: TEST_MONTH, categoryId: null, manualAmountCents: 123456 });
 });
 
 test("Presupuestos conserva targets táctiles de al menos 44 px en 360, 430 y 480", async ({ page }, testInfo) => {
@@ -136,7 +150,6 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
   await mockBudgetRead(page);
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto("/budgets");
-  await page.getByLabel("Mes", { exact: true }).fill("2026-09");
   await expect(page.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
 
   const totalCard = page.getByRole("heading", { name: "Presupuesto mensual total" }).locator("xpath=ancestor::article");
@@ -147,7 +160,7 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
     page.getByText("Referencia automática", { exact: true }).first(),
     page.getByText("Dentro de referencia", { exact: true }).first(),
     totalCard.getByText("Gastado", { exact: true }),
-    totalCard.getByText("Comparación con lo habitual", { exact: true }),
+    totalCard.getByText("Uso de la referencia", { exact: true }),
     page.getByText("Junio", { exact: true }),
     page.getByText(snapshot.total.automaticExplanation, { exact: true }),
     page.getByText("El gasto procede de tus movimientos. La referencia automática combina señales históricas sin convertirse en una recomendación financiera.", { exact: true }),
