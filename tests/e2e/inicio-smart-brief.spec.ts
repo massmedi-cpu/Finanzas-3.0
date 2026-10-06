@@ -557,7 +557,7 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
 test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el panel en blanco", async ({ page }) => {
   await mockInicio(page);
 
-  await page.route(/\\/api\\/financial\\?mode=balance_series.*/, async (route) => {
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
       dateFrom: "2026-07-01",
       dateTo: "2026-09-16",
