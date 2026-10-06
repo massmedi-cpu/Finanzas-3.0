@@ -154,6 +154,10 @@ export default function HomeEvolution({
   );
   const balanceMissingPoints = balanceRows.length - balanceAvailablePoints;
   const balanceHasAccounts = balanceAvailablePoints > 0;
+  const balanceHasNegative = useMemo(
+    () => balanceRows.some((row) => row.accounts > 0 && row.balanceCents < 0),
+    [balanceRows],
+  );
   const balanceCoverageMessage = useMemo(() => {
     if (!balanceHasAccounts) return "";
     if (balanceMissingPoints > 0) {
@@ -220,6 +224,7 @@ export default function HomeEvolution({
             availableFor={(row) => (row as BalanceRow).accounts > 0}
             label="Saldo bancario agregado por mes"
             valuesVisible={valuesVisible}
+            signed={balanceHasNegative}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
           />
