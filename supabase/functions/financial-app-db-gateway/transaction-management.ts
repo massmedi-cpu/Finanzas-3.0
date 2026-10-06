@@ -33,6 +33,17 @@ function transactionIds(value: unknown): string[] {
   return value;
 }
 
+function transactionId(value: unknown): string {
+  if (typeof value !== "string" || !UUID.test(value)) throw new Error("invalid_transaction_id");
+  return value;
+}
+
+function splitAllocations(value: unknown): unknown[] {
+  if (!Array.isArray(value) || value.length > 20) throw new Error("invalid_transaction_split");
+  if (value.length === 1) throw new Error("transaction_split_requires_2_to_20_allocations");
+  return value;
+}
+
 function transactionPatch(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("invalid_transaction_patch");
@@ -52,6 +63,98 @@ export async function handleTransactionManagementAction(input: {
   environment: unknown;
 }): Promise<Response | null> {
   const { action, payload, sql, environment } = input;
+
+  if (action === "transaction.split_save") {
+    const id = transactionId(payload.transactionId);
+    const allocations = splitAllocations(payload.allocations);
+    const rows = await sql`
+      select financial_app.save_transaction_split(${id}::uuid,${allocations}::jsonb) as result
+    `;
+    return json({ result: rows[0]?.result ?? null });
+  }
+
+  if (action === "test.transaction_split_engine") {
+    if (environment !== "preview") {
+      return json({ error: "test_transaction_split_engine_preview_only" }, 403);
+    }
+
+    let verified = false;
+    let transactionIdTest: string | null = null;
+
+    try {
+      await sql.begin(async (tx: any) => {
+        const txRows = await tx`
+          select t.id,t.amount_cents
+          from financial_app.transactions t
+          left join financial_app.transaction_overrides o on o.transaction_id=t.id
+          where abs(t.amount_cents)>=2
+            and financial_app.effective_transaction_kind(t.id,t.kind,o.kind_override,t.transfer_pair_id)<>'transfer'
+          order by t.bank_date desc,t.id
+          limit 1
+        `;
+        const source = txRows[0];
+        if (!source?.id || !Number.isSafeInteger(source.amount_cents)) {
+          throw new Error("test_transaction_split_transaction_missing");
+        }
+        transactionIdTest = source.id;
+
+        const sign = source.amount_cents < 0 ? -1 : 1;
+        const firstAmount = sign * Math.max(1, Math.floor(Math.abs(source.amount_cents) / 2));
+        const secondAmount = source.amount_cents - firstAmount;
+        if (secondAmount === 0) throw new Error("test_transaction_split_amount_failed");
+
+        const saveRows = await tx`
+          select financial_app.save_transaction_split(
+            ${source.id}::uuid,
+            ${[
+              { amountCents: firstAmount, scope: "personal", categoryId: null, label: "Prueba personal" },
+              { amountCents: secondAmount, scope: "other", categoryId: null, label: "Prueba compartida" },
+            ]}::jsonb
+          ) as result
+        `;
+        const snapshot = saveRows[0]?.result;
+        if (
+          snapshot?.active !== true ||
+          snapshot?.bankAmountCents !== source.amount_cents ||
+          snapshot?.personalAmountCents !== firstAmount ||
+          snapshot?.otherAmountCents !== secondAmount
+        ) {
+          throw new Error("test_transaction_split_snapshot_failed");
+        }
+
+        const factRows = await tx`
+          select amount_cents
+          from financial_app.financial_transaction_facts(null,null,null)
+          where transaction_id=${source.id}::uuid
+        `;
+        if (factRows[0]?.amount_cents !== firstAmount) {
+          throw new Error("test_transaction_split_personal_fact_failed");
+        }
+
+        const bankRows = await tx`
+          select amount_cents from financial_app.transactions where id=${source.id}::uuid
+        `;
+        if (bankRows[0]?.amount_cents !== source.amount_cents) {
+          throw new Error("test_transaction_split_source_mutated");
+        }
+
+        verified = true;
+        throw new Error("__ROLLBACK_TRANSACTION_SPLIT_TEST__");
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || error.message !== "__ROLLBACK_TRANSACTION_SPLIT_TEST__") throw error;
+    }
+
+    const residueRows = transactionIdTest
+      ? await sql`
+          select
+            (select count(*)::int from financial_app.transaction_split_allocations where transaction_id=${transactionIdTest}::uuid) as splits,
+            (select count(*)::int from financial_app.audit_changes where entity_id=${transactionIdTest}::uuid and field_name='split_allocations') as audits
+        `
+      : [{ splits: 0, audits: 0 }];
+
+    return json({ verified, clean: residueRows[0]?.splits === 0 && residueRows[0]?.audits === 0 });
+  }
 
   if (action === "transaction.patch") {
     const ids = transactionIds(payload.transactionIds);
