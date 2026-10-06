@@ -98,23 +98,17 @@ export function FinancialBarChart({
             {formatMonth(selected.monthStart)}
             {partialMonthStart === selected.monthStart ? " · parcial" : ""}
           </strong>
-          {valuesVisible ? (
-            <>
-              <span>
-                <i className={styles.incomeDot} aria-hidden="true" />
-                Ingresos {formatMoney(selected.incomeCents)}
-              </span>
-              <span>
-                <i className={styles.expenseDot} aria-hidden="true" />
-                Gastos {formatMoney(selected.expenseCents)}
-              </span>
-              <span className={selected.operatingNetCents < 0 ? styles.readoutNegative : styles.readoutPositive}>
-                Balance {formatMoney(selected.operatingNetCents)}
-              </span>
-            </>
-          ) : (
-            <span>Importes ocultos por privacidad</span>
-          )}
+          <span>
+            <i className={styles.incomeDot} aria-hidden="true" />
+            Ingresos {formatMoney(selected.incomeCents)}
+          </span>
+          <span>
+            <i className={styles.expenseDot} aria-hidden="true" />
+            Gastos {formatMoney(selected.expenseCents)}
+          </span>
+          <span className={selected.operatingNetCents < 0 ? styles.readoutNegative : styles.readoutPositive}>
+            Balance {formatMoney(selected.operatingNetCents)}
+          </span>
         </div>
       )}
     </div>
