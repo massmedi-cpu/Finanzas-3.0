@@ -194,7 +194,7 @@ export async function handleTransactionQueryAction(input: {
         order by value
       `,
       sql`
-        select distinct pg_catalog.extract(year from bank_date)::integer as value
+        select distinct extract(year from bank_date)::integer as value
         from financial_app.transactions
         order by value desc
       `,
