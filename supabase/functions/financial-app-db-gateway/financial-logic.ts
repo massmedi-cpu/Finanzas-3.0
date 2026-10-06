@@ -131,6 +131,15 @@ export async function handleFinancialLogicAction(input: {
     `);
   }
 
+  if (action === "financial.balance_series") {
+    const f = financialFilters(payload);
+    return financialQuery(() => sql`
+      select financial_app.financial_balance_series(
+        ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid
+      ) as result
+    `);
+  }
+
   if (action === "financial.snapshot") {
     const f = financialFilters(payload);
     if (payload.analysis === true) {
