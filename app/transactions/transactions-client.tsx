@@ -272,6 +272,7 @@ function readableError(payload: any) {
   if (code === "authentication_required") return "Tu sesión ha caducado antes de guardar.";
   if (code === "authentication_unavailable") return "El acceso seguro no está disponible temporalmente.";
   if (code.includes("date_range")) return "La fecha inicial no puede ser posterior a la fecha final.";
+  if (code.includes("amount_range")) return "El importe mínimo no puede ser superior al importe máximo.";
   if (code.includes("cursor")) return "La paginación ha quedado desfasada. Actualiza el listado.";
   if (code.includes("page_limit")) return "El tamaño de página solicitado no es válido.";
   if (code.includes("transaction_not_found")) return "Algún movimiento ya no está disponible. Actualiza el listado.";
