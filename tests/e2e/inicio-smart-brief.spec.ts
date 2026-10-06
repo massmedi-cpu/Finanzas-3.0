@@ -759,3 +759,62 @@ test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({
   await expect(page.getByText(/Cobertura parcial:/)).toContainText("no como 0 €");
 });
 
+test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    await json(route, {
+      dateFrom: "2026-08-01",
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: [
+        {
+          monthStart: "2026-08-01",
+          asOfDate: "2026-08-31",
+          balanceCents: 100000,
+          accounts: 1,
+          explicitBalanceAccounts: 1,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-09-01",
+          asOfDate: "2026-09-16",
+          balanceCents: -25000,
+          accounts: 1,
+          explicitBalanceAccounts: 1,
+          reconstructedBalanceAccounts: 0,
+        },
+      ],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Saldo" }).click();
+
+  const chart = page.getByRole("group", { name: "Saldo bancario agregado por mes" });
+  const zeroLine = chart.locator('[data-zero-line="true"]').first();
+  const positive = chart.locator('[data-sign="positive"]').first();
+  const negative = chart.locator('[data-sign="negative"]').first();
+
+  await expect(zeroLine).toBeVisible();
+  await expect(positive).toBeVisible();
+  await expect(negative).toBeVisible();
+
+  const lineBox = await zeroLine.boundingBox();
+  const positiveBox = await positive.boundingBox();
+  const negativeBox = await negative.boundingBox();
+  if (!lineBox || !positiveBox || !negativeBox) throw new Error("QA-19: geometría de saldo no disponible");
+
+  const baseline = lineBox.y;
+  expect(positiveBox.y).toBeLessThan(baseline);
+  expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 2);
+  expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 2);
+  expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
+});
+
