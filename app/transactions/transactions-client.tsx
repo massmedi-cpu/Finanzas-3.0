@@ -111,6 +111,7 @@ type Facets = {
   merchants: Array<{ id: string; name: string; lifecycle: Lifecycle }>;
   channels: string[];
   reconciliationStates: string[];
+  years: number[];
 };
 
 type Filters = {
@@ -130,6 +131,8 @@ type Filters = {
   hasDocument: string;
   documentQuery: string;
   splitLabel: string;
+  year: string;
+  month: string;
   amountFrom: string;
   amountTo: string;
   dateFrom: string;
@@ -181,13 +184,15 @@ const EMPTY_FILTERS: Filters = {
   hasDocument: "",
   documentQuery: "",
   splitLabel: "",
+  year: "",
+  month: "",
   amountFrom: "",
   amountTo: "",
   dateFrom: "",
   dateTo: "",
 };
 
-const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [] };
+const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [], years: [] };
 
 const KIND_LABELS: Record<TransactionKind, string> = {
   income: "Ingreso",
@@ -202,6 +207,11 @@ const REVIEW_STATE_LABELS: Record<ReviewState, string> = {
   pending: "Pendiente",
   needs_review: "Por revisar",
 };
+
+const MONTH_LABELS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+] as const;
 
 const DUPLICATE_LABELS: Record<DuplicateState, string> = {
   none: "Sin duplicado",
@@ -274,6 +284,8 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["hasDocument", "hasDocument"],
     ["documentQuery", "documentQuery"],
     ["splitLabel", "splitLabel"],
+    ["year", "year"],
+    ["month", "month"],
     ["dateFrom", "dateFrom"],
     ["dateTo", "dateTo"],
   ];
@@ -496,6 +508,7 @@ export default function TransactionsClient() {
             merchants: Array.isArray(payload.merchants) ? payload.merchants : [],
             channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
             reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
+            years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
           });
         }
       } catch (cause) {
@@ -520,6 +533,8 @@ export default function TransactionsClient() {
     const recurring = params.get("recurring");
     const internalTransfer = params.get("internalTransfer");
     const hasDocument = params.get("hasDocument");
+    const year = params.get("year");
+    const month = params.get("month");
     const amountFrom = centsParamToMoneyFilter(params.get("amountFromCents"));
     const amountTo = centsParamToMoneyFilter(params.get("amountToCents"));
     const dateFrom = params.get("dateFrom");
@@ -545,6 +560,8 @@ export default function TransactionsClient() {
       hasDocument: hasDocument === "true" ? "true" : "",
       documentQuery: (params.get("documentQuery") ?? "").trim().slice(0, 200),
       splitLabel: (params.get("splitLabel") ?? "").trim().slice(0, 200),
+      year: year && /^\d{4}$/.test(year) ? year : "",
+      month: year && month && /^(?:[1-9]|1[0-2])$/.test(month) ? month : "",
       amountFrom,
       amountTo,
       dateFrom: safeDateRange ? safeDateFrom : "",
@@ -1007,6 +1024,20 @@ async function saveEdit(row: TransactionRow) {
         <label>
           <span>Importe máximo</span>
           <input inputMode="decimal" value={draftFilters.amountTo} onChange={(event) => updateFilter("amountTo", event.target.value)} placeholder="100,00" aria-label="Importe máximo en euros" />
+        </label>
+        <label>
+          <span>Año</span>
+          <select value={draftFilters.year} onChange={(event) => setDraftFilters((current) => ({ ...current, year: event.target.value, month: event.target.value ? current.month : "" }))}>
+            <option value="">Todos</option>
+            {facets.years.map((value) => <option key={value} value={String(value)}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Mes</span>
+          <select value={draftFilters.month} disabled={!draftFilters.year} onChange={(event) => updateFilter("month", event.target.value)}>
+            <option value="">Todos</option>
+            {MONTH_LABELS.map((label, index) => <option key={label} value={String(index + 1)}>{label}</option>)}
+          </select>
         </label>
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
