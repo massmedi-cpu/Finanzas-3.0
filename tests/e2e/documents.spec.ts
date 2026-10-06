@@ -83,7 +83,19 @@ async function mockDocumentApi(
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     if (method === "GET") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ contractVersion: 1, items: [{ ...detail.document, associationCount: detail.associations.length }], total: 1, limit: 50, offset: 0, principles }) }); return;
+      const filteredEmpty = url.searchParams.get("q") === "sin-coincidencias" || url.searchParams.get("status") === "confirmed";
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1,
+          items: filteredEmpty ? [] : [{ ...detail.document, associationCount: detail.associations.length }],
+          total: filteredEmpty ? 0 : 1,
+          limit: 50,
+          offset: 0,
+          principles,
+        }),
+      }); return;
     }
     const body = request.postDataJSON() as Record<string, any>;
     writes.push({ method, ...body });
@@ -169,6 +181,20 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   expect(overflow).toBe(false);
   const undersized = await page.locator("main button, main input, main select").evaluateAll((elements) => elements.filter((el) => { const rect = el.getBoundingClientRect(); return rect.width > 0 && rect.height > 0 && rect.height < 44; }).length);
   expect(undersized).toBe(0);
+});
+
+test("QA-09 · Documentos distingue filtros sin coincidencias de un repositorio vacío", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
+
+  await page.getByLabel("Buscar").fill("sin-coincidencias");
+  await expect(page.getByTestId("documents-filtered-empty")).toContainText("No hay coincidencias");
+  await expect(page.getByTestId("documents-filtered-empty")).not.toContainText("Añade el primero");
+
+  await page.getByRole("button", { name: "Limpiar filtros" }).click();
+  await expect(page.getByText("factura-demo.pdf").first()).toBeVisible();
 });
 
 test("Documentos runs OCR only after explicit action and never writes financial data", async ({ page }) => {
