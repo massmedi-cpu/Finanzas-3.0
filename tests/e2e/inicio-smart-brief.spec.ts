@@ -305,6 +305,77 @@ test("QA-08 · Inicio ofrece Saldo, Ingresos y gastos y Flujo neto desde motores
   await expect(page.getByText(/ingresos menos gastos elegibles/i)).toBeVisible();
 });
 
+test("QA-08 · Saldo se invalida al Actualizar datos aunque el periodo no cambie", async ({ page }) => {
+  await mockInicio(page);
+
+  let refreshed = false;
+  const balanceRequests: Array<{ dateFrom: string; refreshed: boolean }> = [];
+
+  await page.route("**/api/source/google/sync", async (route) => {
+    if (route.request().method() !== "POST") {
+      await route.fallback();
+      return;
+    }
+    refreshed = true;
+    await json(route, {
+      run: {
+        id: "run-refresh",
+        status: "success",
+        startedAt: "2026-09-16T06:10:00.000Z",
+        finishedAt: "2026-09-16T06:10:05.000Z",
+        rowsSeen: 12,
+        rowsInserted: 0,
+        rowsRevised: 0,
+        rowsSkipped: 12,
+        rowsFailed: 0,
+        errorCode: null,
+        errorMessage: null,
+      },
+      cursors: [],
+    });
+  });
+
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    const url = new URL(route.request().url());
+    const dateFrom = url.searchParams.get("dateFrom") ?? "";
+    balanceRequests.push({ dateFrom, refreshed });
+    await json(route, {
+      dateFrom,
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: refreshed
+        ? [
+            { monthStart: "2026-07-01", asOfDate: "2026-07-31", balanceCents: 44000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+            { monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 45000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+          ]
+        : [
+            { monthStart: "2026-07-01", asOfDate: "2026-07-31", balanceCents: 29000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+            { monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 30000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+          ],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  const selector = page.getByRole("group", { name: "Vista de evolución financiera" });
+  await selector.getByRole("button", { name: "Saldo" }).click();
+
+  const balanceChart = page.getByRole("group", { name: "Saldo bancario agregado por mes" });
+  await expect(balanceChart).toContainText("300,00");
+  expect(balanceRequests.some((request) => request.dateFrom === "2026-07-01" && !request.refreshed)).toBe(true);
+
+  await page.getByRole("button", { name: "Actualizar datos" }).click();
+
+  await expect.poll(() => balanceRequests.filter((request) => request.refreshed).length).toBeGreaterThan(0);
+  await expect(balanceChart).toContainText("450,00");
+  await expect(balanceChart).not.toContainText("300,00");
+});
+
 test("Primera visita crea referencia para el futuro sin inventar cambios", async ({ page }) => {
   await mockInicio(page);
   await page.goto("/");

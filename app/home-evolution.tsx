@@ -74,6 +74,7 @@ export default function HomeEvolution({
   formatMoney,
   formatMonth,
   partialMonthStart,
+  refreshKey,
 }: {
   rows: FinancialBarPoint[];
   dateFrom: string;
@@ -82,14 +83,17 @@ export default function HomeEvolution({
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
+  refreshKey: number;
 }) {
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
-  const [balances, setBalances] = useState<BalanceSeries | null>(null);
+  const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState(false);
+  const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
+  const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
 
   useEffect(() => {
-    if (mode !== "balance" || balances) return;
+    if (mode !== "balance" || balanceCache?.key === balanceKey) return;
     const controller = new AbortController();
     setBalanceLoading(true);
     setBalanceError(false);
@@ -100,7 +104,7 @@ export default function HomeEvolution({
         return response.json() as Promise<BalanceSeries>;
       })
       .then((payload) => {
-        if (!controller.signal.aborted) setBalances(payload);
+        if (!controller.signal.aborted) setBalanceCache({ key: balanceKey, data: payload });
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
@@ -111,7 +115,7 @@ export default function HomeEvolution({
         if (!controller.signal.aborted) setBalanceLoading(false);
       });
     return () => controller.abort();
-  }, [balances, dateFrom, dateTo, mode]);
+  }, [balanceCache?.key, balanceKey, dateFrom, dateTo, mode]);
 
   const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
 
