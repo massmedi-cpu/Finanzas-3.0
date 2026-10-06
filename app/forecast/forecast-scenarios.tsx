@@ -102,7 +102,9 @@ export function ForecastScenarios({ snapshot }: { snapshot: ForecastSnapshot }) 
       <div className={styles.grid}>
         {scenarios.map((scenario) => {
           const labels = LABELS[scenario.key];
-          const editable = scenario.key !== "expected";
+          const editableKey = scenario.key === "conservative" || scenario.key === "optimistic"
+            ? scenario.key
+            : null;
           return (
             <article className={styles.card} key={scenario.key} data-scenario={scenario.key}>
               <div className={styles.cardHeader}>
@@ -122,7 +124,7 @@ export function ForecastScenarios({ snapshot }: { snapshot: ForecastSnapshot }) 
                 <div><dt>Saldo final</dt><dd>{formatMoneyCents(scenario.closingBalanceCents)}</dd></div>
               </dl>
 
-              {editable ? (
+              {editableKey ? (
                 <fieldset className={styles.assumptions}>
                   <legend>Hipótesis editables</legend>
                   <label>
@@ -137,7 +139,7 @@ export function ForecastScenarios({ snapshot }: { snapshot: ForecastSnapshot }) 
                         step="1"
                         value={scenario.assumptions.incomeAdjustmentPercent}
                         onChange={(event) => updateAssumption(
-                          scenario.key,
+                          editableKey,
                           "incomeAdjustmentPercent",
                           event.target.value,
                         )}
@@ -157,7 +159,7 @@ export function ForecastScenarios({ snapshot }: { snapshot: ForecastSnapshot }) 
                         step="1"
                         value={scenario.assumptions.expenseAdjustmentPercent}
                         onChange={(event) => updateAssumption(
-                          scenario.key,
+                          editableKey,
                           "expenseAdjustmentPercent",
                           event.target.value,
                         )}
