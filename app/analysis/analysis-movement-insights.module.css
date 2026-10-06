@@ -13,15 +13,15 @@
   border: 1px solid rgba(137, 173, 255, 0.14);
   border-radius: var(--radius-lg);
   background:
-    radial-gradient(circle at 95% 0%, rgba(43, 217, 247, 0.055), transparent 20rem),
-    linear-gradient(145deg, rgba(14, 25, 48, 0.64), rgba(7, 14, 29, 0.54));
+    radial-gradient(circle at 95% 0%, color-mix(in srgb, var(--color-cyan) 6%, transparent), transparent 20rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
 }
 
 .heading > div { min-width: 0; }
 .heading p,
 .cardHeading span {
   margin: 0;
-  color: #94b2ff;
+  color: var(--color-primary-bright);
   font-size: 0.75rem;
   font-weight: 850;
   letter-spacing: 0.09em;
@@ -52,7 +52,7 @@
   border: 1px solid rgba(77, 141, 255, 0.18);
   border-radius: 0.55rem;
   background: rgba(77, 141, 255, 0.045);
-  color: #c8d9fb;
+  color: var(--color-text-secondary);
   font-size: max(var(--font-helper), 0.74rem);
   font-weight: 800;
   text-decoration: none;
@@ -61,7 +61,7 @@
 .heading > a:hover {
   border-color: rgba(77, 141, 255, 0.34);
   background: rgba(77, 141, 255, 0.09);
-  color: white;
+  color: var(--color-text);
 }
 
 .heroGrid,
@@ -90,7 +90,7 @@
   min-width: 0;
   border: 1px solid rgba(137, 173, 255, 0.13);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(14, 25, 48, 0.6), rgba(7, 14, 29, 0.52));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
@@ -196,11 +196,11 @@
   font-size: 11px;
 }
 .valueLabel {
-  fill: #c8d9fb;
+  fill: var(--color-text);
   font-size: 10px;
   font-weight: 750;
   paint-order: stroke;
-  stroke: rgba(5, 9, 20, 0.92);
+  stroke: var(--color-surface-strong);
   stroke-width: 3px;
   stroke-linejoin: round;
 }
@@ -210,11 +210,11 @@
   font-weight: 750;
 }
 .pointLabel {
-  fill: #d7e5ff;
+  fill: var(--color-text);
   font-size: 10px;
   font-weight: 750;
   paint-order: stroke;
-  stroke: rgba(5, 9, 20, 0.94);
+  stroke: var(--color-surface-strong);
   stroke-width: 3px;
   stroke-linejoin: round;
 }
@@ -241,12 +241,12 @@
   vector-effect: non-scaling-stroke;
 }
 .heatmapDayLabel {
-  fill: #eef7ff;
+  fill: var(--color-text);
   font-size: 9px;
   font-weight: 850;
   pointer-events: none;
   paint-order: stroke;
-  stroke: rgba(5, 9, 20, 0.78);
+  stroke: var(--color-surface-strong);
   stroke-width: 2px;
 }
 
@@ -311,7 +311,7 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.weekdayPeak { color: #eef7ff; }
+.weekdayPeak { color: var(--color-text); }
 .weekdayPeak > div {
   background: rgba(43, 217, 247, 0.08);
   box-shadow: inset 0 0 0 1px rgba(43, 217, 247, 0.15);
@@ -319,7 +319,7 @@
 .weekdayPeak i {
   background: linear-gradient(180deg, rgba(43, 217, 247, 0.96), rgba(77, 141, 255, 0.62));
 }
-.weekdayPeak small { color: #a9cfea; }
+.weekdayPeak small { color: var(--color-text-secondary); }
 
 .bandChart { display: grid; gap: 0.46rem; }
 .bandRow {
@@ -350,12 +350,12 @@
 }
 
 .scatterAxis {
-  stroke: rgba(247, 249, 255, 0.18);
+  stroke: var(--color-border-strong);
   stroke-width: 1;
 }
 .scatterPoint {
   fill: rgba(77, 141, 255, 0.54);
-  stroke: rgba(201, 224, 255, 0.86);
+  stroke: color-mix(in srgb, var(--color-text) 72%, transparent);
   stroke-width: 1.35;
 }
 .bubbleLegend {
@@ -432,7 +432,7 @@
   text-decoration: none;
 }
 .transactionRow:last-child { border-bottom: 0; }
-.transactionRow:hover strong { color: white; }
+.transactionRow:hover strong { color: var(--color-text); }
 .transactionMain { min-width: 0; }
 .transactionMain strong,
 .transactionMain span,
