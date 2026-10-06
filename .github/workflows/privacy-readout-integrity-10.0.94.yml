@@ -1,0 +1,55 @@
+name: Privacy Readout Integrity 10.0.94
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/design/financial-bar-chart.tsx"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "scripts/verify-privacy-readout-integrity-10.0.94.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/privacy-readout-integrity-10.0.94.yml"
+  push:
+    branches:
+      - "qa/user-audit-p4-10.0.92"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-readout-integrity-10.0.94-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:privacy-readout-integrity
+      - run: npm run build
+
+  qa20-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-20 · detalle mensual protegido por privacidad
+        run: >-
+          npx playwright test tests/e2e/inicio-smart-brief.spec.ts
+          --grep "QA-20"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
