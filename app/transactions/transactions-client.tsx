@@ -922,7 +922,7 @@ async function saveEdit(row: TransactionRow) {
         </label>
         <label>
           <span>Cuenta</span>
-          <select value={draftFilters.accountId} onChange={(event) => updateFilter("accountId", event.target.value)}>
+          <select data-testid="account-filter" value={draftFilters.accountId} onChange={(event) => updateFilter("accountId", event.target.value)}>
             <option value="">Todas</option>
             {facets.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.lifecycle === "archived" ? " · archivada" : ""}</option>)}
           </select>
