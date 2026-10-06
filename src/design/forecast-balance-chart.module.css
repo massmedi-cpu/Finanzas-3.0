@@ -94,6 +94,13 @@
   color: var(--color-primary-bright);
 }
 
+.zeroLine {
+  stroke: var(--color-border-strong);
+  stroke-width: 1.5;
+  stroke-dasharray: 8 12;
+  opacity: 0.82;
+}
+
 .point {
   position: absolute;
   transform: translate(-50%, -50%);
