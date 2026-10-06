@@ -44,6 +44,12 @@ function enumValue(value: unknown, field: string, allowed: Set<string>): string 
   return text;
 }
 
+function nullableSafeInteger(value: unknown, field: string): number | null {
+  if (value === undefined || value === null || value === "") return null;
+  if (typeof value !== "number" || !Number.isSafeInteger(value)) throw new Error(`invalid_${field}`);
+  return value;
+}
+
 function pageLimit(value: unknown) {
   if (value === undefined || value === null || value === "") return 50;
   if (typeof value !== "number" || !Number.isInteger(value) || value < 1 || value > 100) {
@@ -85,6 +91,8 @@ export async function handleTransactionQueryAction(input: {
     const duplicateState = enumValue(payload.duplicateState, "transaction_duplicate_state", DUPLICATE_STATES);
     const dateFrom = nullableDate(payload.dateFrom, "transaction_date_from");
     const dateTo = nullableDate(payload.dateTo, "transaction_date_to");
+    const amountFromCents = nullableSafeInteger(payload.amountFromCents, "transaction_amount_from");
+    const amountToCents = nullableSafeInteger(payload.amountToCents, "transaction_amount_to");
     const cursorBankDate = nullableDate(payload.cursorBankDate, "transaction_cursor_bank_date");
     const cursorId = nullableUuid(payload.cursorId, "transaction_cursor_id");
     const limit = pageLimit(payload.limit);
@@ -92,6 +100,9 @@ export async function handleTransactionQueryAction(input: {
     const signMismatch = booleanValue(payload.signMismatch, "transaction_sign_mismatch");
 
     if ((cursorBankDate === null) !== (cursorId === null)) throw new Error("invalid_transaction_cursor");
+    if (amountFromCents !== null && amountToCents !== null && amountFromCents > amountToCents) {
+      throw new Error("invalid_transaction_amount_range");
+    }
 
     const rows = await sql`
       select financial_app.query_effective_transactions(
@@ -104,6 +115,8 @@ export async function handleTransactionQueryAction(input: {
         ${duplicateState},
         ${dateFrom}::date,
         ${dateTo}::date,
+        ${amountFromCents}::bigint,
+        ${amountToCents}::bigint,
         ${cursorBankDate}::date,
         ${cursorId}::uuid,
         ${limit},
