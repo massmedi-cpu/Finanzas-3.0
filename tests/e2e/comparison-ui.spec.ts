@@ -14,7 +14,7 @@ function snapshotFor(url: URL) {
     referenceFrom: url.searchParams.get("referenceFrom"),
     referenceTo: url.searchParams.get("referenceTo"),
     accountId: url.searchParams.get("accountId"),
-  }, "2026-09-25");
+  }, "2026-10-06");
   const gateway: AnalysisGatewaySnapshot = {
     current: {
       dateFrom: selection.primaryFrom,
@@ -81,6 +81,24 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByRole("link", { name: /Alimentación, periodo principal/ })).toHaveAttribute("href", /categoryId=/);
   await expect(page.getByRole("link", { name: /Mercado Central, referencia/ })).toHaveAttribute("href", /merchantId=/);
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
+});
+
+test("QA-02 · no interpreta como mejora un periodo posterior al último movimiento importado", async ({ page }) => {
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ available: true, latestMovementDate: "2026-09-29", sync: null }),
+  }));
+  await page.route("**/api/compare?**", async (route) => {
+    const snapshot = snapshotFor(new URL(route.request().url()));
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+  });
+
+  await page.goto(`/compare?primaryFrom=2026-10-01&primaryTo=2026-10-06&referenceFrom=2026-09-01&referenceTo=2026-09-06&accountId=${ACCOUNT_ID}`);
+  const insight = page.locator("section").filter({ has: page.getByText("LECTURA PRINCIPAL", { exact: true }) });
+  await expect(insight).toContainText("último movimiento importado es del 29 sept 2026");
+  await expect(insight).toContainText("No interpretamos 0 € como mejora");
+  await expect(insight).not.toContainText("El gasto diario baja");
 });
 
 test("CMP-UI-002 valida solapamientos sin perder la comparación vigente", async ({ page }) => {

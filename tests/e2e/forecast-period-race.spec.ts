@@ -157,7 +157,10 @@ test("forecast identifies the old period if loading the chosen dates fails", asy
   await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
   await page.getByLabel("Desde", { exact: true }).fill(targetFrom);
 
-  await expect(page.locator("main").getByRole("alert")).toContainText("source_unavailable");
+  const alert = page.locator("main").getByRole("alert");
+  await expect(alert).toContainText("No se pudo cargar la previsión");
+  await expect(alert).toContainText("Los datos disponibles siguen intactos");
+  await expect(alert).not.toContainText("source_unavailable");
   await expect(page.locator("main").getByRole("status")).toContainText("Las cifras visibles corresponden al");
   await expect(page.getByRole("heading", { name: "DATO DEL PERIODO ANTERIOR" })).toBeVisible();
 });

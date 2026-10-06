@@ -14,7 +14,13 @@ const client = read("app/transactions/transactions-client.tsx");
 const tests = read("tests/e2e/transactions.spec.ts");
 const pkg = JSON.parse(read("package.json"));
 
-checks.push([pkg.version === "10.0.86", "versión canónica 10.0.86"]);
+const versionParts = pkg.version.split(".").map(Number);
+const versionAtLeast10086 =
+  versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (versionParts[0] > 10 ||
+    (versionParts[0] === 10 && (versionParts[1] > 0 || (versionParts[1] === 0 && versionParts[2] >= 86))));
+checks.push([versionAtLeast10086, "versión canónica 10.0.86 o superior"]);
 requireText(ocrContract, "create table if not exists financial_app.document_ocr_runs", "prerrequisito-ocr");
 for (const token of [
   "enable row level security",

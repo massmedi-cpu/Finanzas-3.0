@@ -11,7 +11,7 @@ import styles from "./analysis-source-freshness.module.css";
 
 type SyncStatus = "success" | "partial" | "failed" | "started";
 
-type SourceFreshness = {
+export type SourceFreshness = {
   available: boolean;
   latestMovementDate: string | null;
   sync: null | {
@@ -249,7 +249,11 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   };
 }
 
-export default function AnalysisSourceFreshness() {
+export default function AnalysisSourceFreshness({
+  onChange,
+}: {
+  onChange?: (freshness: SourceFreshness | null) => void;
+}) {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
 
   useEffect(() => {
@@ -265,14 +269,22 @@ export default function AnalysisSourceFreshness() {
         return isFreshness(payload) ? payload : null;
       })
       .then((payload) => {
-        if (!controller.signal.aborted && payload?.available) setFreshness(payload);
+        if (!controller.signal.aborted) {
+          const next = payload?.available ? payload : null;
+          setFreshness(next);
+          onChange?.(next);
+        }
       })
       .catch(() => {
+        if (!controller.signal.aborted) {
+          setFreshness(null);
+          onChange?.(null);
+        }
         // La frescura es información auxiliar: nunca bloquea ni degrada Análisis.
       });
 
     return () => controller.abort();
-  }, []);
+  }, [onChange]);
 
   if (!freshness) return null;
   const text = statusText(freshness);

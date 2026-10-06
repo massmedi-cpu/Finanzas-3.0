@@ -209,12 +209,22 @@ export default function HomeSmartBrief({
     if (operatingNetCents !== null && expenseCents !== null) {
       const negative = operatingNetCents < 0;
       const positive = operatingNetCents > 0;
+      const movementInMonth = Boolean(latestTransactionDate?.startsWith(month));
+      const cutoff = latestTransactionDate ? formatBankDate(latestTransactionDate) : null;
       items.push({
         label: "MES",
-        title: negative ? "Balance mensual en negativo" : positive ? "Balance mensual en positivo" : "Mes en equilibrio",
-        detail: `Neto ${displayMoney(operatingNetCents)} · gastos ${displayMoney(expenseCents)}${incomeCents !== null ? ` · ingresos ${displayMoney(incomeCents)}` : ""}.`,
+        title: !movementInMonth
+          ? "Mes aún sin movimientos importados"
+          : negative
+            ? "Balance registrado en negativo"
+            : positive
+              ? "Balance registrado en positivo"
+              : "Balance registrado: 0 €",
+        detail: !movementInMonth
+          ? `${cutoff ? `Último movimiento ${cutoff}. ` : ""}No interpretamos la ausencia de movimientos como equilibrio o mejora.`
+          : `${cutoff ? `Datos hasta ${cutoff} · ` : ""}neto ${displayMoney(operatingNetCents)} · gastos ${displayMoney(expenseCents)}${incomeCents !== null ? ` · ingresos ${displayMoney(incomeCents)}` : ""}.`,
         href: "/analysis",
-        tone: negative ? "warning" : positive ? "positive" : "neutral",
+        tone: !movementInMonth ? "warning" : negative ? "warning" : positive ? "positive" : "neutral",
       });
     }
 
