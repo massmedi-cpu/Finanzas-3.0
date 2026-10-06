@@ -194,7 +194,7 @@ export default function AnalysisAxioma53Controls({
                 ))}
               </div>
               <label className={styles.control}>
-                <span>Mes de referencia</span>
+                <span>Mes para análisis avanzado</span>
                 <input name="month" type="month" value={month} max={currentMonth} onChange={(event) => setMonth(event.target.value)} required />
               </label>
             </div>
