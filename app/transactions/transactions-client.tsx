@@ -60,6 +60,10 @@ type TransactionRow = {
     sourceRowKey: string;
     sourceFingerprint: string;
     importedAt: string;
+    channel: string | null;
+    counterparty: string | null;
+    reconciliation: string | null;
+    sourceSubcategory: string | null;
   };
 };
 
@@ -105,6 +109,9 @@ type Facets = {
     sort_order: number;
   }>;
   merchants: Array<{ id: string; name: string; lifecycle: Lifecycle }>;
+  channels: string[];
+  reconciliationStates: string[];
+  years: number[];
 };
 
 type Filters = {
@@ -116,6 +123,16 @@ type Filters = {
   reviewState: string;
   duplicateState: string;
   signMismatch: string;
+  channel: string;
+  counterparty: string;
+  reconciliation: string;
+  recurring: string;
+  internalTransfer: string;
+  hasDocument: string;
+  documentQuery: string;
+  splitLabel: string;
+  year: string;
+  month: string;
   amountFrom: string;
   amountTo: string;
   dateFrom: string;
@@ -159,13 +176,23 @@ const EMPTY_FILTERS: Filters = {
   reviewState: "",
   duplicateState: "",
   signMismatch: "",
+  channel: "",
+  counterparty: "",
+  reconciliation: "",
+  recurring: "",
+  internalTransfer: "",
+  hasDocument: "",
+  documentQuery: "",
+  splitLabel: "",
+  year: "",
+  month: "",
   amountFrom: "",
   amountTo: "",
   dateFrom: "",
   dateTo: "",
 };
 
-const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [] };
+const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [], years: [] };
 
 const KIND_LABELS: Record<TransactionKind, string> = {
   income: "Ingreso",
@@ -180,6 +207,11 @@ const REVIEW_STATE_LABELS: Record<ReviewState, string> = {
   pending: "Pendiente",
   needs_review: "Por revisar",
 };
+
+const MONTH_LABELS = [
+  "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+  "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre",
+] as const;
 
 const DUPLICATE_LABELS: Record<DuplicateState, string> = {
   none: "Sin duplicado",
@@ -244,6 +276,16 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["reviewState", "reviewState"],
     ["duplicateState", "duplicateState"],
     ["signMismatch", "signMismatch"],
+    ["channel", "channel"],
+    ["counterparty", "counterparty"],
+    ["reconciliation", "reconciliation"],
+    ["recurring", "recurring"],
+    ["internalTransfer", "internalTransfer"],
+    ["hasDocument", "hasDocument"],
+    ["documentQuery", "documentQuery"],
+    ["splitLabel", "splitLabel"],
+    ["year", "year"],
+    ["month", "month"],
     ["dateFrom", "dateFrom"],
     ["dateTo", "dateTo"],
   ];
@@ -464,6 +506,9 @@ export default function TransactionsClient() {
             accounts: Array.isArray(payload.accounts) ? payload.accounts : [],
             categories: Array.isArray(payload.categories) ? payload.categories : [],
             merchants: Array.isArray(payload.merchants) ? payload.merchants : [],
+            channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
+            reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
+            years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
           });
         }
       } catch (cause) {
@@ -483,6 +528,13 @@ export default function TransactionsClient() {
     const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
     const signMismatch = params.get("signMismatch");
+    const channel = params.get("channel");
+    const reconciliation = params.get("reconciliation");
+    const recurring = params.get("recurring");
+    const internalTransfer = params.get("internalTransfer");
+    const hasDocument = params.get("hasDocument");
+    const year = params.get("year");
+    const month = params.get("month");
     const amountFrom = centsParamToMoneyFilter(params.get("amountFromCents"));
     const amountTo = centsParamToMoneyFilter(params.get("amountToCents"));
     const dateFrom = params.get("dateFrom");
@@ -500,6 +552,16 @@ export default function TransactionsClient() {
       reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_STATE_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
       signMismatch: signMismatch === "true" ? "true" : "",
+      channel: channel ? channel.trim().slice(0, 120) : "",
+      counterparty: (params.get("counterparty") ?? "").trim().slice(0, 200),
+      reconciliation: reconciliation ? reconciliation.trim().slice(0, 120) : "",
+      recurring: recurring === "true" ? "true" : "",
+      internalTransfer: internalTransfer === "true" ? "true" : "",
+      hasDocument: hasDocument === "true" ? "true" : "",
+      documentQuery: (params.get("documentQuery") ?? "").trim().slice(0, 200),
+      splitLabel: (params.get("splitLabel") ?? "").trim().slice(0, 200),
+      year: year && /^\d{4}$/.test(year) ? year : "",
+      month: year && month && /^(?:[1-9]|1[0-2])$/.test(month) ? month : "",
       amountFrom,
       amountTo,
       dateFrom: safeDateRange ? safeDateFrom : "",
@@ -856,11 +918,11 @@ async function saveEdit(row: TransactionRow) {
       <form className={styles.filters} onSubmit={applyFilters} aria-label="Filtros de movimientos">
         <label className={styles.searchField}>
           <span>Buscar</span>
-          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, categoría, cuenta o nota" />
+          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, contraparte, categoría, canal o nota" />
         </label>
         <label>
           <span>Cuenta</span>
-          <select value={draftFilters.accountId} onChange={(event) => updateFilter("accountId", event.target.value)}>
+          <select data-testid="account-filter" value={draftFilters.accountId} onChange={(event) => updateFilter("accountId", event.target.value)}>
             <option value="">Todas</option>
             {facets.accounts.map((account) => <option key={account.id} value={account.id}>{account.name}{account.lifecycle === "archived" ? " · archivada" : ""}</option>)}
           </select>
@@ -909,12 +971,73 @@ async function saveEdit(row: TransactionRow) {
           </select>
         </label>
         <label>
+          <span>Canal</span>
+          <select value={draftFilters.channel} onChange={(event) => updateFilter("channel", event.target.value)}>
+            <option value="">Todos</option>
+            {facets.channels.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Contraparte</span>
+          <input value={draftFilters.counterparty} maxLength={200} onChange={(event) => updateFilter("counterparty", event.target.value)} placeholder="Nombre o texto de contraparte" />
+        </label>
+        <label>
+          <span>Conciliación</span>
+          <select value={draftFilters.reconciliation} onChange={(event) => updateFilter("reconciliation", event.target.value)}>
+            <option value="">Todas</option>
+            {facets.reconciliationStates.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Recurrente</span>
+          <select value={draftFilters.recurring} onChange={(event) => updateFilter("recurring", event.target.value)}>
+            <option value="">Todos</option>
+            <option value="true">Solo recurrentes confirmados</option>
+          </select>
+        </label>
+        <label>
+          <span>Entre cuentas</span>
+          <select value={draftFilters.internalTransfer} onChange={(event) => updateFilter("internalTransfer", event.target.value)}>
+            <option value="">Todos</option>
+            <option value="true">Solo transferencias internas</option>
+          </select>
+        </label>
+        <label>
+          <span>Documentos</span>
+          <select value={draftFilters.hasDocument} onChange={(event) => updateFilter("hasDocument", event.target.value)}>
+            <option value="">Todos</option>
+            <option value="true">Con documento asociado</option>
+          </select>
+        </label>
+        <label>
+          <span>Buscar en documento</span>
+          <input value={draftFilters.documentQuery} maxLength={200} onChange={(event) => updateFilter("documentQuery", event.target.value)} placeholder="Archivo, emisor o nota" />
+        </label>
+        <label>
+          <span>Etiqueta de reparto</span>
+          <input value={draftFilters.splitLabel} maxLength={200} onChange={(event) => updateFilter("splitLabel", event.target.value)} placeholder="Persona o uso" />
+        </label>
+        <label>
           <span>Importe mínimo</span>
           <input inputMode="decimal" value={draftFilters.amountFrom} onChange={(event) => updateFilter("amountFrom", event.target.value)} placeholder="-100,00" aria-label="Importe mínimo en euros" />
         </label>
         <label>
           <span>Importe máximo</span>
           <input inputMode="decimal" value={draftFilters.amountTo} onChange={(event) => updateFilter("amountTo", event.target.value)} placeholder="100,00" aria-label="Importe máximo en euros" />
+        </label>
+        <label>
+          <span>Año</span>
+          <select value={draftFilters.year} onChange={(event) => setDraftFilters((current) => ({ ...current, year: event.target.value, month: event.target.value ? current.month : "" }))}>
+            <option value="">Todos</option>
+            {facets.years.map((value) => <option key={value} value={String(value)}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Mes</span>
+          <select value={draftFilters.month} disabled={!draftFilters.year} onChange={(event) => updateFilter("month", event.target.value)}>
+            <option value="">Todos</option>
+            {MONTH_LABELS.map((label, index) => <option key={label} value={String(index + 1)}>{label}</option>)}
+          </select>
         </label>
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
@@ -988,6 +1111,7 @@ async function saveEdit(row: TransactionRow) {
                           <div><dt>Categoría original</dt><dd>{row.category.originalName ?? "—"}</dd></div><div><dt>Categoría efectiva</dt><dd>{row.category.effectiveName ?? "—"}</dd></div>
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
                           {row.signMismatch && <div><dt>Control de signo</dt><dd>El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.</dd></div>}
+                          <div><dt>Canal</dt><dd>{row.source.channel ?? "—"}</dd></div><div><dt>Contraparte</dt><dd>{row.source.counterparty ?? "—"}</dd></div><div><dt>Conciliación</dt><dd>{row.source.reconciliation ?? "—"}</dd></div><div><dt>Subcategoría de origen</dt><dd>{row.source.sourceSubcategory ?? "—"}</dd></div>
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
                           {row.split?.exists && <><div><dt>Importe bancario</dt><dd>{formatMoney(row.amountCents)}</dd></div><div><dt>Parte personal</dt><dd>{formatMoney(row.split.personalAmountCents)}</dd></div><div><dt>Parte de otras personas</dt><dd>{formatMoney(row.split.otherAmountCents)}</dd></div><div><dt>Estado del reparto</dt><dd>{row.split.stale ? "Revisar tras cambio bancario" : row.split.active ? "Activo" : "Inactivo"}</dd></div></>}

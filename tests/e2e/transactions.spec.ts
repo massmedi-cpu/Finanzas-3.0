@@ -251,7 +251,7 @@ test("Movimientos aplica filtros y pagina con cursor estable sin duplicar filas"
   await expect(transactionRows.nth(1).getByText("TRANSFERENCIA INTERNA", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("2 movimientos", { exact: true }).first()).toBeVisible();
 
-  await page.getByLabel("Cuenta").selectOption(accountId);
+  await page.getByTestId("account-filter").selectOption(accountId);
   await page.getByLabel("Buscar", { exact: true }).fill("supermercado");
   const requestPromise = page.waitForRequest((request) => {
     const url = new URL(request.url());
