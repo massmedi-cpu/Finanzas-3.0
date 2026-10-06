@@ -159,7 +159,7 @@ for (const width of WIDTHS) {
 
     await page.setViewportSize({ width, height: width <= 430 ? 900 : 1000 });
     await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-    await page.getByLabel("Mes de referencia").fill("2026-09");
+    await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
     await page.getByRole("button", { name: "Aplicar" }).click();
     await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m$/);
 
@@ -343,7 +343,7 @@ test("QA-02 · Análisis no convierte un periodo sin cobertura completa en tende
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
 
   await expect(page.getByRole("heading", { name: /Datos hasta 10 sept 2026: no interpretamos el periodo posterior como mejora ni empeoramiento/ })).toBeVisible();
@@ -367,7 +367,7 @@ test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema clar
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
 
@@ -408,7 +408,7 @@ test("QA-04 · acumulado y ritmo diario respetan el calendario y representan dí
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
 
   const accumulated = page.getByRole("region", { name: "Gráfica de gasto acumulado" });
@@ -445,7 +445,7 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
   });
 
   await page.goto("/analysis", { waitUntil: "domcontentloaded" });
-  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("form", { name: "Filtros del análisis" }).getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: /Aplicar/ }).click();
 
   const rateKpi = page.getByLabel("Indicadores principales del periodo").locator("article").filter({ hasText: "Tasa de ahorro" });
