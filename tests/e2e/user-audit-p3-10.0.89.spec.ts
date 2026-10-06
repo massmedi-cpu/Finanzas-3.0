@@ -51,7 +51,7 @@ test("QA-16 · Análisis conserva 3 meses al usar comparación personalizada y e
 
   await compareFrom.fill("2026-04-01");
   await compareTo.fill("2026-06-30");
-  await page.getByRole("button", { name: "Aplicar cambios" }).click();
+  await advanced.getByRole("button", { name: "Aplicar cambios" }).click();
 
   await expect(page).toHaveURL(/\/analysis\?/);
   const url = new URL(page.url());
@@ -68,11 +68,13 @@ test("QA-17 · cambios de año y fechas personalizadas activan Aplicar cambios",
 
   await page.goto("/analysis?periodMode=year&year=2025");
   await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
-  await page.getByRole("spinbutton", { name: "Año" }).fill("2024");
-  await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+  const yearAdvanced = page.getByRole("region", { name: "Elige qué quieres analizar" });
+  await yearAdvanced.getByRole("spinbutton", { name: "Año" }).fill("2024");
+  await expect(yearAdvanced.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
 
   await page.goto("/analysis?periodMode=custom&dateFrom=2026-08-01&dateTo=2026-08-31");
   await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
-  await page.getByLabel("Hasta").first().fill("2026-08-30");
-  await expect(page.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
+  const customAdvanced = page.getByRole("region", { name: "Elige qué quieres analizar" });
+  await customAdvanced.getByLabel("Hasta").first().fill("2026-08-30");
+  await expect(customAdvanced.getByRole("button", { name: "Aplicar cambios" })).toBeVisible();
 });
