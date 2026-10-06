@@ -224,7 +224,7 @@ test("Análisis · la frescura de fuente admite sincronización parcial y conser
   expect(freshnessSource).toContain("Datos sincronizados con incidencias");
   expect(freshnessSource).toContain('href="/configuration/source"');
   expect(freshnessSource).toContain("syncHasIncidents(freshness.sync)");
-  expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness \/>[\s\S]*<AnalysisClient/);
+  expect(pageClientSource).toMatch(/if \(!resolved\)[\s\S]*AnalysisLoadingFrame[\s\S]*<AnalysisSourceFreshness(?:\s[^>]*)?\s*\/>[\s\S]*<AnalysisClient/);
   expect(loaderSource).not.toContain("source.google_connection_status");
   expect(loaderSource).not.toContain("source.status");
 });
