@@ -66,6 +66,15 @@ function optionalBoolean(params: URLSearchParams, key: string) {
   throw new Error(`invalid_${key}`);
 }
 
+function optionalSafeInteger(params: URLSearchParams, key: string) {
+  const raw = params.get(key)?.trim() ?? "";
+  if (!raw) return null;
+  if (!/^-?\d+$/.test(raw)) throw new Error(`invalid_${key}`);
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value)) throw new Error(`invalid_${key}`);
+  return value;
+}
+
 function pageLimit(params: URLSearchParams) {
   const raw = params.get("limit");
   if (raw === null || raw === "") return 50;
@@ -221,6 +230,12 @@ export async function GET(request: Request) {
     const dateTo = optionalDate(searchParams, "dateTo");
     if (dateFrom && dateTo && dateFrom > dateTo) throw new Error("invalid_date_range");
 
+    const amountFromCents = optionalSafeInteger(searchParams, "amountFromCents");
+    const amountToCents = optionalSafeInteger(searchParams, "amountToCents");
+    if (amountFromCents !== null && amountToCents !== null && amountFromCents > amountToCents) {
+      throw new Error("invalid_amount_range");
+    }
+
     const cursorBankDate = optionalDate(searchParams, "cursorBankDate");
     const cursorId = optionalUuid(searchParams, "cursorId");
     if ((cursorBankDate === null) !== (cursorId === null)) throw new Error("invalid_cursor");
@@ -240,6 +255,8 @@ export async function GET(request: Request) {
       duplicateState: optionalEnum(searchParams, "duplicateState", DUPLICATE_STATES),
       dateFrom,
       dateTo,
+      amountFromCents,
+      amountToCents,
       cursorBankDate,
       cursorId,
       limit: pageLimit(searchParams),
