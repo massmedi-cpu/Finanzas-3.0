@@ -1,6 +1,6 @@
 {
   "name": "financial-app",
-  "version": "10.0.81",
+  "version": "10.0.82",
   "private": true,
   "scripts": {
     "dev": "next dev",
