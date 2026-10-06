@@ -108,7 +108,8 @@ function comparisonLabel(snapshot: AnalysisSnapshot) {
   return `${formatDate(snapshot.selection.previousDateFrom)} – ${formatDate(snapshot.selection.previousDateTo)}`;
 }
 
-function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "net" | "rate") {
+function trendLabel(trend: AnalysisTrend, kind: "income" | "expense" | "net" | "rate", coverageIncomplete = false) {
+  if (coverageIncomplete) return "Cobertura incompleta: no interpretamos la variación como tendencia";
   if (trend.direction === "insufficient") return "Aún no hay 6 meses completos para confirmar tendencia";
   if (trend.direction === "stable") return "Comportamiento estable en los últimos 6 meses";
   const up = trend.direction === "up";
@@ -189,6 +190,7 @@ function Kpi({
   trend,
   historical,
   tone,
+  coverageIncomplete = false,
 }: {
   label: string;
   value: string;
@@ -196,6 +198,7 @@ function Kpi({
   trend: AnalysisTrend;
   historical: ReactNode;
   tone: "income" | "expense" | "net" | "rate";
+  coverageIncomplete?: boolean;
 }) {
   return (
     <article className={`${styles.kpi} ${styles[`kpi_${tone}`]}`}>
@@ -206,7 +209,7 @@ function Kpi({
       <strong>{value}</strong>
       <div className={styles.kpiContext}>
         {historical}
-        <span>{trendLabel(trend, tone === "net" ? "net" : tone === "rate" ? "rate" : tone)}</span>
+        <span>{trendLabel(trend, tone === "net" ? "net" : tone === "rate" ? "rate" : tone, coverageIncomplete)}</span>
       </div>
     </article>
   );
@@ -329,7 +332,13 @@ function LoadingSkeleton() {
   );
 }
 
-export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: AnalysisSnapshot | null }) {
+export default function AnalysisClient({
+  initialSnapshot,
+  latestMovementDate = null,
+}: {
+  initialSnapshot: AnalysisSnapshot | null;
+  latestMovementDate?: string | null;
+}) {
   const requestRef = useRef<AbortController | null>(null);
   const initialMonth = initialSnapshot?.selection.month ?? currentMadridMonth();
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
@@ -346,6 +355,11 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
       || accountId !== (snapshot.selection.accountId ?? "")
     : true;
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
+  const coverageIncomplete = Boolean(
+    snapshot
+      && latestMovementDate
+      && latestMovementDate < snapshot.selection.dateTo,
+  );
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
@@ -358,9 +372,12 @@ export default function AnalysisClient({ initialSnapshot }: { initialSnapshot: A
     : null;
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
+    if (coverageIncomplete) {
+      return `Datos hasta ${formatDate(latestMovementDate!)}: no interpretamos el periodo posterior como mejora ni empeoramiento.`;
+    }
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
     return `Tu gasto ${expenseDirection > 0 ? "ha aumentado" : "ha disminuido"} ${formatMoney(Math.abs(expenseDirection))} frente al periodo comparable.`;
-  }, [snapshot, expenseDirection]);
+  }, [snapshot, expenseDirection, coverageIncomplete, latestMovementDate]);
 
   async function refresh(event?: FormEvent) {
     event?.preventDefault();
