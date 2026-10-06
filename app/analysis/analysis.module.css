@@ -199,7 +199,7 @@
   overflow: hidden;
   border: 1px solid rgba(137, 173, 255, 0.13);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(14, 25, 48, 0.68), rgba(7, 14, 29, 0.58));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
 }
 .kpi::before {
   content: "";
@@ -259,13 +259,13 @@
   overflow: hidden;
   border: 1px solid rgba(137, 173, 255, 0.12);
   border-radius: var(--radius-lg);
-  background: rgba(137, 173, 255, 0.1);
+  background: color-mix(in srgb, var(--color-border) 72%, transparent);
 }
 .quickReadIntro,
 .quickReadItem {
   min-width: 0;
   padding: 0.7rem 0.78rem;
-  background: linear-gradient(145deg, rgba(14, 25, 48, 0.66), rgba(7, 14, 29, 0.6));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 96%, transparent), color-mix(in srgb, var(--color-surface) 90%, transparent));
 }
 .quickReadIntro { display: grid; align-content: center; gap: 0.12rem; }
 .quickReadIntro span,
@@ -285,7 +285,7 @@
   text-decoration: none;
   transition: background 160ms ease;
 }
-.quickReadItem:hover { background: linear-gradient(145deg, rgba(22, 40, 72, 0.76), rgba(8, 17, 34, 0.7)); }
+.quickReadItem:hover { background: color-mix(in srgb, var(--color-surface-strong) 88%, var(--color-primary) 12%); }
 .quickReadItem:focus-visible { position: relative; z-index: 1; outline: 2px solid var(--color-primary-bright); outline-offset: -2px; }
 .quickReadItem strong { overflow-wrap: anywhere; font-size: 0.9rem; line-height: 1.16; font-variant-numeric: tabular-nums; }
 .quickReadItem small { color: var(--color-text-muted); font-size: 0.71rem; line-height: 1.22; }
@@ -297,15 +297,15 @@
   padding: clamp(0.86rem, 1.2vw, 1.08rem);
   border: 1px solid rgba(137, 173, 255, 0.13);
   border-radius: var(--radius-lg);
-  background: linear-gradient(145deg, rgba(14, 25, 48, 0.6), rgba(7, 14, 29, 0.52));
+  background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 .trendSection { order: 3; padding-bottom: clamp(0.8rem, 1.2vw, 1rem); }
 .changeSection {
   order: 4;
   background:
-    radial-gradient(circle at 100% 0%, rgba(77, 141, 255, 0.055), transparent 24rem),
-    linear-gradient(145deg, rgba(14, 25, 48, 0.62), rgba(7, 14, 29, 0.52));
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--color-primary-bright) 7%, transparent), transparent 24rem),
+    linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
 }
 
 .sectionHeading,
