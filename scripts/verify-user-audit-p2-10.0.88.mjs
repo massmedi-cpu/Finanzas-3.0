@@ -17,7 +17,13 @@ const cashTests = read("tests/e2e/cash-flow-accounting.spec.ts");
 const checks = [];
 const requireText = (source, token, label) => checks.push([source.includes(token), `${label}: ${token}`]);
 
-checks.push([pkg.version === "10.0.88", "versión canónica 10.0.88"]);
+const versionParts = pkg.version.split(".").map(Number);
+const versionAtLeast10088 =
+  versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  (versionParts[0] > 10 ||
+    (versionParts[0] === 10 && (versionParts[1] > 0 || (versionParts[1] === 0 && versionParts[2] >= 88))));
+checks.push([versionAtLeast10088, "versión canónica 10.0.88 o superior"]);
 checks.push([
   String(pkg.scripts?.postbuild ?? "").includes("verify-user-audit-p2-10.0.88.mjs"),
   "gate 10.0.88 incluido en postbuild",
