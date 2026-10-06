@@ -117,6 +117,46 @@ function validatePatchBody(value: unknown) {
   return { transactionIds: ids as string[], patch: patch as Record<string, unknown> };
 }
 
+function splitBody(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_transaction_split_body");
+  const body = value as Record<string, unknown>;
+  if (typeof body.transactionId !== "string" || !UUID.test(body.transactionId)) throw new Error("invalid_transaction_id");
+  if (!Array.isArray(body.allocations) || body.allocations.length > 20 || body.allocations.length === 1) {
+    throw new Error("invalid_transaction_split");
+  }
+
+  const allocations = body.allocations.map((raw) => {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("invalid_transaction_split_allocation");
+    const allocation = raw as Record<string, unknown>;
+    const keys = Object.keys(allocation);
+    if (keys.some((key) => !["amountCents", "scope", "categoryId", "label"].includes(key))) {
+      throw new Error("invalid_transaction_split_allocation");
+    }
+    if (typeof allocation.amountCents !== "number" || !Number.isSafeInteger(allocation.amountCents) || allocation.amountCents === 0) {
+      throw new Error("invalid_transaction_split_amount");
+    }
+    if (allocation.scope !== "personal" && allocation.scope !== "other") throw new Error("invalid_transaction_split_scope");
+    if (allocation.categoryId !== null && allocation.categoryId !== undefined) {
+      if (typeof allocation.categoryId !== "string" || !UUID.test(allocation.categoryId)) {
+        throw new Error("invalid_transaction_split_category");
+      }
+    }
+    if (allocation.label !== null && allocation.label !== undefined) {
+      if (typeof allocation.label !== "string" || allocation.label.trim().length > 80) {
+        throw new Error("invalid_transaction_split_label");
+      }
+    }
+    return {
+      amountCents: allocation.amountCents,
+      scope: allocation.scope,
+      categoryId: allocation.categoryId ?? null,
+      label: typeof allocation.label === "string" ? allocation.label.trim() || null : null,
+    };
+  });
+
+  return { transactionId: body.transactionId, allocations };
+}
+
 function reviewBody(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid_review_body");
   const body = value as Record<string, unknown>;
@@ -147,6 +187,14 @@ export async function GET(request: Request) {
     const mode = searchParams.get("mode");
     if (mode === "facets") {
       const result = await callPersistenceGateway("transaction.facets");
+      return Response.json(result, {
+        headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+      });
+    }
+    if (mode === "split") {
+      const result = await callPersistenceGateway("transaction.split_detail", {
+        transactionId: requiredUuid(searchParams, "transactionId"),
+      });
       return Response.json(result, {
         headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
       });
@@ -212,6 +260,18 @@ export async function PATCH(request: Request) {
     const raw = await request.json().catch(() => null);
     const { transactionIds, patch } = validatePatchBody(raw);
     const result = await callPersistenceGateway("transaction.patch", { transactionIds, patch });
+    return Response.json(result, {
+      headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
+    });
+  } catch (error) {
+    return apiError(error);
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const command = splitBody(await request.json().catch(() => null));
+    const result = await callPersistenceGateway("transaction.split_save", command);
     return Response.json(result, {
       headers: { "cache-control": "no-store", "x-robots-tag": "noindex" },
     });
