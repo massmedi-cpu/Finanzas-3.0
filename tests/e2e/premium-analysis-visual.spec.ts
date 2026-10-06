@@ -429,7 +429,7 @@ test("QA-04 · acumulado y ritmo diario respetan el calendario y representan dí
   const dailyDetails = page.getByText("Ver datos diarios", { exact: true });
   await dailyDetails.click();
   await expect(dailyDetails.locator("..").getByRole("table").locator("tbody tr")).toHaveCount(15);
-  const zeroDay = dailyDetails.locator("..").getByRole("table").getByRole("row").filter({ hasText: "2 sept" });
+  const zeroDay = dailyDetails.locator("..").getByRole("table").getByRole("row", { name: /^2 sept / });
   await expect(zeroDay).toContainText("0,00");
   await expect(zeroDay.getByRole("cell").last()).toHaveText("0");
 });
