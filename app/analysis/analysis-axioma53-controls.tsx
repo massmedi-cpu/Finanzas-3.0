@@ -89,6 +89,7 @@ export default function AnalysisAxioma53Controls({
   const [compareMode, setCompareMode] = useState<CompareMode>(initialCompareMode);
   const [compareDateFrom, setCompareDateFrom] = useState(requested.compareDateFrom?.trim() || resolved?.previousDateFrom || "");
   const [compareDateTo, setCompareDateTo] = useState(requested.compareDateTo?.trim() || resolved?.previousDateTo || "");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const customComparisonMax = previousDay(periodMode === "custom" ? dateFrom : periodMode === "year" ? `${year}-01-01` : `${month}-01`);
   const filtersDirty = periodMode !== initialPeriodMode
@@ -140,12 +141,22 @@ export default function AnalysisAxioma53Controls({
     <section className={styles.panel} aria-labelledby="analysis-period-heading">
       <div className={styles.heading}>
         <div>
-          <span>AXIOMA §53 · PERIODO Y COMPARACIÓN</span>
+          <span>FILTROS AVANZADOS · PERIODO Y COMPARACIÓN</span>
           <h2 id="analysis-period-heading">Elige qué quieres analizar</h2>
         </div>
         <p>Todos los indicadores usan los mismos movimientos elegibles, exclusiones y correcciones que Movimientos.</p>
       </div>
 
+      <button
+        className={styles.apply}
+        type="button"
+        aria-expanded={advancedOpen}
+        onClick={() => setAdvancedOpen((current) => !current)}
+      >
+        {advancedOpen ? "Ocultar filtros avanzados" : "Mostrar filtros avanzados"}
+      </button>
+
+      {advancedOpen && (
       <form className={styles.form} onSubmit={submit}>
         <fieldset className={styles.fieldset}>
           <legend>Periodo</legend>
@@ -248,6 +259,7 @@ export default function AnalysisAxioma53Controls({
           {filtersDirty ? "Aplicar cambios" : "Aplicar análisis"}
         </button>
       </form>
+      )}
     </section>
   );
 }
