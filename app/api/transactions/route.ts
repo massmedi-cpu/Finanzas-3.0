@@ -226,8 +226,23 @@ export async function GET(request: Request) {
       });
     }
 
-    const dateFrom = optionalDate(searchParams, "dateFrom");
-    const dateTo = optionalDate(searchParams, "dateTo");
+    let dateFrom = optionalDate(searchParams, "dateFrom");
+    let dateTo = optionalDate(searchParams, "dateTo");
+    const year = optionalSafeInteger(searchParams, "year");
+    const month = optionalSafeInteger(searchParams, "month");
+    if (year !== null && (year < 1900 || year > 2200)) throw new Error("invalid_year");
+    if (month !== null && (month < 1 || month > 12)) throw new Error("invalid_month");
+    if (month !== null && year === null) throw new Error("invalid_month_without_year");
+    if (year !== null) {
+      const periodFrom = month === null
+        ? `${year}-01-01`
+        : `${year}-${String(month).padStart(2, "0")}-01`;
+      const periodTo = month === null
+        ? `${year}-12-31`
+        : `${year}-${String(month).padStart(2, "0")}-${String(new Date(Date.UTC(year, month, 0)).getUTCDate()).padStart(2, "0")}`;
+      dateFrom = dateFrom && dateFrom > periodFrom ? dateFrom : periodFrom;
+      dateTo = dateTo && dateTo < periodTo ? dateTo : periodTo;
+    }
     if (dateFrom && dateTo && dateFrom > dateTo) throw new Error("invalid_date_range");
 
     const amountFromCents = optionalSafeInteger(searchParams, "amountFromCents");
