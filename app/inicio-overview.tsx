@@ -10,8 +10,8 @@ import {
 } from "../src/application/source-sync-incidents";
 import { formatBasisPoints } from "../src/core/formatters";
 import { formatMoneyCents } from "../src/core/money";
-import { FinancialBarChart } from "../src/design/financial-bar-chart";
 import HomeSmartBrief from "./home-smart-brief";
+import HomeEvolution from "./home-evolution";
 import { CategoryIdentity } from "./category-identity";
 import styles from "./inicio-overview.module.css";
 
@@ -792,8 +792,10 @@ export default function InicioOverview() {
             </div>
           )}
           {homeMonthlyRows.length > 0 ? (
-            <FinancialBarChart
+            <HomeEvolution
               rows={homeMonthlyRows}
+              dateFrom={homeMonthlyRows[0]?.monthStart ?? trailingMonthStart(today, 12)}
+              dateTo={today}
               maxValue={monthlyScale}
               formatMoney={displayMoney}
               formatMonth={formatMonth}
