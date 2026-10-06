@@ -799,6 +799,7 @@ export default function InicioOverview() {
               dateFrom={homeMonthlyRows[0]?.monthStart ?? trailingMonthStart(today, 12)}
               dateTo={today}
               maxValue={monthlyScale}
+              valuesVisible={revealAmounts}
               formatMoney={displayMoney}
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}

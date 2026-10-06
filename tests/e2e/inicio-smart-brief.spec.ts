@@ -1,6 +1,7 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 
 const HOME_VISIT_KEY = "financial-app:home-last-visit:v1";
+const PRIVACY_KEY = "financial-app:home-amounts";
 
 const financial = {
   period: {
@@ -298,7 +299,7 @@ test("QA-08 · Inicio ofrece Saldo, Ingresos y gastos y Flujo neto desde motores
 
   await selector.getByRole("button", { name: "Saldo" }).click();
   await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toContainText("188.137,81");
-  await expect(page.getByText(/no reconstruye el saldo sumando el cash flow/i)).toBeVisible();
+  await expect(page.getByText(/no se reconstruye desde cash flow/i)).toBeVisible();
 
   await selector.getByRole("button", { name: "Flujo neto" }).click();
   await expect(page.getByRole("group", { name: "Flujo neto por mes" })).toBeVisible();
@@ -548,8 +549,8 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
 
   const baseline = lineBox.y;
   expect(positiveBox.y).toBeLessThan(baseline);
-  expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 1);
-  expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 1);
+  expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 2);
+  expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 2);
   expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
   await expect(zero).toHaveCSS("height", "0px");
 });

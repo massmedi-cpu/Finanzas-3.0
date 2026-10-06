@@ -37,7 +37,9 @@ requireText(homeCss, ".evolutionSignedBar[data-sign=\"negative\"]", "negativos b
 requireText(e2e, "QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero", "regresión QA-12");
 requireText(home, "const balanceHasAccounts", "detección de serie sin cuentas");
 requireText(e2e, "QA-13 · Saldo explica una serie sin cuentas", "regresión QA-13");
-requireText(home, "const valuesVisible = formatMoney(0) !== formatMoney(1)", "privacidad serie única");
+requireText(home, "valuesVisible: boolean", "privacidad serie única explícita");
+requireText(bars, "valuesVisible: boolean", "privacidad barras explícita");
+requireText(home, "valuesVisible={valuesVisible}", "propagación de privacidad");
 requireText(home, "const visualSigned = signed && valuesVisible", "privacidad signo");
 requireText(home, 'data-series-bar="true"', "marca de barra neutral");
 requireText(home, "Importes, signos y proporciones ocultos por privacidad.", "texto privacidad");

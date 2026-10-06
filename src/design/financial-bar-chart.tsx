@@ -13,6 +13,7 @@ export type FinancialBarPoint = {
 type FinancialBarChartProps = {
   rows: FinancialBarPoint[];
   maxValue: number;
+  valuesVisible: boolean;
   formatMoney: (cents: number) => string;
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
@@ -21,6 +22,7 @@ type FinancialBarChartProps = {
 export function FinancialBarChart({
   rows,
   maxValue,
+  valuesVisible,
   formatMoney,
   formatMonth,
   partialMonthStart = null,
@@ -31,10 +33,8 @@ export function FinancialBarChart({
     [rows, selectedMonth],
   );
 
-  // Inicio injects the same formatter that masks monetary amounts. When the
-  // formatter cannot distinguish one cent from zero, the chart must not keep
-  // exposing the original values through relative bar heights.
-  const valuesVisible = formatMoney(0) !== formatMoney(1);
+  // La visibilidad se recibe explícitamente desde Inicio: no se deduce del
+  // formato monetario, porque 0 y 1 céntimo pueden redondearse igual.
 
   return (
     <div className={styles.wrapper}>

@@ -32,6 +32,7 @@ function SingleSeriesBars({
   rows,
   valueFor,
   label,
+  valuesVisible,
   formatMoney,
   formatMonth,
   signed = false,
@@ -39,12 +40,12 @@ function SingleSeriesBars({
   rows: Array<FinancialBarPoint | BalanceRow>;
   valueFor: (row: FinancialBarPoint | BalanceRow) => number;
   label: string;
+  valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   signed?: boolean;
 }) {
   const max = Math.max(1, ...rows.map((row) => Math.abs(valueFor(row))));
-  const valuesVisible = formatMoney(0) !== formatMoney(1);
   return (
     <div
       className={styles.evolutionSingle}
@@ -83,6 +84,7 @@ export default function HomeEvolution({
   dateFrom,
   dateTo,
   maxValue,
+  valuesVisible,
   formatMoney,
   formatMonth,
   partialMonthStart,
@@ -92,6 +94,7 @@ export default function HomeEvolution({
   dateFrom: string;
   dateTo: string;
   maxValue: number;
+  valuesVisible: boolean;
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
@@ -152,6 +155,7 @@ export default function HomeEvolution({
           <FinancialBarChart
             rows={rows}
             maxValue={maxValue}
+            valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
             partialMonthStart={partialMonthStart}
@@ -166,6 +170,7 @@ export default function HomeEvolution({
             rows={rows}
             valueFor={(row) => (row as FinancialBarPoint).operatingNetCents}
             label="Flujo neto por mes"
+            valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
             signed
@@ -187,6 +192,7 @@ export default function HomeEvolution({
             rows={balanceRows}
             valueFor={(row) => (row as BalanceRow).balanceCents}
             label="Saldo bancario agregado por mes"
+            valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
           />
