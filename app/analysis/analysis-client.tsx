@@ -24,6 +24,7 @@ import {
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import { CategoryIdentity } from "../category-identity";
+import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
 import AnalysisMovementInsights from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
 
@@ -546,6 +547,7 @@ export default function AnalysisClient({
             />
           </section>
 
+          <AnalysisAxioma53Summary snapshot={snapshot} />
           <QuickRead snapshot={snapshot} />
           <AnalysisMovementInsights snapshot={snapshot} />
 
