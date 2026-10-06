@@ -702,3 +702,60 @@ test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas
   await expect(page.getByText(/Cobertura mixta:/)).toContainText("saldo inicial + movimientos");
   await expect(page.getByText(/Cobertura mixta:/)).toContainText("No se reconstruye desde Cash Flow");
 });
+
+test("QA-18 · Saldo no convierte meses sin cobertura en ceros reales", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route(/\\/api\\/financial\\?mode=balance_series.*/, async (route) => {
+    await json(route, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: [
+        {
+          monthStart: "2026-07-01",
+          asOfDate: "2026-07-31",
+          balanceCents: 100000,
+          accounts: 1,
+          explicitBalanceAccounts: 1,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-08-01",
+          asOfDate: "2026-08-31",
+          balanceCents: 0,
+          accounts: 0,
+          explicitBalanceAccounts: 0,
+          reconstructedBalanceAccounts: 0,
+        },
+        {
+          monthStart: "2026-09-01",
+          asOfDate: "2026-09-16",
+          balanceCents: 105000,
+          accounts: 1,
+          explicitBalanceAccounts: 1,
+          reconstructedBalanceAccounts: 0,
+        },
+      ],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Saldo" }).click();
+
+  const chart = page.getByRole("group", { name: "Saldo bancario agregado por mes" });
+  await expect(chart).toBeVisible();
+  await expect(chart.locator('[data-series-bar="true"]')).toHaveCount(2);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(1);
+  await expect(chart.getByText("Sin dato", { exact: true })).toHaveCount(1);
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("2 de 3 puntos");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("Sin dato");
+  await expect(page.getByText(/Cobertura parcial:/)).toContainText("no como 0 €");
+});
+
