@@ -443,3 +443,55 @@ test("QA-05 · Inicio no atribuye al día de consulta un saldo agregado con fech
   await expect(balanceCard).toContainText("31 ago – 15 sept");
   await expect(balanceCard).not.toContainText("Saldo a 16 sept");
 });
+
+
+test("QA-11 · las gráficas no dibujan barras positivas para valores exactamente cero", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("scope") === "secondary") {
+      await json(route, {
+        contractVersion: 1,
+        scope: "secondary",
+        asOfDate: "2026-09-16",
+        dataThroughDate: "2026-09-16",
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"],
+        failedSources: [],
+        data: {
+          financial: null,
+          monthly: {
+            dateFrom: "2026-09-01",
+            dateTo: "2026-09-16",
+            rows: [
+              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+            ],
+          },
+          budgets,
+          forecast,
+          transactions: null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+
+  const incomeExpense = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  const zeroIncomeExpenseBars = incomeExpense.locator('[data-zero="true"]');
+  await expect(zeroIncomeExpenseBars).toHaveCount(2);
+  for (const bar of await zeroIncomeExpenseBars.all()) {
+    await expect(bar).toHaveCSS("height", "0px");
+    await expect(bar).toHaveCSS("min-height", "0px");
+  }
+
+  await page.getByRole("button", { name: "Flujo neto" }).click();
+  const netChart = page.getByRole("group", { name: "Flujo neto por mes" });
+  const zeroNetBar = netChart.locator('[data-zero="true"]');
+  await expect(zeroNetBar).toHaveCount(1);
+  await expect(zeroNetBar).toHaveCSS("height", "0px");
+  await expect(zeroNetBar).toHaveCSS("min-height", "0px");
+});

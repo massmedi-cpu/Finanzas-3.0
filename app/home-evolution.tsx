@@ -48,7 +48,7 @@ function SingleSeriesBars({
     <div className={styles.evolutionSingle} role="group" aria-label={label}>
       {rows.map((row) => {
         const value = valueFor(row);
-        const height = Math.max(3, (Math.abs(value) / max) * 100);
+        const height = value === 0 ? 0 : Math.max(3, (Math.abs(value) / max) * 100);
         return (
           <div className={styles.evolutionSingleColumn} key={row.monthStart}>
             <div className={styles.evolutionBarArea} aria-hidden="true">

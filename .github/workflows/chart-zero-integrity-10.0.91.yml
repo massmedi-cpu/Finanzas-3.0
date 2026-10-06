@@ -1,0 +1,58 @@
+name: Chart Zero Integrity 10.0.91
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/home-evolution.tsx"
+      - "app/inicio-overview.module.css"
+      - "src/design/financial-bar-chart.tsx"
+      - "src/design/financial-bar-chart.module.css"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "scripts/verify-chart-zero-integrity-10.0.91.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/chart-zero-integrity-10.0.91.yml"
+  push:
+    branches:
+      - "qa/transversal-certification-10.0.90"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: chart-zero-integrity-10.0.91-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:chart-zero-integrity
+      - run: npm run build
+
+  browser-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-11 · ceros reales en gráficas desktop y móvil
+        run: >-
+          npx playwright test tests/e2e/inicio-smart-brief.spec.ts
+          --grep "QA-11"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
