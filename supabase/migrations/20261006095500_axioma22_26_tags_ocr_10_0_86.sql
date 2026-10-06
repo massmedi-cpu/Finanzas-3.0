@@ -26,7 +26,7 @@ create or replace function financial_app.set_transaction_tags(
 returns jsonb
 language plpgsql
 set search_path = ''
-as $
+as $tags$
 declare
   v_ids uuid[];
   v_requested integer;
@@ -92,7 +92,7 @@ begin
     'auditChanges',v_audit
   );
 end;
-$;
+$tags$;
 
 revoke all on function financial_app.set_transaction_tags(uuid[],text[]) from public,anon,authenticated;
 grant execute on function financial_app.set_transaction_tags(uuid[],text[]) to financial_app_gateway;
