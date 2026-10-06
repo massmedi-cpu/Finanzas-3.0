@@ -956,7 +956,7 @@ async function saveEdit(row: TransactionRow) {
           <h1>Movimientos</h1>
           <p>
             Consulta y gestiona el histórico persistido sin alterar el origen bancario. Cada cambio manual se
-            guarda como override separado y conserva la trazabilidad hasta la fila original.
+            guarda como cambio manual separado y conserva la trazabilidad hasta la fila original.
           </p>
         </div>
         <div className={styles.summary} aria-label="Resumen del listado">
