@@ -49,6 +49,7 @@ type TransactionRow = {
   transferPairId: string | null;
   excludedFromAnalytics: boolean;
   userNote: string | null;
+  tags: string[];
   hasUserOverride: boolean;
   overriddenFields: string[];
   split: TransactionSplitSummary;
@@ -112,6 +113,7 @@ type Facets = {
   channels: string[];
   reconciliationStates: string[];
   years: number[];
+  tags: string[];
 };
 
 type Filters = {
@@ -131,6 +133,8 @@ type Filters = {
   hasDocument: string;
   documentQuery: string;
   splitLabel: string;
+  tag: string;
+  ocrQuery: string;
   year: string;
   month: string;
   amountFrom: string;
@@ -152,6 +156,7 @@ type EditorState = {
   kind: string;
   excludedFromAnalytics: boolean;
   note: string;
+  tagsText: string;
 };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -166,6 +171,7 @@ const ANALYTICS_INCLUDE = "__include__";
 const ANALYTICS_EXCLUDE = "__exclude__";
 const CONCEPT_ERROR_ID = "transaction-concept-error";
 const SUBCATEGORY_ERROR_ID = "transaction-subcategory-error";
+const TAGS_ERROR_ID = "transaction-tags-error";
 
 const EMPTY_FILTERS: Filters = {
   q: "",
@@ -184,6 +190,8 @@ const EMPTY_FILTERS: Filters = {
   hasDocument: "",
   documentQuery: "",
   splitLabel: "",
+  tag: "",
+  ocrQuery: "",
   year: "",
   month: "",
   amountFrom: "",
@@ -192,7 +200,7 @@ const EMPTY_FILTERS: Filters = {
   dateTo: "",
 };
 
-const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [], years: [] };
+const EMPTY_FACETS: Facets = { accounts: [], categories: [], merchants: [], channels: [], reconciliationStates: [], years: [], tags: [] };
 
 const KIND_LABELS: Record<TransactionKind, string> = {
   income: "Ingreso",
@@ -227,6 +235,7 @@ const OVERRIDE_LABELS: Record<string, string> = {
   excludedFromAnalytics: "analítica",
   note: "nota",
   split: "reparto",
+  tags: "etiquetas",
 };
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -284,6 +293,8 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
     ["hasDocument", "hasDocument"],
     ["documentQuery", "documentQuery"],
     ["splitLabel", "splitLabel"],
+    ["tag", "tag"],
+    ["ocrQuery", "ocrQuery"],
     ["year", "year"],
     ["month", "month"],
     ["dateFrom", "dateFrom"],
@@ -321,6 +332,9 @@ function readableError(payload: any) {
   if (code.includes("transaction_not_duplicate_candidate")) return "Este movimiento ya no forma parte de un grupo duplicado.";
   if (code.includes("category_not_found")) return "La categoría seleccionada ya no está disponible.";
   if (code.includes("merchant_not_found")) return "El comercio seleccionado ya no está disponible.";
+  if (code.includes("transaction_tags_single_edit_only")) return "Las etiquetas generales se editan desde un movimiento individual.";
+  if (code.includes("too_many_transaction_tags") || code.includes("invalid_transaction_tags")) return "Puedes guardar hasta 12 etiquetas por movimiento.";
+  if (code.includes("invalid_transaction_tag")) return "Cada etiqueta debe tener entre 1 y 40 caracteres.";
   if (code.includes("paired_transfer_kind_locked")) return "Desempareja primero la transferencia antes de cambiar su tipo.";
   if (code.includes("transfer_kind_required")) return "Solo pueden emparejarse movimientos identificados como transferencia.";
   if (code.includes("transfer_accounts_must_differ")) return "Una transferencia interna debe conectar dos cuentas diferentes.";
@@ -367,10 +381,28 @@ function editorFor(row: TransactionRow, categories: Facets["categories"]): Edito
     kind: row.kind.effective,
     excludedFromAnalytics: row.excludedFromAnalytics,
     note: row.userNote ?? "",
+    tagsText: Array.isArray(row.tags) ? row.tags.join(", ") : "",
   };
 }
 
-function individualPatch(row: TransactionRow, editor: EditorState, categories: Facets["categories"]) {
+function normalizedTagsFromEditor(value: string) {
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value.split(",")) {
+    const tag = raw.trim();
+    if (!tag) continue;
+    if (tag.length > 40) return { tags: [] as string[], error: `La etiqueta «${tag.slice(0, 24)}…» supera los 40 caracteres.` };
+    const key = tag.toLocaleLowerCase("es");
+    if (!seen.has(key)) {
+      seen.add(key);
+      tags.push(tag);
+    }
+  }
+  if (tags.length > 12) return { tags: [] as string[], error: "Puedes guardar hasta 12 etiquetas por movimiento." };
+  return { tags: tags.sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" })), error: "" };
+}
+
+function individualPatch(row: TransactionRow, editor: EditorState, categories: Facets["categories"], tags: string[]) {
   const concept = editor.concept.trim();
   return {
     concept: concept === row.concept.processed ? null : concept,
@@ -381,6 +413,7 @@ function individualPatch(row: TransactionRow, editor: EditorState, categories: F
     kind: editor.kindMode === "inherit" ? null : editor.kind,
     excludedFromAnalytics: editor.excludedFromAnalytics,
     note: editor.note.trim() || null,
+    tags,
   } satisfies Record<string, unknown>;
 }
 
@@ -409,6 +442,7 @@ export default function TransactionsClient() {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [conceptError, setConceptError] = useState("");
   const [categoryError, setCategoryError] = useState("");
+  const [tagsError, setTagsError] = useState("");
   const [splittingId, setSplittingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
@@ -509,6 +543,7 @@ export default function TransactionsClient() {
             channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
             reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
             years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
+            tags: Array.isArray(payload.tags) ? payload.tags.filter((value: unknown): value is string => typeof value === "string") : [],
           });
         }
       } catch (cause) {
@@ -533,6 +568,7 @@ export default function TransactionsClient() {
     const recurring = params.get("recurring");
     const internalTransfer = params.get("internalTransfer");
     const hasDocument = params.get("hasDocument");
+    const tag = params.get("tag");
     const year = params.get("year");
     const month = params.get("month");
     const amountFrom = centsParamToMoneyFilter(params.get("amountFromCents"));
@@ -560,6 +596,8 @@ export default function TransactionsClient() {
       hasDocument: hasDocument === "true" ? "true" : "",
       documentQuery: (params.get("documentQuery") ?? "").trim().slice(0, 200),
       splitLabel: (params.get("splitLabel") ?? "").trim().slice(0, 200),
+      tag: tag ? tag.trim().slice(0, 40) : "",
+      ocrQuery: (params.get("ocrQuery") ?? "").trim().slice(0, 200),
       year: year && /^\d{4}$/.test(year) ? year : "",
       month: year && month && /^(?:[1-9]|1[0-2])$/.test(month) ? month : "",
       amountFrom,
@@ -573,6 +611,7 @@ export default function TransactionsClient() {
     setEditor(null);
     setConceptError("");
     setCategoryError("");
+    setTagsError("");
     setSplittingId(null);
     setReviewingId(null);
     setReviewMode(null);
@@ -679,6 +718,7 @@ export default function TransactionsClient() {
     setEditingId(null);
     setEditor(null);
     setConceptError("");
+    setTagsError("");
     setSplittingId(null);
     closeReview();
     navigateFilters(next);
@@ -691,6 +731,7 @@ export default function TransactionsClient() {
     setEditingId(null);
     setEditor(null);
     setConceptError("");
+    setTagsError("");
     setSplittingId(null);
     closeReview();
     navigateFilters(EMPTY_FILTERS);
@@ -809,6 +850,7 @@ export default function TransactionsClient() {
   setEditor(editorFor(row, facets.categories));
   setConceptError("");
   setCategoryError("");
+  setTagsError("");
   setError(null);
   setAuthRecovery(null);
   setNotice(null);
@@ -820,6 +862,7 @@ function cancelEdit() {
   setEditor(null);
   setConceptError("");
   setCategoryError("");
+  setTagsError("");
   setAuthRecovery(null);
 }
 
@@ -829,6 +872,7 @@ function beginSplit(row: TransactionRow) {
   setEditor(null);
   setConceptError("");
   setCategoryError("");
+  setTagsError("");
   setError(null);
   setAuthRecovery(null);
   setNotice(null);
@@ -862,9 +906,16 @@ async function saveEdit(row: TransactionRow) {
     window.requestAnimationFrame(() => subcategorySelectRef.current?.focus());
     return;
   }
+  const parsedTags = normalizedTagsFromEditor(editor.tagsText);
+  if (parsedTags.error) {
+    setError(null);
+    setTagsError(parsedTags.error);
+    return;
+  }
   setConceptError("");
   setCategoryError("");
-  await patchTransactions([row.id], individualPatch(row, editor, facets.categories), "Movimiento actualizado");
+  setTagsError("");
+  await patchTransactions([row.id], individualPatch(row, editor, facets.categories, parsedTags.tags), "Movimiento actualizado");
 }
 
   async function applyBulk() {
@@ -1014,6 +1065,17 @@ async function saveEdit(row: TransactionRow) {
           <input value={draftFilters.documentQuery} maxLength={200} onChange={(event) => updateFilter("documentQuery", event.target.value)} placeholder="Archivo, emisor o nota" />
         </label>
         <label>
+          <span>Etiqueta</span>
+          <select data-testid="tag-filter" value={draftFilters.tag} onChange={(event) => updateFilter("tag", event.target.value)}>
+            <option value="">Todas</option>
+            {facets.tags.map((value) => <option key={value} value={value}>{value}</option>)}
+          </select>
+        </label>
+        <label>
+          <span>Texto OCR</span>
+          <input data-testid="ocr-filter" value={draftFilters.ocrQuery} maxLength={200} onChange={(event) => updateFilter("ocrQuery", event.target.value)} placeholder="Texto leído del documento" />
+        </label>
+        <label>
           <span>Etiqueta de reparto</span>
           <input value={draftFilters.splitLabel} maxLength={200} onChange={(event) => updateFilter("splitLabel", event.target.value)} placeholder="Persona o uso" />
         </label>
@@ -1111,6 +1173,7 @@ async function saveEdit(row: TransactionRow) {
                           <div><dt>Categoría original</dt><dd>{row.category.originalName ?? "—"}</dd></div><div><dt>Categoría efectiva</dt><dd>{row.category.effectiveName ?? "—"}</dd></div>
                           <div><dt>Tipo original / efectivo</dt><dd>{KIND_LABELS[row.kind.original]} / {KIND_LABELS[row.kind.effective]}</dd></div><div><dt>Saldo tras movimiento</dt><dd>{formatMoney(row.balanceAfterCents)}</dd></div>
                           {row.signMismatch && <div><dt>Control de signo</dt><dd>El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.</dd></div>}
+                          <div><dt>Etiquetas</dt><dd>{Array.isArray(row.tags) && row.tags.length > 0 ? row.tags.join(", ") : "—"}</dd></div>
                           <div><dt>Canal</dt><dd>{row.source.channel ?? "—"}</dd></div><div><dt>Contraparte</dt><dd>{row.source.counterparty ?? "—"}</dd></div><div><dt>Conciliación</dt><dd>{row.source.reconciliation ?? "—"}</dd></div><div><dt>Subcategoría de origen</dt><dd>{row.source.sourceSubcategory ?? "—"}</dd></div>
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
@@ -1169,6 +1232,12 @@ async function saveEdit(row: TransactionRow) {
                   </div>
                             <label className={`${styles.editorField} ${styles.typeField}`}><span>Tipo</span><select data-testid="edit-kind" value={editor.kind} disabled={Boolean(row.transferPairId)} onChange={(event) => setEditor({ ...editor, kindMode: "set", kind: event.target.value })}>{(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>{editor.kindMode === "set" ? <button className={`${styles.secondaryButton} ${styles.fieldRestore}`} type="button" disabled={saving || Boolean(row.transferPairId)} onClick={() => setEditor({ ...editor, kindMode: "inherit", kind: row.kind.original })}>Restaurar valor detectado: {KIND_LABELS[row.kind.original]}</button> : row.transferPairId ? <small>Desempareja la transferencia antes de cambiar su tipo.</small> : null}</label>
                             <label className={`${styles.editorField} ${styles.noteField}`}><span>Nota</span><textarea value={editor.note} maxLength={2000} rows={3} onChange={(event) => setEditor({ ...editor, note: event.target.value })} /></label>
+                            <label className={`${styles.editorField} ${styles.noteField}`}>
+                              <span>Etiquetas</span>
+                              <input data-testid="edit-tags" value={editor.tagsText} aria-invalid={tagsError ? "true" : "false"} aria-describedby={tagsError ? TAGS_ERROR_ID : undefined} onChange={(event) => { setEditor({ ...editor, tagsText: event.target.value }); if (tagsError) setTagsError(""); }} placeholder="Ej.: trabajo, reembolsable, viaje" />
+                              <small>Hasta 12 etiquetas, separadas por comas. No modifican el movimiento bancario.</small>
+                              {tagsError ? <small id={TAGS_ERROR_ID} className={styles.fieldError} role="alert">{tagsError}</small> : null}
+                            </label>
                             <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
                           <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
