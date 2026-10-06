@@ -40,7 +40,7 @@ for (const token of [
 
 for (const token of [
   "Axioma §42 calcula escenarios sin alterar la base canónica",
-  "ausencia",
+  "sin escrituras financieras",
   "financialWrites",
   "toEqual([])",
 ]) requireText(regression, token, "regresion");
