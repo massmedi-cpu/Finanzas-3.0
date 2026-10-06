@@ -122,7 +122,7 @@ export function ForecastHorizonPanel({
     <section className={styles.section} aria-labelledby="forecast-horizons-title">
       <div className={styles.heading}>
         <div>
-          <p className={styles.eyebrow}>CASH FLOW · FASE 7</p>
+          <p className={styles.eyebrow}>CASH FLOW · HORIZONTES</p>
           <h2 id="forecast-horizons-title">Tu dinero en cuatro horizontes</h2>
           <p>
             Cobros, pagos, flujo y saldo calculados desde el mismo motor de Previsión, sin contar dos veces movimientos confirmados o excluidos.
