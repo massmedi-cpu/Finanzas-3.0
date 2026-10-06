@@ -1,11 +1,11 @@
 {
   "name": "financial-app",
-  "version": "10.0.82",
+  "version": "10.0.83",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs && node scripts/verify-surface-hierarchy.mjs && node scripts/verify-shared-app-shell.mjs && node scripts/verify-typography-runtime.mjs && node scripts/verify-background-composition.mjs && node scripts/verify-product-navigation.mjs && node scripts/verify-theme-system.mjs && node scripts/verify-mobile-quality-10.0.65.mjs && node scripts/verify-ux-continuity-10.0.66.mjs && node scripts/verify-activation-progressive-disclosure-10.0.67.mjs && node scripts/verify-home-progressive-loading-10.0.69.mjs && node scripts/verify-drive-auto-detection-10.0.72.mjs && node scripts/verify-budget-engine-10.0.73.mjs && node scripts/verify-analysis-axioma53-10.0.74.mjs && node scripts/verify-forecast-phase7-10.0.75.mjs && node scripts/verify-configuration-phase8-10.0.76.mjs && node scripts/verify-home-phase9-10.0.77.mjs && node scripts/verify-transversals-phase10-10.0.78.mjs && node scripts/verify-ocr-phase11-10.0.79.mjs && node scripts/verify-post-ocr-consolidation-10.0.80.mjs && node scripts/verify-forecast-scenarios-10.0.82.mjs",
+    "postbuild": "node scripts/verify-vercel-source-runtime.mjs && node scripts/verify-responsive-breakpoints.mjs && node scripts/verify-product-icon-system.mjs && node scripts/verify-surface-hierarchy.mjs && node scripts/verify-shared-app-shell.mjs && node scripts/verify-typography-runtime.mjs && node scripts/verify-background-composition.mjs && node scripts/verify-product-navigation.mjs && node scripts/verify-theme-system.mjs && node scripts/verify-mobile-quality-10.0.65.mjs && node scripts/verify-ux-continuity-10.0.66.mjs && node scripts/verify-activation-progressive-disclosure-10.0.67.mjs && node scripts/verify-home-progressive-loading-10.0.69.mjs && node scripts/verify-drive-auto-detection-10.0.72.mjs && node scripts/verify-budget-engine-10.0.73.mjs && node scripts/verify-analysis-axioma53-10.0.74.mjs && node scripts/verify-forecast-phase7-10.0.75.mjs && node scripts/verify-configuration-phase8-10.0.76.mjs && node scripts/verify-home-phase9-10.0.77.mjs && node scripts/verify-transversals-phase10-10.0.78.mjs && node scripts/verify-ocr-phase11-10.0.79.mjs && node scripts/verify-post-ocr-consolidation-10.0.80.mjs && node scripts/verify-forecast-scenarios-10.0.82.mjs && node scripts/verify-axioma25-splits-10.0.83.mjs",
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
@@ -55,7 +55,8 @@
     "backup:validate:v2": "node scripts/validate-financial-backup-v2.mjs",
     "verify:data-visualization": "node scripts/verify-data-visualization-10.0.64.mjs",
     "verify:home-progressive-loading": "node scripts/verify-home-progressive-loading-10.0.69.mjs",
-    "verify:forecast-scenarios": "node scripts/verify-forecast-scenarios-10.0.82.mjs"
+    "verify:forecast-scenarios": "node scripts/verify-forecast-scenarios-10.0.82.mjs",
+    "verify:axioma25-splits": "node scripts/verify-axioma25-splits-10.0.83.mjs"
   },
   "engines": {
     "node": "24.x"

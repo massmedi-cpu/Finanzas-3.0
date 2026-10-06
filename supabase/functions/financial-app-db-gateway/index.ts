@@ -51,6 +51,8 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "rule.list",
   "rule.evaluate",
   "transaction.query",
+  "transaction.split_detail",
+  "test.transaction_split_engine",
   "transaction.facets",
   "transaction.duplicate_group",
   "transaction.transfer_candidates",

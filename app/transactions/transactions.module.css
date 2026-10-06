@@ -118,12 +118,16 @@
 .conceptCell strong { color: #f6f8fe; font-size: .98rem; line-height: 1.35; }
 .conceptCell > p { margin: .3rem 0 0; color: var(--color-text-muted); font-size: .875rem; }
 .conceptTop { display: flex; align-items: flex-start; flex-wrap: wrap; gap: .4rem; }
-.overrideChip, .mutedChip, .duplicateChip, .anomalyChip, .transferChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
+.overrideChip, .mutedChip, .duplicateChip, .anomalyChip, .transferChip, .splitChip, .staleSplitChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
 .overrideChip { background: rgba(77, 141, 255, .12); color: #a9c5ff; }
 .mutedChip { background: rgba(116, 131, 161, .12); color: #a7b2c8; }
 .duplicateChip { background: rgba(255, 93, 115, .09); color: #ffc0c9; }
 .anomalyChip { background: rgba(255, 184, 77, .12); color: #ffd28a; }
 .transferChip { background: rgba(43, 217, 247, .09); color: #9cecf8; }
+.splitChip { background: rgba(53, 208, 127, .1); color: #a8edc3; }
+.staleSplitChip { background: rgba(255, 184, 77, .11); color: #ffd28a; }
+.multiCategory { color: #c9d7ef; font-weight: 720; }
+.amountBreakdown { display: block; margin-top: .28rem; color: #9dadc8; font-size: .75rem; font-weight: 650; white-space: normal; }
 .rowActions { display: flex; flex-wrap: wrap; gap: .4rem; }
 .rowActions button { flex: 1 1 6rem; }
 .muted { color: var(--color-text-muted); }

@@ -14,6 +14,7 @@ import {
 } from "../../src/application/auth-recovery";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
+import { TransactionSplitEditor, type TransactionSplitSummary } from "./transaction-split-editor";
 import styles from "./transactions.module.css";
 
 type Lifecycle = "active" | "archived";
@@ -50,6 +51,7 @@ type TransactionRow = {
   userNote: string | null;
   hasUserOverride: boolean;
   overriddenFields: string[];
+  split: TransactionSplitSummary;
   source: {
     sourceRecordId: string;
     sourceRowIdentity: string;
@@ -187,6 +189,7 @@ const OVERRIDE_LABELS: Record<string, string> = {
   kind: "tipo",
   excludedFromAnalytics: "analítica",
   note: "nota",
+  split: "reparto",
 };
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -332,6 +335,7 @@ export default function TransactionsClient() {
   const [editor, setEditor] = useState<EditorState | null>(null);
   const [conceptError, setConceptError] = useState("");
   const [categoryError, setCategoryError] = useState("");
+  const [splittingId, setSplittingId] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewMode, setReviewMode] = useState<ReviewMode | null>(null);
   const [reviewLoading, setReviewLoading] = useState(false);
@@ -471,6 +475,7 @@ export default function TransactionsClient() {
     setEditor(null);
     setConceptError("");
     setCategoryError("");
+    setSplittingId(null);
     setReviewingId(null);
     setReviewMode(null);
     setDuplicateGroup([]);
@@ -566,6 +571,7 @@ export default function TransactionsClient() {
     setEditingId(null);
     setEditor(null);
     setConceptError("");
+    setSplittingId(null);
     closeReview();
     navigateFilters(next);
   }
@@ -577,6 +583,7 @@ export default function TransactionsClient() {
     setEditingId(null);
     setEditor(null);
     setConceptError("");
+    setSplittingId(null);
     closeReview();
     navigateFilters(EMPTY_FILTERS);
   }
@@ -633,6 +640,7 @@ export default function TransactionsClient() {
   }
 
   async function openReview(row: TransactionRow, mode: ReviewMode) {
+    setSplittingId(null);
     setReviewingId(row.id);
     setReviewMode(mode);
     setReviewLoading(true);
@@ -688,6 +696,7 @@ export default function TransactionsClient() {
   }
 
   function beginEdit(row: TransactionRow) {
+  setSplittingId(null);
   setEditingId(row.id);
   setEditor(editorFor(row, facets.categories));
   setConceptError("");
@@ -704,6 +713,30 @@ function cancelEdit() {
   setConceptError("");
   setCategoryError("");
   setAuthRecovery(null);
+}
+
+function beginSplit(row: TransactionRow) {
+  setSplittingId(row.id);
+  setEditingId(null);
+  setEditor(null);
+  setConceptError("");
+  setCategoryError("");
+  setError(null);
+  setAuthRecovery(null);
+  setNotice(null);
+  closeReview();
+}
+
+function cancelSplit() {
+  setSplittingId(null);
+  setAuthRecovery(null);
+}
+
+async function handleSplitSaved(row: TransactionRow, snapshot: TransactionSplitSummary) {
+  setSplittingId(null);
+  setNotice(snapshot.exists ? "Reparto guardado y aplicado a la analítica personal." : "Reparto eliminado. El movimiento vuelve a usar el importe bancario completo.");
+  pendingFocusId.current = row.id;
+  await fetchPage(appliedFilters, null, false);
 }
 
 async function saveEdit(row: TransactionRow) {
@@ -893,7 +926,7 @@ async function saveEdit(row: TransactionRow) {
                       <td data-label="Seleccionar" className={styles.selectCell}><label className={styles.selectTarget}><input data-testid={`select-${row.id}`} aria-label={`Seleccionar ${row.concept.effective}`} type="checkbox" checked={selectedSet.has(row.id)} disabled={saving || (!selectedSet.has(row.id) && selectedIds.length >= MAX_TRANSACTION_PATCH_SIZE)} onChange={() => toggleRow(row.id)} /></label></td>
                       <td data-label="Fecha"><time dateTime={row.bankDate}>{formatDate(row.bankDate)}</time></td>
                       <td data-label="Concepto" className={styles.conceptCell}>
-                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.signMismatch && <span className={styles.anomalyChip}>Signo incoherente</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
+                        <div className={styles.conceptTop}><strong>{row.concept.effective}</strong>{row.overriddenFields.some((field) => field !== "reviewState") && <span className={styles.overrideChip}>Modificado</span>}{row.split?.active && <span className={styles.splitChip}>Repartido</span>}{row.split?.stale && <span className={styles.staleSplitChip}>Reparto por revisar</span>}{row.excludedFromAnalytics && <span className={styles.mutedChip}>Fuera de analítica</span>}{row.duplicateState !== "none" && <span className={styles.duplicateChip}>{DUPLICATE_LABELS[row.duplicateState]}</span>}{row.signMismatch && <span className={styles.anomalyChip}>Signo incoherente</span>}{row.transferPairId && <span className={styles.transferChip}>Transferencia emparejada</span>}</div>
                         <p>{row.merchant.effectiveName ?? "Sin comercio"}</p>
                         <details className={styles.trace}><summary>Detalle y trazabilidad</summary><dl>
                           <div><dt>Concepto original</dt><dd>{row.concept.original}</dd></div><div><dt>Concepto procesado</dt><dd>{row.concept.processed}</dd></div><div><dt>Concepto efectivo</dt><dd>{row.concept.effective}</dd></div>
@@ -903,14 +936,16 @@ async function saveEdit(row: TransactionRow) {
                           {row.signMismatch && <div><dt>Control de signo</dt><dd>El tipo financiero y el signo bancario no coinciden. El importe original no se ha modificado.</dd></div>}
                           <div><dt>Fila de origen</dt><dd>{row.source.sourceRowKey}</dd></div><div><dt>Hoja de origen</dt><dd>{row.source.sourceSheetId ?? "—"}</dd></div><div><dt>Registro fuente</dt><dd>{row.source.sourceRecordId}</dd></div><div><dt>Identidad fuente</dt><dd>{row.source.sourceRowIdentity}</dd></div><div><dt>Fingerprint</dt><dd>{row.source.sourceFingerprint}</dd></div>
                           {row.transferPairId && <div><dt>Transferencia emparejada</dt><dd>{row.transferPairId}</dd></div>}
+                          {row.split?.exists && <><div><dt>Importe bancario</dt><dd>{formatMoney(row.amountCents)}</dd></div><div><dt>Parte personal</dt><dd>{formatMoney(row.split.personalAmountCents)}</dd></div><div><dt>Parte de otras personas</dt><dd>{formatMoney(row.split.otherAmountCents)}</dd></div><div><dt>Estado del reparto</dt><dd>{row.split.stale ? "Revisar tras cambio bancario" : row.split.active ? "Activo" : "Inactivo"}</dd></div></>}
                           {row.overriddenFields.some((field) => field !== "reviewState") && <div><dt>Campos modificados</dt><dd>{row.overriddenFields.filter((field) => field !== "reviewState").map((field) => OVERRIDE_LABELS[field] ?? field).join(", ")}</dd></div>}{row.userNote && <div><dt>Nota</dt><dd>{row.userNote}</dd></div>}
                         </dl></details>
                       </td>
                       <td data-label="Cuenta">{row.account.name}</td>
-                      <td data-label="Categoría"><CategoryIdentity categoryId={row.category.effectiveId} name={row.category.effectiveName} /></td>
-                      <td data-label="Importe" className={`${styles.amount} ${row.amountCents >= 0 ? styles.positive : styles.negative}`}>{formatMoney(row.amountCents)}</td>
+                      <td data-label="Categoría">{row.split?.active && row.split.categoryCount > 1 ? <span className={styles.multiCategory}>Varias categorías</span> : <CategoryIdentity categoryId={row.category.effectiveId} name={row.category.effectiveName} />}</td>
+                      <td data-label="Importe" className={`${styles.amount} ${row.amountCents >= 0 ? styles.positive : styles.negative}`}><div>{formatMoney(row.amountCents)}</div>{row.split?.active ? <small className={styles.amountBreakdown}>Personal: {formatMoney(row.split.personalAmountCents)}</small> : row.split?.stale ? <small className={styles.amountBreakdown}>Reparto por revisar</small> : null}</td>
                       <td data-label="Gestión"><div className={styles.rowActions}>
                         <button data-testid={`edit-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginEdit(row)} disabled={saving}>Editar</button>
+                        {(row.split?.canSplit || row.split?.exists) && <button data-testid={`split-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => beginSplit(row)} disabled={saving}>{row.split?.exists ? "Reparto" : "Repartir"}</button>}
                         {row.duplicateState !== "none" && <button data-testid={`review-duplicate-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => void openReview(row, "duplicate")} disabled={saving || reviewLoading}>Duplicado</button>}
                         {row.kind.effective === "transfer" && <button data-testid={`review-transfer-${row.id}`} className={styles.secondaryButton} type="button" onClick={() => void openReview(row, "transfer")} disabled={saving || reviewLoading}>{row.transferPairId ? "Ver pareja" : "Emparejar"}</button>}
                       </div></td>
@@ -960,6 +995,18 @@ async function saveEdit(row: TransactionRow) {
                           </div>
                           <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
                         </section>
+                      </td></tr>
+                    )}
+                    {splittingId === row.id && row.split && (
+                      <tr className={styles.editorRow}><td colSpan={7}>
+                        <TransactionSplitEditor
+                          transaction={{ id: row.id, amountCents: row.amountCents, concept: row.concept.effective, split: row.split }}
+                          categories={facets.categories}
+                          disabled={saving}
+                          onBusyChange={setSaving}
+                          onSaved={(snapshot) => handleSplitSaved(row, snapshot)}
+                          onCancel={cancelSplit}
+                        />
                       </td></tr>
                     )}
                     {reviewingId === row.id && reviewMode && (

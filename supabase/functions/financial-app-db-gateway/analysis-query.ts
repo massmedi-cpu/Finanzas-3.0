@@ -38,6 +38,18 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
       from bounds p
       cross join lateral financial_app.financial_transaction_facts(p.facts_from, p.date_to, p.account_id) f
     ),
+    allocation_facts as materialized (
+      select f.*
+      from bounds p
+      cross join lateral financial_app.financial_transaction_allocation_facts(p.facts_from, p.date_to, p.account_id) f
+    ),
+    allocation_expenses as materialized (
+      select
+        f.*,
+        financial_app.category_display_name(f.effective_category_id) as category_name
+      from allocation_facts f
+      where f.analytics_eligible and f.effective_kind = 'expense'
+    ),
     expenses as materialized (
       select
         f.*,
@@ -66,9 +78,9 @@ export function runAnalysisSnapshotQuery(sql: any, input: AnalysisQueryInput) {
         coalesce(max(e.category_name), 'Sin categoría') as name,
         coalesce(sum(-e.amount_cents) filter (where e.bank_date between p.date_from and p.date_to), 0)::bigint as current_cents,
         coalesce(sum(-e.amount_cents) filter (where e.bank_date between p.previous_from and p.previous_to), 0)::bigint as previous_cents,
-        count(*) filter (where e.bank_date between p.date_from and p.date_to)::int as current_rows,
-        count(*) filter (where e.bank_date between p.previous_from and p.previous_to)::int as previous_rows
-      from expenses e
+        count(distinct e.transaction_id) filter (where e.bank_date between p.date_from and p.date_to)::int as current_rows,
+        count(distinct e.transaction_id) filter (where e.bank_date between p.previous_from and p.previous_to)::int as previous_rows
+      from allocation_expenses e
       cross join bounds p
       where e.bank_date between p.previous_from and p.date_to
       group by e.effective_category_id
