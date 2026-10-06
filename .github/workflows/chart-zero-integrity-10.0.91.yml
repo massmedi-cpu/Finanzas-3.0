@@ -1,4 +1,4 @@
-name: Chart Zero Integrity 10.0.91
+name: Evolution Integrity 10.0.91
 
 on:
   pull_request:
@@ -51,8 +51,8 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npx playwright install --with-deps chromium
-      - name: QA-11 · ceros reales en gráficas desktop y móvil
+      - name: QA-11/12/13 · evolución coherente desktop y móvil
         run: >-
           npx playwright test tests/e2e/inicio-smart-brief.spec.ts
-          --grep "QA-11"
+          --grep "QA-11|QA-12|QA-13"
           --project=chromium-desktop --project=chromium-mobile --workers=1

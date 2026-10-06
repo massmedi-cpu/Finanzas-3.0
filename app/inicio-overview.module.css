@@ -375,6 +375,42 @@
   background: var(--color-primary);
 }
 
+.evolutionSingleBar[data-zero="true"] {
+  min-height: 0;
+}
+
+.evolutionSignedArea {
+  position: relative;
+  align-items: initial;
+  border-bottom: 0;
+}
+
+.evolutionZeroLine {
+  position: absolute;
+  z-index: 1;
+  top: 50%;
+  right: 0;
+  left: 0;
+  border-top: 1px solid var(--color-border-strong);
+}
+
+.evolutionSignedBar {
+  position: absolute;
+  left: 50%;
+  max-height: 50%;
+  transform: translateX(-50%);
+}
+
+.evolutionSignedBar[data-sign="positive"],
+.evolutionSignedBar[data-sign="zero"] {
+  bottom: 50%;
+}
+
+.evolutionSignedBar[data-sign="negative"] {
+  top: 50%;
+  border-radius: 0 0 0.45rem 0.45rem;
+}
+
 .evolutionNegativeBar {
   background: var(--color-danger);
 }

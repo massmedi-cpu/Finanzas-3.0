@@ -495,3 +495,84 @@ test("QA-11 · las gráficas no dibujan barras positivas para valores exactament
   await expect(zeroNetBar).toHaveCSS("height", "0px");
   await expect(zeroNetBar).toHaveCSS("min-height", "0px");
 });
+
+
+test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("scope") === "secondary") {
+      await json(route, {
+        contractVersion: 1,
+        scope: "secondary",
+        asOfDate: "2026-09-16",
+        dataThroughDate: "2026-09-16",
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"],
+        failedSources: [],
+        data: {
+          financial: null,
+          monthly: {
+            dateFrom: "2026-07-01",
+            dateTo: "2026-09-16",
+            rows: [
+              { monthStart: "2026-07-01", incomeCents: 20000, expenseCents: 10000, operatingNetCents: 10000 },
+              { monthStart: "2026-08-01", incomeCents: 10000, expenseCents: 15000, operatingNetCents: -5000 },
+              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+            ],
+          },
+          budgets,
+          forecast,
+          transactions: null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Flujo neto" }).click();
+
+  const chart = page.getByRole("group", { name: "Flujo neto por mes" });
+  const zeroLine = chart.locator('[data-zero-line="true"]').first();
+  const positive = chart.locator('[data-sign="positive"]').first();
+  const negative = chart.locator('[data-sign="negative"]').first();
+  const zero = chart.locator('[data-sign="zero"]').first();
+
+  const lineBox = await zeroLine.boundingBox();
+  const positiveBox = await positive.boundingBox();
+  const negativeBox = await negative.boundingBox();
+  if (!lineBox || !positiveBox || !negativeBox) throw new Error("QA-12: geometría de barras no disponible");
+
+  const baseline = lineBox.y;
+  expect(positiveBox.y).toBeLessThan(baseline);
+  expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 1);
+  expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 1);
+  expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
+  await expect(zero).toHaveCSS("height", "0px");
+});
+
+test("QA-13 · Saldo explica una serie bancaria vacía en lugar de dejar el panel en blanco", async ({ page }) => {
+  await mockInicio(page);
+
+  await page.route(/\\/api\\/financial\\?mode=balance_series.*/, async (route) => {
+    await json(route, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: [],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Saldo" }).click();
+  await expect(page.getByRole("status")).toContainText("No hay saldos bancarios disponibles para este periodo.");
+});

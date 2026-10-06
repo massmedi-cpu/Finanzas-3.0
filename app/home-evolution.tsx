@@ -49,12 +49,17 @@ function SingleSeriesBars({
       {rows.map((row) => {
         const value = valueFor(row);
         const height = value === 0 ? 0 : Math.max(3, (Math.abs(value) / max) * 100);
+        const renderedHeight = signed ? height / 2 : height;
+        const sign = signed ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
         return (
           <div className={styles.evolutionSingleColumn} key={row.monthStart}>
-            <div className={styles.evolutionBarArea} aria-hidden="true">
+            <div className={`${styles.evolutionBarArea}${signed ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
+              {signed ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
               <span
-                className={`${styles.evolutionSingleBar} ${signed && value < 0 ? styles.evolutionNegativeBar : ""}`}
-                style={{ height: `${height}%` }}
+                className={`${styles.evolutionSingleBar} ${signed ? styles.evolutionSignedBar : ""} ${signed && value < 0 ? styles.evolutionNegativeBar : ""}`}
+                data-zero={value === 0 ? "true" : undefined}
+                data-sign={sign}
+                style={{ height: `${renderedHeight}%` }}
               />
             </div>
             <strong>{formatMoney(value)}</strong>
@@ -157,6 +162,9 @@ export default function HomeEvolution({
       {mode === "balance" && balanceLoading ? <div className={styles.skeleton} aria-label="Cargando evolución del saldo" /> : null}
       {mode === "balance" && balanceError ? (
         <p className={styles.empty} role="status">No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles.</p>
+      ) : null}
+      {mode === "balance" && !balanceLoading && !balanceError && balanceRows.length === 0 ? (
+        <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
       ) : null}
       {mode === "balance" && !balanceLoading && !balanceError && balanceRows.length > 0 ? (
         <>
