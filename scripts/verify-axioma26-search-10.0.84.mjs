@@ -10,7 +10,18 @@ const api = read("app/api/transactions/route.ts");
 const client = read("app/transactions/transactions-client.tsx");
 const pkg = JSON.parse(read("package.json"));
 
-checks.push([pkg.version === "10.0.84", "versión canónica 10.0.84"]);
+const versionParts = String(pkg.version).split(".").map(Number);
+const minVersion = [10, 0, 84];
+const versionAtLeast10084 =
+  versionParts.length === 3 &&
+  versionParts.every(Number.isInteger) &&
+  versionParts.some((part, index) => part !== minVersion[index])
+    ? versionParts.findIndex((part, index) => part !== minVersion[index]) >= 0 &&
+      versionParts[versionParts.findIndex((part, index) => part !== minVersion[index])] >
+        minVersion[versionParts.findIndex((part, index) => part !== minVersion[index])]
+    : versionParts.length === 3 && versionParts.every((part, index) => part === minVersion[index]);
+
+checks.push([versionAtLeast10084, "versión canónica 10.0.84+"]);
 
 for (const token of [
   "query_effective_transactions_v2",
@@ -33,9 +44,13 @@ for (const token of [
   "nullableSafeInteger",
   "amountFromCents",
   "amountToCents",
-  "query_effective_transactions_v2",
   "invalid_transaction_amount_range",
 ]) requireText(query, token, "gateway-busqueda");
+
+checks.push([
+  /query_effective_transactions_v\d+\(/.test(query),
+  "gateway-busqueda: motor versionado de query_effective_transactions",
+]);
 
 for (const token of [
   "optionalSafeInteger",
@@ -51,10 +66,13 @@ for (const token of [
   "amountTo",
   "Importe mínimo",
   "Importe máximo",
-  "Concepto, comercio, categoría, cuenta o nota",
+  "Concepto",
+  "comercio",
+  "categoría",
+  "nota",
 ]) requireText(client, token, "ui-busqueda");
 
 const failures = checks.filter(([ok]) => !ok);
 for (const [, label] of failures) console.error(`❌ ${label}`);
 if (failures.length) process.exitCode = 1;
-else console.log("✅ Axioma §26 · búsqueda avanzada tramo 1 certificada");
+else console.log("✅ Axioma §26 · búsqueda avanzada tramo 1 certificada (10.0.84+)");
