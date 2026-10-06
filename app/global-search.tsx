@@ -242,6 +242,7 @@ export default function GlobalSearch() {
                 autoComplete="off"
                 maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
+                aria-label="Buscar en Financial App"
                 aria-expanded="true"
                 aria-autocomplete="list"
                 aria-controls={`${inputId}-results`}
