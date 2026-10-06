@@ -162,8 +162,8 @@ export function TransactionSplitEditor({
 
   const bankAbs = Math.abs(detail?.bankAmountCents ?? transaction.amountCents);
   const parsed = lines.map((line) => parseInputAmount(line.amount));
-  const totalAbs = parsed.reduce((sum, cents) => sum + (cents ?? 0), 0);
-  const personalAbs = lines.reduce((sum, line, index) => sum + (line.scope === "personal" ? (parsed[index] ?? 0) : 0), 0);
+  const totalAbs = parsed.reduce<number>((sum, cents) => sum + (cents ?? 0), 0);
+  const personalAbs = lines.reduce<number>((sum, line, index) => sum + (line.scope === "personal" ? (parsed[index] ?? 0) : 0), 0);
   const otherAbs = totalAbs - personalAbs;
   const difference = bankAbs - totalAbs;
   const linesValid = lines.length >= 2 && lines.length <= 20 && parsed.every((value) => value !== null);
