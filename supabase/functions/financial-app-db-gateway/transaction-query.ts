@@ -123,9 +123,9 @@ export async function handleTransactionQueryAction(input: {
         from unnest(${ids}::uuid[]) as requested(id)
       `;
       const splitById = new Map(splitRows.map((row: any) => [row.id, row.split]));
-      result.rows = pageRows.map((row: any) => ({
-        ...row,
-        split: splitById.get(row.id) ?? {
+      result.rows = pageRows.map((row: any) => {
+        const snapshot = splitById.get(row.id);
+        const split = snapshot ? { ...snapshot, allocations: [] } : {
           exists: false,
           active: false,
           stale: false,
@@ -137,8 +137,11 @@ export async function handleTransactionQueryAction(input: {
           allocationCount: 0,
           categoryCount: 0,
           allocations: [],
-        },
-      }));
+        };
+        const overriddenFields = Array.isArray(row?.overriddenFields) ? [...row.overriddenFields] : [];
+        if (split.exists && !overriddenFields.includes("split")) overriddenFields.push("split");
+        return { ...row, split, overriddenFields };
+      });
     }
 
     return json(result);
