@@ -175,7 +175,7 @@ test("Inicio inteligente resume el estado actual sin crear un segundo motor", as
   const brief = page.getByRole("region", { name: "Resumen inteligente" });
   await expect(brief).toBeVisible();
   await expect(brief.getByRole("heading", { name: "Ahora mismo" })).toBeVisible();
-  await expect(brief).toContainText("Balance mensual en positivo");
+  await expect(brief).toContainText("Balance registrado en positivo");
   await expect(brief).toContainText("Presupuesto dentro del límite");
   await expect(brief).toContainText("Sin movimientos previstos");
   await expect(brief).toContainText("Datos hasta 16 sept");
