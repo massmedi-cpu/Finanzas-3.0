@@ -105,7 +105,7 @@ export async function handleTransactionQueryAction(input: {
     }
 
     const rows = await sql`
-      select financial_app.query_effective_transactions(
+      select financial_app.query_effective_transactions_v2(
         ${query},
         ${accountId}::uuid,
         ${categoryId}::uuid,
@@ -115,13 +115,13 @@ export async function handleTransactionQueryAction(input: {
         ${duplicateState},
         ${dateFrom}::date,
         ${dateTo}::date,
-        ${amountFromCents}::bigint,
-        ${amountToCents}::bigint,
         ${cursorBankDate}::date,
         ${cursorId}::uuid,
         ${limit},
         ${uncategorized},
-        ${signMismatch}
+        ${signMismatch},
+        ${amountFromCents}::bigint,
+        ${amountToCents}::bigint
       ) as result
     `;
     const result = rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null };
