@@ -101,6 +101,8 @@ export async function handleTransactionQueryAction(input: {
     const hasDocument = booleanValue(payload.hasDocument, "transaction_has_document");
     const documentQuery = nullableText(payload.documentQuery, "transaction_document_query", 200);
     const splitLabel = nullableText(payload.splitLabel, "transaction_split_label", 200);
+    const tag = nullableText(payload.tag, "transaction_tag", 40);
+    const ocrQuery = nullableText(payload.ocrQuery, "transaction_ocr_query", 200);
     const cursorBankDate = nullableDate(payload.cursorBankDate, "transaction_cursor_bank_date");
     const cursorId = nullableUuid(payload.cursorId, "transaction_cursor_id");
     const limit = pageLimit(payload.limit);
@@ -113,7 +115,7 @@ export async function handleTransactionQueryAction(input: {
     }
 
     const rows = await sql`
-      select financial_app.query_effective_transactions_v3(
+      select financial_app.query_effective_transactions_v4(
         ${query},
         ${accountId}::uuid,
         ${categoryId}::uuid,
@@ -137,7 +139,9 @@ export async function handleTransactionQueryAction(input: {
         ${internalTransfer},
         ${hasDocument},
         ${documentQuery},
-        ${splitLabel}
+        ${splitLabel},
+        ${tag},
+        ${ocrQuery}
       ) as result
     `;
     const result = rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null };
@@ -177,7 +181,7 @@ export async function handleTransactionQueryAction(input: {
   }
 
   if (action === "transaction.facets") {
-    const [accounts, categories, merchants, channels, reconciliationStates, years] = await Promise.all([
+    const [accounts, categories, merchants, channels, reconciliationStates, years, tags] = await Promise.all([
       sql`select id,name,lifecycle,sort_order from financial_app.accounts order by case lifecycle when 'active' then 0 else 1 end,sort_order,name,id`,
       sql`select id,name,kind,lifecycle,parent_category_id,sort_order from financial_app.categories order by case lifecycle when 'active' then 0 else 1 end,kind,parent_category_id nulls first,sort_order,name,id`,
       sql`select id,name,lifecycle from financial_app.merchants order by case lifecycle when 'active' then 0 else 1 end,normalized_name,id`,
@@ -198,6 +202,12 @@ export async function handleTransactionQueryAction(input: {
         from financial_app.transactions
         order by value desc
       `,
+      sql`
+        select tag as value
+        from financial_app.transaction_tags
+        group by tag,tag_key
+        order by tag_key,tag
+      `,
     ]);
     return json({
       accounts,
@@ -206,6 +216,7 @@ export async function handleTransactionQueryAction(input: {
       channels: channels.map((row: any) => row.value).filter((value: unknown): value is string => typeof value === "string"),
       reconciliationStates: reconciliationStates.map((row: any) => row.value).filter((value: unknown): value is string => typeof value === "string"),
       years: years.map((row: any) => row.value).filter((value: unknown): value is number => Number.isInteger(value)),
+      tags: tags.map((row: any) => row.value).filter((value: unknown): value is string => typeof value === "string"),
     });
   }
 
