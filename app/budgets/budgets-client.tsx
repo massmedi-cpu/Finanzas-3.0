@@ -701,7 +701,7 @@ export default function BudgetsClient() {
                       return (
                         <div className={styles.historyRow} key={row.month}>
                           <span>{shortMonth(row.month)}</span>
-                          <div className={styles.historyBar}><i style={{ width: `${Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
+                          <div className={styles.historyBar}><i data-budget-history-bar="true" data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${row.expenseCents === 0 ? 0 : Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
                           <strong>{formatMoney(row.expenseCents)}</strong>
                         </div>
                       );

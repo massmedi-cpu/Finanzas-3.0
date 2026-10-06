@@ -500,3 +500,37 @@ test("protected preview rejects a valid but unknown budget category without pers
     code: "budget_category_not_found",
   });
 });
+
+
+test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", async ({ page }) => {
+  const zeroHistorySnapshot = structuredClone(baseSnapshot);
+  zeroHistorySnapshot.total.historyMonths = [
+    { month: "2026-06", expenseCents: 100000 },
+    { month: "2026-07", expenseCents: 0 },
+    { month: "2026-08", expenseCents: 140000 },
+  ];
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(zeroHistorySnapshot),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 405,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "read_only_test" }),
+    });
+  });
+
+  await page.goto("/budgets");
+  const history = page.getByRole("region", { name: "Tres meses recientes visibles de la referencia automática" });
+  await expect(history).toContainText("0,00");
+  const zeroBar = history.locator('[data-budget-history-bar="true"][data-zero="true"]');
+  await expect(zeroBar).toHaveCount(1);
+  expect(await zeroBar.evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
+  expect(await zeroBar.evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
+});

@@ -1,0 +1,55 @@
+name: Budget History Zero Integrity 10.0.96
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/budgets/budgets-client.tsx"
+      - "tests/e2e/budgets.spec.ts"
+      - "scripts/verify-budget-history-zero-10.0.96.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/budget-history-zero-10.0.96.yml"
+  push:
+    branches:
+      - "qa/user-audit-p4-10.0.92"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: budget-history-zero-10.0.96-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:budget-history-zero
+      - run: npm run build
+
+  qa22-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-22 · cero real en histórico de Presupuestos
+        run: >-
+          npx playwright test tests/e2e/budgets.spec.ts
+          --grep "QA-22"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
