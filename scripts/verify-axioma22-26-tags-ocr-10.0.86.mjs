@@ -5,6 +5,8 @@ const checks = [];
 const requireText = (source, token, label) => checks.push([source.includes(token), `${label}: ${token}`]);
 
 const migration = read("supabase/migrations/20261006095500_axioma22_26_tags_ocr_10_0_86.sql");
+const tagsRls = read("supabase/migrations/20261006103000_harden_transaction_tags_rls_10_0_86.sql");
+const ocrContract = read("supabase/migrations/20261001155500_pre034_document_ocr_review_contract.sql");
 const query = read("supabase/functions/financial-app-db-gateway/transaction-query.ts");
 const management = read("supabase/functions/financial-app-db-gateway/transaction-management.ts");
 const api = read("app/api/transactions/route.ts");
@@ -13,6 +15,15 @@ const tests = read("tests/e2e/transactions.spec.ts");
 const pkg = JSON.parse(read("package.json"));
 
 checks.push([pkg.version === "10.0.86", "versión canónica 10.0.86"]);
+requireText(ocrContract, "create table if not exists financial_app.document_ocr_runs", "prerrequisito-ocr");
+for (const token of [
+  "enable row level security",
+  "force row level security",
+  "transaction_tags_workspace_isolation",
+  "financial_app.require_current_workspace_id()",
+  "to financial_app_gateway",
+  "revoke all on financial_app.transaction_tags from public, anon, authenticated",
+]) requireText(tagsRls, token, "rls-etiquetas");
 checks.push([
   String(pkg.scripts?.postbuild ?? "").includes("verify-axioma22-26-tags-ocr-10.0.86.mjs"),
   "gate 10.0.86 incluido en postbuild",
