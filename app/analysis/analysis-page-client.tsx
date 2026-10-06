@@ -6,7 +6,7 @@ import type { AnalysisSelectionInput } from "../../src/application/analysis/anal
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import AnalysisClient from "./analysis-client";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
-import AnalysisSourceFreshness from "./analysis-source-freshness";
+import AnalysisSourceFreshness, { type SourceFreshness } from "./analysis-source-freshness";
 
 function currentMadridMonth() {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -40,6 +40,7 @@ export default function AnalysisPageClient({
 }) {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
+  const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
 
   useEffect(() => {
     if (initialSnapshot) return;
@@ -100,8 +101,8 @@ export default function AnalysisPageClient({
 
   return (
     <>
-      <AnalysisSourceFreshness />
-      <AnalysisClient initialSnapshot={snapshot} />
+      <AnalysisSourceFreshness onChange={setFreshness} />
+      <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null} />
     </>
   );
 }
