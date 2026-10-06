@@ -18,6 +18,15 @@ async function dispatchInstallPrompt(page: import("@playwright/test").Page) {
 }
 
 test.describe("PWA Android install", () => {
+  test("keeps login isolated from the authenticated app shell", async ({ page }) => {
+    await page.goto("/login");
+    await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
+    await expect(page.locator('[data-app-shell="shared"]')).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Navegación principal" })).toHaveCount(0);
+    await expect(page.getByRole("navigation", { name: "Navegación móvil" })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Buscar en Financial App" })).toHaveCount(0);
+  });
+
   test("captures the Chromium install prompt on login before authentication", async ({ page }) => {
     await page.goto("/login");
     await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
