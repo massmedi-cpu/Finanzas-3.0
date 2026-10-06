@@ -328,3 +328,68 @@ for (const width of WIDTHS) {
 
   });
 }
+
+
+test("QA-02 · Análisis no convierte un periodo sin cobertura completa en tendencia favorable", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-10", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+
+  await expect(page.getByRole("heading", { name: /Datos hasta 10 sept 2026: no interpretamos el periodo posterior como mejora ni empeoramiento/ })).toBeVisible();
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis).toContainText("Cobertura incompleta: no interpretamos la variación como tendencia");
+  await expect(kpis).not.toContainText("Tasa de ahorro al alza");
+  await expect(kpis).not.toContainText("Tasa de ahorro a la baja");
+});
+
+test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema claro", async ({ page }, testInfo) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: /Aplicar/ }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+
+  const quick = page.locator('[class*="quickReadIntro"]').first();
+  const patterns = page.locator('div[class*="heading"]').filter({ hasText: "PATRONES DEL PERIODO" }).first();
+  await expect(quick).toBeVisible();
+  await expect(patterns).toBeVisible();
+
+  for (const surface of [quick, patterns]) {
+    const computed = await surface.evaluate((element) => {
+      const style = getComputedStyle(element);
+      const child = element.querySelector("strong, h2, span");
+      return {
+        backgroundImage: style.backgroundImage,
+        color: child ? getComputedStyle(child).color : style.color,
+      };
+    });
+    expect(computed.backgroundImage).not.toContain("rgba(14, 25, 48");
+    expect(computed.backgroundImage).not.toContain("rgba(7, 14, 29");
+    expect(computed.color).not.toBe("rgb(247, 249, 255)");
+  }
+
+  await quick.screenshot({ path: testInfo.outputPath("qa03-light-quick-read.png") });
+  await patterns.screenshot({ path: testInfo.outputPath("qa03-light-patterns.png") });
+});
