@@ -77,13 +77,13 @@ async function AnalysisData({
   return (
     <>
       <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" />
-      <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
       <div className={shellStyles.enhanced}>
         <AnalysisPageClient
           initialSnapshot={initialSnapshot}
           fallbackSelection={fallbackSelection}
         />
       </div>
+      <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
     </>
   );
 }
