@@ -225,6 +225,52 @@ test("Inicio muestra cambios útiles desde la última visita y conserva una memo
   expect(JSON.stringify(stored)).not.toContain("Comercio de prueba");
 });
 
+test("QA-02 · Inicio no llama equilibrio a un mes sin movimientos importados", async ({ page }) => {
+  await mockInicio(page);
+  const staleTransactions = {
+    ...transactions,
+    rows: transactions.rows.map((row) => ({ ...row, bankDate: "2026-08-31" })),
+  };
+
+  await page.route("**/api/dashboard?**", async (route) => {
+    const url = new URL(route.request().url());
+    const scope = url.searchParams.get("scope");
+    if (scope === "activity") {
+      await json(route, {
+        contractVersion: 1,
+        scope: "activity",
+        asOfDate: "2026-09-16",
+        dataThroughDate: "2026-08-31",
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["transactions"],
+        failedSources: [],
+        data: { financial: null, monthly: null, budgets: null, forecast: null, transactions: staleTransactions },
+      });
+      return;
+    }
+    if (scope === "primary") {
+      await json(route, {
+        contractVersion: 1,
+        scope: "primary",
+        asOfDate: "2026-09-16",
+        dataThroughDate: "2026-08-31",
+        generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["financial", "transactions"],
+        failedSources: [],
+        data: { financial: { ...financial, period: { ...financial.period, incomeCents: 0, expenseCents: 0, operatingNetCents: 0, savingsCents: 0, savingsRateBps: null } }, monthly: null, budgets: null, forecast: null, transactions: staleTransactions },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  const brief = page.getByRole("region", { name: "Resumen inteligente" });
+  await expect(brief).toContainText("Mes aún sin movimientos importados");
+  await expect(brief).toContainText("No interpretamos la ausencia de movimientos como equilibrio o mejora");
+  await expect(brief).not.toContainText("Mes en equilibrio");
+});
+
 test("Primera visita crea referencia para el futuro sin inventar cambios", async ({ page }) => {
   await mockInicio(page);
   await page.goto("/");
