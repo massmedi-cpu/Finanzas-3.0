@@ -271,6 +271,40 @@ test("QA-02 · Inicio no llama equilibrio a un mes sin movimientos importados", 
   await expect(brief).not.toContainText("Mes en equilibrio");
 });
 
+test("QA-08 · Inicio ofrece Saldo, Ingresos y gastos y Flujo neto desde motores canónicos", async ({ page }) => {
+  await mockInicio(page);
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    await json(route, {
+      dateFrom: "2026-07-01",
+      dateTo: "2026-09-16",
+      accountId: null,
+      rows: [
+        { monthStart: "2026-07-01", asOfDate: "2026-07-31", balanceCents: 18803155, accounts: 2, explicitBalanceAccounts: 2, reconstructedBalanceAccounts: 0 },
+        { monthStart: "2026-08-01", asOfDate: "2026-08-31", balanceCents: 18891172, accounts: 2, explicitBalanceAccounts: 2, reconstructedBalanceAccounts: 0 },
+        { monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 18813781, accounts: 2, explicitBalanceAccounts: 2, reconstructedBalanceAccounts: 0 },
+      ],
+      principles: {
+        bankSource: "read_only",
+        balanceSource: "financial_account_balances",
+        cashFlowReconstruction: false,
+        getHasSideEffects: false,
+      },
+    });
+  });
+
+  await page.goto("/");
+  const selector = page.getByRole("group", { name: "Vista de evolución financiera" });
+  await expect(selector.getByRole("button", { name: "Ingresos y gastos" })).toHaveAttribute("aria-pressed", "true");
+
+  await selector.getByRole("button", { name: "Saldo" }).click();
+  await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toContainText("188.137,81");
+  await expect(page.getByText(/no reconstruye el saldo sumando el cash flow/i)).toBeVisible();
+
+  await selector.getByRole("button", { name: "Flujo neto" }).click();
+  await expect(page.getByRole("group", { name: "Flujo neto por mes" })).toBeVisible();
+  await expect(page.getByText(/ingresos menos gastos elegibles/i)).toBeVisible();
+});
+
 test("Primera visita crea referencia para el futuro sin inventar cambios", async ({ page }) => {
   await mockInicio(page);
   await page.goto("/");
