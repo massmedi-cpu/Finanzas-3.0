@@ -155,13 +155,16 @@ export default function HomeEvolution({
   const balanceHasAccounts = balanceAvailablePoints > 0;
   const balanceCoverageMessage = useMemo(() => {
     if (!balanceHasAccounts) return "";
-    const availability = balanceMissingPoints > 0
-      ? `Cobertura parcial: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible. Los ${balanceMissingPoints} restantes aparecen como «Sin dato», no como 0 €.`
-      : `Cobertura: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible.`;
-    const origin = reconstructedBalancePoints === 0
-      ? "Los puntos disponibles usan la serie bancaria canónica."
-      : `${reconstructedBalancePoints} de ${balanceAvailablePoints} puntos disponibles incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos.`;
-    return `${availability} ${origin} No se reconstruye desde Cash Flow.`;
+    if (balanceMissingPoints > 0) {
+      const reconstruction = reconstructedBalancePoints > 0
+        ? ` ${reconstructedBalancePoints} de ${balanceAvailablePoints} puntos disponibles incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos.`
+        : " Los puntos disponibles usan la serie bancaria canónica.";
+      return `Cobertura parcial: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible. Los ${balanceMissingPoints} restantes aparecen como «Sin dato», no como 0 €.${reconstruction} No se reconstruye desde Cash Flow.`;
+    }
+    if (reconstructedBalancePoints > 0) {
+      return `Cobertura mixta: ${reconstructedBalancePoints} de ${balanceRows.length} puntos incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos. No se reconstruye desde Cash Flow.`;
+    }
+    return `Cobertura: ${balanceRows.length} de ${balanceRows.length} puntos usan saldos bancarios explícitos. No se reconstruye desde Cash Flow.`;
   }, [balanceAvailablePoints, balanceHasAccounts, balanceMissingPoints, balanceRows.length, reconstructedBalancePoints]);
 
   return (
