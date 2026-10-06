@@ -429,7 +429,9 @@ test("QA-04 · acumulado y ritmo diario respetan el calendario y representan dí
   const dailyDetails = page.getByText("Ver datos diarios", { exact: true });
   await dailyDetails.click();
   await expect(dailyDetails.locator("..").getByRole("table").locator("tbody tr")).toHaveCount(15);
-  await expect(dailyDetails.locator("..").getByRole("table")).toContainText(/2 sept\s+0,00\s*€\s+0/);
+  const zeroDay = dailyDetails.locator("..").getByRole("table").getByRole("row", { name: /^2 sept / });
+  await expect(zeroDay).toContainText("0,00");
+  await expect(zeroDay.getByRole("cell").last()).toHaveText("0");
 });
 
 test("QA-06 · Análisis identifica la tasa histórica como agregada y no como media de porcentajes mensuales", async ({ page }) => {
