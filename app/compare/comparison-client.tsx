@@ -17,7 +17,7 @@ import {
   type ComparisonSelectionInput,
   type ResolvedComparisonSelection,
 } from "../../src/application/comparison/comparison-selection";
-import AnalysisSourceFreshness from "../analysis/analysis-source-freshness";
+import AnalysisSourceFreshness, { type SourceFreshness } from "../analysis/analysis-source-freshness";
 import ComparisonLoadingFrame from "./comparison-loading-frame";
 import styles from "./compare.module.css";
 
@@ -225,7 +225,13 @@ function DriverPanel({
   );
 }
 
-function comparisonInsight(snapshot: ComparisonSnapshot) {
+function comparisonInsight(snapshot: ComparisonSnapshot, latestMovementDate: string | null) {
+  if (latestMovementDate && latestMovementDate < snapshot.selection.primaryTo) {
+    const outsidePrimary = latestMovementDate < snapshot.selection.primaryFrom;
+    return outsidePrimary
+      ? `El periodo principal no tiene cobertura bancaria confirmada: el último movimiento importado es del ${formatDate(latestMovementDate)}. No interpretamos 0 € como mejora.`
+      : `Los datos llegan hasta ${formatDate(latestMovementDate)}, antes del final del periodo principal. No interpretamos la ausencia posterior como una bajada del gasto.`;
+  }
   const expense = snapshot.metrics.expense;
   if (
     snapshot.primary.incomeCents === 0
@@ -257,6 +263,7 @@ export default function ComparisonClient({
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
   const activeRequest = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
 
@@ -363,7 +370,7 @@ export default function ComparisonClient({
 
   return (
     <>
-      <AnalysisSourceFreshness />
+      <AnalysisSourceFreshness onChange={setFreshness} />
       <main className={styles.shell}>
         <header className={styles.header}>
           <div>
@@ -429,8 +436,12 @@ export default function ComparisonClient({
             <section className={styles.insight} aria-labelledby="comparison-insight-title">
               <div>
                 <p>LECTURA PRINCIPAL</p>
-                <h2 id="comparison-insight-title">{comparisonInsight(snapshot)}</h2>
-                <span>Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración.</span>
+                <h2 id="comparison-insight-title">{comparisonInsight(snapshot, freshness?.latestMovementDate ?? null)}</h2>
+                <span>
+                  {freshness?.latestMovementDate && freshness.latestMovementDate < snapshot.selection.primaryTo
+                    ? `Cobertura bancaria incompleta para el periodo principal · último movimiento ${formatDate(freshness.latestMovementDate)}.`
+                    : "Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración."}
+                </span>
               </div>
               <div className={styles.periodLinks}>
                 <Link prefetch={false} href={snapshot.links.primaryTransactions}>Ver principal · {formatPeriod(snapshot.selection.primaryFrom, snapshot.selection.primaryTo)}</Link>
