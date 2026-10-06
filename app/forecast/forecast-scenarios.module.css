@@ -229,9 +229,3 @@
     align-items: flex-start;
   }
 }
-
-@media (max-width: 380px) {
-  .metrics {
-    grid-template-columns: 1fr;
-  }
-}
