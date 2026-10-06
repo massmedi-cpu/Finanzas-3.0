@@ -26,6 +26,16 @@ const forecastWrites = read("tests/e2e/forecast-write-integrity.spec.ts");
 const backupV2 = read("tests/e2e/backup-restore-v2.spec.ts");
 const restore = read("scripts/phase13-restore-rehearsal-v2.sh");
 const backupWorkflow = read(".github/workflows/backup-v2-restore-rehearsal.yml");
+const ocrFkIndex = read("supabase/migrations/20261006173000_cover_document_ocr_review_run_fk_10_0_90.sql");
+for (const token of [
+  "document_ocr_reviews_workspace_run_idx",
+  "document_ocr_reviews(workspace_id, ocr_run_id)",
+]) requireText(ocrFkIndex, token, "índice FK OCR");
+checks.push([
+  !/update\s+financial_app\./i.test(ocrFkIndex) && !/delete\s+from\s+financial_app\./i.test(ocrFkIndex),
+  "índice FK OCR es aditivo y no modifica filas",
+]);
+
 const transactionManagement = read("supabase/functions/financial-app-db-gateway/transaction-management.ts");
 const forecastLogic = read("supabase/functions/financial-app-db-gateway/forecast-logic.ts");
 const documentLogic = read("supabase/functions/financial-app-db-gateway/document-logic.ts");
