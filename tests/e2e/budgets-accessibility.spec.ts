@@ -81,6 +81,8 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
 
   await page.goto("/budgets");
   await expect(page.getByRole("heading", { name: "Presupuestos" })).toBeVisible();
+  await page.getByLabel("Mes", { exact: true }).fill("2026-09");
+  await expect(page.getByRole("button", { name: "Definir límite" }).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
@@ -134,21 +136,23 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
   await mockBudgetRead(page);
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto("/budgets");
+  await page.getByLabel("Mes", { exact: true }).fill("2026-09");
+  await expect(page.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
 
   const totalCard = page.getByRole("heading", { name: "Presupuesto mensual total" }).locator("xpath=ancestor::article");
   const targets = [
     page.locator("label").filter({ hasText: "Mes" }).first(),
-    page.getByText("El histórico no se presenta como recomendación", { exact: true }),
-    page.getByText("Tu límite elegido tiene prioridad; sin él, el histórico se usa sólo para comparar.", { exact: true }),
-    page.getByText("Referencia histórica · media de 3 meses", { exact: true }),
+    page.getByText("La referencia no se presenta como recomendación financiera", { exact: true }),
+    page.getByText("Tu límite elegido tiene prioridad; sin él, la referencia automática se usa para comparar.", { exact: true }),
+    page.getByText("Referencia automática", { exact: true }).first(),
     page.getByText("Dentro de referencia", { exact: true }).first(),
     totalCard.getByText("Gastado", { exact: true }),
     totalCard.getByText("Comparación con lo habitual", { exact: true }),
     page.getByText("Junio", { exact: true }),
     page.getByText(snapshot.total.automaticExplanation, { exact: true }),
-    page.getByText("El gasto mostrado procede de tus movimientos. La referencia histórica describe el pasado y no es una recomendación financiera.", { exact: true }),
+    page.getByText("El gasto procede de tus movimientos. La referencia automática combina señales históricas sin convertirse en una recomendación financiera.", { exact: true }),
     page.getByText("La fuente bancaria se mantiene estrictamente en solo lectura.", { exact: true }),
-    page.getByText("El total ya muestra gasto habitual, límite elegido y consumo real. Cuando existan categorías de gasto activas, aparecerán aquí con la misma separación.", { exact: true }),
+    page.getByText("El total ya muestra referencia automática, límite elegido y consumo real. Cuando existan categorías de gasto activas, aparecerán aquí con la misma separación.", { exact: true }),
     page.getByRole("link", { name: "Abrir Configuración" }),
   ];
 
