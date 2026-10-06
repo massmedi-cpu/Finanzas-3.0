@@ -116,6 +116,8 @@ type Filters = {
   reviewState: string;
   duplicateState: string;
   signMismatch: string;
+  amountFrom: string;
+  amountTo: string;
   dateFrom: string;
   dateTo: string;
 };
@@ -137,6 +139,7 @@ type EditorState = {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const MONEY_FILTER = /^-?\d+(?:[.,]\d{1,2})?$/;
 
 const UNCATEGORIZED = "__uncategorized__";
 const INHERIT = "__inherit__";
@@ -156,6 +159,8 @@ const EMPTY_FILTERS: Filters = {
   reviewState: "",
   duplicateState: "",
   signMismatch: "",
+  amountFrom: "",
+  amountTo: "",
   dateFrom: "",
   dateTo: "",
 };
@@ -209,6 +214,26 @@ function formatDate(value: string) {
   return dateFormatter.format(new Date(Date.UTC(year, month - 1, day, 12)));
 }
 
+function moneyFilterToCents(value: string): number | null {
+  const raw = value.trim();
+  if (!raw) return null;
+  if (!MONEY_FILTER.test(raw)) return Number.NaN;
+  const normalized = raw.replace(",", ".");
+  const negative = normalized.startsWith("-");
+  const unsigned = negative ? normalized.slice(1) : normalized;
+  const [whole, fraction = ""] = unsigned.split(".");
+  const cents = Number(whole) * 100 + Number(fraction.padEnd(2, "0"));
+  const signed = negative ? -cents : cents;
+  return Number.isSafeInteger(signed) ? signed : Number.NaN;
+}
+
+function centsParamToMoneyFilter(value: string | null) {
+  if (!value || !/^-?\d+$/.test(value)) return "";
+  const cents = Number(value);
+  if (!Number.isSafeInteger(cents)) return "";
+  return (cents / 100).toFixed(2).replace(/\.00$/, "").replace(/(\.\d)0$/, "$1");
+}
+
 function buildQuery(filters: Filters, cursor: Cursor | null = null) {
   const params = new URLSearchParams();
   const mapping: Array<[keyof Filters, string]> = [
@@ -228,6 +253,12 @@ function buildQuery(filters: Filters, cursor: Cursor | null = null) {
   }
   if (filters.categoryId === UNCATEGORIZED) params.set("uncategorized", "true");
   else if (filters.categoryId) params.set("categoryId", filters.categoryId);
+
+  const amountFromCents = moneyFilterToCents(filters.amountFrom);
+  const amountToCents = moneyFilterToCents(filters.amountTo);
+  if (amountFromCents !== null && Number.isSafeInteger(amountFromCents)) params.set("amountFromCents", String(amountFromCents));
+  if (amountToCents !== null && Number.isSafeInteger(amountToCents)) params.set("amountToCents", String(amountToCents));
+
   params.set("limit", "50");
   if (cursor) {
     params.set("cursorBankDate", cursor.bankDate);
@@ -451,6 +482,8 @@ export default function TransactionsClient() {
     const reviewState = params.get("reviewState");
     const duplicateState = params.get("duplicateState");
     const signMismatch = params.get("signMismatch");
+    const amountFrom = centsParamToMoneyFilter(params.get("amountFromCents"));
+    const amountTo = centsParamToMoneyFilter(params.get("amountToCents"));
     const dateFrom = params.get("dateFrom");
     const dateTo = params.get("dateTo");
     const safeDateFrom = dateFrom && DATE.test(dateFrom) ? dateFrom : "";
@@ -466,6 +499,8 @@ export default function TransactionsClient() {
       reviewState: reviewState && Object.prototype.hasOwnProperty.call(REVIEW_STATE_LABELS, reviewState) ? reviewState : "",
       duplicateState: duplicateState && Object.prototype.hasOwnProperty.call(DUPLICATE_LABELS, duplicateState) ? duplicateState : "",
       signMismatch: signMismatch === "true" ? "true" : "",
+      amountFrom,
+      amountTo,
       dateFrom: safeDateRange ? safeDateFrom : "",
       dateTo: safeDateRange ? safeDateTo : "",
     };
@@ -563,6 +598,16 @@ export default function TransactionsClient() {
     event.preventDefault();
     if (draftFilters.dateFrom && draftFilters.dateTo && draftFilters.dateFrom > draftFilters.dateTo) {
       setError("La fecha inicial no puede ser posterior a la fecha final.");
+      return;
+    }
+    const amountFromCents = moneyFilterToCents(draftFilters.amountFrom);
+    const amountToCents = moneyFilterToCents(draftFilters.amountTo);
+    if (Number.isNaN(amountFromCents) || Number.isNaN(amountToCents)) {
+      setError("Introduce los importes con hasta dos decimales.");
+      return;
+    }
+    if (amountFromCents !== null && amountToCents !== null && amountFromCents > amountToCents) {
+      setError("El importe mínimo no puede ser superior al importe máximo.");
       return;
     }
     const next = { ...draftFilters };
@@ -810,7 +855,7 @@ async function saveEdit(row: TransactionRow) {
       <form className={styles.filters} onSubmit={applyFilters} aria-label="Filtros de movimientos">
         <label className={styles.searchField}>
           <span>Buscar</span>
-          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, categoría o cuenta" />
+          <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, categoría, cuenta o nota" />
         </label>
         <label>
           <span>Cuenta</span>
@@ -861,6 +906,14 @@ async function saveEdit(row: TransactionRow) {
             <option value="">Todas</option>
             <option value="true">Signo incoherente</option>
           </select>
+        </label>
+        <label>
+          <span>Importe mínimo</span>
+          <input inputMode="decimal" value={draftFilters.amountFrom} onChange={(event) => updateFilter("amountFrom", event.target.value)} placeholder="-100,00" aria-label="Importe mínimo en euros" />
+        </label>
+        <label>
+          <span>Importe máximo</span>
+          <input inputMode="decimal" value={draftFilters.amountTo} onChange={(event) => updateFilter("amountTo", event.target.value)} placeholder="100,00" aria-label="Importe máximo en euros" />
         </label>
         <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
         <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
