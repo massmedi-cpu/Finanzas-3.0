@@ -14,7 +14,6 @@ import {
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 import AnalysisAxioma53Controls from "./analysis-axioma53-controls";
-import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
 import shellStyles from "./analysis-axioma53-shell.module.css";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
@@ -79,7 +78,6 @@ async function AnalysisData({
     <>
       <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" />
       <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
-      {initialSnapshot && <AnalysisAxioma53Summary snapshot={initialSnapshot} />}
       <div className={shellStyles.enhanced}>
         <AnalysisPageClient
           initialSnapshot={initialSnapshot}
