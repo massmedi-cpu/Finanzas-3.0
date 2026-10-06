@@ -89,7 +89,7 @@ export default function HomeEvolution({
   const [balanceError, setBalanceError] = useState(false);
 
   useEffect(() => {
-    if (mode !== "balance" || balances || balanceLoading) return;
+    if (mode !== "balance" || balances) return;
     const controller = new AbortController();
     setBalanceLoading(true);
     setBalanceError(false);
@@ -111,7 +111,7 @@ export default function HomeEvolution({
         if (!controller.signal.aborted) setBalanceLoading(false);
       });
     return () => controller.abort();
-  }, [balances, balanceLoading, dateFrom, dateTo, mode]);
+  }, [balances, dateFrom, dateTo, mode]);
 
   const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
 
