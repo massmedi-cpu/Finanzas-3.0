@@ -506,6 +506,7 @@ export default function AnalysisClient({
               trend={snapshot.trends.income}
               historical={<HistoricalReference snapshot={snapshot} metric="incomeCents" />}
               tone="income"
+              coverageIncomplete={coverageIncomplete}
             />
             <Kpi
               label="Gastos"
@@ -516,6 +517,7 @@ export default function AnalysisClient({
               trend={snapshot.trends.expense}
               historical={<HistoricalReference snapshot={snapshot} metric="expenseCents" />}
               tone="expense"
+              coverageIncomplete={coverageIncomplete}
             />
             <Kpi
               label="Neto del periodo"
@@ -524,6 +526,7 @@ export default function AnalysisClient({
               trend={snapshot.trends.net}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
+              coverageIncomplete={coverageIncomplete}
             />
             <Kpi
               label="Tasa de ahorro"
@@ -536,6 +539,7 @@ export default function AnalysisClient({
               trend={snapshot.trends.savingsRate}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsRateBps" />}
               tone="rate"
+              coverageIncomplete={coverageIncomplete}
             />
           </section>
 
