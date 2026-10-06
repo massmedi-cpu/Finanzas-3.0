@@ -511,7 +511,7 @@ test("QA-21 · la curva de saldo coloca el cero en su escala real", async ({ pag
   expect(y1).toBeLessThan(195);
   expect(Math.abs(y1 - 120)).toBeGreaterThan(50);
 
-  await expect(chart.getByText("-100,00 €", { exact: true })).toBeVisible();
-  await expect(chart.getByText("1.000,00 €", { exact: true })).toBeVisible();
+  await expect(chart.getByText("-100,00 €", { exact: true }).first()).toBeVisible();
+  await expect(chart.getByText("1.000,00 €", { exact: true }).first()).toBeVisible();
 });
 
