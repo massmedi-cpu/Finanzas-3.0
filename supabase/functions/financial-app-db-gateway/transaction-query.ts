@@ -66,6 +66,15 @@ export async function handleTransactionQueryAction(input: {
 }): Promise<Response | null> {
   const { action, payload, sql, environment } = input;
 
+  if (action === "transaction.split_detail") {
+    const transactionId = nullableUuid(payload.transactionId, "transaction_id");
+    if (!transactionId) throw new Error("invalid_transaction_id");
+    const rows = await sql`
+      select financial_app.transaction_split_snapshot(${transactionId}::uuid) as result
+    `;
+    return json(rows[0]?.result ?? null);
+  }
+
   if (action === "transaction.query") {
     const query = nullableText(payload.query, "transaction_query");
     const accountId = nullableUuid(payload.accountId, "transaction_account_id");
@@ -102,7 +111,37 @@ export async function handleTransactionQueryAction(input: {
         ${signMismatch}
       ) as result
     `;
-    return json(rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null });
+    const result = rows[0]?.result ?? { rows: [], totalCount: 0, hasMore: false, nextCursor: null };
+    const pageRows = Array.isArray(result?.rows) ? result.rows : [];
+    const ids = pageRows
+      .map((row: any) => row?.id)
+      .filter((id: unknown): id is string => typeof id === "string" && UUID.test(id));
+
+    if (ids.length > 0) {
+      const splitRows = await sql`
+        select requested.id, financial_app.transaction_split_snapshot(requested.id) as split
+        from unnest(${ids}::uuid[]) as requested(id)
+      `;
+      const splitById = new Map(splitRows.map((row: any) => [row.id, row.split]));
+      result.rows = pageRows.map((row: any) => ({
+        ...row,
+        split: splitById.get(row.id) ?? {
+          exists: false,
+          active: false,
+          stale: false,
+          canSplit: row?.kind?.effective !== "transfer" && row?.amountCents !== 0,
+          bankAmountCents: row?.amountCents ?? 0,
+          sourceAmountCents: null,
+          personalAmountCents: row?.amountCents ?? 0,
+          otherAmountCents: 0,
+          allocationCount: 0,
+          categoryCount: 0,
+          allocations: [],
+        },
+      }));
+    }
+
+    return json(result);
   }
 
   if (action === "transaction.facets") {
