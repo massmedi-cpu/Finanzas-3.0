@@ -466,7 +466,8 @@ test("QA-11 · las gráficas no dibujan barras positivas para valores exactament
             dateFrom: "2026-09-01",
             dateTo: "2026-09-16",
             rows: [
-              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+              { monthStart: "2026-08-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+              { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
             ],
           },
           budgets,
@@ -518,9 +519,10 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
             dateFrom: "2026-07-01",
             dateTo: "2026-09-16",
             rows: [
+              { monthStart: "2026-06-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
               { monthStart: "2026-07-01", incomeCents: 20000, expenseCents: 10000, operatingNetCents: 10000 },
               { monthStart: "2026-08-01", incomeCents: 10000, expenseCents: 15000, operatingNetCents: -5000 },
-              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+              { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
             ],
           },
           budgets,
@@ -628,7 +630,7 @@ test("QA-14 · privacidad oculta también proporciones y signo en Saldo y Flujo 
             rows: [
               { monthStart: "2026-07-01", incomeCents: 30000, expenseCents: 10000, operatingNetCents: 20000 },
               { monthStart: "2026-08-01", incomeCents: 10000, expenseCents: 25000, operatingNetCents: -15000 },
-              { monthStart: "2026-09-01", incomeCents: 0, expenseCents: 0, operatingNetCents: 0 },
+              { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
             ],
           },
           budgets,
