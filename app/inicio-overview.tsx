@@ -370,6 +370,7 @@ export default function InicioOverview() {
   const [privacyReady, setPrivacyReady] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncFeedback, setSyncFeedback] = useState<string | null>(null);
+  const [evolutionRevision, setEvolutionRevision] = useState(0);
   const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
 
@@ -475,6 +476,7 @@ export default function InicioOverview() {
       if (!response.ok) throw new Error(payload?.error ?? `sync_failed_${response.status}`);
       setSyncFeedback(syncFeedbackFromResult(payload));
       await refreshDashboard();
+      setEvolutionRevision((current) => current + 1);
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
       await loadSyncStatus();
@@ -800,6 +802,7 @@ export default function InicioOverview() {
               formatMoney={displayMoney}
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
+              refreshKey={evolutionRevision}
             />
           ) : secondaryLoading ? (
             <div className={styles.skeleton} />
