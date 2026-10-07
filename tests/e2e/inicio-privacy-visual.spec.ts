@@ -110,16 +110,30 @@ async function mockInicio(page: Page) {
     }
 
     if (url.pathname === "/api/dashboard") {
-      if (url.searchParams.get("scope") === "primary") {
+      const scope = url.searchParams.get("scope");
+      if (scope === "critical") {
         await json(route, {
           contractVersion: 1,
-          scope: "primary",
+          scope: "critical",
           asOfDate: "2026-09-11",
           dataThroughDate: "2026-09-11",
           generatedAt: "2026-09-11T08:00:00.000Z",
-          requestedSources: ["financial", "transactions"],
+          requestedSources: ["financial"],
           failedSources: [],
-          data: { financial, monthly: null, budgets: null, forecast: null, transactions },
+          data: { financial, monthly: null, budgets: null, forecast: null, transactions: null },
+        });
+        return;
+      }
+      if (scope === "activity") {
+        await json(route, {
+          contractVersion: 1,
+          scope: "activity",
+          asOfDate: "2026-09-11",
+          dataThroughDate: "2026-09-11",
+          generatedAt: "2026-09-11T08:00:00.000Z",
+          requestedSources: ["transactions"],
+          failedSources: [],
+          data: { financial: null, monthly: null, budgets: null, forecast: null, transactions },
         });
         return;
       }
