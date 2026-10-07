@@ -1,0 +1,34 @@
+name: Ops Dispatch Production Postflight 10.0.98
+
+on:
+  push:
+    branches:
+      - ops/postflight-10.0.98
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch exact Production Postflight
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_URL: https://financialapp-home.vercel.app/
+          EXPECTED_VERSION: 10.0.98
+          DEPLOYMENT_COMMIT: f053fe5639046cbd569276db9b26dbdcde292d61
+          DEPLOYMENT_ID: dpl_2GTfSiHsxfvFWZHd2ewwTfttiLhS
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-postflight.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f "production_url=$PRODUCTION_URL" \
+            -f "expected_version=$EXPECTED_VERSION" \
+            -f "deployment_commit=$DEPLOYMENT_COMMIT" \
+            -f "deployment_id=$DEPLOYMENT_ID"
+          echo "production_postflight_dispatch=accepted"
