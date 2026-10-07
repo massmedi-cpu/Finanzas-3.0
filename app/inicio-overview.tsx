@@ -506,6 +506,17 @@ export default function InicioOverview() {
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
   const revealAmounts = privacyReady && amountsVisible;
   const displayMoney = (cents: number) => revealAmounts ? formatMoneyCents(cents) : "••••,•• €";
+  const financialSign = (value: number) => !revealAmounts
+    ? "hidden"
+    : value < 0
+      ? "negative"
+      : value > 0
+        ? "positive"
+        : "zero";
+  const financialSignClass = (value: number) => {
+    const sign = financialSign(value);
+    return sign === "negative" ? styles.negative : sign === "positive" ? styles.positive : undefined;
+  };
 
   const activeAccounts = useMemo(
     () => consistency.balancesMatch
@@ -531,13 +542,14 @@ export default function InicioOverview() {
   } : null, [homeAnalysis]);
   const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
 
-  const topBudgetCategories = useMemo(
-    () => budget?.categories
-      .filter((item) => item.categoryName && item.actualExpenseCents > 0)
+  const topBudgetCategories = useMemo(() => {
+    const categories = budget?.categories.filter((item) => item.categoryName) ?? [];
+    if (!revealAmounts) return categories.slice(0, 4);
+    return categories
+      .filter((item) => item.actualExpenseCents > 0)
       .sort((a, b) => b.actualExpenseCents - a.actualExpenseCents)
-      .slice(0, 4) ?? [],
-    [budget],
-  );
+      .slice(0, 4);
+  }, [budget, revealAmounts]);
   const upcomingItems = useMemo(
     () => forecast?.items
       .filter((item) => item.affectsProjection && item.status === "planned")
@@ -577,7 +589,7 @@ export default function InicioOverview() {
         tone: "warning",
       });
     }
-    if ((financial?.period.operatingNetCents ?? 0) < 0) {
+    if (revealAmounts && (financial?.period.operatingNetCents ?? 0) < 0) {
       items.push({
         title: "El balance del mes está en negativo",
         detail: `Ingresos ${displayMoney(financial?.period.incomeCents ?? 0)} · gastos ${displayMoney(financial?.period.expenseCents ?? 0)}.`,
@@ -595,7 +607,8 @@ export default function InicioOverview() {
         tone: "danger",
       });
     }
-    if ((forecast?.summary.plannedItems ?? 0) > 0
+    if (revealAmounts
+      && (forecast?.summary.plannedItems ?? 0) > 0
       && (forecast?.summary.projectedClosingBalanceCents ?? 0) < 0) {
       items.push({
         title: "La previsión termina en negativo",
@@ -615,7 +628,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [forecast, displayMoney, failed.length, financial, overBudgetCount, syncFailed, syncHasWarnings, syncRun]);
+  }, [forecast, displayMoney, failed.length, financial, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}>
@@ -708,6 +721,7 @@ export default function InicioOverview() {
         plannedItems={forecast?.summary.plannedItems ?? null}
         syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
         displayMoney={displayMoney}
+        valuesVisible={revealAmounts}
       />
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
@@ -718,7 +732,10 @@ export default function InicioOverview() {
         </article>
         <article className={styles.decisionCard}>
           <span>Este mes</span>
-          <strong className={(financial?.period.operatingNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
+          <strong
+            className={financial ? financialSignClass(financial.period.operatingNetCents) : undefined}
+            data-financial-sign={financial ? financialSign(financial.period.operatingNetCents) : undefined}
+          >
             {financial ? displayMoney(financial.period.operatingNetCents) : "—"}
           </strong>
           <small>
@@ -729,14 +746,19 @@ export default function InicioOverview() {
           {financial && (
             <small>
               {hasSavingsBase && financial.period.savingsRateBps !== null
-                ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
+                ? revealAmounts
+                  ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
+                  : "Ahorro oculto por privacidad"
                 : "Ahorro: sin base suficiente"}
             </small>
           )}
         </article>
         <article className={styles.decisionCard}>
           <span>Próximos 30 días</span>
-          <strong className={(forecast?.summary.projectedNetCents ?? 0) < 0 ? styles.negative : styles.positive}>
+          <strong
+            className={forecast?.summary.plannedItems ? financialSignClass(forecast.summary.projectedNetCents) : undefined}
+            data-financial-sign={forecast?.summary.plannedItems ? financialSign(forecast.summary.projectedNetCents) : undefined}
+          >
             {forecast?.summary.plannedItems ? displayMoney(forecast.summary.projectedNetCents) : forecast ? "Sin previsiones" : "—"}
           </strong>
           <small>
@@ -783,12 +805,17 @@ export default function InicioOverview() {
           {completedComparison && (
             <div className={styles.comparison}>
               <span>Último mes completo · {formatMonth(completedComparison.current.monthStart)}</span>
-              <strong className={completedComparison.current.operatingNetCents < 0 ? styles.negative : styles.positive}>
+              <strong
+                className={financialSignClass(completedComparison.current.operatingNetCents)}
+                data-financial-sign={financialSign(completedComparison.current.operatingNetCents)}
+              >
                 {displayMoney(completedComparison.current.operatingNetCents)}
               </strong>
               {completedComparison.delta !== null && (
                 <small>
-                  {completedComparison.delta >= 0 ? "+" : ""}{displayMoney(completedComparison.delta)} frente al mes anterior
+                  {revealAmounts
+                    ? `${completedComparison.delta >= 0 ? "+" : ""}${displayMoney(completedComparison.delta)} frente al mes anterior`
+                    : "Variación frente al mes anterior oculta por privacidad"}
                 </small>
               )}
             </div>
@@ -826,7 +853,10 @@ export default function InicioOverview() {
                 {upcomingItems.map((item) => (
                   <li key={item.id}>
                     <div><strong>{item.concept}</strong><span>{formatDate(item.date)}{item.categoryId ? <> · <CategoryIdentity categoryId={item.categoryId} name={item.categoryName} /></> : null}</span></div>
-                    <b className={item.amountCents < 0 ? styles.negative : styles.positive}>{displayMoney(item.amountCents)}</b>
+                    <b
+                      className={financialSignClass(item.amountCents)}
+                      data-financial-sign={financialSign(item.amountCents)}
+                    >{displayMoney(item.amountCents)}</b>
                   </li>
                 ))}
               </ul>
@@ -878,9 +908,14 @@ export default function InicioOverview() {
                 <span>gastados de {displayMoney(budget.total.effectiveAmountCents)}</span>
                 <div
                   className={styles.progressTrack}
-                  aria-label={`Presupuesto usado ${Math.max(0, budget.total.progressBps ?? 0) / 100} por ciento`}
+                  aria-label={revealAmounts
+                    ? `Presupuesto usado ${Math.max(0, budget.total.progressBps ?? 0) / 100} por ciento`
+                    : "Porcentaje de presupuesto oculto por privacidad"}
+                  data-budget-progress-privacy={revealAmounts ? "visible" : "hidden"}
                 >
-                  <span style={{ width: `${Math.min(100, Math.max(0, (budget.total.progressBps ?? 0) / 100))}%` }} />
+                  <span style={{ width: `${revealAmounts
+                    ? Math.min(100, Math.max(0, (budget.total.progressBps ?? 0) / 100))
+                    : 36}%` }} />
                 </div>
               </div>
               {topBudgetCategories.length > 0 && (
@@ -918,7 +953,10 @@ export default function InicioOverview() {
                       <span><CategoryIdentity categoryId={row.category.effectiveId} name={row.category.effectiveName} fallback={kindLabel(row.kind.effective)} /> · {row.account.name}</span>
                     </div>
                     <span className={styles.activityDate}>{formatDate(row.bankDate)}</span>
-                    <b className={row.amountCents < 0 ? styles.negative : styles.positive}>{displayMoney(row.amountCents)}</b>
+                    <b
+                      className={financialSignClass(row.amountCents)}
+                      data-financial-sign={financialSign(row.amountCents)}
+                    >{displayMoney(row.amountCents)}</b>
                   </li>
                 );
               })}
