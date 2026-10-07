@@ -18,7 +18,7 @@ export type BudgetAutomaticFactors = {
   extraordinaryMonthCount: number;
   extraordinaryCapCents: number | null;
   recurrencePolicy: "floor_not_additive";
-  exclusionsSource: "financial_transaction_facts.analytics_eligible";
+  exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible";
 };
 
 export type BudgetItem = {
@@ -82,8 +82,8 @@ export type BudgetSnapshot = {
   categories: BudgetItem[];
   principles: {
     bankSource: "read_only";
-    actualSource: string;
-    recommendation: string;
+    actualSource: "financial_transaction_allocation_facts";
+    recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor";
     transfersConsumeBudget: boolean;
     confirmedDuplicatesConsumeBudget: boolean;
     manualAnalyticsExclusionsRespected: boolean;
@@ -174,7 +174,7 @@ function isAutomaticFactors(value: unknown): value is BudgetAutomaticFactors {
     && (factors.extraordinaryCapCents === null
       || (isSafeInteger(factors.extraordinaryCapCents) && factors.extraordinaryCapCents >= 0))
     && factors.recurrencePolicy === "floor_not_additive"
-    && factors.exclusionsSource === "financial_transaction_facts.analytics_eligible";
+    && factors.exclusionsSource === "financial_transaction_allocation_facts.analytics_eligible";
 }
 
 function isBudgetItem(value: unknown): value is BudgetItem {
@@ -214,8 +214,8 @@ export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
     && isBudgetItem(snapshot.total)
     && Array.isArray(snapshot.categories) && snapshot.categories.every(isBudgetItem)
     && principles.bankSource === "read_only"
-    && typeof principles.actualSource === "string"
-    && typeof principles.recommendation === "string"
+    && principles.actualSource === "financial_transaction_allocation_facts"
+    && principles.recommendation === "axioma_52_weighted_history_seasonality_trend_recurrence_floor"
     && typeof principles.transfersConsumeBudget === "boolean"
     && typeof principles.confirmedDuplicatesConsumeBudget === "boolean"
     && typeof principles.manualAnalyticsExclusionsRespected === "boolean"
