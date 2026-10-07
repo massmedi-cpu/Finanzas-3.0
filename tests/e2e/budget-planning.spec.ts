@@ -28,7 +28,22 @@ function snapshot(manualAmountCents: number | null): BudgetSnapshot {
       remainingCents: effectiveAmountCents - actualExpenseCents,
       progressBps: Math.round((actualExpenseCents * 10_000) / effectiveAmountCents),
       status: "on_track",
-      automaticExplanation: "Media del gasto elegible de los 3 meses completos anteriores.",
+      automaticExplanation: "Referencia automática Axioma §52.",
+      automaticFactors: {
+        algorithm: "axioma_52_budget_reference_v1",
+        mode: "axioma_52_weighted",
+        availableMonthCount: 12,
+        trailing3AverageCents: 120_000,
+        recentWeightedCents: 118_000,
+        seasonalSameMonthCents: 121_000,
+        seasonalMonthCount: 1,
+        trendAdjustmentCents: 1_000,
+        knownRecurringCents: 0,
+        extraordinaryMonthCount: 0,
+        extraordinaryCapCents: null,
+        recurrencePolicy: "floor_not_additive",
+        exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+      },
       historyMonths: [
         { month: "2026-06", expenseCents: 100_000 },
         { month: "2026-07", expenseCents: 120_000 },
@@ -38,8 +53,8 @@ function snapshot(manualAmountCents: number | null): BudgetSnapshot {
     categories: [],
     principles: {
       bankSource: "read_only",
-      actualSource: "financial_transaction_facts",
-      recommendation: "trailing_3_complete_month_average",
+      actualSource: "financial_transaction_allocation_facts",
+      recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
       transfersConsumeBudget: false,
       confirmedDuplicatesConsumeBudget: false,
       manualAnalyticsExclusionsRespected: true,
@@ -71,7 +86,7 @@ function monthly(incomes = [190_000, 200_000, 210_000], expenses = [100_000, 120
   };
 }
 
-test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro", () => {
+test("PRE-022 separa referencia automática, límite elegido y objetivo de ahorro", () => {
   const result = assembleBudgetPlanning(snapshot(100_000), monthly());
 
   expect(result.planning).toMatchObject({
@@ -86,7 +101,7 @@ test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro
     targetSavingsRateBps: 5_000,
   });
   expect(result.planning.principles).toEqual({
-    historicalBaseline: "trailing_3_complete_month_expense_average",
+    historicalBaseline: "axioma_52_budget_reference",
     chosenLimit: "manual_total_budget_only",
     objective: "average_income_minus_chosen_limit",
     incomeSource: "financial_monthly_series",
@@ -94,7 +109,7 @@ test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro
   });
 });
 
-test("PRE-022 no convierte la media histórica en un objetivo cuando falta límite elegido", () => {
+test("PRE-022 no convierte la referencia automática en un objetivo cuando falta límite elegido", () => {
   const result = assembleBudgetPlanning(snapshot(null), monthly());
 
   expect(result.planning.state).toBe("ready");
@@ -113,10 +128,11 @@ test("PRE-022 falla cerrado si ingresos y gasto histórico no concilian", () => 
   expect(result.planning.averageIncomeCents).toBeNull();
   expect(result.planning.targetSavingsCents).toBeNull();
 
-  const invalidBaseline = snapshot(100_000);
-  invalidBaseline.total.automaticAmountCents = 119_999;
-  const invalidBaselineResult = assembleBudgetPlanning(invalidBaseline, monthly());
-  expect(invalidBaselineResult.planning.state).toBe("mismatch");
+  const weightedBaseline = snapshot(100_000);
+  weightedBaseline.total.automaticAmountCents = 119_999;
+  const weightedBaselineResult = assembleBudgetPlanning(weightedBaseline, monthly());
+  expect(weightedBaselineResult.planning.state).toBe("ready");
+  expect(weightedBaselineResult.planning.historicalBaselineCents).toBe(119_999);
 
   const unsafeIncomeResult = assembleBudgetPlanning(
     snapshot(100_000),
