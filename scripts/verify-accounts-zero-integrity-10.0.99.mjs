@@ -3,6 +3,7 @@ import fs from "node:fs";
 const read = (path) => fs.readFileSync(path, "utf8");
 const pkg = JSON.parse(read("package.json"));
 const accounts = read("app/accounts/accounts-client.tsx");
+const accountsCss = read("app/accounts/accounts.module.css");
 const visualTest = read("tests/e2e/premium-accounts-visual.spec.ts");
 
 const requireText = (text, token, label) => {
@@ -25,6 +26,7 @@ requireText(accounts, "return magnitude === 0 ? 0 : Math.max(2, (magnitude / sca
 requireText(accounts, 'data-zero={row.incomeCents === 0 ? "true" : undefined}', "Cuentas · ingresos cero");
 requireText(accounts, 'data-zero={row.expenseCents === 0 ? "true" : undefined}', "Cuentas · gastos cero");
 requireText(accounts, 'data-zero={row.operatingNetCents === 0 ? "true" : undefined}', "Cuentas · neto cero");
+requireText(accountsCss, '.barTrack span[data-zero="true"]{min-width:0}', "Cuentas · CSS cero sin ancho mínimo");
 requireText(visualTest, "Cuentas no dibuja barras fantasma para valores exactamente 0 €", "Regresión visual");
 
 for (const legacy of [
