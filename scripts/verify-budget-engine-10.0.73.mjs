@@ -27,6 +27,7 @@ const splitMigration = read("supabase/migrations/20261006053545_axioma25_shared_
 const batchMigration = read("supabase/migrations/20261007165000_qa_work_budget_snapshot_batch.sql");
 const planning = read("src/application/budgets/budget-planning.ts");
 const ui = read("app/budgets/budgets-client.tsx");
+const gateway = read("supabase/functions/financial-app-db-gateway/budget-logic.ts");
 
 if (!versionAtLeast(pkg.version, "10.0.73")) fail(`package.json: la certificación §52 requiere 10.0.73 o posterior, recibida ${pkg.version}`);
 
@@ -85,7 +86,10 @@ forbidText(
 );
 
 requireText(planning, 'historicalBaseline: "axioma_52_budget_reference"', "contrato planificación");
+requireText(planning, 'actualSource: "financial_transaction_allocation_facts"', "contrato snapshot split-aware");
+requireText(planning, 'exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible"', "factores split-aware");
 requireText(planning, "automaticFactors", "contrato planificación");
+requireText(gateway, "snapshot?.principles?.actualSource === 'financial_transaction_allocation_facts'", "autotest gateway split-aware");
 forbidText(planning, "historyAverageCents === snapshot.total.automaticAmountCents", "conciliación planificación");
 
 requireText(ui, "Referencia automática", "UI presupuestos");
