@@ -50,7 +50,8 @@ const GATEWAY: AnalysisGatewaySnapshot = {
   ],
   categories: [
     { id: "11111111-1111-4111-8111-111111111111", name: "Alimentación", currentExpenseCents: 35000, previousExpenseCents: 30000, currentRows: 7, previousRows: 6 },
-    { id: "33333333-3333-4333-8333-333333333333", name: "Transporte", currentExpenseCents: 20000, previousExpenseCents: 30000, currentRows: 5, previousRows: 6 },
+    { id: "33333333-3333-4333-8333-333333333333", name: "Transporte", currentExpenseCents: 20000, previousExpenseCents: 29900, currentRows: 5, previousRows: 6 },
+    { id: "55555555-5555-4555-8555-555555555553", name: "Solo anterior", currentExpenseCents: 0, previousExpenseCents: 100, currentRows: 0, previousRows: 1 },
   ],
   merchants: [
     { id: "22222222-2222-4222-8222-222222222222", name: "Mercado Central", currentExpenseCents: 35000, previousExpenseCents: 32000, currentRows: 7, previousRows: 7, currentAverageCents: 5000, habitualAverageCents: 4500, historyRows: 12 },
@@ -293,6 +294,14 @@ for (const width of WIDTHS) {
     const compareMode = page.getByRole("button", { name: "Actual vs anterior", exact: true });
     await compareMode.click();
     await expect(compareMode).toHaveAttribute("aria-pressed", "true");
+
+    const previousOnlyRow = page.getByRole("listitem", { name: /Solo anterior: gasto actual 0,00.*periodo comparable 1,00/ });
+    await expect(previousOnlyRow).toBeVisible();
+    const zeroCurrentBar = previousOnlyRow.locator('i[data-zero="true"]');
+    await expect(zeroCurrentBar).toHaveCount(1);
+    expect(await zeroCurrentBar.evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
+    expect(await zeroCurrentBar.evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
+
     await page.getByRole("button", { name: "Variación", exact: true }).click();
 
     const chartMonths = page.getByRole("button", { name: /Ingresos\b.*\bgastos\b/i });
