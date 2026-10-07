@@ -745,11 +745,11 @@ export default function InicioOverview() {
           </small>
           {financial && (
             <small>
-              {hasSavingsBase && financial.period.savingsRateBps !== null
-                ? revealAmounts
+              {!revealAmounts
+                ? "Ahorro oculto por privacidad"
+                : hasSavingsBase && financial.period.savingsRateBps !== null
                   ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
-                  : "Ahorro oculto por privacidad"
-                : "Ahorro: sin base suficiente"}
+                  : "Ahorro: sin base suficiente"}
             </small>
           )}
         </article>
