@@ -12,6 +12,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import {
   currentExpenseDrivers,
   resolveBudgetProgressPresentation,
@@ -24,6 +25,7 @@ import {
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import { CategoryIdentity } from "../category-identity";
+import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
 import AnalysisMovementInsights from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
@@ -352,6 +354,10 @@ export default function AnalysisClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
+  const contextLinks = useMemo(
+    () => snapshot ? analysisModuleLinks(snapshot.selection, snapshot.forecast?.period ?? null) : [],
+    [snapshot],
+  );
 
   const filtersDirty = snapshot
     ? month !== snapshot.selection.month
@@ -435,7 +441,9 @@ export default function AnalysisClient({
   }
 
   return (
-    <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
+    <>
+      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
+      <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
       <header className={styles.header}>
         <div className={styles.headerTitle}>
           <p>FINANCIAL APP · INTELIGENCIA FINANCIERA</p>
@@ -752,6 +760,7 @@ export default function AnalysisClient({
           </footer>
         </>
       )}
-    </main>
+      </main>
+    </>
   );
 }
