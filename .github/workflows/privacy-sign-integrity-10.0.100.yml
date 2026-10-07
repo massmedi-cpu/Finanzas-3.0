@@ -1,0 +1,56 @@
+name: Privacy Sign Integrity 10.0.100
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/design/financial-bar-chart.tsx"
+      - "src/design/financial-bar-chart.module.css"
+      - "tests/e2e/inicio-privacy-visual.spec.ts"
+      - "scripts/verify-privacy-sign-integrity-10.0.100.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/privacy-sign-integrity-10.0.100.yml"
+  push:
+    branches:
+      - "audit/inicio-privacy-sign-10.0.100"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: privacy-sign-integrity-10.0.100-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:privacy-sign-integrity
+      - run: npm run build
+
+  privacy-sign-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: 10.0.100 · privacidad de signo desktop y móvil
+        run: >-
+          npx playwright test
+          tests/e2e/inicio-privacy-visual.spec.ts
+          --project=chromium-desktop --project=chromium-mobile --workers=1
