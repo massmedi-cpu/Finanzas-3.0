@@ -1,0 +1,30 @@
+name: Ops Dispatch Production Backup 10.0.98
+
+on:
+  push:
+    branches:
+      - ops/backup-10.0.98
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch exact Production Backup v2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_COMMIT: 929a9b7ae9951877db5d92b68990cad969d2f692
+          EXPECTED_VERSION: 10.0.98
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run production-backup-v2.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f "source_commit=$SOURCE_COMMIT" \
+            -f "expected_app_version=$EXPECTED_VERSION"
+          echo "production_backup_v2_dispatch=accepted"
