@@ -24,11 +24,13 @@ test("Analysis conecta módulos sin perder el periodo, la cuenta ni el horizonte
   );
 
   const transactions = links.find((item) => item.label === "Movimientos");
+  const budgets = links.find((item) => item.label === "Presupuestos");
   const forecast = links.find((item) => item.label === "Previsión");
 
   expect(transactions?.href).toBe(
     `/transactions?dateFrom=2026-09-01&dateTo=2026-09-17&accountId=${ACCOUNT_ID}`,
   );
+  expect(budgets?.href).toBe("/budgets?month=2026-09");
   expect(forecast?.href).toBe(
     `/forecast?dateFrom=2026-09-18&dateTo=2026-10-31&accountId=${ACCOUNT_ID}`,
   );
@@ -62,7 +64,7 @@ test("Forecast vuelve a módulos propietarios sin inventar un periodo analítico
 
   expect(links.find((item) => item.label === "Análisis")?.href).toBe(`/analysis?accountId=${ACCOUNT_ID}`);
   expect(links.find((item) => item.label === "Movimientos")?.href).toBe(`/transactions?accountId=${ACCOUNT_ID}`);
-  expect(links.find((item) => item.label === "Presupuestos")?.href).toBe("/budgets");
+  expect(links.find((item) => item.label === "Presupuestos")?.href).toBe("/budgets?month=2026-09");
   expect(links.find((item) => item.label === "Recurrentes")?.href).toBe(
     `/recurrences?source=forecast&forecastDateFrom=2026-09-18&forecastDateTo=2026-10-31&forecastAccountId=${ACCOUNT_ID}`,
   );
