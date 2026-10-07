@@ -85,7 +85,8 @@ test("10.0.23 Inicio degrada de forma segura si una respuesta auxiliar llega inc
 test("10.0.23 alinea Inicio, Análisis, Presupuestos y Previsión con las fuentes canónicas", () => {
   const migration = read("supabase/migrations/20260927100500_cross_module_financial_consistency.sql");
   const phase5 = read("supabase/migrations/20260905225500_phase5_financial_logic_core.sql");
-  const budgetEngine = read("supabase/migrations/20260906085704_phase6_budget_engine_core.sql");
+  const budgetEngine = read("supabase/migrations/20261006053545_axioma25_shared_transaction_splits_10_0_83.sql");
+  const budgetBatch = read("supabase/migrations/20261007165000_qa_work_budget_snapshot_batch.sql");
   const analysis = read("supabase/functions/financial-app-db-gateway/analysis-query.ts");
   const home = read("app/inicio-overview.tsx");
 
@@ -96,8 +97,12 @@ test("10.0.23 alinea Inicio, Análisis, Presupuestos y Previsión con las fuente
   expect(phase5).toContain("'period',financial_app.financial_period_summary(p_date_from,p_date_to,p_account_id)");
   expect(phase5).toContain("'balances',financial_app.financial_account_balances(p_date_to,p_include_archived)");
   expect(analysis).toContain("financial_app.financial_period_summary");
-  expect(budgetEngine).toContain("financial_app.financial_transaction_facts(v_start, v_end, null)");
-  expect(budgetEngine).toContain("effective_kind = 'expense'");
+  expect(budgetEngine).toContain("financial_app.financial_transaction_allocation_facts(v_start,v_end,null)");
+  expect(budgetEngine).toContain("effective_kind='expense'");
+  expect(budgetBatch).toContain("all_facts as materialized");
+  expect(budgetBatch).toContain("financial_transaction_allocation_facts(");
+  expect(budgetBatch).not.toContain("financial_app.budget_month_recommendation(p_month, x.category_id)");
+  expect(budgetBatch).not.toContain("financial_app.budget_month_actual(p_month, x.category_id)");
 
   expect(home).toContain("openingBalanceCents: number;");
   expect(home).toContain("budget: data.budgets");
@@ -123,6 +128,9 @@ test("Axioma §119 mantiene el gate transversal conectado a todos los módulos f
     "supabase/functions/financial-app-db-gateway/**",
     "supabase/migrations/20260905225500_phase5_financial_logic_core.sql",
     "supabase/migrations/20260906085704_phase6_budget_engine_core.sql",
+    "supabase/migrations/20261005041600_axioma52_budget_recommendation_engine.sql",
+    "supabase/migrations/20261006053545_axioma25_shared_transaction_splits_10_0_83.sql",
+    "supabase/migrations/20261007165000_qa_work_budget_snapshot_batch.sql",
     "supabase/migrations/20260906171000_phase8_forecast_engine_core.sql",
     "supabase/migrations/20260927100500_cross_module_financial_consistency.sql",
     "tests/e2e/forecast-period-integrity.spec.ts",
