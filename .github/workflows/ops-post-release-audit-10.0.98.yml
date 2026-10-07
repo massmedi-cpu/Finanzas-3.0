@@ -1,0 +1,35 @@
+name: Ops Post Release Audit 10.0.98
+
+on:
+  push:
+    branches:
+      - ops/post-release-audit-10.0.98
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Dispatch post-release certifications on exact main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          workflows=(
+            cross-module-financial-consistency.yml
+            extreme-financial-scenarios.yml
+            extreme-financial-edge-cases.yml
+            backup-production-contract.yml
+            auth-session-regression.yml
+            navigation-performance.yml
+            release-operations-contract.yml
+          )
+          for workflow in "${workflows[@]}"; do
+            gh workflow run "$workflow" --repo "${{ github.repository }}" --ref main
+            echo "dispatched=$workflow"
+          done
