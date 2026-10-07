@@ -84,7 +84,7 @@ export function analysisModuleLinks(
     },
     {
       label: "Presupuestos",
-      href: "/budgets",
+      href: href("/budgets", [["month", selection.month]]),
       detail: `Revisar límites de ${selection.month}`,
     },
     {
@@ -152,7 +152,7 @@ export function forecastModuleLinks(selection: ForecastModuleSelection): ModuleC
     },
     {
       label: "Presupuestos",
-      href: "/budgets",
+      href: href("/budgets", [["month", selection.dateFrom.slice(0, 7)]]),
       detail: "Contrastar previsión con límites mensuales",
     },
     {
