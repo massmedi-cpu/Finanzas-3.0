@@ -695,13 +695,13 @@ export default function BudgetsClient() {
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
 
-                  <div className={styles.history} aria-label="Tres meses recientes visibles de la referencia automática">
+                  <div className={styles.history} role="region" aria-label="Tres meses recientes visibles de la referencia automática">
                     {snapshot.total.historyMonths.map((row) => {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
                       return (
                         <div className={styles.historyRow} key={row.month}>
                           <span>{shortMonth(row.month)}</span>
-                          <div className={styles.historyBar}><i style={{ width: `${Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
+                          <div className={styles.historyBar}><i data-budget-history-bar="true" data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${row.expenseCents === 0 ? 0 : Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
                           <strong>{formatMoney(row.expenseCents)}</strong>
                         </div>
                       );

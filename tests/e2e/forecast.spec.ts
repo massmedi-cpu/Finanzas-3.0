@@ -471,3 +471,47 @@ test("protected preview preserves phase 8 forecast contract across later phases"
   expect(Number.isSafeInteger(body.summary.openingBalanceCents)).toBe(true);
   expect(Number.isSafeInteger(body.summary.projectedClosingBalanceCents)).toBe(true);
 });
+
+test("QA-21 · la curva de saldo coloca el cero en su escala real", async ({ page }) => {
+  const crossingSnapshot = {
+    ...baseSnapshot,
+    summary: {
+      ...baseSnapshot.summary,
+      openingBalanceCents: 100000,
+      projectedIncomeCents: 0,
+      projectedExpenseCents: 110000,
+      projectedNetCents: -110000,
+      projectedClosingBalanceCents: -10000,
+    },
+    items: [
+      {
+        ...baseSnapshot.items[0],
+        amountCents: -110000,
+        projectionEffectCents: -110000,
+        projectedBalanceAfterCents: -10000,
+      },
+    ],
+  };
+
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(crossingSnapshot),
+  }));
+  await page.goto("/forecast");
+
+  const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
+  await expect(chart).toBeVisible();
+  const zeroLine = chart.locator('[data-zero-line="true"]');
+  await expect(zeroLine).toHaveCount(1);
+
+  const y1 = Number(await zeroLine.getAttribute("y1"));
+  expect(Number.isFinite(y1)).toBe(true);
+  expect(y1).toBeGreaterThan(180);
+  expect(y1).toBeLessThan(195);
+  expect(Math.abs(y1 - 120)).toBeGreaterThan(50);
+
+  await expect(chart.getByText("-100,00 €", { exact: true }).first()).toBeVisible();
+  await expect(chart.getByText("1.000,00 €", { exact: true }).first()).toBeVisible();
+});
+

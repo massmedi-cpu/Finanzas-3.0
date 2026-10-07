@@ -36,6 +36,7 @@ function SingleSeriesBars({
   formatMoney,
   formatMonth,
   signed = false,
+  availableFor,
 }: {
   rows: Array<FinancialBarPoint | BalanceRow>;
   valueFor: (row: FinancialBarPoint | BalanceRow) => number;
@@ -44,8 +45,10 @@ function SingleSeriesBars({
   formatMoney: (value: number) => string;
   formatMonth: (date: string) => string;
   signed?: boolean;
+  availableFor?: (row: FinancialBarPoint | BalanceRow) => boolean;
 }) {
-  const max = Math.max(1, ...rows.map((row) => Math.abs(valueFor(row))));
+  const availableRows = availableFor ? rows.filter(availableFor) : rows;
+  const max = Math.max(1, ...availableRows.map((row) => Math.abs(valueFor(row))));
   return (
     <div
       className={styles.evolutionSingle}
@@ -53,24 +56,32 @@ function SingleSeriesBars({
       aria-label={valuesVisible ? label : `${label}. Importes, signos y proporciones ocultos por privacidad.`}
     >
       {rows.map((row) => {
-        const value = valueFor(row);
+        const available = availableFor ? availableFor(row) : true;
+        const value = available ? valueFor(row) : 0;
         const height = value === 0 ? 0 : Math.max(3, (Math.abs(value) / max) * 100);
         const visualSigned = signed && valuesVisible;
-        const renderedHeight = valuesVisible ? (visualSigned ? height / 2 : height) : 36;
-        const sign = visualSigned ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
+        const renderedSigned = available && visualSigned;
+        const renderedHeight = valuesVisible ? (renderedSigned ? height / 2 : height) : 36;
+        const sign = renderedSigned ? (value < 0 ? "negative" : value > 0 ? "positive" : "zero") : undefined;
         return (
           <div className={styles.evolutionSingleColumn} key={row.monthStart}>
-            <div className={`${styles.evolutionBarArea}${visualSigned ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
-              {visualSigned ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
-              <span
-                className={`${styles.evolutionSingleBar} ${visualSigned ? styles.evolutionSignedBar : ""} ${visualSigned && value < 0 ? styles.evolutionNegativeBar : ""}`}
-                data-series-bar="true"
-                data-zero={valuesVisible && value === 0 ? "true" : undefined}
-                data-sign={sign}
-                style={{ height: `${renderedHeight}%` }}
-              />
+            <div className={`${styles.evolutionBarArea}${renderedSigned ? ` ${styles.evolutionSignedArea}` : ""}`} aria-hidden="true">
+              {available ? (
+                <>
+                  {renderedSigned ? <span className={styles.evolutionZeroLine} data-zero-line="true" /> : null}
+                  <span
+                    className={`${styles.evolutionSingleBar} ${renderedSigned ? styles.evolutionSignedBar : ""} ${renderedSigned && value < 0 ? styles.evolutionNegativeBar : ""}`}
+                    data-series-bar="true"
+                    data-zero={valuesVisible && value === 0 ? "true" : undefined}
+                    data-sign={sign}
+                    style={{ height: `${renderedHeight}%` }}
+                  />
+                </>
+              ) : (
+                <span className={styles.evolutionMissingMarker} data-series-missing="true" />
+              )}
             </div>
-            <strong>{formatMoney(value)}</strong>
+            <strong>{available ? formatMoney(value) : "Sin dato"}</strong>
             <span>{formatMonth(row.monthStart)}</span>
           </div>
         );
@@ -137,10 +148,29 @@ export default function HomeEvolution({
     () => balanceRows.filter((row) => row.reconstructedBalanceAccounts > 0).length,
     [balanceRows],
   );
-  const balanceHasAccounts = useMemo(
-    () => balanceRows.some((row) => row.accounts > 0),
+  const balanceAvailablePoints = useMemo(
+    () => balanceRows.filter((row) => row.accounts > 0).length,
     [balanceRows],
   );
+  const balanceMissingPoints = balanceRows.length - balanceAvailablePoints;
+  const balanceHasAccounts = balanceAvailablePoints > 0;
+  const balanceHasNegative = useMemo(
+    () => balanceRows.some((row) => row.accounts > 0 && row.balanceCents < 0),
+    [balanceRows],
+  );
+  const balanceCoverageMessage = useMemo(() => {
+    if (!balanceHasAccounts) return "";
+    if (balanceMissingPoints > 0) {
+      const reconstruction = reconstructedBalancePoints > 0
+        ? ` ${reconstructedBalancePoints} de ${balanceAvailablePoints} puntos disponibles incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos.`
+        : " Los puntos disponibles usan la serie bancaria canónica.";
+      return `Cobertura parcial: ${balanceAvailablePoints} de ${balanceRows.length} puntos tienen saldo disponible. Los ${balanceMissingPoints} restantes aparecen como «Sin dato», no como 0 €.${reconstruction} No se reconstruye desde Cash Flow.`;
+    }
+    if (reconstructedBalancePoints > 0) {
+      return `Cobertura mixta: ${reconstructedBalancePoints} de ${balanceRows.length} puntos incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos. No se reconstruye desde Cash Flow.`;
+    }
+    return `Cobertura: ${balanceRows.length} de ${balanceRows.length} puntos usan saldos bancarios explícitos. No se reconstruye desde Cash Flow.`;
+  }, [balanceAvailablePoints, balanceHasAccounts, balanceMissingPoints, balanceRows.length, reconstructedBalancePoints]);
 
   return (
     <div className={styles.evolutionView}>
@@ -191,16 +221,14 @@ export default function HomeEvolution({
           <SingleSeriesBars
             rows={balanceRows}
             valueFor={(row) => (row as BalanceRow).balanceCents}
+            availableFor={(row) => (row as BalanceRow).accounts > 0}
             label="Saldo bancario agregado por mes"
             valuesVisible={valuesVisible}
+            signed={balanceHasNegative}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
           />
-          <p className={styles.helper}>
-            {reconstructedBalancePoints === 0
-              ? `Cobertura: ${balanceRows.length} de ${balanceRows.length} puntos usan saldos bancarios explícitos. No se reconstruye desde Cash Flow.`
-              : `Cobertura mixta: ${reconstructedBalancePoints} de ${balanceRows.length} puntos incluyen al menos una cuenta sin saldo bancario explícito y usan la reconstrucción canónica desde saldo inicial + movimientos. No se reconstruye desde Cash Flow.`}
-          </p>
+          <p className={styles.helper}>{balanceCoverageMessage}</p>
         </>
       ) : null}
     </div>

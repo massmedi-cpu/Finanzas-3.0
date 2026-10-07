@@ -455,3 +455,41 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
   await expect(rateKpi).toContainText(/Tasa de ahorro agregada (al alza|a la baja|estable)/);
   await expect(rateKpi).not.toContainText("Media mensual · 3 m");
 });
+
+
+test("QA-23 · Análisis no dibuja barras para ingresos o gastos exactamente a cero", async ({ page }) => {
+  const zeroGateway = structuredClone(GATEWAY);
+  zeroGateway.history.rows[4] = {
+    ...zeroGateway.history.rows[4],
+    incomeCents: 0,
+    expenseCents: 0,
+    operatingNetCents: 0,
+    savingsCents: 0,
+    savingsRateBps: null,
+  };
+  const zeroSnapshot = buildAnalysisSnapshot({
+    range: "1m",
+    month: "2026-09",
+    accountId: null,
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-15",
+    previousDateFrom: "2026-08-01",
+    previousDateTo: "2026-08-15",
+    partial: true,
+    partialMonthStart: "2026-09-01",
+    gateway: zeroGateway,
+  });
+
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(zeroSnapshot) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+
+  const chart = page.getByRole("img", { name: "Evolución mensual de ingresos, gastos y neto." });
+  await expect(chart).toBeVisible();
+  const zeroBars = chart.locator('rect[data-zero="true"]');
+  await expect(zeroBars).toHaveCount(2);
+  expect(await zeroBars.evaluateAll((elements) => elements.map((element) => Number(element.getAttribute("height"))))).toEqual([0, 0]);
+  await expect(chart.locator('rect[data-series="income"][data-zero="true"]')).toHaveCount(1);
+  await expect(chart.locator('rect[data-series="expense"][data-zero="true"]')).toHaveCount(1);
+});

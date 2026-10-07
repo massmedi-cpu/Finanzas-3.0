@@ -142,8 +142,8 @@ export function FinancialTrendChart({
             const activePoint = row.monthStart === active?.monthStart;
             return (
               <g key={row.monthStart} className={activePoint ? styles.activeGroup : undefined}>
-                <rect className={styles.incomeBar} x={center - chart.barWidth - 3} y={incomeY} width={chart.barWidth} height={Math.max(1, chart.baseline - incomeY)} rx="7" />
-                <rect className={styles.expenseBar} x={center + 3} y={expenseY} width={chart.barWidth} height={Math.max(1, chart.baseline - expenseY)} rx="7" />
+                <rect className={styles.incomeBar} data-series="income" data-zero={row.incomeCents === 0 ? "true" : undefined} x={center - chart.barWidth - 3} y={incomeY} width={chart.barWidth} height={row.incomeCents === 0 ? 0 : Math.max(1, chart.baseline - incomeY)} rx="7" />
+                <rect className={styles.expenseBar} data-series="expense" data-zero={row.expenseCents === 0 ? "true" : undefined} x={center + 3} y={expenseY} width={chart.barWidth} height={row.expenseCents === 0 ? 0 : Math.max(1, chart.baseline - expenseY)} rx="7" />
               </g>
             );
           })}

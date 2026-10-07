@@ -379,6 +379,13 @@
   min-height: 0;
 }
 
+.evolutionMissingMarker {
+  width: min(2rem, 58%);
+  align-self: center;
+  border-top: 2px dashed var(--color-border-strong);
+  opacity: 0.78;
+}
+
 .evolutionSignedArea {
   position: relative;
   align-items: initial;

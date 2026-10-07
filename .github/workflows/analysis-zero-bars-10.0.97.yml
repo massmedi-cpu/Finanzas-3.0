@@ -1,0 +1,55 @@
+name: Analysis Zero Bars 10.0.97
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/design/financial-trend-chart.tsx"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - "scripts/verify-analysis-zero-bars-10.0.97.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/analysis-zero-bars-10.0.97.yml"
+  push:
+    branches:
+      - "qa/user-audit-p4-10.0.92"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: analysis-zero-bars-10.0.97-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:analysis-zero-bars
+      - run: npm run build
+
+  qa23-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-23 · ceros reales en evolución de Análisis
+        run: >-
+          npx playwright test tests/e2e/premium-analysis-visual.spec.ts
+          --grep "QA-23"
+          --project=chromium-desktop --project=chromium-mobile --workers=1

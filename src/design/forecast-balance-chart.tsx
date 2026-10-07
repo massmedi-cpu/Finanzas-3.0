@@ -38,6 +38,8 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
   }), { minimum: Infinity, maximum: -Infinity });
   const range = Math.max(1, maximum - minimum);
   const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
+  const zeroInDomain = minimum <= 0 && maximum >= 0 && minimum !== maximum;
+  const zeroY = zeroInDomain ? coordinateFor(0) * 2.4 : null;
   const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
   const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
   const minimumPoint = points.reduce((current, point) => point.balanceCents < current.balanceCents ? point : current, points[0]);
@@ -90,7 +92,16 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
                 <stop offset="100%" stopColor="currentColor" stopOpacity=".95" />
               </linearGradient>
             </defs>
-            <line x1="0" x2="1000" y1="120" y2="120" stroke="currentColor" strokeOpacity=".08" strokeDasharray="8 12" />
+            {zeroY !== null ? (
+              <line
+                className={styles.zeroLine}
+                data-zero-line="true"
+                x1="0"
+                x2="1000"
+                y1={zeroY}
+                y2={zeroY}
+              />
+            ) : null}
             <polyline points={polyline} fill="none" stroke="url(#forecast-curve-gradient)" strokeWidth="5" strokeLinejoin="round" strokeLinecap="round" />
           </svg>
 

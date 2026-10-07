@@ -1,0 +1,55 @@
+name: Balance Sign Integrity 10.0.93
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/home-evolution.tsx"
+      - "tests/e2e/inicio-smart-brief.spec.ts"
+      - "scripts/verify-balance-sign-integrity-10.0.93.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/balance-sign-integrity-10.0.93.yml"
+  push:
+    branches:
+      - "qa/user-audit-p4-10.0.92"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: balance-sign-integrity-10.0.93-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:balance-sign-integrity
+      - run: npm run build
+
+  qa19-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: QA-19 · saldo positivo y negativo alrededor de cero
+        run: >-
+          npx playwright test tests/e2e/inicio-smart-brief.spec.ts
+          --grep "QA-19"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
