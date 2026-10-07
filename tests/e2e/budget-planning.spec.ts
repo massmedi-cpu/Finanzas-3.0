@@ -169,6 +169,30 @@ test("PRE-022 no fabrica sostenibilidad sin ingresos y resuelve el rango entre a
   });
 });
 
+test("QA Work · el contrato presupuestario exige la fuente split-aware actual", () => {
+  const current = snapshot(null);
+  expect(isBudgetSnapshot(current)).toBe(true);
+
+  expect(isBudgetSnapshot({
+    ...current,
+    total: {
+      ...current.total,
+      automaticFactors: {
+        ...current.total.automaticFactors!,
+        exclusionsSource: "financial_transaction_facts.analytics_eligible",
+      },
+    },
+  })).toBe(false);
+
+  expect(isBudgetSnapshot({
+    ...current,
+    principles: {
+      ...current.principles,
+      actualSource: "financial_transaction_facts",
+    },
+  })).toBe(false);
+});
+
 test("PRE-022 valida el contrato del motor antes de componer la planificación", () => {
   expect(isBudgetSnapshot(snapshot(null))).toBe(true);
   expect(isBudgetSnapshot({ ...snapshot(null), contractVersion: 2 })).toBe(false);
