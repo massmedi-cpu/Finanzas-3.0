@@ -70,6 +70,9 @@ function readableError(payload: any) {
   if (code.includes("budget_category_not_found")) return "La categoría ya no está disponible. Actualiza los presupuestos.";
   if (code.includes("budget_category_must_be_expense")) return "Solo las categorías de gasto pueden tener presupuesto.";
   if (payload?.error === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
+  if (payload?.error === "persistence_failed") {
+    return "Presupuestos no ha podido terminar el cálculo. Reintenta; no se ha guardado ningún cambio.";
+  }
   return "No se pudo completar la operación de presupuestos.";
 }
 
@@ -723,6 +726,21 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               </aside>
             </section>
           </>
+        ) : error ? (
+          <section className={styles.panel} aria-labelledby="budget-load-error-title">
+            <div className={styles.emptyState}>
+              <span className={styles.cardIcon}><Icon name="warning" /></span>
+              <h2 id="budget-load-error-title">No se ha podido cargar {formatMonth(month)}</h2>
+              <p>Los datos bancarios siguen intactos. Puedes volver a intentar el cálculo sin duplicar ni modificar movimientos.</p>
+              <button
+                className={styles.actionButton}
+                type="button"
+                onClick={() => void fetchSnapshot(month)}
+              >
+                Reintentar
+              </button>
+            </div>
+          </section>
         ) : null}
       </div>
     </main>
