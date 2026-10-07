@@ -1,0 +1,28 @@
+name: Ops Dispatch Publish Verified Release 10.0.98
+
+on:
+  push:
+    branches:
+      - ops/release-10.0.98
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch Publish Verified Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRODUCTION_URL: https://financialapp-home.vercel.app/
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run publish-verified-release.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f "production_url=$PRODUCTION_URL"
+          echo "publish_verified_release_dispatch=accepted"
