@@ -19,6 +19,15 @@ import styles from "./documents.module.css";
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type StorageProvider = "supabase" | "google_drive";
+type MetadataEditor = {
+  type: DocumentType;
+  documentDate: string;
+  issuerName: string;
+  total: string;
+  notes: string;
+};
+
+const UNSAVED_METADATA_CONFIRM = "Hay cambios de metadatos sin guardar. ¿Quieres descartarlos?";
 
 type DocumentItem = {
   id: string;
@@ -191,6 +200,25 @@ function parseEuroToCents(input: string) {
   }
 }
 
+function editorFromDocument(document: DocumentDetail["document"]): MetadataEditor {
+  return {
+    type: document.type,
+    documentDate: document.documentDate ?? "",
+    issuerName: document.issuerName ?? "",
+    total: euroInput(document.totalCents),
+    notes: document.notes ?? "",
+  };
+}
+
+function editorMatchesDocument(editor: MetadataEditor, document: DocumentDetail["document"]) {
+  const saved = editorFromDocument(document);
+  return editor.type === saved.type
+    && editor.documentDate === saved.documentDate
+    && editor.issuerName === saved.issuerName
+    && editor.total === saved.total
+    && editor.notes === saved.notes;
+}
+
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -262,14 +290,20 @@ export function DocumentsClient() {
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
-  const [editor, setEditor] = useState({ type: "invoice" as DocumentType, documentDate: "", issuerName: "", total: "", notes: "" });
+  const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const hasActiveListFilters = Boolean(query.trim() || statusFilter);
+  const metadataDirty = useMemo(
+    () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
+    [detail, editor],
+  );
 
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
+  const metadataDirtyRef = useRef(false);
   selectedIdRef.current = selectedId;
+  metadataDirtyRef.current = metadataDirty;
 
   const listUrl = useMemo(() => {
     const params = new URLSearchParams({ limit: "50", offset: "0" });
@@ -286,7 +320,11 @@ export function DocumentsClient() {
       const data = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
       if (sequence !== listSequence.current) return;
       setList(data);
-      if (selectedIdRef.current && !data.items.some((item) => item.id === selectedIdRef.current)) {
+      if (
+        selectedIdRef.current
+        && !data.items.some((item) => item.id === selectedIdRef.current)
+        && !metadataDirtyRef.current
+      ) {
         setSelectedId(null);
         setDetail(null);
       }
@@ -297,7 +335,7 @@ export function DocumentsClient() {
     }
   }, [listUrl]);
 
-  const loadDetail = useCallback(async (id: string, silent = false) => {
+  const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
     if (!silent) setLoadingDetail(true);
     setError(null);
@@ -309,13 +347,7 @@ export function DocumentsClient() {
       const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
       setDetail(data);
-      setEditor({
-        type: data.document.type,
-        documentDate: data.document.documentDate ?? "",
-        issuerName: data.document.issuerName ?? "",
-        total: euroInput(data.document.totalCents),
-        notes: data.document.notes ?? "",
-      });
+      if (!preserveEditor) setEditor(editorFromDocument(data.document));
     } catch (caught) {
       if (sequence === detailSequence.current) setError(friendlyError(caught));
     } finally {
@@ -339,18 +371,52 @@ export function DocumentsClient() {
     feedbackActionRef.current = null;
   }, [actionFeedback, busy, error]);
 
+  useEffect(() => {
+    if (!metadataDirty) return;
+
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const protectInternalNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+      const current = new URL(window.location.href);
+      if (destination.pathname === current.pathname && destination.search === current.search) return;
+
+      if (!window.confirm(UNSAVED_METADATA_CONFIRM)) {
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    };
+
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", protectInternalNavigation, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", protectInternalNavigation, true);
+    };
+  }, [metadataDirty]);
+
   const selectDocument = (id: string) => {
+    if (id !== selectedIdRef.current && metadataDirtyRef.current && !window.confirm(UNSAVED_METADATA_CONFIRM)) return;
     setAuthRecovery(null);
     selectedIdRef.current = id;
     setSelectedId(id);
   };
 
-  const refreshAfterMutation = useCallback(async (id: string) => {
-    await Promise.all([loadList(), loadDetail(id)]);
+  const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
+    await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
   }, [loadList, loadDetail]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
-    await Promise.all([loadList(listUrl, true), loadDetail(id, true)]);
+    await Promise.all([loadList(listUrl, true), loadDetail(id, true, true)]);
     setNotice("Revisión OCR confirmada y documento sincronizado.");
   }, [listUrl, loadList, loadDetail]);
 
@@ -437,7 +503,7 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "status", id: detail.document.id, status }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      await refreshAfterMutation(detail.document.id, true);
       setNotice(`Estado cambiado a ${STATUS_LABELS[status].toLowerCase()}.`);
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
@@ -476,7 +542,7 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "associate", documentId: detail.document.id, transactionId, method }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      await refreshAfterMutation(detail.document.id, true);
       setCandidates(null);
       setTransactions(null);
       setNotice(method === "suggested" ? "Sugerencia confirmada explícitamente." : "Movimiento asociado manualmente.");
@@ -493,7 +559,7 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "unassociate", documentId: detail.document.id, transactionId }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      await refreshAfterMutation(detail.document.id, true);
       setNotice("Asociación eliminada. El movimiento bancario no se ha modificado.");
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
@@ -624,6 +690,11 @@ export function DocumentsClient() {
                 </header>
 
                 <form className={styles.editor} onSubmit={saveMetadata}>
+                  {metadataDirty ? (
+                    <div className={styles.notice} role="status" data-testid="document-metadata-dirty">
+                      Cambios de metadatos sin guardar. Guárdalos antes de cambiar de documento o salir.
+                    </div>
+                  ) : null}
                   <div className={styles.formGrid}>
                     <label>Tipo<select value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
                     <label>Fecha<input type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
