@@ -512,10 +512,14 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
 
   await page.route("**/api/budgets*", async (route) => {
     if (route.request().method() === "GET") {
+      const selectedMonth = new URL(route.request().url()).searchParams.get("month") ?? zeroHistorySnapshot.month;
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify(zeroHistorySnapshot),
+        body: JSON.stringify({
+          ...snapshotForMonth(selectedMonth),
+          total: zeroHistorySnapshot.total,
+        }),
       });
       return;
     }
