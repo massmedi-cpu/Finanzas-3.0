@@ -918,15 +918,19 @@ export default function InicioOverview() {
                     : 36}%` }} />
                 </div>
               </div>
-              {topBudgetCategories.length > 0 && (
-                <ul className={styles.simpleRows}>
+              {!revealAmounts ? (
+                <p className={styles.helper} data-budget-ranking-privacy="hidden">
+                  Detalle por categorías oculto por privacidad.
+                </p>
+              ) : topBudgetCategories.length > 0 ? (
+                <ul className={styles.simpleRows} data-budget-ranking-privacy="visible">
                   {topBudgetCategories.map((item) => (
                     <li key={item.categoryId ?? item.categoryName ?? "total"}>
                       <span><CategoryIdentity categoryId={item.categoryId} name={item.categoryName} fallback="Categoría" /></span><b>{displayMoney(item.actualExpenseCents)}</b>
                     </li>
                   ))}
                 </ul>
-              )}
+              ) : null}
             </>
           ) : !consistency.budgetMonthMatches ? (
             <p className={styles.empty}>El presupuesto recibido corresponde a otro mes. Abre Presupuestos para revisarlo.</p>
