@@ -7,6 +7,8 @@ on:
     paths:
       - "src/design/financial-bar-chart.tsx"
       - "src/design/financial-bar-chart.module.css"
+      - "app/inicio-overview.tsx"
+      - "app/home-smart-brief.tsx"
       - "tests/e2e/inicio-privacy-visual.spec.ts"
       - "scripts/verify-privacy-sign-integrity-10.0.100.mjs"
       - "package.json"
