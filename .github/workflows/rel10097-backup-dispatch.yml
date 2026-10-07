@@ -1,0 +1,26 @@
+name: REL-10097 Backup Dispatch
+
+on:
+  push:
+    branches:
+      - release/10.0.97-backup-dispatch
+    paths:
+      - .github/workflows/rel10097-backup-dispatch.yml
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  dispatch-backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dispatch Production Backup v2 for 10.0.97
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run production-backup-v2.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f source_commit=eefce2fcad9545cd223a56ff1f9d1208330e2be2 \
+            -f expected_app_version=10.0.97
