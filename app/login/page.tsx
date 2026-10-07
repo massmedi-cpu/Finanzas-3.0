@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: Props) {
   const next = Array.isArray(params.next) ? params.next[0] : params.next;
 
   return (
-    <main className="reset-screen">
+    <main id="main-content" className="reset-screen">
       <section className="reset-card" aria-labelledby="login-title">
         <p className="eyebrow">Financial App</p>
         <h1 id="login-title">Acceso privado</h1>
