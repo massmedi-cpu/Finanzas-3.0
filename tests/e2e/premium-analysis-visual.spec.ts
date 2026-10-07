@@ -362,6 +362,46 @@ test("QA-02 · Análisis no convierte un periodo sin cobertura completa en tende
   await expect(kpis).not.toContainText("Tasa de ahorro a la baja");
 });
 
+test("QA Work · el texto atenuado de Análisis mantiene contraste AA en tema oscuro", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  const contrast = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const muted = root.getPropertyValue("--color-text-muted").trim();
+    const surface = root.getPropertyValue("--color-surface-strong").trim();
+
+    const rgb = (hex: string) => {
+      const value = hex.replace("#", "");
+      if (!/^[0-9a-f]{6}$/i.test(value)) throw new Error(`Unexpected color token: ${hex}`);
+      return [0, 2, 4].map((index) => Number.parseInt(value.slice(index, index + 2), 16) / 255);
+    };
+    const luminance = (hex: string) => rgb(hex)
+      .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+
+    const mutedLuminance = luminance(muted);
+    const surfaceLuminance = luminance(surface);
+    const lighter = Math.max(mutedLuminance, surfaceLuminance);
+    const darker = Math.min(mutedLuminance, surfaceLuminance);
+    return (lighter + 0.05) / (darker + 0.05);
+  });
+
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
+});
+
 test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema claro", async ({ page }, testInfo) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.route("**/api/analysis**", async (route) => {
