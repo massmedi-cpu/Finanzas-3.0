@@ -294,8 +294,10 @@ test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y 
   ))).toEqual(Array(balanceSeries.rows.length).fill("36%"));
 
   await page.getByRole("button", { name: "Mostrar importes" }).click();
-  await expect(hiddenBalance.locator('[data-sign="negative"]')).toHaveCount(1);
-  await expect(hiddenBalance.locator('[data-sign="positive"]')).toHaveCount(2);
-  await expect(hiddenBalance.locator('[data-sign="zero"]')).toHaveCount(1);
+  const visibleBalance = page.getByRole("group", { name: /^Saldo bancario agregado por mes$/i });
+  await expect(visibleBalance).toBeVisible();
+  await expect(visibleBalance.locator('[data-sign="negative"]')).toHaveCount(1);
+  await expect(visibleBalance.locator('[data-sign="positive"]')).toHaveCount(2);
+  await expect(visibleBalance.locator('[data-sign="zero"]')).toHaveCount(1);
 });
 
