@@ -9,7 +9,16 @@ const requireText = (text, token, label) => {
   if (!text.includes(token)) throw new Error(`${label}: falta ${token}`);
 };
 
-if (pkg.version !== "10.0.101") throw new Error(`version esperada 10.0.101, recibida ${pkg.version}`);
+const parts = String(pkg.version ?? "").split(".").map(Number);
+const min = [10, 0, 101];
+const atLeast = parts.length === 3
+  && parts.every(Number.isInteger)
+  && (
+    parts[0] > min[0]
+    || (parts[0] === min[0] && parts[1] > min[1])
+    || (parts[0] === min[0] && parts[1] === min[1] && parts[2] >= min[2])
+  );
+if (!atLeast) throw new Error(`version esperada 10.0.101+, recibida ${pkg.version}`);
 requireText(chart, "const flatDomain = minimum === maximum", "Previsión · dominio plano");
 requireText(chart, "flatDomain\n    ? 50", "Previsión · centro neutral");
 requireText(chart, "const zeroInDomain = minimum <= 0 && maximum >= 0", "Previsión · cero incluido");

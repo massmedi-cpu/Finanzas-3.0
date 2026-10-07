@@ -11,7 +11,16 @@ const requireText = (text, token, label) => {
   if (!text.includes(token)) fail(`${label}: falta ${token}`);
 };
 
-if (pkg.version !== "10.0.102") fail(`version esperada 10.0.102, recibida ${pkg.version}`);
+const parts = String(pkg.version ?? "").split(".").map(Number);
+const min = [10, 0, 102];
+const atLeast = parts.length === 3
+  && parts.every(Number.isInteger)
+  && (
+    parts[0] > min[0]
+    || (parts[0] === min[0] && parts[1] > min[1])
+    || (parts[0] === min[0] && parts[1] === min[1] && parts[2] >= min[2])
+  );
+if (!atLeast) fail(`version esperada 10.0.102+, recibida ${pkg.version}`);
 requireText(contract, 'status: "out_of_scope_current_release"', "PRE-019 · estado");
 requireText(contract, 'decision: "do_not_implement"', "PRE-019 · decisión");
 requireText(contract, 'netWorth: "not_available"', "PRE-019 · significado");
