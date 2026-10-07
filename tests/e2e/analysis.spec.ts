@@ -196,6 +196,20 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
 
+test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await loadMockAnalysis(page, snapshot);
+
+  const navigation = page.getByRole("navigation", { name: "Continuar desde Análisis" });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("link", { name: /Cash Flow/i })).toHaveAttribute("href", "/cash-flow?month=2026-09");
+  await expect(navigation.getByRole("link", { name: /Presupuestos/i })).toHaveAttribute("href", "/budgets?month=2026-09");
+  await expect(navigation.getByRole("link", { name: /Movimientos/i })).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
+  );
+});
+
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
   const snapshot = mockSnapshot();
 
