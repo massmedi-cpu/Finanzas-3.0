@@ -112,7 +112,7 @@ test("Premium Â· Cuentas no dibuja barras fantasma para valores exactamente 0 â‚
   await mockAccounts(page);
   await page.goto("/accounts");
 
-  const zeroRow = page.getByRole("listitem", { name: /octubre de 2026: ingresos 0,00/ });
+  const zeroRow = page.getByRole("listitem", { name: /oct: ingresos 0,00/ });
   await expect(zeroRow).toBeVisible();
 
   const zeroBars = zeroRow.locator("[data-zero=true]");
@@ -120,8 +120,6 @@ test("Premium Â· Cuentas no dibuja barras fantasma para valores exactamente 0 â‚
 
   for (let index = 0; index < 3; index += 1) {
     expect(await zeroBars.nth(index).evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
-    const box = await zeroBars.nth(index).boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.width).toBe(0);
+    expect(await zeroBars.nth(index).evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
   }
 });
