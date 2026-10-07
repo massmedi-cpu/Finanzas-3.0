@@ -37,13 +37,32 @@ const monthly = {
 
 const budgets = {
   month: "2026-09",
-  total: { categoryId: null, categoryName: null, effectiveAmountCents: 100000, actualExpenseCents: 60000, remainingCents: 40000, progressBps: 6000, status: "on_track" },
+  total: { categoryId: null, categoryName: null, effectiveAmountCents: 100000, actualExpenseCents: 70000, remainingCents: 30000, progressBps: 7000, status: "on_track" },
   categories: [],
 };
 
 const forecast = {
-  summary: { projectedIncomeCents: 0, projectedExpenseCents: 0, projectedNetCents: 0, projectedClosingBalanceCents: 30000, plannedItems: 0 },
-  items: [],
+  period: { dateFrom: "2026-09-11", dateTo: "2026-10-11", accountId: null },
+  summary: {
+    openingBalanceCents: 30000,
+    projectedIncomeCents: 0,
+    projectedExpenseCents: 32000,
+    projectedNetCents: -32000,
+    projectedClosingBalanceCents: -2000,
+    plannedItems: 1,
+  },
+  items: [
+    {
+      id: "f1",
+      date: "2026-09-20",
+      concept: "Cargo previsto",
+      amountCents: -32000,
+      categoryId: null,
+      categoryName: null,
+      status: "planned",
+      affectsProjection: true,
+    },
+  ],
 };
 
 const transactions = {
@@ -65,6 +84,7 @@ const transactions = {
 };
 
 async function mockInicio(page: Page) {
+  await page.clock.setFixedTime(new Date("2026-09-11T10:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -135,6 +155,10 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(visibleChart).toBeVisible();
   const initialHeights = await barHeights(page);
   expect(new Set(initialHeights).size).toBeGreaterThan(1);
+  await expect(page.locator('[data-financial-sign="positive"]').first()).toBeVisible();
+  await expect(page.locator('[data-financial-sign="negative"]').first()).toBeVisible();
+  await expect(page.getByText("Balance registrado en positivo", { exact: true })).toBeVisible();
+  await expect(page.getByText("La previsión termina en negativo", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Ocultar importes" }).click();
 
@@ -145,6 +169,17 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
 
   const hiddenBalance = page.locator('[data-balance-sign="hidden"]');
   await expect(hiddenBalance).toBeVisible();
+  await expect(page.locator('[data-financial-sign="negative"]')).toHaveCount(0);
+  await expect(page.locator('[data-financial-sign="positive"]')).toHaveCount(0);
+  expect(await page.locator('[data-financial-sign="hidden"]').count()).toBeGreaterThanOrEqual(4);
+  await expect(page.getByText("Balance del mes protegido", { exact: true })).toBeVisible();
+  await expect(page.getByText("Balance registrado en positivo", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("La previsión termina en negativo", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toBeVisible();
+
+  const protectedBudget = page.locator('[data-budget-progress-privacy="hidden"]');
+  await expect(protectedBudget).toHaveAttribute("aria-label", "Porcentaje de presupuesto oculto por privacidad");
+  await expect(protectedBudget.locator("span")).toHaveCSS("width", /36/);
   await expect(hiddenBalance).toHaveCSS("color", await page.locator("body").evaluate((body) => {
     const probe = document.createElement("span");
     probe.style.color = "var(--color-text-secondary)";
@@ -185,4 +220,7 @@ test("Ocultar importes oculta también el signo visual del balance", async ({ pa
   await expect(page.locator('[data-balance-sign="hidden"]')).toBeVisible();
   await expect(page.locator('[data-balance-sign="negative"]')).toHaveCount(0);
   await expect(page.locator('[data-balance-sign="positive"]')).toHaveCount(0);
+  await expect(page.locator('[data-financial-sign="negative"]')).toHaveCount(0);
+  await expect(page.locator('[data-financial-sign="positive"]')).toHaveCount(0);
+  await expect(page.locator('[data-budget-progress-privacy="hidden"]')).toBeVisible();
 });
