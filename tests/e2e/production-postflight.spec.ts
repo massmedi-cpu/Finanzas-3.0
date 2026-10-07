@@ -36,7 +36,7 @@ test("la aplicación privada redirige al acceso y las APIs quedan cerradas", asy
   expect(navigation?.status()).toBe(200);
   await expect(page).toHaveURL(/\/login(?:\?|$)/);
   await expect(page.getByRole("heading", { name: "Acceso privado" })).toBeVisible();
-  await expect(page.locator("#main-content").getByText("Esta aplicación contiene información financiera personal.")).toBeVisible();
+  await expect(page.getByRole("main").getByText(/Esta aplicación contiene información financiera personal\./)).toBeVisible();
 
   const privateApi = await request.get("/api/transactions", { failOnStatusCode: false, maxRedirects: 0 });
   expect(privateApi.status()).toBe(401);
