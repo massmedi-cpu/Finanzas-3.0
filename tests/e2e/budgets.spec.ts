@@ -378,6 +378,29 @@ test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo
   expect(writes.at(-1)).toMatchObject({ manualAmountCents: 100000 });
 });
 
+test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({ page }) => {
+  let requestedMonth = "";
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+
+    requestedMonth = new URL(route.request().url()).searchParams.get("month") ?? "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth(requestedMonth || "2026-09")),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-07");
+  await expect(page.locator('input[type="month"]')).toHaveValue("2026-07");
+  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  expect(requestedMonth).toBe("2026-07");
+});
+
 test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
   let markAugustStarted: (() => void) | null = null;
   const augustStarted = new Promise<void>((resolve) => {
