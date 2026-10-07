@@ -146,6 +146,10 @@
   border-radius: var(--radius-pill);
 }
 
+.compareTrack i[data-zero="true"] {
+  min-width: 0;
+}
+
 .currentBar {
   background: linear-gradient(90deg, rgba(77, 141, 255, 0.72), rgba(43, 217, 247, 0.78));
 }
