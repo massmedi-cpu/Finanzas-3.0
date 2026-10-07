@@ -336,9 +336,9 @@ function BudgetCard({
   );
 }
 
-export default function BudgetsClient() {
+export default function BudgetsClient({ initialMonth }: { initialMonth?: string }) {
   const actionFeedback = useActionFeedback();
-  const [month, setMonth] = useState(currentMonthMadrid);
+  const [month, setMonth] = useState(() => initialMonth ?? currentMonthMadrid());
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
