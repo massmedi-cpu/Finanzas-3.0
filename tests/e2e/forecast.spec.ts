@@ -515,3 +515,46 @@ test("QA-21 · la curva de saldo coloca el cero en su escala real", async ({ pag
   await expect(chart.getByText("1.000,00 €", { exact: true }).first()).toBeVisible();
 });
 
+test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero", async ({ page }) => {
+  const zeroSnapshot = {
+    ...baseSnapshot,
+    summary: {
+      ...baseSnapshot.summary,
+      openingBalanceCents: 0,
+      projectedIncomeCents: 0,
+      projectedExpenseCents: 0,
+      projectedNetCents: 0,
+      projectedClosingBalanceCents: 0,
+      plannedItems: 1,
+    },
+    items: [
+      {
+        ...baseSnapshot.items[0],
+        amountCents: 0,
+        projectionEffectCents: 0,
+        projectedBalanceAfterCents: 0,
+      },
+    ],
+  };
+
+  await page.route("**/api/forecast*", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(zeroSnapshot),
+  }));
+  await page.goto("/forecast");
+
+  const chart = page.getByRole("region", { name: "Curva de saldo prevista" });
+  await expect(chart).toBeVisible();
+
+  const zeroLine = chart.locator('[data-zero-line="true"]');
+  await expect(zeroLine).toHaveCount(1);
+  await expect(zeroLine).toHaveAttribute("y1", "120");
+  await expect(zeroLine).toHaveAttribute("y2", "120");
+
+  const pointTops = await chart.getByRole("button", { name: /· 0,00\s?€/ }).evaluateAll((buttons) => (
+    buttons.map((button) => (button.parentElement as HTMLElement | null)?.style.top)
+  ));
+  expect(pointTops).toEqual(["50%", "50%"]);
+});
+
