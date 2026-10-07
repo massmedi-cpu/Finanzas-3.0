@@ -212,6 +212,92 @@ test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({
   expect(writes.some((write) => write.action === "metadata" && write.issuerName === "Proveedor editado")).toBe(true);
 });
 
+test("QA Work · Documentos confirma antes de cambiar de documento con metadatos pendientes", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+
+  const secondDocumentId = "93000000-0000-4000-8000-000000000095";
+  const secondItem = {
+    ...item,
+    id: secondDocumentId,
+    originalFileName: "recibo-segundo.pdf",
+    issuerName: "Segundo proveedor",
+    totalCents: 3210,
+  };
+
+  await page.route("**/api/documents*", async (route) => {
+    const request = route.request();
+    const url = new URL(request.url());
+    if (request.method() !== "GET") {
+      await route.fallback();
+      return;
+    }
+    if (url.searchParams.get("mode")) {
+      await route.fallback();
+      return;
+    }
+    if (url.searchParams.get("id") === secondDocumentId) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1,
+          document: secondItem,
+          associations: [],
+          principles,
+        }),
+      });
+      return;
+    }
+    if (!url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1,
+          items: [
+            { ...item, associationCount: 0 },
+            { ...secondItem, associationCount: 0 },
+          ],
+          total: 2,
+          limit: 50,
+          offset: 0,
+          principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const issuer = page.getByLabel("Emisor");
+  await issuer.fill("Proveedor pendiente");
+  await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
+
+  let dismissedWarning = "";
+  page.once("dialog", async (dialog) => {
+    dismissedWarning = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.getByRole("button", { name: /recibo-segundo.pdf/i }).click();
+  await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
+  await expect(issuer).toHaveValue("Proveedor pendiente");
+  expect(dismissedWarning).toContain("cambios de metadatos sin guardar");
+
+  let acceptedWarning = "";
+  page.once("dialog", async (dialog) => {
+    acceptedWarning = dialog.message();
+    await dialog.accept();
+  });
+  await page.getByRole("button", { name: /recibo-segundo.pdf/i }).click();
+  await expect(page.getByRole("heading", { name: "recibo-segundo.pdf" })).toBeVisible();
+  await expect(page.getByLabel("Emisor")).toHaveValue("Segundo proveedor");
+  expect(acceptedWarning).toContain("cambios de metadatos sin guardar");
+  expect(writes.some((write) => write.action === "metadata")).toBe(false);
+});
+
 test("QA-09 · Documentos distingue filtros sin coincidencias de un repositorio vacío", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
