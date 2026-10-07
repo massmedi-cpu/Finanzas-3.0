@@ -27,6 +27,8 @@ type Props = {
   plannedItems: number | null;
   syncState: SyncState;
   displayMoney: (cents: number) => string;
+  valuesVisible: boolean;
+  privacyActive: boolean;
 };
 
 type HomeVisitSnapshot = {
@@ -119,12 +121,14 @@ function formatBankDate(value: string | null) {
   return dateOnly.format(parsed).replace(".", "");
 }
 
-function signedMoney(delta: number, displayMoney: (cents: number) => string) {
+function signedMoney(delta: number, displayMoney: (cents: number) => string, valuesVisible: boolean) {
+  if (!valuesVisible) return displayMoney(Math.abs(delta));
   if (delta === 0) return displayMoney(0);
   return `${delta > 0 ? "+" : "−"}${displayMoney(Math.abs(delta))}`;
 }
 
-function signedPoints(deltaBps: number) {
+function signedPoints(deltaBps: number, valuesVisible: boolean) {
+  if (!valuesVisible) return "oculto por privacidad";
   if (deltaBps === 0) return "0 pp";
   return `${deltaBps > 0 ? "+" : "−"}${formatBasisPoints(Math.abs(deltaBps), 1, "pp", 0)}`;
 }
@@ -147,6 +151,8 @@ export default function HomeSmartBrief({
   plannedItems,
   syncState,
   displayMoney,
+  valuesVisible,
+  privacyActive,
 }: Props) {
   const [previousVisit, setPreviousVisit] = useState<HomeVisitSnapshot | null | undefined>(undefined);
 
@@ -195,13 +201,23 @@ export default function HomeSmartBrief({
   ]);
 
   useEffect(() => {
-    if (loading || previousVisit === undefined || !currentVisit) return;
+    if (!privacyActive) return;
+    try {
+      localStorage.removeItem(HOME_VISIT_KEY);
+    } catch {
+      // La privacidad visual no depende de que el almacenamiento local esté disponible.
+    }
+    setPreviousVisit(null);
+  }, [privacyActive]);
+
+  useEffect(() => {
+    if (!valuesVisible || loading || previousVisit === undefined || !currentVisit) return;
     try {
       localStorage.setItem(HOME_VISIT_KEY, JSON.stringify(currentVisit));
     } catch {
       // La memoria de visita es auxiliar: nunca bloquea Inicio.
     }
-  }, [currentVisit, loading, previousVisit]);
+  }, [currentVisit, loading, previousVisit, valuesVisible]);
 
   const currentItems = useMemo<BriefItem[]>(() => {
     const items: BriefItem[] = [];
@@ -215,21 +231,23 @@ export default function HomeSmartBrief({
         label: "MES",
         title: !movementInMonth
           ? "Mes aún sin movimientos importados"
-          : negative
-            ? "Balance registrado en negativo"
-            : positive
-              ? "Balance registrado en positivo"
-              : "Balance registrado: 0 €",
+          : !valuesVisible
+            ? "Balance del mes protegido"
+            : negative
+              ? "Balance registrado en negativo"
+              : positive
+                ? "Balance registrado en positivo"
+                : "Balance registrado: 0 €",
         detail: !movementInMonth
           ? `${cutoff ? `Último movimiento ${cutoff}. ` : ""}No interpretamos la ausencia de movimientos como equilibrio o mejora.`
           : `${cutoff ? `Datos hasta ${cutoff} · ` : ""}neto ${displayMoney(operatingNetCents)} · gastos ${displayMoney(expenseCents)}${incomeCents !== null ? ` · ingresos ${displayMoney(incomeCents)}` : ""}.`,
         href: "/analysis",
-        tone: !movementInMonth ? "warning" : negative ? "warning" : positive ? "positive" : "neutral",
+        tone: !movementInMonth ? "warning" : !valuesVisible ? "neutral" : negative ? "warning" : positive ? "positive" : "neutral",
       });
     }
 
     if (budgetStatus !== null) {
-      const progress = budgetProgressBps !== null ? `${formatBasisPoints(budgetProgressBps, 1, "%", 0)} usado` : null;
+      const progress = valuesVisible && budgetProgressBps !== null ? `${formatBasisPoints(budgetProgressBps, 1, "%", 0)} usado` : null;
       const title = budgetStatus === "over"
         ? "Presupuesto excedido"
         : budgetStatus === "unfunded"
@@ -239,7 +257,7 @@ export default function HomeSmartBrief({
             : "Presupuesto dentro del límite";
       const detail = overBudgetCount && overBudgetCount > 0
         ? `${overBudgetCount} ${overBudgetCount === 1 ? "categoría supera" : "categorías superan"} su límite${progress ? ` · ${progress}` : ""}.`
-        : progress ? `${progress}.` : "Sin porcentaje comparable todavía.";
+        : progress ? `${progress}.` : valuesVisible ? "Sin porcentaje comparable todavía." : "Porcentaje oculto por privacidad.";
       items.push({
         label: "PRESUPUESTO",
         title,
@@ -259,7 +277,7 @@ export default function HomeSmartBrief({
           : "Sin movimientos previstos",
         detail: `${hasPlanned ? `Neto previsto ${displayMoney(projectedNetCents)}` : "No hay cargos o ingresos planificados"}${hasPlanned && projectedClosingBalanceCents !== null ? ` · cierre ${displayMoney(projectedClosingBalanceCents)}` : ""}.`,
         href: "/forecast",
-        tone: hasPlanned && negative ? "danger" : "neutral",
+        tone: valuesVisible && hasPlanned && negative ? "danger" : "neutral",
       });
     }
 
@@ -293,6 +311,7 @@ export default function HomeSmartBrief({
     projectedNetCents,
     syncState,
     transactionTotalCount,
+    valuesVisible,
   ]);
 
   const changes = useMemo<ChangeItem[]>(() => {
@@ -323,10 +342,14 @@ export default function HomeSmartBrief({
       const delta = currentVisit.expenseCents - previousVisit.expenseCents;
       if (delta !== 0) {
         items.push({
-          title: `Gasto del mes ${signedMoney(delta, displayMoney)}`,
-          detail: delta > 0 ? "El gasto acumulado ha aumentado desde tu última visita." : "El gasto acumulado ha bajado tras cambios o correcciones.",
+          title: `Gasto del mes ${signedMoney(delta, displayMoney, valuesVisible)}`,
+          detail: valuesVisible
+            ? delta > 0
+              ? "El gasto acumulado ha aumentado desde tu última visita."
+              : "El gasto acumulado ha bajado tras cambios o correcciones."
+            : "El gasto acumulado ha cambiado desde tu última visita.",
           href: "/analysis",
-          tone: delta > 0 ? "warning" : "positive",
+          tone: valuesVisible ? (delta > 0 ? "warning" : "positive") : "neutral",
         });
       }
     }
@@ -335,10 +358,14 @@ export default function HomeSmartBrief({
       const delta = currentVisit.budgetProgressBps - previousVisit.budgetProgressBps;
       if (delta !== 0) {
         items.push({
-          title: `Presupuesto ${signedPoints(delta)}`,
-          detail: currentVisit.budgetStatus === "over" ? "Ahora hay un límite excedido." : "Cambio en el porcentaje de presupuesto consumido.",
+          title: `Presupuesto ${signedPoints(delta, valuesVisible)}`,
+          detail: currentVisit.budgetStatus === "over"
+            ? "Ahora hay un límite excedido."
+            : valuesVisible
+              ? "Cambio en el porcentaje de presupuesto consumido."
+              : "El presupuesto ha cambiado desde tu última visita.",
           href: "/budgets",
-          tone: delta > 0 ? "warning" : "positive",
+          tone: valuesVisible ? (delta > 0 ? "warning" : "positive") : "neutral",
         });
       }
     }
@@ -354,10 +381,14 @@ export default function HomeSmartBrief({
       const delta = currentVisit.projectedNetCents - previousVisit.projectedNetCents;
       if (delta !== 0) {
         items.push({
-          title: `Previsión neta ${signedMoney(delta, displayMoney)}`,
-          detail: delta > 0 ? "La previsión ha mejorado desde la última visita." : "La previsión ha bajado desde la última visita.",
+          title: `Previsión neta ${signedMoney(delta, displayMoney, valuesVisible)}`,
+          detail: valuesVisible
+            ? delta > 0
+              ? "La previsión ha mejorado desde la última visita."
+              : "La previsión ha bajado desde la última visita."
+            : "La previsión ha cambiado desde la última visita.",
           href: "/forecast",
-          tone: delta >= 0 ? "positive" : "warning",
+          tone: valuesVisible ? (delta >= 0 ? "positive" : "warning") : "neutral",
         });
       }
     }
@@ -366,16 +397,16 @@ export default function HomeSmartBrief({
       const delta = currentVisit.activeBalanceCents - previousVisit.activeBalanceCents;
       if (delta !== 0) {
         items.push({
-          title: `Disponible ${signedMoney(delta, displayMoney)}`,
+          title: `Disponible ${signedMoney(delta, displayMoney, valuesVisible)}`,
           detail: "Variación del saldo agregado de las cuentas activas.",
           href: "/accounts",
-          tone: delta >= 0 ? "positive" : "warning",
+          tone: valuesVisible ? (delta >= 0 ? "positive" : "warning") : "neutral",
         });
       }
     }
 
     return items.slice(0, 4);
-  }, [currentVisit, displayMoney, previousVisit]);
+  }, [currentVisit, displayMoney, previousVisit, valuesVisible]);
 
   const monthStart = `${month}-01`;
   const canDrillIntoCurrentMonth = Boolean(latestTransactionDate?.startsWith(month));
@@ -387,7 +418,11 @@ export default function HomeSmartBrief({
           <span>LECTURA RÁPIDA</span>
           <h2>Ahora mismo</h2>
         </div>
-        <small>{previousVisit ? `Comparado con ${formatDateTime(previousVisit.savedAt)}` : "Resumen sin datos sensibles guardados"}</small>
+        <small>{privacyActive
+          ? "Privacidad activa · referencia monetaria local eliminada"
+          : previousVisit
+            ? `Comparado con ${formatDateTime(previousVisit.savedAt)}`
+            : "Referencia local de indicadores agregados"}</small>
       </div>
 
       <div className={styles.currentGrid}>
@@ -422,15 +457,23 @@ export default function HomeSmartBrief({
         <div className={styles.visitHeading}>
           <div>
             <span>DESDE TU ÚLTIMA VISITA</span>
-            <strong>{previousVisit ? "Qué ha cambiado" : previousVisit === null ? "Primera referencia guardada" : "Preparando comparación…"}</strong>
+            <strong>{privacyActive
+              ? "Comparación pausada por privacidad"
+              : previousVisit
+                ? "Qué ha cambiado"
+                : previousVisit === null
+                  ? "Primera referencia guardada"
+                  : "Preparando comparación…"}</strong>
           </div>
-          {previousVisit?.savedAt && <small>{formatDateTime(previousVisit.savedAt)}</small>}
+          {!privacyActive && previousVisit?.savedAt && <small>{formatDateTime(previousVisit.savedAt)}</small>}
         </div>
 
-        {previousVisit === undefined ? (
+        {privacyActive ? (
+          <p className={styles.noChanges}>La comparación entre visitas está pausada mientras ocultas importes. Se reanudará cuando vuelvas a mostrarlos.</p>
+        ) : previousVisit === undefined ? (
           <p className={styles.noChanges}>Comparando con la última referencia guardada en este dispositivo…</p>
         ) : previousVisit === null ? (
-          <p className={styles.noChanges}>A partir de la próxima visita te mostraré aquí sólo los cambios relevantes, sin guardar nombres de comercios ni conceptos bancarios.</p>
+          <p className={styles.noChanges}>A partir de la próxima visita compararemos indicadores agregados guardados solo en este dispositivo; no guardamos nombres de comercios ni conceptos bancarios.</p>
         ) : changes.length > 0 ? (
           <div className={styles.changeGrid}>
             {changes.map((item) => (

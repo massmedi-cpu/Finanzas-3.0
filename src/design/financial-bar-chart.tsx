@@ -106,7 +106,20 @@ export function FinancialBarChart({
             <i className={styles.expenseDot} aria-hidden="true" />
             Gastos {formatMoney(selected.expenseCents)}
           </span>
-          <span className={selected.operatingNetCents < 0 ? styles.readoutNegative : styles.readoutPositive}>
+          <span
+            className={!valuesVisible || selected.operatingNetCents === 0
+              ? styles.readoutNeutral
+              : selected.operatingNetCents < 0
+                ? styles.readoutNegative
+                : styles.readoutPositive}
+            data-balance-sign={valuesVisible
+              ? selected.operatingNetCents < 0
+                ? "negative"
+                : selected.operatingNetCents > 0
+                  ? "positive"
+                  : "zero"
+              : "hidden"}
+          >
             Balance {formatMoney(selected.operatingNetCents)}
           </span>
         </div>

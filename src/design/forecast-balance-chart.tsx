@@ -36,9 +36,12 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
     minimum: Math.min(minimum, point.balanceCents),
     maximum: Math.max(maximum, point.balanceCents),
   }), { minimum: Infinity, maximum: -Infinity });
+  const flatDomain = minimum === maximum;
   const range = Math.max(1, maximum - minimum);
-  const coordinateFor = (balanceCents: number) => 15 + ((maximum - balanceCents) / range) * 70;
-  const zeroInDomain = minimum <= 0 && maximum >= 0 && minimum !== maximum;
+  const coordinateFor = (balanceCents: number) => flatDomain
+    ? 50
+    : 15 + ((maximum - balanceCents) / range) * 70;
+  const zeroInDomain = minimum <= 0 && maximum >= 0;
   const zeroY = zeroInDomain ? coordinateFor(0) * 2.4 : null;
   const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
   const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");

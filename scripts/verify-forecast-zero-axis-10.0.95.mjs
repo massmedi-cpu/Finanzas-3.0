@@ -21,8 +21,10 @@ const atLeast = parts.length === 3
   );
 if (!atLeast) throw new Error(`version esperada 10.0.95+, recibida ${pkg.version}`);
 
-requireText(chart, "const zeroInDomain = minimum <= 0 && maximum >= 0 && minimum !== maximum", "Previsión · dominio cero");
+requireText(chart, "const zeroInDomain = minimum <= 0 && maximum >= 0", "Previsión · dominio cero");
 requireText(chart, "const zeroY = zeroInDomain ? coordinateFor(0) * 2.4 : null", "Previsión · coordenada cero");
+requireText(chart, "const flatDomain = minimum === maximum", "Previsión · dominio plano compatible");
+requireText(chart, "? 50", "Previsión · dominio plano centrado");
 requireText(chart, 'data-zero-line="true"', "Previsión · referencia cero");
 requireText(chart, "y1={zeroY}", "Previsión · y1 real");
 requireText(chart, "y2={zeroY}", "Previsión · y2 real");

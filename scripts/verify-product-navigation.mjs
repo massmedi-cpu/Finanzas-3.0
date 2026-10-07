@@ -6,6 +6,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const appShell = read("app/app-shell.tsx");
 const mobileNavigation = read("app/mobile-navigation.tsx");
 const navigationItems = read("app/navigation-items.ts");
+const productScopeContract = read("src/domain/product-scope-contract.ts");
 
 function fail(message) {
   console.error(`❌ ART-009 navigation guard: ${message}`);
@@ -38,7 +39,6 @@ const requiredDestinations = [
   "/analysis",
   "/compare",
   "/accounts",
-  "/net-worth",
   "/budgets",
   "/recurrences",
   "/forecast",
@@ -47,6 +47,16 @@ const requiredDestinations = [
 ];
 for (const href of requiredDestinations) {
   if (!navigationItems.includes(`href: "${href}"`)) fail(`falta el destino global ${href}`);
+}
+
+const netWorthOutOfScope =
+  productScopeContract.includes('initiative: "PRE-019"')
+  && productScopeContract.includes('status: "out_of_scope_current_release"')
+  && productScopeContract.includes('decision: "do_not_implement"')
+  && productScopeContract.includes('netWorth: "not_available"');
+
+if (netWorthOutOfScope && navigationItems.includes('href: "/net-worth"')) {
+  fail("PRE-019 está fuera de alcance pero /net-worth aparece en la navegación global");
 }
 
 function collectTsx(dir) {

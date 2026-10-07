@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { NET_WORTH_SCOPE_DECISION } from "../../src/domain/product-scope-contract";
 
@@ -50,3 +50,14 @@ test("CR-005 · no se inventa un modelo patrimonial a partir de tipos de cuenta"
     ]),
   );
 });
+
+test("10.0.102 · PRE-019 no expone una implementación patrimonial fuera de alcance", () => {
+  const navigation = readFileSync("app/navigation-items.ts", "utf8");
+
+  expect(navigation).not.toContain("/net-worth");
+  expect(navigation).not.toContain("Patrimonio");
+  expect(existsSync("app/net-worth/page.tsx")).toBe(false);
+  expect(existsSync("app/net-worth/net-worth-client.tsx")).toBe(false);
+  expect(existsSync("src/application/net-worth/net-worth.ts")).toBe(false);
+});
+

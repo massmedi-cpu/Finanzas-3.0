@@ -1,0 +1,55 @@
+name: Forecast Flat Zero 10.0.101
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "src/design/forecast-balance-chart.tsx"
+      - "tests/e2e/forecast.spec.ts"
+      - "scripts/verify-forecast-flat-zero-10.0.101.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/forecast-flat-zero-10.0.101.yml"
+  push:
+    branches:
+      - "audit/forecast-flat-zero-10.0.101"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forecast-flat-zero-10.0.101-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:forecast-flat-zero
+      - run: npm run build
+
+  flat-zero-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: 10.0.101 · previsión plana en cero desktop y móvil
+        run: >-
+          npx playwright test tests/e2e/forecast.spec.ts
+          --grep "10.0.101"
+          --project=chromium-desktop --project=chromium-mobile --workers=1
