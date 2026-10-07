@@ -244,7 +244,7 @@ export async function handleBudgetLogicAction(input: {
         verified =
           snapshot?.contractVersion === 1 &&
           snapshot?.principles?.bankSource === 'read_only' &&
-          snapshot?.principles?.actualSource === 'financial_transaction_facts' &&
+          snapshot?.principles?.actualSource === 'financial_transaction_allocation_facts' &&
           snapshot?.principles?.transfersConsumeBudget === false &&
           snapshot?.principles?.confirmedDuplicatesConsumeBudget === false &&
           snapshot?.total?.automaticAmountCents === 20000 &&
