@@ -99,6 +99,10 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
   await expect(insight).toContainText("último movimiento importado es del 29 sept 2026");
   await expect(insight).toContainText("No interpretamos 0 € como mejora");
   await expect(insight).not.toContainText("El gasto diario baja");
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  await expect(metrics).not.toContainText("−100");
+  await expect(metrics).not.toContainText("-100");
 });
 
 test("CMP-UI-002 valida solapamientos sin perder la comparación vigente", async ({ page }) => {

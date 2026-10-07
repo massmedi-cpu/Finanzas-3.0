@@ -1,4 +1,10 @@
 import { isForecastSnapshot, type ForecastItem, type ForecastSnapshot } from "../forecast/forecast-contract";
+import {
+  dateHasConfirmedCoverage,
+  periodHasObservedData,
+  resolvePeriodCoverage,
+  type PeriodCoverage,
+} from "../data-coverage";
 
 export type CashFlowTransaction = {
   id: string;
@@ -54,6 +60,7 @@ export type CashFlowView = {
   dateFrom: string;
   dateTo: string;
   actualState: "ready" | "unavailable" | "incomplete" | "mismatch";
+  actualCoverage: PeriodCoverage;
   forecastState: "ready" | "unavailable" | "mismatch";
   actualIncomeCents: number | null;
   actualExpenseCents: number | null;
@@ -148,10 +155,12 @@ export function assembleCashFlow(input: {
   transactionState: "complete" | "incomplete" | "unavailable";
   period: unknown;
   forecast: unknown;
+  latestMovementDate?: string | null;
 }): CashFlowView {
   const { month, dateFrom, dateTo, transactions, transactionState } = input;
   const periodValid = isFinancialPeriod(input.period, dateFrom, dateTo);
   const forecast = isCashFlowForecast(input.forecast, dateFrom, dateTo) ? input.forecast : null;
+  const actualCoverage = resolvePeriodCoverage({ dateFrom, dateTo, latestMovementDate: input.latestMovementDate });
   const actualRows = transactions ?? [];
   const eligible = actualRows.filter((row) => !row.excludedFromAnalytics && row.duplicateState !== "confirmed");
   const cashFlowRows = actualRows.filter(countsInCashFlow);
@@ -163,6 +172,7 @@ export function assembleCashFlow(input: {
       : derivedRealNet === (input.period as FinancialPeriod).operatingNetCents
         && eligible.length === (input.period as FinancialPeriod).quality.includedRows
         && actualRows.length === (input.period as FinancialPeriod).quality.scopedRows ? "ready" : "mismatch";
+  const actualObserved = actualState === "ready" && periodHasObservedData(actualCoverage);
   const derivedPlannedNet = forecast?.items.reduce((sum, item) => sum + item.projectionEffectCents, 0);
   const derivedPlannedIncome = forecast?.items.reduce((sum, item) => sum + Math.max(0, item.projectionEffectCents), 0);
   const derivedPlannedExpense = forecast?.items.reduce((sum, item) => sum - Math.min(0, item.projectionEffectCents), 0);
@@ -192,7 +202,8 @@ export function assembleCashFlow(input: {
   for (let day = dateFrom; day <= dateTo;) {
     const real = transactionsByDate.get(day) ?? [];
     const forecasts = forecastsByDate.get(day) ?? [];
-    const effects = actualState === "ready" ? real.filter(countsInCashFlow) : [];
+    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day, actualCoverage);
+    const effects = realCovered ? real.filter(countsInCashFlow) : [];
     const planned = forecastState === "ready" ? forecasts : [];
     const realIncomeCents = effects.reduce((sum, row) => sum + Math.max(0, row.amountCents), 0);
     const realExpenseCents = effects.reduce((sum, row) => sum + Math.min(0, row.amountCents), 0);
@@ -209,13 +220,14 @@ export function assembleCashFlow(input: {
   let realCumulativeCents = 0;
   let plannedCumulativeCents = 0;
   const evolution = days.map((day): CashFlowEvolutionPoint => {
-    realCumulativeCents += day.realNetCents;
+    const realCovered = actualState === "ready" && dateHasConfirmedCoverage(day.date, actualCoverage);
+    if (realCovered) realCumulativeCents += day.realNetCents;
     plannedCumulativeCents += day.plannedNetCents;
     return {
       date: day.date,
-      realCumulativeCents: actualState === "ready" ? realCumulativeCents : null,
+      realCumulativeCents: realCovered ? realCumulativeCents : null,
       plannedCumulativeCents: forecastState === "ready" ? plannedCumulativeCents : null,
-      combinedCumulativeCents: actualState === "ready" && forecastState === "ready"
+      combinedCumulativeCents: realCovered && forecastState === "ready"
         ? realCumulativeCents + plannedCumulativeCents
         : null,
     };
@@ -230,14 +242,14 @@ export function assembleCashFlow(input: {
   ) : null;
 
   return {
-    month, dateFrom, dateTo, actualState, forecastState,
-    actualIncomeCents: actualState === "ready" ? derivedRealIncome : null,
-    actualExpenseCents: actualState === "ready" ? derivedRealExpense : null,
-    actualNetCents: actualState === "ready" ? derivedRealNet : null,
+    month, dateFrom, dateTo, actualState, actualCoverage, forecastState,
+    actualIncomeCents: actualObserved ? derivedRealIncome : null,
+    actualExpenseCents: actualObserved ? derivedRealExpense : null,
+    actualNetCents: actualObserved ? derivedRealNet : null,
     plannedIncomeCents: forecastState === "ready" ? derivedPlannedIncome ?? null : null,
     plannedExpenseCents: forecastState === "ready" ? derivedPlannedExpense ?? null : null,
     plannedNetCents: forecastState === "ready" ? derivedPlannedNet ?? null : null,
-    realCount: actualState === "ready" ? actualRows.length : null,
+    realCount: actualObserved ? actualRows.length : null,
     forecastCounts,
     days,
     evolution,

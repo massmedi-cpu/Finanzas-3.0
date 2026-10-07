@@ -14,6 +14,11 @@ import type {
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import {
+  periodComparisonIsReliable,
+  periodHasObservedData,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
+import {
   currentExpenseDrivers,
   resolveBudgetProgressPresentation,
   resolveBudgetSourcePresentation,
@@ -365,11 +370,16 @@ export default function AnalysisClient({
       || accountId !== (snapshot.selection.accountId ?? "")
     : true;
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
-  const coverageIncomplete = Boolean(
-    snapshot
-      && latestMovementDate
-      && latestMovementDate < snapshot.selection.dateTo,
-  );
+  const coverage = snapshot ? resolvePeriodCoverage({
+    dateFrom: snapshot.selection.dateFrom,
+    dateTo: snapshot.selection.dateTo,
+    latestMovementDate,
+  }) : null;
+  const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
+  const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
+  const incompleteComparisonLabel = coverage?.state === "unknown"
+    ? "Cobertura desconocida · comparación no disponible"
+    : "Comparación incompleta";
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
@@ -509,8 +519,10 @@ export default function AnalysisClient({
           <section className={styles.kpis} aria-label="Indicadores principales del periodo">
             <Kpi
               label="Ingresos"
-              value={formatMoney(snapshot.current.incomeCents)}
-              comparison={incomeComparisonPresentation?.representative
+              value={coverageHasObservedData ? formatMoney(snapshot.current.incomeCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : incomeComparisonPresentation?.representative
                 ? `${formatPercentBps(incomeComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : incomeComparisonPresentation?.reason === "partial_income_pending"
                   ? "Comparación pendiente · ingresos aún no representativos"
@@ -522,8 +534,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Gastos"
-              value={formatMoney(snapshot.current.expenseCents)}
-              comparison={expenseComparisonPresentation?.representative
+              value={coverageHasObservedData ? formatMoney(snapshot.current.expenseCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : expenseComparisonPresentation?.representative
                 ? `${formatPercentBps(expenseComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : expenseComparisonPresentation?.label ?? "Comparación no disponible"}
               trend={snapshot.trends.expense}
@@ -533,8 +547,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Neto del periodo"
-              value={formatMoney(snapshot.current.operatingNetCents)}
-              comparison={`${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
+              value={coverageHasObservedData ? formatMoney(snapshot.current.operatingNetCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : `${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
               trend={snapshot.trends.net}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
@@ -542,8 +558,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Tasa de ahorro"
-              value={savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
-              comparison={savingsRatePresentation?.representative
+              value={coverageHasObservedData && savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : savingsRatePresentation?.representative
                 ? `${formatPointDeltaBps(savingsRatePresentation.deltaBps)} vs. periodo anterior`
                 : savingsRatePresentation?.reason === "partial_income_pending"
                   ? "Ingresos del mes aún no representativos"
@@ -583,8 +601,8 @@ export default function AnalysisClient({
                 <h2 id="change-heading">{changeHeadline}</h2>
                 <span>vs. {comparisonLabel(snapshot)}</span>
               </div>
-              <span className={expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
-                {deltaText(expenseDirection)}
+              <span className={coverageIncomplete ? styles.neutralChip : expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
+                {coverageIncomplete ? "Comparación incompleta" : deltaText(expenseDirection)}
               </span>
             </div>
             <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />

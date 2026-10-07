@@ -1,0 +1,100 @@
+import { expect, test } from "@playwright/test";
+import {
+  dateHasConfirmedCoverage,
+  periodComparisonIsReliable,
+  periodHasObservedData,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
+import { assembleCashFlow, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
+
+const expense: CashFlowTransaction = {
+  id: "10000000-0000-4000-8000-000000000001",
+  bankDate: "2026-09-29",
+  amountCents: -1_000,
+  account: { id: "20000000-0000-4000-8000-000000000002", name: "Cuenta" },
+  concept: { effective: "Compra" },
+  kind: { effective: "expense" },
+  duplicateState: "none",
+  excludedFromAnalytics: false,
+};
+
+test("AUD-E2E-DAT-001 · distingue cobertura desconocida, ausente, parcial y cubierta", () => {
+  const unknown = resolvePeriodCoverage({ dateFrom: "2026-10-01", dateTo: "2026-10-31", latestMovementDate: null });
+  const none = resolvePeriodCoverage({ dateFrom: "2026-10-01", dateTo: "2026-10-31", latestMovementDate: "2026-09-29" });
+  const partial = resolvePeriodCoverage({ dateFrom: "2026-09-01", dateTo: "2026-09-30", latestMovementDate: "2026-09-29" });
+  const covered = resolvePeriodCoverage({ dateFrom: "2026-08-01", dateTo: "2026-08-31", latestMovementDate: "2026-09-29" });
+
+  expect(unknown.state).toBe("unknown");
+  expect(none.state).toBe("none");
+  expect(partial).toMatchObject({ state: "partial", throughDate: "2026-09-29" });
+  expect(covered).toMatchObject({ state: "covered", throughDate: "2026-08-31" });
+  expect(periodHasObservedData(partial)).toBe(true);
+  expect(periodComparisonIsReliable(partial)).toBe(false);
+  expect(periodComparisonIsReliable(covered)).toBe(true);
+  expect(dateHasConfirmedCoverage("2026-09-29", partial)).toBe(true);
+  expect(dateHasConfirmedCoverage("2026-09-30", partial)).toBe(false);
+});
+
+test("AUD-E2E-DAT-001 · Cash Flow corta el realizado en la última fecha observada", () => {
+  const view = assembleCashFlow({
+    month: "2026-09",
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    transactions: [expense],
+    transactionState: "complete",
+    period: {
+      dateFrom: "2026-09-01",
+      dateTo: "2026-09-30",
+      accountId: null,
+      operatingNetCents: -1_000,
+      quality: { scopedRows: 1, includedRows: 1 },
+    },
+    forecast: null,
+    latestMovementDate: "2026-09-29",
+  });
+
+  expect(view.actualCoverage.state).toBe("partial");
+  expect(view.actualNetCents).toBe(-1_000);
+  expect(view.evolution.find((point) => point.date === "2026-09-29")?.realCumulativeCents).toBe(-1_000);
+  expect(view.evolution.find((point) => point.date === "2026-09-30")?.realCumulativeCents).toBeNull();
+});
+
+test("AUD-E2E-DAT-001 · ausencia de cobertura no se convierte en cero y cero cubierto sigue siendo válido", () => {
+  const october = assembleCashFlow({
+    month: "2026-10",
+    dateFrom: "2026-10-01",
+    dateTo: "2026-10-31",
+    transactions: [],
+    transactionState: "complete",
+    period: {
+      dateFrom: "2026-10-01",
+      dateTo: "2026-10-31",
+      accountId: null,
+      operatingNetCents: 0,
+      quality: { scopedRows: 0, includedRows: 0 },
+    },
+    forecast: null,
+    latestMovementDate: "2026-09-29",
+  });
+  expect(october.actualCoverage.state).toBe("none");
+  expect(october.actualNetCents).toBeNull();
+
+  const august = assembleCashFlow({
+    month: "2026-08",
+    dateFrom: "2026-08-01",
+    dateTo: "2026-08-31",
+    transactions: [],
+    transactionState: "complete",
+    period: {
+      dateFrom: "2026-08-01",
+      dateTo: "2026-08-31",
+      accountId: null,
+      operatingNetCents: 0,
+      quality: { scopedRows: 0, includedRows: 0 },
+    },
+    forecast: null,
+    latestMovementDate: "2026-09-29",
+  });
+  expect(august.actualCoverage.state).toBe("covered");
+  expect(august.actualNetCents).toBe(0);
+});

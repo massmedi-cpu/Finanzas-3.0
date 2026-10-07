@@ -172,8 +172,19 @@ function mockSnapshot(): AnalysisSnapshot {
   });
 }
 
-async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+async function mockAnalysisApi(
+  page: Parameters<typeof test>[0] extends never ? never : any,
+  snapshot: AnalysisSnapshot,
+  latestMovementDate = snapshot.selection.dateTo,
+) {
   let selectedRequestSeen = false;
+  await page.route("**/api/analysis/source-freshness", async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate, sync: null }),
+    });
+  });
   await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
     const url = new URL(route.request().url());
     expect(url.pathname).toBe("/api/analysis");
@@ -186,8 +197,8 @@ async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? 
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
-  const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo) {
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: "1 mes" }).click();
@@ -214,6 +225,19 @@ test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", a
     "href",
     "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
   );
+});
+
+test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora", async ({ page }) => {
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
+  const snapshot = mockSnapshot();
+
+  await loadMockAnalysis(page, snapshot, "2026-08-31");
+
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  await expect(kpis).not.toContainText("−100");
+  await expect(kpis).not.toContainText("-100");
+  await expect(page.getByRole("heading", { name: /no interpretamos el periodo posterior como mejora ni empeoramiento/i })).toBeVisible();
 });
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {

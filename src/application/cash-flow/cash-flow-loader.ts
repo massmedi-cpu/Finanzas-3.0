@@ -39,17 +39,22 @@ export async function loadCashFlow(rawMonth: string | null | undefined): Promise
     { action: "financial.period", payload: { dateFrom, dateTo, accountId: null } },
     { action: "transaction.query", payload: transactionPayload(dateFrom, dateTo) },
     { action: "forecast.snapshot", payload: { dateFrom, dateTo, accountId: null } },
+    { action: "transaction.query", payload: { limit: 1 } },
   ];
 
   let period: unknown = null;
   let forecast: unknown = null;
   let transactionState: "complete" | "incomplete" | "unavailable" = "unavailable";
   let transactions: CashFlowTransaction[] | null = null;
+  let latestMovementDate: string | null = null;
 
   try {
-    const [periodResult, transactionResult, forecastResult] = await callPersistenceGatewayBatch(operations);
+    const [periodResult, transactionResult, forecastResult, latestTransactionResult] = await callPersistenceGatewayBatch(operations);
     if (periodResult.status === "fulfilled") period = periodResult.value;
     if (forecastResult.status === "fulfilled") forecast = forecastResult.value;
+    if (latestTransactionResult.status === "fulfilled" && isTransactionPage(latestTransactionResult.value)) {
+      latestMovementDate = latestTransactionResult.value.rows[0]?.bankDate ?? null;
+    }
 
     if (transactionResult.status === "fulfilled" && isTransactionPage(transactionResult.value)) {
       const first = transactionResult.value;
@@ -94,7 +99,7 @@ export async function loadCashFlow(rawMonth: string | null | undefined): Promise
   }
 
   return {
-    ...assembleCashFlow({ month, dateFrom, dateTo, period, forecast, transactions, transactionState }),
+    ...assembleCashFlow({ month, dateFrom, dateTo, period, forecast, transactions, transactionState, latestMovementDate }),
     invalidMonth: invalid,
   };
 }
