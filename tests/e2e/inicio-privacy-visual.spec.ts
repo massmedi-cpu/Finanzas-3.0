@@ -65,6 +65,24 @@ const forecast = {
   ],
 };
 
+const balanceSeries = {
+  dateFrom: "2026-06-01",
+  dateTo: "2026-09-11",
+  accountId: null,
+  rows: [
+    { monthStart: "2026-06-01", asOfDate: "2026-06-30", balanceCents: 50000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+    { monthStart: "2026-07-01", asOfDate: "2026-07-31", balanceCents: -25000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+    { monthStart: "2026-08-01", asOfDate: "2026-08-31", balanceCents: 0, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+    { monthStart: "2026-09-01", asOfDate: "2026-09-11", balanceCents: 30000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 },
+  ],
+  principles: {
+    bankSource: "read_only",
+    balanceSource: "financial_account_balances",
+    cashFlowReconstruction: false,
+    getHasSideEffects: false,
+  },
+};
+
 const transactions = {
   totalCount: 1,
   rows: [
@@ -106,6 +124,11 @@ async function mockInicio(page: Page) {
         },
         cursors: [],
       });
+      return;
+    }
+
+    if (url.pathname === "/api/financial" && url.searchParams.get("mode") === "balance_series") {
+      await json(route, balanceSeries);
       return;
     }
 
@@ -245,3 +268,34 @@ test("Ocultar importes oculta también el signo visual del balance", async ({ pa
   await expect(page.locator('[data-financial-sign="positive"]')).toHaveCount(0);
   await expect(page.locator('[data-budget-progress-privacy="hidden"]')).toBeVisible();
 });
+
+test("Ocultar importes neutraliza signo y proporciones también en Flujo neto y Saldo", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+
+  await page.getByRole("button", { name: "Ocultar importes" }).click();
+
+  await page.getByRole("button", { name: "Flujo neto" }).click();
+  const hiddenNet = page.getByRole("group", { name: /Flujo neto por mes.*signos y proporciones ocultos/i });
+  await expect(hiddenNet).toBeVisible();
+  await expect(hiddenNet.locator('[data-sign="negative"]')).toHaveCount(0);
+  await expect(hiddenNet.locator('[data-sign="positive"]')).toHaveCount(0);
+  expect(await hiddenNet.locator('[data-series-bar="true"]').evaluateAll((bars) => (
+    bars.map((bar) => (bar as HTMLElement).style.height)
+  ))).toEqual(Array(monthly.rows.length).fill("36%"));
+
+  await page.getByRole("button", { name: "Saldo" }).click();
+  const hiddenBalance = page.getByRole("group", { name: /Saldo bancario agregado por mes.*signos y proporciones ocultos/i });
+  await expect(hiddenBalance).toBeVisible();
+  await expect(hiddenBalance.locator('[data-sign="negative"]')).toHaveCount(0);
+  await expect(hiddenBalance.locator('[data-sign="positive"]')).toHaveCount(0);
+  expect(await hiddenBalance.locator('[data-series-bar="true"]').evaluateAll((bars) => (
+    bars.map((bar) => (bar as HTMLElement).style.height)
+  ))).toEqual(Array(balanceSeries.rows.length).fill("36%"));
+
+  await page.getByRole("button", { name: "Mostrar importes" }).click();
+  await expect(hiddenBalance.locator('[data-sign="negative"]')).toHaveCount(1);
+  await expect(hiddenBalance.locator('[data-sign="positive"]')).toHaveCount(2);
+  await expect(hiddenBalance.locator('[data-sign="zero"]')).toHaveCount(1);
+});
+
