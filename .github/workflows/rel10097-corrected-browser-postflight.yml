@@ -1,0 +1,41 @@
+name: REL-10097 Corrected Browser Postflight
+
+on:
+  push:
+    branches:
+      - release/10.0.97-backup-dispatch
+    paths:
+      - .github/workflows/rel10097-corrected-browser-postflight.yml
+
+permissions:
+  contents: read
+
+jobs:
+  browser-postflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PRODUCTION_URL: https://financialapp-home.vercel.app/
+      EXPECTED_APP_VERSION: 10.0.97
+      EXPECTED_COMMIT_SHA: d3d0d43c13b53d5886c6f196822b8a37ae73f457
+      EXPECTED_DEPLOYMENT_ID: dpl_6Pbh6YvJVcRQP2RPMpnBrHrAAV8E
+    steps:
+      - name: Checkout corrected postflight tooling
+        uses: actions/checkout@v6
+        with:
+          ref: fix/postflight-login-isolation-10.0.97
+          fetch-depth: 0
+      - name: Verify correction scope
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git diff --name-only d3d0d43c13b53d5886c6f196822b8a37ae73f457...HEAD)" = "tests/e2e/production-postflight.spec.ts"
+          test "$(node -p "require('./package.json').version")" = "10.0.97"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: Run corrected Production browser postflight
+        run: npx playwright test --config=playwright.production-postflight.config.ts
