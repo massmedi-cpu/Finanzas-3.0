@@ -183,6 +183,35 @@ test("Documentos renders responsive F11 review semantics without automatic OCR",
   expect(undersized).toBe(0);
 });
 
+test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+
+  const issuer = page.getByLabel("Emisor");
+  await issuer.fill("Proveedor editado");
+  await expect(page.getByTestId("document-metadata-dirty")).toContainText("Cambios de metadatos sin guardar");
+
+  await page.getByRole("complementary", { name: "Listado de documentos" }).getByLabel("Buscar", { exact: true }).fill("sin-coincidencias");
+  await expect(page.getByTestId("documents-filtered-empty")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
+  await expect(issuer).toHaveValue("Proveedor editado");
+
+  let warning = "";
+  page.once("dialog", async (dialog) => {
+    warning = dialog.message();
+    await dialog.dismiss();
+  });
+  await page.getByRole("link", { name: "← Inicio" }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  expect(warning).toContain("cambios de metadatos sin guardar");
+
+  await page.getByRole("button", { name: "Guardar metadatos" }).click();
+  await expect(page.getByTestId("document-metadata-dirty")).toHaveCount(0);
+  expect(writes.some((write) => write.action === "metadata" && write.issuerName === "Proveedor editado")).toBe(true);
+});
+
 test("QA-09 · Documentos distingue filtros sin coincidencias de un repositorio vacío", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
