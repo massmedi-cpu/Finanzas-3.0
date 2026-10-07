@@ -211,6 +211,11 @@ function monthlyScale(rows: MonthlyRow[]) {
   );
 }
 
+function activityBarWidth(value: number, scale: number) {
+  const magnitude = Math.abs(value);
+  return magnitude === 0 ? 0 : Math.max(2, (magnitude / scale) * 100);
+}
+
 export default function AccountsClient() {
   const [showArchived, setShowArchived] = useState(false);
   const [balances, setBalances] = useState<BalancesResponse | null>(null);
@@ -518,13 +523,13 @@ export default function AccountsClient() {
                           <strong className={styles.monthLabel}>{formatMonth(row.monthStart)}</strong>
                           <div className={styles.bars}>
                             <div className={styles.barTrack} title={`Ingresos ${formatMoney(row.incomeCents)}`}>
-                              <span className={styles.incomeBar} style={{ width: `${Math.max(2, (row.incomeCents / scale) * 100)}%` }} />
+                              <span className={styles.incomeBar} data-zero={row.incomeCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.incomeCents, scale)}%` }} />
                             </div>
                             <div className={styles.barTrack} title={`Gastos ${formatMoney(row.expenseCents)}`}>
-                              <span className={styles.expenseBar} style={{ width: `${Math.max(2, (row.expenseCents / scale) * 100)}%` }} />
+                              <span className={styles.expenseBar} data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.expenseCents, scale)}%` }} />
                             </div>
                             <div className={styles.barTrack} title={`Neto ${formatMoney(row.operatingNetCents)}`}>
-                              <span className={row.operatingNetCents >= 0 ? styles.netBar : styles.negativeBar} style={{ width: `${Math.max(2, (Math.abs(row.operatingNetCents) / scale) * 100)}%` }} />
+                              <span className={row.operatingNetCents >= 0 ? styles.netBar : styles.negativeBar} data-zero={row.operatingNetCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.operatingNetCents, scale)}%` }} />
                             </div>
                           </div>
                           <span className={styles.monthValue}>{formatMoney(row.operatingNetCents)}</span>

@@ -1,0 +1,63 @@
+name: Zero Visual Integrity 10.0.99
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "app/accounts/accounts-client.tsx"
+      - "app/accounts/accounts.module.css"
+      - "src/design/contribution-chart.tsx"
+      - "src/design/contribution-chart.module.css"
+      - "tests/e2e/premium-analysis-visual.spec.ts"
+      - "scripts/verify-contribution-zero-integrity-10.0.99.mjs"
+      - "tests/e2e/premium-accounts-visual.spec.ts"
+      - "scripts/verify-accounts-zero-integrity-10.0.99.mjs"
+      - "package.json"
+      - "package-lock.json"
+      - ".github/workflows/accounts-zero-integrity-10.0.99.yml"
+  push:
+    branches:
+      - "qa/accounts-zero-integrity-10.0.99"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: accounts-zero-integrity-10.0.99-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  static-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run verify:accounts-zero-integrity
+      - run: npm run verify:contribution-zero-integrity
+      - run: npm run build
+
+  accounts-zero-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npx playwright install --with-deps chromium
+      - name: 10.0.99 · ceros exactos sin barras fantasma
+        run: >-
+          npx playwright test
+          tests/e2e/premium-accounts-visual.spec.ts
+          tests/e2e/premium-analysis-visual.spec.ts
+          --grep "barras fantasma|Premium.*Análisis"
+          --project=chromium-desktop --project=chromium-mobile --workers=1

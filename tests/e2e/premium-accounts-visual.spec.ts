@@ -50,6 +50,7 @@ const snapshot = {
     rows: [
       { monthStart: "2026-08-01", rows: 2, incomeCents: 100000, expenseCents: 40000, refundCents: 0, adjustmentCents: 0, operatingNetCents: 60000, savingsCents: 60000, transferNetCents: 0, transferGrossCents: 0 },
       { monthStart: "2026-09-01", rows: 2, incomeCents: 60000, expenseCents: 100000, refundCents: 0, adjustmentCents: 0, operatingNetCents: -40000, savingsCents: -40000, transferNetCents: 0, transferGrossCents: 0 },
+      { monthStart: "2026-10-01", rows: 0, incomeCents: 0, expenseCents: 0, refundCents: 0, adjustmentCents: 0, operatingNetCents: 0, savingsCents: 0, transferNetCents: 0, transferGrossCents: 0 },
     ],
   },
   principles: {
@@ -104,4 +105,21 @@ test("Premium · Cuentas dibuja netos positivos y negativos a lados opuestos del
 
   await expect(page.getByText("600,00 €", { exact: true })).toBeVisible();
   await expect(page.getByText("-400,00 €", { exact: true })).toBeVisible();
+});
+
+
+test("Premium · Cuentas no dibuja barras fantasma para valores exactamente 0 €", async ({ page }) => {
+  await mockAccounts(page);
+  await page.goto("/accounts");
+
+  const zeroRow = page.getByRole("listitem", { name: /oct: ingresos 0,00/ });
+  await expect(zeroRow).toBeVisible();
+
+  const zeroBars = zeroRow.locator("[data-zero=true]");
+  await expect(zeroBars).toHaveCount(3);
+
+  for (let index = 0; index < 3; index += 1) {
+    expect(await zeroBars.nth(index).evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
+    expect(await zeroBars.nth(index).evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
+  }
 });

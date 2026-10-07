@@ -90,11 +90,11 @@ export function ContributionChart({ rows, formatMoney, limit = 6, renderLabel }:
                 <div className={styles.compareTrack} aria-hidden="true">
                   <div>
                     <span>Actual</span>
-                    <i className={styles.currentBar} style={{ width: `${currentWidth}%` }} />
+                    <i className={styles.currentBar} data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${currentWidth}%` }} />
                   </div>
                   <div>
                     <span>Anterior</span>
-                    <i className={styles.previousBar} style={{ width: `${previousWidth}%` }} />
+                    <i className={styles.previousBar} data-zero={row.previousExpenseCents === 0 ? "true" : undefined} style={{ width: `${previousWidth}%` }} />
                   </div>
                 </div>
               )}
