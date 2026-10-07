@@ -38,6 +38,12 @@ requireText(smartBrief, "valuesVisible: boolean;", "Lectura rápida · contrato 
 requireText(smartBrief, '"Balance del mes protegido"', "Lectura rápida · signo textual neutral");
 requireText(smartBrief, 'tone: !movementInMonth ? "warning" : !valuesVisible ? "neutral"', "Lectura rápida · tono neutral");
 requireText(smartBrief, '"Porcentaje oculto por privacidad."', "Lectura rápida · porcentaje protegido");
+requireText(inicio, "privacyActive={privacyReady && !amountsVisible}", "Inicio · privacidad lista antes de borrar referencia");
+requireText(smartBrief, "privacyActive: boolean;", "Lectura rápida · estado explícito de privacidad");
+requireText(smartBrief, "localStorage.removeItem(HOME_VISIT_KEY)", "Lectura rápida · borrado de referencia local");
+requireText(smartBrief, "if (!valuesVisible || loading", "Lectura rápida · persistencia pausada");
+requireText(smartBrief, '"Privacidad activa · referencia monetaria local eliminada"', "Lectura rápida · disclosure local");
+requireText(smartBrief, '"La comparación entre visitas está pausada mientras ocultas importes.', "Lectura rápida · comparación pausada");
 requireText(privacyTest, "Ocultar importes oculta también el signo visual del balance", "Regresión privacidad de signo");
 requireText(privacyTest, "data-balance-sign=\"hidden\"", "Regresión estado oculto");
 requireText(privacyTest, "data-balance-sign=\"negative\"", "Regresión signo visible");

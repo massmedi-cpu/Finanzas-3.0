@@ -722,6 +722,7 @@ export default function InicioOverview() {
         syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
         displayMoney={displayMoney}
         valuesVisible={revealAmounts}
+        privacyActive={privacyReady && !amountsVisible}
       />
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">

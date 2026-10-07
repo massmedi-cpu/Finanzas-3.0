@@ -28,6 +28,7 @@ type Props = {
   syncState: SyncState;
   displayMoney: (cents: number) => string;
   valuesVisible: boolean;
+  privacyActive: boolean;
 };
 
 type HomeVisitSnapshot = {
@@ -151,6 +152,7 @@ export default function HomeSmartBrief({
   syncState,
   displayMoney,
   valuesVisible,
+  privacyActive,
 }: Props) {
   const [previousVisit, setPreviousVisit] = useState<HomeVisitSnapshot | null | undefined>(undefined);
 
@@ -196,17 +198,26 @@ export default function HomeSmartBrief({
     plannedItems,
     projectedNetCents,
     transactionTotalCount,
-    valuesVisible,
   ]);
 
   useEffect(() => {
-    if (loading || previousVisit === undefined || !currentVisit) return;
+    if (!privacyActive) return;
+    try {
+      localStorage.removeItem(HOME_VISIT_KEY);
+    } catch {
+      // La privacidad visual no depende de que el almacenamiento local esté disponible.
+    }
+    setPreviousVisit(null);
+  }, [privacyActive]);
+
+  useEffect(() => {
+    if (!valuesVisible || loading || previousVisit === undefined || !currentVisit) return;
     try {
       localStorage.setItem(HOME_VISIT_KEY, JSON.stringify(currentVisit));
     } catch {
       // La memoria de visita es auxiliar: nunca bloquea Inicio.
     }
-  }, [currentVisit, loading, previousVisit]);
+  }, [currentVisit, loading, previousVisit, valuesVisible]);
 
   const currentItems = useMemo<BriefItem[]>(() => {
     const items: BriefItem[] = [];
@@ -300,6 +311,7 @@ export default function HomeSmartBrief({
     projectedNetCents,
     syncState,
     transactionTotalCount,
+    valuesVisible,
   ]);
 
   const changes = useMemo<ChangeItem[]>(() => {
@@ -406,7 +418,11 @@ export default function HomeSmartBrief({
           <span>LECTURA RÁPIDA</span>
           <h2>Ahora mismo</h2>
         </div>
-        <small>{previousVisit ? `Comparado con ${formatDateTime(previousVisit.savedAt)}` : "Resumen sin datos sensibles guardados"}</small>
+        <small>{privacyActive
+          ? "Privacidad activa · referencia monetaria local eliminada"
+          : previousVisit
+            ? `Comparado con ${formatDateTime(previousVisit.savedAt)}`
+            : "Referencia local de indicadores agregados"}</small>
       </div>
 
       <div className={styles.currentGrid}>
@@ -441,15 +457,23 @@ export default function HomeSmartBrief({
         <div className={styles.visitHeading}>
           <div>
             <span>DESDE TU ÚLTIMA VISITA</span>
-            <strong>{previousVisit ? "Qué ha cambiado" : previousVisit === null ? "Primera referencia guardada" : "Preparando comparación…"}</strong>
+            <strong>{privacyActive
+              ? "Comparación pausada por privacidad"
+              : previousVisit
+                ? "Qué ha cambiado"
+                : previousVisit === null
+                  ? "Primera referencia guardada"
+                  : "Preparando comparación…"}</strong>
           </div>
-          {previousVisit?.savedAt && <small>{formatDateTime(previousVisit.savedAt)}</small>}
+          {!privacyActive && previousVisit?.savedAt && <small>{formatDateTime(previousVisit.savedAt)}</small>}
         </div>
 
-        {previousVisit === undefined ? (
+        {privacyActive ? (
+          <p className={styles.noChanges}>La comparación entre visitas está pausada mientras ocultas importes. Se reanudará cuando vuelvas a mostrarlos.</p>
+        ) : previousVisit === undefined ? (
           <p className={styles.noChanges}>Comparando con la última referencia guardada en este dispositivo…</p>
         ) : previousVisit === null ? (
-          <p className={styles.noChanges}>A partir de la próxima visita te mostraré aquí sólo los cambios relevantes, sin guardar nombres de comercios ni conceptos bancarios.</p>
+          <p className={styles.noChanges}>A partir de la próxima visita compararemos indicadores agregados guardados solo en este dispositivo; no guardamos nombres de comercios ni conceptos bancarios.</p>
         ) : changes.length > 0 ? (
           <div className={styles.changeGrid}>
             {changes.map((item) => (

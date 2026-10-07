@@ -173,6 +173,7 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.locator('[data-financial-sign="negative"]').first()).toBeVisible();
   await expect(page.getByText("Balance registrado en positivo", { exact: true })).toBeVisible();
   await expect(page.getByText("La previsión termina en negativo", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).not.toBeNull();
 
   await page.getByRole("button", { name: "Ocultar importes" }).click();
 
@@ -190,6 +191,9 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.getByText("Balance registrado en positivo", { exact: true })).toHaveCount(0);
   await expect(page.getByText("La previsión termina en negativo", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toBeVisible();
+  await expect(page.getByText("Privacidad activa · referencia monetaria local eliminada", { exact: true })).toBeVisible();
+  await expect(page.getByText(/La comparación entre visitas está pausada mientras ocultas importes/i)).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).toBeNull();
 
   const protectedBudget = page.locator('[data-budget-progress-privacy="hidden"]');
   await expect(protectedBudget).toHaveAttribute("aria-label", "Porcentaje de presupuesto oculto por privacidad");
@@ -211,10 +215,12 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
 
   await page.reload();
   await expect(page.getByRole("button", { name: "Mostrar importes" })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).toBeNull();
   await expect(page.getByRole("group", { name: /proporciones están ocultos por privacidad/i })).toBeVisible();
   expect(await barHeights(page)).toEqual(Array(initialHeights.length).fill("36%"));
 
   await page.getByRole("button", { name: "Mostrar importes" }).click();
+  await expect.poll(() => page.evaluate(() => localStorage.getItem("financial-app:home-last-visit:v1"))).not.toBeNull();
   const restoredChart = page.getByRole("group", { name: /Selecciona un mes para consultar ingresos/i });
   await expect(restoredChart).toBeVisible();
   expect(new Set(await barHeights(page)).size).toBeGreaterThan(1);
