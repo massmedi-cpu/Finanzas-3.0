@@ -695,7 +695,7 @@ export default function BudgetsClient() {
                     <span className={styles.cardIcon}><Icon name="spark" /></span>
                   </div>
 
-                  <div className={styles.history} aria-label="Tres meses recientes visibles de la referencia automática">
+                  <div className={styles.history} role="region" aria-label="Tres meses recientes visibles de la referencia automática">
                     {snapshot.total.historyMonths.map((row) => {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
                       return (
