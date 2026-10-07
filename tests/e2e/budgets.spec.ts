@@ -401,6 +401,43 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
   expect(requestedMonth).toBe("2026-07");
 });
 
+test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
+  let attempts = 0;
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed", code: "statement_timeout" }),
+      });
+      return;
+    }
+
+    const selectedMonth = new URL(route.request().url()).searchParams.get("month") ?? "2026-09";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth(selectedMonth)),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("alert")).toContainText("no ha podido terminar el cálculo");
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Septiembre de 2026" })).toBeVisible();
+  await expect(page.getByText(/datos bancarios siguen intactos/i)).toBeVisible();
+
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
 test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
   let markAugustStarted: (() => void) | null = null;
   const augustStarted = new Promise<void>((resolve) => {
@@ -467,7 +504,7 @@ test("protected preview keeps the validated Phase 6 budget contract in later pha
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });
 
-test("protected preview returns a central budget snapshot based on Phase 5 financial facts", async ({ request }) => {
+test("protected preview returns the current split-aware Axioma §52 budget contract", async ({ request }) => {
   test.skip(!isProtectedPreview, "Real budget persistence is validated only against the protected preview.");
 
   const response = await request.get("/api/budgets?month=2026-09");
@@ -482,8 +519,8 @@ test("protected preview returns a central budget snapshot based on Phase 5 finan
   });
   expect(snapshot.principles).toEqual({
     bankSource: "read_only",
-    actualSource: "financial_transaction_facts",
-    recommendation: "trailing_3_complete_month_average",
+    actualSource: "financial_transaction_allocation_facts",
+    recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
     transfersConsumeBudget: false,
     confirmedDuplicatesConsumeBudget: false,
     manualAnalyticsExclusionsRespected: true,
@@ -494,11 +531,12 @@ test("protected preview returns a central budget snapshot based on Phase 5 finan
 
   expect(snapshot.total.categoryId).toBeNull();
   expect(snapshot.total.historyMonths).toHaveLength(3);
-  const historyTotal = snapshot.total.historyMonths.reduce(
-    (sum: number, row: { expenseCents: number }) => sum + row.expenseCents,
-    0,
-  );
-  expect(snapshot.total.automaticAmountCents).toBe(Math.round(historyTotal / 3));
+  expect(snapshot.total.automaticFactors).toMatchObject({
+    algorithm: "axioma_52_budget_reference_v1",
+    recurrencePolicy: "floor_not_additive",
+    exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+  });
+  expect(["fallback_3_month_average", "axioma_52_weighted"]).toContain(snapshot.total.automaticFactors.mode);
   expect(snapshot.total.effectiveAmountCents).toBe(
     snapshot.total.manualAmountCents ?? snapshot.total.automaticAmountCents,
   );
