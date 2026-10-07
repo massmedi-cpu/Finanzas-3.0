@@ -143,6 +143,17 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.getByText("Importes ocultos · proporciones protegidas", { exact: true })).toBeVisible();
   expect(await barHeights(page)).toEqual(Array(initialHeights.length).fill("36%"));
 
+  const hiddenBalance = page.locator('[data-balance-sign="hidden"]');
+  await expect(hiddenBalance).toBeVisible();
+  await expect(hiddenBalance).toHaveCSS("color", await page.locator("body").evaluate((body) => {
+    const probe = document.createElement("span");
+    probe.style.color = "var(--color-text-secondary)";
+    body.appendChild(probe);
+    const color = getComputedStyle(probe).color;
+    probe.remove();
+    return color;
+  }));
+
   for (const button of await protectedChart.getByRole("button").all()) {
     await expect(button).toHaveAttribute("aria-label", /importes ocultos por privacidad/i);
     await expect(button).not.toHaveAttribute("aria-label", /€|ingresos \d|gastos \d/i);
@@ -154,6 +165,24 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   expect(await barHeights(page)).toEqual(Array(initialHeights.length).fill("36%"));
 
   await page.getByRole("button", { name: "Mostrar importes" }).click();
-  await expect(page.getByRole("group", { name: /Selecciona un mes para consultar ingresos/i })).toBeVisible();
+  const restoredChart = page.getByRole("group", { name: /Selecciona un mes para consultar ingresos/i });
+  await expect(restoredChart).toBeVisible();
   expect(new Set(await barHeights(page)).size).toBeGreaterThan(1);
+
+  await restoredChart.getByRole("button").first().click();
+  await expect(page.locator('[data-balance-sign="negative"]')).toBeVisible();
+});
+
+test("Ocultar importes oculta también el signo visual del balance", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+
+  const chart = page.getByRole("group", { name: /Selecciona un mes para consultar ingresos/i });
+  await chart.getByRole("button").first().click();
+  await expect(page.locator('[data-balance-sign="negative"]')).toBeVisible();
+
+  await page.getByRole("button", { name: "Ocultar importes" }).click();
+  await expect(page.locator('[data-balance-sign="hidden"]')).toBeVisible();
+  await expect(page.locator('[data-balance-sign="negative"]')).toHaveCount(0);
+  await expect(page.locator('[data-balance-sign="positive"]')).toHaveCount(0);
 });
