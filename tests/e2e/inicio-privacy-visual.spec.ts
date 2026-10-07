@@ -179,7 +179,7 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
 
   const protectedBudget = page.locator('[data-budget-progress-privacy="hidden"]');
   await expect(protectedBudget).toHaveAttribute("aria-label", "Porcentaje de presupuesto oculto por privacidad");
-  await expect(protectedBudget.locator("span")).toHaveCSS("width", /36/);
+  await expect(protectedBudget.locator("span")).toHaveAttribute("style", /width:\\s*36%/);
   await expect(hiddenBalance).toHaveCSS("color", await page.locator("body").evaluate((body) => {
     const probe = document.createElement("span");
     probe.style.color = "var(--color-text-secondary)";
