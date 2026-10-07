@@ -64,6 +64,17 @@ requireText("scripts/verify-transversals-phase10-10.0.78.mjs", [
   'Fase 10 / 10.0.78+ certificada',
 ]);
 
+requireText("tests/e2e/documents-drive-ocr-live.spec.ts", [
+  "OCR_LIVE_FIXTURE_DOCUMENT_ID",
+  "isolated non-production fixture",
+]);
+if (exists("tests/e2e/documents-drive-ocr-live.spec.ts")) {
+  const liveFixture = read("tests/e2e/documents-drive-ocr-live.spec.ts");
+  if (liveFixture.includes("93000000-0000-4000-8000-000000000094")) {
+    failures.push("OCR live no puede depender de un document_id productivo hardcodeado");
+  }
+}
+
 for (const path of [
   "tests/e2e/document-ocr-review-quality-10.0.79.spec.ts",
   "tests/e2e/document-ocr-traceability-ui-10.0.79.spec.ts",
