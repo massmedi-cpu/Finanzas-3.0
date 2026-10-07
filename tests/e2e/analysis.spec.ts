@@ -198,7 +198,13 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
 
 test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
   const snapshot = mockSnapshot();
-  await loadMockAnalysis(page, snapshot);
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
+
+  await page.goto("/analysis?month=2026-08&range=1m");
+  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "1 mes" }).click();
+  await page.getByRole("button", { name: "Aplicar" }).click();
+  await expect.poll(selectedRequestSeen).toBe(true);
 
   const navigation = page.getByRole("navigation", { name: "Continuar desde Análisis" });
   await expect(navigation).toBeVisible();
