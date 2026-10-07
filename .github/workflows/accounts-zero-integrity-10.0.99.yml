@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - "app/accounts/accounts-client.tsx"
+      - "app/accounts/accounts.module.css"
       - "tests/e2e/premium-accounts-visual.spec.ts"
       - "scripts/verify-accounts-zero-integrity-10.0.99.mjs"
       - "package.json"
