@@ -358,13 +358,13 @@ test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo
   await mockBudgetApi(page, writes);
   await page.goto("/budgets");
 
-  const planning = page.getByRole("region", { name: "De lo habitual a tu objetivo" });
+  const planning = page.getByRole("region", { name: "De la referencia a tu objetivo" });
   await expect(planning).toHaveAttribute("data-planning-state", "ready");
   await expect(planning).toHaveAttribute("data-objective-state", "needs_limit");
-  await expect(planning.getByText("Referencia histórica", { exact: true })).toBeVisible();
+  await expect(planning.getByText("Referencia automática", { exact: true })).toBeVisible();
   await expect(planning.getByText("Límite elegido", { exact: true })).toBeVisible();
   await expect(planning.getByText("Objetivo de ahorro resultante", { exact: true })).toBeVisible();
-  await expect(planning.getByText(/Describe el pasado; no recomienda cuánto deberías gastar/i)).toBeVisible();
+  await expect(planning.getByText(/combina señales históricas para comparar tu gasto; no decide cuánto deberías gastar/i)).toBeVisible();
 
   await planning.getByRole("button", { name: "Definir mi límite mensual" }).click();
   const totalLimit = page.getByLabel("Límite elegido de total mensual");
@@ -486,8 +486,8 @@ test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuar
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   expect(writes).toHaveLength(0);
 
-  await page.getByRole("button", { name: "Actualizar referencias" }).click();
-  await expect(page.getByRole("status")).toContainText("Referencias históricas");
+  await page.getByRole("button", { name: "Actualizar referencia" }).click();
+  await expect(page.getByRole("status")).toContainText("Referencia automática");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });
