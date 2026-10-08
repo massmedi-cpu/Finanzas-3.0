@@ -623,7 +623,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           totalCents: cents, notes: editor.notes,
         }),
       }));
-      const confirmed = await refreshAfterMutation(detail.document.id);
+      // No sustituir el editor con una relectura antigua hasta validar el PATCH.
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
       const persisted = confirmed?.document;
       const matchesSave = persisted?.id === detail.document.id
         && persisted.type === editor.type
@@ -637,6 +638,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
         return false;
       }
+      setEditor(editorFromDocument(confirmed!.document));
+      setDesignationOpen(false);
+      setDesignationReason("");
+      setDesignationReviewed(false);
       setNotice("Metadatos guardados.");
       return true;
     } catch (caught) {
