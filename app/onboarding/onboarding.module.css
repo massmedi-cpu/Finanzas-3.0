@@ -436,3 +436,7 @@
     transition: none;
   }
 }
+
+.card[data-step-status="Parcial"] {
+  border-color: color-mix(in srgb, var(--color-warning) 50%, var(--color-border));
+}

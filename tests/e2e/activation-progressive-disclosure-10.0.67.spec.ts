@@ -34,10 +34,23 @@ async function mockOnboarding(page: Page, state: "new" | "ready") {
   });
 
   await page.route("**/api/financial**", async (route) => {
+    const balance = new URL(route.request().url()).searchParams.get("mode") === "balance_series";
     await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ contractVersion: 1, principles: { bankSource: "read_only" } }),
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(balance
+        ? { rows: [{ monthStart: "2026-09-01", asOfDate: "2026-09-16", accounts: 1, balanceCents: 150000, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 }],
+            principles: { bankSource: "read_only", balanceSource: "financial_account_balances", cashFlowReconstruction: false, getHasSideEffects: false } }
+        : { contractVersion: 1, principles: { bankSource: "read_only" } }),
+    });
+  });
+  await page.route("**/api/dashboard?scope=all", async (route) => {
+    await route.fulfill({
+      status: state === "ready" ? 200 : 503, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        failedSources: [],
+        data: { financial: {}, transactions: {}, monthly: { rows: [] }, budgets: {}, forecast: {} },
+      }),
     });
   });
 }
@@ -84,4 +97,35 @@ test.describe("Financial App 10.0.67 · activación y divulgación progresiva", 
     await expect(page.getByRole("heading", { name: "Fuente bancaria" })).toBeVisible();
     await expect(page.getByRole("link", { name: "Detalles técnicos" })).toHaveAttribute("href", "/configuration/source/diagnostics");
   });
+});
+
+
+test("AUD-E2E-INI-001 · resumen parcial se identifica y permite revisar pendientes", async ({ page }) => {
+  await mockOnboarding(page, "ready");
+  await page.route("**/api/dashboard?scope=all", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        failedSources: ["budgets"],
+        data: { financial: {}, transactions: {}, monthly: { rows: [] }, budgets: null, forecast: {} },
+      }),
+    });
+  });
+  await page.goto("/onboarding");
+  await expect(page.locator("main[data-activation-complete]")).toHaveAttribute("data-activation-complete", "false");
+  const summary = page.locator('[data-step-status="Parcial"]');
+  await expect(summary).toContainText("presupuestos");
+  await expect(summary).toContainText("Resumen parcial");
+  await expect(page.getByRole("link", { name: "Ver qué necesita atención" })).toHaveAttribute("href", "/review");
+});
+
+test("AUD-E2E-INI-001 · un saldo sin lectura confirmada impide declarar Inicio completo", async ({ page }) => {
+  await mockOnboarding(page, "ready");
+  await page.route("**/api/financial?mode=balance_series**", async (route) => {
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "balance_unavailable" }) });
+  });
+  await page.goto("/onboarding");
+  await expect(page.locator("main[data-activation-complete]")).toHaveAttribute("data-activation-complete", "false");
+  await expect(page.locator('[data-step-status="Parcial"]')).toContainText("evolución del saldo");
 });
