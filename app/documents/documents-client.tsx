@@ -793,6 +793,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               Hay cambios de metadatos sin guardar. Puedes guardarlos antes de continuar,
               seguir editando sin perder el borrador o descartarlos.
             </p>
+            {error ? <p className={styles.unsavedError} role="alert">{error}</p> : null}
             <div className={styles.unsavedActions}>
               <button type="button" className={styles.secondaryButton} autoFocus
                 onClick={() => { setPendingExit(null); exitReturnFocusRef.current?.focus(); }} disabled={busy === "metadata"}>
