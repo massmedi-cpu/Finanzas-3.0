@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   assembleBudgetPlanning,
   budgetPlanningRange,
@@ -202,4 +204,22 @@ test("PRE-022 valida el contrato del motor antes de componer la planificación",
     ...snapshot(null),
     total: { ...snapshot(null).total, automaticAmountCents: 12.5 },
   })).toBe(false);
+});
+
+test("AUD-E2E-PTO-001 · snapshot batch evita la multiplicación N× y conserva solo lectura", () => {
+  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261007165000_qa_work_budget_snapshot_batch.sql"), "utf8");
+  const body = sql.slice(sql.indexOf("create or replace function financial_app.budget_month_snapshot"));
+  expect(body).toContain("security invoker");
+  expect(body).toContain("all_facts as materialized");
+  expect(body).toContain("scoped_facts as materialized");
+  expect(body).toContain("financial_app.financial_transaction_allocation_facts(");
+  expect(body).toContain("where f.analytics_eligible");
+  expect(body).toContain("f.effective_kind = 'expense'");
+  expect(body).toContain("'bankSource', 'read_only'");
+  expect(body).toContain("'manualAnalyticsExclusionsRespected', true");
+  expect(body).not.toContain("financial_app.budget_month_actual(");
+  expect(body).not.toContain("financial_app.budget_month_recommendation(");
+  expect(body).not.toMatch(/\b(?:insert\s+into|update\s+financial_app\.|delete\s+from\s+financial_app\.|truncate)\b/i);
+  const matches = body.match(/financial_app\.financial_transaction_allocation_facts\s*\(/g) ?? [];
+  expect(matches).toHaveLength(1);
 });
