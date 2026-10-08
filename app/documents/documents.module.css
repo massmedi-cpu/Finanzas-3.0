@@ -100,6 +100,16 @@
 }
 .unsavedDialog h2 { margin: 0 0 0.55rem; font-size: var(--font-section-title); }
 .unsavedDialog p { margin: 0; color: var(--color-text-secondary); line-height: 1.5; }
+.unsavedDialog .unsavedError {
+  margin-top: 0.9rem;
+  padding: 0.7rem 0.8rem;
+  border: 1px solid color-mix(in srgb, var(--color-danger) 42%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 9%, var(--color-surface-strong));
+  color: var(--color-danger);
+  font-size: var(--font-helper);
+  font-weight: 700;
+}
 .unsavedActions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.35rem; }
 .unsavedActions > button { flex: 1 1 9rem; min-height: 2.9rem; }
 :global(html[data-theme="light"]) .unsavedBackdrop { background: rgba(20, 35, 59, 0.56); }
