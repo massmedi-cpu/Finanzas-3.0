@@ -291,14 +291,28 @@ for (const width of WIDTHS) {
             element,
             rect: element.getBoundingClientRect(),
           }))
-          .filter(({ element, rect }) => rect.width > 0 && rect.right > viewport + 1
-            && window.getComputedStyle(element).display !== "none")
-          .slice(0, 15)
+          .filter(({ element, rect }) => {
+            if (rect.width <= 0 || rect.right <= viewport + 1
+              || window.getComputedStyle(element).display === "none") return false;
+            // Horizontally scrolled navigation links cannot enlarge the page
+            // when an ancestor clips them. Keep the page-width assertion below.
+            for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+              const style = window.getComputedStyle(parent);
+              if (style.clip !== "auto" || style.clipPath !== "none") return false;
+              if (["auto", "scroll", "hidden", "clip"].includes(style.overflowX)
+                && parent.getBoundingClientRect().right <= viewport + 1) return false;
+            }
+            return true;
+          })
+          .slice(0, 25)
           .map(({ element, rect }) => ({
             tag: element.tagName.toLowerCase(),
             className: typeof element.className === "string" ? element.className.slice(0, 90) : "",
             right: Math.round(rect.right),
             width: Math.round(rect.width),
+            scrollWidth: element.scrollWidth,
+            overflowX: window.getComputedStyle(element).overflowX,
+            text: element.textContent?.trim().slice(0, 70),
           })),
       };
     });

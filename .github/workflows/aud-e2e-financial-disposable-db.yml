@@ -1,0 +1,46 @@
+name: AUD E2E Financial Disposable DB
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/aud_e2e_budget_balance.sql'
+      - 'scripts/aud-e2e-financial-disposable-db.sh'
+      - 'scripts/pre001-disposable-db-smoke.sh'
+      - '.github/workflows/aud-e2e-financial-disposable-db.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aud-financial-db-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  budget-balance-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Apply candidate migrations and verify synthetic financial data
+        env:
+          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/aud-e2e-financial-disposable-db.sh
