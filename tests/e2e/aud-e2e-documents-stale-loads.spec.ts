@@ -153,6 +153,7 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
   let updatedIssuer = DOCS[0].issuerName as string;
   let failRevalidation = true;
   let needRevalidation = false;
+  let returnOldMetadata = false;
   let patches = 0;
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
     const req = route.request();
@@ -178,7 +179,7 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
         contentType: "application/json",
         body: JSON.stringify({
           contractVersion: 3,
-          document: source ? { ...source, issuerName: source.id === DOCS[0].id ? updatedIssuer : source.issuerName } : null,
+          document: source ? { ...source, issuerName: source.id === DOCS[0].id ? (returnOldMetadata ? DOCS[0].issuerName : updatedIssuer) : source.issuerName } : null,
           associations: [],
           principles: PRINCIPLES,
         }),
@@ -209,8 +210,15 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
 
   failRevalidation = false;
   needRevalidation = false;
+  returnOldMetadata = true;
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
+  await expect(issuer).toHaveValue("Proveedor revisado");
+  expect(patches).toBe(2);
+
+  returnOldMetadata = false;
   await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
-  expect(patches).toBe(2);
+  expect(patches).toBe(3);
 });
