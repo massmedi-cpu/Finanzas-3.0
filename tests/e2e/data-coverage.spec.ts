@@ -98,3 +98,28 @@ test("AUD-E2E-DAT-001 · ausencia de cobertura no se convierte en cero y cero cu
   expect(august.actualCoverage.state).toBe("covered");
   expect(august.actualNetCents).toBe(0);
 });
+
+
+test("AUD-E2E-DAT-001 · fechas bancarias imposibles o periodos invertidos no certifican cobertura", () => {
+  for (const latestMovementDate of ["2026-02-30", "2026-13-01", "2026-00-09", "2026-09-31"]) {
+    const coverage = resolvePeriodCoverage({
+      dateFrom: "2026-02-01", dateTo: "2026-02-28", latestMovementDate,
+    });
+    expect(coverage).toEqual({ state: "unknown", latestMovementDate: null, throughDate: null });
+    expect(periodComparisonIsReliable(coverage)).toBe(false);
+  }
+  const reverse = resolvePeriodCoverage({
+    dateFrom: "2026-10-31", dateTo: "2026-10-01", latestMovementDate: "2026-10-31",
+  });
+  expect(reverse.state).toBe("unknown");
+  expect(periodComparisonIsReliable(reverse)).toBe(false);
+  const impossibleStart = resolvePeriodCoverage({
+    dateFrom: "2026-02-30", dateTo: "2026-03-31", latestMovementDate: "2026-03-31",
+  });
+  expect(impossibleStart.state).toBe("unknown");
+  const leap = resolvePeriodCoverage({
+    dateFrom: "2024-02-29", dateTo: "2024-02-29", latestMovementDate: "2024-02-29",
+  });
+  expect(leap.state).toBe("covered");
+  expect(dateHasConfirmedCoverage("2026-02-30", leap)).toBe(false);
+});

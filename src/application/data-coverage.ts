@@ -9,7 +9,11 @@ export type PeriodCoverage = {
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 function validDate(value: string | null | undefined) {
-  return typeof value === "string" && ISO_DATE.test(value) ? value : null;
+  if (typeof value !== "string" || !ISO_DATE.test(value)) return null;
+  const parsed = new Date(`${value}T00:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : null;
 }
 
 /**
@@ -23,7 +27,7 @@ export function resolvePeriodCoverage(input: {
   latestMovementDate: string | null | undefined;
 }): PeriodCoverage {
   const latestMovementDate = validDate(input.latestMovementDate);
-  if (!validDate(input.dateFrom) || !validDate(input.dateTo) || !latestMovementDate) {
+  if (!validDate(input.dateFrom) || !validDate(input.dateTo) || input.dateFrom > input.dateTo || !latestMovementDate) {
     return { state: "unknown", latestMovementDate, throughDate: null };
   }
   if (latestMovementDate < input.dateFrom) {
