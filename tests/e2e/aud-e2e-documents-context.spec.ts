@@ -46,3 +46,50 @@ test("AUD-E2E-DOC-002 · solo las notas explícitas señalan un posible fixture,
   expect(hasExplicitSyntheticDocumentNote("F11_DRIVE_LIVE_OCR_TEST.png")).toBe(false);
   expect(hasExplicitSyntheticDocumentNote("Factura: no es un fixture sintético")).toBe(false);
 });
+
+test("AUD-E2E-DOC-002 · la advertencia depende de notas confirmadas, no del nombre ni cambia documentos", async ({ page }) => {
+  const fixture = {
+    id: "93000000-0000-4000-8000-000000000094",
+    originalFileName: "F11_DRIVE_LIVE_OCR_TEST.png",
+    notes: "Fixture sintético F11 para validar OCR live de Google Drive sobre imagen",
+    type: "other", status: "pending_review", mimeType: "image/png",
+    documentDate: "2026-09-12", totalCents: null, associationCount: 0,
+    storageProvider: "google_drive", sizeBytes: 58000,
+    createdAt: "2026-09-12T09:00:00Z", updatedAt: "2026-09-12T09:00:00Z",
+    sourceModifiedAt: "2026-09-12T09:00:00Z", sourceDriveFileId: "fixture-read-only",
+  };
+  const ordinary = {
+    ...fixture,
+    id: "93000000-0000-4000-8000-000000000095",
+    originalFileName: "F11_DRIVE_LIVE_OCR_TEST_COPIA.png",
+    notes: "Factura ordinaria documentada por el usuario",
+  };
+  const writes: string[] = [];
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const method = route.request().method();
+    if (method !== "GET") {
+      writes.push(method);
+      await route.fulfill({ status: 409, contentType: "application/json", body: '{"error":"unexpected_write"}' });
+      return;
+    }
+    const url = new URL(route.request().url());
+    const id = url.searchParams.get("id");
+    if (id) {
+      const doc = [fixture, ordinary].find((item) => item.id === id);
+      await route.fulfill({ status: doc ? 200 : 404, contentType: "application/json",
+        body: JSON.stringify({ contractVersion: 1, document: doc, associations: [] }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ contractVersion: 1, total: 2, limit: 50, offset: 0, items: [fixture, ordinary] }) });
+  });
+
+  await page.goto("/documents");
+  await expect(page.getByText("Declarado como fixture en notas · sin validar")).toHaveCount(1);
+  await page.getByRole("button", { name: /F11_DRIVE_LIVE_OCR_TEST\.png/ }).click();
+  await expect(page.getByTestId("document-synthetic-note")).toBeVisible();
+  await expect(page.getByTestId("document-synthetic-note")).toContainText("sigue incluido en los avisos ordinarios");
+  await page.getByRole("button", { name: /F11_DRIVE_LIVE_OCR_TEST_COPIA\.png/ }).click();
+  await expect(page.getByTestId("document-synthetic-note")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
