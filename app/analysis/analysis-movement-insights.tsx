@@ -521,7 +521,7 @@ function MerchantScatter({ snapshot }: { snapshot: AnalysisSnapshot }) {
   );
 }
 
-function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }) {
+export function MerchantConcentrationCurve({ snapshot }: { snapshot: AnalysisSnapshot }) {
   const rows = snapshot.merchantDrivers.filter((row) => row.expenseCents > 0).slice(0, 30);
   const { viewportRef, width } = useChartWidth(620, rows.length > 0 && snapshot.current.expenseCents > 0);
   const chart = useMemo(() => {
@@ -745,6 +745,10 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
 
       <div className={styles.detailGrid}>
         <TopTransactions snapshot={snapshot} />
+        <details className={styles.conceptsDisclosure}>
+          <summary>Ver conceptos del impacto</summary>
+          <Concepts snapshot={snapshot} />
+        </details>
       </div>
 
       <section className={styles.advancedPatterns} aria-label="Detalle de patrones financieros">
@@ -767,12 +771,6 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
               <div className={styles.chartColumn}>
                 <MerchantScatter snapshot={snapshot} />
               </div>
-              <div className={styles.chartColumn}>
-                <MerchantConcentrationCurve snapshot={snapshot} />
-              </div>
-            </div>
-            <div className={styles.detailGrid}>
-              <Concepts snapshot={snapshot} />
             </div>
           </>
         )}

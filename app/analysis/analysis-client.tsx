@@ -32,7 +32,7 @@ import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import { CategoryIdentity } from "../category-identity";
 import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
-import AnalysisMovementInsights from "./analysis-movement-insights";
+import AnalysisMovementInsights, { MerchantConcentrationCurve } from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
 
 const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -794,6 +794,11 @@ export default function AnalysisClient({
             <div className={styles.rankingsGrid}>
               <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
+            <details className={styles.merchantConcentrationDisclosure}>
+              <summary>Ver curva de concentración</summary>
+              <p>Reparte el gasto acumulado entre los comercios del periodo: no añade movimientos ni modifica el ranking.</p>
+              <MerchantConcentrationCurve snapshot={snapshot} />
+            </details>
           </section>
 
           <footer className={styles.qualityNote}>

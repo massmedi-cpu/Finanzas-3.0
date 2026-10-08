@@ -186,6 +186,8 @@ for (const width of WIDTHS) {
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toHaveCount(0);
     await advancedToggle.click();
     await expect(page.getByRole("button", { name: "Ocultar detalle de patrones" })).toHaveAttribute("aria-expanded", "true");
+    await page.getByText("Ver curva de concentración", { exact: true }).click();
+    await page.getByText("Ver conceptos del impacto", { exact: true }).click();
     await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
@@ -628,9 +630,12 @@ test("AUD-E2E-ANA-001 · lectura diaria y mapa de calor comparten tarjeta sin du
   await expect(advanced).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
   await advanced.click();
+  await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+  await page.getByText("Ver conceptos del impacto", { exact: true }).click();
   await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
   await page.getByRole("button", { name: "Ocultar detalle de patrones" }).click();
-  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
 });
 
 test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de patrones especializados", () => {
@@ -643,4 +648,20 @@ test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de
   expect(categories).toBeGreaterThan(evolution);
   expect(patterns).toBeGreaterThan(categories);
   expect(anomalies).toBeGreaterThan(patterns);
+});
+
+test("AUD-E2E-ANA-001 · concentración solo se abre desde ranking de comercios", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const merchants = page.getByRole("heading", { name: "Comercios principales" });
+  await expect(merchants).toBeVisible();
+  const concentration = page.getByText("Ver curva de concentración", { exact: true });
+  await expect(concentration).toBeVisible();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toHaveCount(0);
+  await concentration.click();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toBeVisible();
+  await concentration.click();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toHaveCount(0);
 });
