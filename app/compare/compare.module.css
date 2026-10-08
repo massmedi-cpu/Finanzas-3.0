@@ -441,3 +441,27 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
+
+/* AUD-E2E-CMP-001 · acceder a todos los cambios sin perder los enlaces por periodo. */
+.expandDrivers {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  margin: 0.85rem 1rem 1rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border-primary-soft);
+  border-radius: 0.7rem;
+  background: var(--surface-primary-subtle);
+  color: var(--color-primary-bright);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 750;
+  cursor: pointer;
+}
+.expandDrivers:hover { background: var(--surface-primary-soft); }
+.expandDrivers:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 3px; }
+:global(html[data-theme="light"]) .expandDrivers {
+  border-color: var(--border-primary-strong);
+  color: var(--color-primary);
+}

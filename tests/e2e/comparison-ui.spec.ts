@@ -7,7 +7,7 @@ const ACCOUNT_ID = "10000000-0000-4000-8000-000000000001";
 const CATEGORY_ID = "20000000-0000-4000-8000-000000000002";
 const MERCHANT_ID = "30000000-0000-4000-8000-000000000003";
 
-function snapshotFor(url: URL) {
+function snapshotFor(url: URL, extendedDrivers = false) {
   const selection = resolveComparisonSelection({
     primaryFrom: url.searchParams.get("primaryFrom"),
     primaryTo: url.searchParams.get("primaryTo"),
@@ -38,13 +38,32 @@ function snapshotFor(url: URL) {
     },
     history: { rows: [] },
     accounts: [{ id: ACCOUNT_ID, name: "Cuenta principal", lifecycle: "active" }],
-    categories: [
-      { id: CATEGORY_ID, name: "Alimentación", currentExpenseCents: 12_000, previousExpenseCents: 9_000, currentRows: 3, previousRows: 2 },
-      { id: null, name: "Sin categoría", currentExpenseCents: 8_000, previousExpenseCents: 6_000, currentRows: 1, previousRows: 1 },
-    ],
-    merchants: [
-      { id: MERCHANT_ID, name: "Mercado Central", currentExpenseCents: 20_000, previousExpenseCents: 15_000, currentRows: 4, previousRows: 3, currentAverageCents: 5_000, habitualAverageCents: 4_500, historyRows: 8 },
-    ],
+    categories: extendedDrivers
+      ? Array.from({ length: 12 }, (_, index) => ({
+          id: `${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000001`,
+          name: `Categoría ${index + 1}`,
+          currentExpenseCents: index === 0 ? 9_000 : 1_000,
+          previousExpenseCents: index === 0 ? 4_000 : 1_000,
+          currentRows: 1, previousRows: 1,
+        }))
+      : [
+          { id: CATEGORY_ID, name: "Alimentación", currentExpenseCents: 12_000, previousExpenseCents: 9_000, currentRows: 3, previousRows: 2 },
+          { id: null, name: "Sin categoría", currentExpenseCents: 8_000, previousExpenseCents: 6_000, currentRows: 1, previousRows: 1 },
+        ],
+    merchants: extendedDrivers
+      ? Array.from({ length: 18 }, (_, index) => ({
+          id: `${String(index + 1).padStart(8, "0")}-0000-4000-8000-000000000002`,
+          name: `Comercio ${index + 1}`,
+          currentExpenseCents: index === 0 ? 3_000 : 1_000,
+          previousExpenseCents: index === 0 ? 1_400 : 800,
+          currentRows: 1, previousRows: 1,
+          currentAverageCents: index === 0 ? 3_000 : 1_000,
+          habitualAverageCents: index === 0 ? 1_400 : 800,
+          historyRows: 3,
+        }))
+      : [
+          { id: MERCHANT_ID, name: "Mercado Central", currentExpenseCents: 20_000, previousExpenseCents: 15_000, currentRows: 4, previousRows: 3, currentAverageCents: 5_000, habitualAverageCents: 4_500, historyRows: 8 },
+        ],
     concentration: { top3CategoryBps: 10_000, top3MerchantBps: 10_000 },
     anomalies: [],
     fixedVariable: { available: false, reliableRecurrences: 0, fixedExpenseCents: 0, variableExpenseCents: 20_000 },
@@ -54,14 +73,14 @@ function snapshotFor(url: URL) {
   return buildComparisonSnapshot({ selection, gateway });
 }
 
-async function mockComparison(page: Page) {
+async function mockComparison(page: Page, extendedDrivers = false) {
   await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, latestMovementDate: "2026-09-25", sync: null }),
   }));
   await page.route("**/api/compare?**", async (route) => {
-    const snapshot = snapshotFor(new URL(route.request().url()));
+    const snapshot = snapshotFor(new URL(route.request().url()), extendedDrivers);
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
   });
 }
@@ -151,3 +170,26 @@ for (const viewport of [
     expect(overflow).toBeLessThanOrEqual(1);
   });
 }
+
+
+test("AUD-E2E-CMP-001 · Ver todos expande 12 categorías y 18 comercios sin perder los dos enlaces", async ({ page }) => {
+  await mockComparison(page, true);
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const categories = page.getByRole("heading", { name: "Qué categorías explican la diferencia" }).locator("xpath=..").locator("xpath=..");
+  const commerce = page.getByRole("heading", { name: "Qué comercios explican la diferencia" }).locator("xpath=..").locator("xpath=..");
+  const categoryPanel = page.locator("section").filter({ has: categories.getByRole("heading", { name: "Qué categorías explican la diferencia" }) }).last();
+  const merchantPanel = page.locator("section").filter({ has: commerce.getByRole("heading", { name: "Qué comercios explican la diferencia" }) }).last();
+  await expect(categoryPanel.locator("tbody tr")).toHaveCount(8);
+  await expect(merchantPanel.locator("tbody tr")).toHaveCount(8);
+
+  await categoryPanel.getByRole("button", { name: "Ver todas las categorías (12)" }).click();
+  await merchantPanel.getByRole("button", { name: "Ver todos los comercios (18)" }).click();
+  await expect(categoryPanel.locator("tbody tr")).toHaveCount(12);
+  await expect(merchantPanel.locator("tbody tr")).toHaveCount(18);
+  await expect(categoryPanel.getByRole("link", { name: /Categoría 12, periodo principal/ })).toHaveAttribute("href", /dateFrom=2026-09-01/);
+  await expect(merchantPanel.getByRole("link", { name: /Comercio 18, referencia/ })).toHaveAttribute("href", /dateFrom=2026-08-01/);
+  await categoryPanel.getByRole("button", { name: "Ver menos categorías" }).click();
+  await merchantPanel.getByRole("button", { name: "Ver menos comercios" }).click();
+  await expect(categoryPanel.locator("tbody tr")).toHaveCount(8);
+  await expect(merchantPanel.locator("tbody tr")).toHaveCount(8);
+});

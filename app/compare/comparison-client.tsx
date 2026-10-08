@@ -190,7 +190,9 @@ function DriverPanel({
   drivers: ComparisonDriver[];
   kind: "categorías" | "comercios";
 }) {
-  const visible = drivers.slice(0, 8);
+  const [expanded, setExpanded] = useState(false);
+  const visible = expanded ? drivers : drivers.slice(0, 8);
+  const hasMore = drivers.length > 8;
   let maximum = 0;
   for (const item of visible) maximum = Math.max(maximum, item.primaryExpenseCents, item.referenceExpenseCents);
 
@@ -211,7 +213,7 @@ function DriverPanel({
           <span>Estos periodos no contienen {kind} con gasto incluido.</span>
         </div>
       ) : (
-        <div className={styles.tableScroller}>
+        <div id={`comparison-${kind}-table`} className={styles.tableScroller}>
           <table className={styles.driverTable}>
             <caption className={styles.srOnly}>{title}: comparación entre periodo principal y referencia</caption>
             <thead>
@@ -247,6 +249,19 @@ function DriverPanel({
           </table>
         </div>
       )}
+      {hasMore ? (
+        <button
+          type="button"
+          className={styles.expandDrivers}
+          aria-controls={`comparison-${kind}-table`}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((current) => !current)}
+        >
+          {expanded ? `Ver menos ${kind}` : kind === "categorías"
+            ? `Ver todas las categorías (${drivers.length})`
+            : `Ver todos los comercios (${drivers.length})`}
+        </button>
+      ) : null}
     </section>
   );
 }
