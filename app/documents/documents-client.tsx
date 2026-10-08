@@ -798,7 +798,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
-  const currentList = loadedListKey === listUrl ? list : null;
+  const currentList = query === debouncedQuery && loadedListKey === listUrl ? list : null;
   const listPending = query !== debouncedQuery || loadingList || (!currentList && !listLoadFailed);
 
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
