@@ -395,7 +395,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setError(friendlyError(caught));
       }
     } finally {
-      if (!silent && sequence === listSequence.current) setLoadingList(false);
+      if (sequence === listSequence.current) setLoadingList(false);
     }
   }, [listUrl, unassociatedOnly]);
 
@@ -426,7 +426,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setError(friendlyError(caught));
       }
     } finally {
-      if (!silent && sequence === detailSequence.current) setLoadingDetail(false);
+      if (sequence === detailSequence.current) setLoadingDetail(false);
     }
   }, []);
 
