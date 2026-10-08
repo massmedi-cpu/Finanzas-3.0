@@ -889,7 +889,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || !detail ? <div className={styles.loading}>Cargando detalle…</div> : (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail ? <div className={styles.loading}>Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
+              <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
+                <h2>El detalle no está disponible</h2>
+                <p>Los datos de otro documento no se muestran en esta selección.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => void loadDetail(selectedId)}>Reintentar detalle</button>
+              </div>
+            ) : (
               <>
                 <header className={styles.detailHeader}>
                   <div><p className={styles.sectionEyebrow}>{TYPE_LABELS[detail.document.type].toUpperCase()}</p><h2>{detail.document.originalFileName}</h2><p>{formatBytes(detail.document.sizeBytes)} · {detail.document.storageProvider === "supabase" ? "Storage privado" : "Google Drive"}</p></div>
