@@ -252,6 +252,31 @@
   font-size: var(--font-helper);
 }
 
+.retryButton {
+  width: fit-content;
+  min-height: 2.75rem;
+  margin: 0.55rem auto 0;
+  padding: 0.6rem 1rem;
+  border: 1px solid var(--border-primary-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+  font: inherit;
+  font-size: var(--font-button);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.retryButton:hover {
+  border-color: var(--color-primary-bright);
+  background: var(--surface-primary-subtle);
+}
+
+.retryButton:focus-visible {
+  outline: 2px solid var(--color-primary-bright);
+  outline-offset: 3px;
+}
+
 .footer {
   min-height: 2.8rem;
   display: flex;
