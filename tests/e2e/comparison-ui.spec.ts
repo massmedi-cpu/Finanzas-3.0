@@ -133,6 +133,9 @@ test("AUD-E2E-NAV-001 · Continuar desde Comparador sigue el periodo aplicado si
   await page.getByRole("button", { name: "Comparar periodos" }).click();
   await expect(page).toHaveURL(/primaryFrom=2026-09-11/);
   await expect(nav.getByRole("link", { name: /Movimientos · principal/ })).toHaveAttribute("href", /dateFrom=2026-09-11&dateTo=2026-09-18/);
+  const analysisLink = nav.getByRole("link", { name: "Análisis" });
+  await expect(analysisLink).toHaveAttribute("href", /periodMode=custom&dateFrom=2026-09-11&dateTo=2026-09-18/);
+  await expect(analysisLink).toHaveAttribute("href", /compareMode=custom&compareDateFrom=/);
 });
 for (const viewport of [
   { label: "360", width: 360, height: 800 },

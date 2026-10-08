@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   analysisModuleLinks,
+  comparisonModuleLinks,
   forecastModuleLinks,
 } from "../../src/application/navigation/module-context";
 import { resolveForecastSelection } from "../../src/application/forecast/forecast-loader";
@@ -68,4 +69,46 @@ test("Forecast vuelve a módulos propietarios sin inventar un periodo analítico
   expect(links.find((item) => item.label === "Recurrentes")?.href).toBe(
     `/recurrences?source=forecast&forecastDateFrom=2026-09-18&forecastDateTo=2026-10-31&forecastAccountId=${ACCOUNT_ID}`,
   );
+});
+
+
+test("AUD-E2E-NAV-001 · Comparador devuelve a Análisis sus dos periodos y cuenta", () => {
+  const links = comparisonModuleLinks({
+    primaryFrom: "2026-09-01",
+    primaryTo: "2026-09-30",
+    referenceFrom: "2026-08-01",
+    referenceTo: "2026-08-31",
+    accountId: ACCOUNT_ID,
+  });
+  const analysis = links.find((item) => item.label === "Análisis");
+  expect(analysis?.href).toBe(
+    `/analysis?periodMode=custom&dateFrom=2026-09-01&dateTo=2026-09-30&compareMode=custom&compareDateFrom=2026-08-01&compareDateTo=2026-08-31&accountId=${ACCOUNT_ID}`,
+  );
+  expect(analysis?.detail).toMatch(/ambos periodos/);
+});
+
+test("AUD-E2E-NAV-001 · los rangos multimes usan el mes final al saltar a Cash Flow", () => {
+  const analysis = analysisModuleLinks({
+    month: "2026-09",
+    dateFrom: "2026-07-01",
+    dateTo: "2026-09-30",
+    previousDateFrom: "2026-04-01",
+    previousDateTo: "2026-06-30",
+    accountId: ACCOUNT_ID,
+  }, null);
+  const cashFlow = analysis.find((item) => item.label === "Cash Flow");
+  expect(cashFlow?.href).toBe("/cash-flow?month=2026-09");
+  expect(cashFlow?.detail).toContain("no todo el rango");
+
+  const comparison = comparisonModuleLinks({
+    primaryFrom: "2026-07-01",
+    primaryTo: "2026-09-30",
+    referenceFrom: "2026-04-01",
+    referenceTo: "2026-06-30",
+    accountId: ACCOUNT_ID,
+  });
+  expect(comparison.find((item) => item.label === "Cash Flow")).toMatchObject({
+    href: "/cash-flow?month=2026-09",
+    detail: expect.stringContaining("Solo el mes final"),
+  });
 });
