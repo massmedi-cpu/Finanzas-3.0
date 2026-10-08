@@ -34,6 +34,22 @@ export default function MobileNavigation() {
 
   useEffect(() => setMoreOpen(false), [pathname]);
 
+  // Cambiar de móvil a escritorio nunca debe dejar un panel abierto e invisible
+  // ni mantener el foco sobre un control que ya no se muestra.
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(max-width: 48rem)");
+    const onViewportChange = () => {
+      if (breakpoint.matches) return;
+      const focusInsidePanel = panelRef.current?.contains(document.activeElement);
+      setMoreOpen(false);
+      if (focusInsidePanel) {
+        document.querySelector<HTMLElement>('nav[aria-label="Navegación principal"] [aria-current="page"]')?.focus();
+      }
+    };
+    breakpoint.addEventListener("change", onViewportChange);
+    return () => breakpoint.removeEventListener("change", onViewportChange);
+  }, []);
+
   // El panel aparece antes del dock en el DOM: mover el foco permite recorrerlo
   // con Tab desde «Más», en vez de dejar el teclado fuera del contenido abierto.
   useEffect(() => {
