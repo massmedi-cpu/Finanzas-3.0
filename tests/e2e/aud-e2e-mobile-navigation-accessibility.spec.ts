@@ -44,3 +44,24 @@ test.describe("AUD-E2E-VAL-001 · navegación móvil accesible", () => {
     await expect(more).toHaveAttribute("aria-expanded", "false");
   });
 });
+
+test("AUD-E2E-NAV-001 · salto de móvil a escritorio cierra Más y recupera el foco visible", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 780 });
+  await page.goto("/onboarding");
+  const mobile = page.getByRole("navigation", { name: "Navegación móvil" });
+  const more = mobile.getByRole("button", { name: "Más", exact: true });
+  await more.click();
+  await expect(more).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: "Cerrar más secciones" })).toBeFocused();
+
+  await page.setViewportSize({ width: 820, height: 900 });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  await expect(mobile).toBeHidden();
+  const desktop = page.getByRole("navigation", { name: "Navegación principal" });
+  await expect(desktop).toBeVisible();
+  await expect(desktop.locator('[aria-current="page"]')).toBeFocused();
+
+  await page.setViewportSize({ width: 390, height: 780 });
+  await expect(more).toBeVisible();
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+});
