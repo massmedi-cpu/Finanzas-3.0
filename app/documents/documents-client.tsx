@@ -598,7 +598,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         }),
       }));
       const confirmed = await refreshAfterMutation(detail.document.id);
-      if (!confirmed) {
+      const persisted = confirmed?.document;
+      const matchesSave = persisted?.id === detail.document.id
+        && persisted.type === editor.type
+        && (persisted.documentDate ?? "") === editor.documentDate
+        && (persisted.issuerName ?? "") === editor.issuerName.trim()
+        && persisted.totalCents === cents
+        && (persisted.notes ?? "") === editor.notes.trim();
+      if (!matchesSave) {
         // El PATCH pudo haberse aplicado, pero no se debe navegar ni afirmar éxito
         // hasta que el backend permita releer el documento correcto.
         setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
