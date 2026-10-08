@@ -184,6 +184,8 @@ begin
   -- empty references are legitimate; A's category IDs, amounts and edits are not.
   if (v_budget->'total'->>'actualExpenseCents')::bigint<>0
     or (v_budget->'total'->>'automaticAmountCents')::bigint<>0
+    or v_budget->'total'->'manualAmountCents'<>'null'::jsonb
+    or (v_budget->'total'->>'persisted')::boolean
     or exists (
       select 1 from jsonb_array_elements(v_budget->'categories') item
       where (item->>'actualExpenseCents')::bigint<>0
@@ -195,6 +197,18 @@ begin
   if (v_series->'rows'->0->>'balanceCents')::bigint<>999999 or (v_series->'rows'->0->>'accounts')::int<>1 then
     raise exception 'AUD_BALANCE_TENANT_LEAK';
   end if;
+  begin
+    perform financial_app.set_budget_manual_amount('2026-10',(select id from aud_ids where key='AUD Food'),1732);
+    raise exception 'AUD_CROSS_TENANT_BUDGET_WRITE_ACCEPTED';
+  exception when others then
+    if sqlerrm<>'budget_category_not_found' then raise; end if;
+  end;
+  begin
+    perform financial_app.save_transaction_split((select id from aud_ids where key='split-2026-10'),'[]'::jsonb);
+    raise exception 'AUD_CROSS_TENANT_SPLIT_WRITE_ACCEPTED';
+  exception when others then
+    if sqlerrm<>'transaction_not_found' then raise; end if;
+  end;
   begin
     perform financial_app.financial_balance_series('2026-10-01','2026-10-18',(select id from aud_ids where key='account'));
     raise exception 'AUD_FOREIGN_ACCOUNT_ACCEPTED';
@@ -299,4 +313,4 @@ begin
   end loop;
 end $$;
 rollback;
-select 'AUD_E2E_BUDGET_BALANCE_OK: seven_month_json_parity, split_personal_scope, descendants, manual_zero, archived_budget, recurrence_floor, balance_canonical_parity, valid_zero, tenant_isolation, read_only, restricted_invoker, budget_save_refresh_restore, split_save_replay_rejection, immutable_bank_source' as result;
+select 'AUD_E2E_BUDGET_BALANCE_OK: seven_month_json_parity, split_personal_scope, descendants, manual_zero, archived_budget, recurrence_floor, balance_canonical_parity, valid_zero, tenant_isolation, cross_tenant_writes_rejected, read_only, restricted_invoker, budget_save_refresh_restore, split_save_replay_rejection, immutable_bank_source' as result;
