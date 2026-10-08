@@ -174,6 +174,62 @@ function MetricCard({
   );
 }
 
+function NetSavingsMetric({
+  net,
+  savings,
+  rate,
+  rateDelta,
+  coverage,
+}: {
+  net: ComparisonMoneyMetric;
+  savings: ComparisonMoneyMetric;
+  rate: number | null;
+  rateDelta: number | null;
+  coverage: PeriodCoverage;
+}) {
+  const equivalent = net.primaryCents === savings.primaryCents
+    && net.referenceCents === savings.referenceCents;
+  const observed = periodHasObservedData(coverage);
+  const comparable = periodComparisonIsReliable(coverage);
+  const coverageLabel = coverage.state === "unknown"
+    ? "Cobertura bancaria desconocida"
+    : coverage.state === "none"
+      ? "Sin movimientos confirmados en el periodo"
+      : "Importes parciales, comparación incompleta";
+
+  return (
+    <article className={`${styles.metricCard} ${styles.netSavingsCard}`} aria-label="Neto operativo y ahorro">
+      <div className={styles.metricTop}>
+        <span>Neto operativo y ahorro</span>
+        <strong className={comparable ? metricTone(net.deltaCents, true) : styles.neutral}>
+          {comparable ? signedMoney(net.deltaCents) : "Comparación incompleta"}
+        </strong>
+      </div>
+      <div className={styles.netSavingsRows}>
+        <div>
+          <span>Neto operativo</span>
+          <strong className={styles.metricValue}>{observed ? formatMoney(net.primaryCents) : "—"}</strong>
+          <small>Referencia {formatMoney(net.referenceCents)}</small>
+          {comparable ? <small>{formatMoney(net.primaryDailyCents)}/día · {signedMoney(net.dailyDeltaCents)}</small> : null}
+        </div>
+        {equivalent ? (
+          <p>El ahorro coincide con el neto operativo en ambos periodos; no se repite el mismo importe.</p>
+        ) : (
+          <div>
+            <span>Ahorro · cálculo propio</span>
+            <strong className={styles.metricValue}>{observed ? formatMoney(savings.primaryCents) : "—"}</strong>
+            <small>Referencia {formatMoney(savings.referenceCents)}</small>
+            {comparable ? <small>Cambio del ahorro {signedMoney(savings.deltaCents)} · {formatMoney(savings.primaryDailyCents)}/día</small> : null}
+          </div>
+        )}
+      </div>
+      {comparable ? (
+        <div className={styles.metricFooter}>Tasa de ahorro {formatPercent(rate)} · {formatPointDelta(rateDelta)}</div>
+      ) : <div className={styles.metricFooter}>{coverageLabel}</div>}
+    </article>
+  );
+}
+
 function DriverValue({ href, cents, label }: { href: string | null; cents: number; label: string }) {
   if (!href) return <span>{formatMoney(cents)}</span>;
   return <Link prefetch={false} href={href} aria-label={`${label}: ${formatMoney(cents)}. Abrir movimientos`}>{formatMoney(cents)}</Link>;
@@ -511,13 +567,12 @@ export default function ComparisonClient({
             <section className={styles.metrics} aria-label="Resumen comparativo">
               <MetricCard label="Ingresos" metric={snapshot.metrics.income} positiveIsGood coverage={primaryCoverage!} />
               <MetricCard label="Gasto" metric={snapshot.metrics.expense} positiveIsGood={false} coverage={primaryCoverage!} />
-              <MetricCard label="Neto operativo" metric={snapshot.metrics.operatingNet} positiveIsGood coverage={primaryCoverage!} />
-              <MetricCard
-                label="Ahorro"
-                metric={snapshot.metrics.savings}
-                positiveIsGood
+              <NetSavingsMetric
+                net={snapshot.metrics.operatingNet}
+                savings={snapshot.metrics.savings}
+                rate={snapshot.savingsRate.primaryBps}
+                rateDelta={snapshot.savingsRate.deltaBps}
                 coverage={primaryCoverage!}
-                footer={<span>Tasa {formatPercent(snapshot.savingsRate.primaryBps)} · {formatPointDelta(snapshot.savingsRate.deltaBps)}</span>}
               />
             </section>
 

@@ -193,3 +193,13 @@ test("AUD-E2E-CMP-001 · Ver todos expande 12 categorías y 18 comercios sin per
   await expect(categoryPanel.locator("tbody tr")).toHaveCount(8);
   await expect(merchantPanel.locator("tbody tr")).toHaveCount(8);
 });
+
+
+test("AUD-E2E-CMP-001 · neto y ahorro coincidentes se agrupan sin duplicar importes", async ({ page }) => {
+  await openComparison(page);
+  const group = page.getByRole("article", { name: "Neto operativo y ahorro" });
+  await expect(group).toBeVisible();
+  await expect(group).toContainText("El ahorro coincide con el neto operativo en ambos periodos");
+  await expect(group).toContainText("Tasa de ahorro");
+  await expect(group.getByText("300,00 €", { exact: true })).toHaveCount(1);
+});
