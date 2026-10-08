@@ -244,7 +244,7 @@ export default function RecurrencesClient({
                         <span className={`${styles.confidence} ${styles[candidate.confidence]}`}>
                           Confianza {confidenceLabel(candidate.confidence)}
                         </span>
-                        {candidate.stale ? (
+                        {candidate.missedCycles > 0 ? (
                           <span className={styles.statusBadge}>
                             {candidate.missedCycles} ciclo{candidate.missedCycles === 1 ? "" : "s"} no observado{candidate.missedCycles === 1 ? "" : "s"}
                           </span>
