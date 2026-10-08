@@ -145,6 +145,8 @@ for (const count of [1, 2, 5] as const) {
     await expect(daily).toBeVisible();
     expect(await daily.locator("circle").count()).toBe(count);
 
+    await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+    await page.getByText("Ver curva de concentración", { exact: true }).click();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();

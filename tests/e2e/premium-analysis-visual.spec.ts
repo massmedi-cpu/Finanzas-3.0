@@ -628,10 +628,10 @@ test("AUD-E2E-ANA-001 · lectura diaria y mapa de calor comparten tarjeta sin du
   await expect(temporal.getByText("Ver datos diarios")).toBeVisible();
   const advanced = page.getByRole("button", { name: "Mostrar detalle de patrones" });
   await expect(advanced).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeHidden();
   await advanced.click();
   await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
-  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeHidden();
   await page.getByText("Ver conceptos del impacto", { exact: true }).click();
   await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
   await page.getByRole("button", { name: "Ocultar detalle de patrones" }).click();

@@ -75,7 +75,7 @@
 }
 
 .heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
-.chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chartColumns { grid-template-columns: minmax(0, 1fr); }
 .chartColumn {
   min-width: 0;
   display: grid;
