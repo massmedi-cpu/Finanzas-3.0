@@ -11,7 +11,6 @@ import {
   type AnalysisSearchParams,
 } from "../../src/application/analysis/analysis-query-state";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
-import AnalysisAxioma53Controls from "./analysis-axioma53-controls";
 import shellStyles from "./analysis-axioma53-shell.module.css";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
@@ -74,7 +73,6 @@ async function AnalysisData({
           fallbackSelection={fallbackSelection}
         />
       </div>
-      <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
     </>
   );
 }

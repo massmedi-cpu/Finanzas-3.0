@@ -5,6 +5,7 @@ import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-e
 import type { AnalysisSelectionInput } from "../../src/application/analysis/analysis-loader";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
 import AnalysisClient from "./analysis-client";
+import AnalysisAxioma53Controls from "./analysis-axioma53-controls";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisSourceFreshness, { type SourceFreshness } from "./analysis-source-freshness";
 
@@ -39,6 +40,7 @@ export default function AnalysisPageClient({
   fallbackSelection?: AnalysisSelectionInput;
 }) {
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
+  const [basicApplied, setBasicApplied] = useState<AnalysisSnapshot | null>(null);
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
 
@@ -102,7 +104,13 @@ export default function AnalysisPageClient({
   return (
     <>
       <AnalysisSourceFreshness onChange={setFreshness} />
-      <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null} />
+      <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null}
+        onApplied={(next) => { setSnapshot(next); setBasicApplied(next); }} />
+      <AnalysisAxioma53Controls
+        key={basicApplied ? [basicApplied.selection.month, basicApplied.selection.range, basicApplied.selection.accountId].join(":") : "initial"}
+        snapshot={snapshot}
+        requested={basicApplied ? { month: basicApplied.selection.month, range: basicApplied.selection.range, accountId: basicApplied.selection.accountId } : fallbackSelection}
+      />
     </>
   );
 }

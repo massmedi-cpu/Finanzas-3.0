@@ -346,9 +346,11 @@ function LoadingSkeleton() {
 export default function AnalysisClient({
   initialSnapshot,
   latestMovementDate = null,
+  onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
   latestMovementDate?: string | null;
+  onApplied?: (snapshot: AnalysisSnapshot) => void;
 }) {
   const requestRef = useRef<AbortController | null>(null);
   const initialMonth = initialSnapshot?.selection.month ?? currentMadridMonth();
@@ -425,6 +427,7 @@ export default function AnalysisClient({
 
       const next = payload;
       setSnapshot(next);
+      onApplied?.(next);
       setMonth(next.selection.month);
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
