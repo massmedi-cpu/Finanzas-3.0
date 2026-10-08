@@ -207,7 +207,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const rawResult = jsonObject(payload.rawResult, "document_ocr_result");
     const interpretation = jsonObject(payload.interpretation, "document_ocr_interpretation");
     return documentQuery(() => sql`
-      select financial_app.store_document_ocr_run(${documentId}::uuid,${JSON.stringify(rawResult)}::jsonb,${JSON.stringify(interpretation)}::jsonb) as result
+      select financial_app.store_document_ocr_run(${documentId}::uuid,${sql.json(rawResult)}::jsonb,${sql.json(interpretation)}::jsonb) as result
     `);
   }
 
@@ -238,7 +238,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
         ${documentId}::uuid,${ocrRunId}::uuid,${type},${date}::date,${time}::time,
         ${issuerName},${issuerTaxId},${documentNumber},${billingPeriod},
         ${taxBaseCents}::bigint,${taxesCents}::bigint,${totalCents}::bigint,${paymentMethod},
-        ${JSON.stringify(lineItems)}::jsonb,${notes}
+        ${sql.json(lineItems)}::jsonb,${notes}
       ) as result
     `);
   }

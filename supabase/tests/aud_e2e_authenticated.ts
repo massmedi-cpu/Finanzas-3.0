@@ -115,20 +115,51 @@ if (Deno.args[0] === "prepare") {
   assert(evidence.rawResult.documentId === id && evidence.rawResult.plainText.includes("19,00"), "real_ocr_fixture_mismatch");
   const sql = database();
   try {
+    // Postgres.js infers JSONB and serializes values itself. Pre-stringifying
+    // produces a JSON string, the regression that rejected real OCR objects.
+    const wire = await sql`select jsonb_typeof(${JSON.stringify(evidence.rawResult)}::jsonb) as legacy_type,
+      jsonb_typeof(${sql.json(evidence.rawResult)}::jsonb) as object_type,
+      jsonb_typeof(${sql.json([])}::jsonb) as array_type`;
+    assert(wire[0].legacy_type === "string" && wire[0].object_type === "object"
+      && wire[0].array_type === "array", "jsonb_wire_regression_not_reproduced");
     const before = await sql`select (select count(*) from financial_app.transactions)::int as transactions,(select count(*) from financial_app.transaction_source_records)::int as sources`;
     await ok(c.owner.token, "document.ocr_store", { documentId: id, rawResult: evidence.rawResult, interpretation: evidence.interpretation });
-    const stored = await sql`select raw_result,interpretation from financial_app.document_ocr_runs where document_id=${id}::uuid`;
+    const stored = await sql`select id,raw_result,interpretation from financial_app.document_ocr_runs where document_id=${id}::uuid`;
     assert(stored.length === 1 && isDeepStrictEqual(stored[0].raw_result, evidence.rawResult)
       && isDeepStrictEqual(stored[0].interpretation, evidence.interpretation), "ocr_result_not_persisted_exactly");
+    const lineItems = [
+      { description: "Producto sintético A", quantity: 1, unitPriceCents: 1230, totalCents: 1230 },
+      { description: "Producto sintético B", quantity: 1, unitPriceCents: 420, totalCents: 420 },
+      { description: "Producto sintético C", quantity: 1, unitPriceCents: 250, totalCents: 250 },
+    ];
+    const review = { documentId: id, ocrRunId: stored[0].id, type: "ticket", documentDate: "2026-10-08",
+      documentTime: "12:34", issuerName: "AUD synthetic reviewed issuer", totalCents: 1900,
+      lineItems, notes: "Reviewed synthetic original in isolated acceptance" };
+    assert((await operation(c.foreign.token, "document.ocr_confirm", review)).status === 404, "cross_workspace_ocr_review_accepted");
+    const confirmed = await ok(c.owner.token, "document.ocr_confirm", review);
+    assert(confirmed.documentId === id && confirmed.ocrRunId === stored[0].id && confirmed.revision === 1,
+      "ocr_review_contract_failed");
+    const reloaded = (await ok(c.owner.token, "document.detail", { id })).document;
+    assert(reloaded.status === "confirmed" && reloaded.documentTime === "12:34" && reloaded.totalCents === 1900
+      && isDeepStrictEqual(reloaded.lineItems, lineItems), "ocr_review_save_reload_failed");
+    // Empty arrays must also survive the JSONB wire contract.
+    await ok(c.owner.token, "document.ocr_confirm", { ...review, lineItems: [] });
+    const emptyReload = (await ok(c.owner.token, "document.detail", { id })).document;
+    assert(Array.isArray(emptyReload.lineItems) && emptyReload.lineItems.length === 0, "empty_line_items_not_persisted");
+    const immutable = await sql`select raw_result,interpretation from financial_app.document_ocr_runs where id=${stored[0].id}::uuid`;
+    assert(isDeepStrictEqual(immutable[0].raw_result, evidence.rawResult)
+      && isDeepStrictEqual(immutable[0].interpretation, evidence.interpretation), "ocr_review_mutated_raw_evidence");
     const after = await sql`select (select count(*) from financial_app.transactions)::int as transactions,(select count(*) from financial_app.transaction_source_records)::int as sources`;
     assert(JSON.stringify(before) === JSON.stringify(after), "ocr_wrote_financial_source");
     const history = await ok(c.owner.token, "document.ocr_history", { id });
     assert(JSON.stringify(history).includes("tesseract-js-7.0.0-spa"), "ocr_reload_missing");
+    assert(history.runs.length === 1 && history.reviews.length === 2 && history.reviews[0].revision === 2,
+      "ocr_review_history_missing");
   } finally { await sql.end(); }
   const opened = await ok(c.owner.token, "document.open", { id });
   assert(new URL(opened.url).hostname === "127.0.0.1", "cloud_document_open_forbidden");
   const bytes = new Uint8Array(await (await fetch(opened.url)).arrayBuffer());
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map((b) => b.toString(16).padStart(2, "0")).join("");
   assert(hash === evidence.sourceSha256, "storage_original_changed");
-  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|original_unchanged=true|oidc_envelope=not_tested");
+  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|oidc_envelope=not_tested");
 } else { throw new Error("expected_prepare_or_verify"); }

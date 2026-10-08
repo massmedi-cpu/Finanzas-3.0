@@ -24,6 +24,24 @@ No crea un proyecto Supabase remoto ni necesita secretos de producción.
 - Ejecuta el OCR Tesseract original, verifica importe/geometría, persiste el
   resultado y su interpretación, relee ambos íntegros y comprueba que el original
   y el número de filas bancarias permanecen iguales.
+- Confirma una revisión sintética con hora y tres líneas de producto, la relee,
+  vuelve a guardar sin líneas y comprueba ambas revisiones en el historial.
+  Rechaza la revisión desde otro espacio y conserva la evidencia OCR original.
+
+## Regresión detectada por el ensayo real
+
+El primer ensayo de `024e01af560b0964c397eeefd94117bd61ae7ab4`
+([run 37837522374](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37837522374))
+aprobó los dos tests de navegador y la persistencia de metadatos/presupuestos,
+pero rechazó el almacenamiento OCR con `invalid_document_ocr_result`.
+El handler preconvertía el objeto a texto mediante `JSON.stringify`; Postgres.js
+3.4.7 serializa de nuevo el parámetro inferido como JSONB y PostgreSQL recibe una
+cadena JSON. El mismo patrón afectaba al array de líneas de la confirmación.
+
+El handler usa ahora `sql.json` para los objetos y arrays. La prueba reproduce
+ambos tipos de envío con el driver y PostgreSQL reales, y exige además la
+persistencia exacta y la lectura posterior del OCR y sus revisiones. Esta sección
+describe la corrección; la aprobación corresponde al SHA de la ejecución final.
 
 ## Alcance de la evidencia
 

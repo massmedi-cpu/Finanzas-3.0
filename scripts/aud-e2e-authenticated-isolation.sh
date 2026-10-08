@@ -46,7 +46,7 @@ for (const [name, value] of Object.entries({
 })) {
   if (/[\r\n']/u.test(value)) throw new Error('invalid_local_env');
   if (name.includes('KEY')) process.stderr.write('::add-mask::' + value + '\n');
-  process.stdout.write(name + '=' + value + '\n');
+  process.stdout.write(name + "='" + value + "'\n");
 }
 NODE
 set -a
