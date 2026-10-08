@@ -33,6 +33,7 @@ test("E1 · los deep-links de revisión aplican realmente el filtro propietario 
   await mockTransactions(page, seen);
 
   await page.goto("/transactions?reviewState=needs_review");
+  await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Revisión" })).toHaveValue("needs_review");
   await expect.poll(() => seen.some((url) => url.searchParams.get("reviewState") === "needs_review")).toBe(true);
 
@@ -114,4 +115,32 @@ test("AUD-E2E-NAV-001 · Gastos conserva fecha, comercio y búsqueda hasta limpi
   await expect.poll(() => seen.some((url) => url.searchParams.get("merchantId") === MERCHANT_ID && url.searchParams.get("kind") === "expense")).toBe(true);
   await nav.getByRole("link", { name: "Todos", exact: true }).click();
   await expect(page).toHaveURL(/\/transactions$/);
+});
+
+
+test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto("/transactions?dateFrom=2026-09-01&dateTo=2026-09-30&kind=expense");
+  await expect(page.getByLabel("Buscar", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("2026-09-01");
+  await expect(page.getByRole("combobox", { name: "Tipo" })).toHaveValue("expense");
+  const more = page.getByRole("button", { name: "Más filtros" });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  const queryCount = seen.length;
+  await more.click();
+  await expect(page.getByLabel("Comercio")).toBeVisible();
+  await page.getByLabel("Comercio").selectOption(MERCHANT_ID);
+  await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /Ocultar filtros avanzados/ }).click();
+  await expect(page.getByLabel("Comercio")).toBeHidden();
+  expect(seen.length).toBe(queryCount);
+  await page.getByRole("button", { name: /Más filtros/ }).click();
+  await expect(page.getByLabel("Comercio")).toHaveValue(MERCHANT_ID);
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("merchantId") === MERCHANT_ID
+    && url.searchParams.get("dateFrom") === "2026-09-01"
+    && url.searchParams.get("kind") === "expense"
+  )).toBe(true);
 });
