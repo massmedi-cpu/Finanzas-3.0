@@ -106,3 +106,7 @@
 :global(html[data-theme="light"]) .unsavedDialog { background: #fff; color: var(--color-text); }
 :global(html[data-theme="light"]) .unsavedActions .secondaryButton { background: var(--surface-primary-subtle); color: var(--color-text); }
 :global(html[data-theme="light"]) .unsavedActions .dangerButton { color: var(--color-danger); }
+
+/* DOC-002 · procedencia declarada; no equivale a una clasificación confirmada. */
+.syntheticNoteLabel { display: block; margin-top: 0.3rem; color: var(--color-text-secondary); font-size: var(--font-helper); font-weight: 750; }
+.syntheticNoteNotice { margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-strong); color: var(--color-text); font-size: var(--font-helper); line-height: 1.5; }

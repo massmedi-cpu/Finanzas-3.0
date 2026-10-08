@@ -12,6 +12,7 @@ import {
 import { useActionFeedback } from "../action-feedback";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
+import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
@@ -749,7 +750,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 {list.items.map((item) => (
                   <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
-                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small></span>
+                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>
                   </button>
                 ))}
@@ -790,6 +791,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
                   </div>
                 </header>
+                {hasExplicitSyntheticDocumentNote(detail.document.notes) ? (
+                  <p className={styles.syntheticNoteNotice} role="note" data-testid="document-synthetic-note">
+                    Las notas guardadas describen este archivo como un fixture sintético. Comprueba su origen antes de asociarlo o analizarlo: no está designado formalmente como Prueba y sigue incluido en los avisos ordinarios. No se ha cambiado el documento ni su archivo de Drive.
+                  </p>
+                ) : null}
 
                 <form className={styles.editor} onSubmit={saveMetadata}>
                   {metadataDirty ? (

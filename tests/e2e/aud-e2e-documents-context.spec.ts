@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 
 const documents = [
   { id: "93000000-0000-4000-8000-000000000091", originalFileName: "Justificante pendiente.pdf", type: "invoice", status: "pending_review", mimeType: "application/pdf", documentDate: "2026-09-12", totalCents: 1000, associationCount: 0 },
@@ -35,4 +36,13 @@ test("AUD-E2E-NAV-001 · sin asociar filtra todos los resultados y permite recup
   await page.goto("/documents?status=pending_review");
   await expect(page.getByLabel("Estado")).toHaveValue("pending_review");
   await expect(page.getByText("Justificante pendiente.pdf")).toBeVisible();
+});
+
+test("AUD-E2E-DOC-002 · solo las notas explícitas señalan un posible fixture, nunca el nombre", () => {
+  expect(hasExplicitSyntheticDocumentNote("Fixture sintético F11 para validar OCR live de Google Drive")).toBe(true);
+  expect(hasExplicitSyntheticDocumentNote("  FIXTURE SINTÉTICO: datos controlados")).toBe(true);
+  expect(hasExplicitSyntheticDocumentNote("")).toBe(false);
+  expect(hasExplicitSyntheticDocumentNote(null)).toBe(false);
+  expect(hasExplicitSyntheticDocumentNote("F11_DRIVE_LIVE_OCR_TEST.png")).toBe(false);
+  expect(hasExplicitSyntheticDocumentNote("Factura: no es un fixture sintético")).toBe(false);
 });
