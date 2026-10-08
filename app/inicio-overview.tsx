@@ -802,7 +802,7 @@ export default function InicioOverview() {
               ? `Media histórica · ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes" : "meses"}`
               : analysisLoading ? "Calculando desde Análisis…" : "Análisis no disponible"}
           </small>
-          <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
+          <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver análisis</Link>
         </article>
       </section>
 

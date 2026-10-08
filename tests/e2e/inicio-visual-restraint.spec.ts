@@ -56,3 +56,8 @@ test("Inicio · conserva privacidad y muestra decisiones, no métricas de escapa
   expect(inicioSource).toContain('href: "/transactions?signMismatch=true"');
   expect(inicioSource).toContain('tone: "warning"');
 });
+
+test("AUD-E2E-NAV-001 · un acceso a Análisis no se presenta como Cash Flow", () => {
+  expect(inicioSource).toContain('href="/analysis">Ver análisis</Link>');
+  expect(inicioSource).not.toContain('href="/analysis">Ver cash flow</Link>');
+});
