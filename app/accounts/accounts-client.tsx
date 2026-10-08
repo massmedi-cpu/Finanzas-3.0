@@ -508,7 +508,8 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                     <div className={styles.legend} aria-label="Leyenda y escala de la actividad mensual">
                       <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos</span>
                       <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
-                      <span><i className={styles.netDot} aria-hidden="true" />Neto</span>
+                      <span><i className={styles.netDot} aria-hidden="true" />Neto positivo (+)</span>
+                      <span><i className={styles.negativeBar} aria-hidden="true" />Neto negativo (−)</span>
                       <span data-testid="accounts-monthly-scale-reference">Escala máxima {formatMoney(scale)}</span>
                     </div>
 
@@ -529,7 +530,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                               <span className={styles.expenseBar} data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.expenseCents, scale)}%` }} />
                             </div>
                             <div className={styles.barTrack} title={`Neto ${formatMoney(row.operatingNetCents)}`}>
-                              <span className={row.operatingNetCents >= 0 ? styles.netBar : styles.negativeBar} data-zero={row.operatingNetCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.operatingNetCents, scale)}%` }} />
+                              <span className={row.operatingNetCents >= 0 ? styles.netBar : styles.negativeBar} data-financial-sign={row.operatingNetCents > 0 ? "positive" : row.operatingNetCents < 0 ? "negative" : "zero"} data-zero={row.operatingNetCents === 0 ? "true" : undefined} style={{ width: `${activityBarWidth(row.operatingNetCents, scale)}%` }} />
                             </div>
                           </div>
                           <span className={styles.monthValue}>{formatMoney(row.operatingNetCents)}</span>
