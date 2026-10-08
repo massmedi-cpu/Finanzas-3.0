@@ -263,6 +263,7 @@ function friendlyError(error: unknown) {
     invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
     document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
     document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
+    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado. No mostraremos datos de otro documento; reintenta la consulta.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -435,6 +436,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     try {
       const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
+      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)) {
+        throw new Error("document_detail_mismatch");
+      }
       setDetail(data);
       if (!preserveEditor) {
         setDesignationOpen(false);
