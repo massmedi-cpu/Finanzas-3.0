@@ -185,7 +185,11 @@ const STATUS_LABELS: Record<DocumentStatus, string> = {
 
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
-  return dateFormatter.format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
+  const iso = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "Fecha no válida";
+  const parsed = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso) return "Fecha no válida";
+  return dateFormatter.format(parsed);
 }
 
 function formatBytes(value: number | null) {
