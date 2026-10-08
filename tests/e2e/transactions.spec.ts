@@ -321,6 +321,7 @@ test("10.0.86 · etiquetas generales y OCR son filtros combinables y la edición
   await mockTransactionApi(page, patches);
   await page.goto("/transactions");
 
+  await page.getByRole("button", { name: "Más filtros" }).click();
   await expect(page.getByTestId("tag-filter")).toContainText("reembolsable");
   await page.getByTestId("tag-filter").selectOption("reembolsable");
   await page.getByTestId("ocr-filter").fill("ticket supermercado");
