@@ -395,11 +395,17 @@ export default function AnalysisClient({
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (coverageIncomplete) {
-      return `Datos hasta ${formatDate(latestMovementDate!)}: no interpretamos el periodo posterior como mejora ni empeoramiento.`;
+      if (coverage?.state === "unknown") {
+        return "Cobertura bancaria desconocida: no interpretamos las variaciones como mejora ni empeoramiento.";
+      }
+      if (coverage?.state === "none") {
+        return "Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación.";
+      }
+      return `Datos hasta ${formatDate(coverage!.throughDate!)}: no interpretamos el periodo posterior como mejora ni empeoramiento.`;
     }
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
     return `Tu gasto ${expenseDirection > 0 ? "ha aumentado" : "ha disminuido"} ${formatMoney(Math.abs(expenseDirection))} frente al periodo comparable.`;
-  }, [snapshot, expenseDirection, coverageIncomplete, latestMovementDate]);
+  }, [snapshot, expenseDirection, coverage, coverageIncomplete]);
 
   async function refresh(event?: FormEvent) {
     event?.preventDefault();

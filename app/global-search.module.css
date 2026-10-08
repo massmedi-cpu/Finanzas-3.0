@@ -299,6 +299,14 @@
   }
 
   .footer {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+    min-height: auto;
+    gap: var(--space-2);
+  }
+
+  .footer > span:first-child {
     display: none;
   }
 }

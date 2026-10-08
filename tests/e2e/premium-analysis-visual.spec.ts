@@ -542,3 +542,22 @@ test("QA-23 · Análisis no dibuja barras para ingresos o gastos exactamente a c
   await expect(chart.locator('rect[data-series="income"][data-zero="true"]')).toHaveCount(1);
   await expect(chart.locator('rect[data-series="expense"][data-zero="true"]')).toHaveCount(1);
 });
+
+
+test("AUD-E2E-DAT-001 · Análisis no rompe si se desconoce la fecha de cobertura bancaria", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: null, sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("form", { name: "Filtros del análisis" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Cobertura bancaria desconocida/ })).toBeVisible();
+  await expect(page.getByText("Cobertura desconocida · comparación no disponible").first()).toBeVisible();
+});

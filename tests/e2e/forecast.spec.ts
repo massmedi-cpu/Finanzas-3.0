@@ -331,7 +331,7 @@ test("una previsión vacía guía a recurrentes o al formulario manual", async (
   }));
   await page.goto("/forecast");
 
-  const empty = page.getByRole("region", { name: "Evaluación de liquidez pendiente" });
+  const empty = page.getByRole("status", { name: "Evaluación de liquidez pendiente" });
   await expect(empty.getByText("Sin datos suficientes para evaluar tensión")).toBeVisible();
   await expect(empty).toContainText("Inicio de la proyección");
   await expect(empty).toContainText("Saldos bancarios conocidos");

@@ -32,7 +32,8 @@ test("Previsión convierte el vacío en acciones reales sin inventar movimientos
   const source = readFileSync(resolve(process.cwd(), "app/forecast/forecast-client.tsx"), "utf8");
 
   expect(source).toContain("No hay cargos ni ingresos previstos en este periodo.");
-  expect(source).toContain("No se inventan movimientos. Añade uno manual o confirma recurrencias reales para generar fechas futuras.");
+  expect(source).toContain("No se inventan movimientos ni se confirma ninguna recurrencia automáticamente.");
+  expect(source).toContain("Usa el bloque de evaluación pendiente para incorporar fechas reales.");
   expect(source).toContain("const recurrencesHref = recurrencesHrefForForecast(recurrenceContextSelection)");
   expect(source).toContain("href={recurrencesHref}");
   expect(source).toContain("<h2>Añadir previsión</h2>");

@@ -223,7 +223,7 @@ test("Inicio prioriza resumen y actividad sin esperar a los módulos secundarios
   releaseSecondary();
 
   await expect(page.locator("main[aria-busy='true']")).toHaveCount(0);
-  await expect(page.getByText(/Último mes completo/i)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Últimos 12 meses" })).toBeVisible();
   await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/i })).toBeVisible();
   await expect(page.getByText("Alimentación", { exact: true }).first()).toBeVisible();
 });
