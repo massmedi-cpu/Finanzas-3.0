@@ -27,7 +27,6 @@ import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
 import { ForecastCalendar } from "./forecast-calendar";
 import { ForecastScenarios } from "./forecast-scenarios";
-import { ForecastHorizonPanel } from "./forecast-horizon-panel";
 import styles from "./forecast.module.css";
 
 type ManualErrors = {
@@ -663,7 +662,6 @@ export function ForecastClient({
         <section className={styles.loading} aria-live="polite">Cargando previsión financiera…</section>
       ) : snapshot ? (
         <>
-          {hasProjectedEvents ? <ForecastHorizonPanel dateFrom={snapshot.period.dateFrom} accountId={snapshot.period.accountId} /> : null}
           {hasProjectedEvents ? (
           <section className={styles.kpis} aria-label="Resumen de previsión">
             <article><span>Saldo de partida</span><strong>{formatMoneyCents(snapshot.summary.openingBalanceCents)}</strong></article>

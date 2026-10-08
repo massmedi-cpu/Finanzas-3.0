@@ -118,6 +118,10 @@ export function ForecastHorizonPanel({
     [snapshot],
   );
 
+  // Without dated events there is no meaningful risk/horizon assessment.
+  // Suppress repeated neutral cards; the owner page explains missing evidence.
+  if (!loading && summary && summary.horizons.every((item) => item.projectedItems === 0)) return null;
+
   return (
     <section className={styles.section} aria-labelledby="forecast-horizons-title">
       <div className={styles.heading}>
