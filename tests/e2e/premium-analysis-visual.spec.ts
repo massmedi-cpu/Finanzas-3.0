@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
@@ -629,4 +631,16 @@ test("AUD-E2E-ANA-001 · lectura diaria y mapa de calor comparten tarjeta sin du
   await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
   await page.getByRole("button", { name: "Ocultar detalle de patrones" }).click();
   await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+});
+
+test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de patrones especializados", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
+  const evolution = source.indexOf('id="evolution-heading"');
+  const categories = source.indexOf('id="distribution-heading"');
+  const patterns = source.indexOf("<AnalysisMovementInsights snapshot={snapshot} />");
+  const anomalies = source.indexOf('id="anomalies-heading"');
+  expect(evolution).toBeGreaterThan(0);
+  expect(categories).toBeGreaterThan(evolution);
+  expect(patterns).toBeGreaterThan(categories);
+  expect(anomalies).toBeGreaterThan(patterns);
 });

@@ -586,7 +586,6 @@ export default function AnalysisClient({
 
           <AnalysisAxioma53Summary snapshot={snapshot} />
           <QuickRead snapshot={snapshot} />
-          <AnalysisMovementInsights snapshot={snapshot} />
 
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
@@ -691,6 +690,8 @@ export default function AnalysisClient({
               )}
             </section>
           </div>
+
+          <AnalysisMovementInsights snapshot={snapshot} />
 
           <div className={styles.intelligenceGrid}>
             <section className={styles.section} aria-labelledby="anomalies-heading">

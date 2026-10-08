@@ -370,7 +370,7 @@ function WeekdayChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>DÍA DE LA SEMANA</span><strong>Qué días pesan más en el gasto</strong></div>
-        <small>Máximo: {peakWeekday.label}</small>
+        <small>Máximo: {peakWeekday.label} · fechas bancarias de contabilización</small>
       </div>
       <div
         className={styles.weekdayChart}
@@ -408,6 +408,7 @@ function AmountBandsChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     <div className={styles.chartCard}>
       <div className={styles.cardHeading}>
         <div><span>TRAMOS DE IMPORTE</span><strong>Cómo son tus compras</strong></div>
+        <small>La longitud de cada barra indica cantidad de movimientos, no euros.</small>
       </div>
       <div className={styles.bandChart} role="img" aria-label="Distribución de movimientos por tramo de importe">
         {rows.map((row) => (
