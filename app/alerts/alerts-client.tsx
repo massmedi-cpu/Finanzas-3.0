@@ -85,6 +85,12 @@ type AlertSnapshot = {
   generatedAt: string;
 };
 
+function alertPriorityLabel(tone: "danger" | "warning" | "info") {
+  if (tone === "danger") return "Atención prioritaria";
+  if (tone === "warning") return "Conviene revisar";
+  return "Información útil";
+}
+
 const CATEGORY_LABELS = {
   source: "Fuente",
   forecast: "Previsión",
@@ -287,7 +293,14 @@ export default function AlertsClient() {
           {alerts.map((alert) => (
             <article key={alert.id} className={`${styles.alertCard} ${styles[alert.tone]}`}>
               <div className={styles.alertCopy}>
-                <div className={styles.alertMeta}><span>{CATEGORY_LABELS[alert.category]}</span><span>Prioridad {alert.priority}</span></div>
+                <div className={styles.alertMeta}>
+                  <span>{CATEGORY_LABELS[alert.category]}</span>
+                  <span>{alertPriorityLabel(alert.tone)}</span>
+                  <details className={styles.priorityDetail}>
+                    <summary>Orden técnico</summary>
+                    <span>Índice de prioridad {alert.priority}; determina el orden de presentación, no es una puntuación de riesgo financiero.</span>
+                  </details>
+                </div>
                 <h3>{alert.title}</h3>
                 <p>{alert.detail}</p>
               </div>

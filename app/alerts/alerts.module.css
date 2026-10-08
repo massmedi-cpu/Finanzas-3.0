@@ -334,3 +334,9 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
+
+/* AUD-E2E-REG-001 · prioridad comprensible, número técnico opcional. */
+.priorityDetail { min-width: 0; color: var(--color-text-secondary); font-size: var(--font-helper); }
+.priorityDetail summary { cursor: pointer; min-height: 2rem; display: inline-flex; align-items: center; font-weight: 650; }
+.priorityDetail[open] > span { display: block; max-width: 21rem; padding: 0.25rem 0; line-height: 1.5; }
+.priorityDetail summary:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 2px; }
