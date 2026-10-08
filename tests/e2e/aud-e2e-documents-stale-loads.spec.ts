@@ -62,7 +62,7 @@ function list<T extends { originalFileName: string }>(items: readonly T[], reque
   };
 }
 
-async function mockDocuments(page: Page, failing: { list: boolean; detail: boolean }) {
+async function mockDocuments(page: Page, failing: { list: boolean; detail: boolean; wrongDetail?: boolean }) {
   await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
     const url = new URL(route.request().url());
     const id = url.searchParams.get("id");
@@ -71,7 +71,9 @@ async function mockDocuments(page: Page, failing: { list: boolean; detail: boole
         await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary_failure"}' });
         return;
       }
-      const doc = DOCS.find((item) => item.id === id);
+      const doc = failing.wrongDetail && id === DOCS[1].id
+        ? DOCS[0]
+        : DOCS.find((item) => item.id === id);
       await route.fulfill({
         status: doc ? 200 : 404,
         contentType: "application/json",
@@ -250,4 +252,22 @@ test("AUD-E2E-UI-001 · Documentos espera una pausa antes de consultar mientras 
   // Un runner lento puede superar el debounce entre teclas; evita depender de su reloj,
   // pero bloquea regresar a una petición por pulsación.
   expect(requestedQueries.length).toBeLessThanOrEqual(3);
+});
+
+
+test("AUD-E2E-DOC-001 · una respuesta 200 con ID ajeno no reemplaza el documento seleccionado", async ({ page }) => {
+  const failing = { list: false, detail: false, wrongDetail: true };
+  await mockDocuments(page, failing);
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  await expect(archive.getByRole("button", { name: /Segunda factura\.pdf/ })).toBeVisible();
+  await archive.getByRole("button", { name: /Segunda factura\.pdf/ }).click();
+  const failure = page.getByTestId("documents-detail-error");
+  await expect(failure).toBeVisible();
+  await expect(page.getByTestId("documents-alert")).toContainText("no ha devuelto el documento solicitado");
+  await expect(page.getByRole("heading", { name: "Primera factura.pdf" })).toHaveCount(0);
+
+  failing.wrongDetail = false;
+  await failure.getByRole("button", { name: "Reintentar detalle" }).click();
+  await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
 });
