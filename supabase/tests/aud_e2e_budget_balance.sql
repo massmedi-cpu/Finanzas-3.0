@@ -180,8 +180,18 @@ declare v_budget jsonb; v_series jsonb;
 begin
   v_budget:=financial_app.budget_month_snapshot('2026-10');
   v_series:=financial_app.financial_balance_series('2026-10-01','2026-10-18',null);
-  if jsonb_array_length(v_budget->'categories')<>0 or (v_budget->'total'->>'actualExpenseCents')::bigint<>0
-    or (v_budget->'total'->>'automaticAmountCents')::bigint<>0 then raise exception 'AUD_BUDGET_TENANT_LEAK'; end if;
+  -- Creating an account initializes B's own built-in category catalog. Those
+  -- empty references are legitimate; A's category IDs, amounts and edits are not.
+  if (v_budget->'total'->>'actualExpenseCents')::bigint<>0
+    or (v_budget->'total'->>'automaticAmountCents')::bigint<>0
+    or exists (
+      select 1 from jsonb_array_elements(v_budget->'categories') item
+      where (item->>'actualExpenseCents')::bigint<>0
+        or (item->>'automaticAmountCents')::bigint<>0
+        or item->'manualAmountCents'<>'null'::jsonb
+        or (item->>'persisted')::boolean
+        or item->>'categoryId' in (select id::text from aud_ids)
+    ) then raise exception 'AUD_BUDGET_TENANT_LEAK'; end if;
   if (v_series->'rows'->0->>'balanceCents')::bigint<>999999 or (v_series->'rows'->0->>'accounts')::int<>1 then
     raise exception 'AUD_BALANCE_TENANT_LEAK';
   end if;
@@ -200,6 +210,79 @@ begin
     raise exception 'AUD_FINANCIAL_READ_HAS_SIDE_EFFECTS';
   end if;
 end $$;
+
+-- Real write/read/recovery contracts on synthetic derived data. This phase is
+-- separate from the read-only fingerprint check and still ends in ROLLBACK.
+do $$
+declare
+  v_category uuid := (select id from aud_ids where key='AUD Food');
+  v_transaction uuid := (select id from aud_ids where key='split-2026-10');
+  v_snapshot jsonb;
+  v_item jsonb;
+  v_split jsonb;
+  v_lines jsonb;
+  v_before jsonb;
+  v_source_fingerprint text;
+begin
+  select md5(jsonb_agg(to_jsonb(t) order by id)::text) into v_source_fingerprint
+  from financial_app.transaction_source_records t;
+
+  perform financial_app.set_budget_manual_amount('2026-10',v_category,1732);
+  perform financial_app.refresh_budget_month('2026-10');
+  v_snapshot:=financial_app.budget_month_snapshot('2026-10');
+  select item into v_item from jsonb_array_elements(v_snapshot->'categories') item where item->>'categoryId'=v_category::text;
+  if (v_item->>'manualAmountCents')::bigint<>1732 or (v_item->>'effectiveAmountCents')::bigint<>1732
+    or (v_item->>'remainingCents')::bigint<>-268 or v_item->>'status'<>'over'
+    or not (v_item->>'persisted')::boolean then raise exception 'AUD_BUDGET_SAVE_REFRESH_FAILED'; end if;
+
+  perform financial_app.set_budget_manual_amount('2026-10',v_category,0);
+  v_snapshot:=financial_app.budget_month_snapshot('2026-10');
+  select item into v_item from jsonb_array_elements(v_snapshot->'categories') item where item->>'categoryId'=v_category::text;
+  if (v_item->>'effectiveAmountCents')::bigint<>0 or v_item->>'status'<>'unfunded' then raise exception 'AUD_BUDGET_SAVED_ZERO_FAILED'; end if;
+  perform financial_app.set_budget_manual_amount('2026-10',v_category,null);
+  v_snapshot:=financial_app.budget_month_snapshot('2026-10');
+  select item into v_item from jsonb_array_elements(v_snapshot->'categories') item where item->>'categoryId'=v_category::text;
+  if v_item->'manualAmountCents'<>'null'::jsonb or v_item->'effectiveAmountCents'<>v_item->'automaticAmountCents' then
+    raise exception 'AUD_BUDGET_RESTORE_AUTOMATIC_FAILED';
+  end if;
+  begin
+    perform financial_app.set_budget_manual_amount('2026-10',v_category,-1);
+    raise exception 'AUD_NEGATIVE_MANUAL_BUDGET_ACCEPTED';
+  exception when others then
+    if sqlerrm<>'invalid_budget_manual_amount' then raise; end if;
+  end;
+
+  v_lines:=jsonb_build_array(
+    jsonb_build_object('scope','personal','amountCents',-1732,'categoryId',(select id from aud_ids where key='AUD Child')),
+    jsonb_build_object('scope','personal','amountCents',-3268,'categoryId',v_category),
+    jsonb_build_object('scope','other','amountCents',-5000,'categoryId',null)
+  );
+  v_split:=financial_app.save_transaction_split(v_transaction,v_lines);
+  if not (v_split->>'changed')::boolean or (v_split->>'bankAmountCents')::bigint<>-10000
+    or (v_split->>'personalAmountCents')::bigint<>-5000 or (v_split->>'allocationCount')::int<>3 then
+    raise exception 'AUD_SPLIT_SAVE_READ_FAILED';
+  end if;
+  v_split:=financial_app.save_transaction_split(v_transaction,v_lines);
+  if (v_split->>'changed')::boolean or (v_split->>'auditChanges')::int<>0 then raise exception 'AUD_SPLIT_REPLAY_NOT_IDEMPOTENT'; end if;
+  v_before:=financial_app.transaction_split_snapshot(v_transaction);
+  begin
+    perform financial_app.save_transaction_split(v_transaction,jsonb_set(v_lines,'{0,amountCents}','-1731'::jsonb));
+    raise exception 'AUD_INVALID_SPLIT_ACCEPTED';
+  exception when others then
+    if sqlerrm<>'transaction_split_amount_mismatch' then raise; end if;
+  end;
+  if v_before is distinct from financial_app.transaction_split_snapshot(v_transaction) then raise exception 'AUD_INVALID_SPLIT_CHANGED_VALID_DATA'; end if;
+  v_snapshot:=financial_app.budget_month_snapshot('2026-10');
+  select item into v_item from jsonb_array_elements(v_snapshot->'categories') item where item->>'categoryId'=v_category::text;
+  if (v_item->>'actualExpenseCents')::bigint<>3268 or (v_snapshot->'total'->>'actualExpenseCents')::bigint<>6100 then
+    raise exception 'AUD_SPLIT_BUDGET_RECONCILIATION_FAILED';
+  end if;
+  if v_source_fingerprint is distinct from (
+    select md5(jsonb_agg(to_jsonb(t) order by id)::text) from financial_app.transaction_source_records t
+  ) or not exists (
+    select 1 from financial_app.transactions where id=v_transaction and amount_cents=-10000 and balance_after_cents=0
+  ) then raise exception 'AUD_DERIVED_EDIT_CHANGED_BANK_SOURCE'; end if;
+end $$;
 reset role;
 do $$
 declare v_function text; v_oid oid;
@@ -216,4 +299,4 @@ begin
   end loop;
 end $$;
 rollback;
-select 'AUD_E2E_BUDGET_BALANCE_OK: seven_month_json_parity, split_personal_scope, descendants, manual_zero, archived_budget, recurrence_floor, balance_canonical_parity, valid_zero, tenant_isolation, read_only, restricted_invoker' as result;
+select 'AUD_E2E_BUDGET_BALANCE_OK: seven_month_json_parity, split_personal_scope, descendants, manual_zero, archived_budget, recurrence_floor, balance_canonical_parity, valid_zero, tenant_isolation, read_only, restricted_invoker, budget_save_refresh_restore, split_save_replay_rejection, immutable_bank_source' as result;
