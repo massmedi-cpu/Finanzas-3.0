@@ -40,15 +40,17 @@ export default function MobileNavigation() {
     const breakpoint = window.matchMedia("(max-width: 48rem)");
     const onViewportChange = () => {
       if (breakpoint.matches) return;
-      const focusInsidePanel = panelRef.current?.contains(document.activeElement);
+      const wasOpen = moreOpen;
       setMoreOpen(false);
-      if (focusInsidePanel) {
+      // Puede haberse perdido el foco al ocultarse el panel por CSS antes del evento.
+      // Si estaba abierto, siempre entregamos el foco a la navegación de escritorio.
+      if (wasOpen) {
         document.querySelector<HTMLElement>('nav[aria-label="Navegación principal"] [aria-current="page"]')?.focus();
       }
     };
     breakpoint.addEventListener("change", onViewportChange);
     return () => breakpoint.removeEventListener("change", onViewportChange);
-  }, []);
+  }, [moreOpen]);
 
   // El panel aparece antes del dock en el DOM: mover el foco permite recorrerlo
   // con Tab desde «Más», en vez de dejar el teclado fuera del contenido abierto.
