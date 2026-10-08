@@ -237,7 +237,7 @@ test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora"
   await expect(kpis.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
   await expect(kpis).not.toContainText("−100");
   await expect(kpis).not.toContainText("-100");
-  await expect(page.getByRole("heading", { name: /no interpretamos el periodo posterior como mejora ni empeoramiento/i })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación/i })).toBeVisible();
 });
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
