@@ -23,6 +23,8 @@ import {
   type ComparisonSelectionInput,
   type ResolvedComparisonSelection,
 } from "../../src/application/comparison/comparison-selection";
+import { comparisonModuleLinks } from "../../src/application/navigation/module-context";
+import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisSourceFreshness, { type SourceFreshness } from "../analysis/analysis-source-freshness";
 import ComparisonLoadingFrame from "./comparison-loading-frame";
 import styles from "./compare.module.css";
@@ -403,6 +405,12 @@ export default function ComparisonClient({
   return (
     <>
       <AnalysisSourceFreshness onChange={setFreshness} />
+      {snapshot ? (
+        <ModuleContextNavigation
+          links={comparisonModuleLinks(snapshot.selection)}
+          ariaLabel="Continuar desde el Comparador"
+        />
+      ) : null}
       <main className={styles.shell}>
         <header className={styles.header}>
           <div>

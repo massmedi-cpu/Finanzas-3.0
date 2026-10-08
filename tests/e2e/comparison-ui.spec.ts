@@ -124,6 +124,16 @@ test("CMP-UI-003 aplica el periodo anterior equivalente y actualiza una URL comp
   await expect(page).toHaveURL(/referenceTo=2026-08-31/);
 });
 
+test("AUD-E2E-NAV-001 · Continuar desde Comparador sigue el periodo aplicado sin recarga", async ({ page }) => {
+  await openComparison(page);
+  const nav = page.getByRole("navigation", { name: "Continuar desde el Comparador" });
+  await expect(nav.getByRole("link", { name: /Movimientos · principal/ })).toHaveAttribute("href", /dateFrom=2026-09-01&dateTo=2026-09-10/);
+  await page.getByLabel("Desde", { exact: true }).first().fill("2026-09-11");
+  await page.getByLabel("Hasta", { exact: true }).first().fill("2026-09-18");
+  await page.getByRole("button", { name: "Comparar periodos" }).click();
+  await expect(page).toHaveURL(/primaryFrom=2026-09-11/);
+  await expect(nav.getByRole("link", { name: /Movimientos · principal/ })).toHaveAttribute("href", /dateFrom=2026-09-11&dateTo=2026-09-18/);
+});
 for (const viewport of [
   { label: "360", width: 360, height: 800 },
   { label: "430", width: 430, height: 900 },
