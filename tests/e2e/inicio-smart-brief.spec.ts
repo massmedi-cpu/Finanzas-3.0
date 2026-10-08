@@ -818,3 +818,34 @@ test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
   expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
 });
 
+
+
+test("AUD-E2E-INI-001 · fallo de saldo deja las otras vistas y reintenta solo la lectura", async ({ page }) => {
+  await mockInicio(page);
+  const methods: string[] = [];
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    methods.push(route.request().method());
+    if (methods.length === 1) {
+      await json(route, { code: "balance_series_unavailable" }, 503);
+      return;
+    }
+    await json(route, {
+      dateFrom: "2026-07-01", dateTo: "2026-09-16", accountId: null,
+      rows: [{ monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 185000, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 }],
+      principles: { bankSource: "read_only", balanceSource: "financial_account_balances", cashFlowReconstruction: false, getHasSideEffects: false },
+    });
+  });
+
+  await page.goto("/");
+  const selector = page.getByRole("group", { name: "Vista de evolución financiera" });
+  await selector.getByRole("button", { name: "Saldo" }).click();
+  const failure = page.getByRole("status").filter({ hasText: "No se ha podido cargar la evolución del saldo" });
+  await expect(failure).toBeVisible();
+  await expect(selector.getByRole("button", { name: "Flujo neto" })).toBeEnabled();
+  await expect(selector.getByRole("button", { name: "Ingresos y gastos" })).toBeEnabled();
+  await failure.getByRole("button", { name: "Reintentar saldo" }).click();
+  await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toContainText("1.850,00");
+  await selector.getByRole("button", { name: "Flujo neto" }).click();
+  await expect(page.getByRole("group", { name: "Flujo neto por mes" })).toBeVisible();
+  expect(methods).toEqual(["GET", "GET"]);
+});

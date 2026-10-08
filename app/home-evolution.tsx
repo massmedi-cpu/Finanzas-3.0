@@ -28,6 +28,25 @@ type BalanceSeries = {
   };
 };
 
+function isBalanceSeries(value: unknown): value is BalanceSeries {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const candidate = value as Partial<BalanceSeries>;
+  const principles = candidate.principles;
+  return Array.isArray(candidate.rows)
+    && principles?.bankSource === "read_only"
+    && principles?.balanceSource === "financial_account_balances"
+    && principles?.cashFlowReconstruction === false
+    && principles?.getHasSideEffects === false
+    && candidate.rows.every((row) =>
+      typeof row.monthStart === "string"
+      && typeof row.asOfDate === "string"
+      && Number.isFinite(row.balanceCents)
+      && Number.isInteger(row.accounts) && row.accounts >= 0
+      && Number.isInteger(row.explicitBalanceAccounts) && row.explicitBalanceAccounts >= 0
+      && Number.isInteger(row.reconstructedBalanceAccounts) && row.reconstructedBalanceAccounts >= 0
+    );
+}
+
 function SingleSeriesBars({
   rows,
   valueFor,
@@ -115,6 +134,7 @@ export default function HomeEvolution({
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState(false);
+  const [balanceRetry, setBalanceRetry] = useState(0);
   const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
 
@@ -127,9 +147,10 @@ export default function HomeEvolution({
     void fetch(`/api/financial?${params.toString()}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("balance_series_unavailable");
-        return response.json() as Promise<BalanceSeries>;
+        return response.json() as Promise<unknown>;
       })
       .then((payload) => {
+        if (!isBalanceSeries(payload)) throw new Error("balance_series_invalid_contract");
         if (!controller.signal.aborted) setBalanceCache({ key: balanceKey, data: payload });
       })
       .catch((error) => {
@@ -141,7 +162,7 @@ export default function HomeEvolution({
         if (!controller.signal.aborted) setBalanceLoading(false);
       });
     return () => controller.abort();
-  }, [balanceCache?.key, balanceKey, dateFrom, dateTo, mode]);
+  }, [balanceCache?.key, balanceKey, balanceRetry, dateFrom, dateTo, mode]);
 
   const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
   const reconstructedBalancePoints = useMemo(
@@ -211,7 +232,12 @@ export default function HomeEvolution({
 
       {mode === "balance" && balanceLoading ? <div className={styles.skeleton} aria-label="Cargando evolución del saldo" /> : null}
       {mode === "balance" && balanceError ? (
-        <p className={styles.empty} role="status">No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles.</p>
+        <div className={styles.empty} role="status">
+          <p>No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles; no se han modificado datos bancarios.</p>
+          <button type="button" className={styles.evolutionRetryButton} onClick={() => setBalanceRetry((current) => current + 1)}>
+            Reintentar saldo
+          </button>
+        </div>
       ) : null}
       {mode === "balance" && !balanceLoading && !balanceError && !balanceHasAccounts ? (
         <p className={styles.empty} role="status">No hay saldos bancarios disponibles para este periodo.</p>
