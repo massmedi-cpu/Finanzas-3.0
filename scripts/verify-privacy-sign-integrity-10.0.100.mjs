@@ -29,7 +29,7 @@ requireText(chart, "selected.operatingNetCents === 0", "Readout · cero neutral"
 requireText(chart, ': "hidden"}', "Readout · signo oculto");
 requireText(chartCss, ".readoutNeutral", "Readout · estilo neutral");
 requireText(inicio, "const financialSign = (value: number)", "Inicio · helper de signo");
-requireText(inicio, 'data-financial-sign={financial ? financialSign(financial.period.operatingNetCents) : undefined}', "Inicio · balance mensual protegido");
+requireText(inicio, 'data-financial-sign={financial && currentPeriodObserved ? financialSign(financial.period.operatingNetCents) : undefined}', "Inicio · balance mensual protegido");
 requireText(inicio, 'data-budget-progress-privacy={revealAmounts ? "visible" : "hidden"}', "Inicio · progreso presupuestario protegido");
 requireText(inicio, 'data-budget-ranking-privacy="hidden"', "Inicio · ranking presupuestario protegido");
 requireText(inicio, '"Ahorro oculto por privacidad"', "Inicio · tasa de ahorro protegida");
