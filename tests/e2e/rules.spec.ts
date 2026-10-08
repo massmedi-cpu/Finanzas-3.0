@@ -175,3 +175,43 @@ test("AUD-E2E-REG-001 · sin reglas no se anuncia una búsqueda fallida", async 
   await page.getByRole("button", { name: "Crear la primera regla" }).click();
   await expect(page.getByRole("heading", { name: "Nueva regla" })).toBeVisible();
 });
+
+
+test("AUD-E2E-REG-001 · cambiar la búsqueda impide simular el movimiento antiguo", async ({ page }) => {
+  const evaluations: string[] = [];
+  await mockRuleApi(page);
+  await page.route(/\/api\/transactions(?:\?.*)?$/, async (route) => {
+    const term = new URL(route.request().url()).searchParams.get("q");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        rows: term === "Mercadona" ? [{
+          id: "60000000-0000-4000-8000-000000000001",
+          bankDate: "2026-09-15",
+          amountCents: -2850,
+          merchant: { effectiveName: "Mercadona" },
+          account: { name: "Cuenta principal" },
+        }] : [],
+        totalCount: term === "Mercadona" ? 1 : 0,
+      }),
+    });
+  });
+  await page.route("**/api/rules", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.operation === "rule.evaluate") evaluations.push(body.transactionId);
+    await route.fallback();
+  });
+  await page.goto("/configuration/rules");
+  await page.getByLabel("Buscar movimiento").fill("Mercadona");
+  await page.getByRole("button", { name: "Buscar movimientos" }).click();
+  const selected = page.getByLabel("Movimiento para simular");
+  await expect(selected).toContainText("Mercadona");
+  await selected.selectOption("60000000-0000-4000-8000-000000000001");
+  await expect(page.getByRole("button", { name: /Explicar decisión/ })).toBeEnabled();
+  await page.getByLabel("Buscar movimiento").fill("Gasolinera");
+  await expect(page.getByRole("button", { name: /Explicar decisión/ })).toBeDisabled();
+  await expect(page.getByLabel("Movimiento para simular")).toHaveCount(0);
+  expect(evaluations).toEqual([]);
+});

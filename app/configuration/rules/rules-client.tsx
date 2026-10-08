@@ -2,7 +2,7 @@
 
 import { formatMoneyCents, formatMoneyInputCents, parseMoneyInputToCents } from "../../../src/core/money";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useActionFeedback } from "../../action-feedback";
 import styles from "./rules.module.css";
 
@@ -156,6 +156,8 @@ export default function RulesClient() {
   const [movementOptions, setMovementOptions] = useState<MovementOption[]>([]);
   const [movementLoading, setMovementLoading] = useState(false);
   const [movementError, setMovementError] = useState<string | null>(null);
+  const movementSearchAbort = useRef<AbortController | null>(null);
+  const movementSearchSequence = useRef(0);
   const [explanation, setExplanation] = useState<any>(null);
   const [applyResult, setApplyResult] = useState<any>(null);
 
@@ -291,7 +293,24 @@ export default function RulesClient() {
     }
   }
 
+  useEffect(() => () => movementSearchAbort.current?.abort(), []);
+
+  function editMovementQuery(value: string) {
+    movementSearchSequence.current += 1;
+    movementSearchAbort.current?.abort();
+    setMovementLoading(false);
+    setMovementQuery(value);
+    setMovementOptions([]);
+    setMovementError(null);
+    setTransactionId("");
+    setExplanation(null);
+  }
+
   async function searchMovements() {
+    const sequence = ++movementSearchSequence.current;
+    movementSearchAbort.current?.abort();
+    const controller = new AbortController();
+    movementSearchAbort.current = controller;
     const query = movementQuery.trim();
     if (!query) {
       setMovementOptions([]);
@@ -302,7 +321,7 @@ export default function RulesClient() {
     setMovementError(null);
     setMovementOptions([]);
     try {
-      const response = await fetch(`/api/transactions?q=${encodeURIComponent(query)}&limit=20`, { cache: "no-store" });
+      const response = await fetch(`/api/transactions?q=${encodeURIComponent(query)}&limit=20`, { cache: "no-store", signal: controller.signal });
       if (!response.ok) throw new Error("La búsqueda de movimientos no está disponible.");
       const payload: unknown = await response.json();
       if (!payload || typeof payload !== "object" || !("rows" in payload) || !Array.isArray(payload.rows)) {
@@ -315,11 +334,13 @@ export default function RulesClient() {
         && typeof (row as MovementOption).bankDate === "string"
         && Number.isSafeInteger((row as MovementOption).amountCents),
       );
-      setMovementOptions(rows);
+      if (sequence === movementSearchSequence.current && !controller.signal.aborted) setMovementOptions(rows);
     } catch (cause) {
-      setMovementError(cause instanceof Error ? cause.message : "No se pudo buscar movimientos.");
+      if (sequence === movementSearchSequence.current && !controller.signal.aborted) {
+        setMovementError(cause instanceof Error ? cause.message : "No se pudo buscar movimientos.");
+      }
     } finally {
-      setMovementLoading(false);
+      if (sequence === movementSearchSequence.current && !controller.signal.aborted) setMovementLoading(false);
     }
   }
 
@@ -476,7 +497,7 @@ export default function RulesClient() {
               <div className={styles.panelHeading}><div><p className={styles.kicker}>AUDITABLE</p><h2 id="explain-heading">Simular movimiento</h2></div></div>
               <div className={styles.form}>
                 <p className={styles.helper}>Busca un movimiento real por su comercio, concepto o contraparte. La simulación solo explica la propuesta; no cambia categorías ni escribe en el banco.</p>
-                <label><span>Buscar movimiento</span><input value={movementQuery} onChange={(event) => setMovementQuery(event.target.value)} placeholder="Comercio o concepto" /></label>
+                <label><span>Buscar movimiento</span><input value={movementQuery} onChange={(event) => editMovementQuery(event.target.value)} placeholder="Comercio o concepto" /></label>
                 <button type="button" onClick={() => void searchMovements()} disabled={movementLoading || busy}>
                   {movementLoading ? "Buscando…" : "Buscar movimientos"}
                 </button>
