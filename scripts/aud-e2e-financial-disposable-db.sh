@@ -41,4 +41,8 @@ psql_db -f supabase/tests/aud_e2e_budget_balance.sql
 psql_db -f supabase/tests/aud_e2e_document_designation.sql
 residue="$(psql_db -At -c "select count(*) from financial_app.workspaces where id in ('a0d00000-0000-4000-8000-000000000001','a0d00000-0000-4000-8000-000000000002','a0d20000-0000-4000-8000-000000000001','a0d20000-0000-4000-8000-000000000002');")"
 [[ "$residue" == '0' ]] || { echo 'AUD_E2E_DB|status=failed|reason=fixture_rollback_failed'; exit 1; }
+# The production backup-v2 and restore verifier are rehearsed only against
+# this exact disposable database after synthetic SQL fixtures rolled back.
+bash scripts/aud-e2e-disposable-backup-restore.sh
+
 echo "AUD_E2E_DB|status=ok|migrations_after_pre001=${aud_migration_count}|fixtures_rolled_back=true|sha=${GITHUB_SHA}"
