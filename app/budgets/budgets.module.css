@@ -692,3 +692,67 @@
   .progressFill { transition: none; }
   .spinner { animation-duration: 1.6s; }
 }
+
+
+/* AUD-E2E-UI-001 · Superficies y texto coherentes con Sistema/Claro. */
+:global(html[data-theme="light"]) .hero,
+:global(html[data-theme="light"]) .metric,
+:global(html[data-theme="light"]) .planningPanel,
+:global(html[data-theme="light"]) .planningStep,
+:global(html[data-theme="light"]) .panel,
+:global(html[data-theme="light"]) .budgetCard {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .monthField input,
+:global(html[data-theme="light"]) .editor input {
+  border-color: var(--color-border);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+  color-scheme: light;
+}
+:global(html[data-theme="light"]) .heroText,
+:global(html[data-theme="light"]) .panelHeading p,
+:global(html[data-theme="light"]) .helper,
+:global(html[data-theme="light"]) .historyRow span:first-child,
+:global(html[data-theme="light"]) .explanation,
+:global(html[data-theme="light"]) .planningNote,
+:global(html[data-theme="light"]) .emptyState p,
+:global(html[data-theme="light"]) .metricLabel,
+:global(html[data-theme="light"]) .stepLabel,
+:global(html[data-theme="light"]) .progressMeta {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .backLink,
+:global(html[data-theme="light"]) .textButton,
+:global(html[data-theme="light"]) .stepLink {
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .secondaryButton,
+:global(html[data-theme="light"]) .history,
+:global(html[data-theme="light"]) .principle {
+  background: var(--surface-interactive-soft);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .alert {
+  background: var(--surface-warning-soft);
+  border-color: var(--border-warning-soft);
+  color: var(--color-danger);
+}
+:global(html[data-theme="light"]) .notice {
+  background: var(--surface-success-soft);
+  border-color: var(--border-success-soft);
+  color: var(--color-success);
+}
+:global(html[data-theme="light"]) .status.over { color: var(--color-danger); }
+:global(html[data-theme="light"]) .status.unfunded { color: var(--color-warning); }
+:global(html[data-theme="light"]) .status.on_track { color: var(--color-success); }
+:global(html[data-theme="light"]) .status.empty { color: var(--color-text-secondary); }
+:global(html[data-theme="light"]) .hero :is(a,button,input):focus-visible,
+:global(html[data-theme="light"]) .content :is(a,button,input):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}

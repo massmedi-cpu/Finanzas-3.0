@@ -391,3 +391,53 @@
   .skeletonCards span,
   .skeletonPanels span { animation: none; }
 }
+
+
+/* AUD-E2E-UI-001 · Comparador, controles y resultados de tema claro. */
+:global(html[data-theme="light"]) .periodLegend,
+:global(html[data-theme="light"]) .filters,
+:global(html[data-theme="light"]) .metricCard,
+:global(html[data-theme="light"]) .driverPanel,
+:global(html[data-theme="light"]) .insight,
+:global(html[data-theme="light"]) .quality,
+:global(html[data-theme="light"]) .emptyPanel {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .periodFieldset,
+:global(html[data-theme="light"]) .periodLinks,
+:global(html[data-theme="light"]) .quickActions button {
+  border-color: var(--color-border);
+  background: var(--surface-interactive-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .periodFieldset input,
+:global(html[data-theme="light"]) .accountField select {
+  border-color: var(--color-border);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+  color-scheme: light;
+}
+:global(html[data-theme="light"]) .readOnlyChip,
+:global(html[data-theme="light"]) .countChip,
+:global(html[data-theme="light"]) .periodFieldset legend {
+  color: var(--color-success);
+}
+:global(html[data-theme="light"]) .eyebrow,
+:global(html[data-theme="light"]) .panelHeading p,
+:global(html[data-theme="light"]) .insight p { color: var(--color-primary); }
+:global(html[data-theme="light"]) .quickActions button:hover {
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .driverTable th,
+:global(html[data-theme="light"]) .metricReference,
+:global(html[data-theme="light"]) .metricFooter {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .shell :is(a,button,input,select):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
