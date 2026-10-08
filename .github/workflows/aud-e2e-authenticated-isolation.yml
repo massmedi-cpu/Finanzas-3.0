@@ -1,0 +1,47 @@
+name: AUD E2E Authenticated Isolation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/functions/financial-app-db-gateway/**'
+      - 'supabase/tests/aud_e2e_authenticated.ts'
+      - 'src/infrastructure/auth/**'
+      - 'src/infrastructure/ocr/**'
+      - 'src/application/document-ocr-service.ts'
+      - 'src/domain/document-ocr*'
+      - 'scripts/aud-e2e-authenticated-isolation.sh'
+      - 'tests/e2e/aud-e2e-authenticated-isolation.spec.ts'
+      - 'playwright.authenticated-isolation.config.ts'
+      - '.github/workflows/aud-e2e-authenticated-isolation.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aud-auth-isolation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  local-supabase-auth-storage-ocr:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked application dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Install Chromium for the real login and OCR fixture
+        run: npx playwright install --with-deps chromium
+      - name: Verify isolated Supabase sessions, Storage and persisted OCR
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/aud-e2e-authenticated-isolation.sh
+      # No tokens, cookies, signed URLs, database dumps or browser traces are uploaded.
