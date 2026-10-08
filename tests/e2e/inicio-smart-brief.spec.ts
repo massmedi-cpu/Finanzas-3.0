@@ -82,8 +82,8 @@ const transactions = {
   ],
 };
 
-async function json(route: Route, body: unknown) {
-  await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+async function json(route: Route, body: unknown, status = 200) {
+  await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 }
 
 async function mockInicio(page: Page) {
@@ -865,4 +865,43 @@ test("AUD-E2E-INI-001 · falta del motor de saldo se distingue de fallo de red s
   await expect(page.getByRole("group", { name: "Vista de evolución financiera" })
     .getByRole("button", { name: "Flujo neto" })).toBeEnabled();
   expect(methods).toEqual(["GET"]);
+});
+
+test("AUD-E2E-INI-001 · saldo demorado termina a los 30 segundos y recupera solo la lectura", async ({ page }) => {
+  await page.clock.install();
+  await mockInicio(page);
+  const methods: string[] = [];
+  let releasePending: () => void = () => {};
+  const pending = new Promise<void>((resolve) => { releasePending = resolve; });
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    methods.push(route.request().method());
+    if (methods.length === 1) {
+      await pending;
+      await json(route, { code: "late_response" }, 503).catch(() => {});
+      return;
+    }
+    await json(route, {
+      dateFrom: "2026-07-01", dateTo: "2026-09-16", accountId: null,
+      rows: [{ monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 0, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 }],
+      principles: { bankSource: "read_only", balanceSource: "financial_account_balances", cashFlowReconstruction: false, getHasSideEffects: false },
+    });
+  });
+  try {
+    await page.goto("/");
+    const selector = page.getByRole("group", { name: "Vista de evolución financiera" });
+    await selector.getByRole("button", { name: "Saldo" }).click();
+    await expect.poll(() => methods.length).toBe(1);
+    await page.clock.fastForward(15_000);
+    await expect(page.getByRole("status").filter({ hasText: "tardando más de lo habitual" })).toBeVisible();
+    await page.clock.fastForward(15_000);
+    const failure = page.getByRole("status").filter({ hasText: "ha superado 30 segundos" });
+    await expect(failure).toBeVisible();
+    await expect(page.getByLabel("Cargando evolución del saldo")).toHaveCount(0);
+    await expect(selector.getByRole("button", { name: "Flujo neto" })).toBeEnabled();
+    await failure.getByRole("button", { name: "Reintentar saldo" }).click();
+    await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toContainText("0,00");
+    expect(methods).toEqual(["GET", "GET"]);
+  } finally {
+    releasePending();
+  }
 });

@@ -133,7 +133,8 @@ export default function HomeEvolution({
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState<"not_installed" | "unavailable" | null>(null);
+  const [balanceSlowLoading, setBalanceSlowLoading] = useState(false);
+  const [balanceError, setBalanceError] = useState<"not_installed" | "unavailable" | "timeout" | null>(null);
   const [balanceRetry, setBalanceRetry] = useState(0);
   const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
@@ -142,7 +143,18 @@ export default function HomeEvolution({
     if (mode !== "balance" || balanceCache?.key === balanceKey) return;
     const controller = new AbortController();
     setBalanceLoading(true);
+    setBalanceSlowLoading(false);
     setBalanceError(null);
+    const slowTimer = window.setTimeout(() => {
+      if (!controller.signal.aborted) setBalanceSlowLoading(true);
+    }, 15_000);
+    const deadlineTimer = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
+      controller.abort();
+      setBalanceLoading(false);
+      setBalanceSlowLoading(false);
+      setBalanceError("timeout");
+    }, 30_000);
     const params = new URLSearchParams({ mode: "balance_series", dateFrom, dateTo });
     void fetch(`/api/financial?${params.toString()}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
@@ -169,9 +181,18 @@ export default function HomeEvolution({
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setBalanceLoading(false);
+        window.clearTimeout(slowTimer);
+        window.clearTimeout(deadlineTimer);
+        if (!controller.signal.aborted) {
+          setBalanceLoading(false);
+          setBalanceSlowLoading(false);
+        }
       });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+    };
   }, [balanceCache?.key, balanceKey, balanceRetry, dateFrom, dateTo, mode]);
 
   const balanceRows = useMemo(() => balances?.rows ?? [], [balances]);
@@ -240,12 +261,19 @@ export default function HomeEvolution({
         </>
       ) : null}
 
-      {mode === "balance" && balanceLoading ? <div className={styles.skeleton} aria-label="Cargando evolución del saldo" /> : null}
+      {mode === "balance" && balanceLoading ? (
+        <>
+          <div className={styles.skeleton} aria-label="Cargando evolución del saldo" />
+          {balanceSlowLoading ? <p className={styles.helper} role="status">La lectura del saldo está tardando más de lo habitual. Las otras vistas siguen disponibles.</p> : null}
+        </>
+      ) : null}
       {mode === "balance" && balanceError ? (
         <div className={styles.empty} role="status">
           <p>{balanceError === "not_installed"
             ? "La evolución del saldo está pendiente de habilitarse en el motor financiero de este entorno. Las otras vistas siguen disponibles; no se han modificado datos bancarios."
-            : "No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles; no se han modificado datos bancarios."}</p>
+            : balanceError === "timeout"
+              ? "La lectura de la evolución del saldo ha superado 30 segundos. Puedes reintentar esta lectura; las otras vistas siguen disponibles y no se han modificado datos bancarios."
+              : "No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles; no se han modificado datos bancarios."}</p>
           <button type="button" className={styles.evolutionRetryButton} onClick={() => setBalanceRetry((current) => current + 1)}>
             Reintentar saldo
           </button>

@@ -211,12 +211,15 @@ for (const width of [390, 1440] as const) {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await openAnalysis(page, LOW_DATA_SNAPSHOT);
 
+    await expect(page.getByRole("button", { name: "Mostrar detalle de patrones" })).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Mostrar detalle de patrones" }).click();
+    await page.getByText("Ver curva de concentración", { exact: true }).click();
     await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
     const heatmap = page.getByRole("img", { name: "Mapa de calor diario del gasto" });
     const scatter = page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" });
-    await expect(heatmap).toBeVisible();
     await expect(scatter).toBeVisible();
     await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toBeVisible();
 
@@ -226,6 +229,9 @@ for (const width of [390, 1440] as const) {
     expect(dailyBox).not.toBeNull();
     expect(dailyBox!.height).toBeLessThan(300);
 
+    await page.getByRole("button", { name: "Mapa de calor", exact: true }).click();
+    await expect(heatmap).toBeVisible();
+    await expect(dailyChart).toHaveCount(0);
     const heatmapUsage = await heatmap.evaluate((svg) => {
       const cells = Array.from(svg.querySelectorAll("rect"));
       if (cells.length < 2) return 1;

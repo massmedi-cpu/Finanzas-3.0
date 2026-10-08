@@ -47,6 +47,7 @@
 
 .navigationCluster {
   min-width: 0;
+  max-width: 100%;
   flex: 1 1 auto;
   display: grid;
   grid-template-columns: 2.5rem minmax(0, 1fr) 2.5rem;
@@ -93,6 +94,8 @@
 .navigation {
   min-width: 0;
   width: 100%;
+  max-width: 100%;
+  contain: inline-size;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -242,7 +245,7 @@
   }
 
   .navigationCluster {
-    flex: 1 0 100%;
+    flex: 1 1 100%;
     order: 3;
   }
 }
