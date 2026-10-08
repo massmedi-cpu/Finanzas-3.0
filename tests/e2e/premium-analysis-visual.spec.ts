@@ -281,9 +281,28 @@ for (const width of WIDTHS) {
         && style.clip !== "auto";
     })).toBe(true);
 
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
-    ).toBe(true);
+    const overflowAudit = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      return {
+        viewport,
+        scrollWidth: document.documentElement.scrollWidth,
+        offenders: [...document.querySelectorAll<HTMLElement>("body *")]
+          .map((element) => ({
+            element,
+            rect: element.getBoundingClientRect(),
+          }))
+          .filter(({ element, rect }) => rect.width > 0 && rect.right > viewport + 1
+            && window.getComputedStyle(element).display !== "none")
+          .slice(0, 15)
+          .map(({ element, rect }) => ({
+            tag: element.tagName.toLowerCase(),
+            className: typeof element.className === "string" ? element.className.slice(0, 90) : "",
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+          })),
+      };
+    });
+    expect(overflowAudit.scrollWidth, JSON.stringify(overflowAudit)).toBeLessThanOrEqual(overflowAudit.viewport + 1);
 
     const apply = page.getByRole("button", { name: "Aplicar" });
     const applyBox = await apply.boundingBox();
