@@ -305,6 +305,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [unassociatedOnly, setUnassociatedOnly] = useState(initialUnassociatedFilter);
   const [scope, setScope] = useState<DocumentScope>(initialScope);
@@ -340,14 +341,20 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   selectedIdRef.current = selectedId;
   metadataDirtyRef.current = metadataDirty;
 
+  // Una consulta por pausa de escritura; evita descargar la lista en cada tecla.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 220);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
   const listUrl = useMemo(() => {
     const params = new URLSearchParams({ limit: "50", offset: String(offset) });
     params.set("scope", scope);
     if (unassociatedOnly) params.set("unassociated", "true");
-    if (query.trim()) params.set("q", query.trim());
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     if (statusFilter) params.set("status", statusFilter);
     return `/api/documents?${params}`;
-  }, [query, statusFilter, scope, unassociatedOnly, offset]);
+  }, [debouncedQuery, statusFilter, scope, unassociatedOnly, offset]);
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
@@ -761,7 +768,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
   const currentList = loadedListKey === listUrl ? list : null;
-  const listPending = loadingList || (!currentList && !listLoadFailed);
+  const listPending = query !== debouncedQuery || loadingList || (!currentList && !listLoadFailed);
 
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0] ?? null;
@@ -864,7 +871,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           <aside className={styles.listPanel} aria-label="Listado de documentos">
             <div className={styles.listHeader}>
               <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2></div>
-              <button className={styles.iconButton} onClick={() => void loadList()} disabled={loadingList} aria-label="Actualizar documentos">↻</button>
+              <button className={styles.iconButton} onClick={() => void loadList()} disabled={listPending} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
               <label>Vista documental<select value={scope} onChange={(event) => { setScope(event.target.value as DocumentScope); setOffset(0); }} disabled={busy !== null}>
