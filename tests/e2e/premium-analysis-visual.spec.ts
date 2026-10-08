@@ -570,3 +570,30 @@ test("AUD-E2E-DAT-001 · Análisis no rompe si se desconoce la fecha de cobertur
   await expect(page.getByRole("heading", { name: /Cobertura bancaria desconocida/ })).toBeVisible();
   await expect(page.getByText("Cobertura desconocida · comparación no disponible").first()).toBeVisible();
 });
+
+
+test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder importes ni enlaces", async ({ page }) => {
+  const expandedSnapshot = structuredClone(SNAPSHOT);
+  const source = expandedSnapshot.categoryDrivers[0];
+  expandedSnapshot.categoryDrivers = Array.from({ length: 8 }, (_, index) => ({
+    ...source,
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    name: `Categoría de prueba ${index + 1}`,
+    href: `/transactions?categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+  }));
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
+  await page.route("**/api/analysis/source-freshness", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, latestMovementDate: "2026-09-15", sync: null,
+    }) }));
+  await page.goto("/analysis");
+  const breakdown = page.locator("section").filter({ has: page.getByRole("heading", { name: "Dónde se concentra el gasto" }) });
+  await expect(breakdown.getByText("6 de 8 categorías con gasto")).toBeVisible();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(6);
+  await breakdown.getByRole("button", { name: "Ver todas las 8 categorías" }).click();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(8);
+  await expect(breakdown.getByText("8 de 8 categorías con gasto")).toBeVisible();
+  await breakdown.getByRole("button", { name: "Ver menos categorías" }).click();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(6);
+});

@@ -361,6 +361,7 @@ export default function AnalysisClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
   const contextLinks = useMemo(
     () => snapshot ? analysisModuleLinks(snapshot.selection, snapshot.forecast?.period ?? null) : [],
     [snapshot],
@@ -438,6 +439,7 @@ export default function AnalysisClient({
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
       setMerchantsExpanded(false);
+      setCategoriesExpanded(false);
 
       const nextParams = new URLSearchParams({
         month: next.selection.month,
@@ -632,7 +634,10 @@ export default function AnalysisClient({
                 <p className={styles.empty}>No hay categorías con gasto elegible en el periodo.</p>
               ) : (
                 <div className={styles.breakdown}>
-                  {currentCategoryDrivers.slice(0, 6).map((item) => (
+                  <p className={styles.breakdownCount}>
+                    {categoriesExpanded ? currentCategoryDrivers.length : Math.min(6, currentCategoryDrivers.length)} de {currentCategoryDrivers.length} categorías con gasto
+                  </p>
+                  {(categoriesExpanded ? currentCategoryDrivers : currentCategoryDrivers.slice(0, 6)).map((item) => (
                     <Link prefetch={false} href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                       <div>
                         <strong><CategoryIdentity categoryId={item.id} name={item.name} /></strong>
@@ -644,6 +649,16 @@ export default function AnalysisClient({
                       <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>{deltaText(item.deltaCents)}</span>
                     </Link>
                   ))}
+                  {currentCategoryDrivers.length > 6 ? (
+                    <button
+                      type="button"
+                      className={styles.breakdownToggle}
+                      aria-expanded={categoriesExpanded}
+                      onClick={() => setCategoriesExpanded((current) => !current)}
+                    >
+                      {categoriesExpanded ? "Ver menos categorías" : `Ver todas las ${currentCategoryDrivers.length} categorías`}
+                    </button>
+                  ) : null}
                 </div>
               )}
             </section>
