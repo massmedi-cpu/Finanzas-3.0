@@ -137,9 +137,13 @@ test("AUD-E2E-BUS-001 · permite reintentar un error sin cambiar la búsqueda", 
   await expect(dialog.getByText("No se pudo completar la búsqueda", { exact: true })).toBeVisible();
   const retry = dialog.getByRole("button", { name: "Reintentar búsqueda" });
   await expect(retry).toBeVisible();
+  await expect(dialog.getByRole("region", { name: "Resultados de búsqueda" })).toContainText("No se pudo completar");
+  await expect(input).toHaveAttribute("aria-expanded", "false");
   await retry.click();
   await expect(input).toBeFocused();
   await expect(dialog.getByRole("option")).toHaveCount(2);
+  await expect(dialog.getByRole("listbox", { name: "Resultados de búsqueda" })).toBeVisible();
+  await expect(input).toHaveAttribute("aria-expanded", "true");
   expect(calls).toBe(2);
 });
 
