@@ -68,8 +68,11 @@ for (const token of [
 
 for (const token of [
   "No interpretamos 0 € como mejora",
-  "No interpretamos la ausencia posterior como una bajada del gasto",
-  "Cobertura bancaria incompleta para el periodo principal",
+  "El periodo principal no tiene cobertura bancaria confirmada",
+  "Cobertura bancaria del periodo principal desconocida",
+  "La comparación queda incompleta",
+  "periodComparisonIsReliable(coverage)",
+  "Comparación incompleta",
 ]) requireText(compare, token, "QA-02 Comparador");
 
 for (const token of [
