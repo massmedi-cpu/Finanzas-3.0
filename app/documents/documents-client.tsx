@@ -412,7 +412,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     }
     try {
       const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
-      if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
+      if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
       setDetail(data);
       if (!preserveEditor) {
         setDesignationOpen(false);
@@ -420,11 +420,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setDesignationReviewed(false);
       }
       if (!preserveEditor) setEditor(editorFromDocument(data.document));
+      return data;
     } catch (caught) {
       if (sequence === detailSequence.current && selectedIdRef.current === id) {
         if (!silent) setDetailLoadFailed(true);
         setError(friendlyError(caught));
       }
+      return null;
     } finally {
       if (sequence === detailSequence.current) setLoadingDetail(false);
     }
@@ -516,7 +518,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   };
 
   const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
-    await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
+    const [, verifiedDetail] = await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
+    return verifiedDetail?.document.id === id ? verifiedDetail : null;
   }, [loadList, loadDetail]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
