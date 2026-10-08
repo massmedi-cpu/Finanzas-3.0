@@ -199,3 +199,17 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
   });
   expect(editorLabelSize).toBeGreaterThanOrEqual(14);
 });
+
+
+test("AUD-E2E-UI-001 · texto funcional de Presupuestos mantiene tono legible en tema claro", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await mockBudgetRead(page);
+  await page.goto("/budgets");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const eyebrow = page.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
+  await expect(eyebrow).toBeVisible();
+  await expect(eyebrow).toHaveCSS("color", "rgb(30, 64, 175)");
+  const emptyMessage = page.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
+  await expect(emptyMessage).toBeVisible();
+  await expect(emptyMessage).toHaveCSS("color", "rgb(71, 85, 105)");
+});

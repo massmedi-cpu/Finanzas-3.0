@@ -756,3 +756,20 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
+
+
+/* AUD-E2E-UI-001 · texto funcional sobre las superficies claras. */
+:global(html[data-theme="light"]) .eyebrow {
+  color: #1e40af;
+}
+:global(html[data-theme="light"]) .loading {
+  color: #334155;
+}
+:global(html[data-theme="light"]) .emptyState {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  color: #1e293b;
+}
+:global(html[data-theme="light"]) .emptyState p {
+  color: #475569;
+}

@@ -418,3 +418,40 @@ test("AUD-E2E-DOC-001 · un error de guardado mantiene el borrador y la elecció
   await expect(page).toHaveURL(/\/documents/);
   expect(writes.filter((write) => write.action === "metadata")).toHaveLength(0);
 });
+
+
+test("AUD-E2E-DOC-001 · cambiar de documento protege y descarta únicamente el borrador", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const otherId = "93000000-0000-4000-8000-000000000092";
+  const other = { ...item, id: otherId, originalFileName: "otro-documento.pdf", issuerName: "Otro emisor" };
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const url = new URL(route.request().url());
+    if (url.searchParams.has("mode")) return route.fallback();
+    if (url.searchParams.has("id")) {
+      const document = url.searchParams.get("id") === otherId ? other : item;
+      await route.fulfill({ status: 200, contentType: "application/json",
+        body: JSON.stringify({ contractVersion: 1, document, associations: [], principles }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ contractVersion: 1, items: [item, other], total: 2, limit: 50, offset: 0, principles }) });
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await expect(page.getByLabel("Emisor")).toHaveValue("Proveedor Demo");
+  await page.getByLabel("Emisor").fill("BORRADOR AUDITORÍA NO GUARDAR");
+  await page.getByRole("button", { name: /otro-documento.pdf/i }).click();
+  const alert = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(alert).toBeVisible();
+  await alert.getByRole("button", { name: "Seguir editando" }).click();
+  await expect(page.getByLabel("Emisor")).toHaveValue("BORRADOR AUDITORÍA NO GUARDAR");
+  await page.getByRole("button", { name: /otro-documento.pdf/i }).click();
+  await alert.getByRole("button", { name: "Descartar cambios" }).click();
+  await expect(page.getByLabel("Emisor")).toHaveValue("Otro emisor");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await expect(page.getByLabel("Emisor")).toHaveValue("Proveedor Demo");
+  expect(writes).toEqual([]);
+});
