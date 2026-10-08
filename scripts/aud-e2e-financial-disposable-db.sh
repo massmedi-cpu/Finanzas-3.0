@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-: "${GITHUB_SHA:?GITHUB_SHA is required for exact audit evidence}"
+: "${AUD_VALIDATION_SHA:?AUD_VALIDATION_SHA is required for exact audit evidence}"
+[[ "$(git rev-parse HEAD)" == "$AUD_VALIDATION_SHA" ]] || { echo 'AUD_E2E_DB|status=failed|reason=checkout_sha_mismatch'; exit 1; }
+export GITHUB_SHA="$AUD_VALIDATION_SHA"
 
 # This runner can only create its known disposable database on the CI service.
 # Reject an inherited external URL before the baseline runner's first DROP.
@@ -12,6 +14,11 @@ if [[ "${GITHUB_ACTIONS:-}" != 'true' || "${PRE001_POSTGRES_ADMIN_URL:-$AUD_ADMI
 fi
 export PRE001_POSTGRES_ADMIN_URL="$AUD_ADMIN_URL"
 source scripts/pre001-disposable-db-smoke.sh
+
+# The older personal-backfill fixture intentionally has no inferred merchant.
+# Give only its derived synthetic concept a recognizable shape before the later
+# merchant migration's strict backfill check. Its bank source stays unchanged.
+psql_db -c "UPDATE financial_app.transactions SET concept_normalized='COMPRA EN AUD Synthetic, CON LA TARJETA' WHERE id='${BASE_TRANSACTION_ID}';" >/dev/null
 
 AUD_BATCH='20261007165000_qa_work_budget_snapshot_batch.sql'
 AUD_BASELINE_END='20260909200000_pre001_function_surface_lockdown.sql'

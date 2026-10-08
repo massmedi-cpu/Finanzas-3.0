@@ -119,9 +119,13 @@
   line-height: 1.24;
 }
 .cardHeading small {
-  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
   color: var(--color-text-muted);
   font-size: max(var(--font-helper), 0.72rem);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .svgViewport,
@@ -168,9 +172,11 @@
 }
 .dailyChart {
   max-width: 100%;
+  max-height: 14.75rem;
 }
 .scatterChart {
-  max-width: 100%;
+  max-width: min(100%, 38.75rem);
+  margin-inline: auto;
 }
 .heatmapChart {
   width: min(100%, 31rem);
@@ -484,6 +490,7 @@
   }
   .heading > a { width: 100%; justify-content: center; }
   .cardHeading { display: grid; gap: 0.3rem; }
+  .cardHeading small { text-align: left; }
   .weekdayChart { min-height: 0; grid-template-columns: 1fr; gap: 0.55rem; }
   .weekdayColumn {
     grid-template-columns: 1.5rem minmax(0, 1fr) auto;

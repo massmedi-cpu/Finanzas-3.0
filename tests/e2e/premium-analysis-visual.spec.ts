@@ -195,7 +195,7 @@ for (const width of WIDTHS) {
     const weekday = page.getByRole("img", { name: "Gasto por día de la semana" });
     await expect(weekday).toHaveAttribute("aria-label", /lunes, 140,00\s*€/);
     for (const [name, maximum] of [
-      ["Gráfica de gasto diario", 760],
+      ["Gráfica de gasto diario", 1600],
       ["Gráfica de comercios", 620],
       ["Curva de concentración", 620],
     ] as const) {

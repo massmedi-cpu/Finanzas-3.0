@@ -42,5 +42,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
       - name: Apply candidate migrations and verify synthetic financial data
         env:
-          GITHUB_SHA: ${{ github.event.pull_request.head.sha }}
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/aud-e2e-financial-disposable-db.sh

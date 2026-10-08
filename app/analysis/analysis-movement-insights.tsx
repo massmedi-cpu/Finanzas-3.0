@@ -157,7 +157,7 @@ function DailySpendChart({ snapshot }: { snapshot: AnalysisSnapshot }) {
     () => buildDailySpendCalendar(sourceRows, snapshot.selection.dateFrom, snapshot.selection.dateTo),
     [sourceRows, snapshot.selection.dateFrom, snapshot.selection.dateTo],
   );
-  const { viewportRef, width } = useChartWidth(760, sourceRows.length > 0);
+  const { viewportRef, width } = useChartWidth(1600, sourceRows.length > 0);
   const chart = useMemo(() => {
     if (rows.length === 0) return null;
     const height = 236;
