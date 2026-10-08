@@ -133,7 +133,7 @@ export default function HomeEvolution({
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
-  const [balanceError, setBalanceError] = useState(false);
+  const [balanceError, setBalanceError] = useState<"not_installed" | "unavailable" | null>(null);
   const [balanceRetry, setBalanceRetry] = useState(0);
   const balanceKey = `${dateFrom}|${dateTo}|${refreshKey}`;
   const balances = balanceCache?.key === balanceKey ? balanceCache.data : null;
@@ -142,12 +142,20 @@ export default function HomeEvolution({
     if (mode !== "balance" || balanceCache?.key === balanceKey) return;
     const controller = new AbortController();
     setBalanceLoading(true);
-    setBalanceError(false);
+    setBalanceError(null);
     const params = new URLSearchParams({ mode: "balance_series", dateFrom, dateTo });
     void fetch(`/api/financial?${params.toString()}`, { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) throw new Error("balance_series_unavailable");
-        return response.json() as Promise<unknown>;
+        const body: unknown = await response.json().catch(() => null);
+        if (!response.ok) {
+          const code = body && typeof body === "object" && "code" in body
+            ? (body as { code?: unknown }).code
+            : null;
+          throw new Error(code === "financial_balance_series_not_installed"
+            ? "financial_balance_series_not_installed"
+            : "balance_series_unavailable");
+        }
+        return body;
       })
       .then((payload) => {
         if (!isBalanceSeries(payload)) throw new Error("balance_series_invalid_contract");
@@ -155,7 +163,9 @@ export default function HomeEvolution({
       })
       .catch((error) => {
         if (!(error instanceof DOMException && error.name === "AbortError") && !controller.signal.aborted) {
-          setBalanceError(true);
+          setBalanceError(error instanceof Error && error.message === "financial_balance_series_not_installed"
+            ? "not_installed"
+            : "unavailable");
         }
       })
       .finally(() => {
@@ -233,7 +243,9 @@ export default function HomeEvolution({
       {mode === "balance" && balanceLoading ? <div className={styles.skeleton} aria-label="Cargando evolución del saldo" /> : null}
       {mode === "balance" && balanceError ? (
         <div className={styles.empty} role="status">
-          <p>No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles; no se han modificado datos bancarios.</p>
+          <p>{balanceError === "not_installed"
+            ? "La evolución del saldo está pendiente de habilitarse en el motor financiero de este entorno. Las otras vistas siguen disponibles; no se han modificado datos bancarios."
+            : "No se ha podido cargar la evolución del saldo. Las otras vistas siguen disponibles; no se han modificado datos bancarios."}</p>
           <button type="button" className={styles.evolutionRetryButton} onClick={() => setBalanceRetry((current) => current + 1)}>
             Reintentar saldo
           </button>

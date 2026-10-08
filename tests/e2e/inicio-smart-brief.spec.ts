@@ -849,3 +849,20 @@ test("AUD-E2E-INI-001 · fallo de saldo deja las otras vistas y reintenta solo l
   await expect(page.getByRole("group", { name: "Flujo neto por mes" })).toBeVisible();
   expect(methods).toEqual(["GET", "GET"]);
 });
+
+test("AUD-E2E-INI-001 · falta del motor de saldo se distingue de fallo de red sin escribir", async ({ page }) => {
+  await mockInicio(page);
+  const methods: string[] = [];
+  await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+    methods.push(route.request().method());
+    await json(route, { error: "persistence_failed", code: "financial_balance_series_not_installed" }, 503);
+  });
+  await page.goto("/");
+  await page.getByRole("group", { name: "Vista de evolución financiera" })
+    .getByRole("button", { name: "Saldo" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "pendiente de habilitarse en el motor financiero" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Reintentar saldo" })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Vista de evolución financiera" })
+    .getByRole("button", { name: "Flujo neto" })).toBeEnabled();
+  expect(methods).toEqual(["GET"]);
+});
