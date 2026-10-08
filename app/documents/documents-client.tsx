@@ -161,6 +161,7 @@ type TransactionSearch = {
 
 const DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1UCUZSmOWfGM5VyvhDcx7ExeBw3LS872t";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const DOCUMENT_READ_TIMEOUT_MS = 20_000;
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp";
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -233,6 +234,16 @@ function editorMatchesDocument(editor: MetadataEditor, document: DocumentDetail[
     && editor.notes === saved.notes;
 }
 
+async function getDocumentJson(url: string) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), DOCUMENT_READ_TIMEOUT_MS);
+  try {
+    return await readJson(await fetch(url, { cache: "no-store", signal: controller.signal }));
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -242,6 +253,9 @@ async function readJson(response: Response) {
 }
 
 function friendlyError(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "La consulta documental ha superado el tiempo de espera. No se ha modificado ningún dato; puedes reintentar.";
+  }
   const code = error instanceof Error ? error.message : "request_failed";
   const labels: Record<string, string> = {
     document_owner_review_required: "El propietario debe revisar el documento antes de cambiar su tratamiento.",
@@ -365,7 +379,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!silent) setLoadingList(true);
     setError(null);
     try {
-      const first = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
+      const first = await getDocumentJson(url) as DocumentList;
       let data = first;
       if (unassociatedOnly && first.contractVersion < 3) {
         const all = [...first.items];
@@ -374,7 +388,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           if (all.length >= 10_000) throw new Error("document_filter_limit");
           parsed.searchParams.set("limit", "100");
           parsed.searchParams.set("offset", String(all.length));
-          const next = await readJson(await fetch(parsed.toString(), { cache: "no-store" })) as DocumentList;
+          const next = await getDocumentJson(parsed.toString()) as DocumentList;
           if (!next.items.length) throw new Error("document_filter_incomplete");
           all.push(...next.items);
         }
@@ -419,7 +433,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       setTransactions(null);
     }
     try {
-      const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
+      const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
       setDetail(data);
       if (!preserveEditor) {
