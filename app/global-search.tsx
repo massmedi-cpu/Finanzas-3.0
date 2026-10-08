@@ -33,9 +33,12 @@ const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", 
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return null;
-  const parsed = new Date(`${value.slice(0, 10)}T12:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ? null : date.format(parsed).replace(".", "");
+  const bankDate = value?.slice(0, 10);
+  if (!bankDate || !/^\d{4}-\d{2}-\d{2}$/.test(bankDate)) return null;
+  const parsed = new Date(`${bankDate}T12:00:00Z`);
+  // JavaScript normaliza fechas inexistentes: nunca mostrar 30/02 como una fecha bancaria real.
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== bankDate) return null;
+  return date.format(parsed).replace(".", "");
 }
 
 export default function GlobalSearch() {
@@ -52,6 +55,7 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   function openSearch() {
@@ -134,6 +138,9 @@ export default function GlobalSearch() {
     requestRef.current = controller;
     setLoading(true);
     setError(false);
+    // No presentar ni permitir abrir resultados de la consulta anterior mientras llega la nueva.
+    setItems([]);
+    setPartial(false);
     const timer = window.setTimeout(() => {
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
@@ -159,7 +166,7 @@ export default function GlobalSearch() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, retryCount]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -260,9 +267,17 @@ export default function GlobalSearch() {
             <div id={`${inputId}-results`} className={styles.results} role="listbox" aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
+              ) : loading ? (
+                <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
-                <div className={styles.hint}><strong>No se pudo completar la búsqueda</strong><span>Los datos no se han modificado. Puedes intentarlo de nuevo.</span></div>
-              ) : !loading && items.length === 0 ? (
+                <div className={styles.hint}>
+                  <strong>No se pudo completar la búsqueda</strong>
+                  <span>No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla.</span>
+                  <button type="button" className={styles.retryButton} onClick={() => { setRetryCount((current) => current + 1); inputRef.current?.focus(); }}>
+                    Reintentar búsqueda
+                  </button>
+                </div>
+              ) : items.length === 0 ? (
                 <div className={styles.hint}><strong>Sin coincidencias</strong><span>No hay resultados para “{preparedQuery}”.</span></div>
               ) : (
                 items.map((item, index) => {
