@@ -629,3 +629,46 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
   expect(await zeroBar.evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
   expect(await zeroBar.evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
 });
+
+
+test("AUD-E2E-PTO-001 · no presenta presupuestos de respuesta inválida y permite reintentar", async ({ page }) => {
+  let attempts = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+    attempts += 1;
+    const body = attempts === 1
+      ? { contractVersion: 1, month: "2026-09", total: { effectiveAmountCents: 0 }, categories: [] }
+      : snapshotForMonth("2026-09");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("alert")).toContainText("no es válida");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
+test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escritura de otro mes", async ({ page }) => {
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes.push(method);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotForMonth("2026-08")) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  const summary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
+  await expect(summary).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar referencia" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
+  expect(writes).toEqual(["POST"]);
+});
