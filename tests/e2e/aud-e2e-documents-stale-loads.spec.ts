@@ -222,3 +222,29 @@ test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y cons
   await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
   expect(patches).toBe(3);
 });
+
+
+test("AUD-E2E-UI-001 · Documentos espera una pausa antes de consultar mientras escribimos", async ({ page }) => {
+  const requestedQueries: string[] = [];
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const url = new URL(route.request().url());
+    const query = url.searchParams.get("q") ?? "";
+    if (query) requestedQueries.push(query);
+    const filtered = DOCS.filter((item) => !query || item.originalFileName.toLowerCase().includes(query.toLowerCase()));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(list(filtered, url)),
+    });
+  });
+
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  await expect(archive.getByRole("button", { name: /Primera factura\.pdf/ })).toBeVisible();
+  const search = archive.getByRole("textbox", { name: "Buscar" });
+  await search.press("s");
+  await expect(archive.getByRole("button", { name: /Primera factura\.pdf/ })).toHaveCount(0);
+  await search.pressSequentially("egunda", { delay: 20 });
+  await expect(archive.getByRole("button", { name: /Segunda factura\.pdf/ })).toBeVisible();
+  expect(requestedQueries).toEqual(["segunda"]);
+});
