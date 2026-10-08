@@ -597,7 +597,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           totalCents: cents, notes: editor.notes,
         }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      const confirmed = await refreshAfterMutation(detail.document.id);
+      if (!confirmed) {
+        // El PATCH pudo haberse aplicado, pero no se debe navegar ni afirmar éxito
+        // hasta que el backend permita releer el documento correcto.
+        setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
+        return false;
+      }
       setNotice("Metadatos guardados.");
       return true;
     } catch (caught) {
