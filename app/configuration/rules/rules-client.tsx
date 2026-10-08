@@ -1,6 +1,6 @@
 "use client";
 
-import { formatMoneyInputCents, parseMoneyInputToCents } from "../../../src/core/money";
+import { formatMoneyCents, formatMoneyInputCents, parseMoneyInputToCents } from "../../../src/core/money";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useActionFeedback } from "../../action-feedback";
@@ -30,6 +30,19 @@ type Account = { id: string; name: string; lifecycle: "active" | "archived" };
 type Category = { id: string; name: string; kind: string; lifecycle: "active" | "archived" };
 type Merchant = { id: string; name: string; lifecycle: "active" | "archived" };
 type Payload = { rules: Rule[]; accounts: Account[]; categories: Category[]; merchants: Merchant[] };
+
+type MovementOption = {
+  id: string;
+  bankDate: string;
+  amountCents: number;
+  concept?: { effective?: string | null };
+  merchant?: { effectiveName?: string | null };
+  account?: { name?: string | null };
+};
+
+function movementLabel(row: MovementOption) {
+  return `${row.bankDate} · ${row.merchant?.effectiveName || row.concept?.effective || "Movimiento"} · ${row.account?.name || "Cuenta sin nombre"} · ${formatMoneyCents(row.amountCents)}`;
+}
 
 type RuleForm = {
   name: string;
@@ -139,6 +152,10 @@ export default function RulesClient() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<RuleForm>(EMPTY_FORM);
   const [transactionId, setTransactionId] = useState("");
+  const [movementQuery, setMovementQuery] = useState("");
+  const [movementOptions, setMovementOptions] = useState<MovementOption[]>([]);
+  const [movementLoading, setMovementLoading] = useState(false);
+  const [movementError, setMovementError] = useState<string | null>(null);
   const [explanation, setExplanation] = useState<any>(null);
   const [applyResult, setApplyResult] = useState<any>(null);
 
@@ -274,8 +291,44 @@ export default function RulesClient() {
     }
   }
 
+  async function searchMovements() {
+    const query = movementQuery.trim();
+    if (!query) {
+      setMovementOptions([]);
+      setMovementError("Escribe un comercio, concepto o contraparte para buscar.");
+      return;
+    }
+    setMovementLoading(true);
+    setMovementError(null);
+    setMovementOptions([]);
+    try {
+      const response = await fetch(`/api/transactions?q=${encodeURIComponent(query)}&limit=20`, { cache: "no-store" });
+      if (!response.ok) throw new Error("La búsqueda de movimientos no está disponible.");
+      const payload: unknown = await response.json();
+      if (!payload || typeof payload !== "object" || !("rows" in payload) || !Array.isArray(payload.rows)) {
+        throw new Error("La respuesta de Movimientos no es válida.");
+      }
+      const rows = (payload.rows as unknown[]).filter((row): row is MovementOption =>
+        Boolean(row)
+        && typeof row === "object"
+        && typeof (row as MovementOption).id === "string"
+        && typeof (row as MovementOption).bankDate === "string"
+        && Number.isSafeInteger((row as MovementOption).amountCents),
+      );
+      setMovementOptions(rows);
+    } catch (cause) {
+      setMovementError(cause instanceof Error ? cause.message : "No se pudo buscar movimientos.");
+    } finally {
+      setMovementLoading(false);
+    }
+  }
+
   async function evaluate(event: FormEvent) {
     event.preventDefault();
+    if (!transactionId.trim()) {
+      setError("Elige un movimiento de los resultados o introduce su identificador.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setExplanation(null);
@@ -324,7 +377,7 @@ export default function RulesClient() {
         <div>
           <p className={styles.eyebrow}>FINANCIAL APP · REGLAS</p>
           <h1>Reglas de categorización</h1>
-          <p className={styles.copy}>Una sola lógica decide por prioridad y combina concepto, cuenta, importe, comercio y categoría. Los overrides manuales siempre tienen precedencia y la fuente bancaria sigue siendo de solo lectura.</p>
+          <p className={styles.copy}>Las reglas se prueban por orden y combinan concepto, cuenta, importe, comercio y categoría. Los cambios manuales que tú confirmas tienen prioridad: por ejemplo, si corriges un comercio, una regla no lo sobrescribe. La fuente bancaria sigue siendo de solo lectura.</p>
         </div>
         <div className={styles.summary} aria-label="Resumen de reglas">
           <div><strong>{activeRuleCount}</strong><span>Activas</span></div>
@@ -361,9 +414,12 @@ export default function RulesClient() {
               <div><p className={styles.kicker}>ORDEN DE EJECUCIÓN</p><h2 id="rule-list-heading">Reglas</h2></div>
               <span>{filteredRules.length}</span>
             </div>
-            <p className={styles.helper}>Menor número = mayor prioridad. En empate decide el ID persistente, por lo que el resultado siempre es reproducible.</p>
+            <p className={styles.helper}>El número más bajo se aplica primero. Cuando dos reglas tienen la misma prioridad se mantiene un orden estable para dar siempre el mismo resultado; los cambios manuales confirmados prevalecen.</p>
             <div className={styles.ruleList}>
-              {filteredRules.length === 0 ? <p className={styles.empty}>No hay reglas que coincidan.</p> : filteredRules.map((rule) => (
+              {filteredRules.length === 0 ? <div className={styles.empty}>
+                <p>{data.rules.length === 0 ? "Todavía no hay reglas." : "No hay reglas que coincidan con la búsqueda."}</p>
+                {data.rules.length === 0 ? <button type="button" onClick={beginNew}>Crear la primera regla</button> : <button type="button" onClick={() => setSearch("")}>Limpiar búsqueda</button>}
+              </div> : filteredRules.map((rule) => (
                 <article key={rule.id} className={`${styles.ruleCard} ${rule.status === "disabled" ? styles.disabled : ""}`}>
                   <div className={styles.ruleTop}>
                     <div>
@@ -418,11 +474,38 @@ export default function RulesClient() {
 
             <section className={styles.panel} aria-labelledby="explain-heading">
               <div className={styles.panelHeading}><div><p className={styles.kicker}>AUDITABLE</p><h2 id="explain-heading">Simular movimiento</h2></div></div>
-              <form className={styles.form} onSubmit={evaluate}>
-                <label><span>ID del movimiento</span><input value={transactionId} onChange={(event) => setTransactionId(event.target.value)} placeholder="UUID" required /></label>
-                <button type="submit" disabled={busy}>Explicar decisión</button>
-              </form>
-              {explanation && <pre className={styles.explanation}>{JSON.stringify(explanation, null, 2)}</pre>}
+              <div className={styles.form}>
+                <p className={styles.helper}>Busca un movimiento real por su comercio, concepto o contraparte. La simulación solo explica la propuesta; no cambia categorías ni escribe en el banco.</p>
+                <label><span>Buscar movimiento</span><input value={movementQuery} onChange={(event) => setMovementQuery(event.target.value)} placeholder="Comercio o concepto" /></label>
+                <button type="button" onClick={() => void searchMovements()} disabled={movementLoading || busy}>
+                  {movementLoading ? "Buscando…" : "Buscar movimientos"}
+                </button>
+                {movementError ? <p role="alert" className={styles.message}>{movementError}</p> : null}
+                {movementOptions.length > 0 ? (
+                  <label><span>Movimiento para simular</span>
+                    <select value={movementOptions.some((row) => row.id === transactionId) ? transactionId : ""}
+                      onChange={(event) => { setTransactionId(event.target.value); setExplanation(null); }}>
+                      <option value="">Selecciona fecha, comercio, cuenta e importe</option>
+                      {movementOptions.map((row) => <option key={row.id} value={row.id}>{movementLabel(row)}</option>)}
+                    </select>
+                  </label>
+                ) : movementQuery.trim() && !movementLoading && !movementError ? (
+                  <p className={styles.helper}>Sin movimientos encontrados con ese texto.</p>
+                ) : null}
+                <details className={styles.technicalId}>
+                  <summary>Introducir identificador manualmente</summary>
+                  <label><span>ID del movimiento</span><input value={transactionId} onChange={(event) => setTransactionId(event.target.value)} placeholder="Identificador técnico" /></label>
+                </details>
+                <form className={styles.form} onSubmit={evaluate}>
+                  <button type="submit" disabled={busy || !transactionId}>Explicar decisión · solo lectura</button>
+                </form>
+              </div>
+              {explanation && (
+                <div aria-label="Resultado de la simulación">
+                  <p className={styles.helper}>Propuesta de la regla, sin modificar el movimiento. La aplicación real es una acción separada.</p>
+                  <pre className={styles.explanation}>{JSON.stringify(explanation, null, 2)}</pre>
+                </div>
+              )}
             </section>
           </div>
         </div>
