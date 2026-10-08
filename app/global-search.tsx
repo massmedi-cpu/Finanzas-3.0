@@ -216,6 +216,7 @@ export default function GlobalSearch() {
   }
 
   const preparedQuery = prepareGlobalSearchQuery(query);
+  const hasResults = !loading && !error && items.length > 0;
   const previewMovements = items.filter((item) => item.kind === "transaction").length;
   const fullMovementHref = preparedQuery ? `/transactions?q=${encodeURIComponent(preparedQuery)}` : "/transactions";
   const statusMessage = loading
@@ -252,11 +253,11 @@ export default function GlobalSearch() {
                 maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
                 aria-label="Buscar en Financial App"
-                aria-expanded="true"
+                aria-expanded={hasResults}
                 aria-autocomplete="list"
-                aria-controls={`${inputId}-results`}
+                aria-controls={hasResults ? `${inputId}-results` : undefined}
                 aria-describedby={`${inputId}-status`}
-                aria-activedescendant={activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
+                aria-activedescendant={hasResults && activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
               />
               {loading && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
             </label>
@@ -264,7 +265,7 @@ export default function GlobalSearch() {
             {preparedQuery && !loading && !error ? (
               <p className={styles.previewSummary}>Resultados rápidos · {items.length} mostrados ({previewMovements} movimientos). No es el total de coincidencias.</p>
             ) : null}
-            <div id={`${inputId}-results`} className={styles.results} role="listbox" aria-label="Resultados de búsqueda">
+            <div id={`${inputId}-results`} className={styles.results} role={hasResults ? "listbox" : "region"} aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
               ) : loading ? (
