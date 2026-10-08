@@ -356,12 +356,23 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [fieldError, setFieldError] = useState("");
   const fetchGeneration = useRef(0);
   const fetchController = useRef<AbortController | null>(null);
+  const [slowLoading, setSlowLoading] = useState(false);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
     const generation = ++fetchGeneration.current;
     fetchController.current?.abort();
     const controller = new AbortController();
     fetchController.current = controller;
+    let timedOut = false;
+    const slowTimer = window.setTimeout(() => {
+      if (!controller.signal.aborted && generation === fetchGeneration.current) setSlowLoading(true);
+    }, 15_000);
+    const deadlineTimer = window.setTimeout(() => {
+      if (controller.signal.aborted || generation !== fetchGeneration.current) return;
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
+    setSlowLoading(false);
     setLoading(true);
     setError("");
     setNotice("");
@@ -384,12 +395,19 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       setSnapshot(nextSnapshot);
       setEditingKey(null);
     } catch (caught) {
-      if (generation !== fetchGeneration.current || controller.signal.aborted) return;
+      if (generation !== fetchGeneration.current || (controller.signal.aborted && !timedOut)) return;
       setSnapshot(null);
-      setError(caught instanceof Error ? caught.message : "No se pudieron cargar los presupuestos.");
+      setError(timedOut
+        ? "La consulta de presupuestos ha superado 30 segundos. No se han cambiado límites ni movimientos. Puedes reintentar solo esta lectura."
+        : caught instanceof Error ? caught.message : "No se pudieron cargar los presupuestos.");
     } finally {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
       if (fetchController.current === controller) fetchController.current = null;
-      if (generation === fetchGeneration.current && !controller.signal.aborted) setLoading(false);
+      if (generation === fetchGeneration.current && (!controller.signal.aborted || timedOut)) {
+        setLoading(false);
+        setSlowLoading(false);
+      }
     }
   }, []);
 
@@ -548,6 +566,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                 <div className={styles.spinner} />
                 Cargando presupuesto de {formatMonth(month)}…
               </div>
+              {slowLoading ? (
+                <p role="status">La consulta está tardando más de 15 segundos. Los datos bancarios no se están modificando; podrás reintentar si no responde.</p>
+              ) : null}
             </div>
           </section>
         ) : snapshot ? (

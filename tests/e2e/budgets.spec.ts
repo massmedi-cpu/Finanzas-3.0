@@ -672,3 +672,27 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
   await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
   expect(writes).toEqual(["POST"]);
 });
+
+
+test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintentar sin escrituras", async ({ page }) => {
+  await page.clock.install();
+  const requests: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    requests.push(route.request().method());
+    if (requests.length === 1) return new Promise<void>(() => {});
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth("2026-09")),
+    });
+  });
+  await page.goto("/budgets?month=2026-09", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText(/Cargando presupuesto de/)).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("alert")).toContainText("superado 30 segundos");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(requests).toEqual(["GET", "GET"]);
+});
