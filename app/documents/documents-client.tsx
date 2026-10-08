@@ -272,7 +272,10 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
   return <span className={`${styles.status} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>;
 }
 
-export function DocumentsClient() {
+export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedFilter = false }: {
+  initialStatusFilter?: string;
+  initialUnassociatedFilter?: boolean;
+}) {
   const actionFeedback = useActionFeedback();
   const [list, setList] = useState<DocumentList | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -280,7 +283,8 @@ export function DocumentsClient() {
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
+  const [unassociatedOnly, setUnassociatedOnly] = useState(initialUnassociatedFilter);
   const [manualQuery, setManualQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -291,7 +295,7 @@ export function DocumentsClient() {
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
-  const hasActiveListFilters = Boolean(query.trim() || statusFilter);
+  const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly);
   const metadataDirty = useMemo(
     () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
     [detail, editor],
@@ -317,7 +321,22 @@ export function DocumentsClient() {
     if (!silent) setLoadingList(true);
     setError(null);
     try {
-      const data = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
+      const first = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
+      let data = first;
+      if (unassociatedOnly) {
+        const all = [...first.items];
+        const parsed = new URL(url, window.location.origin);
+        while (all.length < first.total) {
+          if (all.length >= 10_000) throw new Error("document_filter_limit");
+          parsed.searchParams.set("limit", "100");
+          parsed.searchParams.set("offset", String(all.length));
+          const next = await readJson(await fetch(parsed.toString(), { cache: "no-store" })) as DocumentList;
+          if (!next.items.length) throw new Error("document_filter_incomplete");
+          all.push(...next.items);
+        }
+        const filtered = all.filter((item) => item.status !== "archived" && item.associationCount === 0);
+        data = { ...first, items: filtered, total: filtered.length, offset: 0, limit: filtered.length };
+      }
       if (sequence !== listSequence.current) return;
       setList(data);
       if (
@@ -333,7 +352,7 @@ export function DocumentsClient() {
     } finally {
       if (!silent && sequence === listSequence.current) setLoadingList(false);
     }
-  }, [listUrl]);
+  }, [listUrl, unassociatedOnly]);
 
   const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
@@ -640,6 +659,9 @@ export function DocumentsClient() {
             </div>
             <div className={styles.filters}>
               <label>Buscar<input value={query} maxLength={200} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, emisor o notas" /></label>
+              <label><span>Asociación</span><select value={unassociatedOnly ? "unassociated" : "all"} onChange={(event) => setUnassociatedOnly(event.target.value === "unassociated")}>
+                <option value="all">Todos</option><option value="unassociated">Sin asociar</option>
+              </select></label>
               <label>Estado<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
                 <option value="">Todos</option><option value="imported">Importados</option><option value="pending_review">Pendientes</option><option value="confirmed">Confirmados</option><option value="archived">Archivados</option>
               </select></label>
@@ -664,6 +686,8 @@ export function DocumentsClient() {
                   onClick={() => {
                     setQuery("");
                     setStatusFilter("");
+                    setUnassociatedOnly(false);
+                    window.history.replaceState(window.history.state, "", "/documents");
                   }}
                 >
                   Limpiar filtros
