@@ -52,6 +52,7 @@ export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
+  const [resultsQuery, setResultsQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
@@ -70,6 +71,7 @@ export default function GlobalSearch() {
     setOpen(false);
     setQuery("");
     setItems([]);
+    setResultsQuery("");
     setLoading(false);
     setPartial(false);
     setError(false);
@@ -116,6 +118,7 @@ export default function GlobalSearch() {
     setOpen(false);
     setQuery("");
     setItems([]);
+    setResultsQuery("");
     setLoading(false);
     setPartial(false);
     setError(false);
@@ -129,6 +132,7 @@ export default function GlobalSearch() {
     const preparedQuery = prepareGlobalSearchQuery(query);
     if (!preparedQuery) {
       setItems([]);
+      setResultsQuery("");
       setLoading(false);
       setPartial(false);
       setError(false);
@@ -138,8 +142,9 @@ export default function GlobalSearch() {
     requestRef.current = controller;
     setLoading(true);
     setError(false);
-    // No presentar ni permitir abrir resultados de la consulta anterior mientras llega la nueva.
+    // La respuesta queda vinculada al término exacto, incluso antes del siguiente efecto React.
     setItems([]);
+    setResultsQuery("");
     setPartial(false);
     const timer = window.setTimeout(() => {
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
@@ -148,12 +153,14 @@ export default function GlobalSearch() {
           if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
           if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
           setItems(payload.items);
+          setResultsQuery(preparedQuery);
           setPartial(payload.partial === true);
         })
         .catch((cause) => {
           if (cause instanceof DOMException && cause.name === "AbortError") return;
           if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) {
             setItems([]);
+            setResultsQuery("");
             setPartial(false);
             setError(true);
           }
@@ -174,17 +181,18 @@ export default function GlobalSearch() {
   }, [activeIndex, inputId]);
 
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const safeItems = !loading && !error && prepareGlobalSearchQuery(query) === resultsQuery ? items : [];
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "next"));
+      setActiveIndex((current) => moveGlobalSearchIndex(current, safeItems.length, "next"));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "previous"));
-    } else if (event.key === "Enter" && activeIndex >= 0 && items[activeIndex]) {
+      setActiveIndex((current) => moveGlobalSearchIndex(current, safeItems.length, "previous"));
+    } else if (event.key === "Enter" && activeIndex >= 0 && safeItems[activeIndex]) {
       event.preventDefault();
       requestSequenceRef.current += 1;
       requestRef.current?.abort();
-      window.location.assign(items[activeIndex].href);
+      window.location.assign(safeItems[activeIndex].href);
     }
   }
 
@@ -216,15 +224,18 @@ export default function GlobalSearch() {
   }
 
   const preparedQuery = prepareGlobalSearchQuery(query);
-  const hasResults = !loading && !error && items.length > 0;
-  const previewMovements = items.filter((item) => item.kind === "transaction").length;
+  const queryMatchesResults = preparedQuery === resultsQuery;
+  const searching = loading || Boolean(preparedQuery && !queryMatchesResults && !error);
+  const visibleItems = !searching && !error && queryMatchesResults ? items : [];
+  const hasResults = visibleItems.length > 0;
+  const previewMovements = visibleItems.filter((item) => item.kind === "transaction").length;
   const fullMovementHref = preparedQuery ? `/transactions?q=${encodeURIComponent(preparedQuery)}` : "/transactions";
-  const statusMessage = loading
+  const statusMessage = searching
     ? "Buscando resultados…"
     : error
       ? "No se pudo completar la búsqueda."
       : preparedQuery
-        ? `Resultados rápidos: ${items.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
+        ? `Resultados rápidos: ${visibleItems.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
 
   return (
@@ -259,16 +270,16 @@ export default function GlobalSearch() {
                 aria-describedby={`${inputId}-status`}
                 aria-activedescendant={hasResults && activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
               />
-              {loading && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
+              {searching && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
             </label>
             <p id={`${inputId}-status`} className={styles.srOnly} role="status" aria-live="polite" aria-atomic="true">{statusMessage}</p>
-            {preparedQuery && !loading && !error ? (
-              <p className={styles.previewSummary}>Resultados rápidos · {items.length} mostrados ({previewMovements} movimientos). No es el total de coincidencias.</p>
+            {preparedQuery && !searching && !error ? (
+              <p className={styles.previewSummary}>Resultados rápidos · {visibleItems.length} mostrados ({previewMovements} movimientos). No es el total de coincidencias.</p>
             ) : null}
             <div id={`${inputId}-results`} className={styles.results} role={hasResults ? "listbox" : "region"} aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
-              ) : loading ? (
+              ) : searching ? (
                 <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
                 <div className={styles.hint}>
@@ -278,10 +289,10 @@ export default function GlobalSearch() {
                     Reintentar búsqueda
                   </button>
                 </div>
-              ) : items.length === 0 ? (
+              ) : visibleItems.length === 0 ? (
                 <div className={styles.hint}><strong>Sin coincidencias</strong><span>No hay resultados para “{preparedQuery}”.</span></div>
               ) : (
-                items.map((item, index) => {
+                visibleItems.map((item, index) => {
                   const itemDate = formatDate(item.date);
                   return (
                     <Link prefetch={false}
