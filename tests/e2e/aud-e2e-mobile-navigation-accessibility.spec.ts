@@ -58,8 +58,10 @@ test("AUD-E2E-NAV-001 · salto de móvil a escritorio cierra Más y recupera el 
   await expect(page.getByRole("button", { name: "Cerrar más secciones" })).toBeFocused();
 
   await page.setViewportSize({ width: 820, height: 900 });
-  await expect(more).toHaveAttribute("aria-expanded", "false");
+  // getByRole oculta elementos fuera del árbol accesible cuando cambia el breakpoint.
+  // Verificar el atributo en el DOM mientras el dock está oculto.
   await expect(mobile).toBeHidden();
+  await expect(page.locator('nav[aria-label="Navegación móvil"] button[aria-controls="mobile-more-navigation"]')).toHaveAttribute("aria-expanded", "false");
   const desktop = page.getByRole("navigation", { name: "Navegación principal" });
   await expect(desktop).toBeVisible();
   await expect(desktop.locator('[aria-current="page"]')).toBeFocused();
