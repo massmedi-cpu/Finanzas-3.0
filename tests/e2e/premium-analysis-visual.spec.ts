@@ -157,6 +157,15 @@ for (const width of WIDTHS) {
     await page.route("**/api/analysis**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
     });
+    // Este escenario certifica la lectura con cobertura conocida; la cobertura
+    // desconocida se valida por separado, sin inventar tendencias financieras.
+    await page.route("**/api/analysis/source-freshness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      });
+    });
 
     await page.setViewportSize({ width, height: width <= 430 ? 900 : 1000 });
     await page.goto("/analysis", { waitUntil: "domcontentloaded" });
