@@ -221,6 +221,124 @@ export default function RecurrencesClient({
     }
   }
 
+  const orderedCandidates = useMemo(() => {
+    const rank = { high: 0, medium: 1, low: 2 };
+    const items = [...(snapshot?.candidates ?? [])].sort((left, right) =>
+      rank[left.confidence] - rank[right.confidence]
+      || right.lastObservedDate.localeCompare(left.lastObservedDate)
+      || right.occurrenceCount - left.occurrenceCount
+      || left.conceptPattern.localeCompare(right.conceptPattern, "es"),
+    );
+    return {
+      current: items.filter((item) => !item.stale && item.missedCycles < 3),
+      historical: items.filter((item) => item.stale || item.missedCycles >= 3),
+    };
+  }, [snapshot]);
+
+  function renderCandidate(candidate: Candidate) {
+                const pending = pendingKey === candidate.candidateKey;
+                return (
+                  <article className={styles.card} key={candidate.candidateKey}>
+                    <div className={styles.cardTop}>
+                      <div className={styles.cardTitleWrap}>
+                        <span className={`${styles.confidence} ${styles[candidate.confidence]}`}>
+                          Confianza {confidenceLabel(candidate.confidence)}
+                        </span>
+                        {candidate.stale ? (
+                          <span className={styles.statusBadge}>
+                            {candidate.missedCycles} ciclo{candidate.missedCycles === 1 ? "" : "s"} no observado{candidate.missedCycles === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
+                        {candidate.existingStatus ? (
+                          <span className={styles.statusBadge}>Estado · {candidate.existingStatus}</span>
+                        ) : null}
+                        <h3>{candidate.conceptPattern}</h3>
+                      </div>
+                      <strong className={candidate.kind === "expense" ? styles.expense : styles.income}>
+                        {money(candidate.usualAmountCents)}
+                      </strong>
+                    </div>
+
+                    <dl className={styles.details}>
+                      <div><dt>Cadencia</dt><dd>{cadenceLabel(candidate.intervalUnit, candidate.intervalCount)}</dd></div>
+                      <div><dt>Apariciones</dt><dd>{candidate.occurrenceCount}</dd></div>
+                      <div><dt>Próxima fecha provisional</dt><dd>{date(candidate.nextEstimatedDate)}</dd></div>
+                      <div><dt>Ciclos no observados</dt><dd>{candidate.missedCycles}</dd></div>
+                      <div><dt>Tolerancia fecha</dt><dd>± {candidate.dateToleranceDays} días</dd></div>
+                      <div><dt>Tolerancia importe</dt><dd>± {money(candidate.amountToleranceCents)}</dd></div>
+                      <div><dt>Último movimiento</dt><dd>{date(candidate.lastObservedDate)}</dd></div>
+                    </dl>
+
+                    <p className={styles.explanation}>{candidate.explanation}</p>
+
+                    <div className={styles.actions}>
+                      {!candidate.existingStatus ? (
+                        <>
+                          <button
+                            className={styles.primaryButton}
+                            type="button"
+                            disabled={pending}
+                            onClick={() => void persistCandidate(candidate, "active")}
+                          >
+                            {pending ? "Guardando…" : "Confirmar recurrencia"}
+                          </button>
+                          <button
+                            className={styles.secondaryButton}
+                            type="button"
+                            disabled={pending}
+                            onClick={() => void persistCandidate(candidate, "ignored")}
+                          >
+                            Ignorar patrón
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {candidate.existingStatus !== "active" ? (
+                            <button
+                              className={styles.primaryButton}
+                              type="button"
+                              disabled={pending}
+                              onClick={() => void persistCandidate(candidate, "active")}
+                            >
+                              Reactivar y recalcular
+                            </button>
+                          ) : (
+                            <>
+                              <button
+                                className={styles.primaryButton}
+                                type="button"
+                                disabled={pending}
+                                onClick={() => void persistCandidate(candidate, "active")}
+                              >
+                                Actualizar cálculo
+                              </button>
+                              <button
+                                className={styles.secondaryButton}
+                                type="button"
+                                disabled={pending}
+                                onClick={() => void changeStatus(candidate, "ignored")}
+                              >
+                                Ignorar
+                              </button>
+                            </>
+                          )}
+                          {candidate.existingStatus !== "archived" ? (
+                            <button
+                              className={styles.textButton}
+                              type="button"
+                              disabled={pending}
+                              onClick={() => void changeStatus(candidate, "archived")}
+                            >
+                              Archivar
+                            </button>
+                          ) : null}
+                        </>
+                      )}
+                    </div>
+                  </article>
+                );
+  }
+
   const forecastHref = forecastContext ? forecastHrefForContext(forecastContext) : "/forecast";
 
   return (
@@ -315,7 +433,7 @@ export default function RecurrencesClient({
           <div className={styles.panelHeading}>
             <div>
               <h2 id="candidate-title">Candidatos encontrados</h2>
-              <p>Ordenados por confianza, vigencia y número de apariciones.</p>
+              <p>Primero confianza y última aparición. El historial con ciclos omitidos permanece disponible bajo demanda.</p>
             </div>
             <span className={styles.readOnlyBadge}>Origen bancario · solo lectura</span>
           </div>
@@ -324,109 +442,16 @@ export default function RecurrencesClient({
             <div className={styles.empty}>Analizando los movimientos…</div>
           ) : snapshot?.candidates.length ? (
             <div className={styles.candidateList}>
-              {snapshot.candidates.map((candidate) => {
-                const pending = pendingKey === candidate.candidateKey;
-                return (
-                  <article className={styles.card} key={candidate.candidateKey}>
-                    <div className={styles.cardTop}>
-                      <div className={styles.cardTitleWrap}>
-                        <span className={`${styles.confidence} ${styles[candidate.confidence]}`}>
-                          Confianza {confidenceLabel(candidate.confidence)}
-                        </span>
-                        {candidate.stale ? (
-                          <span className={styles.statusBadge}>
-                            {candidate.missedCycles} ciclo{candidate.missedCycles === 1 ? "" : "s"} no observado{candidate.missedCycles === 1 ? "" : "s"}
-                          </span>
-                        ) : null}
-                        {candidate.existingStatus ? (
-                          <span className={styles.statusBadge}>Estado · {candidate.existingStatus}</span>
-                        ) : null}
-                        <h3>{candidate.conceptPattern}</h3>
-                      </div>
-                      <strong className={candidate.kind === "expense" ? styles.expense : styles.income}>
-                        {money(candidate.usualAmountCents)}
-                      </strong>
-                    </div>
-
-                    <dl className={styles.details}>
-                      <div><dt>Cadencia</dt><dd>{cadenceLabel(candidate.intervalUnit, candidate.intervalCount)}</dd></div>
-                      <div><dt>Apariciones</dt><dd>{candidate.occurrenceCount}</dd></div>
-                      <div><dt>Próxima fecha</dt><dd>{date(candidate.nextEstimatedDate)}</dd></div>
-                      <div><dt>Ciclos no observados</dt><dd>{candidate.missedCycles}</dd></div>
-                      <div><dt>Tolerancia fecha</dt><dd>± {candidate.dateToleranceDays} días</dd></div>
-                      <div><dt>Tolerancia importe</dt><dd>± {money(candidate.amountToleranceCents)}</dd></div>
-                      <div><dt>Último movimiento</dt><dd>{date(candidate.lastObservedDate)}</dd></div>
-                    </dl>
-
-                    <p className={styles.explanation}>{candidate.explanation}</p>
-
-                    <div className={styles.actions}>
-                      {!candidate.existingStatus ? (
-                        <>
-                          <button
-                            className={styles.primaryButton}
-                            type="button"
-                            disabled={pending}
-                            onClick={() => void persistCandidate(candidate, "active")}
-                          >
-                            {pending ? "Guardando…" : "Confirmar recurrencia"}
-                          </button>
-                          <button
-                            className={styles.secondaryButton}
-                            type="button"
-                            disabled={pending}
-                            onClick={() => void persistCandidate(candidate, "ignored")}
-                          >
-                            Ignorar patrón
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          {candidate.existingStatus !== "active" ? (
-                            <button
-                              className={styles.primaryButton}
-                              type="button"
-                              disabled={pending}
-                              onClick={() => void persistCandidate(candidate, "active")}
-                            >
-                              Reactivar y recalcular
-                            </button>
-                          ) : (
-                            <>
-                              <button
-                                className={styles.primaryButton}
-                                type="button"
-                                disabled={pending}
-                                onClick={() => void persistCandidate(candidate, "active")}
-                              >
-                                Actualizar cálculo
-                              </button>
-                              <button
-                                className={styles.secondaryButton}
-                                type="button"
-                                disabled={pending}
-                                onClick={() => void changeStatus(candidate, "ignored")}
-                              >
-                                Ignorar
-                              </button>
-                            </>
-                          )}
-                          {candidate.existingStatus !== "archived" ? (
-                            <button
-                              className={styles.textButton}
-                              type="button"
-                              disabled={pending}
-                              onClick={() => void changeStatus(candidate, "archived")}
-                            >
-                              Archivar
-                            </button>
-                          ) : null}
-                        </>
-                      )}
-                    </div>
-                  </article>
-                );
-              })}
+              {orderedCandidates.current.map(renderCandidate)}
+              {orderedCandidates.historical.length > 0 ? (
+                <details className={styles.historicalGroup}>
+                  <summary>
+                    Históricos · {orderedCandidates.historical.length} patrón{orderedCandidates.historical.length === 1 ? "" : "es"}
+                    <span>No se incorporan a Previsión sin confirmación; próximas fechas provisionales</span>
+                  </summary>
+                  <div className={styles.candidateList}>{orderedCandidates.historical.map(renderCandidate)}</div>
+                </details>
+              ) : null}
             </div>
           ) : (
             <div className={styles.empty}>
