@@ -315,6 +315,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [manualQuery, setManualQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
@@ -400,7 +401,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
-    if (!silent) setLoadingDetail(true);
+    if (!silent) {
+      setLoadingDetail(true);
+      setDetailLoadFailed(false);
+    }
     setError(null);
     if (!silent) {
       setCandidates(null);
@@ -417,7 +421,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
       if (!preserveEditor) setEditor(editorFromDocument(data.document));
     } catch (caught) {
-      if (sequence === detailSequence.current) setError(friendlyError(caught));
+      if (sequence === detailSequence.current && selectedIdRef.current === id) {
+        if (!silent) setDetailLoadFailed(true);
+        setError(friendlyError(caught));
+      }
     } finally {
       if (!silent && sequence === detailSequence.current) setLoadingDetail(false);
     }
@@ -913,7 +920,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail ? <div className={styles.loading}>Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
               <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
                 <h2>El detalle no está disponible</h2>
                 <p>Los datos de otro documento no se muestran en esta selección.</p>
