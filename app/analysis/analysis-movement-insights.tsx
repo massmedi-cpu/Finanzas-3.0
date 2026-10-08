@@ -700,6 +700,8 @@ function TopTransactions({ snapshot }: { snapshot: AnalysisSnapshot }) {
 }
 
 export default function AnalysisMovementInsights({ snapshot }: { snapshot: AnalysisSnapshot }) {
+  const [dailyView, setDailyView] = useState<"series" | "heatmap">("series");
+  const [patternsExpanded, setPatternsExpanded] = useState(false);
   const available = snapshot.dailySpend.length > 0
     || snapshot.weekdaySpend.length > 0
     || snapshot.amountBands.length > 0
@@ -714,25 +716,18 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
         <div>
           <p>PATRONES DEL PERIODO</p>
           <h2 id="movement-insights-heading">Patrones que no se ven en un simple total</h2>
-          <span>Las gráficas usan los mismos movimientos elegibles del periodo y conservan filtros, exclusiones y correcciones.</span>
+          <span>Una lectura del calendario y, bajo demanda, los patrones especializados. Todas las vistas reutilizan movimientos elegibles, filtros y correcciones.</span>
         </div>
         <Link prefetch={false} href={periodHref(snapshot)}>Ver todos los movimientos</Link>
       </div>
 
-      <div className={styles.heroGrid}>
-        <DailySpendChart snapshot={snapshot} />
-        <WeekdayChart snapshot={snapshot} />
-      </div>
-
-      <div className={styles.chartColumns}>
-        <div className={styles.chartColumn}>
-          <SpendingCalendar snapshot={snapshot} />
-          <MerchantScatter snapshot={snapshot} />
+      <div className={styles.dailyOverview} aria-label="Gasto temporal del periodo">
+        <div className={styles.dailySwitch} role="group" aria-label="Vista del gasto diario">
+          <button type="button" aria-pressed={dailyView === "series"} onClick={() => setDailyView("series")}>Evolución diaria</button>
+          <button type="button" aria-pressed={dailyView === "heatmap"} onClick={() => setDailyView("heatmap")}>Mapa de calor</button>
         </div>
-        <div className={styles.chartColumn}>
-          <AmountBandsChart snapshot={snapshot} />
-          <MerchantConcentrationCurve snapshot={snapshot} />
-        </div>
+        {dailyView === "series" ? <DailySpendChart snapshot={snapshot} /> : <SpendingCalendar snapshot={snapshot} />}
+        <p className={styles.viewExplanation}>Ambas vistas muestran las mismas fechas y gastos; cambia solo la forma de leerlos.</p>
       </div>
 
       {snapshot.accountSpend.length > 1 && (
@@ -748,9 +743,39 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
       )}
 
       <div className={styles.detailGrid}>
-        <Concepts snapshot={snapshot} />
         <TopTransactions snapshot={snapshot} />
       </div>
+
+      <section className={styles.advancedPatterns} aria-label="Detalle de patrones financieros">
+        <button
+          type="button"
+          className={styles.advancedToggle}
+          aria-expanded={patternsExpanded}
+          onClick={() => setPatternsExpanded((expanded) => !expanded)}
+        >
+          {patternsExpanded ? "Ocultar detalle de patrones" : "Mostrar detalle de patrones"}
+        </button>
+        <p className={styles.viewExplanation}>Por día de la semana, importes, comercios, concentración y conceptos; gráficos y tablas originales disponibles bajo demanda.</p>
+        {patternsExpanded && (
+          <>
+            <div className={styles.heroGrid}>
+              <WeekdayChart snapshot={snapshot} />
+              <AmountBandsChart snapshot={snapshot} />
+            </div>
+            <div className={styles.chartColumns}>
+              <div className={styles.chartColumn}>
+                <MerchantScatter snapshot={snapshot} />
+              </div>
+              <div className={styles.chartColumn}>
+                <MerchantConcentrationCurve snapshot={snapshot} />
+              </div>
+            </div>
+            <div className={styles.detailGrid}>
+              <Concepts snapshot={snapshot} />
+            </div>
+          </>
+        )}
+      </section>
     </section>
   );
 }

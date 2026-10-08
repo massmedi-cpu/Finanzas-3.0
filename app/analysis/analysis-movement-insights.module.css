@@ -520,3 +520,16 @@
 @media (prefers-reduced-motion: reduce) {
   .heading > a { transition: none; }
 }
+
+/* AUD-E2E-ANA-001: one temporal card, optional specialist views. */
+.dailyOverview { min-width: 0; display: grid; gap: var(--space-2); }
+.dailySwitch { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.2rem; width: fit-content; max-width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.dailySwitch button,
+.advancedToggle { min-height: 2.75rem; padding: 0.55rem 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-strong); color: var(--color-text); font: inherit; font-weight: 700; cursor: pointer; }
+.dailySwitch button[aria-pressed="true"] { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface)); }
+.advancedPatterns { min-width: 0; display: grid; align-content: start; gap: var(--space-3); margin-top: var(--space-4); }
+.advancedToggle { width: fit-content; }
+.dailySwitch button:focus-visible,
+.advancedToggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.viewExplanation { margin: 0; color: var(--color-text-muted); font-size: var(--font-helper); line-height: 1.5; }
+@media (max-width: 30rem) { .dailySwitch { width: 100%; } .dailySwitch button { flex: 1 1 auto; } .advancedToggle { width: 100%; } }

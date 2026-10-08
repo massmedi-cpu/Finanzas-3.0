@@ -179,6 +179,11 @@ for (const width of WIDTHS) {
     await expect(page.getByLabel("Lectura rápida")).toBeVisible();
     await expect(page.getByLabel("Lectura rápida")).toContainText("Sin previsiones");
     await expect(page.getByRole("heading", { name: "Patrones que no se ven en un simple total" })).toBeVisible();
+    const advancedToggle = page.getByRole("button", { name: "Mostrar detalle de patrones" });
+    await expect(advancedToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toHaveCount(0);
+    await advancedToggle.click();
+    await expect(page.getByRole("button", { name: "Ocultar detalle de patrones" })).toHaveAttribute("aria-expanded", "true");
     await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
@@ -216,6 +221,7 @@ for (const width of WIDTHS) {
         ["merchants", "Relación entre frecuencia de compra e importe medio por comercio"],
         ["concentration", "Curva de concentración del gasto por comercio"],
       ]) {
+        if (name === "heatmap") await page.getByRole("button", { name: "Mapa de calor", exact: true }).click();
         const card = page.getByRole("img", { name: chart }).locator("xpath=ancestor::div[contains(@class, 'chartCard')][1]");
         await card.scrollIntoViewIfNeeded();
         await card.evaluate((element) => {
@@ -223,6 +229,7 @@ for (const width of WIDTHS) {
         });
         await card.screenshot({ path: testInfo.outputPath(`analysis-patterns-${testInfo.project.name}-${width}-${name}.png`) });
       }
+      await page.getByRole("button", { name: "Evolución diaria", exact: true }).click();
     }
 
     const dailyData = page.getByText("Ver datos diarios", { exact: true });
@@ -596,4 +603,30 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
   await expect(breakdown.getByText("8 de 8 categorías con gasto")).toBeVisible();
   await breakdown.getByRole("button", { name: "Ver menos categorías" }).click();
   await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(6);
+});
+
+test("AUD-E2E-ANA-001 · lectura diaria y mapa de calor comparten tarjeta sin duplicidad", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const temporal = page.getByLabel("Gasto temporal del periodo");
+  const series = temporal.getByRole("button", { name: "Evolución diaria" });
+  const heatmap = temporal.getByRole("button", { name: "Mapa de calor" });
+  await expect(series).toHaveAttribute("aria-pressed", "true");
+  await expect(temporal.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
+  await expect(temporal.getByRole("img", { name: "Mapa de calor diario del gasto" })).toHaveCount(0);
+  await heatmap.click();
+  await expect(heatmap).toHaveAttribute("aria-pressed", "true");
+  await expect(temporal.getByRole("img", { name: "Mapa de calor diario del gasto" })).toBeVisible();
+  await expect(temporal.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toHaveCount(0);
+  await series.click();
+  await expect(temporal.getByText("Ver datos diarios")).toBeVisible();
+  const advanced = page.getByRole("button", { name: "Mostrar detalle de patrones" });
+  await expect(advanced).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
+  await advanced.click();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
+  await page.getByRole("button", { name: "Ocultar detalle de patrones" }).click();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toHaveCount(0);
 });
