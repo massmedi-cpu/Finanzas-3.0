@@ -121,7 +121,7 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
   const metrics = page.getByRole("region", { name: "Resumen comparativo" });
   // Neto y Ahorro comparten ahora una tarjeta: 2 métricas + bloque agrupado.
   await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
-  await expect(metrics.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Importes parciales, comparación incompleta");
+  await expect(metrics.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Sin movimientos confirmados en el periodo");
   await expect(metrics).not.toContainText("−100");
   await expect(metrics).not.toContainText("-100");
 });
