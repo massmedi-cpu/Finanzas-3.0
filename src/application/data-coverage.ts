@@ -49,8 +49,7 @@ export function periodComparisonIsReliable(coverage: PeriodCoverage) {
 
 export function dateHasConfirmedCoverage(date: string, coverage: PeriodCoverage) {
   if (!validDate(date)) return false;
-  if (coverage.state === "covered") return true;
-  return coverage.state === "partial"
-    && Boolean(coverage.throughDate)
-    && date <= coverage.throughDate!;
+  if (!coverage.throughDate) return false;
+  return (coverage.state === "covered" || coverage.state === "partial")
+    && date <= coverage.throughDate;
 }

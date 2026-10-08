@@ -123,3 +123,17 @@ test("AUD-E2E-DAT-001 · fechas bancarias imposibles o periodos invertidos no ce
   expect(leap.state).toBe("covered");
   expect(dateHasConfirmedCoverage("2026-02-30", leap)).toBe(false);
 });
+ 
+
+test("AUD-E2E-DAT-001 · cobertura confirmada no legitima fechas posteriores al periodo", () => {
+  const covered = resolvePeriodCoverage({
+    dateFrom: "2026-08-01", dateTo: "2026-08-31", latestMovementDate: "2026-09-29",
+  });
+  expect(dateHasConfirmedCoverage("2026-08-31", covered)).toBe(true);
+  expect(dateHasConfirmedCoverage("2026-09-01", covered)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-12-31", covered)).toBe(false);
+  const unknown = resolvePeriodCoverage({
+    dateFrom: "2026-08-01", dateTo: "2026-08-31", latestMovementDate: null,
+  });
+  expect(dateHasConfirmedCoverage("2026-08-15", unknown)).toBe(false);
+});
