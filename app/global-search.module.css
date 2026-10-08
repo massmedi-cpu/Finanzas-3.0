@@ -319,3 +319,5 @@
     backdrop-filter: none;
   }
 }
+
+.previewSummary{margin:.2rem .9rem .6rem;color:var(--color-text-muted,#bcc9de);font-size:.78rem;line-height:1.45;font-weight:650}

@@ -209,12 +209,14 @@ export default function GlobalSearch() {
   }
 
   const preparedQuery = prepareGlobalSearchQuery(query);
+  const previewMovements = items.filter((item) => item.kind === "transaction").length;
+  const fullMovementHref = preparedQuery ? `/transactions?q=${encodeURIComponent(preparedQuery)}` : "/transactions";
   const statusMessage = loading
     ? "Buscando resultados…"
     : error
       ? "No se pudo completar la búsqueda."
       : preparedQuery
-        ? `${items.length} ${items.length === 1 ? "resultado" : "resultados"}${partial ? ". Algunos orígenes no respondieron." : "."}`
+        ? `Resultados rápidos: ${items.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
 
   return (
@@ -252,6 +254,9 @@ export default function GlobalSearch() {
               {loading && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
             </label>
             <p id={`${inputId}-status`} className={styles.srOnly} role="status" aria-live="polite" aria-atomic="true">{statusMessage}</p>
+            {preparedQuery && !loading && !error ? (
+              <p className={styles.previewSummary}>Resultados rápidos · {items.length} mostrados ({previewMovements} movimientos). No es el total de coincidencias.</p>
+            ) : null}
             <div id={`${inputId}-results`} className={styles.results} role="listbox" aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
@@ -284,6 +289,11 @@ export default function GlobalSearch() {
             </div>
             <div className={styles.footer}>
               <span>↑↓ navegar · Enter abrir · Esc cerrar</span>
+              {preparedQuery ? (
+                <Link prefetch={false} href={fullMovementHref} onClick={() => close(false)}>
+                  Ver todos los movimientos para «{preparedQuery}»
+                </Link>
+              ) : null}
               {partial && <span>Alguna fuente no respondió; se muestran los resultados disponibles.</span>}
             </div>
           </div>

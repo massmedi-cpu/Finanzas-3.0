@@ -101,3 +101,20 @@ test("Endpoint global reutiliza consultas canónicas y no introduce IA ni una se
   expect(source).not.toContain("openai");
   expect(source).not.toContain("financial_period_summary");
 });
+
+test("AUD-E2E-BUS-001 · buscador rápido y listado completo distinguen alcance", async ({ page }) => {
+  await page.route("**/api/search?**", async route => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      query: "mercadona", partial: false, items: [
+        { id: "t1", kind: "transaction", title: "Mercadona", subtitle: null, href: "/transactions?dateFrom=2026-09-25", amountCents: -1200 },
+        { id: "m1", kind: "merchant", title: "Mercadona", subtitle: null, href: "/transactions?merchantId=11111111-1111-4111-8111-111111111111" },
+      ],
+    }) });
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("combobox", { name: "Buscar en Financial App" }).fill("mercadona");
+  await expect(dialog.getByText(/Resultados rápidos · 2 mostrados/)).toBeVisible();
+  await expect(dialog.getByRole("link", { name: /Ver todos los movimientos para «mercadona»/ })).toHaveAttribute("href", "/transactions?q=mercadona");
+});
