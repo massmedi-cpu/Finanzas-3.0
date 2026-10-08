@@ -294,6 +294,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 }) {
   const actionFeedback = useActionFeedback();
   const [list, setList] = useState<DocumentList | null>(null);
+  const [loadedListKey, setLoadedListKey] = useState<string | null>(null);
+  const [listLoadFailed, setListLoadFailed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
@@ -344,6 +346,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
+    const requested = new URL(url, window.location.origin);
+    const requestKey = `${requested.pathname}${requested.search}`;
+    setListLoadFailed(false);
     if (!silent) setLoadingList(true);
     setError(null);
     try {
@@ -369,6 +374,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         return;
       }
       setList(data);
+      setLoadedListKey(requestKey);
+      setListLoadFailed(false);
       if (
         selectedIdRef.current
         && !data.items.some((item) => item.id === selectedIdRef.current)
@@ -378,7 +385,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setDetail(null);
       }
     } catch (caught) {
-      if (sequence === listSequence.current) setError(friendlyError(caught));
+      if (sequence === listSequence.current) {
+        setListLoadFailed(true);
+        setError(friendlyError(caught));
+      }
     } finally {
       if (!silent && sequence === listSequence.current) setLoadingList(false);
     }
