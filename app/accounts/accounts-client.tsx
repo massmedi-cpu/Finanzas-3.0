@@ -216,10 +216,10 @@ function activityBarWidth(value: number, scale: number) {
   return magnitude === 0 ? 0 : Math.max(2, (magnitude / scale) * 100);
 }
 
-export default function AccountsClient() {
-  const [showArchived, setShowArchived] = useState(false);
+export default function AccountsClient({ initialAccountId = null }: { initialAccountId?: string | null }) {
+  const [showArchived, setShowArchived] = useState(Boolean(initialAccountId));
   const [balances, setBalances] = useState<BalancesResponse | null>(null);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const [selectedId, setSelectedId] = useState<string>(initialAccountId ?? "");
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [transactions, setTransactions] = useState<TransactionsResponse | null>(null);
   const [loadingBalances, setLoadingBalances] = useState(true);

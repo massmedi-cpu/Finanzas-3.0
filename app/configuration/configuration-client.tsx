@@ -10,6 +10,7 @@ import {
 } from "../../src/domain/category-visuals";
 import { CategoryGlyph } from "../../src/ui/category-glyph";
 import { formatMoneyCents, parseSpanishMoneyToCents } from "../../src/core/money";
+import Link from "next/link";
 
 type ConfigPayload = { accounts: Account[]; categories: Category[] };
 type Tab = "accounts" | "categories";
@@ -456,7 +457,7 @@ export default function ConfigurationClient() {
             {data.accounts.length === 0 ? <div className="empty-state"><Icon name="account" /><h3>Aún no hay cuentas</h3></div> : (
               <div className="entity-list">
                 {data.accounts.map((account, index) => <article className={`entity-card ${account.lifecycle === "archived" ? "archived" : ""}`} key={account.id}>
-                  <div className="entity-main"><div className="entity-icon"><Icon name="account" /></div><div><div className="entity-title-row"><h3>{account.name}</h3><span className={`lifecycle ${account.lifecycle}`}>{account.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{account.institution || "Sin entidad"} · {labelForAccountType(account.type)}</p><strong>{formatMoneyCents(account.openingBalanceCents)}</strong></div></div>
+                  <div className="entity-main"><div className="entity-icon"><Icon name="account" /></div><div><div className="entity-title-row"><h3>{account.name}</h3><span className={`lifecycle ${account.lifecycle}`}>{account.lifecycle === "active" ? "Activa" : "Archivada"}</span></div><p>{account.institution || "Sin entidad"} · {labelForAccountType(account.type)}</p><span className="field-hint">Saldo inicial · configuración</span><strong aria-label={`Saldo inicial de ${account.name}: ${formatMoneyCents(account.openingBalanceCents)}`}>{formatMoneyCents(account.openingBalanceCents)}</strong><Link href={`/accounts?accountId=${encodeURIComponent(account.id)}`} prefetch={false} className="back-link" aria-label={`Ver saldo bancario con fecha de ${account.name}`}>Ver saldo bancario y fecha</Link></div></div>
                   <div className="entity-actions">
                     <button type="button" className="icon-button" onClick={() => beginAccountEdit(account)} aria-label={`Editar ${account.name}`}><Icon name="edit" /></button>
                     <button type="button" className="icon-button" disabled={busy || !canMoveAccount(index, -1)} onClick={() => void reorderAccounts(index, -1)} aria-label="Subir dentro de su grupo"><Icon name="up" /></button>
