@@ -248,6 +248,7 @@ function friendlyError(error: unknown) {
     invalid_document_owner_review: "Confirma que has revisado el documento y su procedencia.",
     invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
     document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
+    document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -655,7 +656,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "status", id: detail.document.id, status }),
       }));
-      await refreshAfterMutation(detail.document.id, true);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed || confirmed.document.status !== status) throw new Error("document_revalidation_incomplete");
       setNotice(`Estado cambiado a ${STATUS_LABELS[status].toLowerCase()}.`);
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
@@ -727,7 +729,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "associate", documentId: detail.document.id, transactionId, method }),
       }));
-      await refreshAfterMutation(detail.document.id, true);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed?.associations?.some((association) => association.transactionId === transactionId)) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setCandidates(null);
       setTransactions(null);
       setNotice(method === "suggested" ? "Sugerencia confirmada explícitamente." : "Movimiento asociado manualmente.");
@@ -744,7 +749,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "unassociate", documentId: detail.document.id, transactionId }),
       }));
-      await refreshAfterMutation(detail.document.id, true);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed || confirmed.associations?.some((association) => association.transactionId === transactionId)) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setNotice("Asociación eliminada. El movimiento bancario no se ha modificado.");
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
