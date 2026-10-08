@@ -602,3 +602,68 @@
 .merchantConcentrationDisclosure > summary { cursor: pointer; color: var(--color-text); font-weight: 700; padding: 0.55rem 0; }
 .merchantConcentrationDisclosure > summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
 .merchantConcentrationDisclosure > p { color: var(--color-text-muted); font-size: var(--font-helper); }
+
+/* AUD-E2E-UI-001 · contraste de Análisis en tema claro sin alterar el tema oscuro. */
+:global(html[data-theme="light"]) .headerTitle > p,
+:global(html[data-theme="light"]) .sectionHeading p {
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .filters input,
+:global(html[data-theme="light"]) .filters select {
+  border-color: var(--color-border);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .rangeSelector {
+  border-color: var(--color-border);
+  background: var(--surface-card-muted);
+}
+:global(html[data-theme="light"]) .rangeActive {
+  border-color: var(--border-primary-strong);
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .applyButton {
+  border-color: var(--border-primary-strong);
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+:global(html[data-theme="light"]) .secondaryLink,
+:global(html[data-theme="light"]) .sectionHeadingCompact a,
+:global(html[data-theme="light"]) .insufficient a,
+:global(html[data-theme="light"]) .rankingList a,
+:global(html[data-theme="light"]) .textButton {
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .secondaryLink:hover,
+:global(html[data-theme="light"]) .sectionHeadingCompact a:hover,
+:global(html[data-theme="light"]) .insufficient a:hover,
+:global(html[data-theme="light"]) .textButton:hover,
+:global(html[data-theme="light"]) .rankingList a:hover {
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .changeGood,
+:global(html[data-theme="light"]) .goodText,
+:global(html[data-theme="light"]) .goodDelta {
+  color: var(--color-success) !important;
+}
+:global(html[data-theme="light"]) .changeBad,
+:global(html[data-theme="light"]) .badDelta,
+:global(html[data-theme="light"]) .contextAlerts strong,
+:global(html[data-theme="light"]) .error {
+  color: var(--color-danger) !important;
+}
+:global(html[data-theme="light"]) .partialChip {
+  color: var(--color-warning);
+}
+:global(html[data-theme="light"]) .refreshing {
+  background: var(--surface-card-hover);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .rank {
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .breakdownRow:hover strong,
+:global(html[data-theme="light"]) .anomaly:hover strong {
+  color: var(--color-text);
+}
