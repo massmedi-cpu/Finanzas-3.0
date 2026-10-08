@@ -732,6 +732,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     finally { setBusy(null); }
   }
 
+  // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
+  const currentList = loadedListKey === listUrl ? list : null;
+  const listPending = loadingList || (!currentList && !listLoadFailed);
+
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
@@ -831,7 +835,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         <section className={styles.workspace}>
           <aside className={styles.listPanel} aria-label="Listado de documentos">
             <div className={styles.listHeader}>
-              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{list?.total ?? 0} documentos</h2></div>
+              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2></div>
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={loadingList} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
@@ -846,9 +850,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 <option value="">Todos</option><option value="imported">Importados</option><option value="pending_review">Pendientes</option><option value="confirmed">Confirmados</option><option value="archived">Archivados</option>
               </select></label>
             </div>
-            {loadingList ? <div className={styles.loading}>Cargando documentos…</div> : list?.items.length ? (
+            {listPending ? <div className={styles.loading} role="status">Cargando documentos…</div> : listLoadFailed ? (
+              <div className={styles.empty} role="status" data-testid="documents-list-error">
+                <strong>No se ha podido cargar la lista</strong>
+                <p>Estos filtros aún no se han comprobado. Los documentos no se han modificado.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => void loadList()} disabled={loadingList}>Reintentar lista</button>
+              </div>
+            ) : currentList?.items.length ? (
               <div className={styles.documentList}>
-                {list.items.map((item) => (
+                {currentList.items.map((item) => (
                   <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
                     <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{item.isTest === true ? <small className={styles.syntheticNoteLabel}>Prueba · designación revisada</small> : hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
@@ -875,7 +885,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                   Limpiar filtros
                 </button>
               </div>
-            ) : list?.testCount ? (
+            ) : currentList?.testCount ? (
               <div className={styles.empty}>
                 <strong>No hay documentos ordinarios</strong>
                 <p>Los documentos designados como Prueba siguen disponibles en su vista.</p>
