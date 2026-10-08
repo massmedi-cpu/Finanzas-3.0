@@ -96,6 +96,7 @@ async function existingDriveDocuments() {
       query: null,
       limit: PAGE_SIZE,
       offset,
+      scope: "all",
     });
     total = page.total;
     for (const item of page.items) {
@@ -174,8 +175,8 @@ function apiError(error: unknown) {
 
 export async function POST() {
   try {
-    const existingPromise = existingDriveDocuments();
     const readers = googleReaders();
+    const existingPromise = existingDriveDocuments();
     const discoveredPromise = readers.discovery.listAuthorizedFolder(
       FINANCIAL_APP_DOCUMENTS_DRIVE_FOLDER_ID,
     );

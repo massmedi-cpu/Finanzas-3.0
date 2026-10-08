@@ -16,6 +16,13 @@ on:
       - "tests/e2e/document-ocr-natural-review.spec.ts"
       - "tests/e2e/document-ocr-service.spec.ts"
       - "tests/e2e/documents.spec.ts"
+      - "tests/e2e/document-test-designation.spec.ts"
+      - "tests/e2e/document-drive-sync-preflight.spec.ts"
+      - "tests/e2e/document-pagination.spec.ts"
+      - "tests/e2e/aud-e2e-documents-context.spec.ts"
+      - "app/documents/**"
+      - "app/api/documents/**"
+      - "supabase/functions/financial-app-db-gateway/document-logic.ts"
       - ".github/workflows/document-ocr-edge-cases.yml"
       - ".github/workflows/quality-edge-ci-gates-10.0.41.yml"
 
@@ -59,5 +66,10 @@ jobs:
           tests/e2e/document-ocr-natural-review.spec.ts
           tests/e2e/document-ocr-service.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/document-test-designation.spec.ts
+          tests/e2e/document-drive-sync-preflight.spec.ts
+          tests/e2e/document-pagination.spec.ts
+          tests/e2e/drive-auto-detection-10.0.72.spec.ts
+          tests/e2e/aud-e2e-documents-context.spec.ts
           --project=chromium-desktop
           --workers=2

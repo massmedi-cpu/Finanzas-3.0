@@ -65,6 +65,7 @@ type DocumentItem = {
   id: string;
   status: "imported" | "pending_review" | "confirmed" | "archived";
   associationCount: number;
+  isTest?: boolean;
 };
 
 type DocumentList = {
@@ -153,10 +154,10 @@ async function loadDocumentSummary(): Promise<DocumentSummary> {
   let pages = 0;
 
   while (offset < total) {
-    const page = await readJson<DocumentList>(`/api/documents?limit=100&offset=${offset}`);
+    const page = await readJson<DocumentList>(`/api/documents?scope=ordinary&limit=100&offset=${offset}`);
     total = Math.max(0, page.total);
     for (const document of page.items) {
-      if (document.status === "archived") continue;
+      if (document.status === "archived" || document.isTest === true) continue;
       if (document.associationCount === 0) unassociated += 1;
       if (document.status === "pending_review") pendingReview += 1;
     }

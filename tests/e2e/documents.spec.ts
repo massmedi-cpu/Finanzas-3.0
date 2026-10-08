@@ -201,6 +201,16 @@ test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({
   await page.getByRole("link", { name: "← Inicio" }).click();
   const unsaved = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
   await expect(unsaved).toContainText("cambios de metadatos sin guardar");
+  await expect(unsaved.getByRole("button", { name: "Seguir editando" })).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(unsaved.getByRole("button", { name: "Descartar cambios" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(unsaved.getByRole("button", { name: "Seguir editando" })).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(unsaved).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "← Inicio" })).toBeFocused();
+  await expect(issuer).toHaveValue("Proveedor editado");
+  await page.getByRole("link", { name: "← Inicio" }).click();
   await unsaved.getByRole("button", { name: "Seguir editando" }).click();
   await expect(page).toHaveURL(/\/documents/);
   await expect(issuer).toHaveValue("Proveedor editado");

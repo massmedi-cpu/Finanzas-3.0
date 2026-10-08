@@ -19,6 +19,7 @@ import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
+type DocumentScope = "ordinary" | "tests" | "all";
 type StorageProvider = "supabase" | "google_drive";
 type MetadataEditor = {
   type: DocumentType;
@@ -49,6 +50,9 @@ type DocumentItem = {
   originalFileName: string;
   sourceModifiedAt: string | null;
   sourceDriveFileId: string | null;
+  isTest?: boolean;
+  testDesignationUpdatedAt?: string | null;
+  testDesignationReason?: string | null;
 };
 
 type DocumentLineItem = {
@@ -76,7 +80,7 @@ type Association = {
 };
 
 type DocumentDetail = {
-  contractVersion: 1 | 2;
+  contractVersion: 1 | 2 | 3;
   document: Omit<DocumentItem, "associationCount"> & {
     storageKey?: string;
     documentTime?: string | null;
@@ -98,12 +102,15 @@ type DocumentPrinciples = {
   getHasSideEffects: false;
   suggestionsPersisted: false;
   associationsRequireConfirmation: true;
+  testDesignationSupported?: boolean;
+  testDesignationEditable?: boolean;
 };
 
 type DocumentList = {
-  contractVersion: 1;
+  contractVersion: 1 | 2 | 3;
   items: DocumentItem[];
   total: number;
+  testCount?: number;
   limit: number;
   offset: number;
   principles: DocumentPrinciples;
@@ -233,6 +240,10 @@ async function readJson(response: Response) {
 function friendlyError(error: unknown) {
   const code = error instanceof Error ? error.message : "request_failed";
   const labels: Record<string, string> = {
+    document_owner_review_required: "El propietario debe revisar el documento antes de cambiar su tratamiento.",
+    invalid_document_owner_review: "Confirma que has revisado el documento y su procedencia.",
+    invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
+    document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -275,9 +286,11 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
   return <span className={`${styles.status} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>;
 }
 
-export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedFilter = false }: {
+export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedFilter = false, initialScope = "ordinary", initialOffset = 0 }: {
   initialStatusFilter?: string;
   initialUnassociatedFilter?: boolean;
+  initialScope?: DocumentScope;
+  initialOffset?: number;
 }) {
   const actionFeedback = useActionFeedback();
   const [list, setList] = useState<DocumentList | null>(null);
@@ -288,6 +301,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
   const [unassociatedOnly, setUnassociatedOnly] = useState(initialUnassociatedFilter);
+  const [scope, setScope] = useState<DocumentScope>(initialScope);
+  const [offset, setOffset] = useState(initialOffset);
+  const [designationReason, setDesignationReason] = useState("");
+  const [designationReviewed, setDesignationReviewed] = useState(false);
+  const [designationOpen, setDesignationOpen] = useState(false);
   const [manualQuery, setManualQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
@@ -299,7 +317,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [file, setFile] = useState<File | null>(null);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
-  const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly);
+  const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
   const metadataDirty = useMemo(
     () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
     [detail, editor],
@@ -311,15 +329,18 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
   const bypassUnloadOnceRef = useRef(false);
+  const exitReturnFocusRef = useRef<HTMLElement | null>(null);
   selectedIdRef.current = selectedId;
   metadataDirtyRef.current = metadataDirty;
 
   const listUrl = useMemo(() => {
-    const params = new URLSearchParams({ limit: "50", offset: "0" });
+    const params = new URLSearchParams({ limit: "50", offset: String(offset) });
+    params.set("scope", scope);
+    if (unassociatedOnly) params.set("unassociated", "true");
     if (query.trim()) params.set("q", query.trim());
     if (statusFilter) params.set("status", statusFilter);
     return `/api/documents?${params}`;
-  }, [query, statusFilter]);
+  }, [query, statusFilter, scope, unassociatedOnly, offset]);
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
@@ -328,7 +349,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     try {
       const first = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
       let data = first;
-      if (unassociatedOnly) {
+      if (unassociatedOnly && first.contractVersion < 3) {
         const all = [...first.items];
         const parsed = new URL(url, window.location.origin);
         while (all.length < first.total) {
@@ -343,6 +364,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         data = { ...first, items: filtered, total: filtered.length, offset: 0, limit: filtered.length };
       }
       if (sequence !== listSequence.current) return;
+      if (data.contractVersion === 3 && data.offset > 0 && data.items.length === 0) {
+        setOffset(0);
+        return;
+      }
       setList(data);
       if (
         selectedIdRef.current
@@ -371,6 +396,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
       setDetail(data);
+      if (!preserveEditor) {
+        setDesignationOpen(false);
+        setDesignationReason("");
+        setDesignationReviewed(false);
+      }
       if (!preserveEditor) setEditor(editorFromDocument(data.document));
     } catch (caught) {
       if (sequence === detailSequence.current) setError(friendlyError(caught));
@@ -380,6 +410,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, []);
 
   useEffect(() => { void loadList(); }, [loadList]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (scope === "ordinary") params.delete("scope"); else params.set("scope", scope);
+    if (statusFilter) params.set("status", statusFilter); else params.delete("status");
+    if (unassociatedOnly) params.set("unassociated", "true"); else params.delete("unassociated");
+    if (offset > 0) params.set("offset", String(offset)); else params.delete("offset");
+    const search = params.toString();
+    window.history.replaceState(window.history.state, "", `/documents${search ? `?${search}` : ""}`);
+  }, [scope, statusFilter, unassociatedOnly, offset]);
   useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId, loadDetail]);
   useEffect(() => {
     if (busy) {
@@ -417,6 +456,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
       event.preventDefault();
       event.stopPropagation();
+      exitReturnFocusRef.current = anchor;
       setPendingExit({ type: "navigation", href: destination.href });
     };
 
@@ -431,6 +471,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const selectDocument = (id: string) => {
     if (id === selectedIdRef.current || busy) return;
     if (metadataDirtyRef.current) {
+      exitReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
       setPendingExit({ type: "document", id });
       return;
     }
@@ -576,6 +617,39 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     finally { setBusy(null); }
   }
 
+  async function changeTestDesignation(event: FormEvent) {
+    event.preventDefault();
+    if (!detail || busy || metadataDirty || !designationReviewed || !designationReason.trim()) return;
+    const id = detail.document.id;
+    const isTest = detail.document.isTest !== true;
+    setBusy("test-designation");
+    setError(null);
+    setAuthRecovery(null);
+    try {
+      const saved = await readJson(await fetch("/api/documents", {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "test_designation", id, isTest, ownerReviewed: true, reason: designationReason.trim() }),
+      })) as DocumentDetail;
+      if (saved.contractVersion !== 3 || saved.document?.id !== id || saved.document.isTest !== isTest) {
+        throw new Error("document_test_designation_incomplete");
+      }
+      setDetail(saved);
+      setScope(isTest ? "tests" : "ordinary");
+      setOffset(0);
+      setDesignationOpen(false);
+      setDesignationReason("");
+      setDesignationReviewed(false);
+      const next = new URL(listUrl, window.location.origin);
+      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
+      next.searchParams.set("offset", "0");
+      await loadList(next.toString(), true);
+      setNotice(isTest ? "Documento designado como Prueba. Puedes encontrarlo en Pruebas y revertir el cambio." : "Documento devuelto a la vista ordinaria y a sus avisos correspondientes.");
+    } catch (caught) {
+      setAuthRecovery(authRecoveryFromError(caught));
+      setError(friendlyError(caught));
+    } finally { setBusy(null); }
+  }
+
   async function openDocument() {
     if (!detail) return;
     setBusy("open");
@@ -665,6 +739,20 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             aria-modal="true"
             aria-labelledby="document-unsaved-heading"
             aria-describedby="document-unsaved-detail"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && busy !== "metadata") {
+                event.preventDefault();
+                setPendingExit(null);
+                exitReturnFocusRef.current?.focus();
+              }
+              if (event.key !== "Tab") return;
+              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+              const first = buttons[0];
+              const last = buttons[buttons.length - 1];
+              if (!first || !last) { event.preventDefault(); return; }
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }}
           >
             <h2 id="document-unsaved-heading">Cambios sin guardar</h2>
             <p id="document-unsaved-detail">
@@ -673,7 +761,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             </p>
             <div className={styles.unsavedActions}>
               <button type="button" className={styles.secondaryButton} autoFocus
-                onClick={() => setPendingExit(null)} disabled={busy === "metadata"}>
+                onClick={() => { setPendingExit(null); exitReturnFocusRef.current?.focus(); }} disabled={busy === "metadata"}>
                 Seguir editando
               </button>
               <button type="button" className={styles.primaryButton}
@@ -737,11 +825,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               <button className={styles.iconButton} onClick={() => void loadList()} disabled={loadingList} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
-              <label>Buscar<input value={query} maxLength={200} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, emisor o notas" /></label>
-              <label><span>Asociación</span><select value={unassociatedOnly ? "unassociated" : "all"} onChange={(event) => setUnassociatedOnly(event.target.value === "unassociated")}>
+              <label>Vista documental<select value={scope} onChange={(event) => { setScope(event.target.value as DocumentScope); setOffset(0); }} disabled={busy !== null}>
+                <option value="ordinary">Documentos ordinarios</option><option value="tests">Pruebas</option><option value="all">Todos, incluidas pruebas</option>
+              </select></label>
+              <label>Buscar<input value={query} maxLength={200} onChange={(event) => { setQuery(event.target.value); setOffset(0); }} placeholder="Nombre, emisor o notas" /></label>
+              <label><span>Asociación</span><select value={unassociatedOnly ? "unassociated" : "all"} onChange={(event) => { setUnassociatedOnly(event.target.value === "unassociated"); setOffset(0); }}>
                 <option value="all">Todos</option><option value="unassociated">Sin asociar</option>
               </select></label>
-              <label>Estado<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <label>Estado<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setOffset(0); }}>
                 <option value="">Todos</option><option value="imported">Importados</option><option value="pending_review">Pendientes</option><option value="confirmed">Confirmados</option><option value="archived">Archivados</option>
               </select></label>
             </div>
@@ -750,7 +841,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 {list.items.map((item) => (
                   <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
-                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
+                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{item.isTest === true ? <small className={styles.syntheticNoteLabel}>Prueba · designación revisada</small> : hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>
                   </button>
                 ))}
@@ -766,11 +857,19 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     setQuery("");
                     setStatusFilter("");
                     setUnassociatedOnly(false);
+                    setScope("ordinary");
+                    setOffset(0);
                     window.history.replaceState(window.history.state, "", "/documents");
                   }}
                 >
                   Limpiar filtros
                 </button>
+              </div>
+            ) : list?.testCount ? (
+              <div className={styles.empty}>
+                <strong>No hay documentos ordinarios</strong>
+                <p>Los documentos designados como Prueba siguen disponibles en su vista.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => { setScope("tests"); setOffset(0); }}>Ver pruebas</button>
               </div>
             ) : (
               <div className={styles.empty} data-testid="documents-repository-empty">
@@ -778,6 +877,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
               </div>
             )}
+            {list?.contractVersion === 3 && list.total > 0 ? (
+              <nav className={styles.pagination} aria-label="Paginación documental">
+                <span aria-live="polite">Mostrando {list.offset + 1}–{Math.min(list.offset + list.items.length, list.total)} de {list.total}</span>
+                <button type="button" className={styles.secondaryButton} disabled={loadingList || busy !== null || list.offset === 0}
+                  onClick={() => setOffset(Math.max(0, list.offset - list.limit))}>Página anterior</button>
+                <button type="button" className={styles.secondaryButton} disabled={loadingList || busy !== null || list.offset + list.items.length >= list.total}
+                  onClick={() => setOffset(list.offset + list.limit)}>Página siguiente</button>
+              </nav>
+            ) : null}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
@@ -791,10 +899,32 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
                   </div>
                 </header>
-                {hasExplicitSyntheticDocumentNote(detail.document.notes) ? (
+                {detail.document.isTest === true ? (
+                  <p className={styles.syntheticNoteNotice} role="note" data-testid="document-test-designation">
+                    <strong>Prueba · designación revisada.</strong> Excluido de Alertas y Para revisar ordinarios.
+                    {detail.document.testDesignationUpdatedAt ? ` Revisado el ${formatDate(detail.document.testDesignationUpdatedAt)}.` : ""}
+                    {detail.document.testDesignationReason ? ` Motivo: ${detail.document.testDesignationReason}` : ""}
+                  </p>
+                ) : hasExplicitSyntheticDocumentNote(detail.document.notes) ? (
                   <p className={styles.syntheticNoteNotice} role="note" data-testid="document-synthetic-note">
                     Las notas guardadas describen este archivo como un fixture sintético. Comprueba su origen antes de asociarlo o analizarlo: no está designado formalmente como Prueba y sigue incluido en los avisos ordinarios. No se ha cambiado el documento ni su archivo de Drive.
                   </p>
+                ) : null}
+
+                {detail.principles?.testDesignationSupported ? (
+                  <details className={styles.designationPanel} open={designationOpen} onToggle={(event) => setDesignationOpen(event.currentTarget.open)}>
+                    <summary>Cambiar tratamiento documental</summary>
+                    <p>{detail.document.isTest ? "Devolver este documento a la vista ordinaria restaura sus avisos cuando correspondan." : "Designar como Prueba lo separa de los avisos ordinarios y lo conserva en la vista Pruebas."} El original, los metadatos y las asociaciones se conservan.</p>
+                    {!detail.principles.testDesignationEditable ? <p>El propietario del espacio debe revisar y confirmar este cambio.</p> : (
+                      <form onSubmit={changeTestDesignation}>
+                        {metadataDirty ? <p>Guarda o descarta los metadatos pendientes antes de cambiar el tratamiento.</p> : null}
+                        <label>Motivo de la revisión<textarea value={designationReason} maxLength={500} required rows={2} onChange={(event) => setDesignationReason(event.target.value)} disabled={busy !== null || metadataDirty} /></label>
+                        <label className={styles.reviewConfirmation}><input type="checkbox" checked={designationReviewed} onChange={(event) => setDesignationReviewed(event.target.checked)} disabled={busy !== null || metadataDirty} />He revisado este documento y su procedencia como propietario.</label>
+                        <button className={styles.secondaryButton} type="submit" disabled={busy !== null || metadataDirty || !designationReviewed || !designationReason.trim()}>{busy === "test-designation" ? "Guardando tratamiento…" : detail.document.isTest ? "Devolver a documentos ordinarios" : "Designar como Prueba"}</button>
+                        <button className={styles.secondaryButton} type="button" disabled={busy !== null} onClick={() => { setDesignationOpen(false); setDesignationReason(""); setDesignationReviewed(false); }}>Cancelar cambio</button>
+                      </form>
+                    )}
+                  </details>
                 ) : null}
 
                 <form className={styles.editor} onSubmit={saveMetadata}>

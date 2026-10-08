@@ -38,6 +38,7 @@ psql_db -c 'ALTER FUNCTION financial_app.budget_month_snapshot(text) RENAME TO a
 psql_db -f "supabase/migrations/${AUD_BATCH}" >/dev/null
 
 psql_db -f supabase/tests/aud_e2e_budget_balance.sql
-residue="$(psql_db -At -c "select count(*) from financial_app.workspaces where id in ('a0d00000-0000-4000-8000-000000000001','a0d00000-0000-4000-8000-000000000002');")"
+psql_db -f supabase/tests/aud_e2e_document_designation.sql
+residue="$(psql_db -At -c "select count(*) from financial_app.workspaces where id in ('a0d00000-0000-4000-8000-000000000001','a0d00000-0000-4000-8000-000000000002','a0d20000-0000-4000-8000-000000000001','a0d20000-0000-4000-8000-000000000002');")"
 [[ "$residue" == '0' ]] || { echo 'AUD_E2E_DB|status=failed|reason=fixture_rollback_failed'; exit 1; }
 echo "AUD_E2E_DB|status=ok|migrations_after_pre001=${aud_migration_count}|fixtures_rolled_back=true|sha=${GITHUB_SHA}"

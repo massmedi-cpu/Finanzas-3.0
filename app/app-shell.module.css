@@ -234,7 +234,7 @@
   display: none;
 }
 
-:global(nav[aria-label="Accesos principales"]) {
+.root :global(nav[aria-label="Accesos principales"]) {
   display: none;
 }
 

@@ -34,7 +34,7 @@ test("AUD-E2E-NAV-001 · sin asociar filtra todos los resultados y permite recup
   await page.getByLabel("Asociación").selectOption("all");
   await expect(page.getByText("Justificante asociado.pdf")).toBeVisible();
   await page.goto("/documents?status=pending_review");
-  await expect(page.getByLabel("Estado")).toHaveValue("pending_review");
+  await expect(page.getByRole("complementary", { name: "Listado de documentos" }).getByLabel("Estado")).toHaveValue("pending_review");
   await expect(page.getByText("Justificante pendiente.pdf")).toBeVisible();
 });
 

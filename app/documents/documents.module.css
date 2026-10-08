@@ -110,3 +110,16 @@
 /* DOC-002 · procedencia declarada; no equivale a una clasificación confirmada. */
 .syntheticNoteLabel { display: block; margin-top: 0.3rem; color: var(--color-text-secondary); font-size: var(--font-helper); font-weight: 750; }
 .syntheticNoteNotice { margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-strong); color: var(--color-text); font-size: var(--font-helper); line-height: 1.5; }
+
+.designationPanel { margin: var(--space-3) 0; padding: var(--space-3); border: 1px solid var(--color-border); border-radius: var(--radius-md); color: var(--color-text); background: var(--color-surface-strong); }
+.designationPanel summary { cursor: pointer; font-weight: 750; }
+.designationPanel p { color: var(--color-text-secondary); line-height: 1.5; }
+.designationPanel form { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.designationPanel label { display: grid; gap: 0.5rem; width: 100%; min-width: 0; }
+.designationPanel textarea { box-sizing: border-box; width: 100%; min-width: 0; padding: 0.7rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-surface); color: var(--color-text); font: inherit; }
+.designationPanel .reviewConfirmation { display: flex; align-items: flex-start; gap: 0.6rem; line-height: 1.5; }
+.reviewConfirmation input { margin-top: 0.3rem; flex: 0 0 auto; }
+.designationPanel summary:focus-visible { outline: 3px solid var(--color-primary); outline-offset: 3px; }
+.pagination { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-top: 1rem; }
+.pagination > span { flex: 1 1 100%; color: var(--color-text-muted); font-size: 0.875rem; }
+.pagination > button { min-height: 2.75rem; flex: 1 1 auto; }

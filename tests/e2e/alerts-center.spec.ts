@@ -62,25 +62,26 @@ async function mockAlerts(page: Page) {
   await page.route("**/api/transactions?uncategorized=true&limit=1", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [], totalCount: 3 }) });
   });
-  await page.route("**/api/documents?limit=100&offset=0", async (route) => {
+  await page.route("**/api/documents?scope=ordinary&limit=100&offset=0", async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({
-        total: 3,
+        total: 4,
         limit: 100,
         offset: 0,
         items: [
           { id: "a", status: "confirmed", associationCount: 0 },
           { id: "b", status: "pending_review", associationCount: 1 },
           { id: "c", status: "archived", associationCount: 0 },
+          { id: "reviewed-test", status: "pending_review", associationCount: 0, isTest: true },
         ],
       }),
     });
   });
 }
 
-test("Alertas · agrupa señales globales, prioriza y mantiene acciones de solo lectura", async ({ page }) => {
+test("Alertas · agrupa señales ordinarias, excluye Pruebas y mantiene acciones de solo lectura", async ({ page }) => {
   await mockAlerts(page);
   await page.goto("/alerts");
 
