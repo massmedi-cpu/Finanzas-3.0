@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { formatMoneyCents } from "../../src/core/money";
+import { formatSplitAmountInput as formatInputAmount, parseSplitAmountInput as parseInputAmount } from "../../src/application/transactions/split-amount-format";
 import styles from "./transaction-split-editor.module.css";
 
 export type TransactionSplitSummary = {
@@ -65,19 +66,6 @@ type Props = {
   onSaved: (snapshot: TransactionSplitSummary) => void | Promise<void>;
   onCancel: () => void;
 };
-
-function formatInputAmount(cents: number) {
-  return (Math.abs(cents) / 100).toFixed(2);
-}
-
-function parseInputAmount(value: string) {
-  const normalized = value.trim().replace(",", ".");
-  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return null;
-  const number = Number(normalized);
-  if (!Number.isFinite(number) || number <= 0) return null;
-  const cents = Math.round(number * 100);
-  return Number.isSafeInteger(cents) && cents > 0 ? cents : null;
-}
 
 function errorMessage(payload: any) {
   const code = String(payload?.code ?? payload?.error ?? "");
