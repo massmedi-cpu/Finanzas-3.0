@@ -27,7 +27,9 @@ type MetadataEditor = {
   notes: string;
 };
 
-const UNSAVED_METADATA_CONFIRM = "Hay cambios de metadatos sin guardar. ¿Quieres descartarlos?";
+type PendingDocumentExit =
+  | { type: "document"; id: string }
+  | { type: "navigation"; href: string };
 
 type DocumentItem = {
   id: string;
@@ -295,6 +297,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
+  const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly);
   const metadataDirty = useMemo(
     () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
@@ -306,6 +309,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
+  const bypassUnloadOnceRef = useRef(false);
   selectedIdRef.current = selectedId;
   metadataDirtyRef.current = metadataDirty;
 
@@ -394,6 +398,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     if (!metadataDirty) return;
 
     const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (bypassUnloadOnceRef.current || !metadataDirtyRef.current) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -409,10 +414,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const current = new URL(window.location.href);
       if (destination.pathname === current.pathname && destination.search === current.search) return;
 
-      if (!window.confirm(UNSAVED_METADATA_CONFIRM)) {
-        event.preventDefault();
-        event.stopPropagation();
-      }
+      event.preventDefault();
+      event.stopPropagation();
+      setPendingExit({ type: "navigation", href: destination.href });
     };
 
     window.addEventListener("beforeunload", beforeUnload);
@@ -424,10 +428,28 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [metadataDirty]);
 
   const selectDocument = (id: string) => {
-    if (id !== selectedIdRef.current && metadataDirtyRef.current && !window.confirm(UNSAVED_METADATA_CONFIRM)) return;
+    if (id === selectedIdRef.current || busy) return;
+    if (metadataDirtyRef.current) {
+      setPendingExit({ type: "document", id });
+      return;
+    }
     setAuthRecovery(null);
     selectedIdRef.current = id;
     setSelectedId(id);
+  };
+
+  const continueDocumentExit = (target: PendingDocumentExit) => {
+    setPendingExit(null);
+    metadataDirtyRef.current = false;
+    if (target.type === "document") {
+      if (detail) setEditor(editorFromDocument(detail.document));
+      setAuthRecovery(null);
+      selectedIdRef.current = target.id;
+      setSelectedId(target.id);
+      return;
+    }
+    bypassUnloadOnceRef.current = true;
+    window.location.assign(target.href);
   };
 
   const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
@@ -487,13 +509,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     }
   }
 
-  async function saveMetadata(event: FormEvent) {
-    event.preventDefault();
-    if (!detail) return;
+  async function persistMetadata(): Promise<boolean> {
+    if (!detail || busy) return false;
+    if (!metadataDirtyRef.current) return true;
     const cents = parseEuroToCents(editor.total);
     if (cents === undefined) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
-      return;
+      return false;
     }
     setBusy("metadata");
     setError(null);
@@ -502,15 +524,40 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       await readJson(await fetch("/api/documents", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "metadata", id: detail.document.id, type: editor.type, documentDate: editor.documentDate || null, issuerName: editor.issuerName || null, totalCents: cents, notes: editor.notes }),
+        body: JSON.stringify({
+          action: "metadata", id: detail.document.id, type: editor.type,
+          documentDate: editor.documentDate || null,
+          issuerName: editor.issuerName || null,
+          totalCents: cents, notes: editor.notes,
+        }),
       }));
       await refreshAfterMutation(detail.document.id);
       setNotice("Metadatos guardados.");
+      return true;
     } catch (caught) {
       setAuthRecovery(authRecoveryFromError(caught));
       setError(friendlyError(caught));
+      return false;
+    } finally {
+      setBusy(null);
     }
-    finally { setBusy(null); }
+  }
+
+  async function saveMetadata(event: FormEvent) {
+    event.preventDefault();
+    await persistMetadata();
+  }
+
+  async function saveAndContinue() {
+    if (!pendingExit) return;
+    const target = pendingExit;
+    if (await persistMetadata()) continueDocumentExit(target);
+  }
+
+  function discardAndContinue() {
+    if (!pendingExit) return;
+    if (detail) setEditor(editorFromDocument(detail.document));
+    continueDocumentExit(pendingExit);
   }
 
   async function changeStatus(status: DocumentStatus) {
@@ -609,6 +656,37 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   return (
     <main className={styles.shell}>
+      {pendingExit ? (
+        <div className={styles.unsavedBackdrop}>
+          <section
+            className={styles.unsavedDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="document-unsaved-heading"
+            aria-describedby="document-unsaved-detail"
+          >
+            <h2 id="document-unsaved-heading">Cambios sin guardar</h2>
+            <p id="document-unsaved-detail">
+              Hay cambios de metadatos sin guardar. Puedes guardarlos antes de continuar,
+              seguir editando sin perder el borrador o descartarlos.
+            </p>
+            <div className={styles.unsavedActions}>
+              <button type="button" className={styles.secondaryButton} autoFocus
+                onClick={() => setPendingExit(null)} disabled={busy === "metadata"}>
+                Seguir editando
+              </button>
+              <button type="button" className={styles.primaryButton}
+                onClick={() => void saveAndContinue()} disabled={busy === "metadata"}>
+                {busy === "metadata" ? "Guardando…" : "Guardar y continuar"}
+              </button>
+              <button type="button" className={styles.dangerButton}
+                onClick={discardAndContinue} disabled={busy === "metadata"}>
+                Descartar cambios
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <section className={styles.hero}>
         <div>
           <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
@@ -726,7 +804,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                     <label>Importe (€)<input inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
                   <label>Notas<textarea value={editor.notes} maxLength={2000} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
-                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
+                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata" || !metadataDirty}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
                 <OcrReviewBoundary key={detail.document.id}>

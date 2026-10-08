@@ -74,3 +74,35 @@
   outline: 3px solid var(--color-primary);
   outline-offset: 3px;
 }
+
+
+/* AUD-E2E-DOC-001 · decisión explícita al abandonar un borrador documental. */
+.unsavedBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(3, 7, 17, 0.76);
+  backdrop-filter: blur(7px);
+}
+.unsavedDialog {
+  width: min(33rem, 100%);
+  max-height: calc(100dvh - 2rem);
+  overflow: auto;
+  padding: clamp(1.1rem, 2vw, 1.6rem);
+  border: 1px solid var(--color-border-strong);
+  border-radius: 1.2rem;
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+  box-shadow: var(--shadow-panel);
+}
+.unsavedDialog h2 { margin: 0 0 0.55rem; font-size: var(--font-section-title); }
+.unsavedDialog p { margin: 0; color: var(--color-text-secondary); line-height: 1.5; }
+.unsavedActions { display: flex; flex-wrap: wrap; gap: 0.65rem; margin-top: 1.35rem; }
+.unsavedActions > button { flex: 1 1 9rem; min-height: 2.9rem; }
+:global(html[data-theme="light"]) .unsavedBackdrop { background: rgba(20, 35, 59, 0.56); }
+:global(html[data-theme="light"]) .unsavedDialog { background: #fff; color: var(--color-text); }
+:global(html[data-theme="light"]) .unsavedActions .secondaryButton { background: var(--surface-primary-subtle); color: var(--color-text); }
+:global(html[data-theme="light"]) .unsavedActions .dangerButton { color: var(--color-danger); }

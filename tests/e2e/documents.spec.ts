@@ -198,14 +198,12 @@ test("QA Work · Documentos no descarta metadatos editados sin avisar", async ({
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
   await expect(issuer).toHaveValue("Proveedor editado");
 
-  let warning = "";
-  page.once("dialog", async (dialog) => {
-    warning = dialog.message();
-    await dialog.dismiss();
-  });
   await page.getByRole("link", { name: "← Inicio" }).click();
+  const unsaved = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(unsaved).toContainText("cambios de metadatos sin guardar");
+  await unsaved.getByRole("button", { name: "Seguir editando" }).click();
   await expect(page).toHaveURL(/\/documents/);
-  expect(warning).toContain("cambios de metadatos sin guardar");
+  await expect(issuer).toHaveValue("Proveedor editado");
 
   await page.getByRole("button", { name: "Guardar metadatos" }).click();
   await expect(page.getByTestId("document-metadata-dirty")).toHaveCount(0);
@@ -276,26 +274,25 @@ test("QA Work · Documentos confirma antes de cambiar de documento con metadatos
   await issuer.fill("Proveedor pendiente");
   await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
 
-  let dismissedWarning = "";
-  page.once("dialog", async (dialog) => {
-    dismissedWarning = dialog.message();
-    await dialog.dismiss();
-  });
   await page.getByRole("button", { name: /recibo-segundo.pdf/i }).click();
+  const unsaved = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(unsaved).toBeVisible();
+  await unsaved.getByRole("button", { name: "Seguir editando" }).click();
   await expect(page.getByRole("heading", { name: "factura-demo.pdf" })).toBeVisible();
   await expect(issuer).toHaveValue("Proveedor pendiente");
-  expect(dismissedWarning).toContain("cambios de metadatos sin guardar");
 
-  let acceptedWarning = "";
-  page.once("dialog", async (dialog) => {
-    acceptedWarning = dialog.message();
-    await dialog.accept();
-  });
   await page.getByRole("button", { name: /recibo-segundo.pdf/i }).click();
+  await unsaved.getByRole("button", { name: "Descartar cambios" }).click();
   await expect(page.getByRole("heading", { name: "recibo-segundo.pdf" })).toBeVisible();
   await expect(page.getByLabel("Emisor")).toHaveValue("Segundo proveedor");
-  expect(acceptedWarning).toContain("cambios de metadatos sin guardar");
   expect(writes.some((write) => write.action === "metadata")).toBe(false);
+
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByLabel("Emisor").fill("Proveedor guardado antes de cambiar");
+  await page.getByRole("button", { name: /recibo-segundo.pdf/i }).click();
+  await unsaved.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(page.getByRole("heading", { name: "recibo-segundo.pdf" })).toBeVisible();
+  expect(writes.some((write) => write.action === "metadata" && write.issuerName === "Proveedor guardado antes de cambiar")).toBe(true);
 });
 
 test("QA-09 · Documentos distingue filtros sin coincidencias de un repositorio vacío", async ({ page }) => {
@@ -391,4 +388,33 @@ test("protected preview preserves phase 9 document persistence contract across l
   const missing = await request.get(`/api/documents?id=${unknownDocumentId}`);
   expect(missing.status()).toBe(404);
   expect((await missing.json()).error).toBe("not_found");
+});
+
+test("AUD-E2E-DOC-001 · un error de guardado mantiene el borrador y la elección abierta", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents*", async (route) => {
+    if (route.request().method() === "PATCH" && route.request().postDataJSON()?.action === "metadata") {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByLabel("Emisor").fill("BORRADOR AUDITORÍA NO GUARDAR");
+  await page.getByRole("link", { name: "← Inicio" }).click();
+
+  const unsaved = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await unsaved.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(unsaved).toBeVisible();
+  await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
+  await unsaved.getByRole("button", { name: "Seguir editando" }).click();
+  await expect(page.getByLabel("Emisor")).toHaveValue("BORRADOR AUDITORÍA NO GUARDAR");
+  await expect(page).toHaveURL(/\/documents/);
+  expect(writes.filter((write) => write.action === "metadata")).toHaveLength(0);
 });
