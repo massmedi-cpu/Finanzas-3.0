@@ -195,3 +195,53 @@ for (const width of [360, 390, 768]) {
     }
   });
 }
+
+test("AUD-E2E-BUS-001 · nunca abre un resultado anterior al cambiar de consulta y pulsar Enter", async ({ page }) => {
+  await page.route("**/api/search?**", async (route) => {
+    const query = new URL(route.request().url()).searchParams.get("q");
+    if (query === "Mercadona") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RESPONSE) });
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 850));
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ query, partial: false, items: [] }),
+      }).catch(() => {});
+    }
+  });
+
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+  const input = dialog.getByRole("combobox", { name: "Buscar en Financial App" });
+  await input.fill("Mercadona");
+  await expect(dialog.getByRole("option")).toHaveCount(2);
+  await input.press("ArrowDown");
+  await expect(input).toHaveAttribute("aria-activedescendant", /-result-0$/);
+
+  await input.fill("Otro comercio");
+  await input.press("Enter");
+  await expect(input).toHaveValue("Otro comercio");
+  await expect(dialog.getByRole("option")).toHaveCount(0);
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+  await expect(page).toHaveURL(/\/onboarding/);
+});
+
+test("AUD-E2E-BUS-001 · el resumen opcional no tapa la lista ni el pie en móvil", async ({ page }) => {
+  await mockSearch(page);
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+  await dialog.getByRole("combobox").fill("Mercadona");
+  await expect(dialog.getByRole("option")).toHaveCount(2);
+  const summary = dialog.getByText(/Resultados rápidos · 2 mostrados/);
+  const list = dialog.getByRole("listbox", { name: "Resultados de búsqueda" });
+  const footer = dialog.getByRole("link", { name: /Ver todos los movimientos/ });
+  for (const node of [summary, list, footer]) await expect(node).toBeVisible();
+  const bounds = await Promise.all([summary, list, footer].map((node) => node.boundingBox()));
+  expect(bounds[0]!.y + bounds[0]!.height).toBeLessThanOrEqual(bounds[1]!.y + 1);
+  expect(bounds[1]!.y + bounds[1]!.height).toBeLessThanOrEqual(bounds[2]!.y + 1);
+  expect(bounds[2]!.y + bounds[2]!.height).toBeLessThanOrEqual(641);
+});
