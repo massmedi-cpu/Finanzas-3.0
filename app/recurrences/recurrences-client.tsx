@@ -446,7 +446,7 @@ export default function RecurrencesClient({
               {orderedCandidates.historical.length > 0 ? (
                 <details className={styles.historicalGroup}>
                   <summary>
-                    Históricos · {orderedCandidates.historical.length} patrón{orderedCandidates.historical.length === 1 ? "" : "es"}
+                    Históricos · {orderedCandidates.historical.length} {orderedCandidates.historical.length === 1 ? "patrón" : "patrones"}
                     <span>No se incorporan a Previsión sin confirmación; próximas fechas provisionales</span>
                   </summary>
                   <div className={styles.candidateList}>{orderedCandidates.historical.map(renderCandidate)}</div>
