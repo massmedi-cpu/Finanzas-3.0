@@ -30,6 +30,7 @@ const KIND_LABEL: Record<SearchKind, string> = {
   section: "Sección",
 };
 const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid" });
+const SEARCH_TIMEOUT_MS = 12_000;
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 function formatDate(value: string | null | undefined) {
@@ -56,6 +57,7 @@ export default function GlobalSearch() {
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
+  const [requestTimedOut, setRequestTimedOut] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
 
@@ -75,6 +77,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setRequestTimedOut(false);
     setActiveIndex(-1);
     const opener = openerRef.current;
     openerRef.current = null;
@@ -122,6 +125,7 @@ export default function GlobalSearch() {
     setLoading(false);
     setPartial(false);
     setError(false);
+    setRequestTimedOut(false);
     setActiveIndex(-1);
   }, [pathname]);
 
@@ -136,17 +140,24 @@ export default function GlobalSearch() {
       setLoading(false);
       setPartial(false);
       setError(false);
+      setRequestTimedOut(false);
       return;
     }
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
     setError(false);
+    setRequestTimedOut(false);
     // La respuesta queda vinculada al término exacto, incluso antes del siguiente efecto React.
     setItems([]);
     setResultsQuery("");
     setPartial(false);
     const timer = window.setTimeout(() => {
+      let deadlineExceeded = false;
+      const deadline = window.setTimeout(() => {
+        deadlineExceeded = true;
+        controller.abort();
+      }, SEARCH_TIMEOUT_MS);
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => null) as SearchResponse | null;
@@ -157,16 +168,18 @@ export default function GlobalSearch() {
           setPartial(payload.partial === true);
         })
         .catch((cause) => {
-          if (cause instanceof DOMException && cause.name === "AbortError") return;
-          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) {
+          if (cause instanceof DOMException && cause.name === "AbortError" && !deadlineExceeded) return;
+          if ((!controller.signal.aborted || deadlineExceeded) && requestSequence === requestSequenceRef.current) {
             setItems([]);
             setResultsQuery("");
             setPartial(false);
             setError(true);
+            setRequestTimedOut(deadlineExceeded);
           }
         })
         .finally(() => {
-          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) setLoading(false);
+          window.clearTimeout(deadline);
+          if ((!controller.signal.aborted || deadlineExceeded) && requestSequence === requestSequenceRef.current) setLoading(false);
         });
     }, 180);
     return () => {
@@ -233,7 +246,7 @@ export default function GlobalSearch() {
   const statusMessage = searching
     ? "Buscando resultados…"
     : error
-      ? "No se pudo completar la búsqueda."
+      ? requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
       : preparedQuery
         ? `Resultados rápidos: ${visibleItems.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
@@ -283,8 +296,8 @@ export default function GlobalSearch() {
                 <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
                 <div className={styles.hint}>
-                  <strong>No se pudo completar la búsqueda</strong>
-                  <span>No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla.</span>
+                  <strong>{requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
+                  <span>{requestTimedOut ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos." : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
                   <button type="button" className={styles.retryButton} onClick={() => { setRetryCount((current) => current + 1); inputRef.current?.focus(); }}>
                     Reintentar búsqueda
                   </button>
