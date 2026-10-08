@@ -43,6 +43,6 @@ residue="$(psql_db -At -c "select count(*) from financial_app.workspaces where i
 [[ "$residue" == '0' ]] || { echo 'AUD_E2E_DB|status=failed|reason=fixture_rollback_failed'; exit 1; }
 # The production backup-v2 and restore verifier are rehearsed only against
 # this exact disposable database after synthetic SQL fixtures rolled back.
-bash scripts/aud-e2e-disposable-backup-restore.sh
+DB_URL="$DB_URL" PRE001_POSTGRES_ADMIN_URL="$PRE001_POSTGRES_ADMIN_URL" bash scripts/aud-e2e-disposable-backup-restore.sh
 
 echo "AUD_E2E_DB|status=ok|migrations_after_pre001=${aud_migration_count}|fixtures_rolled_back=true|sha=${GITHUB_SHA}"
