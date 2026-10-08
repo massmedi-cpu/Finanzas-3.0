@@ -897,13 +897,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
               </div>
             )}
-            {list?.contractVersion === 3 && list.total > 0 ? (
+            {!listLoadFailed && currentList?.contractVersion === 3 && currentList.total > 0 ? (
               <nav className={styles.pagination} aria-label="Paginación documental">
-                <span aria-live="polite">Mostrando {list.offset + 1}–{Math.min(list.offset + list.items.length, list.total)} de {list.total}</span>
-                <button type="button" className={styles.secondaryButton} disabled={loadingList || busy !== null || list.offset === 0}
-                  onClick={() => setOffset(Math.max(0, list.offset - list.limit))}>Página anterior</button>
-                <button type="button" className={styles.secondaryButton} disabled={loadingList || busy !== null || list.offset + list.items.length >= list.total}
-                  onClick={() => setOffset(list.offset + list.limit)}>Página siguiente</button>
+                <span aria-live="polite">Mostrando {currentList.offset + 1}–{Math.min(currentList.offset + currentList.items.length, currentList.total)} de {currentList.total}</span>
+                <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset === 0}
+                  onClick={() => setOffset(Math.max(0, currentList.offset - currentList.limit))}>Página anterior</button>
+                <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset + currentList.items.length >= currentList.total}
+                  onClick={() => setOffset(currentList.offset + currentList.limit)}>Página siguiente</button>
               </nav>
             ) : null}
           </aside>
