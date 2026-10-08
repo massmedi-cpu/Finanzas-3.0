@@ -409,3 +409,26 @@ test("E2 · Preview protegido conserva contrato v2 y falla cerrado sin workspace
     code: "workspace_context_required",
   });
 });
+
+test("AUD-E2E-NAV-001 · avanzado refleja los 3 meses aplicados sin recarga", async ({ page }) => {
+  const base = mockSnapshot();
+  const selected: AnalysisSnapshot = {
+    ...base,
+    selection: { ...base.selection, month: "2026-09", range: "3m", dateFrom: "2026-07-01", dateTo: "2026-09-15" },
+  };
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(selected),
+  }));
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+  }));
+  await page.goto("/analysis?month=2026-08&range=1m");
+  await page.getByRole("button", { name: "3 meses" }).first().click();
+  await page.getByRole("button", { name: "Aplicar", exact: true }).first().click();
+  await expect(page).toHaveURL(/range=3m/);
+  await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+  const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+  await expect(advanced.getByRole("button", { name: "3 meses" })).toHaveAttribute("aria-pressed", "true");
+  await expect(advanced.getByLabel("Mes para análisis avanzado")).toHaveValue("2026-09");
+});
