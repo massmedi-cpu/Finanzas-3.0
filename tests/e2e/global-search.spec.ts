@@ -118,3 +118,76 @@ test("AUD-E2E-BUS-001 · buscador rápido y listado completo distinguen alcance"
   await expect(dialog.getByText(/Resultados rápidos · 2 mostrados/)).toBeVisible();
   await expect(dialog.getByRole("link", { name: /Ver todos los movimientos para «mercadona»/ })).toHaveAttribute("href", "/transactions?q=mercadona");
 });
+
+test("AUD-E2E-BUS-001 · permite reintentar un error sin cambiar la búsqueda", async ({ page }) => {
+  let calls = 0;
+  await page.route("**/api/search?**", async (route) => {
+    calls += 1;
+    if (calls === 1) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporarily_unavailable"}' });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RESPONSE) });
+  });
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+  const input = dialog.getByRole("combobox", { name: "Buscar en Financial App" });
+  await input.fill("Mercadona");
+  await expect(dialog.getByText("No se pudo completar la búsqueda", { exact: true })).toBeVisible();
+  const retry = dialog.getByRole("button", { name: "Reintentar búsqueda" });
+  await expect(retry).toBeVisible();
+  await retry.click();
+  await expect(input).toBeFocused();
+  await expect(dialog.getByRole("option")).toHaveCount(2);
+  expect(calls).toBe(2);
+});
+
+test("AUD-E2E-BUS-001 · oculta resultados obsoletos mientras consulta un término nuevo", async ({ page }) => {
+  await page.route("**/api/search?**", async (route) => {
+    const query = new URL(route.request().url()).searchParams.get("q");
+    if (query === "Mercadona") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(RESPONSE) });
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ query, partial: false, items: [] }) }).catch(() => {});
+    }
+  });
+  await page.goto("/onboarding");
+  await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+  const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+  const input = dialog.getByRole("combobox", { name: "Buscar en Financial App" });
+  await input.fill("Mercadona");
+  await expect(dialog.getByRole("option")).toHaveCount(2);
+  await input.fill("Otro comercio");
+  await expect(dialog.getByRole("option")).toHaveCount(0);
+  await expect(dialog.getByText("Buscando coincidencias…")).toBeVisible();
+  await input.press("Escape");
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Buscar en Financial App" })).toBeFocused();
+});
+
+for (const width of [360, 390, 768]) {
+  test(`AUD-E2E-VAL-001 · búsqueda y reintento accesibles a ${width}px en claro y oscuro`, async ({ page }) => {
+    for (const theme of ["light", "dark"] as const) {
+      await page.setViewportSize({ width, height: 780 });
+      await page.emulateMedia({ colorScheme: theme });
+      await page.route("**/api/search?**", (route) => route.fulfill({
+        status: 503, contentType: "application/json", body: '{"error":"temporarily_unavailable"}',
+      }));
+      await page.goto("/onboarding");
+      await page.getByRole("button", { name: "Buscar en Financial App" }).click();
+      const dialog = page.getByRole("dialog", { name: "Encuentra cualquier cosa" });
+      await dialog.getByRole("combobox").fill("sin respuesta");
+      const retry = dialog.getByRole("button", { name: "Reintentar búsqueda" });
+      await expect(retry).toBeVisible();
+      const bounds = await retry.boundingBox();
+      expect(bounds).not.toBeNull();
+      expect(bounds!.height).toBeGreaterThanOrEqual(44);
+      expect(bounds!.x).toBeGreaterThanOrEqual(0);
+      expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width + 1);
+      await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      await dialog.getByRole("combobox").press("Escape");
+    }
+  });
+}
