@@ -643,8 +643,10 @@ export default function TransactionsClient() {
   const advancedAppliedCount = advancedFilterKeys.filter((key) => appliedFilters[key].trim() !== "").length;
 
   useEffect(() => {
-    if (advancedDraftCount > 0 || advancedAppliedCount > 0) setAdvancedOpen(true);
-  }, [advancedAppliedCount, advancedDraftCount]);
+    // Solo los filtros YA APLICADOS (p. ej. desde un enlace) despliegan al entrar.
+    // Los borradores no deben reabrir el panel después de cerrarlo manualmente.
+    if (advancedAppliedCount > 0) setAdvancedOpen(true);
+  }, [advancedAppliedCount]);
 
   const filtersDirty = useMemo(
     () => (Object.keys(EMPTY_FILTERS) as Array<keyof Filters>).some(
