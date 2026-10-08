@@ -74,9 +74,10 @@ checks.push([!preferences.includes("Configuración · Fase 8"), "QA-07 sin Fase 
 checks.push([!forecast.includes("CASH FLOW · FASE 7"), "QA-07 sin Fase 7 en Previsión"]);
 checks.push([!transactions.includes("guarda como override separado"), "QA-07 sin jerga override en cabecera"]);
 
-const clientIndex = analysisPage.indexOf("<AnalysisPageClient");
-const advancedIndex = analysisPage.indexOf("<AnalysisAxioma53Controls");
-checks.push([clientIndex >= 0 && advancedIndex > clientIndex, "QA-07 lectura principal antes de filtros avanzados"]);
+const analysisClientPage = read("app/analysis/analysis-page-client.tsx");
+const clientIndex = analysisClientPage.indexOf("<AnalysisClient ");
+const advancedIndex = analysisClientPage.indexOf("<AnalysisAxioma53Controls");
+checks.push([analysisPage.includes("<AnalysisPageClient") && clientIndex >= 0 && advancedIndex > clientIndex, "QA-07 lectura principal antes de filtros avanzados"]);
 
 requireText(homeTests, "QA-08 · Inicio ofrece Saldo, Ingresos y gastos y Flujo neto", "regresión QA-08");
 requireText(documentTests, "QA-09 · Documentos distingue filtros sin coincidencias", "regresión QA-09");
