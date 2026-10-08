@@ -8,6 +8,10 @@ on:
       - 'supabase/tests/aud_e2e_budget_balance.sql'
       - 'supabase/tests/aud_e2e_document_designation.sql'
       - 'scripts/aud-e2e-financial-disposable-db.sh'
+      - 'scripts/aud-e2e-disposable-backup-restore.sh'
+      - 'scripts/create-financial-backup-v2.mjs'
+      - 'scripts/validate-financial-backup-v2.mjs'
+      - 'scripts/restore-verify-production-backup-v2.sh'
       - 'scripts/pre001-disposable-db-smoke.sh'
       - '.github/workflows/aud-e2e-financial-disposable-db.yml'
 
@@ -21,7 +25,7 @@ concurrency:
 jobs:
   budget-balance-parity:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     services:
       postgres:
         image: postgres:17
@@ -41,6 +45,20 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Install PostgreSQL 17 dump and restore clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
       - name: Apply candidate migrations and verify synthetic financial data
         env:
           AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
