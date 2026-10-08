@@ -141,10 +141,24 @@ function statusClass(status: StepStatus) {
 
 export default function OnboardingClient() {
   const [loading, setLoading] = useState(true);
+  const [slowLoading, setSlowLoading] = useState(false);
+  const [readDeadlineReached, setReadDeadlineReached] = useState(false);
   const [state, setState] = useState<OnboardingState>(INITIAL_STATE);
 
   useEffect(() => {
     const controller = new AbortController();
+    let mounted = true;
+    let timedOut = false;
+    const slowTimer = window.setTimeout(() => {
+      if (mounted) setSlowLoading(true);
+    }, 15_000);
+    const deadlineTimer = window.setTimeout(() => {
+      if (!mounted || controller.signal.aborted) return;
+      timedOut = true;
+      controller.abort();
+      setReadDeadlineReached(true);
+      setLoading(false);
+    }, 30_000);
 
     void (async () => {
       const [sourceResult, syncResult, configurationResult] = await Promise.allSettled([
@@ -153,7 +167,7 @@ export default function OnboardingClient() {
         readJson<Configuration>("/api/configuration", controller.signal),
       ] as const);
 
-      if (controller.signal.aborted) return;
+      if (!mounted || (controller.signal.aborted && !timedOut)) return;
 
       const source = fulfilled(sourceResult);
       const sync = fulfilled(syncResult);
@@ -171,6 +185,12 @@ export default function OnboardingClient() {
       const accountsAvailable = configuration !== null;
       const activeAccounts = configuration?.accounts?.filter((account) => account.lifecycle === "active").length ?? 0;
 
+      // Conservar resultados iniciales aunque la lectura secundaria tarde o falle.
+      setState((current) => ({
+        ...current, sourceAvailable, sourceConnected, sourceReady,
+        accountsAvailable, activeAccounts,
+      }));
+
       let financialAvailable = false;
       let financialReady = false;
       let summaryMissing: string[] = [];
@@ -186,13 +206,14 @@ export default function OnboardingClient() {
           readJson<DashboardReadiness>("/api/dashboard?scope=all", controller.signal),
           readJson<BalanceReadiness>(`/api/financial?${balanceParams.toString()}`, controller.signal),
         ]);
-        if (controller.signal.aborted) return;
+        if (!mounted || (controller.signal.aborted && !timedOut)) return;
         const financial = fulfilled(financialResult);
         financialAvailable = financial !== null;
         financialReady = financial?.contractVersion === 1 && financial.principles?.bankSource === "read_only";
         summaryMissing = summaryComponentsMissing(fulfilled(dashboardResult), fulfilled(balanceResult));
       }
 
+      if (!mounted) return;
       setState({
         sourceAvailable,
         sourceConnected,
@@ -205,10 +226,19 @@ export default function OnboardingClient() {
       });
       setLoading(false);
     })().catch(() => {
-      if (!controller.signal.aborted) setLoading(false);
+      if (mounted) setLoading(false);
+    }).finally(() => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+      if (mounted && !timedOut) setSlowLoading(false);
     });
 
-    return () => controller.abort();
+    return () => {
+      mounted = false;
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+      controller.abort();
+    };
   }, []);
 
   const accountsReady = state.sourceReady && state.accountsAvailable && state.activeAccounts > 0;
@@ -350,6 +380,17 @@ export default function OnboardingClient() {
           <span>{loading ? "Comprobando tu estado" : activationComplete ? "Ya puedes usar tu resumen" : "Objetivos completados"}</span>
         </div>
       </header>
+
+      {loading && slowLoading ? (
+        <p role="status" aria-live="polite">
+          La comprobación está tardando más de 15 segundos. Seguimos leyendo las secciones disponibles sin cambiar tus datos.
+        </p>
+      ) : null}
+      {readDeadlineReached ? (
+        <p role="status" aria-live="polite">
+          La comprobación ha superado 30 segundos. Se muestran únicamente los resultados verificados; abre el módulo pendiente para volver a comprobarlo.
+        </p>
+      ) : null}
 
       <section className={styles.nextAction} aria-labelledby="next-action-heading">
         {activationComplete ? (
