@@ -133,7 +133,10 @@ test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores
   await page.getByLabel("Comercio").selectOption(MERCHANT_ID);
   await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toHaveAttribute("aria-expanded", "true");
   await page.getByRole("button", { name: /Ocultar filtros avanzados/ }).click();
-  await expect(page.getByLabel("Comercio")).toBeHidden();
+  // Comercio es un filtro principal y permanece visible; lo que se pliega
+  // es el panel avanzado, sin descartar los borradores.
+  await expect(page.locator("#movement-advanced-filters")).toBeHidden();
+  await expect(page.getByLabel("Comercio")).toBeVisible();
   expect(seen.length).toBe(queryCount);
   await page.getByRole("button", { name: /Más filtros/ }).click();
   await expect(page.getByLabel("Comercio")).toHaveValue(MERCHANT_ID);

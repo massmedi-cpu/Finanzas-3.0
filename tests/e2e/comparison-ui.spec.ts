@@ -119,7 +119,9 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
   await expect(insight).toContainText("No interpretamos 0 € como mejora");
   await expect(insight).not.toContainText("El gasto diario baja");
   const metrics = page.getByRole("region", { name: "Resumen comparativo" });
-  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  // Neto y Ahorro comparten ahora una tarjeta: 2 métricas + bloque agrupado.
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Importes parciales, comparación incompleta");
   await expect(metrics).not.toContainText("−100");
   await expect(metrics).not.toContainText("-100");
 });
