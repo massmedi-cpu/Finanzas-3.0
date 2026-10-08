@@ -147,3 +147,70 @@ test("AUD-E2E-DOC-001 · fecha bancaria imposible se señala sin bloquear Docume
   await expect(archive.getByText("Fecha no válida", { exact: false })).toBeVisible();
   await expect(archive.getByRole("button", { name: /Primera factura\.pdf/ })).toBeVisible();
 });
+
+
+test("AUD-E2E-DOC-001 · Guardar y continuar espera a verificar relectura y conserva el borrador si falla", async ({ page }) => {
+  let updatedIssuer = DOCS[0].issuerName as string;
+  let failRevalidation = true;
+  let needRevalidation = false;
+  let patches = 0;
+  await page.route(/\/api\/documents(?:\?.*)?$/, async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    const id = url.searchParams.get("id");
+    if (req.method() === "PATCH") {
+      const payload = req.postDataJSON() as { action: string; issuerName: string };
+      expect(payload.action).toBe("metadata");
+      patches += 1;
+      updatedIssuer = payload.issuerName;
+      needRevalidation = failRevalidation;
+      await route.fulfill({ status: 200, contentType: "application/json", body: '{"ok":true}' });
+      return;
+    }
+    if (id === DOCS[0].id && needRevalidation) {
+      await route.fulfill({ status: 503, contentType: "application/json", body: '{"error":"temporary_failure"}' });
+      return;
+    }
+    if (id) {
+      const source = DOCS.find((doc) => doc.id === id);
+      await route.fulfill({
+        status: source ? 200 : 404,
+        contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3,
+          document: source ? { ...source, issuerName: source.id === DOCS[0].id ? updatedIssuer : source.issuerName } : null,
+          associations: [],
+          principles: PRINCIPLES,
+        }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(list(DOCS, url)),
+    });
+  });
+
+  await page.goto("/documents");
+  const archive = page.getByRole("complementary", { name: "Listado de documentos" });
+  await archive.getByRole("button", { name: /Primera factura\.pdf/ }).click();
+  const issuer = page.getByRole("textbox", { name: "Emisor" });
+  await expect(issuer).toHaveValue(DOCS[0].issuerName);
+  await issuer.fill("Proveedor revisado");
+  await archive.getByRole("button", { name: /Segunda factura\.pdf/ }).click();
+
+  const dialog = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("alert")).toContainText("no se pudo comprobar");
+  await expect(issuer).toHaveValue("Proveedor revisado");
+  expect(patches).toBe(1);
+
+  failRevalidation = false;
+  needRevalidation = false;
+  await dialog.getByRole("button", { name: "Guardar y continuar" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Segunda factura.pdf" })).toBeVisible();
+  expect(patches).toBe(2);
+});
