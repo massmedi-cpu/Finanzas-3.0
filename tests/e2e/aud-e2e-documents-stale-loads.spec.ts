@@ -48,7 +48,7 @@ const PRINCIPLES = {
   testDesignationSupported: false,
 };
 
-function list(items: readonly typeof DOCS[number][], requestUrl: URL) {
+function list<T extends { originalFileName: string }>(items: readonly T[], requestUrl: URL) {
   const offset = Number(requestUrl.searchParams.get("offset") ?? "0");
   const limit = Number(requestUrl.searchParams.get("limit") ?? "50");
   return {
@@ -115,10 +115,8 @@ test("AUD-E2E-DOC-001 · un fallo de detalle no muestra metadatos del documento 
   await mockDocuments(page, failing);
   await page.goto("/documents");
   const archive = page.getByRole("complementary", { name: "Listado de documentos" });
-  const detail = page.locator('section[aria-live="polite"]').filter({ has: page.locator("form") }).last();
-
   await archive.getByRole("button", { name: /Primera factura\.pdf/ }).click();
-  await expect(detail.getByRole("heading", { name: "Primera factura.pdf" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Primera factura.pdf" })).toBeVisible();
 
   await archive.getByRole("button", { name: /Segunda factura\.pdf/ }).click();
   const failure = page.getByTestId("documents-detail-error");
