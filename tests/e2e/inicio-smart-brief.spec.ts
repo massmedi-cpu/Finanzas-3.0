@@ -665,7 +665,7 @@ test("QA-15 · Saldo hace visible cuándo un punto incluye cuentas reconstruidas
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
-      dateFrom: "2026-08-01",
+      dateFrom: "2026-07-01",
       dateTo: "2026-09-16",
       accountId: null,
       rows: [
@@ -764,7 +764,7 @@ test("QA-19 · Saldo sitúa balances negativos bajo cero", async ({ page }) => {
 
   await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
     await json(route, {
-      dateFrom: "2026-08-01",
+      dateFrom: "2026-07-01",
       dateTo: "2026-09-16",
       accountId: null,
       rows: [
@@ -905,3 +905,41 @@ test("AUD-E2E-INI-001 · saldo demorado termina a los 30 segundos y recupera sol
     releasePending();
   }
 });
+
+for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "inconsistent_coverage", "repeated_month", "null_row"] as const) {
+  test(`AUD-E2E-INI-001 · saldo rechaza ${defect} y recupera un cero bancario válido`, async ({ page }) => {
+    await mockInicio(page);
+    const methods: string[] = [];
+    await page.route(/\/api\/financial\?mode=balance_series.*/, async (route) => {
+      methods.push(route.request().method());
+      const row = { monthStart: "2026-09-01", asOfDate: "2026-09-16", balanceCents: 0, accounts: 1, explicitBalanceAccounts: 1, reconstructedBalanceAccounts: 0 };
+      const response = {
+        dateFrom: "2026-07-01", dateTo: "2026-09-16", accountId: null,
+        rows: [row] as unknown[],
+        principles: { bankSource: "read_only", balanceSource: "financial_account_balances", cashFlowReconstruction: false, getHasSideEffects: false },
+      };
+      if (methods.length === 1) {
+        if (defect === "invalid_date") row.monthStart = "2026-13-01";
+        if (defect === "wrong_period") response.dateTo = "2026-10-16";
+        if (defect === "fractional_cents") row.balanceCents = 0.5;
+        if (defect === "inconsistent_coverage") row.explicitBalanceAccounts = 2;
+        if (defect === "repeated_month") response.rows.push({ ...row });
+        if (defect === "null_row") response.rows = [null];
+      }
+      await json(route, response);
+    });
+    const pageErrors: string[] = [];
+    page.on("pageerror", (error) => pageErrors.push(error.message));
+    await page.goto("/");
+    const selector = page.getByRole("group", { name: "Vista de evolución financiera" });
+    await selector.getByRole("button", { name: "Saldo" }).click();
+    const failure = page.getByRole("status").filter({ hasText: "No se ha podido cargar la evolución del saldo" });
+    await expect(failure).toBeVisible();
+    await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toHaveCount(0);
+    await expect(selector.getByRole("button", { name: "Flujo neto" })).toBeEnabled();
+    await failure.getByRole("button", { name: "Reintentar saldo" }).click();
+    await expect(page.getByRole("group", { name: "Saldo bancario agregado por mes" })).toContainText("0,00");
+    expect(methods).toEqual(["GET", "GET"]);
+    expect(pageErrors).toEqual([]);
+  });
+}

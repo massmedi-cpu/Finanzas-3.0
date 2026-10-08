@@ -20,15 +20,15 @@ insert into aud_ids select case name when 'AUD bank explicit' then 'account' els
 
 with inserted as (
   insert into financial_app.categories(name,kind,icon_key,color_token,lifecycle,sort_order) values
-    ('AUD Root','expense','test','neutral','active',1),
-    ('AUD Food','expense','test','neutral','active',2),
-    ('AUD Archived','expense','test','neutral','archived',3)
+    ('AUD Root','expense','wallet','category.blue','active',1),
+    ('AUD Food','expense','cart','category.green','active',2),
+    ('AUD Archived','expense','receipt','category.slate','archived',3)
   returning id,name
 )
 insert into aud_ids select name,id from inserted;
 with inserted as (
   insert into financial_app.categories(name,kind,parent_category_id,icon_key,color_token,sort_order)
-  values('AUD Child','expense',(select id from aud_ids where key='AUD Root'),'test','neutral',4)
+  values('AUD Child','expense',(select id from aud_ids where key='AUD Root'),'wallet','category.blue',4)
   returning id
 )
 insert into aud_ids select 'AUD Child',id from inserted;

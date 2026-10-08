@@ -28,23 +28,41 @@ type BalanceSeries = {
   };
 };
 
-function isBalanceSeries(value: unknown): value is BalanceSeries {
+function isCalendarDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const parsed = new Date(`${value}T12:00:00Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
+function isBalanceSeries(value: unknown, dateFrom: string, dateTo: string): value is BalanceSeries {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const candidate = value as Partial<BalanceSeries>;
   const principles = candidate.principles;
-  return Array.isArray(candidate.rows)
+  const months = new Set<string>();
+  return candidate.dateFrom === dateFrom && candidate.dateTo === dateTo
+    && candidate.accountId === null
+    && Array.isArray(candidate.rows)
     && principles?.bankSource === "read_only"
     && principles?.balanceSource === "financial_account_balances"
     && principles?.cashFlowReconstruction === false
     && principles?.getHasSideEffects === false
-    && candidate.rows.every((row) =>
-      typeof row.monthStart === "string"
-      && typeof row.asOfDate === "string"
-      && Number.isFinite(row.balanceCents)
-      && Number.isInteger(row.accounts) && row.accounts >= 0
-      && Number.isInteger(row.explicitBalanceAccounts) && row.explicitBalanceAccounts >= 0
-      && Number.isInteger(row.reconstructedBalanceAccounts) && row.reconstructedBalanceAccounts >= 0
-    );
+    && candidate.rows.every((row, index, rows) => {
+      if (!row || typeof row !== "object"
+        || !isCalendarDate(row.monthStart) || !row.monthStart.endsWith("-01")
+        || !isCalendarDate(row.asOfDate)
+        || row.monthStart < `${dateFrom.slice(0, 7)}-01` || row.monthStart > dateTo
+        || row.asOfDate < row.monthStart || row.asOfDate > dateTo
+        || row.asOfDate.slice(0, 7) !== row.monthStart.slice(0, 7)
+        || months.has(row.monthStart)
+        || (index > 0 && rows[index - 1].monthStart >= row.monthStart)
+        || !Number.isSafeInteger(row.balanceCents)
+        || !Number.isSafeInteger(row.accounts) || row.accounts < 0
+        || !Number.isSafeInteger(row.explicitBalanceAccounts) || row.explicitBalanceAccounts < 0
+        || !Number.isSafeInteger(row.reconstructedBalanceAccounts) || row.reconstructedBalanceAccounts < 0
+        || row.explicitBalanceAccounts + row.reconstructedBalanceAccounts !== row.accounts) return false;
+      months.add(row.monthStart);
+      return true;
+    });
 }
 
 function SingleSeriesBars({
@@ -170,7 +188,7 @@ export default function HomeEvolution({
         return body;
       })
       .then((payload) => {
-        if (!isBalanceSeries(payload)) throw new Error("balance_series_invalid_contract");
+        if (!isBalanceSeries(payload, dateFrom, dateTo)) throw new Error("balance_series_invalid_contract");
         if (!controller.signal.aborted) setBalanceCache({ key: balanceKey, data: payload });
       })
       .catch((error) => {
