@@ -46,8 +46,11 @@ test.describe("AUD-E2E-VAL-001 · navegación móvil accesible", () => {
 });
 
 test("AUD-E2E-NAV-001 · salto de móvil a escritorio cierra Más y recupera el foco visible", async ({ page }) => {
+  await page.route("**/api/**", (route) => route.fulfill({
+    status: 503, contentType: "application/json", body: '{"error":"isolated_mobile_navigation"}',
+  }));
   await page.setViewportSize({ width: 390, height: 780 });
-  await page.goto("/onboarding");
+  await page.goto("/");
   const mobile = page.getByRole("navigation", { name: "Navegación móvil" });
   const more = mobile.getByRole("button", { name: "Más", exact: true });
   await more.click();
