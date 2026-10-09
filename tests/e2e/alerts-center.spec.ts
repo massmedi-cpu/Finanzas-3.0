@@ -151,7 +151,7 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
     });
   });
   await page.goto("/alerts");
-  await expect(page.getByRole("heading", { name: "Alertas" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Alertas", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByText(/50\\.000 documentos sin asociar/)).toBeVisible();
   await expect(page.getByText(/125 documentos pendientes de revisar/)).toBeVisible();
   expect(reads).toHaveLength(2);
