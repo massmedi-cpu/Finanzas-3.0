@@ -803,3 +803,39 @@ test("RECUPERACION-PRODUCTO · aviso de exceso legible en Claro y Oscuro", async
     expect(colors.text).not.toEqual(colors.background);
   }
 });
+
+
+test("RECUPERACION-PRODUCTO · no descarta un límite en edición al cambiar mes y conserva la URL", async ({ page }) => {
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only" }) });
+      return;
+    }
+    const month = new URL(route.request().url()).searchParams.get("month") ?? "2026-09";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotForMonth(month)) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const input = page.getByLabel("Límite elegido de total mensual");
+  await input.fill("123,45");
+  const monthInput = page.locator('input[type="month"]');
+  await expect(monthInput).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Actualizar referencia" })).toBeDisabled();
+  await expect(page.getByText("Tienes un límite en edición. Guárdalo o cancélalo antes de cambiar de mes o actualizar la referencia.")).toBeVisible();
+  await expect(input).toHaveValue("123,45");
+  await expect(page).toHaveURL(/month=2026-09/);
+  expect(writes).toEqual([]);
+
+  await page.getByRole("button", { name: "Cancelar" }).first().click();
+  await expect(monthInput).toBeEnabled();
+  await monthInput.fill("2026-08");
+  await expect(page).toHaveURL(/month=2026-08/);
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  await page.reload();
+  await expect(monthInput).toHaveValue("2026-08");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(writes).toEqual([]);
+});
