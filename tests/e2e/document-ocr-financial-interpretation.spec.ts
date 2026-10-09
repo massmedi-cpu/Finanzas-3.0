@@ -283,3 +283,15 @@ test("OCR keeps an unlabelled receipt clock available but doubtful", () => {
   expect(interpretation.time.value).toBe("13:45");
   expect(interpretation.time.trust).toBe("doubtful");
 });
+
+test("explicit incorrect CIF checksum remains doubtful, not reliable", () => {
+  const x = interpretDocumentOcrFinancially(result([line("bad", "Emisor CIF B12345678", 0.99, 0.10)]));
+  expect(x.taxId.value).toBe("B12345678");
+  expect(x.taxId.trust).toBe("doubtful");
+});
+test("explicit DNI uses the Spanish check letter before declaring a reliable ID", () => {
+  const good = interpretDocumentOcrFinancially(result([line("good", "Proveedor NIF 12345678Z", 0.99, 0.10)]));
+  const bad = interpretDocumentOcrFinancially(result([line("bad", "Proveedor NIF 12345678A", 0.99, 0.10)]));
+  expect(good.taxId.trust).toBe("reliable");
+  expect(bad.taxId.trust).toBe("doubtful");
+});
