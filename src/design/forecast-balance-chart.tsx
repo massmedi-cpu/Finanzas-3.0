@@ -30,6 +30,11 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
   }
 
   const points = timeline.points;
+  const markerPoints = points.filter((point) => point.kind !== "opening" || points[1]?.date !== point.date);
+  // When points are too close, don't overlap 44px hit targets.
+  const crowdedMarkers = markerPoints.some((point, index) => index > 0
+    && timeline.position(point.date) - timeline.position(markerPoints[index - 1].date) < 8.5);
+  const selectedPoint = markerPoints.find((point) => `forecast-balance-${point.id}` === activePoint) ?? null;
   const allPoints = [
     { date: snapshot.period.dateFrom, balanceCents: snapshot.summary.openingBalanceCents },
     ...snapshot.items.map((item) => ({ date: item.date, balanceCents: item.projectedBalanceAfterCents })),
@@ -126,16 +131,20 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
                 className={styles.point}
                 style={{ left: `${xFor(index)}%`, top: `${coordinateFor(point.balanceCents)}%` }}
               >
-                <button
-                  type="button"
-                  className={styles.pointButton}
-                  aria-label={label}
-                  onFocus={() => setActivePoint(id)}
-                  onBlur={() => setActivePoint((current) => current === id ? null : current)}
-                  onMouseEnter={() => setActivePoint(id)}
-                  onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                />
-                {activePoint === id ? (
+                {crowdedMarkers ? (
+                  <span className={styles.staticPoint} aria-hidden="true" />
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.pointButton}
+                    aria-label={label}
+                    onClick={() => setActivePoint(id)}
+                    onFocus={() => setActivePoint(id)}
+                    onMouseEnter={() => setActivePoint(id)}
+                    onKeyDown={(event) => { if (event.key === "Escape") setActivePoint(null); }}
+                  />
+                )}
+                {!crowdedMarkers && activePoint === id ? (
                   <div role="tooltip" className={styles.tooltip}>
                     {point.label} · {formatMoneyCents(point.balanceCents)}
                   </div>
@@ -146,6 +155,20 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
         </div>
       </div>
       <div className={styles.dateAxis} aria-label="Inicio y fin del periodo"><span>{formatDate(snapshot.period.dateFrom)}</span><span>{formatDate(snapshot.period.dateTo)}</span></div>
+      <label className={styles.inspector}>
+        <span>Consultar un hito de la curva</span>
+        <select value={selectedPoint ? activePoint ?? "" : ""} onChange={(event) => setActivePoint(event.target.value || null)}>
+          <option value="">Selecciona una fecha</option>
+          {markerPoints.map((point) => (
+            <option key={point.id} value={`forecast-balance-${point.id}`}>
+              {formatDate(point.date)} · {point.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selectedPoint ? <p className={styles.selectedDetail} role="status">
+        {selectedPoint.label} · {formatDate(selectedPoint.date)} · Saldo {formatMoneyCents(selectedPoint.balanceCents)}
+      </p> : null}
 
       <div className={styles.tableScroller}>
         <table aria-label="Datos de la curva de saldo" className={styles.table}>
