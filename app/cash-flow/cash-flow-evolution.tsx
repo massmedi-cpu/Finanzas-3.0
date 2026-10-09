@@ -70,9 +70,10 @@ export function CashFlowEvolution({
     const minimum = Math.min(0, ...values);
     const flatZero = maximum === 0 && minimum === 0;
     const span = Math.max(1, maximum - minimum);
+    const tickCount = width < 520 ? 3 : 5;
     const ticks = flatZero
       ? [0]
-      : Array.from({ length: width < 520 ? 3 : 5 }, (_, index, values) => maximum - (span * index) / (values.length - 1));
+      : Array.from({ length: tickCount }, (_, index) => maximum - (span * index) / (tickCount - 1));
     // Axis labels stay full es-ES monetary amounts, including cents. Reserve
     // enough room to avoid clipping large numbers instead of truncating them.
     const labelLength = Math.max(...ticks.map((tick) => formatMoneyCents(Math.round(tick)).length));
