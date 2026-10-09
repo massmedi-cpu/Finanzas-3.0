@@ -463,26 +463,28 @@ export default function InicioOverview() {
   }, [isFresh]);
 
   const refreshDashboard = useCallback(async () => {
+    const generation = ++generationRef.current;
     setPrimaryLoading(true);
     setActivityLoading(true);
     setSecondaryLoading(true);
     setDataThroughDate(null);
     setIndependentSources([]);
 
-    const statusPromise = loadSyncStatus();
-    const analysisPromise = loadHomeAnalysis();
-    const activityPromise = loadScope("activity", ["transactions"])
-      .finally(() => setActivityLoading(false));
-    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"])
-      .finally(() => setSecondaryLoading(false));
+    const statusPromise = loadSyncStatus(generation);
+    const analysisPromise = loadHomeAnalysis(generation);
+    const activityPromise = loadScope("activity", ["transactions"], generation)
+      .finally(() => { if (isFresh(generation)) setActivityLoading(false); });
+    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"], generation)
+      .finally(() => { if (isFresh(generation)) setSecondaryLoading(false); });
 
-    await loadScope("critical", ["financial"]);
-    setPrimaryLoading(false);
+    await loadScope("critical", ["financial"], generation);
+    if (isFresh(generation)) setPrimaryLoading(false);
     await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise]);
-  }, [loadHomeAnalysis, loadScope, loadSyncStatus]);
+  }, [loadHomeAnalysis, loadScope, loadSyncStatus, isFresh]);
 
   useEffect(() => {
     void refreshDashboard();
+    return () => { generationRef.current += 1; };
   }, [refreshDashboard]);
 
   const runSync = useCallback(async () => {
