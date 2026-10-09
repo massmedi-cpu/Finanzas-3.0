@@ -689,3 +689,58 @@ test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", 
   const comparisons = page.getByLabel("Indicadores principales del periodo");
   await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
 });
+
+
+test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura anterior", async ({ page }) => {
+  const overall = mockSnapshot();
+  const selectedAccountId = overall.accounts[0].id;
+  const individual: AnalysisSnapshot = {
+    ...overall,
+    selection: { ...overall.selection, accountId: selectedAccountId },
+  };
+  let releaseScopedRequest: (() => void) | undefined;
+  const holdScopedRequest = new Promise<void>((resolve) => {
+    releaseScopedRequest = resolve;
+  });
+  let scopedRequestSeen = false;
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    if (account === selectedAccountId) {
+      scopedRequestSeen = true;
+      await holdScopedRequest;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: account ? "2026-09-04" : "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(account === selectedAccountId ? individual : overall),
+    });
+  });
+
+  try {
+    await page.goto("/analysis?month=2026-09&range=1m");
+    const comparisons = page.getByLabel("Indicadores principales del periodo");
+    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(0);
+    await page.getByLabel("Cuenta", { exact: true }).first().selectOption(selectedAccountId);
+    await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+    await expect.poll(() => scopedRequestSeen).toBe(true);
+    // While the new scoped request is pending, the old account's complete
+    // bounds cannot certify the selected account's comparisons.
+    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  } finally {
+    releaseScopedRequest?.();
+  }
+});
