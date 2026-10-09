@@ -83,7 +83,7 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
             <strong>{formatMoney(maximum)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días con cobertura y sin gasto permanecen planos; no se introduce un segundo cálculo financiero."}</p>
+        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días con cobertura y sin gasto permanecen planos."}</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
           <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(maximum)}`}>
             {tickValues.map((value) => {
