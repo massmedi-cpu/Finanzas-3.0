@@ -96,8 +96,9 @@ if (Deno.args[0] === "prepare") {
       fixtureIds[key] = row[0].id;
     }
     const baseline = await sql`select md5(coalesce((select jsonb_agg(to_jsonb(t) order by id)::text from financial_app.transaction_source_records t),'[]')) as source_hash,
-      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
-    await Deno.writeTextFile(`${dir}/bank-baseline.json`, JSON.stringify(baseline[0]), { mode: 0o600 });
+      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'category_origin'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
+    const classificationRows = await sql`select id,merchant_id,category_id,category_origin from financial_app.transactions order by id`;
+    await Deno.writeTextFile(`${dir}/bank-baseline.json`, JSON.stringify({ ...baseline[0], classificationRows }), { mode: 0o600 });
   } finally { await sql.end(); }
   const upload = await ok(owner.token, "document.upload_sign", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", sizeBytes: 1000 });
   assert(new URL(upload.signedUrl).hostname === "127.0.0.1", "external_upload_forbidden");
@@ -200,11 +201,28 @@ if (Deno.args[0] === "prepare") {
   try {
     const baseline = JSON.parse(await Deno.readTextFile(`${dir}/bank-baseline.json`));
     const after = await finalSql`select md5(coalesce((select jsonb_agg(to_jsonb(t) order by id)::text from financial_app.transaction_source_records t),'[]')) as source_hash,
-      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
-    assert(isDeepStrictEqual(after[0], baseline), 'http_mutated_immutable_bank_records');
+      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'category_origin'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
+    assert(after[0].source_hash === baseline.source_hash, 'http_mutated_original_source_records');
+    assert(after[0].transaction_hash === baseline.transaction_hash, 'http_mutated_immutable_bank_records');
+    // Applying the explicit rule changes derived classification and its origin.
+    // Check those fields exactly on the intended row and preserve every other row.
+    const expectedRule = JSON.parse(await Deno.readTextFile(`${dir}/rule-classification.json`));
+    const classifications = await finalSql`select id,merchant_id,category_id,category_origin from financial_app.transactions order by id`;
+    assert(classifications.length === baseline.classificationRows.length, 'classification_row_count_changed');
+    assert(classifications.some(row => row.id === expectedRule.id), 'rule_classification_row_missing');
+    for (const row of classifications) {
+      const before = baseline.classificationRows.find((item: any) => item.id === row.id);
+      assert(before, 'classification_row_identity_changed');
+      const expected = row.id === expectedRule.id
+        ? { merchant_id: expectedRule.merchantId, category_id: expectedRule.categoryId, category_origin: 'rule' }
+        : before;
+      for (const key of ['merchant_id', 'category_id', 'category_origin']) {
+        assert(row[key] === expected[key], 'unexpected_classification_change_' + key);
+      }
+    }
     const httpEvidence = JSON.parse(await Deno.readTextFile(`${dir}/http-ocr.json`));
     const persisted = await finalSql`select raw_result from financial_app.document_ocr_runs where document_id=${httpEvidence.id}::uuid`;
     assert(persisted.length === 1 && isDeepStrictEqual(persisted[0].raw_result, httpEvidence.raw), 'next_http_ocr_not_persisted_exactly');
   } finally { await finalSql.end(); }
-  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
+  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|classification_scope_exact=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
 } else { throw new Error("expected_prepare_or_verify"); }

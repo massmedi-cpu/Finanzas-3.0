@@ -28,7 +28,7 @@ Un adaptador de red exclusivo del proceso de prueba dirige las URL fijas del gat
 | UI | 21 rutas: 14 módulos y 7 áreas de Configuración; 360/390/768/820/1024/1348/1440 px; claro/oscuro; datos reales en las rutas financieras; sin overflow ni excepciones de página |
 | Preferencias/PWA | Guardado local y recarga, foco/teclado, privacidad al perder foco, worker real, fallo de lectura offline sin caché privada y recuperación |
 
-La fuente sintética se coteja por hash completo. Los campos bancarios de movimientos se cotejan excluyendo únicamente merchant/category/updated_at, que la aplicación modifica legítimamente al aplicar reglas explícitas. Ninguna prueba escribe en el banco o Drive originales.
+La fuente sintética se coteja por hash completo. Los campos bancarios de movimientos se cotejan excluyendo merchant/category/category_origin/updated_at; las tres columnas de clasificación se comprueban además exactamente por movimiento, que la aplicación modifica legítimamente al aplicar reglas explícitas. Ninguna prueba escribe en el banco o Drive originales.
 
 Los ensayos existentes de cobertura financiera, contraste, navegación contextual, errores/demoras, OCR heterogéneo y responsive complementan esta matriz. El ensayo de upgrade/reversión sobre el backup real se mantiene separado. La revisión humana del F11 real quedó confirmada por el propietario el 09/10/2026; aplicar su designación en Producción sigue siendo una acción del release final.
 
@@ -60,3 +60,10 @@ El [run 37892129714](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/3
 Contenido y rejilla móvil principal usan tracks con mínimo cero; los paneles pueden contraerse, el resumen conserva columnas ajustables (una hasta 400 px) y títulos/estados pueden pasar de línea. No se recorta la página ni se ocultan controles. El ensayo registra todos los desbordamientos de una pasada con aserciones soft que siguen haciendo FALLAR el caso; sólo emite el marcador responsive con overflow=0 cuando no hay errores. Así se revisan también las rutas posteriores antes de aceptar 14/14 y el cotejo SQL final.
 
 Los commits concurrentes `9cce944d` y `14dd99b7` añadieron mínimos cero y el breakpoint compacto de 400 px. Se conservan sus cambios al integrar el salto de filas y la pasada completa de diagnóstico.
+
+
+## Quinto recorrido y procedencia de clasificación
+
+El [run 37893609993](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37893609993), HEAD `5c6e5cd8`, pasó **14/14 pruebas browser→Next→gateway**: 21 rutas × siete anchuras × claro/oscuro sin overflow ni excepciones, además de todos los casos funcionales. El run completo terminó FALLIDO en el cotejo SQL final `http_mutated_immutable_bank_records`; no constituye aceptación.
+
+El SQL original `apply_categorization_rules` actualiza también `category_origin` al aplicar explícitamente la regla. El ensayo excluía merchant/category/updated_at pero contaba esa procedencia derivada como dato bancario. Ahora conserva la huella completa de `transaction_source_records` y todas las demás columnas de movimientos, y exige exactamente merchant/category/origin esperados en el único movimiento de la regla; los otros diez mantienen su clasificación original. La expectativa procede de los IDs realmente creados por el caso HTTP y se guarda sólo en el runner privado temporal. No se cambia la lógica de producto ni se relajan invariantes de fuentes, fechas, importes, saldos o identidades. Se repite el run completo para comprobar además el OCR Next contra SQL y emitir los marcadores finales.

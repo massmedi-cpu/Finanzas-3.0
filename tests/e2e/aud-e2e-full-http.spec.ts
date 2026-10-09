@@ -111,6 +111,7 @@ test('financial API persists budgets, category, aliases, rule precedence, bulk e
   expect((await api(page, '/api/rules', 'POST', { operation: 'rule.evaluate', transactionId: ids.rule })).result.categoryLocked).toBe(true);
   await api(page, '/api/rules', 'POST', { operation: 'rule.apply', transactionId: ids.rule });
   expect((await transaction(page, ids.rule)).category.effectiveId).toBe(category.id);
+  await fs.writeFile(`${dir}/rule-classification.json`, JSON.stringify({ id: ids.rule, merchantId: merchant.id, categoryId: ids.categoryA }), { mode: 0o600 });
   await api(page, '/api/transactions', 'PATCH', { transactionIds: [ids.rec1, ids.rec2], patch: { note: 'AUD persisted bulk note', reviewState: 'confirmed' } });
   expect((await transaction(page, ids.rec1)).userNote).toBe('AUD persisted bulk note');
   expect((await transaction(page, ids.rec2)).userNote).toBe('AUD persisted bulk note');
