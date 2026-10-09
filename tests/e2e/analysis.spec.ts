@@ -529,3 +529,30 @@ test("REC-ANA-004 · cero neto por devolución no se muestra como un céntimo", 
   await expect(accumulation.getByRole("table")).toContainText(/100,00/);
   await expect(accumulation.getByRole("table").getByRole("row").last()).toContainText(/0,00/);
 });
+
+test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más allá de quince", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  const template = snapshot.merchantDrivers[0];
+  expect(template).toBeDefined();
+  snapshot.merchantDrivers = Array.from({ length: 18 }, (_, index) => ({
+    ...template,
+    id: `merchant-${index + 1}`,
+    name: `Comercio de prueba ${index + 1}`,
+    href: `/transactions?merchantId=merchant-${index + 1}`,
+  }));
+  await loadMockAnalysis(page, snapshot);
+
+  const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
+  await expect(ranking.getByRole("listitem")).toHaveCount(5);
+  const showAll = ranking.getByRole("button", { name: "Ver todos" });
+  await expect(showAll).toHaveAttribute("aria-expanded", "false");
+  await showAll.click();
+  await expect(ranking.getByRole("listitem")).toHaveCount(18);
+  await expect(ranking.getByRole("link", { name: "Ver movimientos de Comercio de prueba 18" })).toHaveAttribute(
+    "href",
+    "/transactions?merchantId=merchant-18",
+  );
+  await expect(ranking.getByRole("button", { name: "Ver menos" })).toHaveAttribute("aria-expanded", "true");
+  await ranking.getByRole("button", { name: "Ver menos" }).click();
+  await expect(ranking.getByRole("listitem")).toHaveCount(5);
+});
