@@ -103,7 +103,11 @@ export default function AnalysisPageClient({
 
   return (
     <>
-      <AnalysisSourceFreshness onChange={setFreshness} />
+      <AnalysisSourceFreshness
+        key={snapshot?.selection.accountId ?? fallbackSelection.accountId ?? "all"}
+        accountId={snapshot?.selection.accountId ?? fallbackSelection.accountId ?? null}
+        onChange={setFreshness}
+      />
       <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null} earliestMovementDate={freshness?.earliestMovementDate ?? null}
         onApplied={(next) => { setSnapshot(next); setBasicApplied(next); }} />
       <AnalysisAxioma53Controls
