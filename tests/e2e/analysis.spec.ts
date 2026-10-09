@@ -238,6 +238,27 @@ test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora"
   await expect(kpis).not.toContainText("−100");
   await expect(kpis).not.toContainText("-100");
   await expect(page.getByRole("heading", { name: /Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación/i })).toBeVisible();
+  const changeSection = page.locator('section[aria-labelledby="change-heading"]');
+  await expect(changeSection).toContainText("Sin cobertura bancaria confirmada");
+  await expect(changeSection.getByRole("list", { name: /categoría/i })).toHaveCount(0);
+  await expect(changeSection).not.toContainText("Más gasto");
+  await expect(changeSection).not.toContainText("Menos gasto");
+});
+
+test("REC-ANA-001 · un mes con cobertura parcial muestra gastos reales sin inventar variaciones", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await loadMockAnalysis(page, snapshot, "2026-09-05");
+
+  const changeSection = page.locator('section[aria-labelledby="change-heading"]');
+  await expect(changeSection).toContainText("Sin comparación fiable");
+  await expect(changeSection).toContainText("Importes observados del periodo");
+  const observed = changeSection.getByRole("list", { name: "Gastos observados por categoría, periodo incompleto" });
+  await expect(observed.getByRole("listitem")).toHaveCount(2);
+  await expect(observed.getByRole("listitem", { name: /Alimentación: gasto observado 350,00/ })).toBeVisible();
+  await expect(observed.getByRole("link", { name: "Ver movimientos" }).first()).toHaveAttribute("href", new RegExp(`categoryId=${CATEGORY_FOOD}`));
+  await expect(changeSection).not.toContainText("Más gasto");
+  await expect(changeSection).not.toContainText("Menos gasto");
+  await expect(changeSection.getByRole("button", { name: "Variación" })).toHaveCount(0);
 });
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
