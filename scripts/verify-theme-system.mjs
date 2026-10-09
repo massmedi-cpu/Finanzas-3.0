@@ -70,6 +70,16 @@ for (const file of ["app/transactions/transactions.module.css", "app/accounts/ac
   if (/(?<![\w-])color:\s*#[0-9a-f]/i.test(css)) fail(`${file} mantiene texto de tema fijo`);
   if (!css.includes("var(--surface-card)")) fail(`${file} debe consumir la superficie compartida`);
 }
+const themedModules = [
+  ["app/transactions/transactions.module.css", ["rgba(24, 50, 99, .72)", "accent-color: #4d8dff"], ["accent-color: var(--color-primary-bright)", "var(--surface-card)"]],
+  ["app/documents/documents.module.css", ["#8fb5ff", "#1f6bff", "#1857d8", "#f1f5fc", "background: #fff;"], ["outline:2px solid var(--color-primary-bright)", "var(--color-surface-strong)"]],
+  ["app/analysis/analysis.module.css", ["rgba(26, 43, 75, 0.7)"], ["color-mix(in srgb, var(--color-primary) 9%, var(--surface-card))"]],
+];
+for (const [file, forbidden, required] of themedModules) {
+  const css = read(file);
+  for (const color of forbidden) if (css.includes(color)) fail(`${file} retiene ${color} que no responde al tema`);
+  for (const token of required) if (!css.includes(token)) fail(`${file} no consume ${token}`);
+}
 if (/!important/.test(themeCss)) fail("el tema no debe depender de parches por ruta con !important");
 
 if (!appearance.includes('data-testid={`theme-${option.value}`}')) fail("faltan test ids de selección de tema");
