@@ -681,9 +681,13 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
 test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintentar sin escrituras", async ({ page }) => {
   await page.clock.install();
   const requests: string[] = [];
+  let markRequestStarted: (() => void) | null = null;
+  const requestStarted = new Promise<void>((resolve) => { markRequestStarted = resolve; });
   let retryAllowed = false;
   await page.route("**/api/budgets*", async (route) => {
     requests.push(route.request().method());
+    markRequestStarted?.();
+    markRequestStarted = null;
     if (!retryAllowed) return new Promise<void>(() => {});
     await route.fulfill({
       status: 200, contentType: "application/json",
@@ -692,9 +696,12 @@ test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintenta
   });
   await page.goto("/budgets?month=2026-09", { waitUntil: "domcontentloaded" });
   await expect(page.getByText(/Cargando presupuesto de/)).toBeVisible();
-  await page.clock.fastForward(15_000);
+  // El HTML de carga puede ser visible antes de que React haya arrancado sus temporizadores.
+  // Esperamos la primera petición real para no adelantar el reloj antes de montar el efecto.
+  await requestStarted;
+  await page.clock.runFor(15_100);
   await expect(page.locator("main").getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
-  await page.clock.fastForward(15_000);
+  await page.clock.runFor(15_100);
   await expect(page.locator("main").getByRole("alert")).toContainText("superado 30 segundos");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
   retryAllowed = true;
