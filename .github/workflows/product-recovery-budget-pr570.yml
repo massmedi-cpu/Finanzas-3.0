@@ -37,9 +37,11 @@ jobs:
         run: npm run build
       - name: Preparar navegador
         run: npx playwright install --with-deps chromium
-      - name: Experiencia de usuario de Presupuestos en escritorio y movil
+      - name: Contratos y experiencia completa de Presupuestos en escritorio y movil
         run: >-
-          npx playwright test tests/e2e/budgets.spec.ts
-          --grep RECUPERACION-PRODUCTO
+          npx playwright test
+          tests/e2e/budget-planning.spec.ts
+          tests/e2e/budgets.spec.ts
+          tests/e2e/budgets-accessibility.spec.ts
           --project=chromium-desktop --project=chromium-mobile
           --workers=1
