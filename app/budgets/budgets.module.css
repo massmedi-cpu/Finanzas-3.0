@@ -883,3 +883,10 @@
   font-size: 0.875rem;
   line-height: 1.5;
 }
+
+
+/* Sin un límite explícito ni referencia calculable, el gasto NO se presenta como exceso. */
+.noReferencePanel {
+  border-color: var(--border-warning-soft);
+  background: var(--surface-warning-soft);
+}
