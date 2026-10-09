@@ -75,8 +75,13 @@ for (const token of [
   "Comparación incompleta",
 ]) requireText(compare, token, "QA-02 Comparador");
 
+// The account selected in Análisis owns its own coverage state. This guard
+// deliberately checks the stronger scoped contract rather than the old
+// unscoped state-setter implementation.
 for (const token of [
-  "onChange={setFreshness}",
+  "onChange={onFreshnessChange}",
+  "scopedFreshness?.accountId === selectedAccountId",
+  "setScopedFreshness({ accountId: selectedAccountId, value })",
   "latestMovementDate={freshness?.latestMovementDate ?? null}",
 ]) requireText(analysisPage, token, "QA-02 Análisis wiring");
 
