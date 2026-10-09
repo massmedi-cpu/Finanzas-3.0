@@ -9,14 +9,14 @@ export default defineConfig({
   forbidOnly: Boolean(process.env.CI),
   reporter: "list",
   use: {
-    baseURL: "http://127.0.0.1:3000",
+    baseURL: "http://localhost:3000",
     trace: "off", screenshot: "off", video: "off",
     serviceWorkers: "allow",
   },
   projects: [{ name: "chromium-desktop", use: { ...devices["Desktop Chrome"] } }],
   webServer: {
-    command: "NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run dev -- --hostname 127.0.0.1",
-    url: "http://127.0.0.1:3000/login",
+    command: "NODE_OPTIONS='--require ./scripts/aud-e2e-local-network.cjs' npm run dev -- --hostname localhost",
+    url: "http://localhost:3000/login",
     reuseExistingServer: false,
     timeout: 120_000,
   },

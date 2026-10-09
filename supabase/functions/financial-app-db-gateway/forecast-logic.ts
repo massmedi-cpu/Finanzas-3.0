@@ -180,9 +180,11 @@ export async function handleForecastLogicAction(input: {
         ) as result
       `);
     }
+    // Bind as text: postgres.js converts timestamptz parameters through JS Date,
+    // which drops the microseconds required by the exact concurrency check.
     return forecastQuery(() => sql`
       select financial_app.set_forecast_item_excluded(
-        ${id}::uuid,${payload.excluded}::boolean,${reason},${expectedUpdatedAt}::timestamptz
+        ${id}::uuid,${payload.excluded}::boolean,${reason},${expectedUpdatedAt}::text::timestamptz
       ) as result
     `);
   }
@@ -210,9 +212,10 @@ export async function handleForecastLogicAction(input: {
         ) as result
       `);
     }
+    // Preserve the timestamp read from JSONB, including PostgreSQL microseconds.
     return forecastQuery(() => sql`
       select financial_app.reconcile_forecast_item(
-        ${id}::uuid,${transactionId}::uuid,${note},${expectedUpdatedAt}::timestamptz
+        ${id}::uuid,${transactionId}::uuid,${note},${expectedUpdatedAt}::text::timestamptz
       ) as result
     `);
   }

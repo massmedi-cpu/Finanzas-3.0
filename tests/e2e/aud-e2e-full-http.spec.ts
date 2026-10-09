@@ -21,6 +21,12 @@ async function login(page: Page, account = 'owner') {
     if (['http:', 'https:'].includes(url.protocol) && !['127.0.0.1', 'localhost'].includes(url.hostname)) return route.abort();
     return route.continue();
   });
+  page.on('response', async response => {
+    if (new URL(response.url()).pathname.startsWith('/api/') && !response.ok()) {
+      const body = await response.json().catch(() => ({}));
+      console.log(`AUD_HTTP|diagnostic=api_error|method=${response.request().method()}|path=${new URL(response.url()).pathname}|status=${response.status()}|error=${body.error ?? ''}|code=${body.code ?? ''}`);
+    }
+  });
   return c;
 }
 async function api(page: Page, path: string, method = 'GET', data?: unknown) {
@@ -45,13 +51,13 @@ test('HTTP boundary verifies signature/claims, Preview read-only and actual user
     body: JSON.stringify({ action, payload: {} }),
   });
   for (const key of ['wrongOwner', 'wrongProject', 'wrongAudience', 'wrongIssuer', 'expired', 'wrongSignature']) {
-    expect((await gateway(tokens[key])).status(), key).toBe(401);
+    expect((await gateway(tokens[key])).status, key).toBe(401);
   }
-  expect((await gateway('')).status()).toBe(401);
-  expect((await gateway(tokens.production, 'account.list', 'invalid-user')).status()).toBe(401);
-  expect((await gateway(tokens.preview)).status()).toBe(200);
-  expect((await gateway(tokens.preview, 'budget.set_manual')).status()).toBe(403);
-  expect((await gateway(tokens.preview, 'data.export_v1')).status()).toBe(403);
+  expect((await gateway('')).status).toBe(401);
+  expect((await gateway(tokens.production, 'account.list', 'invalid-user')).status).toBe(401);
+  expect((await gateway(tokens.preview)).status).toBe(200);
+  expect((await gateway(tokens.preview, 'budget.set_manual')).status).toBe(403);
+  expect((await gateway(tokens.preview, 'data.export_v1')).status).toBe(403);
   const ownerAccounts = await api(page, '/api/configuration');
   expect(ownerAccounts.accounts.some((a: any) => a.id === c.fixtureIds.account)).toBe(true);
   await page.request.post('/api/auth/logout');
@@ -205,24 +211,24 @@ test('document original, genuine OCR, human review, associations, owner designat
   expect((await api(page, `/api/documents?id=${id}`)).associations).toHaveLength(0);
   await page.goto(`/documents?selectedId=${id}`);
   await page.getByRole('button', { name: /AUD-http-ticket.png/ }).click();
-  await page.getByLabel('Notas', { exact: true }).fill('AUD persisted UI notes');
+  await page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar metadatos', exact: true }) }).locator('textarea').fill('AUD persisted UI notes');
   await page.getByRole('button', { name: 'Guardar metadatos', exact: true }).click();
   await expect(page.getByTestId('document-metadata-dirty')).toHaveCount(0);
   await page.reload();
   await page.getByRole('button', { name: /AUD-http-ticket.png/ }).click();
-  await expect(page.getByLabel('Notas', { exact: true })).toHaveValue('AUD persisted UI notes');
-  await page.getByLabel('Notas', { exact: true }).fill('AUD draft must survive failed save');
+  await expect(page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar metadatos', exact: true }) }).locator('textarea')).toHaveValue('AUD persisted UI notes');
+  await page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar metadatos', exact: true }) }).locator('textarea').fill('AUD draft must survive failed save');
   const failSave = async (route: import('@playwright/test').Route) => route.request().method() === 'PATCH' ? route.abort() : route.continue();
   await page.route(/\/api\/documents$/, failSave);
   await page.getByRole('button', { name: 'Guardar metadatos', exact: true }).click();
   await expect(page.getByTestId('documents-alert')).toBeVisible();
-  await expect(page.getByLabel('Notas', { exact: true })).toHaveValue('AUD draft must survive failed save');
+  await expect(page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar metadatos', exact: true }) }).locator('textarea')).toHaveValue('AUD draft must survive failed save');
   await page.unroute(/\/api\/documents$/, failSave);
   await page.getByRole('link', { name: '← Inicio' }).click();
   const alert = page.getByRole('alertdialog', { name: 'Cambios sin guardar' });
   await expect(alert.getByRole('button', { name: 'Seguir editando' })).toBeFocused();
   await page.keyboard.press('Escape');
-  await expect(page.getByLabel('Notas', { exact: true })).toHaveValue('AUD draft must survive failed save');
+  await expect(page.locator('form').filter({ has: page.getByRole('button', { name: 'Guardar metadatos', exact: true }) }).locator('textarea')).toHaveValue('AUD draft must survive failed save');
   await page.getByRole('link', { name: '← Inicio' }).click();
   await alert.getByRole('button', { name: 'Descartar cambios' }).click();
   expect((await api(page, `/api/documents?id=${id}`)).document.notes).toBe('AUD persisted UI notes');
@@ -247,7 +253,7 @@ test('document original, genuine OCR, human review, associations, owner designat
 const routes = ['/', '/transactions', '/analysis', '/compare', '/cash-flow', '/accounts', '/budgets', '/recurrences', '/forecast', '/documents', '/alerts', '/review', '/onboarding', '/configuration',
   '/configuration/source', '/configuration/source/diagnostics', '/configuration/merchants', '/configuration/rules', '/configuration/preferences', '/configuration/appearance', '/configuration/data'];
 const routeApi: Record<string, string> = { '/': '/api/dashboard', '/transactions': '/api/transactions', '/analysis': '/api/analysis',
-  '/compare': '/api/compare', '/cash-flow': '/api/financial', '/accounts': '/api/financial', '/budgets': '/api/budgets',
+  '/compare': '/api/compare', '/accounts': '/api/financial', '/budgets': '/api/budgets',
   '/recurrences': '/api/recurrences', '/forecast': '/api/forecast', '/documents': '/api/documents',
   '/configuration': '/api/configuration', '/configuration/merchants': '/api/merchants', '/configuration/rules': '/api/rules' };
 for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
@@ -258,6 +264,7 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
     const failed: string[] = [];
     page.on('pageerror', error => failed.push(error.message));
     for (const route of routes) {
+      console.log(`AUD_HTTP|stage=ui_route|width=${width}|route=${route}`);
       const dataResponse = routeApi[route] ? page.waitForResponse(response => new URL(response.url()).pathname === routeApi[route]
         && response.request().method() === 'GET', { timeout: 60_000 }) : null;
       const response = await page.goto(route);
@@ -265,6 +272,10 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
       await expect(page.locator('#main-content'), route).toBeVisible();
       await expect(page.locator('h1').first(), route).toBeVisible();
       if (dataResponse) expect((await dataResponse).ok(), `${route} real API response`).toBe(true);
+      if (route === '/cash-flow') {
+        await expect(page.getByText('No se han podido cargar juntos el resumen financiero y los movimientos reales.', { exact: false })).toHaveCount(0);
+        await expect(page.getByText('No se pudo cargar el motor de Previsión.', { exact: false })).toHaveCount(0);
+      }
       // Wait for actual route data where it exists, rather than only auditing a loader.
       await expect.poll(() => page.locator('main [aria-busy="true"]').count(), { timeout: 35_000 }).toBe(0);
       for (const theme of ['light', 'dark']) {

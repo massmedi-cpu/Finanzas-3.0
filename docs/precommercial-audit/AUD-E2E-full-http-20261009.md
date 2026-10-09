@@ -31,3 +31,9 @@ Un adaptador de red exclusivo del proceso de prueba dirige las URL fijas del gat
 La fuente sintética se coteja por hash completo. Los campos bancarios de movimientos se cotejan excluyendo únicamente merchant/category/updated_at, que la aplicación modifica legítimamente al aplicar reglas explícitas. Ninguna prueba escribe en el banco o Drive originales.
 
 Los ensayos existentes de cobertura financiera, contraste, navegación contextual, errores/demoras, OCR heterogéneo y responsive complementan esta matriz. El ensayo de upgrade/reversión sobre el backup real se mantiene separado. La revisión humana del F11 real quedó confirmada por el propietario el 09/10/2026; aplicar su designación en Producción sigue siendo una acción del release final.
+
+## Primer recorrido y corrección
+
+El [run 37887187836](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37887187836), HEAD `adb99694`, terminó FALLIDO: 3/14 casos pasaron. El recorrido real detectó `forecast_write_conflict` en una exclusión recién leída. El serializador timestamptz de postgres.js 3.4.7 convierte parámetros mediante `Date.toISOString()` y pierde microsegundos. Excluir y conciliar ahora enlazan la revisión como texto antes del cast PostgreSQL; se conserva la igualdad exacta y una revisión antigua debe seguir devolviendo 409. No se relaja el control de concurrencia ni se cambia SQL.
+
+Se corrigen también defectos del ensayo: `Response.status` numérico, host local coherente con el URL reconstruido por Next y la comprobación CSRF, selección del textarea de metadatos dentro de su formulario, y Cash Flow como renderizado de servidor, comprobando que sus lecturas reales no terminan en avisos de datos no disponibles. El siguiente run debe repetir todos los casos; estos cambios no convierten el fallo en aprobación.
