@@ -575,3 +575,31 @@ test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ra
     "href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
   );
 });
+
+test("REC-ANA-007 · cifras y fechas del acumulado legibles en 390px", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [
+    { date: "2026-09-01", expenseCents: 123_456_789, rows: 1 },
+    { date: "2026-09-02", expenseCents: -23_456_789, rows: 1 },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-09-15");
+  const region = page.getByRole("region", { name: "Gráfica de gasto acumulado" });
+  const visual = await region.locator("svg").evaluate((svg) => {
+    const ticks = [...svg.querySelectorAll("g text")];
+    const viewBox = (svg as SVGSVGElement).viewBox.baseVal;
+    const scale = svg.getBoundingClientRect().width / viewBox.width;
+    return {
+      minRenderedLabelPx: Math.min(...ticks.map((node) => parseFloat(getComputedStyle(node).fontSize) * scale)),
+      allTicksVisible: ticks.every((node) => {
+        const box = (node as SVGGraphicsElement).getBBox();
+        return box.x >= -0.5 && box.x + box.width <= viewBox.width + 0.5;
+      }),
+    };
+  });
+  expect(visual.minRenderedLabelPx).toBeGreaterThanOrEqual(14);
+  expect(visual.allTicksVisible).toBe(true);
+  await expect(region).toContainText("1.234.567,89");
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  expect(overflow).toBeLessThanOrEqual(1);
+});

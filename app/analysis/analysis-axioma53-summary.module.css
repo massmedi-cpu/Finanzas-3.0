@@ -74,7 +74,7 @@
 .chartViewport svg {
   display: block;
   width: 100%;
-  min-width: 560px;
+  min-width: 720px;
   height: auto;
 }
 
@@ -86,7 +86,7 @@
 .grid text,
 .axisLabel {
   fill: var(--text-secondary, #65676d);
-  font-size: 10px;
+  font-size: 16px;
 }
 
 .area {
