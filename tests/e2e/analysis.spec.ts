@@ -622,3 +622,27 @@ test("REC-COV-003 · Análisis omite los días anteriores al primer dato bancari
   const comparisons = page.getByLabel("Indicadores principales del periodo");
   await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
 });
+
+test("REC-COV-006 · el extremo bancario se solicita para la cuenta realmente seleccionada", async ({ page }) => {
+  const accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const snapshot = mockSnapshot();
+  snapshot.selection.accountId = accountId;
+  const scopes: Array<string | null> = [];
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const value = new URL(route.request().url()).searchParams.get("accountId");
+    scopes.push(value);
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true, earliestMovementDate: "2026-09-04",
+        latestMovementDate: "2026-09-15", sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
+  });
+  await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
+  await expect.poll(() => scopes.includes(accountId)).toBe(true);
+  await expect(page.getByRole("heading", { level: 1, name: "Análisis" })).toBeVisible();
+});

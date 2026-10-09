@@ -189,3 +189,29 @@ test("REC-COV-004 · date_bounds usa una sola lectura RLS del banco sin calcular
   });
   expect(calls).toBe(1);
 });
+
+test("REC-COV-005 · date_bounds mantiene las dos fechas dentro de la cuenta elegida", async () => {
+  const accountId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  let statements = 0;
+  const sql = async (parts: TemplateStringsArray, ...values: unknown[]) => {
+    statements++;
+    const statement = parts.join(" ").toLowerCase();
+    expect(statement).toContain("from financial_app.transactions");
+    expect(statement).toContain("account_id =");
+    expect(values).toEqual([accountId, accountId]);
+    return [{ earliestMovementDate: "2026-09-04", latestMovementDate: "2026-09-15" }];
+  };
+  const answer = await handleTransactionQueryAction({
+    action: "transaction.date_bounds", payload: { accountId }, sql, environment: "preview",
+  });
+  expect(answer?.status).toBe(200);
+  expect(await answer?.json()).toEqual({
+    earliestMovementDate: "2026-09-04", latestMovementDate: "2026-09-15",
+  });
+  expect(statements).toBe(1);
+
+  await expect(handleTransactionQueryAction({
+    action: "transaction.date_bounds", payload: { accountId: "../other" }, sql, environment: "preview",
+  })).rejects.toThrow("invalid_transaction_account_id");
+  expect(statements).toBe(1);
+});
