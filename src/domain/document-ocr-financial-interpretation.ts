@@ -97,6 +97,12 @@ function fieldFrom<T>(item: LocatedLine | null, rawValue: string | null, value: 
   };
 }
 
+// OCR confidence measures character recognition, not whether the document field was
+// identified correctly. Keep uncertain candidates editable but require human review.
+function fieldRequiringReview<T>(field: OcrInterpretedField<T>): OcrInterpretedField<T> {
+  return field.value === null ? field : { ...field, trust: "doubtful" };
+}
+
 function parseMoneyCents(raw: string): number | null {
   const cleaned = raw
     .replace(/\s/g, "")
@@ -162,18 +168,30 @@ function extractTaxId(lines: LocatedLine[]) {
 
 function extractDate(lines: LocatedLine[]) {
   const pattern = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/;
+  // A date in legal conditions, a billing period or an expiration field is not
+  // evidence of the document's issue/purchase date.
+  const unrelated = /\b(?:nacimiento|vencimiento|caducidad|vigencia|registro|periodo|hasta|desde|legal)\b/;
+  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura|ticket))?|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  let unlabelled: OcrInterpretedField<string> | null = null;
+
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
+    const normalized = normalizeToken(item.line.text);
+    if (unrelated.test(normalized)) continue;
     const day = Number(match[1]);
     const month = Number(match[2]);
-    const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+    const year = Number(match[3].length === 2 ? "20" + match[3] : match[3]);
     const candidate = new Date(Date.UTC(year, month - 1, day));
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
-    const iso = `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-    return fieldFrom(item, match[0], iso);
+    const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+    const field = fieldFrom(item, match[0], iso);
+    if (directLabel.test(normalized)) return field;
+    // The date may be real, but text recognition alone cannot establish its role.
+    // Preserve the first fallback for review; never promote it to "reliable".
+    unlabelled ??= fieldRequiringReview(field);
   }
-  return emptyField<string>();
+  return unlabelled ?? emptyField<string>();
 }
 
 function extractTime(lines: LocatedLine[]) {
@@ -231,17 +249,28 @@ function extractPaymentMethod(lines: LocatedLine[]) {
 }
 
 function extractIssuer(lines: LocatedLine[]) {
-  const explicit = findLabelled(lines, [/\brazon social\b/, /\bemisor\b/, /\bcomercio\b/, /\bproveedor\b/]);
+  // Explicit issuer labels take precedence over a recipient's "Razón social".
+  const explicit = findLabelled(lines, [/^(?:emisor|comercio|proveedor)\b/]);
   if (explicit) {
     const raw = valueAfterLabel(explicit.line.text);
     if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) return fieldFrom(explicit, raw, raw);
+  }
+
+  const ambiguous = findLabelled(lines, [/\brazon social\b/]);
+  if (ambiguous) {
+    const raw = valueAfterLabel(ambiguous.line.text);
+    if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) {
+      return fieldRequiringReview(fieldFrom(ambiguous, raw, raw));
+    }
   }
 
   for (const item of lines.slice(0, 8)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized)) continue;
-    if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) return fieldFrom(item, text, text);
+    if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
+      return fieldRequiringReview(fieldFrom(item, text, text));
+    }
   }
   return emptyField<string>();
 }
