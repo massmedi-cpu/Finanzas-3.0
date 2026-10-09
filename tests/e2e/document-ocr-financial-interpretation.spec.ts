@@ -138,3 +138,53 @@ test("keeps ambiguous weak receipt evidence doubtful instead of promoting it", a
   expect(interpretation.totalCents.trust).toBe("doubtful");
   expect(interpretation.issuer.trust).toBe("doubtful");
 });
+
+
+test("prioritizes an explicit issue date over an earlier unrelated legal date", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("conditions", "Válido hasta 10/11/2027", 0.99, 0.05),
+    line("period", "Periodo: 01/09/2026 - 30/09/2026", 0.98, 0.10),
+    line("date", "Fecha de emisión: 01/10/2026", 0.96, 0.20),
+  ]));
+  expect(interpretation.date.value).toBe("2026-10-01");
+  expect(interpretation.date.trust).toBe("reliable");
+  expect(interpretation.date.evidence[0]?.lineId).toBe("date");
+});
+
+test("does not invent a document date from expiry and billing period dates", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("expiration", "Fecha de vencimiento: 10/11/2026", 0.99, 0.10),
+    line("period", "Periodo: 01/09/2026 - 30/09/2026", 0.99, 0.20),
+  ]));
+  expect(interpretation.date.value).toBeNull();
+  expect(interpretation.date.trust).toBe("not_detected");
+});
+
+test("keeps an unlabelled receipt date available but requests review", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("date", "01-10-2026 08:31", 0.99, 0.10),
+    line("total", "TOTAL 4,00", 0.99, 0.90),
+  ]));
+  expect(interpretation.date.value).toBe("2026-10-01");
+  expect(interpretation.date.trust).toBe("doubtful");
+  expect(interpretation.date.evidence[0]?.lineId).toBe("date");
+});
+
+test("does not confuse a recipient's company with an explicitly named issuer", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("recipient", "Razón social: CLIENTE INDUSTRIAL SL", 0.99, 0.10),
+    line("issuer", "Emisor: OFICINA SERVICIOS SL", 0.96, 0.18),
+  ]));
+  expect(interpretation.issuer.value).toBe("OFICINA SERVICIOS SL");
+  expect(interpretation.issuer.trust).toBe("reliable");
+  expect(interpretation.issuer.evidence[0]?.lineId).toBe("issuer");
+});
+
+test("marks an unqualified company name as doubtful even with legible OCR", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("company", "Razón social: CLIENTE INDUSTRIAL SL", 0.99, 0.10),
+    line("date", "Fecha: 01/10/2026", 0.99, 0.20),
+  ]));
+  expect(interpretation.issuer.value).toBe("CLIENTE INDUSTRIAL SL");
+  expect(interpretation.issuer.trust).toBe("doubtful");
+});
