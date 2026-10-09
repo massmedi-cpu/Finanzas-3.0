@@ -62,21 +62,15 @@ async function mockAlerts(page: Page) {
   await page.route("**/api/transactions?uncategorized=true&limit=1", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [], totalCount: 3 }) });
   });
-  await page.route("**/api/documents?scope=ordinary&limit=100&offset=0", async (route) => {
+  await page.route("**/api/documents?scope=ordinary&*", async (route) => {
+    const url = new URL(route.request().url());
+    const unassociatedOnly = url.searchParams.get("unassociated") === "true";
+    const pendingOnly = url.searchParams.get("status") === "pending_review";
+    if (!unassociatedOnly && !pendingOnly) throw new Error("Unexpected unfiltered documents list read");
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        total: 4,
-        limit: 100,
-        offset: 0,
-        items: [
-          { id: "a", status: "confirmed", associationCount: 0 },
-          { id: "b", status: "pending_review", associationCount: 1 },
-          { id: "c", status: "archived", associationCount: 0 },
-          { id: "reviewed-test", status: "pending_review", associationCount: 0, isTest: true },
-        ],
-      }),
+      body: JSON.stringify({ total: 1, limit: 1, offset: 0, items: [] }),
     });
   });
 }
@@ -125,4 +119,44 @@ test("AUD-E2E-REG-001 · Alertas traduce prioridad a importancia y reserva índi
   await detail.locator("summary").click();
   await expect(detail).toContainText("Índice de prioridad 68");
   await expect(detail).toContainText("no es una puntuación de riesgo financiero");
+});
+
+test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en Alertas", async ({ page }) => {
+  const reads: Array<{ pathname: string; status: string | null; unassociated: string | null; limit: string | null; method: string }> = [];
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ failedSources: [], data: { financial: null, budgets: null, forecast: null } }),
+  }));
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ run: { status: "success", rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 } }),
+  }));
+  await page.route("**/api/transactions?uncategorized=true&limit=1", (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify({ totalCount: 0 }),
+  }));
+  await page.route("**/api/documents?scope=ordinary&*", (route) => {
+    const url = new URL(route.request().url());
+    reads.push({
+      pathname: url.pathname,
+      status: url.searchParams.get("status"),
+      unassociated: url.searchParams.get("unassociated"),
+      limit: url.searchParams.get("limit"),
+      method: route.request().method(),
+    });
+    return route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ total: url.searchParams.get("unassociated") === "true" ? 50_000 : 125, limit: 1, offset: 0, items: [] }),
+    });
+  });
+  await page.goto("/alerts");
+  await expect(page.getByRole("heading", { name: "Alertas" })).toBeVisible();
+  await expect(page.getByText(/50000 documentos sin asociar/)).toBeVisible();
+  await expect(page.getByText(/125 documentos pendientes de revisar/)).toBeVisible();
+  expect(reads).toHaveLength(2);
+  expect(reads).toEqual(expect.arrayContaining([
+    expect.objectContaining({ pathname: "/api/documents", unassociated: "true", status: null, limit: "1", method: "GET" }),
+    expect.objectContaining({ pathname: "/api/documents", unassociated: null, status: "pending_review", limit: "1", method: "GET" }),
+  ]));
 });
