@@ -440,24 +440,27 @@ export default function InicioOverview() {
     }
   }, [commit, loadSource, isFresh]);
 
-  const loadSyncStatus = useCallback(async () => {
+  const loadSyncStatus = useCallback(async (generation: number) => {
     try {
-      setSyncStatus(await readJson<SyncStatus>("/api/source/google/sync", 5_000));
+      const status = await readJson<SyncStatus>("/api/source/google/sync", 5_000);
+      setSyncStatus((current) => isFresh(generation) ? status : current);
     } catch {
-      setSyncStatus(null);
+      if (isFresh(generation)) setSyncStatus(null);
     }
-  }, []);
+  }, [isFresh]);
 
-  const loadHomeAnalysis = useCallback(async () => {
+  const loadHomeAnalysis = useCallback(async (generation: number) => {
+    if (!isFresh(generation)) return;
     setAnalysisLoading(true);
     try {
-      setHomeAnalysis(await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000));
+      const analysis = await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000);
+      setHomeAnalysis((current) => isFresh(generation) ? analysis : current);
     } catch {
-      setHomeAnalysis(null);
+      if (isFresh(generation)) setHomeAnalysis(null);
     } finally {
-      setAnalysisLoading(false);
+      if (isFresh(generation)) setAnalysisLoading(false);
     }
-  }, []);
+  }, [isFresh]);
 
   const refreshDashboard = useCallback(async () => {
     setPrimaryLoading(true);
