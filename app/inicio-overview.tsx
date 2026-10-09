@@ -488,7 +488,8 @@ export default function InicioOverview() {
   }, [refreshDashboard]);
 
   const runSync = useCallback(async () => {
-    if (syncing) return;
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
     setSyncing(true);
     setSyncFeedback(null);
     try {
@@ -504,11 +505,12 @@ export default function InicioOverview() {
       setEvolutionRevision((current) => current + 1);
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
-      await loadSyncStatus();
+      await loadSyncStatus(generationRef.current);
     } finally {
+      syncInFlight.current = false;
       setSyncing(false);
     }
-  }, [loadSyncStatus, refreshDashboard, syncing]);
+  }, [loadSyncStatus, refreshDashboard]);
 
   const today = madridToday();
   const currentMonthStart = `${today.slice(0, 7)}-01`;
