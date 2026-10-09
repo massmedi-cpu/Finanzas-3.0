@@ -97,6 +97,12 @@ function fieldFrom<T>(item: LocatedLine | null, rawValue: string | null, value: 
   };
 }
 
+// OCR confidence measures character recognition, not whether the document field was
+// identified correctly. Keep uncertain candidates editable but require human review.
+function fieldRequiringReview<T>(field: OcrInterpretedField<T>): OcrInterpretedField<T> {
+  return field.value === null ? field : { ...field, trust: "doubtful" };
+}
+
 function parseMoneyCents(raw: string): number | null {
   const cleaned = raw
     .replace(/\s/g, "")
@@ -139,51 +145,118 @@ function valueAfterLabel(text: string) {
   return tokens.length > 1 ? tokens.slice(1).join(" ").trim() : null;
 }
 
-function extractMoneyField(lines: LocatedLine[], labels: RegExp[]) {
-  const item = findLabelled(lines, labels);
-  if (!item) return emptyField<number>();
-  const matches = item.line.text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g);
-  const raw = matches?.at(-1) ?? null;
-  const value = raw ? parseMoneyCents(raw) : null;
-  return fieldFrom(item, raw, value);
+function extractMoneyField(
+  lines: LocatedLine[],
+  labels: RegExp[],
+  options: { exclude?: RegExp; prefer?: RegExp } = {},
+) {
+  const candidates = lines.flatMap((item) => {
+    const normalized = normalizeToken(item.line.text);
+    if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
+    const matches = item.line.text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g);
+    const raw = matches?.at(-1);
+    const value = raw ? parseMoneyCents(raw) : null;
+    return raw && value !== null ? [{ item, raw, value, preferred: Boolean(options.prefer?.test(normalized)) }] : [];
+  });
+  if (!candidates.length) return emptyField<number>();
+  // Prefer an explicit final amount over a generic TOTAL, but do not erase
+  // contradictory alternatives that might be real in the source.
+  const chosen = candidates.find((candidate) => candidate.preferred) ?? candidates[0];
+  const field = fieldFrom(chosen.item, chosen.raw, chosen.value);
+  if (new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
+  return {
+    ...fieldRequiringReview(field),
+    evidence: candidates.map((candidate) => evidenceOf(candidate.item)),
+  };
+}
+
+function spanishTaxIdChecksumValid(raw: string): boolean {
+  const value = raw.toUpperCase().replace(/[\s-]/g, "");
+  const dniLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
+  if (/^\d{8}[A-Z]$/.test(value)) {
+    return dniLetters[Number(value.slice(0, 8)) % 23] === value[8];
+  }
+  if (/^[XYZ]\d{7}[A-Z]$/.test(value)) {
+    const numeric = `${{X: "0", Y: "1", Z: "2"}[value[0] as "X" | "Y" | "Z"]}${value.slice(1, 8)}`;
+    return dniLetters[Number(numeric) % 23] === value[8];
+  }
+  if (!/^[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J]$/.test(value)) return false;
+  const digits = value.slice(1, 8).split("").map(Number);
+  const doubled = (digit: number) => { const value = digit * 2; return Math.floor(value / 10) + (value % 10); };
+  const evenSum = digits[1] + digits[3] + digits[5];
+  const oddDoubledSum = doubled(digits[0]) + doubled(digits[2]) + doubled(digits[4]) + doubled(digits[6]);
+  const checksum = evenSum + oddDoubledSum;
+  const control = (10 - checksum % 10) % 10;
+  const suffix = value[8];
+  const numberAllowed = "ABEH".includes(value[0]) || !"NPQRSW".includes(value[0]);
+  const letterAllowed = !"ABEH".includes(value[0]);
+  return (numberAllowed && suffix === String(control)) || (letterAllowed && suffix === "JABCDEFGHI"[control]);
 }
 
 function extractTaxId(lines: LocatedLine[]) {
-  const pattern = /\b(?:[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
+  const pattern = /\b(?:[XYZ]\s*[- ]?\s*\d{7}\s*[- ]?\s*[A-Z]|[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
+  const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
+  const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
+  let unassigned: OcrInterpretedField<string> | null = null;
+
   for (const item of lines) {
     const match = item.line.text.toUpperCase().match(pattern);
-    if (match) {
-      const raw = match[0].replace(/\s+/g, "");
-      return fieldFrom(item, raw, raw.replace(/-/g, ""));
-    }
+    if (!match) continue;
+    const normalized = normalizeToken(item.line.text);
+    // Do not show the customer or recipient tax identifier as the issuer ID.
+    if (recipientLabel.test(normalized)) continue;
+    const raw = match[0].replace(/\s+/g, "");
+    const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
+    if (explicitIssuerLabel.test(normalized)) return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
+    // A bare CIF/NIF is recognized text, but its owner is not proven.
+    unassigned ??= fieldRequiringReview(candidate);
   }
-  return emptyField<string>();
+  return unassigned ?? emptyField<string>();
 }
 
 function extractDate(lines: LocatedLine[]) {
   const pattern = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/;
+  // A date in legal conditions, a billing period or an expiration field is not
+  // evidence of the document's issue/purchase date.
+  const unrelated = /\b(?:nacimiento|vencimiento|caducidad|vigencia|registro|periodo|hasta|desde|legal)\b/;
+  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura|ticket))?|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  let unlabelled: OcrInterpretedField<string> | null = null;
+
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
+    const normalized = normalizeToken(item.line.text);
+    if (unrelated.test(normalized)) continue;
     const day = Number(match[1]);
     const month = Number(match[2]);
-    const year = Number(match[3].length === 2 ? `20${match[3]}` : match[3]);
+    const year = Number(match[3].length === 2 ? "20" + match[3] : match[3]);
     const candidate = new Date(Date.UTC(year, month - 1, day));
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
-    const iso = `${year.toString().padStart(4, "0")}-${month.toString().padStart(2, "0")}-${day.toString().padStart(2, "0")}`;
-    return fieldFrom(item, match[0], iso);
+    const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
+    const field = fieldFrom(item, match[0], iso);
+    if (directLabel.test(normalized)) return field;
+    // The date may be real, but text recognition alone cannot establish its role.
+    // Preserve the first fallback for review; never promote it to "reliable".
+    unlabelled ??= fieldRequiringReview(field);
   }
-  return emptyField<string>();
+  return unlabelled ?? emptyField<string>();
 }
 
 function extractTime(lines: LocatedLine[]) {
   const pattern = /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/;
+  const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas)\b/;
+  const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
+  let unknown: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
-    return fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
+    const normalized = normalizeToken(item.line.text);
+    if (unrelated.test(normalized)) continue;
+    const candidate = fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
+    if (explicitTime.test(normalized)) return candidate;
+    unknown ??= fieldRequiringReview(candidate);
   }
-  return emptyField<string>();
+  return unknown ?? emptyField<string>();
 }
 
 function extractDocumentNumber(lines: LocatedLine[]) {
@@ -231,17 +304,28 @@ function extractPaymentMethod(lines: LocatedLine[]) {
 }
 
 function extractIssuer(lines: LocatedLine[]) {
-  const explicit = findLabelled(lines, [/\brazon social\b/, /\bemisor\b/, /\bcomercio\b/, /\bproveedor\b/]);
+  // Explicit issuer labels take precedence over a recipient's "Razón social".
+  const explicit = findLabelled(lines, [/^(?:emisor|comercio|proveedor)\s*[:\-]\s*\S/]);
   if (explicit) {
     const raw = valueAfterLabel(explicit.line.text);
     if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) return fieldFrom(explicit, raw, raw);
+  }
+
+  const ambiguous = findLabelled(lines, [/\brazon social\b/]);
+  if (ambiguous) {
+    const raw = valueAfterLabel(ambiguous.line.text);
+    if (raw && (raw.match(/\p{L}/gu) ?? []).length >= 2) {
+      return fieldRequiringReview(fieldFrom(ambiguous, raw, raw));
+    }
   }
 
   for (const item of lines.slice(0, 8)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized)) continue;
-    if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) return fieldFrom(item, text, text);
+    if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
+      return fieldRequiringReview(fieldFrom(item, text, text));
+    }
   }
   return emptyField<string>();
 }
@@ -296,14 +380,24 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
-  const taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
-  const taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
-  const totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/]);
+  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
+  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
+  let totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/], {
+    exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
+    prefer: /\b(?:total\s+a\s+pagar|importe\s+total|a\s+pagar|total\s+factura|total\s+final)\b/,
+  });
   const warnings: string[] = [];
 
   if (taxBaseCents.value !== null && taxesCents.value !== null && totalCents.value !== null) {
     const delta = Math.abs(taxBaseCents.value + taxesCents.value - totalCents.value);
-    if (delta > 1) warnings.push("base_plus_tax_mismatch");
+    if (delta > 1) {
+      warnings.push("base_plus_tax_mismatch");
+      // An OCR match on each individual number does not resolve a financial
+      // contradiction. Preserve all three raw values, but require review.
+      taxBaseCents = fieldRequiringReview(taxBaseCents);
+      taxesCents = fieldRequiringReview(taxesCents);
+      totalCents = fieldRequiringReview(totalCents);
+    }
   }
   if (result.status === "empty") warnings.push("ocr_empty");
   if (result.status === "needs_review") warnings.push("ocr_needs_review");

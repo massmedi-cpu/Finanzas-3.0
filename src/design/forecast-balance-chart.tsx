@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { ForecastSnapshot } from "../application/forecast/forecast-contract";
+import { buildForecastTimeline } from "../application/forecast/forecast-chart-timeline";
 import { formatMoneyCents } from "../core/money";
 import styles from "./forecast-balance-chart.module.css";
 
@@ -18,21 +19,27 @@ function formatDate(date: string) {
 
 export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot }) {
   const [activePoint, setActivePoint] = useState<string | null>(null);
-  const points = [
-    {
-      id: "opening",
-      label: "Saldo inicial",
-      date: snapshot.period.dateFrom,
-      balanceCents: snapshot.summary.openingBalanceCents,
-    },
-    ...snapshot.items.map((item) => ({
-      id: item.id,
-      label: item.concept,
-      date: item.date,
-      balanceCents: item.projectedBalanceAfterCents,
-    })),
+  const timeline = buildForecastTimeline(snapshot);
+  if (!timeline) {
+    return (
+      <section className={styles.panel} aria-label="Curva de saldo prevista">
+        <h2>Curva de saldo prevista</h2>
+        <p role="alert">No se representa la curva: las fechas o los saldos recibidos no son coherentes con el periodo. Revisa las previsiones antes de interpretar su evolución.</p>
+      </section>
+    );
+  }
+
+  const points = timeline.points;
+  const markerPoints = points.filter((point) => point.kind !== "opening" || points[1]?.date !== point.date);
+  // When points are too close, don't overlap 44px hit targets.
+  const crowdedMarkers = markerPoints.some((point, index) => index > 0
+    && timeline.position(point.date) - timeline.position(markerPoints[index - 1].date) < 8.5);
+  const selectedPoint = markerPoints.find((point) => `forecast-balance-${point.id}` === activePoint) ?? null;
+  const allPoints = [
+    { date: snapshot.period.dateFrom, balanceCents: snapshot.summary.openingBalanceCents },
+    ...snapshot.items.map((item) => ({ date: item.date, balanceCents: item.projectedBalanceAfterCents })),
   ];
-  const { minimum, maximum } = points.reduce(({ minimum, maximum }, point) => ({
+  const { minimum, maximum } = allPoints.reduce(({ minimum, maximum }, point) => ({
     minimum: Math.min(minimum, point.balanceCents),
     maximum: Math.max(maximum, point.balanceCents),
   }), { minimum: Infinity, maximum: -Infinity });
@@ -43,10 +50,10 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
     : 15 + ((maximum - balanceCents) / range) * 70;
   const zeroInDomain = minimum <= 0 && maximum >= 0;
   const zeroY = zeroInDomain ? coordinateFor(0) * 2.4 : null;
-  const xFor = (index: number) => points.length <= 1 ? 50 : 5 + (index / (points.length - 1)) * 90;
+  const xFor = (index: number) => timeline.position(points[index].date);
   const polyline = points.map((point, index) => `${xFor(index) * 10},${coordinateFor(point.balanceCents) * 2.4}`).join(" ");
-  const minimumPoint = points.reduce((current, point) => point.balanceCents < current.balanceCents ? point : current, points[0]);
-  const firstNegative = points.find((point) => point.balanceCents < 0) ?? null;
+  const minimumPoint = allPoints.reduce((current, point) => point.balanceCents < current.balanceCents ? point : current, allPoints[0]);
+  const firstNegative = allPoints.find((point) => point.balanceCents < 0) ?? null;
   const largestOutflow = snapshot.items
     .filter((item) => item.affectsProjection && item.projectionEffectCents < 0)
     .reduce<(typeof snapshot.items)[number] | null>((current, item) => {
@@ -61,7 +68,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
           <p className={styles.eyebrow}>SALDO PROYECTADO</p>
           <h2>Curva de saldo prevista</h2>
         </div>
-        <span className={styles.meta}>Valores del motor de previsión · sin recálculo visual</span>
+        <span className={styles.meta}>Saldos del motor de previsión · evolución por fechas reales</span>
       </div>
 
       <div className={styles.insights} role="region" aria-label="Radar de previsión">
@@ -86,6 +93,10 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
         </article>
       </div>
 
+      <p className={styles.plotExplanation}>La posición horizontal corresponde al calendario, no al número de movimientos. La curva muestra el saldo al final de cada día; el saldo mínimo incluye también los hitos intermedios del mismo día.</p>
+      {!timeline.closingReconciled ? (
+        <p className={styles.warning} role="alert">El saldo final del motor no coincide con el último saldo por movimiento. No se prolonga artificialmente la curva hasta el cierre del periodo.</p>
+      ) : null}
       <div className={styles.plotScroller}>
         <div className={styles.plot}>
           <svg viewBox="0 0 1000 240" preserveAspectRatio="none" aria-hidden="true" className={styles.svg}>
@@ -109,24 +120,33 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
           </svg>
 
           {points.map((point, index) => {
+            // Opening and first-day closing must not create overlapping 44px
+            // buttons at the same date, but both remain in the line and table.
+            if (point.kind === "opening" && points[1]?.date === point.date) return null;
             const id = `forecast-balance-${point.id}`;
             const label = `${point.label} · ${formatDate(point.date)} · ${formatMoneyCents(point.balanceCents)}`;
             return (
               <div
                 key={point.id}
                 className={styles.point}
+                data-forecast-marker={point.kind}
+                data-forecast-date={point.date}
                 style={{ left: `${xFor(index)}%`, top: `${coordinateFor(point.balanceCents)}%` }}
               >
-                <button
-                  type="button"
-                  className={styles.pointButton}
-                  aria-label={label}
-                  onFocus={() => setActivePoint(id)}
-                  onBlur={() => setActivePoint((current) => current === id ? null : current)}
-                  onMouseEnter={() => setActivePoint(id)}
-                  onMouseLeave={() => setActivePoint((current) => current === id ? null : current)}
-                />
-                {activePoint === id ? (
+                {crowdedMarkers ? (
+                  <span className={styles.staticPoint} aria-hidden="true" />
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.pointButton}
+                    aria-label={label}
+                    onClick={() => setActivePoint(id)}
+                    onFocus={() => setActivePoint(id)}
+                    onMouseEnter={() => setActivePoint(id)}
+                    onKeyDown={(event) => { if (event.key === "Escape") setActivePoint(null); }}
+                  />
+                )}
+                {!crowdedMarkers && activePoint === id ? (
                   <div role="tooltip" className={styles.tooltip}>
                     {point.label} · {formatMoneyCents(point.balanceCents)}
                   </div>
@@ -136,6 +156,21 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
           })}
         </div>
       </div>
+      <div className={styles.dateAxis} aria-label="Inicio y fin del periodo"><span>{formatDate(snapshot.period.dateFrom)}</span><span>{formatDate(snapshot.period.dateTo)}</span></div>
+      <label className={styles.inspector}>
+        <span>Consultar un hito de la curva</span>
+        <select value={selectedPoint ? activePoint ?? "" : ""} onChange={(event) => setActivePoint(event.target.value || null)}>
+          <option value="">Selecciona una fecha</option>
+          {markerPoints.map((point) => (
+            <option key={point.id} value={`forecast-balance-${point.id}`}>
+              {formatDate(point.date)} · {point.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {selectedPoint ? <p className={styles.selectedDetail} role="status">
+        {selectedPoint.label} · {formatDate(selectedPoint.date)} · Saldo {formatMoneyCents(selectedPoint.balanceCents)}
+      </p> : null}
 
       <div className={styles.tableScroller}>
         <table aria-label="Datos de la curva de saldo" className={styles.table}>
@@ -147,7 +182,10 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
             </tr>
           </thead>
           <tbody>
-            {points.map((point) => (
+            {[
+              { id: "opening", label: "Saldo inicial", date: snapshot.period.dateFrom, balanceCents: snapshot.summary.openingBalanceCents },
+              ...snapshot.items.map((item) => ({ id: item.id, label: item.concept, date: item.date, balanceCents: item.projectedBalanceAfterCents })),
+            ].map((point) => (
               <tr key={point.id}>
                 <th scope="row">{point.label}</th>
                 <td>{formatDate(point.date)}</td>

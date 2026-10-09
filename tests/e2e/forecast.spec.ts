@@ -558,9 +558,10 @@ test("10.0.101 · una previsión plana en 0 € queda centrada sobre el eje cero
   await expect(zeroLine).toHaveAttribute("y1", "120");
   await expect(zeroLine).toHaveAttribute("y2", "120");
 
-  const pointTops = await chart.getByRole("button", { name: /· 0,00\s?€/ }).evaluateAll((buttons) => (
-    buttons.map((button) => (button.parentElement as HTMLElement | null)?.style.top)
+  const pointTops = await chart.locator("[data-forecast-marker]").evaluateAll((markers) => (
+    markers.map((marker) => (marker as HTMLElement).style.top)
   ));
-  expect(pointTops).toEqual(["50%", "50%"]);
+  expect(pointTops).toEqual(["50%", "50%", "50%"]);
+  await expect(chart.getByRole("combobox", { name: "Consultar un hito de la curva" })).toBeVisible();
 });
 
