@@ -243,10 +243,16 @@ test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora"
   await expect(changeSection.getByRole("list", { name: /categoría/i })).toHaveCount(0);
   await expect(changeSection).not.toContainText("Más gasto");
   await expect(changeSection).not.toContainText("Menos gasto");
+  await expect(page.getByLabel("Lectura rápida")).toContainText("Sin cobertura");
+  await expect(page.getByLabel("Lectura rápida")).not.toContainText("Mayor cambio");
+  await expect(page.locator('section[aria-labelledby="axioma53-accumulated-heading"]')).toContainText("No hay cobertura bancaria confirmada");
 });
 
 test("REC-ANA-001 · un mes con cobertura parcial muestra gastos reales sin inventar variaciones", async ({ page }) => {
   const snapshot = mockSnapshot();
+  // All 550,00 € of the financial-period fixture have observed dates. The
+  // calendar after 05/09 is unavailable, not a confirmed sequence of zeroes.
+  snapshot.dailySpend = [{ date: "2026-09-02", expenseCents: 55_000, rows: 12 }];
   await loadMockAnalysis(page, snapshot, "2026-09-05");
 
   const changeSection = page.locator('section[aria-labelledby="change-heading"]');
@@ -259,6 +265,13 @@ test("REC-ANA-001 · un mes con cobertura parcial muestra gastos reales sin inve
   await expect(changeSection).not.toContainText("Más gasto");
   await expect(changeSection).not.toContainText("Menos gasto");
   await expect(changeSection.getByRole("button", { name: "Variación" })).toHaveCount(0);
+  await expect(page.getByLabel("Lectura rápida")).toContainText("Gasto observado");
+  await expect(page.getByLabel("Lectura rápida")).not.toContainText("Mayor cambio");
+  const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulation).toContainText("Datos observados hasta el 05/09/2026");
+  await accumulation.getByText("Ver acumulado por día").click();
+  await expect(accumulation.getByRole("table").getByRole("row")).toHaveCount(6);
+  await expect(accumulation.getByRole("table")).not.toContainText("06/09/2026");
 });
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
