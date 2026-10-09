@@ -38,9 +38,16 @@ check("§66", "tarjetas y paneles usan sistema estable de radios/superficies", h
 check("§67", "gráficos principales mantienen contratos accesibles", [contribution, trend, forecastChart].every((source) => source.includes("aria-label") || source.includes('role="img"')));
 check("§68", "jerarquía visual con títulos y contenido principal accesible", shell.includes('href="#main-content"') && shell.includes('id="main-content"') && globals.includes("--font-page-title:"));
 check("§69", "sistema tipográfico único centralizado", hasAll(globals, ["--font-page-title:", "--font-section-title:", "--font-kpi-primary:", "--font-body:", "--font-label:", "--font-helper:"]));
-const helperSize = globals.match(/--font-helper:\s*([0-9.]+)rem/);
-const helperRem = helperSize ? Number(helperSize[1]) : 0;
-check("§70", "font minimum", /--font-body:\s*1rem\b/.test(globals) && helperRem >= 0.875 && helperRem <= 1);
+function remToken(css, name) {
+  const match = css.match(new RegExp(`(?:^|\\n)\\s*${name}:\\s*([0-9]+(?:\\.[0-9]+)?)rem\\s*;`, "m"));
+  return match ? Number(match[1]) : null;
+}
+const bodySize = remToken(globals, "--font-body");
+const helperSize = remToken(globals, "--font-helper");
+check("§70", "legibilidad base y ayudas >=14 px sin reducir texto para hacer espacio",
+  bodySize !== null && bodySize >= 1
+  && helperSize !== null && helperSize >= 0.875
+  && helperSize <= bodySize);
 check("§71", "feedback y navegación conservan patrones globales estables", feedback.includes("pending") && feedback.includes("success") && feedback.includes("error") && shell.includes('aria-label="Navegación principal"'));
 
 console.log(`Axioma §§62–71 · evidencia objetiva: ${passes} PASS, ${failures.length} FAIL`);

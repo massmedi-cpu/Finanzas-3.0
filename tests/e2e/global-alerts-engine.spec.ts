@@ -101,3 +101,19 @@ test("Axioma · sin señales no genera ruido y el resumen queda a cero", () => {
   expect(alerts).toEqual([]);
   expect(summarizeGlobalAlerts(alerts)).toEqual({ total: 0, danger: 0, warning: 0, info: 0 });
 });
+
+test("Alertas · agrupa miles desde cuatro cifras y presenta la fecha del pago en español", () => {
+  const alerts = deriveGlobalAlerts({
+    ...base,
+    unassociatedDocumentCount: 1234,
+    pendingDocumentReviewCount: 50000,
+    forecast: {
+      ...base.forecast,
+      plannedItems: 1,
+      items: [{ date: "2026-10-02", concept: "Recibo", amountCents: -4000, status: "planned", affectsProjection: true }],
+    },
+  });
+  expect(alerts.find((alert) => alert.id === "unassociated-documents")?.title).toBe("1.234 documentos sin asociar");
+  expect(alerts.find((alert) => alert.id === "pending-document-review")?.title).toBe("50.000 documentos pendientes de revisar");
+  expect(alerts.find((alert) => alert.id === "upcoming-payments")?.detail).toContain("02/10/2026");
+});
