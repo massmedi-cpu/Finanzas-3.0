@@ -63,6 +63,11 @@ function plural(count: number, singular: string, pluralValue: string) {
   return count === 1 ? singular : pluralValue;
 }
 
+const spanishInteger = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 0 });
+function formatAlertCount(count: number) {
+  return spanishInteger.format(count);
+}
+
 export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
   const alerts: GlobalAlert[] = [];
 
@@ -98,7 +103,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       priority: 86,
       tone: "info",
       title: "Parte de la información no está disponible",
-      detail: `${failedSourceCount} ${plural(failedSourceCount, "fuente del resumen no respondió", "fuentes del resumen no respondieron")}. El resto permanece operativo.`,
+      detail: `${formatAlertCount(failedSourceCount)} ${plural(failedSourceCount, "fuente del resumen no respondió", "fuentes del resumen no respondieron")}. El resto permanece operativo.`,
       href: "/configuration",
       action: "Comprobar estado",
     });
@@ -126,7 +131,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "budget",
       priority: 94,
       tone: "danger",
-      title: `${overBudgetCount} ${plural(overBudgetCount, "presupuesto superado", "presupuestos superados")}`,
+      title: `${formatAlertCount(overBudgetCount)} ${plural(overBudgetCount, "presupuesto superado", "presupuestos superados")}`,
       detail: "Hay categorías cuyo gasto ya supera el límite definido.",
       href: "/budgets",
       action: "Ver presupuestos",
@@ -145,7 +150,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "budget",
       priority: 78,
       tone: "warning",
-      title: `${nearBudgetCount} ${plural(nearBudgetCount, "presupuesto cerca del límite", "presupuestos cerca del límite")}`,
+      title: `${formatAlertCount(nearBudgetCount)} ${plural(nearBudgetCount, "presupuesto cerca del límite", "presupuestos cerca del límite")}`,
       detail: "Estas categorías han consumido al menos el 90 % de su presupuesto sin haberlo superado todavía.",
       href: "/budgets",
       action: "Revisar margen",
@@ -159,7 +164,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "transaction",
       priority: 84,
       tone: "warning",
-      title: `${suspectedDuplicateRows} ${plural(suspectedDuplicateRows, "posible movimiento duplicado", "posibles movimientos duplicados")}`,
+      title: `${formatAlertCount(suspectedDuplicateRows)} ${plural(suspectedDuplicateRows, "posible movimiento duplicado", "posibles movimientos duplicados")}`,
       detail: "Son candidatos a revisión; Financial App no elimina ni altera movimientos bancarios automáticamente.",
       href: "/transactions?duplicateState=suspected",
       action: "Revisar duplicados",
@@ -173,7 +178,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "transaction",
       priority: 82,
       tone: "warning",
-      title: `${signMismatchRows} ${plural(signMismatchRows, "movimiento con signo incoherente", "movimientos con signo incoherente")}`,
+      title: `${formatAlertCount(signMismatchRows)} ${plural(signMismatchRows, "movimiento con signo incoherente", "movimientos con signo incoherente")}`,
       detail: "El tipo financiero y el signo bancario no coinciden. El importe original no se corrige automáticamente.",
       href: "/transactions?signMismatch=true",
       action: "Revisar movimientos",
@@ -187,7 +192,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "transaction",
       priority: 76,
       tone: "warning",
-      title: `${uncategorizedCount} ${plural(uncategorizedCount, "movimiento sin categorizar", "movimientos sin categorizar")}`,
+      title: `${formatAlertCount(uncategorizedCount)} ${plural(uncategorizedCount, "movimiento sin categorizar", "movimientos sin categorizar")}`,
       detail: "Clasificarlos mejora presupuestos, análisis y previsiones sin modificar la fuente bancaria.",
       href: "/transactions?uncategorized=true",
       action: "Categorizar",
@@ -211,7 +216,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "forecast",
       priority: 72,
       tone: "info",
-      title: `${upcomingPayments.length} ${plural(upcomingPayments.length, "pago previsto en los próximos 7 días", "pagos previstos en los próximos 7 días")}`,
+      title: `${formatAlertCount(upcomingPayments.length)} ${plural(upcomingPayments.length, "pago previsto en los próximos 7 días", "pagos previstos en los próximos 7 días")}`,
       detail: `El primero está previsto para ${first.date}. Revisa la previsión si ha cambiado la fecha o el importe.`,
       href: "/forecast",
       action: "Ver próximos pagos",
@@ -225,7 +230,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "document",
       priority: 68,
       tone: "info",
-      title: `${unassociatedDocumentCount} ${plural(unassociatedDocumentCount, "documento sin asociar", "documentos sin asociar")}`,
+      title: `${formatAlertCount(unassociatedDocumentCount)} ${plural(unassociatedDocumentCount, "documento sin asociar", "documentos sin asociar")}`,
       detail: "Puedes vincularlos manualmente a sus movimientos cuando exista una coincidencia válida.",
       href: "/documents?unassociated=true",
       action: "Revisar documentos",
@@ -239,7 +244,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       category: "document",
       priority: 66,
       tone: "warning",
-      title: `${pendingDocumentReviewCount} ${plural(pendingDocumentReviewCount, "documento pendiente de revisar", "documentos pendientes de revisar")}`,
+      title: `${formatAlertCount(pendingDocumentReviewCount)} ${plural(pendingDocumentReviewCount, "documento pendiente de revisar", "documentos pendientes de revisar")}`,
       detail: "La revisión humana sigue siendo obligatoria antes de confirmar datos extraídos o asociaciones.",
       href: "/documents?status=pending_review",
       action: "Abrir revisión",

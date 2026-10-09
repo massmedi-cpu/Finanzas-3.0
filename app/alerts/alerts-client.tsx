@@ -61,19 +61,7 @@ type TransactionCount = {
   totalCount: number;
 };
 
-type DocumentItem = {
-  id: string;
-  status: "imported" | "pending_review" | "confirmed" | "archived";
-  associationCount: number;
-  isTest?: boolean;
-};
-
-type DocumentList = {
-  items: DocumentItem[];
-  total: number;
-  limit: number;
-  offset: number;
-};
+type DocumentCount = { total: number };
 
 type DocumentSummary = {
   unassociated: number;
@@ -146,28 +134,23 @@ function syncDetail(run: SyncStatus["run"]) {
   return parts.join(" ") || null;
 }
 
+function documentCount(page: DocumentCount): number {
+  if (!Number.isSafeInteger(page.total) || page.total < 0) throw new Error("invalid_document_summary_total");
+  return page.total;
+}
+
 async function loadDocumentSummary(): Promise<DocumentSummary> {
-  let offset = 0;
-  let total = Number.POSITIVE_INFINITY;
-  let unassociated = 0;
-  let pendingReview = 0;
-  let pages = 0;
-
-  while (offset < total) {
-    const page = await readJson<DocumentList>(`/api/documents?scope=ordinary&limit=100&offset=${offset}`);
-    total = Math.max(0, page.total);
-    for (const document of page.items) {
-      if (document.status === "archived" || document.isTest === true) continue;
-      if (document.associationCount === 0) unassociated += 1;
-      if (document.status === "pending_review") pendingReview += 1;
-    }
-    if (page.items.length === 0) break;
-    offset += page.items.length;
-    pages += 1;
-    if (pages >= 50) throw new Error("document_alert_pagination_limit");
-  }
-
-  return { unassociated, pendingReview };
+  // El contrato document.list_filtered del gateway ya aplica scope=ordinary,
+  // excluye archivados del filtro unassociated y calcula total ANTES de paginar.
+  // No descargamos el listado entero para contar alertas.
+  const [unassociatedPage, pendingPage] = await Promise.all([
+    readJson<DocumentCount>("/api/documents?scope=ordinary&unassociated=true&limit=1&offset=0"),
+    readJson<DocumentCount>("/api/documents?scope=ordinary&status=pending_review&limit=1&offset=0"),
+  ]);
+  return {
+    unassociated: documentCount(unassociatedPage),
+    pendingReview: documentCount(pendingPage),
+  };
 }
 
 export default function AlertsClient() {
