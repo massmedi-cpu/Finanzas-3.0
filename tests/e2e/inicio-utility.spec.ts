@@ -215,7 +215,8 @@ test("Inicio sustituye una tasa de ahorro sin base suficiente por una lectura co
   await mockInicio(page);
   await page.goto("/");
 
-  await expect(page.getByText("Ahorro: sin base suficiente", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Importes parciales · cobertura observada hasta/).first()).toBeVisible();
+  await expect(page.getByText("Ahorro: sin base suficiente", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/37\.060/)).toHaveCount(0);
 });
 

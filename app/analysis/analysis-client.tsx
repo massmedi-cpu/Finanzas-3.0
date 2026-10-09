@@ -12,6 +12,12 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import { analysisModuleLinks } from "../../src/application/navigation/module-context";
+import {
+  periodComparisonIsReliable,
+  periodHasObservedData,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
 import {
   currentExpenseDrivers,
   resolveBudgetProgressPresentation,
@@ -24,8 +30,9 @@ import {
 import { ContributionChart } from "../../src/design/contribution-chart";
 import { FinancialTrendChart } from "../../src/design/financial-trend-chart";
 import { CategoryIdentity } from "../category-identity";
+import ModuleContextNavigation from "../module-context-navigation";
 import AnalysisAxioma53Summary from "./analysis-axioma53-summary";
-import AnalysisMovementInsights from "./analysis-movement-insights";
+import AnalysisMovementInsights, { MerchantConcentrationCurve } from "./analysis-movement-insights";
 import styles from "./analysis.module.css";
 
 const longMonthFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -339,9 +346,11 @@ function LoadingSkeleton() {
 export default function AnalysisClient({
   initialSnapshot,
   latestMovementDate = null,
+  onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
   latestMovementDate?: string | null;
+  onApplied?: (snapshot: AnalysisSnapshot) => void;
 }) {
   const requestRef = useRef<AbortController | null>(null);
   const initialMonth = initialSnapshot?.selection.month ?? currentMadridMonth();
@@ -352,6 +361,11 @@ export default function AnalysisClient({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(initialSnapshot ? null : "No se pudo preparar el análisis inicial. Puedes reintentarlo con los filtros.");
   const [merchantsExpanded, setMerchantsExpanded] = useState(false);
+  const [categoriesExpanded, setCategoriesExpanded] = useState(false);
+  const contextLinks = useMemo(
+    () => snapshot ? analysisModuleLinks(snapshot.selection, snapshot.forecast?.period ?? null) : [],
+    [snapshot],
+  );
 
   const filtersDirty = snapshot
     ? month !== snapshot.selection.month
@@ -359,11 +373,16 @@ export default function AnalysisClient({
       || accountId !== (snapshot.selection.accountId ?? "")
     : true;
   const expenseDirection = snapshot?.comparison.expenseDeltaCents ?? 0;
-  const coverageIncomplete = Boolean(
-    snapshot
-      && latestMovementDate
-      && latestMovementDate < snapshot.selection.dateTo,
-  );
+  const coverage = snapshot ? resolvePeriodCoverage({
+    dateFrom: snapshot.selection.dateFrom,
+    dateTo: snapshot.selection.dateTo,
+    latestMovementDate,
+  }) : null;
+  const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
+  const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
+  const incompleteComparisonLabel = coverage?.state === "unknown"
+    ? "Cobertura desconocida · comparación no disponible"
+    : "Comparación incompleta";
   const incomeComparisonPresentation = snapshot ? resolveIncomeComparisonPresentation(snapshot) : null;
   const expenseComparisonPresentation = snapshot ? resolveExpenseComparisonPresentation(snapshot) : null;
   const savingsRatePresentation = snapshot ? resolveSavingsRatePresentation(snapshot) : null;
@@ -377,11 +396,17 @@ export default function AnalysisClient({
   const changeHeadline = useMemo(() => {
     if (!snapshot) return "Qué ha cambiado";
     if (coverageIncomplete) {
-      return `Datos hasta ${formatDate(latestMovementDate!)}: no interpretamos el periodo posterior como mejora ni empeoramiento.`;
+      if (coverage?.state === "unknown") {
+        return "Cobertura bancaria desconocida: no interpretamos las variaciones como mejora ni empeoramiento.";
+      }
+      if (coverage?.state === "none") {
+        return "Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación.";
+      }
+      return `Datos hasta ${formatDate(coverage!.throughDate!)}: no interpretamos el periodo posterior como mejora ni empeoramiento.`;
     }
     if (expenseDirection === 0) return "Tu gasto se mantiene igual que en el periodo comparable.";
     return `Tu gasto ${expenseDirection > 0 ? "ha aumentado" : "ha disminuido"} ${formatMoney(Math.abs(expenseDirection))} frente al periodo comparable.`;
-  }, [snapshot, expenseDirection, coverageIncomplete, latestMovementDate]);
+  }, [snapshot, expenseDirection, coverage, coverageIncomplete]);
 
   async function refresh(event?: FormEvent) {
     event?.preventDefault();
@@ -409,10 +434,12 @@ export default function AnalysisClient({
 
       const next = payload;
       setSnapshot(next);
+      onApplied?.(next);
       setMonth(next.selection.month);
       setRange(next.selection.range);
       setAccountId(next.selection.accountId ?? "");
       setMerchantsExpanded(false);
+      setCategoriesExpanded(false);
 
       const nextParams = new URLSearchParams({
         month: next.selection.month,
@@ -435,7 +462,9 @@ export default function AnalysisClient({
   }
 
   return (
-    <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
+    <>
+      {snapshot ? <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" /> : null}
+      <main className={styles.shell} aria-busy={loading ? "true" : "false"}>
       <header className={styles.header}>
         <div className={styles.headerTitle}>
           <p>FINANCIAL APP · INTELIGENCIA FINANCIERA</p>
@@ -501,8 +530,10 @@ export default function AnalysisClient({
           <section className={styles.kpis} aria-label="Indicadores principales del periodo">
             <Kpi
               label="Ingresos"
-              value={formatMoney(snapshot.current.incomeCents)}
-              comparison={incomeComparisonPresentation?.representative
+              value={coverageHasObservedData ? formatMoney(snapshot.current.incomeCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : incomeComparisonPresentation?.representative
                 ? `${formatPercentBps(incomeComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : incomeComparisonPresentation?.reason === "partial_income_pending"
                   ? "Comparación pendiente · ingresos aún no representativos"
@@ -514,8 +545,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Gastos"
-              value={formatMoney(snapshot.current.expenseCents)}
-              comparison={expenseComparisonPresentation?.representative
+              value={coverageHasObservedData ? formatMoney(snapshot.current.expenseCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : expenseComparisonPresentation?.representative
                 ? `${formatPercentBps(expenseComparisonPresentation.changeBps, true)} vs. periodo anterior`
                 : expenseComparisonPresentation?.label ?? "Comparación no disponible"}
               trend={snapshot.trends.expense}
@@ -525,8 +558,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Neto del periodo"
-              value={formatMoney(snapshot.current.operatingNetCents)}
-              comparison={`${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
+              value={coverageHasObservedData ? formatMoney(snapshot.current.operatingNetCents) : "—"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : `${deltaText(snapshot.comparison.netDeltaCents)} vs. periodo anterior`}
               trend={snapshot.trends.net}
               historical={<HistoricalReference snapshot={snapshot} metric="savingsCents" />}
               tone="net"
@@ -534,8 +569,10 @@ export default function AnalysisClient({
             />
             <Kpi
               label="Tasa de ahorro"
-              value={savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
-              comparison={savingsRatePresentation?.representative
+              value={coverageHasObservedData && savingsRatePresentation?.representative ? formatPercentBps(savingsRatePresentation.valueBps) : "Pendiente"}
+              comparison={coverageIncomplete
+                ? incompleteComparisonLabel
+                : savingsRatePresentation?.representative
                 ? `${formatPointDeltaBps(savingsRatePresentation.deltaBps)} vs. periodo anterior`
                 : savingsRatePresentation?.reason === "partial_income_pending"
                   ? "Ingresos del mes aún no representativos"
@@ -549,7 +586,6 @@ export default function AnalysisClient({
 
           <AnalysisAxioma53Summary snapshot={snapshot} />
           <QuickRead snapshot={snapshot} />
-          <AnalysisMovementInsights snapshot={snapshot} />
 
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
@@ -575,8 +611,8 @@ export default function AnalysisClient({
                 <h2 id="change-heading">{changeHeadline}</h2>
                 <span>vs. {comparisonLabel(snapshot)}</span>
               </div>
-              <span className={expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
-                {deltaText(expenseDirection)}
+              <span className={coverageIncomplete ? styles.neutralChip : expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
+                {coverageIncomplete ? "Comparación incompleta" : deltaText(expenseDirection)}
               </span>
             </div>
             <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />
@@ -597,7 +633,10 @@ export default function AnalysisClient({
                 <p className={styles.empty}>No hay categorías con gasto elegible en el periodo.</p>
               ) : (
                 <div className={styles.breakdown}>
-                  {currentCategoryDrivers.slice(0, 6).map((item) => (
+                  <p className={styles.breakdownCount}>
+                    {categoriesExpanded ? currentCategoryDrivers.length : Math.min(6, currentCategoryDrivers.length)} de {currentCategoryDrivers.length} categorías con gasto
+                  </p>
+                  {(categoriesExpanded ? currentCategoryDrivers : currentCategoryDrivers.slice(0, 6)).map((item) => (
                     <Link prefetch={false} href={item.href ?? periodHref(snapshot)} key={`${item.id ?? "none"}-${item.name}`} className={styles.breakdownRow}>
                       <div>
                         <strong><CategoryIdentity categoryId={item.id} name={item.name} /></strong>
@@ -609,6 +648,16 @@ export default function AnalysisClient({
                       <span className={item.deltaCents > 0 ? styles.badDelta : item.deltaCents < 0 ? styles.goodDelta : undefined}>{deltaText(item.deltaCents)}</span>
                     </Link>
                   ))}
+                  {currentCategoryDrivers.length > 6 ? (
+                    <button
+                      type="button"
+                      className={styles.breakdownToggle}
+                      aria-expanded={categoriesExpanded}
+                      onClick={() => setCategoriesExpanded((current) => !current)}
+                    >
+                      {categoriesExpanded ? "Ver menos categorías" : `Ver todas las ${currentCategoryDrivers.length} categorías`}
+                    </button>
+                  ) : null}
                 </div>
               )}
             </section>
@@ -641,6 +690,8 @@ export default function AnalysisClient({
               )}
             </section>
           </div>
+
+          <AnalysisMovementInsights snapshot={snapshot} />
 
           <div className={styles.intelligenceGrid}>
             <section className={styles.section} aria-labelledby="anomalies-heading">
@@ -743,6 +794,11 @@ export default function AnalysisClient({
             <div className={styles.rankingsGrid}>
               <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
+            <details className={styles.merchantConcentrationDisclosure}>
+              <summary>Ver curva de concentración</summary>
+              <p>Reparte el gasto acumulado entre los comercios del periodo: no añade movimientos ni modifica el ranking.</p>
+              <MerchantConcentrationCurve snapshot={snapshot} />
+            </details>
           </section>
 
           <footer className={styles.qualityNote}>
@@ -752,6 +808,7 @@ export default function AnalysisClient({
           </footer>
         </>
       )}
-    </main>
+      </main>
+    </>
   );
 }

@@ -1,0 +1,128 @@
+name: AUD E2E Production Backup Upgrade
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/aud_e2e_production_upgrade_rollback.sql'
+      - 'supabase/tests/aud_e2e_budget_balance.sql'
+      - 'supabase/tests/aud_e2e_document_designation.sql'
+      - 'supabase/tests/fixtures/production-10.0.102-permissions-20261009.json'
+      - 'scripts/aud-e2e-production-backup-preflight.sh'
+      - 'scripts/render-aud-production-permissions.mjs'
+      - 'scripts/restore-verify-production-backup-v2.sh'
+      - 'scripts/protect-backup-artifact-v2.sh'
+      - '.github/workflows/aud-e2e-production-backup-preflight.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: aud-production-backup-upgrade-561
+  cancel-in-progress: true
+
+jobs:
+  restored-production-upgrade-rollback:
+    # Only the existing release PR in this repository. No fork or future PR
+    # can use this release-specific encrypted backup or protection secret.
+    if: >-
+      github.event.pull_request.number == 561 &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'audit/work-findings-prep-20261007'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Verify successful immutable backup run and encrypted artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node - <<'NODE'
+          (async () => {
+          const root = 'https://api.github.com/repos/massmedi-cpu/Finanzas-3.0';
+          const request = async (path) => {
+            const r = await fetch(root + path, { headers: {
+              authorization: 'Bearer ' + process.env.GH_TOKEN,
+              accept: 'application/vnd.github+json',
+            } });
+            if (!r.ok) throw new Error('backup_metadata_unavailable_' + r.status);
+            return r.json();
+          };
+          const sha = '0d278a361ba8c0dfef0c116374a21af20782abdb';
+          const run = await request('/actions/runs/37877870394');
+          if (run.head_sha !== sha || run.path !== '.github/workflows/production-backup-v2.yml'
+            || run.event !== 'workflow_dispatch' || run.conclusion !== 'success') throw new Error('backup_run_identity');
+          const main = await request('/branches/main');
+          if (main.commit.sha !== sha) throw new Error('production_base_changed_requires_new_backup');
+          const artifact = await request('/actions/artifacts/11592759027');
+          if (artifact.expired || artifact.workflow_run.id !== run.id
+            || artifact.workflow_run.head_sha !== sha
+            || artifact.name !== 'financial-app-production-v2-' + sha
+            || artifact.digest !== 'sha256:910c6e1a79742463a12f28e3502f87d1dc268482f912d877caee56bd70ecb0f7') throw new Error('backup_artifact_identity');
+          console.log('AUD_RELEASE_BACKUP|stage=identity|run=37877870394|artifact=11592759027|encrypted=true');
+          })().catch((error) => { console.error(error.message); process.exitCode = 1; });
+          NODE
+      - name: Download only the verified encrypted backup
+        uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5
+        with:
+          artifact-ids: '11592759027'
+          run-id: '37877870394'
+          github-token: ${{ github.token }}
+          path: .aud-private-production-backup
+      - name: Decrypt on the disposable runner only
+        env:
+          FINANCIAL_APP_BACKUP_PASSPHRASE: ${{ secrets.FINANCIAL_APP_BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          test "${#FINANCIAL_APP_BACKUP_PASSPHRASE}" -ge 32
+          echo "::add-mask::$FINANCIAL_APP_BACKUP_PASSPHRASE"
+          cd .aud-private-production-backup
+          chmod 700 .
+          archive='financial-app-production-v2-0d278a361ba8c0dfef0c116374a21af20782abdb.tgz'
+          sha256sum -c "${archive}.gpg.sha256"
+          bash "$GITHUB_WORKSPACE/scripts/protect-backup-artifact-v2.sh" decrypt "${archive}.gpg" "$archive"
+          mkdir extracted
+          tar -xzf "$archive" -C extracted
+      - name: Install PostgreSQL 17 client
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+      - name: Rehearse the four targeted migrations and rollback on the real restored backup
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/aud-e2e-production-backup-preflight.sh
+      - name: Remove the restored database and every plaintext file
+        if: always()
+        run: |
+          psql 'postgresql://postgres:postgres@127.0.0.1:5432/postgres' -X -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS financial_app_production_backup_restore_check;' >/dev/null 2>&1 || true
+          rm -rf -- "$GITHUB_WORKSPACE/.aud-private-production-backup"
+      # No database passwords/service keys, live database route, Drive requests,
+      # financial rows, signed URLs, plaintext artifacts or browser traces.

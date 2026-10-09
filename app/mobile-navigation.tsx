@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MOBILE_FAVORITE_OPTIONS,
   readMobileFavorite,
@@ -21,6 +21,8 @@ export default function MobileNavigation() {
   const router = useRouter();
   const [moreOpen, setMoreOpen] = useState(false);
   const [favoriteHref, setFavoriteHref] = useState<MobileFavoriteHref>("/review");
+  const panelRef = useRef<HTMLDivElement>(null);
+  const moreButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     try {
@@ -31,6 +33,48 @@ export default function MobileNavigation() {
   }, []);
 
   useEffect(() => setMoreOpen(false), [pathname]);
+
+  // Cambiar de móvil a escritorio nunca debe dejar un panel abierto e invisible
+  // ni mantener el foco sobre un control que ya no se muestra.
+  useEffect(() => {
+    const breakpoint = window.matchMedia("(max-width: 48rem)");
+    const onViewportChange = () => {
+      if (breakpoint.matches) return;
+      const wasOpen = moreOpen;
+      setMoreOpen(false);
+      // Puede haberse perdido el foco al ocultarse el panel por CSS antes del evento.
+      // Si estaba abierto, siempre entregamos el foco a la navegación de escritorio.
+      if (wasOpen) {
+        document.querySelector<HTMLElement>('nav[aria-label="Navegación principal"] [aria-current="page"]')?.focus();
+      }
+    };
+    breakpoint.addEventListener("change", onViewportChange);
+    return () => breakpoint.removeEventListener("change", onViewportChange);
+  }, [moreOpen]);
+
+  // El panel aparece antes del dock en el DOM: mover el foco permite recorrerlo
+  // con Tab desde «Más», en vez de dejar el teclado fuera del contenido abierto.
+  useEffect(() => {
+    if (!moreOpen) return;
+    panelRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      setMoreOpen(false);
+      moreButtonRef.current?.focus();
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (panelRef.current?.contains(event.target) || moreButtonRef.current?.contains(event.target)) return;
+      setMoreOpen(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
+  }, [moreOpen]);
 
   const primary = useMemo(() => navigationItems.filter((item) => (
     FIXED_MOBILE_HREFS.has(item.href) || item.href === favoriteHref
@@ -46,6 +90,11 @@ export default function MobileNavigation() {
     return () => window.clearTimeout(timer);
   }, [primary, router]);
 
+  function closeMoreFromPanel() {
+    setMoreOpen(false);
+    moreButtonRef.current?.focus();
+  }
+
   function updateFavorite(value: string) {
     if (!(MOBILE_FAVORITE_OPTIONS as readonly string[]).includes(value)) return;
     const href = value as MobileFavoriteHref;
@@ -59,11 +108,11 @@ export default function MobileNavigation() {
 
   return (
     <div className={styles.mobileNavigation}>
-      <div className={styles.mobileMorePanel} id="mobile-more-navigation" hidden={!moreOpen}>
+      <div ref={panelRef} className={styles.mobileMorePanel} id="mobile-more-navigation" hidden={!moreOpen}>
         {moreOpen && <>
           <div className={styles.mobileMoreHeader}>
             <strong>Más secciones</strong>
-            <button type="button" onClick={() => setMoreOpen(false)} aria-label="Cerrar más secciones">
+            <button type="button" onClick={closeMoreFromPanel} aria-label="Cerrar más secciones">
               <ProductIcon name="close" size="1.15em" />
             </button>
           </div>
@@ -125,6 +174,7 @@ export default function MobileNavigation() {
           );
         })}
         <button
+          ref={moreButtonRef}
           type="button"
           className={`${styles.mobileDockLink} ${styles.mobileMoreButton}${moreActive ? ` ${styles.mobileActive}` : ""}`}
           aria-expanded={moreOpen}

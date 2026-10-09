@@ -123,3 +123,13 @@ test("Premium · Cuentas no dibuja barras fantasma para valores exactamente 0 �
     expect(await zeroBars.nth(index).evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
   }
 });
+
+test("AUD-E2E-CTA-001 · leyenda y signo del neto coinciden en la misma cuenta", async ({ page }) => {
+  await mockAccounts(page);
+  await page.goto("/accounts");
+  await expect(page.getByText("Neto positivo (+)")).toBeVisible();
+  await expect(page.getByText("Neto negativo (−)")).toBeVisible();
+  await expect(page.locator('[data-financial-sign="positive"]')).toHaveCount(1);
+  await expect(page.locator('[data-financial-sign="negative"]')).toHaveCount(1);
+  await expect(page.locator('[data-financial-sign="zero"]')).toHaveCount(1);
+});

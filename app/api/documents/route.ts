@@ -22,6 +22,7 @@ const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 const TYPES = new Set(["ticket", "invoice", "other"]);
 const STATUSES = new Set(["imported", "pending_review", "confirmed", "archived"]);
 const METHODS = new Set(["manual", "suggested"]);
+const SCOPES = new Set(["ordinary", "tests", "all"]);
 const MIMES = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
 let googleDriveDownloader: GoogleDriveDocumentDownloader | null = null;
 
@@ -162,7 +163,13 @@ export async function GET(request: Request) {
     const offsetRaw = searchParams.get("offset");
     const limit = limitRaw === null ? 50 : integer(Number(limitRaw), "invalid_document_limit", 1, 100);
     const offset = offsetRaw === null ? 0 : integer(Number(offsetRaw), "invalid_document_offset", 0, 100000);
-    const result = await callPersistenceGateway("document.list", { status, query, limit, offset });
+    const scope = searchParams.get("scope") ?? "ordinary";
+    if (!SCOPES.has(scope)) throw new Error("invalid_document_scope");
+    const unassociatedRaw = searchParams.get("unassociated");
+    if (unassociatedRaw !== null && unassociatedRaw !== "true" && unassociatedRaw !== "false") throw new Error("invalid_document_association_filter");
+    const result = await callPersistenceGateway("document.list", {
+      status, query, limit, offset, scope, unassociatedOnly: unassociatedRaw === "true",
+    });
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);
@@ -236,6 +243,18 @@ export async function PATCH(request: Request) {
   try {
     const row = objectBody(await request.json().catch(() => null));
     const action = text(row.action, "invalid_document_action", 40);
+
+    if (action === "test_designation") {
+      if (typeof row.isTest !== "boolean") throw new Error("invalid_document_test_designation");
+      if (row.ownerReviewed !== true) throw new Error("invalid_document_owner_review");
+      const result = await callPersistenceGateway("document.test_designation", {
+        id: uuid(row.id, "invalid_document_id"),
+        isTest: row.isTest,
+        ownerReviewed: true,
+        reason: text(row.reason, "invalid_document_designation_reason", 500),
+      });
+      return Response.json(result, { headers: HEADERS });
+    }
 
     if (action === "metadata") {
       const payload = {

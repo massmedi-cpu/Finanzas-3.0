@@ -87,3 +87,22 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+/* AUD-E2E-UI-001 · navegación cruzada perceptible en tema claro. */
+:global(html[data-theme="light"]) .shell,
+:global(html[data-theme="light"]) .link {
+  border-color: var(--color-border);
+  background: var(--surface-card);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .link:hover,
+:global(html[data-theme="light"]) .link:focus-visible {
+  border-color: var(--border-primary-strong);
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .link:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}

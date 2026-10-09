@@ -6,6 +6,7 @@ import { formatBasisPoints, formatNumberWithDigits } from "../../src/core/format
 import { formatMoneyCents as formatMoney, formatMoneyInputCents, parseMoneyInputToCents } from "../../src/core/money";
 import {
   assembleBudgetPlanning,
+  isBudgetSnapshot,
   type BudgetItem,
   type BudgetPlanningContext,
   type BudgetSnapshot,
@@ -70,6 +71,12 @@ function readableError(payload: any) {
   if (code.includes("budget_category_not_found")) return "La categoría ya no está disponible. Actualiza los presupuestos.";
   if (code.includes("budget_category_must_be_expense")) return "Solo las categorías de gasto pueden tener presupuesto.";
   if (payload?.error === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
+  if (code === "invalid_budget_snapshot") {
+    return "La información de presupuestos no es válida. No se mostrarán cifras incoherentes; reintenta la consulta.";
+  }
+  if (payload?.error === "persistence_failed") {
+    return "Presupuestos no ha podido terminar el cálculo. Reintenta; no se ha guardado ningún cambio.";
+  }
   return "No se pudo completar la operación de presupuestos.";
 }
 
@@ -336,9 +343,9 @@ function BudgetCard({
   );
 }
 
-export default function BudgetsClient() {
+export default function BudgetsClient({ initialMonth }: { initialMonth?: string }) {
   const actionFeedback = useActionFeedback();
-  const [month, setMonth] = useState(currentMonthMadrid);
+  const [month, setMonth] = useState(() => initialMonth ?? currentMonthMadrid());
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -348,9 +355,24 @@ export default function BudgetsClient() {
   const [editValue, setEditValue] = useState("");
   const [fieldError, setFieldError] = useState("");
   const fetchGeneration = useRef(0);
+  const fetchController = useRef<AbortController | null>(null);
+  const [slowLoading, setSlowLoading] = useState(false);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
     const generation = ++fetchGeneration.current;
+    fetchController.current?.abort();
+    const controller = new AbortController();
+    fetchController.current = controller;
+    let timedOut = false;
+    const slowTimer = window.setTimeout(() => {
+      if (!controller.signal.aborted && generation === fetchGeneration.current) setSlowLoading(true);
+    }, 15_000);
+    const deadlineTimer = window.setTimeout(() => {
+      if (controller.signal.aborted || generation !== fetchGeneration.current) return;
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
+    setSlowLoading(false);
     setLoading(true);
     setError("");
     setNotice("");
@@ -358,27 +380,43 @@ export default function BudgetsClient() {
     try {
       const response = await fetch(`/api/budgets?month=${encodeURIComponent(selectedMonth)}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
       const payload = await response.json().catch(() => null);
       if (generation !== fetchGeneration.current) return;
       if (!response.ok || !payload) throw new Error(readableError(payload));
-      const nextSnapshot = payload as BudgetSnapshot;
+      if (!isBudgetSnapshot(payload)) {
+        throw new Error("La información de presupuestos no es válida. Reintenta la consulta.");
+      }
+      const nextSnapshot = payload;
       if (nextSnapshot.month !== selectedMonth) {
         throw new Error("El servidor devolvió un presupuesto de otro mes.");
       }
       setSnapshot(nextSnapshot);
       setEditingKey(null);
     } catch (caught) {
-      if (generation !== fetchGeneration.current) return;
+      if (generation !== fetchGeneration.current || (controller.signal.aborted && !timedOut)) return;
       setSnapshot(null);
-      setError(caught instanceof Error ? caught.message : "No se pudieron cargar los presupuestos.");
+      setError(timedOut
+        ? "La consulta de presupuestos ha superado 30 segundos. No se han cambiado límites ni movimientos. Puedes reintentar solo esta lectura."
+        : caught instanceof Error ? caught.message : "No se pudieron cargar los presupuestos.");
     } finally {
-      if (generation === fetchGeneration.current) setLoading(false);
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+      if (fetchController.current === controller) fetchController.current = null;
+      if (generation === fetchGeneration.current && (!controller.signal.aborted || timedOut)) {
+        setLoading(false);
+        setSlowLoading(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     void fetchSnapshot(month);
+    return () => {
+      fetchController.current?.abort();
+      fetchGeneration.current += 1;
+    };
   }, [fetchSnapshot, month]);
 
   const mutate = useCallback(async (
@@ -400,7 +438,10 @@ export default function BudgetsClient() {
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) throw new Error(readableError(payload));
-      setSnapshot(payload as BudgetSnapshot);
+      if (!isBudgetSnapshot(payload) || payload.month !== body.month) {
+        throw new Error("No se pudo verificar el presupuesto actualizado. Los datos anteriores siguen visibles; vuelve a consultar.");
+      }
+      setSnapshot(payload);
       setEditingKey(null);
       setEditValue("");
       setNotice(successMessage);
@@ -525,6 +566,9 @@ export default function BudgetsClient() {
                 <div className={styles.spinner} />
                 Cargando presupuesto de {formatMonth(month)}…
               </div>
+              {slowLoading ? (
+                <p role="status">La consulta está tardando más de 15 segundos. Los datos bancarios no se están modificando; podrás reintentar si no responde.</p>
+              ) : null}
             </div>
           </section>
         ) : snapshot ? (
@@ -723,6 +767,21 @@ export default function BudgetsClient() {
               </aside>
             </section>
           </>
+        ) : error ? (
+          <section className={styles.panel} aria-labelledby="budget-load-error-title">
+            <div className={styles.emptyState}>
+              <span className={styles.cardIcon}><Icon name="warning" /></span>
+              <h2 id="budget-load-error-title">No se ha podido cargar {formatMonth(month)}</h2>
+              <p>Los datos bancarios siguen intactos. Puedes volver a intentar el cálculo sin duplicar ni modificar movimientos.</p>
+              <button
+                className={styles.actionButton}
+                type="button"
+                onClick={() => void fetchSnapshot(month)}
+              >
+                Reintentar
+              </button>
+            </div>
+          </section>
         ) : null}
       </div>
     </main>

@@ -30,12 +30,16 @@ const KIND_LABEL: Record<SearchKind, string> = {
   section: "Sección",
 };
 const date = new Intl.DateTimeFormat("es-ES", { day: "numeric", month: "short", year: "numeric", timeZone: "Europe/Madrid" });
+const SEARCH_TIMEOUT_MS = 12_000;
 const FOCUSABLE_SELECTOR = "button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex='-1'])";
 
 function formatDate(value: string | null | undefined) {
-  if (!value) return null;
-  const parsed = new Date(`${value.slice(0, 10)}T12:00:00Z`);
-  return Number.isNaN(parsed.getTime()) ? null : date.format(parsed).replace(".", "");
+  const bankDate = value?.slice(0, 10);
+  if (!bankDate || !/^\d{4}-\d{2}-\d{2}$/.test(bankDate)) return null;
+  const parsed = new Date(`${bankDate}T12:00:00Z`);
+  // JavaScript normaliza fechas inexistentes: nunca mostrar 30/02 como una fecha bancaria real.
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== bankDate) return null;
+  return date.format(parsed).replace(".", "");
 }
 
 export default function GlobalSearch() {
@@ -49,9 +53,12 @@ export default function GlobalSearch() {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [items, setItems] = useState<SearchItem[]>([]);
+  const [resultsQuery, setResultsQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [partial, setPartial] = useState(false);
   const [error, setError] = useState(false);
+  const [requestTimedOut, setRequestTimedOut] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const [activeIndex, setActiveIndex] = useState(-1);
 
   function openSearch() {
@@ -66,9 +73,11 @@ export default function GlobalSearch() {
     setOpen(false);
     setQuery("");
     setItems([]);
+    setResultsQuery("");
     setLoading(false);
     setPartial(false);
     setError(false);
+    setRequestTimedOut(false);
     setActiveIndex(-1);
     const opener = openerRef.current;
     openerRef.current = null;
@@ -112,9 +121,11 @@ export default function GlobalSearch() {
     setOpen(false);
     setQuery("");
     setItems([]);
+    setResultsQuery("");
     setLoading(false);
     setPartial(false);
     setError(false);
+    setRequestTimedOut(false);
     setActiveIndex(-1);
   }, [pathname]);
 
@@ -125,41 +136,57 @@ export default function GlobalSearch() {
     const preparedQuery = prepareGlobalSearchQuery(query);
     if (!preparedQuery) {
       setItems([]);
+      setResultsQuery("");
       setLoading(false);
       setPartial(false);
       setError(false);
+      setRequestTimedOut(false);
       return;
     }
     const controller = new AbortController();
     requestRef.current = controller;
     setLoading(true);
     setError(false);
+    setRequestTimedOut(false);
+    // La respuesta queda vinculada al término exacto, incluso antes del siguiente efecto React.
+    setItems([]);
+    setResultsQuery("");
+    setPartial(false);
     const timer = window.setTimeout(() => {
+      let deadlineExceeded = false;
+      const deadline = window.setTimeout(() => {
+        deadlineExceeded = true;
+        controller.abort();
+      }, SEARCH_TIMEOUT_MS);
       void fetch(`/api/search?q=${encodeURIComponent(preparedQuery)}`, { cache: "no-store", signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => null) as SearchResponse | null;
           if (!response.ok || !payload || !Array.isArray(payload.items) || payload.query !== preparedQuery) throw new Error("search_failed");
           if (controller.signal.aborted || requestSequence !== requestSequenceRef.current) return;
           setItems(payload.items);
+          setResultsQuery(preparedQuery);
           setPartial(payload.partial === true);
         })
         .catch((cause) => {
-          if (cause instanceof DOMException && cause.name === "AbortError") return;
-          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) {
+          if (cause instanceof DOMException && cause.name === "AbortError" && !deadlineExceeded) return;
+          if ((!controller.signal.aborted || deadlineExceeded) && requestSequence === requestSequenceRef.current) {
             setItems([]);
+            setResultsQuery("");
             setPartial(false);
             setError(true);
+            setRequestTimedOut(deadlineExceeded);
           }
         })
         .finally(() => {
-          if (!controller.signal.aborted && requestSequence === requestSequenceRef.current) setLoading(false);
+          window.clearTimeout(deadline);
+          if ((!controller.signal.aborted || deadlineExceeded) && requestSequence === requestSequenceRef.current) setLoading(false);
         });
     }, 180);
     return () => {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, retryCount]);
 
   useEffect(() => {
     if (activeIndex < 0) return;
@@ -167,17 +194,18 @@ export default function GlobalSearch() {
   }, [activeIndex, inputId]);
 
   function onInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
+    const safeItems = !loading && !error && prepareGlobalSearchQuery(query) === resultsQuery ? items : [];
     if (event.key === "ArrowDown") {
       event.preventDefault();
-      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "next"));
+      setActiveIndex((current) => moveGlobalSearchIndex(current, safeItems.length, "next"));
     } else if (event.key === "ArrowUp") {
       event.preventDefault();
-      setActiveIndex((current) => moveGlobalSearchIndex(current, items.length, "previous"));
-    } else if (event.key === "Enter" && activeIndex >= 0 && items[activeIndex]) {
+      setActiveIndex((current) => moveGlobalSearchIndex(current, safeItems.length, "previous"));
+    } else if (event.key === "Enter" && activeIndex >= 0 && safeItems[activeIndex]) {
       event.preventDefault();
       requestSequenceRef.current += 1;
       requestRef.current?.abort();
-      window.location.assign(items[activeIndex].href);
+      window.location.assign(safeItems[activeIndex].href);
     }
   }
 
@@ -209,12 +237,18 @@ export default function GlobalSearch() {
   }
 
   const preparedQuery = prepareGlobalSearchQuery(query);
-  const statusMessage = loading
+  const queryMatchesResults = preparedQuery === resultsQuery;
+  const searching = loading || Boolean(preparedQuery && !queryMatchesResults && !error);
+  const visibleItems = !searching && !error && queryMatchesResults ? items : [];
+  const hasResults = visibleItems.length > 0;
+  const previewMovements = visibleItems.filter((item) => item.kind === "transaction").length;
+  const fullMovementHref = preparedQuery ? `/transactions?q=${encodeURIComponent(preparedQuery)}` : "/transactions";
+  const statusMessage = searching
     ? "Buscando resultados…"
     : error
-      ? "No se pudo completar la búsqueda."
+      ? requestTimedOut ? "La búsqueda ha superado el tiempo de espera. Puedes reintentarla." : "No se pudo completar la búsqueda."
       : preparedQuery
-        ? `${items.length} ${items.length === 1 ? "resultado" : "resultados"}${partial ? ". Algunos orígenes no respondieron." : "."}`
+        ? `Resultados rápidos: ${visibleItems.length} mostrados (${previewMovements} movimientos). No es el total de coincidencias.${partial ? " Algunos orígenes no respondieron." : ""}`
         : "Escribe al menos dos caracteres para buscar.";
 
   return (
@@ -243,24 +277,35 @@ export default function GlobalSearch() {
                 maxLength={MAX_GLOBAL_SEARCH_QUERY_LENGTH}
                 role="combobox"
                 aria-label="Buscar en Financial App"
-                aria-expanded="true"
+                aria-expanded={hasResults}
                 aria-autocomplete="list"
-                aria-controls={`${inputId}-results`}
+                aria-controls={hasResults ? `${inputId}-results` : undefined}
                 aria-describedby={`${inputId}-status`}
-                aria-activedescendant={activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
+                aria-activedescendant={hasResults && activeIndex >= 0 ? `${inputId}-result-${activeIndex}` : undefined}
               />
-              {loading && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
+              {searching && <span className={styles.loading} aria-hidden="true">Buscando…</span>}
             </label>
             <p id={`${inputId}-status`} className={styles.srOnly} role="status" aria-live="polite" aria-atomic="true">{statusMessage}</p>
-            <div id={`${inputId}-results`} className={styles.results} role="listbox" aria-label="Resultados de búsqueda">
+            {preparedQuery && !searching && !error ? (
+              <p className={styles.previewSummary}>Resultados rápidos · {visibleItems.length} mostrados ({previewMovements} movimientos). No es el total de coincidencias.</p>
+            ) : null}
+            <div id={`${inputId}-results`} className={styles.results} role={hasResults ? "listbox" : "region"} aria-label="Resultados de búsqueda">
               {!preparedQuery ? (
                 <div className={styles.hint}><strong>Busca en toda la app</strong><span>Prueba con un comercio, una factura, una categoría o el nombre de una sección.</span></div>
+              ) : searching ? (
+                <div className={styles.hint}><strong>Buscando coincidencias…</strong><span>Se consultan las fuentes disponibles. Los resultados anteriores se han ocultado para evitar confusiones.</span></div>
               ) : error ? (
-                <div className={styles.hint}><strong>No se pudo completar la búsqueda</strong><span>Los datos no se han modificado. Puedes intentarlo de nuevo.</span></div>
-              ) : !loading && items.length === 0 ? (
+                <div className={styles.hint}>
+                  <strong>{requestTimedOut ? "La búsqueda tardó demasiado" : "No se pudo completar la búsqueda"}</strong>
+                  <span>{requestTimedOut ? "El servidor no respondió en 12 segundos. Puedes reintentar sin modificar datos." : "No se ha modificado ningún dato. Puedes repetir la consulta sin volver a escribirla."}</span>
+                  <button type="button" className={styles.retryButton} onClick={() => { setRetryCount((current) => current + 1); inputRef.current?.focus(); }}>
+                    Reintentar búsqueda
+                  </button>
+                </div>
+              ) : visibleItems.length === 0 ? (
                 <div className={styles.hint}><strong>Sin coincidencias</strong><span>No hay resultados para “{preparedQuery}”.</span></div>
               ) : (
-                items.map((item, index) => {
+                visibleItems.map((item, index) => {
                   const itemDate = formatDate(item.date);
                   return (
                     <Link prefetch={false}
@@ -284,6 +329,11 @@ export default function GlobalSearch() {
             </div>
             <div className={styles.footer}>
               <span>↑↓ navegar · Enter abrir · Esc cerrar</span>
+              {preparedQuery ? (
+                <Link prefetch={false} href={fullMovementHref} onClick={() => close(false)}>
+                  Ver todos los movimientos para «{preparedQuery}»
+                </Link>
+              ) : null}
               {partial && <span>Alguna fuente no respondió; se muestran los resultados disponibles.</span>}
             </div>
           </div>

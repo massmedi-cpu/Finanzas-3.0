@@ -12,13 +12,26 @@ import {
 import { useActionFeedback } from "../action-feedback";
 import { DraftRecoveryNotice } from "../draft-recovery-notice";
 import { CategoryIdentity } from "../category-identity";
+import { hasExplicitSyntheticDocumentNote } from "../../src/application/document-test-disclosure";
 import { OcrReviewBoundary } from "./ocr-review-boundary";
 import { OcrReviewPanel } from "./ocr-review-panel";
 import styles from "./documents.module.css";
 
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
+type DocumentScope = "ordinary" | "tests" | "all";
 type StorageProvider = "supabase" | "google_drive";
+type MetadataEditor = {
+  type: DocumentType;
+  documentDate: string;
+  issuerName: string;
+  total: string;
+  notes: string;
+};
+
+type PendingDocumentExit =
+  | { type: "document"; id: string }
+  | { type: "navigation"; href: string };
 
 type DocumentItem = {
   id: string;
@@ -37,6 +50,9 @@ type DocumentItem = {
   originalFileName: string;
   sourceModifiedAt: string | null;
   sourceDriveFileId: string | null;
+  isTest?: boolean;
+  testDesignationUpdatedAt?: string | null;
+  testDesignationReason?: string | null;
 };
 
 type DocumentLineItem = {
@@ -64,7 +80,7 @@ type Association = {
 };
 
 type DocumentDetail = {
-  contractVersion: 1 | 2;
+  contractVersion: 1 | 2 | 3;
   document: Omit<DocumentItem, "associationCount"> & {
     storageKey?: string;
     documentTime?: string | null;
@@ -86,12 +102,15 @@ type DocumentPrinciples = {
   getHasSideEffects: false;
   suggestionsPersisted: false;
   associationsRequireConfirmation: true;
+  testDesignationSupported?: boolean;
+  testDesignationEditable?: boolean;
 };
 
 type DocumentList = {
-  contractVersion: 1;
+  contractVersion: 1 | 2 | 3;
   items: DocumentItem[];
   total: number;
+  testCount?: number;
   limit: number;
   offset: number;
   principles: DocumentPrinciples;
@@ -142,6 +161,7 @@ type TransactionSearch = {
 
 const DRIVE_FOLDER_URL = "https://drive.google.com/drive/folders/1UCUZSmOWfGM5VyvhDcx7ExeBw3LS872t";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const DOCUMENT_READ_TIMEOUT_MS = 20_000;
 const ACCEPT = ".pdf,.jpg,.jpeg,.png,.webp";
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
@@ -166,7 +186,11 @@ const STATUS_LABELS: Record<DocumentStatus, string> = {
 
 function formatDate(value: string | null) {
   if (!value) return "Sin fecha";
-  return dateFormatter.format(new Date(`${value.slice(0, 10)}T12:00:00Z`));
+  const iso = value.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return "Fecha no válida";
+  const parsed = new Date(`${iso}T12:00:00Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== iso) return "Fecha no válida";
+  return dateFormatter.format(parsed);
 }
 
 function formatBytes(value: number | null) {
@@ -191,6 +215,35 @@ function parseEuroToCents(input: string) {
   }
 }
 
+function editorFromDocument(document: DocumentDetail["document"]): MetadataEditor {
+  return {
+    type: document.type,
+    documentDate: document.documentDate ?? "",
+    issuerName: document.issuerName ?? "",
+    total: euroInput(document.totalCents),
+    notes: document.notes ?? "",
+  };
+}
+
+function editorMatchesDocument(editor: MetadataEditor, document: DocumentDetail["document"]) {
+  const saved = editorFromDocument(document);
+  return editor.type === saved.type
+    && editor.documentDate === saved.documentDate
+    && editor.issuerName === saved.issuerName
+    && editor.total === saved.total
+    && editor.notes === saved.notes;
+}
+
+async function getDocumentJson(url: string) {
+  const controller = new AbortController();
+  const timeout = window.setTimeout(() => controller.abort(), DOCUMENT_READ_TIMEOUT_MS);
+  try {
+    return await readJson(await fetch(url, { cache: "no-store", signal: controller.signal }));
+  } finally {
+    window.clearTimeout(timeout);
+  }
+}
+
 async function readJson(response: Response) {
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -200,8 +253,17 @@ async function readJson(response: Response) {
 }
 
 function friendlyError(error: unknown) {
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "La consulta documental ha superado el tiempo de espera. No se ha modificado ningún dato; puedes reintentar.";
+  }
   const code = error instanceof Error ? error.message : "request_failed";
   const labels: Record<string, string> = {
+    document_owner_review_required: "El propietario debe revisar el documento antes de cambiar su tratamiento.",
+    invalid_document_owner_review: "Confirma que has revisado el documento y su procedencia.",
+    invalid_document_designation_reason: "Explica el motivo del cambio (hasta 500 caracteres).",
+    document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
+    document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
+    document_detail_mismatch: "El servidor no ha devuelto el documento solicitado. No mostraremos datos de otro documento; reintenta la consulta.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -244,86 +306,168 @@ function StatusBadge({ status }: { status: DocumentStatus }) {
   return <span className={`${styles.status} ${styles[`status_${status}`]}`}>{STATUS_LABELS[status]}</span>;
 }
 
-export function DocumentsClient() {
+export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedFilter = false, initialScope = "ordinary", initialOffset = 0 }: {
+  initialStatusFilter?: string;
+  initialUnassociatedFilter?: boolean;
+  initialScope?: DocumentScope;
+  initialOffset?: number;
+}) {
   const actionFeedback = useActionFeedback();
   const [list, setList] = useState<DocumentList | null>(null);
+  const [loadedListKey, setLoadedListKey] = useState<string | null>(null);
+  const [listLoadFailed, setListLoadFailed] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<DocumentDetail | null>(null);
   const [candidates, setCandidates] = useState<CandidateResponse | null>(null);
   const [transactions, setTransactions] = useState<TransactionSearch | null>(null);
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState(initialStatusFilter);
+  const [unassociatedOnly, setUnassociatedOnly] = useState(initialUnassociatedFilter);
+  const [scope, setScope] = useState<DocumentScope>(initialScope);
+  const [offset, setOffset] = useState(initialOffset);
+  const [designationReason, setDesignationReason] = useState("");
+  const [designationReviewed, setDesignationReviewed] = useState(false);
+  const [designationOpen, setDesignationOpen] = useState(false);
   const [manualQuery, setManualQuery] = useState("");
   const [loadingList, setLoadingList] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
+  const [detailLoadFailed, setDetailLoadFailed] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
-  const [editor, setEditor] = useState({ type: "invoice" as DocumentType, documentDate: "", issuerName: "", total: "", notes: "" });
-  const hasActiveListFilters = Boolean(query.trim() || statusFilter);
+  const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
+  const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
+  const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
+  const metadataDirty = useMemo(
+    () => Boolean(detail && !editorMatchesDocument(editor, detail.document)),
+    [detail, editor],
+  );
 
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
+  const metadataDirtyRef = useRef(false);
+  const bypassUnloadOnceRef = useRef(false);
+  const exitReturnFocusRef = useRef<HTMLElement | null>(null);
   selectedIdRef.current = selectedId;
+  metadataDirtyRef.current = metadataDirty;
+
+  // Una consulta por pausa de escritura; evita descargar la lista en cada tecla.
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 220);
+    return () => window.clearTimeout(timer);
+  }, [query]);
 
   const listUrl = useMemo(() => {
-    const params = new URLSearchParams({ limit: "50", offset: "0" });
-    if (query.trim()) params.set("q", query.trim());
+    const params = new URLSearchParams({ limit: "50", offset: String(offset) });
+    params.set("scope", scope);
+    if (unassociatedOnly) params.set("unassociated", "true");
+    if (debouncedQuery.trim()) params.set("q", debouncedQuery.trim());
     if (statusFilter) params.set("status", statusFilter);
     return `/api/documents?${params}`;
-  }, [query, statusFilter]);
+  }, [debouncedQuery, statusFilter, scope, unassociatedOnly, offset]);
 
   const loadList = useCallback(async (url = listUrl, silent = false) => {
     const sequence = ++listSequence.current;
+    const requested = new URL(url, window.location.origin);
+    const requestKey = `${requested.pathname}${requested.search}`;
+    setListLoadFailed(false);
     if (!silent) setLoadingList(true);
     setError(null);
     try {
-      const data = await readJson(await fetch(url, { cache: "no-store" })) as DocumentList;
+      const first = await getDocumentJson(url) as DocumentList;
+      let data = first;
+      if (unassociatedOnly && first.contractVersion < 3) {
+        const all = [...first.items];
+        const parsed = new URL(url, window.location.origin);
+        while (all.length < first.total) {
+          if (all.length >= 10_000) throw new Error("document_filter_limit");
+          parsed.searchParams.set("limit", "100");
+          parsed.searchParams.set("offset", String(all.length));
+          const next = await getDocumentJson(parsed.toString()) as DocumentList;
+          if (!next.items.length) throw new Error("document_filter_incomplete");
+          all.push(...next.items);
+        }
+        const filtered = all.filter((item) => item.status !== "archived" && item.associationCount === 0);
+        data = { ...first, items: filtered, total: filtered.length, offset: 0, limit: filtered.length };
+      }
       if (sequence !== listSequence.current) return;
+      if (data.contractVersion === 3 && data.offset > 0 && data.items.length === 0) {
+        setOffset(0);
+        return;
+      }
       setList(data);
-      if (selectedIdRef.current && !data.items.some((item) => item.id === selectedIdRef.current)) {
+      setLoadedListKey(requestKey);
+      setListLoadFailed(false);
+      if (
+        selectedIdRef.current
+        && !data.items.some((item) => item.id === selectedIdRef.current)
+        && !metadataDirtyRef.current
+      ) {
         setSelectedId(null);
         setDetail(null);
       }
     } catch (caught) {
-      if (sequence === listSequence.current) setError(friendlyError(caught));
+      if (sequence === listSequence.current) {
+        setListLoadFailed(true);
+        setError(friendlyError(caught));
+      }
     } finally {
-      if (!silent && sequence === listSequence.current) setLoadingList(false);
+      if (sequence === listSequence.current) setLoadingList(false);
     }
-  }, [listUrl]);
+  }, [listUrl, unassociatedOnly]);
 
-  const loadDetail = useCallback(async (id: string, silent = false) => {
+  const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
-    if (!silent) setLoadingDetail(true);
+    if (!silent) {
+      setLoadingDetail(true);
+      setDetailLoadFailed(false);
+    }
     setError(null);
     if (!silent) {
       setCandidates(null);
       setTransactions(null);
     }
     try {
-      const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}`, { cache: "no-store" })) as DocumentDetail;
-      if (sequence !== detailSequence.current || selectedIdRef.current !== id) return;
+      const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
+      if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
+      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)) {
+        throw new Error("document_detail_mismatch");
+      }
       setDetail(data);
-      setEditor({
-        type: data.document.type,
-        documentDate: data.document.documentDate ?? "",
-        issuerName: data.document.issuerName ?? "",
-        total: euroInput(data.document.totalCents),
-        notes: data.document.notes ?? "",
-      });
+      if (!preserveEditor) {
+        setDesignationOpen(false);
+        setDesignationReason("");
+        setDesignationReviewed(false);
+      }
+      if (!preserveEditor) setEditor(editorFromDocument(data.document));
+      return data;
     } catch (caught) {
-      if (sequence === detailSequence.current) setError(friendlyError(caught));
+      if (sequence === detailSequence.current && selectedIdRef.current === id) {
+        if (!silent) setDetailLoadFailed(true);
+        setError(friendlyError(caught));
+      }
+      return null;
     } finally {
-      if (!silent && sequence === detailSequence.current) setLoadingDetail(false);
+      if (sequence === detailSequence.current) setLoadingDetail(false);
     }
   }, []);
 
   useEffect(() => { void loadList(); }, [loadList]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (scope === "ordinary") params.delete("scope"); else params.set("scope", scope);
+    if (statusFilter) params.set("status", statusFilter); else params.delete("status");
+    if (unassociatedOnly) params.set("unassociated", "true"); else params.delete("unassociated");
+    if (offset > 0) params.set("offset", String(offset)); else params.delete("offset");
+    const search = params.toString();
+    window.history.replaceState(window.history.state, "", `/documents${search ? `?${search}` : ""}`);
+  }, [scope, statusFilter, unassociatedOnly, offset]);
   useEffect(() => { if (selectedId) void loadDetail(selectedId); }, [selectedId, loadDetail]);
   useEffect(() => {
     if (busy) {
@@ -339,18 +483,73 @@ export function DocumentsClient() {
     feedbackActionRef.current = null;
   }, [actionFeedback, busy, error]);
 
+  useEffect(() => {
+    if (!metadataDirty) return;
+
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      if (bypassUnloadOnceRef.current || !metadataDirtyRef.current) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    const protectInternalNavigation = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const anchor = target.closest("a[href]");
+      if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
+
+      const destination = new URL(anchor.href, window.location.href);
+      if (destination.origin !== window.location.origin) return;
+      const current = new URL(window.location.href);
+      if (destination.pathname === current.pathname && destination.search === current.search) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      exitReturnFocusRef.current = anchor;
+      setPendingExit({ type: "navigation", href: destination.href });
+    };
+
+    window.addEventListener("beforeunload", beforeUnload);
+    document.addEventListener("click", protectInternalNavigation, true);
+    return () => {
+      window.removeEventListener("beforeunload", beforeUnload);
+      document.removeEventListener("click", protectInternalNavigation, true);
+    };
+  }, [metadataDirty]);
+
   const selectDocument = (id: string) => {
+    if (id === selectedIdRef.current || busy) return;
+    if (metadataDirtyRef.current) {
+      exitReturnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+      setPendingExit({ type: "document", id });
+      return;
+    }
     setAuthRecovery(null);
     selectedIdRef.current = id;
     setSelectedId(id);
   };
 
-  const refreshAfterMutation = useCallback(async (id: string) => {
-    await Promise.all([loadList(), loadDetail(id)]);
+  const continueDocumentExit = (target: PendingDocumentExit) => {
+    setPendingExit(null);
+    metadataDirtyRef.current = false;
+    if (target.type === "document") {
+      if (detail) setEditor(editorFromDocument(detail.document));
+      setAuthRecovery(null);
+      selectedIdRef.current = target.id;
+      setSelectedId(target.id);
+      return;
+    }
+    bypassUnloadOnceRef.current = true;
+    window.location.assign(target.href);
+  };
+
+  const refreshAfterMutation = useCallback(async (id: string, preserveEditor = false) => {
+    const [, verifiedDetail] = await Promise.all([loadList(), loadDetail(id, false, preserveEditor)]);
+    return verifiedDetail?.document.id === id ? verifiedDetail : null;
   }, [loadList, loadDetail]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
-    await Promise.all([loadList(listUrl, true), loadDetail(id, true)]);
+    await Promise.all([loadList(listUrl, true), loadDetail(id, true, true)]);
     setNotice("Revisión OCR confirmada y documento sincronizado.");
   }, [listUrl, loadList, loadDetail]);
 
@@ -402,13 +601,13 @@ export function DocumentsClient() {
     }
   }
 
-  async function saveMetadata(event: FormEvent) {
-    event.preventDefault();
-    if (!detail) return;
+  async function persistMetadata(): Promise<boolean> {
+    if (!detail || busy) return false;
+    if (!metadataDirtyRef.current) return true;
     const cents = parseEuroToCents(editor.total);
     if (cents === undefined) {
       setError("Introduce un importe válido con un máximo de dos decimales.");
-      return;
+      return false;
     }
     setBusy("metadata");
     setError(null);
@@ -417,15 +616,58 @@ export function DocumentsClient() {
       await readJson(await fetch("/api/documents", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "metadata", id: detail.document.id, type: editor.type, documentDate: editor.documentDate || null, issuerName: editor.issuerName || null, totalCents: cents, notes: editor.notes }),
+        body: JSON.stringify({
+          action: "metadata", id: detail.document.id, type: editor.type,
+          documentDate: editor.documentDate || null,
+          issuerName: editor.issuerName || null,
+          totalCents: cents, notes: editor.notes,
+        }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      // No sustituir el editor con una relectura antigua hasta validar el PATCH.
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      const persisted = confirmed?.document;
+      const matchesSave = persisted?.id === detail.document.id
+        && persisted.type === editor.type
+        && (persisted.documentDate ?? "") === editor.documentDate
+        && (persisted.issuerName ?? "") === editor.issuerName.trim()
+        && persisted.totalCents === cents
+        && (persisted.notes ?? "") === editor.notes.trim();
+      if (!matchesSave) {
+        // El PATCH pudo haberse aplicado, pero no se debe navegar ni afirmar éxito
+        // hasta que el backend permita releer el documento correcto.
+        setError("El guardado puede haberse realizado, pero no se pudo comprobar al recargar. Conservamos el borrador; reintenta antes de continuar.");
+        return false;
+      }
+      setEditor(editorFromDocument(confirmed!.document));
+      setDesignationOpen(false);
+      setDesignationReason("");
+      setDesignationReviewed(false);
       setNotice("Metadatos guardados.");
+      return true;
     } catch (caught) {
       setAuthRecovery(authRecoveryFromError(caught));
       setError(friendlyError(caught));
+      return false;
+    } finally {
+      setBusy(null);
     }
-    finally { setBusy(null); }
+  }
+
+  async function saveMetadata(event: FormEvent) {
+    event.preventDefault();
+    await persistMetadata();
+  }
+
+  async function saveAndContinue() {
+    if (!pendingExit) return;
+    const target = pendingExit;
+    if (await persistMetadata()) continueDocumentExit(target);
+  }
+
+  function discardAndContinue() {
+    if (!pendingExit) return;
+    if (detail) setEditor(editorFromDocument(detail.document));
+    continueDocumentExit(pendingExit);
   }
 
   async function changeStatus(status: DocumentStatus) {
@@ -437,10 +679,44 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "status", id: detail.document.id, status }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed || confirmed.document.status !== status) throw new Error("document_revalidation_incomplete");
       setNotice(`Estado cambiado a ${STATUS_LABELS[status].toLowerCase()}.`);
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
+  }
+
+  async function changeTestDesignation(event: FormEvent) {
+    event.preventDefault();
+    if (!detail || busy || metadataDirty || !designationReviewed || !designationReason.trim()) return;
+    const id = detail.document.id;
+    const isTest = detail.document.isTest !== true;
+    setBusy("test-designation");
+    setError(null);
+    setAuthRecovery(null);
+    try {
+      const saved = await readJson(await fetch("/api/documents", {
+        method: "PATCH", headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action: "test_designation", id, isTest, ownerReviewed: true, reason: designationReason.trim() }),
+      })) as DocumentDetail;
+      if (saved.contractVersion !== 3 || saved.document?.id !== id || saved.document.isTest !== isTest) {
+        throw new Error("document_test_designation_incomplete");
+      }
+      setDetail(saved);
+      setScope(isTest ? "tests" : "ordinary");
+      setOffset(0);
+      setDesignationOpen(false);
+      setDesignationReason("");
+      setDesignationReviewed(false);
+      const next = new URL(listUrl, window.location.origin);
+      next.searchParams.set("scope", isTest ? "tests" : "ordinary");
+      next.searchParams.set("offset", "0");
+      await loadList(next.toString(), true);
+      setNotice(isTest ? "Documento designado como Prueba. Puedes encontrarlo en Pruebas y revertir el cambio." : "Documento devuelto a la vista ordinaria y a sus avisos correspondientes.");
+    } catch (caught) {
+      setAuthRecovery(authRecoveryFromError(caught));
+      setError(friendlyError(caught));
+    } finally { setBusy(null); }
   }
 
   async function openDocument() {
@@ -476,7 +752,10 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "associate", documentId: detail.document.id, transactionId, method }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed?.associations?.some((association) => association.transactionId === transactionId)) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setCandidates(null);
       setTransactions(null);
       setNotice(method === "suggested" ? "Sugerencia confirmada explícitamente." : "Movimiento asociado manualmente.");
@@ -493,7 +772,10 @@ export function DocumentsClient() {
         method: "PATCH", headers: { "content-type": "application/json" },
         body: JSON.stringify({ action: "unassociate", documentId: detail.document.id, transactionId }),
       }));
-      await refreshAfterMutation(detail.document.id);
+      const confirmed = await refreshAfterMutation(detail.document.id, true);
+      if (!confirmed || confirmed.associations?.some((association) => association.transactionId === transactionId)) {
+        throw new Error("document_revalidation_incomplete");
+      }
       setNotice("Asociación eliminada. El movimiento bancario no se ha modificado.");
     } catch (caught) { setError(friendlyError(caught)); }
     finally { setBusy(null); }
@@ -515,6 +797,10 @@ export function DocumentsClient() {
     finally { setBusy(null); }
   }
 
+  // Los resultados solo se muestran bajo los filtros exactos que los produjeron.
+  const currentList = query === debouncedQuery && loadedListKey === listUrl ? list : null;
+  const listPending = query !== debouncedQuery || loadingList || (!currentList && !listLoadFailed);
+
   const onFile = (event: ChangeEvent<HTMLInputElement>) => {
     const next = event.target.files?.[0] ?? null;
     setFile(next);
@@ -524,6 +810,52 @@ export function DocumentsClient() {
 
   return (
     <main className={styles.shell}>
+      {pendingExit ? (
+        <div className={styles.unsavedBackdrop}>
+          <section
+            className={styles.unsavedDialog}
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="document-unsaved-heading"
+            aria-describedby="document-unsaved-detail"
+            onKeyDown={(event) => {
+              if (event.key === "Escape" && busy !== "metadata") {
+                event.preventDefault();
+                setPendingExit(null);
+                exitReturnFocusRef.current?.focus();
+              }
+              if (event.key !== "Tab") return;
+              const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+              const first = buttons[0];
+              const last = buttons[buttons.length - 1];
+              if (!first || !last) { event.preventDefault(); return; }
+              if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+              else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+            }}
+          >
+            <h2 id="document-unsaved-heading">Cambios sin guardar</h2>
+            <p id="document-unsaved-detail">
+              Hay cambios de metadatos sin guardar. Puedes guardarlos antes de continuar,
+              seguir editando sin perder el borrador o descartarlos.
+            </p>
+            {error ? <p className={styles.unsavedError} role="alert">{error}</p> : null}
+            <div className={styles.unsavedActions}>
+              <button type="button" className={styles.secondaryButton} autoFocus
+                onClick={() => { setPendingExit(null); exitReturnFocusRef.current?.focus(); }} disabled={busy === "metadata"}>
+                Seguir editando
+              </button>
+              <button type="button" className={styles.primaryButton}
+                onClick={() => void saveAndContinue()} disabled={busy === "metadata"}>
+                {busy === "metadata" ? "Guardando…" : "Guardar y continuar"}
+              </button>
+              <button type="button" className={styles.dangerButton}
+                onClick={discardAndContinue} disabled={busy === "metadata"}>
+                Descartar cambios
+              </button>
+            </div>
+          </section>
+        </div>
+      ) : null}
       <section className={styles.hero}>
         <div>
           <Link prefetch={false} href="/" className={styles.backLink}>← Inicio</Link>
@@ -569,21 +901,33 @@ export function DocumentsClient() {
         <section className={styles.workspace}>
           <aside className={styles.listPanel} aria-label="Listado de documentos">
             <div className={styles.listHeader}>
-              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{list?.total ?? 0} documentos</h2></div>
-              <button className={styles.iconButton} onClick={() => void loadList()} disabled={loadingList} aria-label="Actualizar documentos">↻</button>
+              <div><p className={styles.sectionEyebrow}>ARCHIVO DOCUMENTAL</p><h2>{currentList ? `${currentList.total} documentos` : "Documentos"}</h2></div>
+              <button className={styles.iconButton} onClick={() => void loadList()} disabled={listPending} aria-label="Actualizar documentos">↻</button>
             </div>
             <div className={styles.filters}>
-              <label>Buscar<input value={query} maxLength={200} onChange={(event) => setQuery(event.target.value)} placeholder="Nombre, emisor o notas" /></label>
-              <label>Estado<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+              <label>Vista documental<select value={scope} onChange={(event) => { setScope(event.target.value as DocumentScope); setOffset(0); }} disabled={busy !== null}>
+                <option value="ordinary">Documentos ordinarios</option><option value="tests">Pruebas</option><option value="all">Todos, incluidas pruebas</option>
+              </select></label>
+              <label>Buscar<input value={query} maxLength={200} onChange={(event) => { setQuery(event.target.value); setOffset(0); }} placeholder="Nombre, emisor o notas" /></label>
+              <label><span>Asociación</span><select value={unassociatedOnly ? "unassociated" : "all"} onChange={(event) => { setUnassociatedOnly(event.target.value === "unassociated"); setOffset(0); }}>
+                <option value="all">Todos</option><option value="unassociated">Sin asociar</option>
+              </select></label>
+              <label>Estado<select value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value); setOffset(0); }}>
                 <option value="">Todos</option><option value="imported">Importados</option><option value="pending_review">Pendientes</option><option value="confirmed">Confirmados</option><option value="archived">Archivados</option>
               </select></label>
             </div>
-            {loadingList ? <div className={styles.loading}>Cargando documentos…</div> : list?.items.length ? (
+            {listPending ? <div className={styles.loading} role="status">Cargando documentos…</div> : listLoadFailed ? (
+              <div className={styles.empty} role="status" data-testid="documents-list-error">
+                <strong>No se ha podido cargar la lista</strong>
+                <p>Estos filtros aún no se han comprobado. Los documentos no se han modificado.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => void loadList()} disabled={loadingList}>Reintentar lista</button>
+              </div>
+            ) : currentList?.items.length ? (
               <div className={styles.documentList}>
-                {list.items.map((item) => (
+                {currentList.items.map((item) => (
                   <button key={item.id} className={`${styles.documentRow} ${selectedId === item.id ? styles.selected : ""}`} onClick={() => selectDocument(item.id)}>
                     <span className={styles.fileIcon}>{item.mimeType === "application/pdf" ? "PDF" : "IMG"}</span>
-                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small></span>
+                    <span className={styles.rowMain}><strong>{item.originalFileName}</strong><small>{TYPE_LABELS[item.type]} · {formatDate(item.documentDate)} · {item.totalCents === null ? "Sin importe" : formatMoneyCents(item.totalCents)}</small>{item.isTest === true ? <small className={styles.syntheticNoteLabel}>Prueba · designación revisada</small> : hasExplicitSyntheticDocumentNote(item.notes) ? <small className={styles.syntheticNoteLabel}>Declarado como fixture en notas · sin validar</small> : null}</span>
                     <span className={styles.rowSide}><StatusBadge status={item.status} /><small>{item.associationCount} {item.associationCount === 1 ? "asociación" : "asociaciones"}</small></span>
                   </button>
                 ))}
@@ -598,10 +942,20 @@ export function DocumentsClient() {
                   onClick={() => {
                     setQuery("");
                     setStatusFilter("");
+                    setUnassociatedOnly(false);
+                    setScope("ordinary");
+                    setOffset(0);
+                    window.history.replaceState(window.history.state, "", "/documents");
                   }}
                 >
                   Limpiar filtros
                 </button>
+              </div>
+            ) : currentList?.testCount ? (
+              <div className={styles.empty}>
+                <strong>No hay documentos ordinarios</strong>
+                <p>Los documentos designados como Prueba siguen disponibles en su vista.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => { setScope("tests"); setOffset(0); }}>Ver pruebas</button>
               </div>
             ) : (
               <div className={styles.empty} data-testid="documents-repository-empty">
@@ -609,10 +963,25 @@ export function DocumentsClient() {
                 <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
               </div>
             )}
+            {!listLoadFailed && currentList?.contractVersion === 3 && currentList.total > 0 ? (
+              <nav className={styles.pagination} aria-label="Paginación documental">
+                <span aria-live="polite">Mostrando {currentList.offset + 1}–{Math.min(currentList.offset + currentList.items.length, currentList.total)} de {currentList.total}</span>
+                <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset === 0}
+                  onClick={() => setOffset(Math.max(0, currentList.offset - currentList.limit))}>Página anterior</button>
+                <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset + currentList.items.length >= currentList.total}
+                  onClick={() => setOffset(currentList.offset + currentList.limit)}>Página siguiente</button>
+              </nav>
+            ) : null}
           </aside>
 
           <section className={styles.detailPanel} aria-live="polite">
-            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || !detail ? <div className={styles.loading}>Cargando detalle…</div> : (
+            {!selectedId ? <div className={styles.emptyDetail}><span>▤</span><h2>Selecciona un documento</h2><p>Aquí podrás revisar OCR, editar datos y asociarlo a movimientos reales.</p></div> : loadingDetail || (!detailLoadFailed && (!detail || detail.document.id !== selectedId)) ? <div className={styles.loading} role="status">Cargando detalle…</div> : !detail || detail.document.id !== selectedId ? (
+              <div className={styles.emptyDetail} role="status" data-testid="documents-detail-error">
+                <h2>El detalle no está disponible</h2>
+                <p>Los datos de otro documento no se muestran en esta selección.</p>
+                <button type="button" className={styles.secondaryButton} onClick={() => void loadDetail(selectedId)}>Reintentar detalle</button>
+              </div>
+            ) : (
               <>
                 <header className={styles.detailHeader}>
                   <div><p className={styles.sectionEyebrow}>{TYPE_LABELS[detail.document.type].toUpperCase()}</p><h2>{detail.document.originalFileName}</h2><p>{formatBytes(detail.document.sizeBytes)} · {detail.document.storageProvider === "supabase" ? "Storage privado" : "Google Drive"}</p></div>
@@ -622,16 +991,48 @@ export function DocumentsClient() {
                     <a className={styles.secondaryButton} href={`/api/documents/download?id=${encodeURIComponent(detail.document.id)}`} download={detail.document.originalFileName}>Descargar original</a>
                   </div>
                 </header>
+                {detail.document.isTest === true ? (
+                  <p className={styles.syntheticNoteNotice} role="note" data-testid="document-test-designation">
+                    <strong>Prueba · designación revisada.</strong> Excluido de Alertas y Para revisar ordinarios.
+                    {detail.document.testDesignationUpdatedAt ? ` Revisado el ${formatDate(detail.document.testDesignationUpdatedAt)}.` : ""}
+                    {detail.document.testDesignationReason ? ` Motivo: ${detail.document.testDesignationReason}` : ""}
+                  </p>
+                ) : hasExplicitSyntheticDocumentNote(detail.document.notes) ? (
+                  <p className={styles.syntheticNoteNotice} role="note" data-testid="document-synthetic-note">
+                    Las notas guardadas describen este archivo como un fixture sintético. Comprueba su origen antes de asociarlo o analizarlo: no está designado formalmente como Prueba y sigue incluido en los avisos ordinarios. No se ha cambiado el documento ni su archivo de Drive.
+                  </p>
+                ) : null}
+
+                {detail.principles?.testDesignationSupported ? (
+                  <details className={styles.designationPanel} open={designationOpen} onToggle={(event) => setDesignationOpen(event.currentTarget.open)}>
+                    <summary>Cambiar tratamiento documental</summary>
+                    <p>{detail.document.isTest ? "Devolver este documento a la vista ordinaria restaura sus avisos cuando correspondan." : "Designar como Prueba lo separa de los avisos ordinarios y lo conserva en la vista Pruebas."} El original, los metadatos y las asociaciones se conservan.</p>
+                    {!detail.principles.testDesignationEditable ? <p>El propietario del espacio debe revisar y confirmar este cambio.</p> : (
+                      <form onSubmit={changeTestDesignation}>
+                        {metadataDirty ? <p>Guarda o descarta los metadatos pendientes antes de cambiar el tratamiento.</p> : null}
+                        <label>Motivo de la revisión<textarea value={designationReason} maxLength={500} required rows={2} onChange={(event) => setDesignationReason(event.target.value)} disabled={busy !== null || metadataDirty} /></label>
+                        <label className={styles.reviewConfirmation}><input type="checkbox" checked={designationReviewed} onChange={(event) => setDesignationReviewed(event.target.checked)} disabled={busy !== null || metadataDirty} />He revisado este documento y su procedencia como propietario.</label>
+                        <button className={styles.secondaryButton} type="submit" disabled={busy !== null || metadataDirty || !designationReviewed || !designationReason.trim()}>{busy === "test-designation" ? "Guardando tratamiento…" : detail.document.isTest ? "Devolver a documentos ordinarios" : "Designar como Prueba"}</button>
+                        <button className={styles.secondaryButton} type="button" disabled={busy !== null} onClick={() => { setDesignationOpen(false); setDesignationReason(""); setDesignationReviewed(false); }}>Cancelar cambio</button>
+                      </form>
+                    )}
+                  </details>
+                ) : null}
 
                 <form className={styles.editor} onSubmit={saveMetadata}>
+                  {metadataDirty ? (
+                    <div className={styles.notice} role="status" data-testid="document-metadata-dirty">
+                      Cambios de metadatos sin guardar. Guárdalos antes de cambiar de documento o salir.
+                    </div>
+                  ) : null}
                   <div className={styles.formGrid}>
-                    <label>Tipo<select value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
-                    <label>Fecha<input type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
-                    <label>Emisor<input value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
-                    <label>Importe (€)<input inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
+                    <label>Tipo<select disabled={busy !== null} value={editor.type} onChange={(event) => setEditor((value) => ({ ...value, type: event.target.value as DocumentType }))}><option value="invoice">Factura</option><option value="ticket">Ticket</option><option value="other">Otro</option></select></label>
+                    <label>Fecha<input disabled={busy !== null} type="date" value={editor.documentDate} onChange={(event) => setEditor((value) => ({ ...value, documentDate: event.target.value }))} /></label>
+                    <label>Emisor<input disabled={busy !== null} value={editor.issuerName} maxLength={300} onChange={(event) => setEditor((value) => ({ ...value, issuerName: event.target.value }))} placeholder="Empresa o comercio" /></label>
+                    <label>Importe (€)<input disabled={busy !== null} inputMode="decimal" value={editor.total} onChange={(event) => setEditor((value) => ({ ...value, total: event.target.value }))} placeholder="0,00" /></label>
                   </div>
-                  <label>Notas<textarea value={editor.notes} maxLength={2000} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
-                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy === "metadata"}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
+                  <label>Notas<textarea disabled={busy !== null} value={editor.notes} maxLength={2000} onChange={(event) => setEditor((value) => ({ ...value, notes: event.target.value }))} rows={3} placeholder="Información útil revisada por ti" /></label>
+                  <div className={styles.formActions}><button className={styles.primaryButton} type="submit" disabled={busy !== null || !metadataDirty}>{busy === "metadata" ? "Guardando…" : "Guardar metadatos"}</button></div>
                 </form>
 
                 <OcrReviewBoundary key={detail.document.id}>

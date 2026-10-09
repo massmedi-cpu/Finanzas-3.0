@@ -78,7 +78,7 @@ test("Reglas mantiene una UX responsive y controles accesibles", async ({ page }
   }
   await expect(page.getByText("FINANCIAL APP · REGLAS", { exact: true })).toBeVisible();
   await expect(page.getByText("Supermercado mensual", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Menor número = mayor prioridad/)).toBeVisible();
+  await expect(page.getByText(/El número más bajo se aplica primero/)).toBeVisible();
   await expect(page.getByText(/fuente bancaria sigue siendo de solo lectura/i)).toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
@@ -118,9 +118,100 @@ test("Reglas expone aplicación explícita y explicación auditable", async ({ p
   await expect(page.locator('[data-action-id="rules:apply-all"]')).toContainText("3172 movimientos evaluados");
   await expect(page.getByText("48", { exact: true })).toBeVisible();
 
+  await page.getByText("Introducir identificador manualmente").click();
   await page.getByLabel("ID del movimiento").fill("60000000-0000-4000-8000-000000000001");
-  await page.getByRole("button", { name: "Explicar decisión" }).click();
+  await page.getByRole("button", { name: /Explicar decisión/ }).click();
   const explanation = page.locator("pre");
   await expect(explanation).toContainText('"selectedRuleName": "Supermercado mensual"');
   await expect(explanation).toContainText('"selectedRulePriority": 20');
+});
+
+test("AUD-E2E-REG-001 · el simulador ofrece movimientos legibles y nunca ejecuta escritura bancaria", async ({ page }) => {
+  const reads: string[] = [];
+  await mockRuleApi(page);
+  await page.route(/\/api\/transactions(?:\?.*)?$/, async (route) => {
+    reads.push(route.request().method());
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        rows: [{
+          id: "60000000-0000-4000-8000-000000000001",
+          bankDate: "2026-09-15",
+          amountCents: -2850,
+          merchant: { effectiveName: "Mercadona" },
+          account: { name: "Cuenta principal" },
+          concept: { effective: "Compra Mercadona" },
+        }],
+        totalCount: 1,
+      }),
+    });
+  });
+  await page.goto("/configuration/rules");
+  await page.getByLabel("Buscar movimiento").fill("Mercadona");
+  await page.getByRole("button", { name: "Buscar movimientos" }).click();
+  const select = page.getByLabel("Movimiento para simular");
+  await expect(select).toContainText("15");
+  await expect(select).toContainText("Mercadona");
+  await expect(select).toContainText("Cuenta principal");
+  await expect(select).toContainText("28,50");
+  await select.selectOption("60000000-0000-4000-8000-000000000001");
+  await page.getByRole("button", { name: /Explicar decisión/ }).click();
+  await expect(page.getByLabel("Resultado de la simulación")).toContainText("Supermercado mensual");
+  expect(reads).toEqual(["GET"]);
+});
+
+test("AUD-E2E-REG-001 · sin reglas no se anuncia una búsqueda fallida", async ({ page }) => {
+  await mockRuleApi(page);
+  await page.route("**/api/rules", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ rules: [], accounts: [], categories: [], merchants: [] }),
+    });
+  });
+  await page.goto("/configuration/rules");
+  await expect(page.getByText("Todavía no hay reglas.")).toBeVisible();
+  await expect(page.getByText("No hay reglas que coincidan con la búsqueda.")).toHaveCount(0);
+  await page.getByRole("button", { name: "Crear la primera regla" }).click();
+  await expect(page.getByRole("heading", { name: "Nueva regla" })).toBeVisible();
+});
+
+
+test("AUD-E2E-REG-001 · cambiar la búsqueda impide simular el movimiento antiguo", async ({ page }) => {
+  const evaluations: string[] = [];
+  await mockRuleApi(page);
+  await page.route(/\/api\/transactions(?:\?.*)?$/, async (route) => {
+    const term = new URL(route.request().url()).searchParams.get("q");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        rows: term === "Mercadona" ? [{
+          id: "60000000-0000-4000-8000-000000000001",
+          bankDate: "2026-09-15",
+          amountCents: -2850,
+          merchant: { effectiveName: "Mercadona" },
+          account: { name: "Cuenta principal" },
+        }] : [],
+        totalCount: term === "Mercadona" ? 1 : 0,
+      }),
+    });
+  });
+  await page.route("**/api/rules", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.operation === "rule.evaluate") evaluations.push(body.transactionId);
+    await route.fallback();
+  });
+  await page.goto("/configuration/rules");
+  await page.getByLabel("Buscar movimiento").fill("Mercadona");
+  await page.getByRole("button", { name: "Buscar movimientos" }).click();
+  const selected = page.getByLabel("Movimiento para simular");
+  await expect(selected).toContainText("Mercadona");
+  await selected.selectOption("60000000-0000-4000-8000-000000000001");
+  await expect(page.getByRole("button", { name: /Explicar decisión/ })).toBeEnabled();
+  await page.getByLabel("Buscar movimiento").fill("Gasolinera");
+  await expect(page.getByRole("button", { name: /Explicar decisión/ })).toBeDisabled();
+  await expect(page.getByLabel("Movimiento para simular")).toHaveCount(0);
+  expect(evaluations).toEqual([]);
 });

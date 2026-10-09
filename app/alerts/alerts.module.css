@@ -295,3 +295,48 @@
     transition: none;
   }
 }
+
+
+/* AUD-E2E-UI-001 · Paneles de alertas en claro sin texto tenue sobre fondo oscuro. */
+:global(html[data-theme="light"]) .summaryCard,
+:global(html[data-theme="light"]) .alertCard,
+:global(html[data-theme="light"]) .guardrail,
+:global(html[data-theme="light"]) .emptyState {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .lead,
+:global(html[data-theme="light"]) .eyebrow,
+:global(html[data-theme="light"]) .alertMeta,
+:global(html[data-theme="light"]) .summaryCard small,
+:global(html[data-theme="light"]) .guardrail p,
+:global(html[data-theme="light"]) .emptyState p {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .refreshButton,
+:global(html[data-theme="light"]) .alertAction {
+  border-color: var(--border-primary-soft);
+  background: var(--surface-primary-subtle);
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .partialNotice {
+  background: var(--surface-warning-soft);
+  border-color: var(--border-warning-soft);
+  color: var(--color-warning);
+}
+:global(html[data-theme="light"]) .error {
+  background: var(--surface-warning-soft);
+  color: var(--color-danger);
+}
+:global(html[data-theme="light"]) .shell :is(a,button):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* AUD-E2E-REG-001 · prioridad comprensible, número técnico opcional. */
+.priorityDetail { min-width: 0; color: var(--color-text-secondary); font-size: var(--font-helper); }
+.priorityDetail summary { cursor: pointer; min-height: 2rem; display: inline-flex; align-items: center; font-weight: 650; }
+.priorityDetail[open] > span { display: block; max-width: 21rem; padding: 0.25rem 0; line-height: 1.5; }
+.priorityDetail summary:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 2px; }

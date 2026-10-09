@@ -506,6 +506,13 @@ export function ForecastClient({
   }
 
   const items = snapshot?.items ?? EMPTY_FORECAST_ITEMS;
+  const hasProjectedEvents = items.some((item) => item.affectsProjection);
+  const sourceBalanceDates = Array.from(new Set((snapshot?.balanceContext.accounts ?? [])
+    .map((account) => account.explicitBalanceDate)
+    .filter((date): date is string => Boolean(date)))).sort();
+  const bankBalanceDatesLabel = sourceBalanceDates.length
+    ? sourceBalanceDates.length === 1 ? formatDate(sourceBalanceDates[0]) : `${formatDate(sourceBalanceDates[0])} – ${formatDate(sourceBalanceDates[sourceBalanceDates.length - 1])}`
+    : "sin fecha bancaria explícita en las cuentas incluidas";
   const recurrenceImpact = useMemo(() => {
     if (!handoffRecurrenceId) return null;
     const matchingItems = items.filter(
@@ -655,6 +662,7 @@ export function ForecastClient({
         <section className={styles.loading} aria-live="polite">Cargando previsión financiera…</section>
       ) : snapshot ? (
         <>
+          {hasProjectedEvents ? (
           <section className={styles.kpis} aria-label="Resumen de previsión">
             <article><span>Saldo de partida</span><strong>{formatMoneyCents(snapshot.summary.openingBalanceCents)}</strong></article>
             <article><span>Ingresos previstos</span><strong>{formatMoneyCents(snapshot.summary.projectedIncomeCents)}</strong></article>
@@ -664,9 +672,22 @@ export function ForecastClient({
               <small>Neto {formatMoneyCents(snapshot.summary.projectedNetCents)}</small>
             </article>
           </section>
+          ) : null}
 
-          <ForecastScenarios snapshot={snapshot} />
-          <ForecastBalanceChart snapshot={snapshot} />
+          {hasProjectedEvents ? <ForecastScenarios snapshot={snapshot} /> : null}
+          {hasProjectedEvents ? <ForecastBalanceChart snapshot={snapshot} /> : null}
+          {!hasProjectedEvents ? (
+            <section className={styles.empty} aria-label="Evaluación de liquidez pendiente" role="status">
+              <h2>Sin datos suficientes para evaluar tensión</h2>
+              <p>Inicio de la proyección: {formatDate(snapshot.period.dateFrom)}. No equivale a la fecha de los saldos bancarios.</p>
+              <p>Saldo de partida calculado: <strong>{formatMoneyCents(snapshot.summary.openingBalanceCents)}</strong>. Saldos bancarios conocidos: {bankBalanceDatesLabel}.</p>
+              <p>Sin cobros ni pagos previstos con impacto confirmado, no podemos afirmar que el saldo estará a salvo en el horizonte.</p>
+              <div className={styles.emptyActions}>
+                <Link prefetch={false} href={recurrencesHref} className={styles.secondaryButton}>Revisar recurrentes</Link>
+                <a href="#forecast-manual-concept" className={styles.primaryButton}>Añadir previsión manual</a>
+              </div>
+            </section>
+          ) : null}
           <ForecastCalendar dateFrom={snapshot.period.dateFrom} dateTo={snapshot.period.dateTo} items={items} />
 
           <section className={styles.mainGrid}>
@@ -686,11 +707,7 @@ export function ForecastClient({
               {items.length === 0 ? (
                 <div className={styles.empty}>
                   <strong>No hay cargos ni ingresos previstos en este periodo.</strong>
-                  <p>No se inventan movimientos. Añade uno manual o confirma recurrencias reales para generar fechas futuras.</p>
-                  <div className={styles.emptyActions}>
-                    <Link prefetch={false} href={recurrencesHref} className={styles.secondaryButton}>Revisar recurrentes</Link>
-                    <a href="#forecast-manual-concept" className={styles.primaryButton}>Añadir previsión manual</a>
-                  </div>
+                  <p>No se inventan movimientos ni se confirma ninguna recurrencia automáticamente. Usa el bloque de evaluación pendiente para incorporar fechas reales.</p>
                 </div>
               ) : (
                 <div className={styles.timeline}>

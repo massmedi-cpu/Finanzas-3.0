@@ -33,6 +33,7 @@ test("E1 · los deep-links de revisión aplican realmente el filtro propietario 
   await mockTransactions(page, seen);
 
   await page.goto("/transactions?reviewState=needs_review");
+  await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Revisión" })).toHaveValue("needs_review");
   await expect.poll(() => seen.some((url) => url.searchParams.get("reviewState") === "needs_review")).toBe(true);
 
@@ -94,6 +95,55 @@ test("10.0.21 · filtros sobreviven recarga, atrás y navegación rápida", asyn
   await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('supermercado');
   await page.getByRole('navigation', { name: 'Filtros rápidos de movimientos' }).getByRole('link', { name: 'Gastos', exact: true }).click();
   await expect(page.getByRole('combobox', { name: 'Tipo', exact: true })).toHaveValue('expense');
-  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Buscar', { exact: true })).toHaveValue('supermercado');
   await expect.poll(() => seen.at(-1)?.searchParams.get('kind')).toBe('expense');
+  await expect.poll(() => seen.at(-1)?.searchParams.get('q')).toBe('supermercado');
+});
+
+test("AUD-E2E-NAV-001 · Gastos conserva fecha, comercio y búsqueda hasta limpiar explícitamente", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto("/transactions?dateFrom=2026-09-25&dateTo=2026-09-25&merchantId=" + MERCHANT_ID + "&q=Mercadona");
+  const nav = page.getByRole("navigation", { name: "Filtros rápidos de movimientos" });
+  const gastos = nav.getByRole("link", { name: "Gastos", exact: true });
+  await gastos.click();
+  await expect.poll(() => {
+    const params = new URL(page.url()).searchParams;
+    return ["dateFrom", "dateTo", "merchantId", "q", "kind"].map((k) => params.get(k));
+  }).toEqual(["2026-09-25", "2026-09-25", MERCHANT_ID, "Mercadona", "expense"]);
+  await expect(nav.getByRole("link", { name: "Gastos", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect.poll(() => seen.some((url) => url.searchParams.get("merchantId") === MERCHANT_ID && url.searchParams.get("kind") === "expense")).toBe(true);
+  await nav.getByRole("link", { name: "Todos", exact: true }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+});
+
+
+test("AUD-E2E-MOV-001 · Más filtros no cambia la consulta ni pierde borradores", async ({ page }) => {
+  const seen: URL[] = [];
+  await mockTransactions(page, seen);
+  await page.goto("/transactions?dateFrom=2026-09-01&dateTo=2026-09-30&kind=expense");
+  await expect(page.getByLabel("Buscar", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Desde", { exact: true })).toHaveValue("2026-09-01");
+  await expect(page.getByRole("combobox", { name: "Tipo" })).toHaveValue("expense");
+  const more = page.getByRole("button", { name: "Más filtros" });
+  await expect(more).toHaveAttribute("aria-expanded", "false");
+  const queryCount = seen.length;
+  await more.click();
+  await expect(page.getByLabel("Comercio")).toBeVisible();
+  await page.getByLabel("Comercio").selectOption(MERCHANT_ID);
+  await expect(page.getByRole("button", { name: /Ocultar filtros avanzados/ })).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("button", { name: /Ocultar filtros avanzados/ }).click();
+  // Comercio es un filtro principal y permanece visible; lo que se pliega
+  // es el panel avanzado, sin descartar los borradores.
+  await expect(page.locator("#movement-advanced-filters")).toBeHidden();
+  await expect(page.getByLabel("Comercio")).toBeVisible();
+  expect(seen.length).toBe(queryCount);
+  await page.getByRole("button", { name: /Más filtros/ }).click();
+  await expect(page.getByLabel("Comercio")).toHaveValue(MERCHANT_ID);
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect.poll(() => seen.some((url) =>
+    url.searchParams.get("merchantId") === MERCHANT_ID
+    && url.searchParams.get("dateFrom") === "2026-09-01"
+    && url.searchParams.get("kind") === "expense"
+  )).toBe(true);
 });

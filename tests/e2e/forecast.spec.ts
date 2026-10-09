@@ -331,7 +331,13 @@ test("una previsión vacía guía a recurrentes o al formulario manual", async (
   }));
   await page.goto("/forecast");
 
-  const empty = page.getByText("No hay cargos ni ingresos previstos en este periodo.").locator("..");
+  const empty = page.getByRole("status", { name: "Evaluación de liquidez pendiente" });
+  await expect(empty.getByText("Sin datos suficientes para evaluar tensión")).toBeVisible();
+  await expect(empty).toContainText("Inicio de la proyección");
+  await expect(empty).toContainText("Saldos bancarios conocidos");
+  await expect(page.getByLabel("Curva de saldo prevista")).toHaveCount(0);
+  await expect(page.getByTestId("forecast-scenarios")).toHaveCount(0);
+  await expect(page.getByRole("heading", { name: "Tu dinero en cuatro horizontes" })).toHaveCount(0);
   await expect(empty.getByRole("link", { name: "Revisar recurrentes" })).toHaveAttribute("href", /\/recurrences/);
   await empty.getByRole("link", { name: "Añadir previsión manual" }).click();
   await expect(page.locator("#forecast-manual-concept")).toBeInViewport();

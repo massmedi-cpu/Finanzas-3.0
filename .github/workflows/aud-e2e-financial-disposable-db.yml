@@ -1,0 +1,65 @@
+name: AUD E2E Financial Disposable DB
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/aud_e2e_budget_balance.sql'
+      - 'supabase/tests/aud_e2e_document_designation.sql'
+      - 'scripts/aud-e2e-financial-disposable-db.sh'
+      - 'scripts/aud-e2e-disposable-backup-restore.sh'
+      - 'scripts/create-financial-backup-v2.mjs'
+      - 'scripts/validate-financial-backup-v2.mjs'
+      - 'scripts/restore-verify-production-backup-v2.sh'
+      - 'scripts/pre001-disposable-db-smoke.sh'
+      - '.github/workflows/aud-e2e-financial-disposable-db.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aud-financial-db-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  budget-balance-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact candidate SHA
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Install PostgreSQL 17 dump and restore clients
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes curl ca-certificates gnupg
+          sudo install -d /usr/share/postgresql-common/pgdg
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor --yes -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
+          . /etc/os-release
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client-17
+          echo "/usr/lib/postgresql/17/bin" >> "$GITHUB_PATH"
+          /usr/lib/postgresql/17/bin/pg_dump --version
+      - name: Apply candidate migrations and verify synthetic financial data
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/aud-e2e-financial-disposable-db.sh

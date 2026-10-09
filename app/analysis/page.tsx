@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadAnalysisSnapshot,
   resolveAnalysisSelection,
@@ -11,9 +10,7 @@ import {
   analysisSelectionFromSearchParams,
   type AnalysisSearchParams,
 } from "../../src/application/analysis/analysis-query-state";
-import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
-import AnalysisAxioma53Controls from "./analysis-axioma53-controls";
 import shellStyles from "./analysis-axioma53-shell.module.css";
 import AnalysisLoadingFrame from "./analysis-loading-frame";
 import AnalysisPageClient from "./analysis-page-client";
@@ -68,22 +65,14 @@ async function AnalysisData({
     });
   }
 
-  const resolvedSelection = initialSnapshot?.selection ?? resolveAnalysisSelection(fallbackSelection);
-  const contextLinks = analysisModuleLinks(
-    resolvedSelection,
-    initialSnapshot?.forecast?.period ?? null,
-  );
-
   return (
     <>
-      <ModuleContextNavigation links={contextLinks} ariaLabel="Continuar desde Análisis" />
       <div className={shellStyles.enhanced}>
         <AnalysisPageClient
           initialSnapshot={initialSnapshot}
           fallbackSelection={fallbackSelection}
         />
       </div>
-      <AnalysisAxioma53Controls snapshot={initialSnapshot} requested={fallbackSelection} />
     </>
   );
 }

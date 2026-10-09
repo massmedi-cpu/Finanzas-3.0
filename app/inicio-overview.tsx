@@ -5,6 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import {
+  periodComparisonIsReliable,
+  periodHasObservedData,
+  resolvePeriodCoverage,
+} from "../src/application/data-coverage";
+import {
   hasSourceSyncIncidents,
   normalizeSourceSyncIncidents,
 } from "../src/application/source-sync-incidents";
@@ -499,6 +504,19 @@ export default function InicioOverview() {
   const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;
   const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;
   const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
+  const currentPeriodCoverage = resolvePeriodCoverage({
+    dateFrom: currentMonthStart,
+    dateTo: today,
+    latestMovementDate: latestDataDate,
+  });
+  const currentPeriodObserved = periodHasObservedData(currentPeriodCoverage);
+  const currentCoverageLabel = currentPeriodCoverage.state === "covered"
+    ? `Cobertura bancaria observada hasta ${formatDate(currentPeriodCoverage.throughDate)}`
+    : currentPeriodCoverage.state === "partial"
+      ? `Importes parciales · cobertura observada hasta ${formatDate(currentPeriodCoverage.throughDate)}`
+      : currentPeriodCoverage.state === "none"
+        ? `Sin cobertura bancaria confirmada este mes · último movimiento ${formatDate(currentPeriodCoverage.latestMovementDate)}`
+        : "Cobertura bancaria pendiente de confirmar";
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
@@ -539,7 +557,12 @@ export default function InicioOverview() {
       operatingNetCents: homeAnalysis.netComparison.currentNetCents,
     },
     delta: homeAnalysis.netComparison.deltaCents,
-  } : null, [homeAnalysis]);
+    coverage: resolvePeriodCoverage({
+      dateFrom: homeAnalysis.period.dateFrom,
+      dateTo: homeAnalysis.period.dateTo,
+      latestMovementDate: latestDataDate,
+    }),
+  } : null, [homeAnalysis, latestDataDate]);
   const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
 
   const topBudgetCategories = useMemo(() => {
@@ -734,23 +757,25 @@ export default function InicioOverview() {
         <article className={styles.decisionCard}>
           <span>Este mes</span>
           <strong
-            className={financial ? financialSignClass(financial.period.operatingNetCents) : undefined}
-            data-financial-sign={financial ? financialSign(financial.period.operatingNetCents) : undefined}
+            className={financial && currentPeriodObserved ? financialSignClass(financial.period.operatingNetCents) : undefined}
+            data-financial-sign={financial && currentPeriodObserved ? financialSign(financial.period.operatingNetCents) : undefined}
           >
-            {financial ? displayMoney(financial.period.operatingNetCents) : "—"}
+            {financial && currentPeriodObserved ? displayMoney(financial.period.operatingNetCents) : "—"}
           </strong>
           <small>
-            {financial
+            {financial && currentPeriodObserved
               ? `Ingresos ${displayMoney(financial.period.incomeCents)} · gastos ${displayMoney(financial.period.expenseCents)}`
-              : "Balance pendiente"}
+              : financial ? currentCoverageLabel : "Balance pendiente"}
           </small>
-          {financial && (
+          {financial && currentPeriodObserved && (
             <small>
-              {!revealAmounts
-                ? "Ahorro oculto por privacidad"
-                : hasSavingsBase && financial.period.savingsRateBps !== null
-                  ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
-                  : "Ahorro: sin base suficiente"}
+              {currentPeriodCoverage.state === "partial"
+                ? currentCoverageLabel
+                : !revealAmounts
+                  ? "Ahorro oculto por privacidad"
+                  : hasSavingsBase && financial.period.savingsRateBps !== null
+                    ? `Ahorro ${formatBasisPoints(financial.period.savingsRateBps, 1, "%", 0)}`
+                    : "Ahorro: sin base suficiente"}
             </small>
           )}
         </article>
@@ -774,10 +799,10 @@ export default function InicioOverview() {
           <strong>{recentExpenseAverage ? displayMoney(recentExpenseAverage.cents) : "—"}</strong>
           <small>
             {recentExpenseAverage
-              ? `Media de ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes completo" : "meses completos"}`
+              ? `Media histórica · ${recentExpenseAverage.months} ${recentExpenseAverage.months === 1 ? "mes" : "meses"}`
               : analysisLoading ? "Calculando desde Análisis…" : "Análisis no disponible"}
           </small>
-          <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver cash flow</Link>
+          <Link prefetch={false} className={styles.inlineLink} href="/analysis">Ver análisis</Link>
         </article>
       </section>
 
@@ -805,18 +830,28 @@ export default function InicioOverview() {
           </div>
           {completedComparison && (
             <div className={styles.comparison}>
-              <span>Último mes completo · {formatMonth(completedComparison.current.monthStart)}</span>
+              <span>
+                {completedComparison.coverage.state === "covered"
+                  ? `Periodo con cobertura · ${formatMonth(completedComparison.current.monthStart)}`
+                  : completedComparison.coverage.state === "partial"
+                    ? `Periodo parcial · ${formatMonth(completedComparison.current.monthStart)} · datos hasta ${formatDate(completedComparison.coverage.throughDate)}`
+                    : completedComparison.coverage.state === "none"
+                      ? `Periodo sin cobertura confirmada · ${formatMonth(completedComparison.current.monthStart)}`
+                      : `Cobertura pendiente · ${formatMonth(completedComparison.current.monthStart)}`}
+              </span>
               <strong
-                className={financialSignClass(completedComparison.current.operatingNetCents)}
-                data-financial-sign={financialSign(completedComparison.current.operatingNetCents)}
+                className={periodHasObservedData(completedComparison.coverage) ? financialSignClass(completedComparison.current.operatingNetCents) : undefined}
+                data-financial-sign={periodHasObservedData(completedComparison.coverage) ? financialSign(completedComparison.current.operatingNetCents) : undefined}
               >
-                {displayMoney(completedComparison.current.operatingNetCents)}
+                {periodHasObservedData(completedComparison.coverage) ? displayMoney(completedComparison.current.operatingNetCents) : "—"}
               </strong>
               {completedComparison.delta !== null && (
                 <small>
-                  {revealAmounts
-                    ? `${completedComparison.delta >= 0 ? "+" : ""}${displayMoney(completedComparison.delta)} frente al mes anterior`
-                    : "Variación frente al mes anterior oculta por privacidad"}
+                  {periodComparisonIsReliable(completedComparison.coverage)
+                    ? revealAmounts
+                      ? `${completedComparison.delta >= 0 ? "+" : ""}${displayMoney(completedComparison.delta)} frente al mes anterior`
+                      : "Variación frente al mes anterior oculta por privacidad"
+                    : "Comparación incompleta · no se interpreta la ausencia de datos como mejora"}
                 </small>
               )}
             </div>

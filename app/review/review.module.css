@@ -310,3 +310,35 @@
   .action,
   .unavailableList a { transition: none; }
 }
+
+
+/* AUD-E2E-UI-001 · Revisión sobre superficies claras con cifras legibles. */
+:global(html[data-theme="light"]) .shell {
+  background: linear-gradient(160deg, #edf2f9, #f9fbff);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .hero,
+:global(html[data-theme="light"]) .section,
+:global(html[data-theme="light"]) .compactPanel,
+:global(html[data-theme="light"]) .loadingPanel,
+:global(html[data-theme="light"]) .note,
+:global(html[data-theme="light"]) .actionCard {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .heroStatus strong,
+:global(html[data-theme="light"]) .count { color: var(--color-text); }
+:global(html[data-theme="light"]) .kicker,
+:global(html[data-theme="light"]) .eyebrow { color: var(--color-primary); }
+:global(html[data-theme="light"]) .heroStatus span,
+:global(html[data-theme="light"]) .note,
+:global(html[data-theme="light"]) .unavailable,
+:global(html[data-theme="light"]) .allClear {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .shell :is(a,button):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}

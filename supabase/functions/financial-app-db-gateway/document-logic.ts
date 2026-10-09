@@ -151,6 +151,7 @@ async function storageObjectMetadata(supabase: ReturnType<typeof storageClient>,
 
 function databaseError(error: unknown) {
   const message = error instanceof Error ? error.message : "";
+  if (message.includes("document_owner_review_required")) return json({ error: "document_owner_review_required" }, 403);
   if (message.includes("document_not_found") || message.includes("document_transaction_not_found") || message.includes("document_association_not_found") || message.includes("document_ocr_run_not_found")) {
     return json({ error: message.match(/document_[a-z_]+/)?.[0] ?? "document_not_found" }, 404);
   }
@@ -181,7 +182,19 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const query = nullableText(payload.query, "document_query", 200);
     const limit = boundedInteger(payload.limit, "document_limit", 1, 100, 50);
     const offset = boundedInteger(payload.offset, "document_offset", 0, 100000, 0);
-    return documentQuery(() => sql`select financial_app.document_list(${status},${query},${limit}::integer,${offset}::integer) as result`);
+    const scope = payload.scope ?? "ordinary";
+    if (typeof scope !== "string" || !["ordinary", "tests", "all"].includes(scope)) throw new Error("invalid_document_scope");
+    const unassociated = payload.unassociatedOnly ?? false;
+    if (typeof unassociated !== "boolean") throw new Error("invalid_document_association_filter");
+    return documentQuery(() => sql`select financial_app.document_list_filtered(${status},${query},${limit}::integer,${offset}::integer,${scope},${unassociated}::boolean) as result`);
+  }
+
+  if (action === "document.test_designation") {
+    const id = uuid(payload.id, "document_id");
+    if (typeof payload.isTest !== "boolean") throw new Error("invalid_document_test_designation");
+    if (payload.ownerReviewed !== true) throw new Error("invalid_document_owner_review");
+    const reason = text(payload.reason, "document_designation_reason", 500);
+    return documentQuery(() => sql`select financial_app.set_document_test_designation(${id}::uuid,${payload.isTest}::boolean,${reason},true) as result`);
   }
 
   if (action === "document.detail") {
@@ -194,7 +207,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const rawResult = jsonObject(payload.rawResult, "document_ocr_result");
     const interpretation = jsonObject(payload.interpretation, "document_ocr_interpretation");
     return documentQuery(() => sql`
-      select financial_app.store_document_ocr_run(${documentId}::uuid,${JSON.stringify(rawResult)}::jsonb,${JSON.stringify(interpretation)}::jsonb) as result
+      select financial_app.store_document_ocr_run(${documentId}::uuid,${sql.json(rawResult)}::jsonb,${sql.json(interpretation)}::jsonb) as result
     `);
   }
 
@@ -225,7 +238,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
         ${documentId}::uuid,${ocrRunId}::uuid,${type},${date}::date,${time}::time,
         ${issuerName},${issuerTaxId},${documentNumber},${billingPeriod},
         ${taxBaseCents}::bigint,${taxesCents}::bigint,${totalCents}::bigint,${paymentMethod},
-        ${JSON.stringify(lineItems)}::jsonb,${notes}
+        ${sql.json(lineItems)}::jsonb,${notes}
       ) as result
     `);
   }

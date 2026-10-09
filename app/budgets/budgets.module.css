@@ -146,6 +146,8 @@
 
 .content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 1rem;
   margin-top: 1rem;
 }
@@ -174,6 +176,7 @@
 
 .summaryGrid {
   display: grid;
+  min-width: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.8rem;
 }
@@ -213,6 +216,7 @@
 }
 
 .planningPanel {
+  min-width: 0;
   padding: clamp(1rem, 2.2vw, 1.5rem);
   border: 1px solid rgba(43, 217, 247, 0.2);
   border-radius: 1.35rem;
@@ -343,6 +347,7 @@
 }
 
 .panel {
+  min-width: 0;
   border: 1px solid rgba(137, 173, 255, 0.14);
   border-radius: 1.35rem;
   background: linear-gradient(145deg, rgba(14, 25, 48, 0.84), rgba(7, 14, 29, 0.78));
@@ -417,6 +422,8 @@
   overflow-wrap: anywhere;
   font-size: 1rem;
 }
+
+.cardTitle > div { min-width: 0; }
 
 .cardTitle p {
   margin: 0.18rem 0 0;
@@ -667,7 +674,7 @@
   .heroControls { justify-content: flex-start; min-width: 0; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .planningSteps { grid-template-columns: 1fr; }
-  .mainGrid { grid-template-columns: 1fr; }
+  .mainGrid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 620px) {
@@ -675,20 +682,110 @@
   .hero { padding: 1.2rem; border-radius: 1.15rem; }
   .heroControls { display: grid; grid-template-columns: 1fr; width: 100%; }
   .monthField input, .actionButton { width: 100%; }
-  .summaryGrid { grid-template-columns: 1fr 1fr; gap: 0.55rem; }
+  .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.55rem; }
   .metric { padding: 0.9rem; }
   .planningHeader { display: grid; }
   .planningHeader .status { width: fit-content; white-space: normal; }
   .planningStep { padding: 0.85rem; }
   .amounts { grid-template-columns: 1fr; gap: 0.4rem; }
-  .cardTop { align-items: flex-start; }
+  .cardTop { align-items: flex-start; flex-wrap: wrap; }
+  .cardTitle { max-width: 100%; }
+  .panelHeading { flex-wrap: wrap; }
   .editor { grid-template-columns: 1fr; }
   .editorButtons { align-items: center; }
   .historyRow { grid-template-columns: 3.7rem minmax(0, 1fr); }
   .historyRow strong { grid-column: 2; }
 }
 
+/* On compact phones, metric labels must not force the entire budget grid wider than the viewport. */
+@media (max-width: 400px) {
+  .summaryGrid { grid-template-columns: minmax(0, 1fr); }
+  .planningHeader { grid-template-columns: minmax(0, 1fr); }
+  .metricLabel { min-width: 0; overflow-wrap: anywhere; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .progressFill { transition: none; }
   .spinner { animation-duration: 1.6s; }
+}
+
+
+/* AUD-E2E-UI-001 · Superficies y texto coherentes con Sistema/Claro. */
+:global(html[data-theme="light"]) .hero,
+:global(html[data-theme="light"]) .metric,
+:global(html[data-theme="light"]) .planningPanel,
+:global(html[data-theme="light"]) .planningStep,
+:global(html[data-theme="light"]) .panel,
+:global(html[data-theme="light"]) .budgetCard {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .monthField input,
+:global(html[data-theme="light"]) .editor input {
+  border-color: var(--color-border);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+  color-scheme: light;
+}
+:global(html[data-theme="light"]) .heroText,
+:global(html[data-theme="light"]) .panelHeading p,
+:global(html[data-theme="light"]) .helper,
+:global(html[data-theme="light"]) .historyRow span:first-child,
+:global(html[data-theme="light"]) .explanation,
+:global(html[data-theme="light"]) .planningNote,
+:global(html[data-theme="light"]) .emptyState p,
+:global(html[data-theme="light"]) .metricLabel,
+:global(html[data-theme="light"]) .stepLabel,
+:global(html[data-theme="light"]) .progressMeta {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .backLink,
+:global(html[data-theme="light"]) .textButton,
+:global(html[data-theme="light"]) .stepLink {
+  color: var(--color-primary);
+}
+:global(html[data-theme="light"]) .secondaryButton,
+:global(html[data-theme="light"]) .history,
+:global(html[data-theme="light"]) .principle {
+  background: var(--surface-interactive-soft);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .alert {
+  background: var(--surface-warning-soft);
+  border-color: var(--border-warning-soft);
+  color: var(--color-danger);
+}
+:global(html[data-theme="light"]) .notice {
+  background: var(--surface-success-soft);
+  border-color: var(--border-success-soft);
+  color: var(--color-success);
+}
+:global(html[data-theme="light"]) .status.over { color: var(--color-danger); }
+:global(html[data-theme="light"]) .status.unfunded { color: var(--color-warning); }
+:global(html[data-theme="light"]) .status.on_track { color: var(--color-success); }
+:global(html[data-theme="light"]) .status.empty { color: var(--color-text-secondary); }
+:global(html[data-theme="light"]) .hero :is(a,button,input):focus-visible,
+:global(html[data-theme="light"]) .content :is(a,button,input):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+
+/* AUD-E2E-UI-001 · texto funcional sobre las superficies claras. */
+:global(html[data-theme="light"]) .eyebrow {
+  color: #1e40af;
+}
+:global(html[data-theme="light"]) .loading {
+  color: #334155;
+}
+:global(html[data-theme="light"]) .emptyState {
+  border-color: #94a3b8;
+  background: #f8fafc;
+  color: #1e293b;
+}
+:global(html[data-theme="light"]) .emptyState p {
+  color: #475569;
 }

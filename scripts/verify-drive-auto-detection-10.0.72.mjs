@@ -30,6 +30,7 @@ assert.match(client, /sessionStorage/);
 assert.match(client, /Puedes seguir usando Documentos/);
 assert.match(client, /Comprobar ahora/);
 assert.match(page, /<DriveAutoSync \/>/);
-assert.match(page, /<DocumentsClient \/>/);
+assert.match(page, /<DocumentsClient\s+initialStatusFilter=/);
+assert.match(page, /initialUnassociatedFilter=\{initialUnassociatedFilter\}/);
 
 console.log("Axioma §51 · detección automática de documentos Drive: contrato 10.0.72 verificado.");

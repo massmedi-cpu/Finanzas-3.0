@@ -99,7 +99,7 @@ export default function ReviewClient() {
         readJson<TransactionCount>("/api/transactions?signMismatch=true&limit=1", controller.signal),
         readJson<TransactionCount>("/api/transactions?duplicateState=suspected&limit=1", controller.signal),
         readJson<RecurrenceSnapshot>("/api/recurrences?minOccurrences=3", controller.signal),
-        readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0", controller.signal),
+        readJson<DocumentList>("/api/documents?status=pending_review&limit=1&offset=0&scope=ordinary", controller.signal),
         readJson<BudgetSnapshot>(`/api/budgets?month=${month}`, controller.signal),
         readJson<ForecastSnapshot>(`/api/forecast?dateFrom=${today}&dateTo=${dateTo}`, controller.signal),
         readJson<GoogleStatus>("/api/source/google/status", controller.signal),

@@ -1,5 +1,4 @@
 import { Suspense } from "react";
-import ModuleContextNavigation from "../module-context-navigation";
 import {
   loadComparisonSnapshot,
 } from "../../src/application/comparison/comparison-loader";
@@ -12,7 +11,6 @@ import {
   resolveComparisonSelection,
   type ComparisonSelectionInput,
 } from "../../src/application/comparison/comparison-selection";
-import { comparisonModuleLinks } from "../../src/application/navigation/module-context";
 import { PersistenceGatewayError } from "../../src/infrastructure/persistence/vercel-supabase-gateway";
 import ComparisonClient from "./comparison-client";
 import ComparisonLoadingFrame from "./comparison-loading-frame";
@@ -64,15 +62,7 @@ async function ComparisonData({
 
   const selection = initialSnapshot?.selection ?? resolveComparisonSelection(fallbackInput);
 
-  return (
-    <>
-      <ModuleContextNavigation
-        links={comparisonModuleLinks(selection)}
-        ariaLabel="Continuar desde el Comparador"
-      />
-      <ComparisonClient initialSnapshot={initialSnapshot} fallbackSelection={selection} />
-    </>
-  );
+  return <ComparisonClient initialSnapshot={initialSnapshot} fallbackSelection={selection} />;
 }
 
 export default function ComparisonPage({

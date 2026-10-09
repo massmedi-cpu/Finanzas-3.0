@@ -156,18 +156,20 @@ export function CashFlowEvolution({
         </div>
       </div>
 
-      <table className={styles.srTable}>
-        <caption>Datos diarios acumulados del Cash Flow</caption>
-        <thead><tr><th>Fecha</th><th>Real</th><th>Previsto pendiente</th><th>Resultado potencial</th></tr></thead>
-        <tbody>{points.map((point) => (
-          <tr key={point.date}>
-            <th scope="row">{formatDate(point.date)}</th>
-            <td>{stateLabel(point.realCumulativeCents)}</td>
-            <td>{stateLabel(point.plannedCumulativeCents)}</td>
-            <td>{stateLabel(point.combinedCumulativeCents)}</td>
-          </tr>
-        ))}</tbody>
-      </table>
+      <div className={styles.srTable}>
+        <table>
+          <caption>Datos diarios acumulados del Cash Flow</caption>
+          <thead><tr><th>Fecha</th><th>Real</th><th>Previsto pendiente</th><th>Resultado potencial</th></tr></thead>
+          <tbody>{points.map((point) => (
+            <tr key={point.date}>
+              <th scope="row">{formatDate(point.date)}</th>
+              <td>{stateLabel(point.realCumulativeCents)}</td>
+              <td>{stateLabel(point.plannedCumulativeCents)}</td>
+              <td>{stateLabel(point.combinedCumulativeCents)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
     </section>
   );
 }

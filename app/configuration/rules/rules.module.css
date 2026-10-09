@@ -270,3 +270,22 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .cardActions button,
   .formActions button { flex: 1 1 auto; }
 }
+
+/* AUD-E2E-REG-001 · Identificadores solo en detalles; búsqueda reconocible. */
+.technicalId {
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+.technicalId summary {
+  min-height: 2.75rem;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  font-weight: 700;
+}
+.technicalId[open] label { margin-top: 0.55rem; }
+.technicalId summary:focus-visible {
+  outline: 3px solid var(--color-primary-bright);
+  outline-offset: 3px;
+}

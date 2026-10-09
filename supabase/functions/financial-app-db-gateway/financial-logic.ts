@@ -15,8 +15,16 @@ function json(body: unknown, status = 200) {
   });
 }
 
-function financialDatabaseError(error: unknown) {
+function financialDatabaseError(error: unknown, action: string | null = null) {
   const message = error instanceof Error ? error.message : "";
+  const pgCode = error && typeof error === "object" && "code" in error
+    ? (error as { code?: unknown }).code
+    : null;
+  if (action === "financial.balance_series"
+      && pgCode === "42883"
+      && /\bfinancial_balance_series\b/i.test(message)) {
+    return json({ error: "financial_balance_series_not_installed" }, 503);
+  }
   if (message === "financial_account_not_found") {
     return json({ error: "financial_account_not_found" }, 404);
   }
@@ -24,12 +32,12 @@ function financialDatabaseError(error: unknown) {
   return json({ error: "financial_internal_error" }, 500);
 }
 
-async function financialQuery(run: () => Promise<any>) {
+async function financialQuery(run: () => Promise<any>, action: string | null = null) {
   try {
     const rows = await run();
     return json(rows[0]?.result ?? null);
   } catch (error) {
-    return financialDatabaseError(error);
+    return financialDatabaseError(error, action);
   }
 }
 
@@ -137,7 +145,7 @@ export async function handleFinancialLogicAction(input: {
       select financial_app.financial_balance_series(
         ${f.dateFrom}::date,${f.dateTo}::date,${f.accountId}::uuid
       ) as result
-    `);
+    `, action);
   }
 
   if (action === "financial.snapshot") {

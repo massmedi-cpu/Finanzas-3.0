@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   assembleBudgetPlanning,
   budgetPlanningRange,
@@ -28,7 +30,22 @@ function snapshot(manualAmountCents: number | null): BudgetSnapshot {
       remainingCents: effectiveAmountCents - actualExpenseCents,
       progressBps: Math.round((actualExpenseCents * 10_000) / effectiveAmountCents),
       status: "on_track",
-      automaticExplanation: "Media del gasto elegible de los 3 meses completos anteriores.",
+      automaticExplanation: "Referencia automática Axioma §52.",
+      automaticFactors: {
+        algorithm: "axioma_52_budget_reference_v1",
+        mode: "axioma_52_weighted",
+        availableMonthCount: 12,
+        trailing3AverageCents: 120_000,
+        recentWeightedCents: 118_000,
+        seasonalSameMonthCents: 121_000,
+        seasonalMonthCount: 1,
+        trendAdjustmentCents: 1_000,
+        knownRecurringCents: 0,
+        extraordinaryMonthCount: 0,
+        extraordinaryCapCents: null,
+        recurrencePolicy: "floor_not_additive",
+        exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+      },
       historyMonths: [
         { month: "2026-06", expenseCents: 100_000 },
         { month: "2026-07", expenseCents: 120_000 },
@@ -38,8 +55,8 @@ function snapshot(manualAmountCents: number | null): BudgetSnapshot {
     categories: [],
     principles: {
       bankSource: "read_only",
-      actualSource: "financial_transaction_facts",
-      recommendation: "trailing_3_complete_month_average",
+      actualSource: "financial_transaction_allocation_facts",
+      recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
       transfersConsumeBudget: false,
       confirmedDuplicatesConsumeBudget: false,
       manualAnalyticsExclusionsRespected: true,
@@ -71,7 +88,7 @@ function monthly(incomes = [190_000, 200_000, 210_000], expenses = [100_000, 120
   };
 }
 
-test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro", () => {
+test("PRE-022 separa referencia automática, límite elegido y objetivo de ahorro", () => {
   const result = assembleBudgetPlanning(snapshot(100_000), monthly());
 
   expect(result.planning).toMatchObject({
@@ -86,7 +103,7 @@ test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro
     targetSavingsRateBps: 5_000,
   });
   expect(result.planning.principles).toEqual({
-    historicalBaseline: "trailing_3_complete_month_expense_average",
+    historicalBaseline: "axioma_52_budget_reference",
     chosenLimit: "manual_total_budget_only",
     objective: "average_income_minus_chosen_limit",
     incomeSource: "financial_monthly_series",
@@ -94,7 +111,7 @@ test("PRE-022 separa referencia histórica, límite elegido y objetivo de ahorro
   });
 });
 
-test("PRE-022 no convierte la media histórica en un objetivo cuando falta límite elegido", () => {
+test("PRE-022 no convierte la referencia automática en un objetivo cuando falta límite elegido", () => {
   const result = assembleBudgetPlanning(snapshot(null), monthly());
 
   expect(result.planning.state).toBe("ready");
@@ -113,10 +130,11 @@ test("PRE-022 falla cerrado si ingresos y gasto histórico no concilian", () => 
   expect(result.planning.averageIncomeCents).toBeNull();
   expect(result.planning.targetSavingsCents).toBeNull();
 
-  const invalidBaseline = snapshot(100_000);
-  invalidBaseline.total.automaticAmountCents = 119_999;
-  const invalidBaselineResult = assembleBudgetPlanning(invalidBaseline, monthly());
-  expect(invalidBaselineResult.planning.state).toBe("mismatch");
+  const weightedBaseline = snapshot(100_000);
+  weightedBaseline.total.automaticAmountCents = 119_999;
+  const weightedBaselineResult = assembleBudgetPlanning(weightedBaseline, monthly());
+  expect(weightedBaselineResult.planning.state).toBe("ready");
+  expect(weightedBaselineResult.planning.historicalBaselineCents).toBe(119_999);
 
   const unsafeIncomeResult = assembleBudgetPlanning(
     snapshot(100_000),
@@ -153,6 +171,30 @@ test("PRE-022 no fabrica sostenibilidad sin ingresos y resuelve el rango entre a
   });
 });
 
+test("QA Work · el contrato presupuestario exige la fuente split-aware actual", () => {
+  const current = snapshot(null);
+  expect(isBudgetSnapshot(current)).toBe(true);
+
+  expect(isBudgetSnapshot({
+    ...current,
+    total: {
+      ...current.total,
+      automaticFactors: {
+        ...current.total.automaticFactors!,
+        exclusionsSource: "financial_transaction_facts.analytics_eligible",
+      },
+    },
+  })).toBe(false);
+
+  expect(isBudgetSnapshot({
+    ...current,
+    principles: {
+      ...current.principles,
+      actualSource: "financial_transaction_facts",
+    },
+  })).toBe(false);
+});
+
 test("PRE-022 valida el contrato del motor antes de componer la planificación", () => {
   expect(isBudgetSnapshot(snapshot(null))).toBe(true);
   expect(isBudgetSnapshot({ ...snapshot(null), contractVersion: 2 })).toBe(false);
@@ -162,4 +204,22 @@ test("PRE-022 valida el contrato del motor antes de componer la planificación",
     ...snapshot(null),
     total: { ...snapshot(null).total, automaticAmountCents: 12.5 },
   })).toBe(false);
+});
+
+test("AUD-E2E-PTO-001 · snapshot batch evita la multiplicación N× y conserva solo lectura", () => {
+  const sql = readFileSync(resolve(process.cwd(), "supabase/migrations/20261007165000_qa_work_budget_snapshot_batch.sql"), "utf8");
+  const body = sql.slice(sql.indexOf("create or replace function financial_app.budget_month_snapshot"));
+  expect(body).toContain("security invoker");
+  expect(body).toContain("all_facts as materialized");
+  expect(body).toContain("scoped_facts as materialized");
+  expect(body).toContain("financial_app.financial_transaction_allocation_facts(");
+  expect(body).toContain("where f.analytics_eligible");
+  expect(body).toContain("f.effective_kind = 'expense'");
+  expect(body).toContain("'bankSource', 'read_only'");
+  expect(body).toContain("'manualAnalyticsExclusionsRespected', true");
+  expect(body).not.toContain("financial_app.budget_month_actual(");
+  expect(body).not.toContain("financial_app.budget_month_recommendation(");
+  expect(body).not.toMatch(/\b(?:insert\s+into|update\s+financial_app\.|delete\s+from\s+financial_app\.|truncate)\b/i);
+  const matches = body.match(/financial_app\.financial_transaction_allocation_facts\s*\(/g) ?? [];
+  expect(matches).toHaveLength(1);
 });

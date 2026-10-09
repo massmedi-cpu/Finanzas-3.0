@@ -391,3 +391,100 @@
   .skeletonCards span,
   .skeletonPanels span { animation: none; }
 }
+
+
+/* AUD-E2E-UI-001 · Comparador, controles y resultados de tema claro. */
+:global(html[data-theme="light"]) .periodLegend,
+:global(html[data-theme="light"]) .filters,
+:global(html[data-theme="light"]) .metricCard,
+:global(html[data-theme="light"]) .driverPanel,
+:global(html[data-theme="light"]) .insight,
+:global(html[data-theme="light"]) .quality,
+:global(html[data-theme="light"]) .emptyPanel {
+  border-color: var(--color-border);
+  background: linear-gradient(145deg, #ffffff, #f1f5fc);
+  color: var(--color-text);
+  box-shadow: var(--shadow-card);
+}
+:global(html[data-theme="light"]) .periodFieldset,
+:global(html[data-theme="light"]) .periodLinks,
+:global(html[data-theme="light"]) .quickActions button {
+  border-color: var(--color-border);
+  background: var(--surface-interactive-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .periodFieldset input,
+:global(html[data-theme="light"]) .accountField select {
+  border-color: var(--color-border);
+  background: var(--surface-control-strong);
+  color: var(--color-text);
+  color-scheme: light;
+}
+:global(html[data-theme="light"]) .readOnlyChip,
+:global(html[data-theme="light"]) .countChip,
+:global(html[data-theme="light"]) .periodFieldset legend {
+  color: var(--color-success);
+}
+:global(html[data-theme="light"]) .eyebrow,
+:global(html[data-theme="light"]) .panelHeading p,
+:global(html[data-theme="light"]) .insight p { color: var(--color-primary); }
+:global(html[data-theme="light"]) .quickActions button:hover {
+  background: var(--surface-primary-soft);
+  color: var(--color-text);
+}
+:global(html[data-theme="light"]) .driverTable th,
+:global(html[data-theme="light"]) .metricReference,
+:global(html[data-theme="light"]) .metricFooter {
+  color: var(--color-text-secondary);
+}
+:global(html[data-theme="light"]) .shell :is(a,button,input,select):focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
+/* AUD-E2E-CMP-001 · acceder a todos los cambios sin perder los enlaces por periodo. */
+.expandDrivers {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.75rem;
+  margin: 0.85rem 1rem 1rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--border-primary-soft);
+  border-radius: 0.7rem;
+  background: var(--surface-primary-subtle);
+  color: var(--color-primary-bright);
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 750;
+  cursor: pointer;
+}
+.expandDrivers:hover { background: var(--surface-primary-soft); }
+.expandDrivers:focus-visible { outline: 3px solid var(--color-primary-bright); outline-offset: 3px; }
+:global(html[data-theme="light"]) .expandDrivers {
+  border-color: var(--border-primary-strong);
+  color: var(--color-primary);
+}
+
+/* AUD-E2E-CMP-001 · Neto y Ahorro juntos sin eliminar diferencias normativas. */
+.netSavingsCard {
+  grid-column: span 2;
+}
+.netSavingsRows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+.netSavingsRows > div {
+  min-width: 0;
+  display: grid;
+  align-content: start;
+  gap: 0.35rem;
+}
+.netSavingsRows > div > span { font-size: var(--font-helper); font-weight: 750; color: var(--color-text-secondary); }
+.netSavingsRows small { color: var(--color-text-secondary); }
+.netSavingsRows > p { margin: 0; align-self: center; color: var(--color-text-secondary); line-height: 1.5; }
+@media (max-width: 700px) {
+  .netSavingsCard { grid-column: 1 / -1; }
+  .netSavingsRows { grid-template-columns: 1fr; }
+}

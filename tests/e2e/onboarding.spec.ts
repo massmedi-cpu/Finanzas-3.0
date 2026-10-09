@@ -140,3 +140,20 @@ test("E3 · sin cuentas mantiene el resumen y los pendientes bloqueados aunque l
   await expect(page.getByRole("article", { name: "Paso 3 · Primer resumen" }).getByText("Bloqueado", { exact: true })).toBeVisible();
   await expect(page.getByRole("article", { name: "Paso 4 · Pendientes" }).getByText("Bloqueado", { exact: true })).toBeVisible();
 });
+
+
+test("AUD-E2E-INI-001 · Primeros pasos deja de comprobar indefinidamente y conserva el avance verificado", async ({ page }) => {
+  await page.clock.install();
+  const writes = await mockOnboardingApis(page, { sourceReady: true, activeAccounts: 1, financialReady: true });
+  await page.route("**/api/dashboard?**", async () => new Promise<void>(() => {}));
+
+  await page.goto("/onboarding", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText("Comprobando tu estado")).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("status").filter({ hasText: "superado 30 segundos" })).toBeVisible();
+  await expect(page.getByText("Comprobando tu estado")).toHaveCount(0);
+  await expect(page.locator('li[data-step-status]').filter({ hasText: "Mira tu primer resumen" })).not.toContainText("Completado");
+  expect(writes).toEqual([]);
+});

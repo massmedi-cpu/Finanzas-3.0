@@ -227,7 +227,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       tone: "info",
       title: `${unassociatedDocumentCount} ${plural(unassociatedDocumentCount, "documento sin asociar", "documentos sin asociar")}`,
       detail: "Puedes vincularlos manualmente a sus movimientos cuando exista una coincidencia válida.",
-      href: "/documents",
+      href: "/documents?unassociated=true",
       action: "Revisar documentos",
     });
   }
@@ -241,7 +241,7 @@ export function deriveGlobalAlerts(input: GlobalAlertInput): GlobalAlert[] {
       tone: "warning",
       title: `${pendingDocumentReviewCount} ${plural(pendingDocumentReviewCount, "documento pendiente de revisar", "documentos pendientes de revisar")}`,
       detail: "La revisión humana sigue siendo obligatoria antes de confirmar datos extraídos o asociaciones.",
-      href: "/documents",
+      href: "/documents?status=pending_review",
       action: "Abrir revisión",
     });
   }

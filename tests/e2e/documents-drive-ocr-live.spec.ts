@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
-const documentId = "93000000-0000-4000-8000-000000000094";
+const documentId = process.env.OCR_LIVE_FIXTURE_DOCUMENT_ID?.trim() ?? "";
+const hasIsolatedFixture = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(documentId);
 
-test("protected preview reads the synthetic Drive image end to end without financial writes", async ({ request }, testInfo) => {
+test("protected preview reads an explicitly configured isolated Drive OCR fixture without financial writes", async ({ request }, testInfo) => {
   test.skip(!isProtectedPreview, "requires protected preview checkpoint");
+  test.skip(!hasIsolatedFixture, "requires OCR_LIVE_FIXTURE_DOCUMENT_ID from an isolated non-production fixture");
   test.skip(testInfo.project.name !== "chromium-desktop", "live Drive OCR runs once per CI matrix");
   test.setTimeout(120_000);
 

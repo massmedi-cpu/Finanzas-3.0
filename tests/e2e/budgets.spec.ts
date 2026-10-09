@@ -22,7 +22,22 @@ const baseSnapshot = {
     remainingCents: 80000,
     progressBps: 3333,
     status: "on_track",
-    automaticExplanation: "Media del gasto elegible de los 3 meses completos anteriores.",
+    automaticExplanation: "Referencia automática Axioma §52.",
+    automaticFactors: {
+      algorithm: "axioma_52_budget_reference_v1",
+      mode: "axioma_52_weighted",
+      availableMonthCount: 12,
+      trailing3AverageCents: 120000,
+      recentWeightedCents: 118000,
+      seasonalSameMonthCents: 121000,
+      seasonalMonthCount: 1,
+      trendAdjustmentCents: 1000,
+      knownRecurringCents: 0,
+      extraordinaryMonthCount: 0,
+      extraordinaryCapCents: null,
+      recurrencePolicy: "floor_not_additive",
+      exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+    },
     historyMonths: [
       { month: "2026-06", expenseCents: 100000 },
       { month: "2026-07", expenseCents: 120000 },
@@ -43,7 +58,22 @@ const baseSnapshot = {
       remainingCents: 25000,
       progressBps: 3750,
       status: "on_track",
-      automaticExplanation: "Media del gasto elegible de los 3 meses completos anteriores.",
+      automaticExplanation: "Referencia automática Axioma §52.",
+      automaticFactors: {
+        algorithm: "axioma_52_budget_reference_v1",
+        mode: "axioma_52_weighted",
+        availableMonthCount: 12,
+        trailing3AverageCents: 40000,
+        recentWeightedCents: 39000,
+        seasonalSameMonthCents: 41000,
+        seasonalMonthCount: 1,
+        trendAdjustmentCents: 500,
+        knownRecurringCents: 0,
+        extraordinaryMonthCount: 0,
+        extraordinaryCapCents: null,
+        recurrencePolicy: "floor_not_additive",
+        exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+      },
       historyMonths: [
         { month: "2026-06", expenseCents: 30000 },
         { month: "2026-07", expenseCents: 40000 },
@@ -53,8 +83,8 @@ const baseSnapshot = {
   ],
   principles: {
     bankSource: "read_only",
-    actualSource: "financial_transaction_facts",
-    recommendation: "trailing_3_complete_month_average",
+    actualSource: "financial_transaction_allocation_facts",
+    recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
     transfersConsumeBudget: false,
     confirmedDuplicatesConsumeBudget: false,
     manualAnalyticsExclusionsRespected: true,
@@ -81,7 +111,7 @@ const baseSnapshot = {
       { month: "2026-08", incomeCents: 210000 },
     ],
     principles: {
-      historicalBaseline: "trailing_3_complete_month_expense_average",
+      historicalBaseline: "axioma_52_budget_reference",
       chosenLimit: "manual_total_budget_only",
       objective: "average_income_minus_chosen_limit",
       incomeSource: "financial_monthly_series",
@@ -358,13 +388,13 @@ test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo
   await mockBudgetApi(page, writes);
   await page.goto("/budgets");
 
-  const planning = page.getByRole("region", { name: "De lo habitual a tu objetivo" });
+  const planning = page.getByRole("region", { name: "De la referencia a tu objetivo" });
   await expect(planning).toHaveAttribute("data-planning-state", "ready");
   await expect(planning).toHaveAttribute("data-objective-state", "needs_limit");
-  await expect(planning.getByText("Referencia histórica", { exact: true })).toBeVisible();
+  await expect(planning.getByText("Referencia automática", { exact: true })).toBeVisible();
   await expect(planning.getByText("Límite elegido", { exact: true })).toBeVisible();
   await expect(planning.getByText("Objetivo de ahorro resultante", { exact: true })).toBeVisible();
-  await expect(planning.getByText(/Describe el pasado; no recomienda cuánto deberías gastar/i)).toBeVisible();
+  await expect(planning.getByText(/combina señales históricas para comparar tu gasto; no decide cuánto deberías gastar/i)).toBeVisible();
 
   await planning.getByRole("button", { name: "Definir mi límite mensual" }).click();
   const totalLimit = page.getByLabel("Límite elegido de total mensual");
@@ -376,6 +406,66 @@ test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo
   await expect(planning.getByText("1.000,00 €", { exact: true })).toHaveCount(2);
   await expect(planning.getByText(/50,00 % para ahorro/i)).toBeVisible();
   expect(writes.at(-1)).toMatchObject({ manualAmountCents: 100000 });
+});
+
+test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({ page }) => {
+  let requestedMonth = "";
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+
+    requestedMonth = new URL(route.request().url()).searchParams.get("month") ?? "";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth(requestedMonth || "2026-09")),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-07");
+  await expect(page.locator('input[type="month"]')).toHaveValue("2026-07");
+  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  expect(requestedMonth).toBe("2026-07");
+});
+
+test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
+  let attempts = 0;
+
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+
+    attempts += 1;
+    if (attempts === 1) {
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed", code: "statement_timeout" }),
+      });
+      return;
+    }
+
+    const selectedMonth = new URL(route.request().url()).searchParams.get("month") ?? "2026-09";
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth(selectedMonth)),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("alert")).toContainText("no ha podido terminar el cálculo");
+  await expect(page.getByRole("heading", { name: "No se ha podido cargar Septiembre de 2026" })).toBeVisible();
+  await expect(page.getByText(/datos bancarios siguen intactos/i)).toBeVisible();
+
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(attempts).toBe(2);
 });
 
 test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
@@ -426,8 +516,8 @@ test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuar
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   expect(writes).toHaveLength(0);
 
-  await page.getByRole("button", { name: "Actualizar referencias" }).click();
-  await expect(page.getByRole("status")).toContainText("Referencias históricas");
+  await page.getByRole("button", { name: "Actualizar referencia" }).click();
+  await expect(page.getByRole("status")).toContainText("Referencia automática");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });
@@ -444,7 +534,7 @@ test("protected preview keeps the validated Phase 6 budget contract in later pha
   if (process.env.GITHUB_SHA) expect(build.commit).toBe(process.env.GITHUB_SHA);
 });
 
-test("protected preview returns a central budget snapshot based on Phase 5 financial facts", async ({ request }) => {
+test("protected preview returns the current split-aware Axioma §52 budget contract", async ({ request }) => {
   test.skip(!isProtectedPreview, "Real budget persistence is validated only against the protected preview.");
 
   const response = await request.get("/api/budgets?month=2026-09");
@@ -459,8 +549,8 @@ test("protected preview returns a central budget snapshot based on Phase 5 finan
   });
   expect(snapshot.principles).toEqual({
     bankSource: "read_only",
-    actualSource: "financial_transaction_facts",
-    recommendation: "trailing_3_complete_month_average",
+    actualSource: "financial_transaction_allocation_facts",
+    recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
     transfersConsumeBudget: false,
     confirmedDuplicatesConsumeBudget: false,
     manualAnalyticsExclusionsRespected: true,
@@ -471,11 +561,12 @@ test("protected preview returns a central budget snapshot based on Phase 5 finan
 
   expect(snapshot.total.categoryId).toBeNull();
   expect(snapshot.total.historyMonths).toHaveLength(3);
-  const historyTotal = snapshot.total.historyMonths.reduce(
-    (sum: number, row: { expenseCents: number }) => sum + row.expenseCents,
-    0,
-  );
-  expect(snapshot.total.automaticAmountCents).toBe(Math.round(historyTotal / 3));
+  expect(snapshot.total.automaticFactors).toMatchObject({
+    algorithm: "axioma_52_budget_reference_v1",
+    recurrencePolicy: "floor_not_additive",
+    exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+  });
+  expect(["fallback_3_month_average", "axioma_52_weighted"]).toContain(snapshot.total.automaticFactors.mode);
   expect(snapshot.total.effectiveAmountCents).toBe(
     snapshot.total.manualAmountCents ?? snapshot.total.automaticAmountCents,
   );
@@ -537,4 +628,71 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
   await expect(zeroBar).toHaveCount(1);
   expect(await zeroBar.evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
   expect(await zeroBar.evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
+});
+
+
+test("AUD-E2E-PTO-001 · no presenta presupuestos de respuesta inválida y permite reintentar", async ({ page }) => {
+  let attempts = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+    attempts += 1;
+    const body = attempts === 1
+      ? { contractVersion: 1, month: "2026-09", total: { effectiveAmountCents: 0 }, categories: [] }
+      : snapshotForMonth("2026-09");
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("alert")).toContainText("no es válida");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(attempts).toBe(2);
+});
+
+test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escritura de otro mes", async ({ page }) => {
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes.push(method);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotForMonth("2026-08")) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  const summary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
+  await expect(summary).toBeVisible();
+  await page.getByRole("button", { name: "Actualizar referencia" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
+  await expect(summary).toBeVisible();
+  await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
+  expect(writes).toEqual(["POST"]);
+});
+
+
+test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintentar sin escrituras", async ({ page }) => {
+  await page.clock.install();
+  const requests: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    requests.push(route.request().method());
+    if (requests.length === 1) return new Promise<void>(() => {});
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(snapshotForMonth("2026-09")),
+    });
+  });
+  await page.goto("/budgets?month=2026-09", { waitUntil: "domcontentloaded" });
+  await expect(page.getByText(/Cargando presupuesto de/)).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
+  await page.clock.fastForward(15_000);
+  await expect(page.getByRole("alert")).toContainText("superado 30 segundos");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Reintentar" }).click();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(requests).toEqual(["GET", "GET"]);
 });

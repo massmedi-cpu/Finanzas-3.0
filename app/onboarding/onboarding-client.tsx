@@ -29,6 +29,63 @@ type FinancialSnapshot = {
   principles?: { bankSource?: string };
 };
 
+type DashboardReadiness = {
+  contractVersion?: number;
+  failedSources?: string[];
+  data?: Record<string, unknown>;
+};
+
+type BalanceReadiness = {
+  rows?: Array<{ accounts?: number }>;
+  principles?: {
+    bankSource?: string;
+    balanceSource?: string;
+    cashFlowReconstruction?: boolean;
+    getHasSideEffects?: boolean;
+  };
+};
+
+const DASHBOARD_COMPONENTS = [
+  ["financial", "resumen financiero"],
+  ["transactions", "actividad reciente"],
+  ["monthly", "evolución mensual"],
+  ["budgets", "presupuestos"],
+  ["forecast", "previsión"],
+] as const;
+
+function madridToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
+function balanceDateFrom(today: string) {
+  const [year, month] = today.slice(0, 7).split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 12, 1));
+  return date.toISOString().slice(0, 10);
+}
+
+function summaryComponentsMissing(dashboard: DashboardReadiness | null, balance: BalanceReadiness | null) {
+  const missing: string[] = [];
+  if (dashboard?.contractVersion !== 1 || !dashboard.data) {
+    missing.push("componentes del resumen");
+  } else {
+    for (const [source, label] of DASHBOARD_COMPONENTS) {
+      if (dashboard.failedSources?.includes(source) || !dashboard.data[source]) missing.push(label);
+    }
+  }
+  const balanceValid = balance?.principles?.bankSource === "read_only"
+    && balance.principles.balanceSource === "financial_account_balances"
+    && balance.principles.cashFlowReconstruction === false
+    && balance.principles.getHasSideEffects === false
+    && Array.isArray(balance.rows)
+    && balance.rows.some((row) => Number.isInteger(row.accounts) && row.accounts! > 0);
+  if (!balanceValid) missing.push("evolución del saldo");
+  return missing;
+}
+
 type OnboardingState = {
   sourceAvailable: boolean;
   sourceConnected: boolean;
@@ -37,9 +94,10 @@ type OnboardingState = {
   activeAccounts: number;
   financialAvailable: boolean;
   financialReady: boolean;
+  summaryMissing: string[];
 };
 
-type StepStatus = "Comprobando…" | "Completado" | "Siguiente" | "Pendiente" | "Bloqueado" | "No disponible";
+type StepStatus = "Comprobando…" | "Completado" | "Parcial" | "Siguiente" | "Pendiente" | "Bloqueado" | "No disponible";
 
 type Step = {
   number: number;
@@ -60,6 +118,7 @@ const INITIAL_STATE: OnboardingState = {
   activeAccounts: 0,
   financialAvailable: false,
   financialReady: false,
+  summaryMissing: [],
 };
 
 async function readJson<T>(url: string, signal: AbortSignal): Promise<T> {
@@ -74,7 +133,7 @@ function fulfilled<T>(result: PromiseSettledResult<T>): T | null {
 
 function statusClass(status: StepStatus) {
   if (status === "Completado") return styles.ready;
-  if (status === "Siguiente" || status === "Pendiente") return styles.pending;
+  if (status === "Siguiente" || status === "Pendiente" || status === "Parcial") return styles.pending;
   if (status === "No disponible") return styles.unavailable;
   if (status === "Bloqueado") return styles.blocked;
   return styles.checking;
@@ -82,10 +141,24 @@ function statusClass(status: StepStatus) {
 
 export default function OnboardingClient() {
   const [loading, setLoading] = useState(true);
+  const [slowLoading, setSlowLoading] = useState(false);
+  const [readDeadlineReached, setReadDeadlineReached] = useState(false);
   const [state, setState] = useState<OnboardingState>(INITIAL_STATE);
 
   useEffect(() => {
     const controller = new AbortController();
+    let mounted = true;
+    let timedOut = false;
+    const slowTimer = window.setTimeout(() => {
+      if (mounted) setSlowLoading(true);
+    }, 15_000);
+    const deadlineTimer = window.setTimeout(() => {
+      if (!mounted || controller.signal.aborted) return;
+      timedOut = true;
+      controller.abort();
+      setReadDeadlineReached(true);
+      setLoading(false);
+    }, 30_000);
 
     void (async () => {
       const [sourceResult, syncResult, configurationResult] = await Promise.allSettled([
@@ -94,7 +167,7 @@ export default function OnboardingClient() {
         readJson<Configuration>("/api/configuration", controller.signal),
       ] as const);
 
-      if (controller.signal.aborted) return;
+      if (!mounted || (controller.signal.aborted && !timedOut)) return;
 
       const source = fulfilled(sourceResult);
       const sync = fulfilled(syncResult);
@@ -112,19 +185,35 @@ export default function OnboardingClient() {
       const accountsAvailable = configuration !== null;
       const activeAccounts = configuration?.accounts?.filter((account) => account.lifecycle === "active").length ?? 0;
 
+      // Conservar resultados iniciales aunque la lectura secundaria tarde o falle.
+      setState((current) => ({
+        ...current, sourceAvailable, sourceConnected, sourceReady,
+        accountsAvailable, activeAccounts,
+      }));
+
       let financialAvailable = false;
       let financialReady = false;
+      let summaryMissing: string[] = [];
       if (sourceReady && accountsAvailable && activeAccounts > 0) {
-        try {
-          const financial = await readJson<FinancialSnapshot>("/api/financial?mode=snapshot", controller.signal);
-          if (controller.signal.aborted) return;
-          financialAvailable = true;
-          financialReady = financial.contractVersion === 1 && financial.principles?.bankSource === "read_only";
-        } catch {
-          if (controller.signal.aborted) return;
-        }
+        const today = madridToday();
+        const balanceParams = new URLSearchParams({
+          mode: "balance_series",
+          dateFrom: balanceDateFrom(today),
+          dateTo: today,
+        });
+        const [financialResult, dashboardResult, balanceResult] = await Promise.allSettled([
+          readJson<FinancialSnapshot>("/api/financial?mode=snapshot", controller.signal),
+          readJson<DashboardReadiness>("/api/dashboard?scope=all", controller.signal),
+          readJson<BalanceReadiness>(`/api/financial?${balanceParams.toString()}`, controller.signal),
+        ]);
+        if (!mounted || (controller.signal.aborted && !timedOut)) return;
+        const financial = fulfilled(financialResult);
+        financialAvailable = financial !== null;
+        financialReady = financial?.contractVersion === 1 && financial.principles?.bankSource === "read_only";
+        summaryMissing = summaryComponentsMissing(fulfilled(dashboardResult), fulfilled(balanceResult));
       }
 
+      if (!mounted) return;
       setState({
         sourceAvailable,
         sourceConnected,
@@ -133,17 +222,28 @@ export default function OnboardingClient() {
         activeAccounts,
         financialAvailable,
         financialReady,
+        summaryMissing,
       });
       setLoading(false);
     })().catch(() => {
-      if (!controller.signal.aborted) setLoading(false);
+      if (mounted) setLoading(false);
+    }).finally(() => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+      if (mounted && !timedOut) setSlowLoading(false);
     });
 
-    return () => controller.abort();
+    return () => {
+      mounted = false;
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(deadlineTimer);
+      controller.abort();
+    };
   }, []);
 
   const accountsReady = state.sourceReady && state.accountsAvailable && state.activeAccounts > 0;
-  const summaryReady = accountsReady && state.financialReady;
+  const summaryReady = accountsReady && state.financialReady && state.summaryMissing.length === 0;
+  const summaryPartial = accountsReady && state.financialReady && state.summaryMissing.length > 0;
 
   const steps = useMemo<Step[]>(() => {
     if (loading) {
@@ -175,10 +275,12 @@ export default function OnboardingClient() {
       ? "Completado"
       : !accountsReady
         ? "Bloqueado"
-        : state.financialAvailable
-          ? "Siguiente"
-          : "No disponible";
-    const step5Status: StepStatus = summaryReady ? "Siguiente" : "Bloqueado";
+        : summaryPartial
+          ? "Parcial"
+          : state.financialAvailable
+            ? "Siguiente"
+            : "No disponible";
+    const step5Status: StepStatus = summaryReady || summaryPartial ? "Siguiente" : "Bloqueado";
 
     return [
       {
@@ -230,10 +332,12 @@ export default function OnboardingClient() {
         name: "Mira tu primer resumen",
         outcome: "Visión general lista",
         description: summaryReady
-          ? "Tu resumen financiero ya puede mostrar una visión conjunta de tus datos."
+          ? "Resumen y evolución del saldo disponibles: puedes consultar una visión conjunta de tus datos."
           : !accountsReady
             ? "El resumen se habilita cuando los datos y las cuentas están preparados."
-            : "Abre Inicio para confirmar que ya puedes ver tu situación financiera de un vistazo.",
+            : summaryPartial
+              ? `Resumen parcial: pendiente ${state.summaryMissing.join(", ")}. En Inicio puedes consultar las partes disponibles; no se presentan como completas.`
+              : "Abre Inicio para confirmar que ya puedes ver tu situación financiera de un vistazo.",
         status: step4Status,
         href: "/",
         action: "Ver mi resumen",
@@ -243,20 +347,23 @@ export default function OnboardingClient() {
         number: 5,
         name: "Revisa lo que necesita tu decisión",
         outcome: "Todo bajo control",
-        description: summaryReady
-          ? "Para revisar reúne en un solo lugar los avisos y decisiones que merecen tu atención."
+        description: summaryReady || summaryPartial
+          ? "Para revisar reúne las decisiones disponibles aunque otra sección del resumen siga pendiente."
           : "Cuando el primer resumen esté listo, Financial App te llevará a los elementos que requieren una decisión.",
         status: step5Status,
         href: "/review",
         action: "Ver qué necesita atención",
-        blocked: !summaryReady,
+        blocked: !summaryReady && !summaryPartial,
       },
     ];
-  }, [accountsReady, loading, state, summaryReady]);
+  }, [accountsReady, loading, state, summaryReady, summaryPartial]);
 
   const completedCount = steps.filter((step) => step.status === "Completado").length;
   const activationComplete = !loading && summaryReady;
-  const nextStep = steps.find((step) => step.status === "Siguiente") ?? steps.find((step) => !step.blocked && step.status !== "Completado") ?? null;
+  const nextStep = steps.find((step) => step.status === "Parcial")
+    ?? steps.find((step) => step.status === "Siguiente")
+    ?? steps.find((step) => !step.blocked && step.status !== "Completado")
+    ?? null;
 
   return (
     <main className={styles.shell} aria-busy={loading} data-activation-complete={activationComplete ? "true" : "false"}>
@@ -273,6 +380,17 @@ export default function OnboardingClient() {
           <span>{loading ? "Comprobando tu estado" : activationComplete ? "Ya puedes usar tu resumen" : "Objetivos completados"}</span>
         </div>
       </header>
+
+      {loading && slowLoading ? (
+        <p role="status" aria-live="polite">
+          La comprobación está tardando más de 15 segundos. Seguimos leyendo las secciones disponibles sin cambiar tus datos.
+        </p>
+      ) : null}
+      {readDeadlineReached ? (
+        <p role="status" aria-live="polite">
+          La comprobación ha superado 30 segundos. Se muestran únicamente los resultados verificados; abre el módulo pendiente para volver a comprobarlo.
+        </p>
+      ) : null}
 
       <section className={styles.nextAction} aria-labelledby="next-action-heading">
         {activationComplete ? (

@@ -422,6 +422,7 @@ export default function TransactionsClient() {
   const filterSearch = searchParams.toString();
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
   const [rows, setRows] = useState<TransactionRow[]>([]);
   const [totalCount, setTotalCount] = useState(0);
@@ -632,6 +633,20 @@ export default function TransactionsClient() {
     () => Object.values(appliedFilters).filter((value) => value.trim() !== "").length,
     [appliedFilters],
   );
+  const advancedFilterKeys: Array<keyof Filters> = [
+    "merchantId", "reviewState", "duplicateState", "signMismatch", "channel",
+    "counterparty", "reconciliation", "recurring", "internalTransfer",
+    "hasDocument", "documentQuery", "tag", "ocrQuery", "splitLabel",
+    "amountFrom", "amountTo", "year", "month",
+  ];
+  const advancedDraftCount = advancedFilterKeys.filter((key) => draftFilters[key].trim() !== "").length;
+  const advancedAppliedCount = advancedFilterKeys.filter((key) => appliedFilters[key].trim() !== "").length;
+
+  useEffect(() => {
+    // Solo los filtros YA APLICADOS (p. ej. desde un enlace) despliegan al entrar.
+    // Los borradores no deben reabrir el panel después de cerrarlo manualmente.
+    if (advancedAppliedCount > 0) setAdvancedOpen(true);
+  }, [advancedAppliedCount]);
 
   const filtersDirty = useMemo(
     () => (Object.keys(EMPTY_FILTERS) as Array<keyof Filters>).some(
@@ -967,6 +982,7 @@ async function saveEdit(row: TransactionRow) {
       </header>
 
       <form className={styles.filters} onSubmit={applyFilters} aria-label="Filtros de movimientos">
+        <div className={styles.coreFilters}>
         <label className={styles.searchField}>
           <span>Buscar</span>
           <input value={draftFilters.q} maxLength={200} onChange={(event) => updateFilter("q", event.target.value)} placeholder="Concepto, comercio, contraparte, categoría, canal o nota" />
@@ -1000,6 +1016,27 @@ async function saveEdit(row: TransactionRow) {
             {(Object.entries(KIND_LABELS) as Array<[TransactionKind, string]>).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
         </label>
+        <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
+        <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
+        </div>
+        <div className={styles.moreFiltersHeader}>
+          <button
+            type="button"
+            className={styles.moreFiltersButton}
+            aria-expanded={advancedOpen}
+            aria-controls="movement-advanced-filters"
+            onClick={() => setAdvancedOpen((current) => !current)}
+          >
+            {advancedOpen ? "Ocultar filtros avanzados" : "Más filtros"}
+            {advancedAppliedCount > 0 ? ` · ${advancedAppliedCount} aplicados` : advancedDraftCount > 0 ? ` · ${advancedDraftCount} preparados` : ""}
+          </button>
+          <span role="status" aria-live="polite">
+            {advancedAppliedCount > 0
+              ? `${advancedAppliedCount} filtros avanzados activos`
+              : "Búsqueda, cuenta, categoría, tipo y periodo disponibles arriba"}
+          </span>
+        </div>
+        <div id="movement-advanced-filters" className={styles.advancedFilters} hidden={!advancedOpen}>
         <label>
           <span>Revisión</span>
           <select value={draftFilters.reviewState} onChange={(event) => updateFilter("reviewState", event.target.value)}>
@@ -1101,8 +1138,7 @@ async function saveEdit(row: TransactionRow) {
             {MONTH_LABELS.map((label, index) => <option key={label} value={String(index + 1)}>{label}</option>)}
           </select>
         </label>
-        <label><span>Desde</span><input type="date" value={draftFilters.dateFrom} onChange={(event) => updateFilter("dateFrom", event.target.value)} /></label>
-        <label><span>Hasta</span><input type="date" value={draftFilters.dateTo} onChange={(event) => updateFilter("dateTo", event.target.value)} /></label>
+        </div>
         <div className={styles.filterActions}>
           <span className={styles.resultCount} role="status" aria-live="polite">
             {filtersDirty ? "Cambios sin aplicar" : "La tabla refleja estos filtros"}

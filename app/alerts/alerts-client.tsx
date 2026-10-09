@@ -65,6 +65,7 @@ type DocumentItem = {
   id: string;
   status: "imported" | "pending_review" | "confirmed" | "archived";
   associationCount: number;
+  isTest?: boolean;
 };
 
 type DocumentList = {
@@ -84,6 +85,12 @@ type AlertSnapshot = {
   degradedReads: string[];
   generatedAt: string;
 };
+
+function alertPriorityLabel(tone: "danger" | "warning" | "info") {
+  if (tone === "danger") return "Atención prioritaria";
+  if (tone === "warning") return "Conviene revisar";
+  return "Información útil";
+}
 
 const CATEGORY_LABELS = {
   source: "Fuente",
@@ -147,10 +154,10 @@ async function loadDocumentSummary(): Promise<DocumentSummary> {
   let pages = 0;
 
   while (offset < total) {
-    const page = await readJson<DocumentList>(`/api/documents?limit=100&offset=${offset}`);
+    const page = await readJson<DocumentList>(`/api/documents?scope=ordinary&limit=100&offset=${offset}`);
     total = Math.max(0, page.total);
     for (const document of page.items) {
-      if (document.status === "archived") continue;
+      if (document.status === "archived" || document.isTest === true) continue;
       if (document.associationCount === 0) unassociated += 1;
       if (document.status === "pending_review") pendingReview += 1;
     }
@@ -287,7 +294,14 @@ export default function AlertsClient() {
           {alerts.map((alert) => (
             <article key={alert.id} className={`${styles.alertCard} ${styles[alert.tone]}`}>
               <div className={styles.alertCopy}>
-                <div className={styles.alertMeta}><span>{CATEGORY_LABELS[alert.category]}</span><span>Prioridad {alert.priority}</span></div>
+                <div className={styles.alertMeta}>
+                  <span>{CATEGORY_LABELS[alert.category]}</span>
+                  <span>{alertPriorityLabel(alert.tone)}</span>
+                  <details className={styles.priorityDetail}>
+                    <summary>Orden técnico</summary>
+                    <span>Índice de prioridad {alert.priority}; determina el orden de presentación, no es una puntuación de riesgo financiero.</span>
+                  </details>
+                </div>
                 <h3>{alert.title}</h3>
                 <p>{alert.detail}</p>
               </div>

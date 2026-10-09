@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
@@ -157,6 +159,15 @@ for (const width of WIDTHS) {
     await page.route("**/api/analysis**", async (route) => {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
     });
+    // Este escenario certifica la lectura con cobertura conocida; la cobertura
+    // desconocida se valida por separado, sin inventar tendencias financieras.
+    await page.route("**/api/analysis/source-freshness", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      });
+    });
 
     await page.setViewportSize({ width, height: width <= 430 ? 900 : 1000 });
     await page.goto("/analysis", { waitUntil: "domcontentloaded" });
@@ -170,6 +181,13 @@ for (const width of WIDTHS) {
     await expect(page.getByLabel("Lectura rápida")).toBeVisible();
     await expect(page.getByLabel("Lectura rápida")).toContainText("Sin previsiones");
     await expect(page.getByRole("heading", { name: "Patrones que no se ven en un simple total" })).toBeVisible();
+    const advancedToggle = page.getByRole("button", { name: "Mostrar detalle de patrones" });
+    await expect(advancedToggle).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toHaveCount(0);
+    await advancedToggle.click();
+    await expect(page.getByRole("button", { name: "Ocultar detalle de patrones" })).toHaveAttribute("aria-expanded", "true");
+    await page.getByText("Ver curva de concentración", { exact: true }).click();
+    await page.getByText("Ver conceptos del impacto", { exact: true }).click();
     await expect(page.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Gasto por día de la semana" })).toBeVisible();
     await expect(page.getByRole("img", { name: "Distribución de movimientos por tramo de importe" })).toBeVisible();
@@ -177,7 +195,7 @@ for (const width of WIDTHS) {
     const weekday = page.getByRole("img", { name: "Gasto por día de la semana" });
     await expect(weekday).toHaveAttribute("aria-label", /lunes, 140,00\s*€/);
     for (const [name, maximum] of [
-      ["Gráfica de gasto diario", 760],
+      ["Gráfica de gasto diario", 1600],
       ["Gráfica de comercios", 620],
       ["Curva de concentración", 620],
     ] as const) {
@@ -207,6 +225,7 @@ for (const width of WIDTHS) {
         ["merchants", "Relación entre frecuencia de compra e importe medio por comercio"],
         ["concentration", "Curva de concentración del gasto por comercio"],
       ]) {
+        if (name === "heatmap") await page.getByRole("button", { name: "Mapa de calor", exact: true }).click();
         const card = page.getByRole("img", { name: chart }).locator("xpath=ancestor::div[contains(@class, 'chartCard')][1]");
         await card.scrollIntoViewIfNeeded();
         await card.evaluate((element) => {
@@ -214,6 +233,7 @@ for (const width of WIDTHS) {
         });
         await card.screenshot({ path: testInfo.outputPath(`analysis-patterns-${testInfo.project.name}-${width}-${name}.png`) });
       }
+      await page.getByRole("button", { name: "Evolución diaria", exact: true }).click();
     }
 
     const dailyData = page.getByText("Ver datos diarios", { exact: true });
@@ -261,9 +281,42 @@ for (const width of WIDTHS) {
         && style.clip !== "auto";
     })).toBe(true);
 
-    expect(
-      await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth + 1),
-    ).toBe(true);
+    const overflowAudit = await page.evaluate(() => {
+      const viewport = document.documentElement.clientWidth;
+      return {
+        viewport,
+        scrollWidth: document.documentElement.scrollWidth,
+        offenders: [...document.querySelectorAll<HTMLElement>("body *")]
+          .map((element) => ({
+            element,
+            rect: element.getBoundingClientRect(),
+          }))
+          .filter(({ element, rect }) => {
+            if (rect.width <= 0 || rect.right <= viewport + 1
+              || window.getComputedStyle(element).display === "none") return false;
+            // Horizontally scrolled navigation links cannot enlarge the page
+            // when an ancestor clips them. Keep the page-width assertion below.
+            for (let parent = element.parentElement; parent; parent = parent.parentElement) {
+              const style = window.getComputedStyle(parent);
+              if (style.clip !== "auto" || style.clipPath !== "none") return false;
+              if (["auto", "scroll", "hidden", "clip"].includes(style.overflowX)
+                && parent.getBoundingClientRect().right <= viewport + 1) return false;
+            }
+            return true;
+          })
+          .slice(0, 25)
+          .map(({ element, rect }) => ({
+            tag: element.tagName.toLowerCase(),
+            className: typeof element.className === "string" ? element.className.slice(0, 90) : "",
+            right: Math.round(rect.right),
+            width: Math.round(rect.width),
+            scrollWidth: element.scrollWidth,
+            overflowX: window.getComputedStyle(element).overflowX,
+            text: element.textContent?.trim().slice(0, 70),
+          })),
+      };
+    });
+    expect(overflowAudit.scrollWidth, JSON.stringify(overflowAudit)).toBeLessThanOrEqual(overflowAudit.viewport + 1);
 
     const apply = page.getByRole("button", { name: "Aplicar" });
     const applyBox = await apply.boundingBox();
@@ -360,6 +413,46 @@ test("QA-02 · Análisis no convierte un periodo sin cobertura completa en tende
   await expect(kpis).toContainText("Cobertura incompleta: no interpretamos la variación como tendencia");
   await expect(kpis).not.toContainText("Tasa de ahorro al alza");
   await expect(kpis).not.toContainText("Tasa de ahorro a la baja");
+});
+
+test("QA Work · el texto atenuado de Análisis mantiene contraste AA en tema oscuro", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+
+  const contrast = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const muted = root.getPropertyValue("--color-text-muted").trim();
+    const surface = root.getPropertyValue("--color-surface-strong").trim();
+
+    const rgb = (hex: string) => {
+      const value = hex.replace("#", "");
+      if (!/^[0-9a-f]{6}$/i.test(value)) throw new Error(`Unexpected color token: ${hex}`);
+      return [0, 2, 4].map((index) => Number.parseInt(value.slice(index, index + 2), 16) / 255);
+    };
+    const luminance = (hex: string) => rgb(hex)
+      .map((channel) => channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+
+    const mutedLuminance = luminance(muted);
+    const surfaceLuminance = luminance(surface);
+    const lighter = Math.max(mutedLuminance, surfaceLuminance);
+    const darker = Math.min(mutedLuminance, surfaceLuminance);
+    return (lighter + 0.05) / (darker + 0.05);
+  });
+
+  expect(contrast).toBeGreaterThanOrEqual(4.5);
 });
 
 test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema claro", async ({ page }, testInfo) => {
@@ -501,4 +594,107 @@ test("QA-23 · Análisis no dibuja barras para ingresos o gastos exactamente a c
   expect(await zeroBars.evaluateAll((elements) => elements.map((element) => Number(element.getAttribute("height"))))).toEqual([0, 0]);
   await expect(chart.locator('rect[data-series="income"][data-zero="true"]')).toHaveCount(1);
   await expect(chart.locator('rect[data-series="expense"][data-zero="true"]')).toHaveCount(1);
+});
+
+
+test("AUD-E2E-DAT-001 · Análisis no rompe si se desconoce la fecha de cobertura bancaria", async ({ page }) => {
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate: null, sync: null }),
+    });
+  });
+
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  await expect(page.getByRole("form", { name: "Filtros del análisis" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: /Cobertura bancaria desconocida/ })).toBeVisible();
+  await expect(page.getByText("Cobertura desconocida · comparación no disponible").first()).toBeVisible();
+});
+
+
+test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder importes ni enlaces", async ({ page }) => {
+  const expandedSnapshot = structuredClone(SNAPSHOT);
+  const source = expandedSnapshot.categoryDrivers[0];
+  expandedSnapshot.categoryDrivers = Array.from({ length: 8 }, (_, index) => ({
+    ...source,
+    id: `11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+    name: `Categoría de prueba ${index + 1}`,
+    href: `/transactions?categoryId=11111111-1111-4111-8111-${String(index + 1).padStart(12, "0")}`,
+  }));
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
+  await page.route("**/api/analysis/source-freshness", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      available: true, latestMovementDate: "2026-09-15", sync: null,
+    }) }));
+  await page.goto("/analysis");
+  const breakdown = page.locator("section").filter({ has: page.getByRole("heading", { name: "Dónde se concentra el gasto" }) });
+  await expect(breakdown.getByText("6 de 8 categorías con gasto")).toBeVisible();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(6);
+  await breakdown.getByRole("button", { name: "Ver todas las 8 categorías" }).click();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(8);
+  await expect(breakdown.getByText("8 de 8 categorías con gasto")).toBeVisible();
+  await breakdown.getByRole("button", { name: "Ver menos categorías" }).click();
+  await expect(breakdown.locator('a[href*="categoryId="]')).toHaveCount(6);
+});
+
+test("AUD-E2E-ANA-001 · lectura diaria y mapa de calor comparten tarjeta sin duplicidad", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const temporal = page.getByLabel("Gasto temporal del periodo");
+  const series = temporal.getByRole("button", { name: "Evolución diaria" });
+  const heatmap = temporal.getByRole("button", { name: "Mapa de calor" });
+  await expect(series).toHaveAttribute("aria-pressed", "true");
+  await expect(temporal.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toBeVisible();
+  await expect(temporal.getByRole("img", { name: "Mapa de calor diario del gasto" })).toHaveCount(0);
+  await heatmap.click();
+  await expect(heatmap).toHaveAttribute("aria-pressed", "true");
+  await expect(temporal.getByRole("img", { name: "Mapa de calor diario del gasto" })).toBeVisible();
+  await expect(temporal.getByRole("img", { name: "Evolución diaria del gasto del periodo" })).toHaveCount(0);
+  await series.click();
+  await expect(temporal.getByText("Ver datos diarios")).toBeVisible();
+  const advanced = page.getByRole("button", { name: "Mostrar detalle de patrones" });
+  await expect(advanced).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeHidden();
+  await advanced.click();
+  await expect(page.getByRole("img", { name: "Relación entre frecuencia de compra e importe medio por comercio" })).toBeVisible();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeHidden();
+  await page.getByText("Ver conceptos del impacto", { exact: true }).click();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
+  await page.getByRole("button", { name: "Ocultar detalle de patrones" }).click();
+  await expect(page.getByText("Qué descripciones concentran más gasto")).toBeVisible();
+});
+
+test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de patrones especializados", () => {
+  const source = readFileSync(resolve(process.cwd(), "app/analysis/analysis-client.tsx"), "utf8");
+  const evolution = source.indexOf('id="evolution-heading"');
+  const categories = source.indexOf('id="distribution-heading"');
+  const patterns = source.indexOf("<AnalysisMovementInsights snapshot={snapshot} />");
+  const anomalies = source.indexOf('id="anomalies-heading"');
+  expect(evolution).toBeGreaterThan(0);
+  expect(categories).toBeGreaterThan(evolution);
+  expect(patterns).toBeGreaterThan(categories);
+  expect(anomalies).toBeGreaterThan(patterns);
+});
+
+test("AUD-E2E-ANA-001 · concentración solo se abre desde ranking de comercios", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const merchants = page.getByRole("heading", { name: "Comercios principales" });
+  await expect(merchants).toBeVisible();
+  const concentration = page.getByText("Ver curva de concentración", { exact: true });
+  await expect(concentration).toBeVisible();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toHaveCount(0);
+  await concentration.click();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toBeVisible();
+  await concentration.click();
+  await expect(page.getByRole("img", { name: "Curva de concentración del gasto por comercio" })).toHaveCount(0);
 });

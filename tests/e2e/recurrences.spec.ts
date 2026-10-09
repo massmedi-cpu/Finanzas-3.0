@@ -293,6 +293,7 @@ test("Recurrentes muestra confianza explícita, vigencia, formato español y con
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   await expect(page.getByText(/-42,50\s?€/).first()).toBeVisible();
   await expect(page.getByText("Confianza Media", { exact: true }).first()).toBeVisible();
+  await page.locator("details").filter({ hasText: /Históricos/ }).locator("summary").click();
   await expect(page.getByText("1 ciclo no observado", { exact: true })).toBeVisible();
   await expect(page.getByText("Origen bancario · solo lectura", { exact: true })).toBeVisible();
   await expect(page.getByText(/Ningún patrón se confirma como recurrencia sin una decisión explícita/i)).toBeVisible();
@@ -335,7 +336,9 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
     status: "archived",
   });
 
-  const incomeCard = page.locator("article").filter({ hasText: "ingreso periódico" });
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  const incomeCard = history.locator("article").filter({ hasText: "ingreso periódico" });
   await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
   await expect(recurrenceStatus(page, "Recurrencia actualizada")).toContainText("Recurrencia actualizada con los movimientos actuales.");
   expect(writes.at(-1)).toEqual({
@@ -453,4 +456,98 @@ test("protected preview exposes only future recurrence projections without autom
       expect(candidate.confidence).toBe("medium");
     }
   }
+});
+
+
+test("AUD-E2E-REC-001 · los históricos quedan plegados pero todos siguen disponibles sin escritura", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockRecurrenceApi(page, writes);
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await expect(history).not.toHaveAttribute("open");
+  await expect(history.locator("summary")).toContainText("1 patrón");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await expect(history.getByText("ingreso periódico", { exact: true })).toBeHidden();
+  await history.locator("summary").click();
+  await expect(history.getByText("ingreso periódico", { exact: true })).toBeVisible();
+  await expect(history).toContainText("Próxima fecha provisional");
+  await expect(history).toContainText("Ciclos no observados");
+  expect(writes).toHaveLength(0);
+});
+
+test("AUD-E2E-REC-001 · 14 candidatos se reparten entre actual e histórico sin escritura ni pérdida de fechas", async ({ page }) => {
+  const medium = {
+    ...baseSnapshot.candidates[0],
+    candidateKey: "00000000000000000000000000000001",
+    conceptPattern: "Patrón reciente de confianza media",
+    confidence: "medium" as const,
+    observedConfidence: "medium" as const,
+    missedCycles: 0,
+    stale: false,
+  };
+  const old = Array.from({ length: 13 }, (_, i) => ({
+    ...baseSnapshot.candidates[1],
+    candidateKey: (i + 2).toString(16).padStart(32, "0"),
+    conceptPattern: `Patrón histórico ${String(i + 1).padStart(2, "0")}`,
+    confidence: "low" as const,
+    observedConfidence: "low" as const,
+    existingRecurrenceId: null,
+    existingStatus: null,
+    lastObservedDate: "2021-01-01",
+    missedCycles: i === 12 ? 65 : i + 1,
+    stale: true,
+  }));
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 409, contentType: "application/json", body: '{"error":"unexpected_write"}' });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...baseSnapshot,
+        candidateCount: 14,
+        candidates: [old[10], old[0], medium, ...old.filter((_, i) => i !== 10 && i !== 0)],
+      }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("Patrón reciente de confianza media", { exact: true })).toBeVisible();
+  const history = page.locator("details").filter({ hasText: /Históricos · 13 patrones/ });
+  await expect(history).not.toHaveAttribute("open");
+  await expect(history.locator("summary")).toContainText("13 patrones");
+  await expect(history.locator("article")).toHaveCount(13);
+  await expect(history.getByText("Patrón histórico 13", { exact: true })).toBeHidden();
+  await history.locator("summary").click();
+  await expect(history.getByText("Patrón histórico 13", { exact: true })).toBeVisible();
+  await expect(history).toContainText("65 ciclos no observados");
+  await expect(history).toContainText("Próxima fecha provisional");
+  await expect(history).toContainText("Último movimiento");
+  expect(writes).toEqual([]);
+});
+
+test("AUD-E2E-REC-001 · todos los ciclos omitidos son visibles aun sin marca de antigüedad", async ({ page }) => {
+  await page.route("**/api/recurrences*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        ...baseSnapshot,
+        candidateCount: 1,
+        candidates: [{
+          ...baseSnapshot.candidates[0],
+          candidateKey: "0000000000000000000000000000000f",
+          missedCycles: 3,
+          stale: false,
+        }],
+      }),
+    });
+  });
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos · 1 patrón/ });
+  await history.locator("summary").click();
+  await expect(history.getByText("3 ciclos no observados")).toBeVisible();
 });

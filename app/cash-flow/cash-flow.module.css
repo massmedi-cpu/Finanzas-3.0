@@ -298,6 +298,8 @@
 .evolutionActions { display: grid; align-content: center; gap: var(--space-2); }
 
 .srTable {
+  /* A table's intrinsic width can exceed 1px. Clip a block wrapper instead,
+     keeping the native table and its caption available to assistive tech. */
   position: absolute;
   width: 1px;
   height: 1px;

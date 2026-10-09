@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { CashFlowDay, CashFlowEventState, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
 import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow } from "../../src/application/cash-flow/cash-flow-model";
 import { formatMoneyCents } from "../../src/core/money";
+import { dateHasConfirmedCoverage, periodComparisonIsReliable } from "../../src/application/data-coverage";
 import { CashFlowEvolution } from "./cash-flow-evolution";
 import styles from "./cash-flow.module.css";
 
@@ -77,8 +78,20 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
   const forecastReady = view.forecastState === "ready";
   const selectedDay = view.days.find((day) => day.date === selected) ?? null;
   const offset = (new Date(`${view.dateFrom}T12:00:00Z`).getUTCDay() + 6) % 7;
-  const combined = view.actualNetCents !== null && view.plannedNetCents !== null
-    ? view.actualNetCents + view.plannedNetCents : null;
+  const combined = periodComparisonIsReliable(view.actualCoverage)
+    && view.actualNetCents !== null
+    && view.plannedNetCents !== null
+      ? view.actualNetCents + view.plannedNetCents
+      : null;
+  const coverageLabel = view.actualCoverage.state === "covered"
+    ? `Cobertura bancaria observada hasta ${formatDate(view.actualCoverage.throughDate!)}`
+    : view.actualCoverage.state === "partial"
+      ? `Datos reales parciales hasta ${formatDate(view.actualCoverage.throughDate!)}; los días posteriores no se tratan como cero.`
+      : view.actualCoverage.state === "none"
+        ? `Sin cobertura bancaria confirmada para este mes${view.actualCoverage.latestMovementDate ? `; último movimiento ${formatDate(view.actualCoverage.latestMovementDate)}` : ""}.`
+        : "Cobertura bancaria desconocida; no se muestran ceros como datos reales.";
+
+  const actualCoveredOn = (date: string) => actualReady && dateHasConfirmedCoverage(date, view.actualCoverage);
   const nextMonth = shiftCashFlowMonth(view.month, 1);
   const previousMonth = shiftCashFlowMonth(view.month, -1);
 
@@ -110,8 +123,9 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
 
       <section className={styles.kpis} aria-label="Resumen de Cash Flow">
         <article>
-          <span>Neto real</span><strong>{view.actualNetCents === null ? "—" : formatMoneyCents(view.actualNetCents)}</strong>
+          <span>{view.actualCoverage.state === "partial" ? "Neto real observado · parcial" : "Neto real"}</span><strong>{view.actualNetCents === null ? "—" : formatMoneyCents(view.actualNetCents)}</strong>
           <dl><div><dt>Entradas</dt><dd>{view.actualIncomeCents === null ? "—" : formatMoneyCents(view.actualIncomeCents)}</dd></div><div><dt>Salidas</dt><dd>{view.actualExpenseCents === null ? "—" : formatMoneyCents(view.actualExpenseCents)}</dd></div></dl>
+          <small>{coverageLabel}</small>
           <Link prefetch={false} href={`/transactions?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Ver movimientos reales</Link>
         </article>
         <article>
@@ -121,12 +135,15 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
         </article>
         <article className={styles.combined}>
           <span>Real + pendiente previsto</span><strong>{combined === null ? "—" : formatMoneyCents(combined)}</strong>
-          <small>Resultado potencial del mes; no equivale al saldo de tus cuentas.</small>
+          <small>{periodComparisonIsReliable(view.actualCoverage)
+            ? "Resultado potencial del mes; no equivale al saldo de tus cuentas."
+            : "Resultado no disponible mientras la cobertura real del mes sea incompleta o desconocida."}</small>
           <a href="#cash-flow-evolution-title">Ver cómo evoluciona</a>
         </article>
       </section>
 
       {view.actualState !== "ready" ? <p className={styles.warning} role="alert">{realStatus(view.actualState)} <Link prefetch={false} href={`/transactions?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Abrir Movimientos</Link></p> : null}
+      {view.actualState === "ready" && view.actualCoverage.state !== "covered" ? <p className={styles.notice} role="status">{coverageLabel}</p> : null}
       {view.forecastState !== "ready" ? <p className={styles.warning} role="alert">{forecastStatus(view.forecastState)} <Link prefetch={false} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Abrir Previsión</Link></p> : null}
 
       <section className={styles.eventStates} aria-labelledby="cash-flow-states-title">
@@ -161,17 +178,18 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
           <div className={styles.days}>
             {Array.from({ length: offset }, (_, index) => <span key={`offset-${index}`} aria-hidden="true" />)}
             {view.days.map((day) => {
-              const signals = daySignals(day, actualReady, forecastReady);
-              const realCount = actualReady ? day.real.filter(countsInCashFlow).length : null;
+              const dayActualCovered = actualCoveredOn(day.date);
+              const signals = daySignals(day, dayActualCovered, forecastReady);
+              const realCount = dayActualCovered ? day.real.filter(countsInCashFlow).length : null;
               const plannedCount = forecastReady ? day.forecasts.filter((item) => item.status === "planned").length : null;
               return (
                 <button key={day.date} type="button" className={`${styles.day} ${selected === day.date ? styles.active : ""}`}
-                  aria-label={`${formatDate(day.date)}: ${signals || (actualReady && forecastReady ? "sin actividad registrada" : "datos incompletos")}`}
+                  aria-label={`${formatDate(day.date)}: ${signals || (!dayActualCovered ? "sin cobertura bancaria confirmada" : forecastReady ? "sin actividad registrada" : "previsión no disponible")}`}
                   aria-pressed={selected === day.date} onClick={() => setSelected(day.date)}>
                   <strong>{Number(day.date.slice(-2))}</strong>
                   <span className={styles.dayCounts}>{realCount || plannedCount
                     ? [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null].filter(Boolean).join(" · ")
-                    : realCount === null || plannedCount === null ? "Datos incompletos" : "—"}</span>
+                    : realCount === null ? "Sin cobertura" : plannedCount === null ? "Previsión no disponible" : "—"}</span>
                   <span className={styles.signals} aria-hidden="true">
                     {actualReady && day.real.some((row) => countsInCashFlow(row) && row.amountCents > 0) ? <i className={styles.realIncome} /> : null}
                     {actualReady && day.real.some((row) => countsInCashFlow(row) && row.amountCents < 0) ? <i className={styles.realExpense} /> : null}
@@ -194,17 +212,21 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
           <div id="cash-flow-day-detail" className={styles.detail} role="region" aria-label={`Detalle del ${formatDate(selectedDay.date)}`}>
             <div className={styles.detailTitle}><h3>{formatDate(selectedDay.date)}</h3><Link prefetch={false} href={`/transactions?dateFrom=${selectedDay.date}&dateTo=${selectedDay.date}`}>Ver todos los movimientos</Link></div>
             <div className={styles.dayTotals}>
-              <p>Real <strong>{actualReady ? formatMoneyCents(selectedDay.realNetCents) : "—"}</strong></p>
+              <p>Real <strong>{actualCoveredOn(selectedDay.date) ? formatMoneyCents(selectedDay.realNetCents) : "—"}</strong></p>
               <p>Pendiente previsto <strong>{forecastReady ? formatMoneyCents(selectedDay.plannedNetCents) : "—"}</strong></p>
             </div>
-            {actualReady && selectedDay.real.length > 0 ? (
+            {actualCoveredOn(selectedDay.date) && selectedDay.real.length > 0 ? (
               <div className={styles.group}><h4>Movimientos bancarios · fecha real</h4><ul>{selectedDay.real.map((row) => (
                 <li key={row.id}>
                   <div><strong>{row.concept.effective}</strong><small>{row.account.name} · {row.kind.effective === "transfer" ? "Transferencia" : countsInCashFlow(row) ? "Incluido en neto real" : "No incluido en neto real"}</small></div>
                   <strong className={row.amountCents < 0 ? styles.negative : styles.positive}>{formatMoneyCents(row.amountCents)}</strong>
                 </li>
               ))}</ul></div>
-            ) : actualReady ? <p className={styles.empty}>No hay movimientos bancarios en este día.</p> : null}
+            ) : actualCoveredOn(selectedDay.date)
+              ? <p className={styles.empty}>No hay movimientos bancarios en este día.</p>
+              : actualReady
+                ? <p className={styles.empty}>Sin cobertura bancaria confirmada para este día; no se interpreta como 0,00 €.</p>
+                : null}
             {forecastReady && selectedDay.forecasts.length > 0 ? (
               <div className={styles.group}><h4>Previsiones · fecha estimada</h4><ul>{selectedDay.forecasts.map((item) => (
                 <li key={item.id}>

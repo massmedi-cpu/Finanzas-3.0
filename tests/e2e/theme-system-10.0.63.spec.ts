@@ -88,3 +88,24 @@ test.describe("ART-010 · tema system / light / dark", () => {
     await expect(root).toHaveAttribute("data-theme", "light");
   });
 });
+
+
+test("AUD-E2E-UI-001 · Presupuestos y Documentos usan superficies claras y texto legible", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  for (const section of [
+    { path: "/budgets", heading: "Presupuestos" },
+    { path: "/documents", heading: "Documentos" },
+  ]) {
+    await page.goto(section.path);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    const hero = page.getByRole("heading", { name: section.heading, level: 1 }).locator("xpath=../..");
+    await expect(hero).toBeVisible();
+    const styles = await hero.evaluate((node) => {
+      const computed = getComputedStyle(node);
+      return { color: computed.color, background: computed.backgroundImage };
+    });
+    expect(styles.color).toBe("rgb(20, 35, 59)");
+    expect(styles.background).toContain("rgb(255, 255, 255)");
+    expect(styles.background).not.toContain("rgb(7, 14, 29)");
+  }
+});

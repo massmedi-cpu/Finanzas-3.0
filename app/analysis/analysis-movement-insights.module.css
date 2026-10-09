@@ -75,7 +75,7 @@
 }
 
 .heroGrid { grid-template-columns: minmax(0, 1.45fr) minmax(18rem, 0.55fr); }
-.chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.chartColumns { grid-template-columns: minmax(0, 1fr); }
 .chartColumn {
   min-width: 0;
   display: grid;
@@ -119,9 +119,13 @@
   line-height: 1.24;
 }
 .cardHeading small {
-  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+  flex: 0 1 auto;
   color: var(--color-text-muted);
   font-size: max(var(--font-helper), 0.72rem);
+  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .svgViewport,
@@ -168,9 +172,11 @@
 }
 .dailyChart {
   max-width: 100%;
+  max-height: 14.75rem;
 }
 .scatterChart {
-  max-width: 100%;
+  max-width: min(100%, 38.75rem);
+  margin-inline: auto;
 }
 .heatmapChart {
   width: min(100%, 31rem);
@@ -484,6 +490,7 @@
   }
   .heading > a { width: 100%; justify-content: center; }
   .cardHeading { display: grid; gap: 0.3rem; }
+  .cardHeading small { text-align: left; }
   .weekdayChart { min-height: 0; grid-template-columns: 1fr; gap: 0.55rem; }
   .weekdayColumn {
     grid-template-columns: 1.5rem minmax(0, 1fr) auto;
@@ -520,3 +527,22 @@
 @media (prefers-reduced-motion: reduce) {
   .heading > a { transition: none; }
 }
+
+/* AUD-E2E-ANA-001: one temporal card, optional specialist views. */
+.dailyOverview { min-width: 0; display: grid; gap: var(--space-2); }
+.dailySwitch { display: flex; flex-wrap: wrap; gap: 0.4rem; padding: 0.2rem; width: fit-content; max-width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.dailySwitch button,
+.advancedToggle { min-height: 2.75rem; padding: 0.55rem 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-surface-strong); color: var(--color-text); font: inherit; font-weight: 700; cursor: pointer; }
+.dailySwitch button[aria-pressed="true"] { border-color: var(--color-primary); background: color-mix(in srgb, var(--color-primary) 12%, var(--color-surface)); }
+.advancedPatterns { min-width: 0; display: grid; align-content: start; gap: var(--space-3); margin-top: var(--space-4); }
+.advancedToggle { width: fit-content; }
+.dailySwitch button:focus-visible,
+.advancedToggle:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 3px; }
+.viewExplanation { margin: 0; color: var(--color-text-muted); font-size: var(--font-helper); line-height: 1.5; }
+@media (max-width: 30rem) { .dailySwitch { width: 100%; } .dailySwitch button { flex: 1 1 auto; } .advancedToggle { width: 100%; } }
+
+/* El detalle agregado por concepto se ofrece desde el impacto, no como bloque principal duplicado. */
+.conceptsDisclosure { min-width: 0; padding: 0.75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.conceptsDisclosure > summary { cursor: pointer; padding: 0.45rem; font-weight: 700; color: var(--color-text); }
+.conceptsDisclosure > summary:focus-visible { outline: 2px solid var(--color-primary); outline-offset: 2px; }
+.conceptsDisclosure[open] > .detailCard { margin-top: var(--space-2); }

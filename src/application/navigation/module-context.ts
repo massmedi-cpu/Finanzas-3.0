@@ -74,8 +74,10 @@ export function analysisModuleLinks(
     },
     {
       label: "Cash Flow",
-      href: href("/cash-flow", [["month", selection.dateFrom.slice(0, 7)]]),
-      detail: "Hechos reales y previsiones del mismo mes",
+      href: href("/cash-flow", [["month", selection.month]]),
+      detail: selection.dateFrom.slice(0, 7) !== selection.month
+        ? `Solo ${selection.month}: Cash Flow muestra un mes, no todo el rango del análisis`
+        : "Hechos reales y previsiones del mismo mes",
     },
     {
       label: "Movimientos",
@@ -84,7 +86,7 @@ export function analysisModuleLinks(
     },
     {
       label: "Presupuestos",
-      href: "/budgets",
+      href: href("/budgets", [["month", selection.month]]),
       detail: `Revisar límites de ${selection.month}`,
     },
     {
@@ -104,8 +106,16 @@ export function comparisonModuleLinks(selection: ComparisonModuleSelection): Mod
   return [
     {
       label: "Análisis",
-      href: href("/analysis", [["accountId", selection.accountId]]),
-      detail: "Volver a tendencias y evolución mensual",
+      href: href("/analysis", [
+        ["periodMode", "custom"],
+        ["dateFrom", selection.primaryFrom],
+        ["dateTo", selection.primaryTo],
+        ["compareMode", "custom"],
+        ["compareDateFrom", selection.referenceFrom],
+        ["compareDateTo", selection.referenceTo],
+        ["accountId", selection.accountId],
+      ]),
+      detail: "Conserva ambos periodos y la cuenta seleccionada",
     },
     {
       label: "Movimientos · principal",
@@ -127,8 +137,10 @@ export function comparisonModuleLinks(selection: ComparisonModuleSelection): Mod
     },
     {
       label: "Cash Flow",
-      href: href("/cash-flow", [["month", selection.primaryFrom.slice(0, 7)]]),
-      detail: "Ver hechos y previsiones del mes principal",
+      href: href("/cash-flow", [["month", selection.primaryTo.slice(0, 7)]]),
+      detail: selection.primaryFrom.slice(0, 7) !== selection.primaryTo.slice(0, 7)
+        ? "Solo el mes final del periodo principal: Cash Flow es mensual"
+        : "Ver hechos y previsiones del mes principal",
     },
   ];
 }
@@ -152,7 +164,7 @@ export function forecastModuleLinks(selection: ForecastModuleSelection): ModuleC
     },
     {
       label: "Presupuestos",
-      href: "/budgets",
+      href: href("/budgets", [["month", selection.dateFrom.slice(0, 7)]]),
       detail: "Contrastar previsión con límites mensuales",
     },
     {

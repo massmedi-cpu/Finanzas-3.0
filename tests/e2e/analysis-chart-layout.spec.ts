@@ -25,7 +25,9 @@ test.describe("Análisis · legibilidad de gráficas", () => {
   test("las tarjetas de distinta densidad no comparten una fila de altura forzada", () => {
     expect(insights).toContain("styles.chartColumns");
     expect(insights).toContain("styles.chartColumn");
-    expect(styles).toContain(".chartColumns { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
+    // Concentración ahora pertenece a Comercios; el gráfico especialista que
+    // queda usa todo el ancho, sin reservar una segunda columna vacía.
+    expect(styles).toContain(".chartColumns { grid-template-columns: minmax(0, 1fr); }");
     expect(styles).toContain("align-content: start");
     expect(styles).not.toContain(".chartGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }");
   });

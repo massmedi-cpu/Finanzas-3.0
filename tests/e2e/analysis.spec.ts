@@ -172,8 +172,19 @@ function mockSnapshot(): AnalysisSnapshot {
   });
 }
 
-async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? never : any, snapshot: AnalysisSnapshot) {
+async function mockAnalysisApi(
+  page: Parameters<typeof test>[0] extends never ? never : any,
+  snapshot: AnalysisSnapshot,
+  latestMovementDate = snapshot.selection.dateTo,
+) {
   let selectedRequestSeen = false;
+  await page.route("**/api/analysis/source-freshness", async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: true, latestMovementDate, sync: null }),
+    });
+  });
   await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
     const url = new URL(route.request().url());
     expect(url.pathname).toBe("/api/analysis");
@@ -186,8 +197,8 @@ async function mockAnalysisApi(page: Parameters<typeof test>[0] extends never ? 
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
-  const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo) {
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: "1 mes" }).click();
@@ -195,6 +206,39 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot) {
   await expect.poll(selectedRequestSeen).toBe(true);
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
+
+test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
+
+  await page.goto("/analysis?month=2026-08&range=1m");
+  await page.getByLabel("Mes de referencia").fill("2026-09");
+  await page.getByRole("button", { name: "1 mes" }).click();
+  await page.getByRole("button", { name: "Aplicar" }).click();
+  await expect.poll(selectedRequestSeen).toBe(true);
+
+  const navigation = page.getByRole("navigation", { name: "Continuar desde Análisis" });
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole("link", { name: /Cash Flow/i })).toHaveAttribute("href", "/cash-flow?month=2026-09");
+  await expect(navigation.getByRole("link", { name: /Presupuestos/i })).toHaveAttribute("href", "/budgets?month=2026-09");
+  await expect(navigation.getByRole("link", { name: /Movimientos/i })).toHaveAttribute(
+    "href",
+    "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
+  );
+});
+
+test("AUD-E2E-DAT-001 · Análisis no convierte ausencia de cobertura en mejora", async ({ page }) => {
+  test.skip(Boolean(process.env.VERCEL_PREVIEW_URL), "el Preview protegido valida la frontera real de workspace en otra prueba");
+  const snapshot = mockSnapshot();
+
+  await loadMockAnalysis(page, snapshot, "2026-08-31");
+
+  const kpis = page.getByLabel("Indicadores principales del periodo");
+  await expect(kpis.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  await expect(kpis).not.toContainText("−100");
+  await expect(kpis).not.toContainText("-100");
+  await expect(page.getByRole("heading", { name: /Sin movimientos bancarios confirmados para este periodo: no podemos interpretar una variación/i })).toBeVisible();
+});
 
 test("E2 · el motor v2 reconcilia al céntimo, excluye el mes parcial de medias y crea drill-down", () => {
   const snapshot = mockSnapshot();
@@ -364,4 +408,27 @@ test("E2 · Preview protegido conserva contrato v2 y falla cerrado sin workspace
   await expect(response.json()).resolves.toMatchObject({
     code: "workspace_context_required",
   });
+});
+
+test("AUD-E2E-NAV-001 · avanzado refleja los 3 meses aplicados sin recarga", async ({ page }) => {
+  const base = mockSnapshot();
+  const selected: AnalysisSnapshot = {
+    ...base,
+    selection: { ...base.selection, month: "2026-09", range: "3m", dateFrom: "2026-07-01", dateTo: "2026-09-15" },
+  };
+  await page.route(/\/api\/analysis(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json", body: JSON.stringify(selected),
+  }));
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+  }));
+  await page.goto("/analysis?month=2026-08&range=1m");
+  await page.getByRole("button", { name: "3 meses" }).first().click();
+  await page.getByRole("button", { name: "Aplicar", exact: true }).first().click();
+  await expect(page).toHaveURL(/range=3m/);
+  await page.getByRole("button", { name: "Mostrar filtros avanzados" }).click();
+  const advanced = page.locator("section[aria-labelledby=analysis-period-heading]");
+  await expect(advanced.getByRole("button", { name: "3 meses" })).toHaveAttribute("aria-pressed", "true");
+  await expect(advanced.getByLabel("Mes para análisis avanzado")).toHaveValue("2026-09");
 });

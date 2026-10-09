@@ -33,7 +33,22 @@ const snapshot = {
     remainingCents: 77000,
     progressBps: 4867,
     status: "on_track",
-    automaticExplanation: "Media mensual de gasto elegible de los últimos tres meses completos.",
+    automaticExplanation: "Referencia automática Axioma §52.",
+    automaticFactors: {
+      algorithm: "axioma_52_budget_reference_v1",
+      mode: "axioma_52_weighted",
+      availableMonthCount: 12,
+      trailing3AverageCents: 150000,
+      recentWeightedCents: 148000,
+      seasonalSameMonthCents: 152000,
+      seasonalMonthCount: 1,
+      trendAdjustmentCents: 1000,
+      knownRecurringCents: 0,
+      extraordinaryMonthCount: 0,
+      extraordinaryCapCents: null,
+      recurrencePolicy: "floor_not_additive",
+      exclusionsSource: "financial_transaction_allocation_facts.analytics_eligible",
+    },
     historyMonths: [
       { month: "2026-06", expenseCents: 130000 },
       { month: "2026-07", expenseCents: 145000 },
@@ -43,12 +58,12 @@ const snapshot = {
   categories: [],
   principles: {
     bankSource: "read_only",
-    actualSource: "effective_transactions",
-    recommendation: "three_complete_month_average",
+    actualSource: "financial_transaction_allocation_facts",
+    recommendation: "axioma_52_weighted_history_seasonality_trend_recurrence_floor",
     transfersConsumeBudget: false,
     confirmedDuplicatesConsumeBudget: false,
     manualAnalyticsExclusionsRespected: true,
-    refundsNetAgainstExpense: true,
+    refundsNetAgainstExpense: false,
     manualOverrideWins: true,
     parentCategoryIncludesDescendants: true,
   },
@@ -183,4 +198,18 @@ test("Presupuestos mantiene microtexto financiero funcional en al menos 14 px", 
     return Number.parseFloat(getComputedStyle(label).fontSize);
   });
   expect(editorLabelSize).toBeGreaterThanOrEqual(14);
+});
+
+
+test("AUD-E2E-UI-001 · texto funcional de Presupuestos mantiene tono legible en tema claro", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await mockBudgetRead(page);
+  await page.goto("/budgets");
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+  const eyebrow = page.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
+  await expect(eyebrow).toBeVisible();
+  await expect(eyebrow).toHaveCSS("color", "rgb(30, 64, 175)");
+  const emptyMessage = page.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
+  await expect(emptyMessage).toBeVisible();
+  await expect(emptyMessage).toHaveCSS("color", "rgb(71, 85, 105)");
 });
