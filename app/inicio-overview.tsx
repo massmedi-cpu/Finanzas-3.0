@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import {
@@ -378,6 +378,9 @@ export default function InicioOverview() {
   const [evolutionRevision, setEvolutionRevision] = useState(0);
   const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const generationRef = useRef(0);
+  const syncInFlight = useRef(false);
+  const isFresh = useCallback((generation: number) => generationRef.current === generation, []);
 
   useEffect(() => {
     try {
@@ -389,86 +392,104 @@ export default function InicioOverview() {
     }
   }, []);
 
-  const commit = useCallback((source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
-    setData((current) => ({ ...current, [source]: value } as DashboardData));
+  const commit = useCallback((generation: number, source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
+    if (!isFresh(generation)) return;
+    setData((current) => isFresh(generation) ? ({ ...current, [source]: value } as DashboardData) : current);
     setFailed((current) => {
+      if (!isFresh(generation)) return current;
       const next = new Set(current);
       if (isFailed) next.add(source);
       else next.delete(source);
       return [...next];
     });
-  }, []);
+  }, [isFresh]);
 
-  const loadSource = useCallback(async (source: DashboardSource) => {
+  const loadSource = useCallback(async (source: DashboardSource, generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const value = await legacySource(source, madridToday());
-      setIndependentSources((current) => current.includes(source) ? current : [...current, source]);
-      commit(source, value as DashboardData[DashboardSource], false);
+      if (!isFresh(generation)) return;
+      setIndependentSources((current) =>
+        !isFresh(generation) || current.includes(source) ? current : [...current, source]);
+      commit(generation, source, value as DashboardData[DashboardSource], false);
     } catch {
-      commit(source, null, true);
+      commit(generation, source, null, true);
     }
-  }, [commit]);
+  }, [commit, isFresh]);
 
-  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
+  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[], generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
-      if (scope === "activity" || scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
+      if (!isFresh(generation)) return;
+      if (scope === "activity" || scope === "primary") {
+        setDataThroughDate((current) => isFresh(generation) ? envelope.dataThroughDate ?? null : current);
+      }
       await Promise.all(sources.map(async (source) => {
+        if (!isFresh(generation)) return;
         if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
-          commit(source, envelope.data[source], false);
+          commit(generation, source, envelope.data[source], false);
         } else {
-          await loadSource(source);
+          await loadSource(source, generation);
         }
       }));
     } catch {
-      await Promise.all(sources.map(loadSource));
+      if (isFresh(generation)) {
+        await Promise.all(sources.map((source) => loadSource(source, generation)));
+      }
     }
-  }, [commit, loadSource]);
+  }, [commit, loadSource, isFresh]);
 
-  const loadSyncStatus = useCallback(async () => {
+  const loadSyncStatus = useCallback(async (generation: number) => {
     try {
-      setSyncStatus(await readJson<SyncStatus>("/api/source/google/sync", 5_000));
+      const status = await readJson<SyncStatus>("/api/source/google/sync", 5_000);
+      setSyncStatus((current) => isFresh(generation) ? status : current);
     } catch {
-      setSyncStatus(null);
+      if (isFresh(generation)) setSyncStatus(null);
     }
-  }, []);
+  }, [isFresh]);
 
-  const loadHomeAnalysis = useCallback(async () => {
+  const loadHomeAnalysis = useCallback(async (generation: number) => {
+    if (!isFresh(generation)) return;
     setAnalysisLoading(true);
     try {
-      setHomeAnalysis(await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000));
+      const analysis = await readJson<HomeAnalysisSummary>("/api/dashboard/analysis", 8_000);
+      setHomeAnalysis((current) => isFresh(generation) ? analysis : current);
     } catch {
-      setHomeAnalysis(null);
+      if (isFresh(generation)) setHomeAnalysis(null);
     } finally {
-      setAnalysisLoading(false);
+      if (isFresh(generation)) setAnalysisLoading(false);
     }
-  }, []);
+  }, [isFresh]);
 
   const refreshDashboard = useCallback(async () => {
+    const generation = ++generationRef.current;
     setPrimaryLoading(true);
     setActivityLoading(true);
     setSecondaryLoading(true);
     setDataThroughDate(null);
     setIndependentSources([]);
 
-    const statusPromise = loadSyncStatus();
-    const analysisPromise = loadHomeAnalysis();
-    const activityPromise = loadScope("activity", ["transactions"])
-      .finally(() => setActivityLoading(false));
-    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"])
-      .finally(() => setSecondaryLoading(false));
+    const statusPromise = loadSyncStatus(generation);
+    const analysisPromise = loadHomeAnalysis(generation);
+    const activityPromise = loadScope("activity", ["transactions"], generation)
+      .finally(() => { if (isFresh(generation)) setActivityLoading(false); });
+    const secondaryPromise = loadScope("secondary", ["monthly", "budgets", "forecast"], generation)
+      .finally(() => { if (isFresh(generation)) setSecondaryLoading(false); });
 
-    await loadScope("critical", ["financial"]);
-    setPrimaryLoading(false);
+    await loadScope("critical", ["financial"], generation);
+    if (isFresh(generation)) setPrimaryLoading(false);
     await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise]);
-  }, [loadHomeAnalysis, loadScope, loadSyncStatus]);
+  }, [loadHomeAnalysis, loadScope, loadSyncStatus, isFresh]);
 
   useEffect(() => {
     void refreshDashboard();
+    return () => { generationRef.current += 1; };
   }, [refreshDashboard]);
 
   const runSync = useCallback(async () => {
-    if (syncing) return;
+    if (syncInFlight.current) return;
+    syncInFlight.current = true;
     setSyncing(true);
     setSyncFeedback(null);
     try {
@@ -484,11 +505,12 @@ export default function InicioOverview() {
       setEvolutionRevision((current) => current + 1);
     } catch {
       setSyncFeedback("No se ha podido actualizar. Consulta el estado de la fuente.");
-      await loadSyncStatus();
+      await loadSyncStatus(generationRef.current);
     } finally {
+      syncInFlight.current = false;
       setSyncing(false);
     }
-  }, [loadSyncStatus, refreshDashboard, syncing]);
+  }, [loadSyncStatus, refreshDashboard]);
 
   const today = madridToday();
   const currentMonthStart = `${today.slice(0, 7)}-01`;

@@ -38,7 +38,11 @@ check("§66", "tarjetas y paneles usan sistema estable de radios/superficies", h
 check("§67", "gráficos principales mantienen contratos accesibles", [contribution, trend, forecastChart].every((source) => source.includes("aria-label") || source.includes('role="img"')));
 check("§68", "jerarquía visual con títulos y contenido principal accesible", shell.includes('href="#main-content"') && shell.includes('id="main-content"') && globals.includes("--font-page-title:"));
 check("§69", "sistema tipográfico único centralizado", hasAll(globals, ["--font-page-title:", "--font-section-title:", "--font-kpi-primary:", "--font-body:", "--font-label:", "--font-helper:"]));
-check("§70", "legibilidad base no reducida para resolver espacio", /--font-body:\s*1rem/.test(globals) && /--font-helper:\s*0\.8125rem/.test(globals));
+// Axioma §70 protects minimum legibility, not an obsolete fixed 13px helper size.
+const helperMatch = globals.match(/--font-helper:\s*([0-9.]+)rem/);
+const helperRem = helperMatch ? Number(helperMatch[1]) : 0;
+check("§70", "body 16px and supporting text at least 14px",
+  /--font-body:\s*1rem\b/.test(globals) && helperRem >= 0.875 && helperRem <= 1);
 check("§71", "feedback y navegación conservan patrones globales estables", feedback.includes("pending") && feedback.includes("success") && feedback.includes("error") && shell.includes('aria-label="Navegación principal"'));
 
 console.log(`Axioma §§62–71 · evidencia objetiva: ${passes} PASS, ${failures.length} FAIL`);

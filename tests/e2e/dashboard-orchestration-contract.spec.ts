@@ -271,3 +271,26 @@ test("Inicio oculta saldo, mes y presupuesto incongruentes sin perder la activid
   await expect(page.getByRole("group", { name: /Ingresos y gastos por mes/ }).getByRole("button", { name: /sep.*ingresos/i })).toHaveCount(0);
   await expect(page.getByText("Carrefour", { exact: true })).toBeVisible();
 });
+
+test("Inicio preserves newer activity after a delayed older refresh", async ({ page }) => {
+  await installDashboardMocks(page);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  let calls = 0;
+  await page.route("**/api/dashboard?scope=activity", async (route) => {
+    const call = ++calls;
+    if (call === 1) await gate;
+    const payload = call === 1 ? transactions : {
+      ...transactions,
+      rows: [{ ...transactions.rows[0], merchant: { effectiveName: "Actividad actualizada" } }],
+    };
+    await fulfillJson(route, envelope("activity", { transactions: payload }, ["transactions"]));
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Actualizar datos" }).click();
+  await expect(page.getByText("Actividad actualizada", { exact: true })).toBeVisible();
+  release();
+  await page.waitForTimeout(150);
+  await expect(page.getByText("Actividad actualizada", { exact: true })).toBeVisible();
+  await expect(page.getByText("Carrefour", { exact: true })).toHaveCount(0);
+});
