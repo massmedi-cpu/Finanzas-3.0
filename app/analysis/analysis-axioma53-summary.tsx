@@ -50,13 +50,10 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   }
 
   const width = 820;
-  const height = 240;
-  const left = 58;
-  const right = 18;
-  const top = 22;
-  const bottom = 36;
-  const innerWidth = width - left - right;
-  const innerHeight = height - top - bottom;
+  const height = 260;
+  const right = 24;
+  const top = 26;
+  const bottom = 46;
   // The last known accumulated amount is a financial total, NOT the visual
   // maximum. A later refund can lower it; a real zero must remain 0,00 €.
   const finalCents = rows.at(-1)?.accumulatedCents ?? 0;
@@ -64,6 +61,14 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   const domainMax = Math.max(0, ...rows.map((row) => row.accumulatedCents));
   const domainSpan = Math.max(1, domainMax - domainMin);
   const flatZero = domainMin === domainMax;
+  const tickValues = flatZero
+    ? [0]
+    : [...new Set([domainMin, Math.round((domainMin + domainMax) / 2), domainMax])];
+  // Preserve two monetary decimals and give the longest label room in the SVG.
+  const longestLabel = Math.max(...tickValues.map((value) => formatMoney(value).length), 0);
+  const left = Math.max(96, Math.min(240, Math.ceil(longestLabel * 9.5 + 18)));
+  const innerWidth = width - left - right;
+  const innerHeight = height - top - bottom;
   const yFor = (value: number) => flatZero
     ? top + innerHeight
     : top + ((domainMax - value) / domainSpan) * innerHeight;
@@ -78,9 +83,6 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   const area = points.length > 1 && !flatZero
     ? `${path} L ${points.at(-1)?.x} ${baselineY} L ${points[0].x} ${baselineY} Z`
     : "";
-  const tickValues = flatZero
-    ? [0]
-    : [...new Set([domainMin, Math.round((domainMin + domainMax) / 2), domainMax])];
   const hasNegativeDailyAdjustment = rows.some((row) => row.expenseCents < 0);
 
   return (
