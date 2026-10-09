@@ -693,7 +693,7 @@
 }
 
 /* On compact phones, metric labels must not force the entire budget grid wider than the viewport. */
-@media (max-width: 420px) {
+@media (max-width: 400px) {
   .summaryGrid { grid-template-columns: minmax(0, 1fr); }
   .planningHeader { grid-template-columns: minmax(0, 1fr); }
   .metricLabel { min-width: 0; overflow-wrap: anywhere; }
