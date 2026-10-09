@@ -109,3 +109,24 @@ test("AUD-E2E-UI-001 · Presupuestos y Documentos usan superficies claras y text
     expect(styles.background).not.toContain("rgb(7, 14, 29)");
   }
 });
+
+test("REC-THEME · las superficies grandes de Documentos y Presupuestos se adaptan al tema", async ({ page }) => {
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    for (const route of [
+      { path: "/documents", title: "Documentos" },
+      { path: "/budgets", title: "Presupuestos" },
+    ]) {
+      await page.goto(route.path);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      const hero = page.getByRole("heading", { name: route.title, level: 1 }).locator("xpath=../..");
+      await expect(hero).toBeVisible();
+      const shadow = await hero.evaluate((node) => getComputedStyle(node).boxShadow);
+      if (theme === "light") {
+        expect(shadow).toContain("42, 66, 101");
+      } else {
+        expect(shadow).toContain("0, 0, 0");
+      }
+    }
+  }
+});
