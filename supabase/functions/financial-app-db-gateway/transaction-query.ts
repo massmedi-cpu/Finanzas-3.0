@@ -81,6 +81,20 @@ export async function handleTransactionQueryAction(input: {
     return json(rows[0]?.result ?? null);
   }
 
+  if (action === "transaction.date_bounds") {
+    // RLS-scoped, read-only min/max; avoids the expensive full effective
+    // transaction projection and per-transaction split lookup for freshness.
+    const rows = await sql`
+      select min(bank_date)::text as "earliestMovementDate",
+             max(bank_date)::text as "latestMovementDate"
+      from financial_app.transactions
+    `;
+    return json({
+      earliestMovementDate: rows[0]?.earliestMovementDate ?? null,
+      latestMovementDate: rows[0]?.latestMovementDate ?? null,
+    });
+  }
+
   if (action === "transaction.query") {
     const query = nullableText(payload.query, "transaction_query");
     const accountId = nullableUuid(payload.accountId, "transaction_account_id");
