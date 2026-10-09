@@ -6,6 +6,7 @@ import {
   resolvePeriodCoverage,
 } from "../../src/application/data-coverage";
 import { assembleCashFlow, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
+import { handleTransactionQueryAction } from "../../supabase/functions/financial-app-db-gateway/transaction-query";
 
 const expense: CashFlowTransaction = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -162,4 +163,29 @@ test("REC-COV-002 · los límites del histórico evitan ceros anteriores al prim
     earliestMovementDate: "2026-02-30", latestMovementDate: "2026-09-29",
   });
   expect(invalid.state).toBe("unknown");
+});
+
+test("REC-COV-004 · date_bounds usa una sola lectura RLS del banco sin calcular movimientos efectivos", async () => {
+  let calls = 0;
+  const sql = async (parts: TemplateStringsArray) => {
+    calls++;
+    const query = parts.join(" ").toLowerCase();
+    expect(query).toContain("from financial_app.transactions");
+    expect(query).toContain("min(bank_date)");
+    expect(query).toContain("max(bank_date)");
+    expect(query).not.toContain("insert ");
+    expect(query).not.toContain("update ");
+    expect(query).not.toContain("delete ");
+    expect(query).not.toContain("transaction_split_snapshot");
+    return [{ earliestMovementDate: "2026-07-04", latestMovementDate: "2026-09-29" }];
+  };
+  const response = await handleTransactionQueryAction({
+    action: "transaction.date_bounds", payload: {}, sql, environment: "preview",
+  });
+  expect(response?.status).toBe(200);
+  expect(await response?.json()).toEqual({
+    earliestMovementDate: "2026-07-04",
+    latestMovementDate: "2026-09-29",
+  });
+  expect(calls).toBe(1);
 });
