@@ -20,6 +20,7 @@ type Props = {
   hrefForMonth: (monthStart: string) => string;
   partialMonthStart?: string | null;
   latestMovementDate?: string | null;
+  earliestMovementDate?: string | null;
 };
 
 type TrendView = "all" | "flow" | "net";
@@ -47,6 +48,7 @@ export function FinancialTrendChart({
   hrefForMonth,
   partialMonthStart = null,
   latestMovementDate = null,
+  earliestMovementDate = null,
 }: Props) {
   const assessed = useMemo(() => rows.map((row) => {
     const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
@@ -55,13 +57,14 @@ export function FinancialTrendChart({
       dateFrom: row.monthStart,
       dateTo: monthEnd.toISOString().slice(0, 10),
       latestMovementDate,
+      earliestMovementDate,
     });
     // A populated history is still useful when the freshness request fails,
     // but its coverage must never be described as confirmed.
     const observed = coverage.state === "covered" || coverage.state === "partial"
       || (coverage.state === "unknown" && (row.rows ?? 0) > 0);
     return { ...row, coverage, observed };
-  }), [latestMovementDate, rows]);
+  }), [earliestMovementDate, latestMovementDate, rows]);
   const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
   const [view, setView] = useState<TrendView>("all");
