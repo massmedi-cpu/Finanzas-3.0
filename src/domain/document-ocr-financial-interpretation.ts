@@ -221,12 +221,19 @@ function extractDate(lines: LocatedLine[]) {
 
 function extractTime(lines: LocatedLine[]) {
   const pattern = /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/;
+  const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas)\b/;
+  const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
+  let unknown: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
-    return fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
+    const normalized = normalizeToken(item.line.text);
+    if (unrelated.test(normalized)) continue;
+    const candidate = fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
+    if (explicitTime.test(normalized)) return candidate;
+    unknown ??= fieldRequiringReview(candidate);
   }
-  return emptyField<string>();
+  return unknown ?? emptyField<string>();
 }
 
 function extractDocumentNumber(lines: LocatedLine[]) {
