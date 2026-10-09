@@ -154,9 +154,12 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
   await expect(page.getByRole("heading", { name: "Alertas", exact: true, level: 1 })).toBeVisible();
   await expect(page.getByText(/50\.000 documentos sin asociar/)).toBeVisible();
   await expect(page.getByText(/125 documentos pendientes de revisar/)).toBeVisible();
-  expect(reads).toHaveLength(2);
-  expect(reads).toEqual(expect.arrayContaining([
-    expect.objectContaining({ pathname: "/api/documents", unassociated: "true", status: null, limit: "1", method: "GET" }),
-    expect.objectContaining({ pathname: "/api/documents", unassociated: null, status: "pending_review", limit: "1", method: "GET" }),
-  ]));
+  // Next/React ejecuta de nuevo los efectos al montar en StrictMode de desarrollo:
+  // cada lectura sigue realizando exactamente las dos consultas filtradas, nunca páginas N.
+  expect([2, 4]).toContain(reads.length);
+  expect(reads.every((read) => read.pathname === "/api/documents" && read.limit === "1" && read.method === "GET")).toBe(true);
+  expect(reads.filter((read) => read.unassociated === "true" && read.status === null))
+    .toHaveLength(reads.length / 2);
+  expect(reads.filter((read) => read.unassociated === null && read.status === "pending_review"))
+    .toHaveLength(reads.length / 2);
 });
