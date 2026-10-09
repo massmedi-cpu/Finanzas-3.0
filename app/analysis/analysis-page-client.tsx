@@ -48,7 +48,11 @@ export default function AnalysisPageClient({
   } | null>(null);
   // A newly selected account must not inherit the previous account's banking
   // bounds for even the first render, before the next freshness effect runs.
-  const selectedAccountId = snapshot?.selection.accountId ?? fallbackSelection.accountId ?? null;
+  // Explicit "Todas las cuentas" (null) is a real selection; it must not
+  // fall back to an account ID left in the initial URL selection.
+  const selectedAccountId = snapshot
+    ? snapshot.selection.accountId
+    : (fallbackSelection.accountId ?? null);
   const onFreshnessChange = useCallback((value: SourceFreshness | null) => {
     setScopedFreshness({ accountId: selectedAccountId, value });
   }, [selectedAccountId]);
