@@ -2,7 +2,7 @@ name: Product recovery browser matrix
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, work/product-recovery-20261009]
     paths:
       - 'app/**'
       - 'src/design/**'
@@ -50,5 +50,17 @@ jobs:
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
           --project=chromium-desktop
+      - name: Integrated module regressions on the same optimized build
+        if: ${{ !cancelled() }}
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts
+          tests/e2e/budgets.spec.ts
+          tests/e2e/budgets-accessibility.spec.ts
+          tests/e2e/accounts.spec.ts
+          tests/e2e/alerts-center.spec.ts
+          tests/e2e/global-alerts-engine.spec.ts
+          tests/e2e/cash-flow-evolution-plot.spec.ts
+          tests/e2e/forecast-chart-timeline.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
       # Synthetic UI results are distinct from authenticated real persistence.
       # No financial originals, secrets or production access are used here.

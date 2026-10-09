@@ -69,7 +69,7 @@
   padding: 1rem;
   border: 1px solid color-mix(in srgb, var(--color-primary-bright) 28%, transparent);
   border-radius: var(--radius-lg);
-  background: linear-gradient(135deg, rgba(24, 50, 99, .72), var(--surface-card));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 14%, var(--surface-card)), var(--surface-card));
   box-shadow: 0 14px 36px rgba(0, 0, 0, .2);
 }
 .bulkIntro { display: grid; align-self: center; gap: .25rem; }
@@ -109,7 +109,7 @@
 .selectTarget { display: inline-grid; place-items: center; min-width: 2.75rem; min-height: 2.75rem; border-radius: .7rem; cursor: pointer; }
 .selectTarget:hover { background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent); }
 .selectTarget:has(input:focus-visible) { outline: 2px solid var(--color-primary-bright); outline-offset: 2px; }
-.selectCell input, .checkboxLabel input { width: 1.15rem; height: 1.15rem; min-width: 1.15rem; margin: 0; cursor: pointer; accent-color: #4d8dff; }
+.selectCell input, .checkboxLabel input { width: 1.15rem; height: 1.15rem; min-width: 1.15rem; margin: 0; cursor: pointer; accent-color: var(--color-primary-bright); }
 .amountHeading { text-align: right !important; }
 .amount { font-variant-numeric: tabular-nums; font-weight: 820; text-align: right; white-space: nowrap; }
 .positive { color: var(--color-success) !important; }
@@ -120,7 +120,7 @@
 .conceptTop { display: flex; align-items: flex-start; flex-wrap: wrap; gap: .4rem; }
 .overrideChip, .mutedChip, .duplicateChip, .anomalyChip, .transferChip, .splitChip, .staleSplitChip { display: inline-flex; min-height: 1.65rem; align-items: center; padding: .18rem .5rem; border-radius: var(--radius-pill); font-size: .875rem; font-weight: 760; white-space: nowrap; }
 .overrideChip { background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent); color: var(--color-text); }
-.mutedChip { background: rgba(116, 131, 161, .12); color: var(--color-text-secondary); }
+.mutedChip { background: color-mix(in srgb, var(--color-text-secondary) 12%, transparent); color: var(--color-text-secondary); }
 .duplicateChip { background: color-mix(in srgb, var(--color-danger) 9%, transparent); color: var(--color-danger); }
 .anomalyChip { background: color-mix(in srgb, var(--color-warning) 12%, transparent); color: var(--color-warning); }
 .transferChip { background: color-mix(in srgb, var(--color-cyan) 9%, transparent); color: var(--color-cyan); }

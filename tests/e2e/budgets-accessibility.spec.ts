@@ -208,8 +208,40 @@ test("AUD-E2E-UI-001 · texto funcional de Presupuestos mantiene tono legible en
   await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
   const eyebrow = page.getByText("FINANCIAL APP · PRESUPUESTOS", { exact: true });
   await expect(eyebrow).toBeVisible();
-  await expect(eyebrow).toHaveCSS("color", "rgb(30, 64, 175)");
   const emptyMessage = page.getByText(/El total ya muestra referencia automática, límite elegido y consumo real/);
   await expect(emptyMessage).toBeVisible();
-  await expect(emptyMessage).toHaveCSS("color", "rgb(71, 85, 105)");
+
+  // El tema debe aplicar tokens de diseño, no un RGB histórico que ya no representa la paleta.
+  const tokens = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const probe = document.createElement("span");
+    document.body.appendChild(probe);
+    const resolveColor = (name: string) => {
+      probe.style.color = `var(${name})`;
+      return getComputedStyle(probe).color;
+    };
+    const result = {
+      primary: resolveColor("--color-primary-bright"),
+      muted: resolveColor("--color-text-muted"),
+    };
+    probe.remove();
+    return result;
+  });
+  const eyebrowRgb = await eyebrow.evaluate((node) => getComputedStyle(node).color);
+  const helperRgb = await emptyMessage.evaluate((node) => getComputedStyle(node).color);
+  expect(eyebrowRgb).toBe(tokens.primary);
+  expect(helperRgb).toBe(tokens.muted);
+
+  const contrastAgainstWhite = (rgb: string) => {
+    const channels = (rgb.match(/[0-9]+(?:\\.[0-9]+)?/g) ?? []).slice(0, 3).map(Number);
+    if (channels.length !== 3) throw new Error(`Unexpected RGB value: ${rgb}`);
+    const luminance = channels.reduce((sum, channel, index) => {
+      const s = channel / 255;
+      const linear = s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+      return sum + linear * [0.2126, 0.7152, 0.0722][index];
+    }, 0);
+    return 1.05 / (luminance + 0.05);
+  };
+  expect(contrastAgainstWhite(eyebrowRgb)).toBeGreaterThanOrEqual(4.5);
+  expect(contrastAgainstWhite(helperRgb)).toBeGreaterThanOrEqual(4.5);
 });

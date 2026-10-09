@@ -157,6 +157,7 @@ function BudgetCard({
   monthEnd,
   busy,
   editing,
+  editLocked,
   editValue,
   fieldError,
   onStartEdit,
@@ -171,6 +172,7 @@ function BudgetCard({
   monthEnd: string;
   busy: boolean;
   editing: boolean;
+  editLocked: boolean;
   editValue: string;
   fieldError: string;
   onStartEdit: () => void;
@@ -180,11 +182,18 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const hasChosenLimit = item.manualAmountCents !== null;
-  const referenceLabel = hasChosenLimit ? "Límite elegido" : "Referencia automática";
-  const remainingLabel = item.remainingCents >= 0
-    ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
-    : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
-  const comparisonLabel = hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
+  // Sin referencia histórica no equivale a haber elegido un límite de 0 €.
+  const withoutReference = !hasChosenLimit && item.status === "unfunded";
+  const referenceLabel = withoutReference ? "Referencia no disponible" : hasChosenLimit ? "Límite elegido" : "Referencia automática";
+  const remainingLabel = withoutReference ? "Margen no calculable"
+    : item.remainingCents >= 0
+      ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
+      : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
+  const comparisonLabel = withoutReference ? "Cobertura del gasto" : hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
+  const progressLabel = withoutReference ? "No calculable sin referencia"
+    : hasChosenLimit && item.effectiveAmountCents === 0
+      ? item.actualExpenseCents > 0 ? "Límite 0 € superado" : "Límite 0 € sin gasto"
+      : formatProgress(item.progressBps);
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
   const excessCents = Math.max(0, -item.remainingCents);
@@ -210,7 +219,9 @@ function BudgetCard({
             <p>
               {hasChosenLimit
                 ? "Límite elegido por ti"
-                : "Referencia automática · Axioma §52"}
+                : withoutReference
+                  ? "Sin histórico suficiente para fijar una referencia"
+                  : "Referencia automática · Axioma §52"}
               {!total && item.categoryLifecycle === "archived" ? " · categoría archivada" : ""}
             </p>
           </div>
@@ -221,7 +232,7 @@ function BudgetCard({
       <div className={styles.amounts}>
         <div>
           <span>{referenceLabel}</span>
-          <strong>{formatMoney(item.effectiveAmountCents)}</strong>
+          <strong>{withoutReference ? "—" : formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
           <span>Gastado</span>
@@ -229,73 +240,70 @@ function BudgetCard({
         </div>
         <div>
           <span>{remainingLabel}</span>
-          <strong>{formatMoney(Math.abs(item.remainingCents))}</strong>
+          <strong>{withoutReference ? "—" : formatMoney(Math.abs(item.remainingCents))}</strong>
         </div>
       </div>
 
       <div className={styles.progressMeta}>
         <span>{comparisonLabel}</span>
-        <strong>{formatProgress(item.progressBps)}</strong>
+        <strong>{progressLabel}</strong>
       </div>
-      <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel} ${formatProgress(item.progressBps)}`}>
+      <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel}: ${progressLabel}`}>
         <div
           className={`${styles.progressFill} ${item.status === "over" ? styles.progressOver : ""}`}
           style={{ width: `${progressWidth(item)}%` }}
         />
       </div>
 
-      {!total && item.status === "over" && causalHref ? (
+      {!total && (item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0)) && causalHref ? (
         <div
           role="group"
           aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
           data-budget-state={item.status}
-          style={{
-            marginTop: ".9rem",
-            padding: ".85rem .95rem",
-            borderRadius: ".9rem",
-            border: "1px solid rgba(255,118,139,.28)",
-            background: "linear-gradient(135deg, rgba(255,91,118,.10), rgba(255,255,255,.025))",
-            display: "grid",
-            gap: ".55rem",
-          }}
+          className={withoutReference ? `${styles.excessPanel} ${styles.noReferencePanel}` : styles.excessPanel}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
-            <strong>Exceso {formatMoney(excessCents)}</strong>
+            <strong>{withoutReference ? "Gasto sin referencia" : "Exceso"} {formatMoney(withoutReference ? item.actualExpenseCents : excessCents)}</strong>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>
-              {excessPercent === null
-                ? "Sin base de comparación"
-                : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
+              {withoutReference
+                ? "Falta histórico o límite elegido para calcular un exceso."
+                : excessPercent === null
+                  ? "No existe un porcentaje calculable con límite 0 €"
+                  : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
             </span>
           </div>
-          <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
-            <div
-              style={{
+          {!withoutReference ? (
+            <div aria-hidden="true" className={styles.excessTrack}>
+              <div className={styles.excessFill} style={{
                 width: `${Math.min(100, excessPercent ?? 0)}%`,
                 minWidth: excessCents > 0 ? ".45rem" : 0,
-                height: "100%",
-                borderRadius: "inherit",
-                background: "linear-gradient(90deg, rgba(255,103,130,.78), rgba(255,171,111,.82))",
-              }}
-            />
-          </div>
+              }} />
+            </div>
+          ) : null}
           <Link prefetch={false}
             href={causalHref}
             aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
-            style={{ width: "fit-content", fontWeight: 700, textDecoration: "none" }}
+            className={styles.excessLink}
           >
             Ver movimientos que explican el gasto
           </Link>
         </div>
       ) : null}
 
+      {!total && item.actualExpenseCents > 0 && causalHref && item.status !== "over"
+        && !(item.status === "unfunded" && item.actualExpenseCents > 0) ? (
+        <Link className={styles.excessLink} prefetch={false} href={causalHref}>
+          Ver movimientos de esta categoría
+        </Link>
+      ) : null}
       <div className={styles.cardActions}>
-        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editing}>
+        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editLocked}>
           {hasChosenLimit ? "Editar límite elegido" : "Definir límite"}
         </button>
         {hasChosenLimit ? (
           <>
             <span className={styles.manualBadge}>Referencia automática {formatMoney(item.automaticAmountCents)}</span>
-            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy}>
+            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy || editLocked}>
               Quitar límite elegido
             </button>
           </>
@@ -321,7 +329,7 @@ function BudgetCard({
               <span
                 id={fieldErrorId}
                 role="alert"
-                style={{ color: "#ff9aaa", fontSize: "0.875rem", lineHeight: 1.35 }}
+                className={styles.fieldError}
               >
                 {fieldError}
               </span>
@@ -354,9 +362,19 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [fieldError, setFieldError] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryView, setCategoryView] = useState<"all" | "attention" | "manual">("all");
   const fetchGeneration = useRef(0);
   const fetchController = useRef<AbortController | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
+
+  // La URL es parte del contexto de un presupuesto; permite recargar o compartir el mes sin perderlo.
+  useEffect(() => {
+    const next = new URL(window.location.href);
+    if (next.searchParams.get("month") === month) return;
+    next.searchParams.set("month", month);
+    window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
+  }, [month]);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
     const generation = ++fetchGeneration.current;
@@ -462,13 +480,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [month, mutate]);
 
   const startEdit = useCallback((item: BudgetItem) => {
+    if (editingKey !== null) return;
     const key = item.categoryId ?? "__total__";
     setError("");
     setNotice("");
     setFieldError("");
     setEditingKey(key);
     setEditValue(euroInputFromCents(item.manualAmountCents ?? item.effectiveAmountCents));
-  }, []);
+  }, [editingKey]);
 
   const changeEditValue = useCallback((value: string) => {
     setEditValue(value);
@@ -497,21 +516,43 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [editValue, month, mutate]);
 
   const clearManual = useCallback((item: BudgetItem) => {
+    if (editingKey !== null) return;
     void mutate(
       "PATCH",
       { month, categoryId: item.categoryId, manualAmountCents: null },
       "Se ha quitado el límite elegido. La referencia automática vuelve a aplicarse.",
     );
-  }, [month, mutate]);
+  }, [editingKey, month, mutate]);
 
   const categorySummary = useMemo(() => {
-    if (!snapshot) return { over: 0, onTrack: 0, total: 0 };
+    if (!snapshot) return { attention: 0, onTrack: 0, total: 0 };
     return {
-      over: snapshot.categories.filter((item) => item.status === "over").length,
+      attention: snapshot.categories.filter((item) =>
+        item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0),
+      ).length,
       onTrack: snapshot.categories.filter((item) => item.status === "on_track").length,
       total: snapshot.categories.length,
     };
   }, [snapshot]);
+
+  const filteredCategories = useMemo(() => {
+    if (!snapshot) return [];
+    const normalized = categorySearch.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-ES");
+    const needsAttention = (item: BudgetItem) =>
+      item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0);
+    return snapshot.categories.filter((item) => {
+      const name = (item.categoryName ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-ES");
+      if (normalized && !name.includes(normalized)) return false;
+      if (categoryView === "manual") return item.manualAmountCents !== null;
+      if (categoryView === "attention") return needsAttention(item);
+      return true;
+    }).sort((left, right) => {
+      if (needsAttention(left) !== needsAttention(right)) return needsAttention(left) ? -1 : 1;
+      if (needsAttention(left) && needsAttention(right)) return left.remainingCents - right.remainingCents;
+      return right.actualExpenseCents - left.actualExpenseCents
+        || (left.categoryName ?? "").localeCompare(right.categoryName ?? "", "es-ES");
+    });
+  }, [snapshot, categorySearch, categoryView]);
 
   const planning = useMemo(() => {
     if (!snapshot) return null;
@@ -526,7 +567,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
           <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
-            Compara tu gasto con una referencia automática calculada por el motor Axioma §52, define tu límite y mide el ahorro que permitiría.
+            Consulta cuánto has gastado, identifica las categorías que superan su referencia y ajusta tus límites mensuales.
           </p>
         </div>
 
@@ -540,14 +581,20 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               onChange={(event) => {
                 if (event.target.value) setMonth(event.target.value);
               }}
-              disabled={busy}
+              disabled={busy || editingKey !== null}
+              title={editingKey !== null ? "Guarda o cancela la edición antes de cambiar de mes" : undefined}
             />
           </label>
-          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading}>
+          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading || editingKey !== null}>
             <Icon name="refresh" />
             {busy ? "Actualizando…" : "Actualizar referencia"}
           </button>
         </div>
+        {editingKey !== null ? (
+          <p className={styles.editorGuardMessage} role="status">
+            Tienes un límite en edición. Guárdalo o cancélalo antes de cambiar de mes o actualizar la referencia.
+          </p>
+        ) : null}
       </section>
 
       <div className={styles.content}>
@@ -615,7 +662,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                   </div>
                   <span className={`${styles.status} ${styles[snapshot.total.status]}`}>
                     {categorySummary.total
-                      ? `${categorySummary.onTrack} dentro · ${categorySummary.over} por encima`
+                      ? `${categorySummary.onTrack} dentro · ${categorySummary.attention} por revisar`
                       : "Sin categorías activas"}
                   </span>
                 </div>
@@ -641,7 +688,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                           className={styles.stepLink}
                           type="button"
                           onClick={() => startEdit(snapshot.total)}
-                          disabled={busy}
+                          disabled={busy || editingKey !== null}
                         >
                           Definir mi límite mensual
                         </button>
@@ -680,13 +727,36 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     <span className={`${styles.status} ${styles[snapshot.total.status]}`}>{formatMonth(snapshot.month)}</span>
                   </div>
 
-                  <div className={styles.budgetList}>
+                  {snapshot.categories.length > 0 ? (
+                    <div className={styles.categoryToolbar} role="search" aria-label="Encontrar presupuestos por categoría">
+                      <label>
+                        Buscar categorías
+                        <input type="search" value={categorySearch} disabled={editingKey !== null}
+                          onChange={(event) => setCategorySearch(event.target.value)}
+                          placeholder="Nombre de la categoría" />
+                      </label>
+                      <label>
+                        Ver categorías
+                        <select value={categoryView} disabled={editingKey !== null}
+                          onChange={(event) => setCategoryView(event.target.value as "all" | "attention" | "manual")}>
+                          <option value="all">Todas</option>
+                          <option value="attention">Requieren atención</option>
+                          <option value="manual">Con límite elegido</option>
+                        </select>
+                      </label>
+                      <span className={styles.categoryCount} aria-live="polite" aria-atomic="true">
+                        {filteredCategories.length} de {snapshot.categories.length} categorías
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className={styles.budgetList} data-testid="budget-category-list">
                     <BudgetCard
                       item={snapshot.total}
                       total
                       monthStart={snapshot.monthStart}
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
+                      editLocked={editingKey !== null}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
                       fieldError={editingKey === "__total__" ? fieldError : ""}
@@ -697,13 +767,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       onClearManual={() => clearManual(snapshot.total)}
                     />
 
-                    {snapshot.categories.map((item) => (
+                    {filteredCategories.map((item) => (
                       <BudgetCard
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
                         monthStart={snapshot.monthStart}
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
+                        editLocked={editingKey !== null}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
                         fieldError={editingKey === item.categoryId ? fieldError : ""}
@@ -715,6 +786,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       />
                     ))}
 
+                    {snapshot.categories.length > 0 && filteredCategories.length === 0 ? (
+                      <div className={styles.emptyState} role="status">
+                        <strong>No hay categorías con estos filtros</strong>
+                        <p>Prueba con otra búsqueda o vuelve a mostrar todas las categorías.</p>
+                        <button className={styles.secondaryButton} type="button"
+                          onClick={() => { setCategorySearch(""); setCategoryView("all"); }} disabled={editingKey !== null}>Quitar filtros</button>
+                      </div>
+                    ) : null}
                     {snapshot.categories.length === 0 ? (
                       <div className={styles.emptyState}>
                         <span className={styles.cardIcon} style={{ margin: "0 auto" }}><Icon name="category" /></span>
