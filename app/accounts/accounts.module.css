@@ -18,3 +18,22 @@
 .visuallyHidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 @media(max-width:720px){.reconciliationHeading{align-items:start;flex-direction:column;gap:.4rem}.reconciliationHeading>span{text-align:left}.reconciliationEvent{grid-template-columns:minmax(0,1fr) auto}.reconciliationEvent a{grid-column:1/-1;width:max-content}.reconciliationEventValue{text-align:right}}
 @media(max-width:430px){.reconciliationEvent{grid-template-columns:1fr}.reconciliationEventValue{text-align:left}.reconciliationEvent a{grid-column:1}}
+
+
+/* RECUPERACION-PRODUCTO-20261009 · Saldo bancario con fechas diversas. */
+.totalCard .balanceDateNotice {
+  display: block;
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  color: var(--color-text);
+  line-height: 1.5;
+  overflow-wrap: break-word;
+}
+.currentBalance small {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-helper);
+  line-height: 1.45;
+}

@@ -1,0 +1,47 @@
+name: RECUPERACION-PRODUCTO cuentas alcance y saldos
+
+on:
+  push:
+    branches:
+      - chat/accounts-scope-date-integrity-20261009
+    paths:
+      - 'app/accounts/**'
+      - 'tests/e2e/accounts.spec.ts'
+      - 'tests/e2e/premium-accounts-visual.spec.ts'
+      - '.github/workflows/product-recovery-accounts-pr572.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-accounts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  accounts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Dependencias con lockfile
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: TypeScript
+        run: npm run typecheck
+      - name: Compilación y guardas
+        run: npm run build
+      - name: Instalar Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Cuentas por cuenta, saldos y graficas · escritorio y movil
+        run: >-
+          npx playwright test
+          tests/e2e/accounts.spec.ts
+          tests/e2e/premium-accounts-visual.spec.ts
+          --project=chromium-desktop --project=chromium-mobile
+          --workers=1
