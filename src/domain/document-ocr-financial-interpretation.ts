@@ -352,7 +352,10 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
   let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
   let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
-  let totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/]);
+  let totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/], {
+    exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
+    prefer: /\b(?:total\s+a\s+pagar|importe\s+total|a\s+pagar|total\s+factura|total\s+final)\b/,
+  });
   const warnings: string[] = [];
 
   if (taxBaseCents.value !== null && taxesCents.value !== null && totalCents.value !== null) {
