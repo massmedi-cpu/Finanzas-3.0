@@ -183,9 +183,9 @@ function spanishTaxIdChecksumValid(raw: string): boolean {
   if (!/^[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J]$/.test(value)) return false;
   const digits = value.slice(1, 8).split("").map(Number);
   const doubled = (digit: number) => { const value = digit * 2; return Math.floor(value / 10) + (value % 10); };
-  const odd = digits[0] + digits[2] + digits[4] + digits[6];
-  const checksum = ((odd === -1 ? 0 : 0) + digits.filter((_, i) => i % 2 === 1).reduce((sum, n) => sum + n, 0)
-    + doubled(digits[0]) + doubled(digits[2]) + doubled(digits[4]) + doubled(digits[6]));
+  const evenSum = digits[1] + digits[3] + digits[5];
+  const oddDoubledSum = doubled(digits[0]) + doubled(digits[2]) + doubled(digits[4]) + doubled(digits[6]);
+  const checksum = evenSum + oddDoubledSum;
   const control = (10 - checksum % 10) % 10;
   const suffix = value[8];
   const numberAllowed = "ABEH".includes(value[0]) || !"NPQRSW".includes(value[0]);
@@ -194,7 +194,7 @@ function spanishTaxIdChecksumValid(raw: string): boolean {
 }
 
 function extractTaxId(lines: LocatedLine[]) {
-  const pattern = /\b(?:[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
+  const pattern = /\b(?:[XYZ]\s*[- ]?\s*\d{7}\s*[- ]?\s*[A-Z]|[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
   const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
   const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
   let unassigned: OcrInterpretedField<string> | null = null;
@@ -207,7 +207,7 @@ function extractTaxId(lines: LocatedLine[]) {
     if (recipientLabel.test(normalized)) continue;
     const raw = match[0].replace(/\s+/g, "");
     const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
-    if (explicitIssuerLabel.test(normalized)) return candidate;
+    if (explicitIssuerLabel.test(normalized)) return spanishTaxIdChecksumValid(candidate.value ?? "") ? candidate : fieldRequiringReview(candidate);
     // A bare CIF/NIF is recognized text, but its owner is not proven.
     unassigned ??= fieldRequiringReview(candidate);
   }
