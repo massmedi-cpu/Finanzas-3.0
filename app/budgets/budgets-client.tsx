@@ -244,20 +244,12 @@ function BudgetCard({
         />
       </div>
 
-      {!total && item.status === "over" && causalHref ? (
+      {!total && (item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0)) && causalHref ? (
         <div
           role="group"
           aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
           data-budget-state={item.status}
-          style={{
-            marginTop: ".9rem",
-            padding: ".85rem .95rem",
-            borderRadius: ".9rem",
-            border: "1px solid rgba(255,118,139,.28)",
-            background: "linear-gradient(135deg, rgba(255,91,118,.10), rgba(255,255,255,.025))",
-            display: "grid",
-            gap: ".55rem",
-          }}
+          className={styles.excessPanel}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
             <strong>Exceso {formatMoney(excessCents)}</strong>
@@ -267,27 +259,28 @@ function BudgetCard({
                 : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
             </span>
           </div>
-          <div aria-hidden="true" style={{ height: ".5rem", borderRadius: "999px", overflow: "hidden", background: "rgba(255,255,255,.08)" }}>
-            <div
-              style={{
-                width: `${Math.min(100, excessPercent ?? 0)}%`,
-                minWidth: excessCents > 0 ? ".45rem" : 0,
-                height: "100%",
-                borderRadius: "inherit",
-                background: "linear-gradient(90deg, rgba(255,103,130,.78), rgba(255,171,111,.82))",
-              }}
-            />
+          <div aria-hidden="true" className={styles.excessTrack}>
+            <div className={styles.excessFill} style={{
+              width: `${Math.min(100, excessPercent ?? 0)}%`,
+              minWidth: excessCents > 0 ? ".45rem" : 0,
+            }} />
           </div>
           <Link prefetch={false}
             href={causalHref}
             aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
-            style={{ width: "fit-content", fontWeight: 700, textDecoration: "none" }}
+            className={styles.excessLink}
           >
             Ver movimientos que explican el gasto
           </Link>
         </div>
       ) : null}
 
+      {!total && item.actualExpenseCents > 0 && causalHref && item.status !== "over"
+        && !(item.status === "unfunded" && item.actualExpenseCents > 0) ? (
+        <Link className={styles.excessLink} prefetch={false} href={causalHref}>
+          Ver movimientos de esta categoría
+        </Link>
+      ) : null}
       <div className={styles.cardActions}>
         <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editing}>
           {hasChosenLimit ? "Editar límite elegido" : "Definir límite"}
@@ -321,7 +314,7 @@ function BudgetCard({
               <span
                 id={fieldErrorId}
                 role="alert"
-                style={{ color: "#ff9aaa", fontSize: "0.875rem", lineHeight: 1.35 }}
+                className={styles.fieldError}
               >
                 {fieldError}
               </span>
@@ -354,6 +347,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [fieldError, setFieldError] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+  const [categoryView, setCategoryView] = useState<"all" | "attention" | "manual">("all");
   const fetchGeneration = useRef(0);
   const fetchController = useRef<AbortController | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
@@ -505,13 +500,34 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [month, mutate]);
 
   const categorySummary = useMemo(() => {
-    if (!snapshot) return { over: 0, onTrack: 0, total: 0 };
+    if (!snapshot) return { attention: 0, onTrack: 0, total: 0 };
     return {
-      over: snapshot.categories.filter((item) => item.status === "over").length,
+      attention: snapshot.categories.filter((item) =>
+        item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0),
+      ).length,
       onTrack: snapshot.categories.filter((item) => item.status === "on_track").length,
       total: snapshot.categories.length,
     };
   }, [snapshot]);
+
+  const filteredCategories = useMemo(() => {
+    if (!snapshot) return [];
+    const normalized = categorySearch.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-ES");
+    const needsAttention = (item: BudgetItem) =>
+      item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0);
+    return snapshot.categories.filter((item) => {
+      const name = (item.categoryName ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("es-ES");
+      if (normalized && !name.includes(normalized)) return false;
+      if (categoryView === "manual") return item.manualAmountCents !== null;
+      if (categoryView === "attention") return needsAttention(item);
+      return true;
+    }).sort((left, right) => {
+      if (needsAttention(left) !== needsAttention(right)) return needsAttention(left) ? -1 : 1;
+      if (needsAttention(left) && needsAttention(right)) return left.remainingCents - right.remainingCents;
+      return right.actualExpenseCents - left.actualExpenseCents
+        || (left.categoryName ?? "").localeCompare(right.categoryName ?? "", "es-ES");
+    });
+  }, [snapshot, categorySearch, categoryView]);
 
   const planning = useMemo(() => {
     if (!snapshot) return null;
@@ -526,7 +542,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
           <p className={styles.eyebrow}>FINANCIAL APP · PRESUPUESTOS</p>
           <h1 id="budget-title">Presupuestos</h1>
           <p className={styles.heroText}>
-            Compara tu gasto con una referencia automática calculada por el motor Axioma §52, define tu límite y mide el ahorro que permitiría.
+            Consulta cuánto has gastado, identifica las categorías que superan su referencia y ajusta tus límites mensuales.
           </p>
         </div>
 
@@ -615,7 +631,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                   </div>
                   <span className={`${styles.status} ${styles[snapshot.total.status]}`}>
                     {categorySummary.total
-                      ? `${categorySummary.onTrack} dentro · ${categorySummary.over} por encima`
+                      ? `${categorySummary.onTrack} dentro · ${categorySummary.attention} por revisar`
                       : "Sin categorías activas"}
                   </span>
                 </div>
@@ -680,7 +696,29 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     <span className={`${styles.status} ${styles[snapshot.total.status]}`}>{formatMonth(snapshot.month)}</span>
                   </div>
 
-                  <div className={styles.budgetList}>
+                  {snapshot.categories.length > 0 ? (
+                    <div className={styles.categoryToolbar} role="search" aria-label="Encontrar presupuestos por categoría">
+                      <label>
+                        Buscar categorías
+                        <input type="search" value={categorySearch}
+                          onChange={(event) => setCategorySearch(event.target.value)}
+                          placeholder="Nombre de la categoría" />
+                      </label>
+                      <label>
+                        Ver categorías
+                        <select value={categoryView}
+                          onChange={(event) => setCategoryView(event.target.value as "all" | "attention" | "manual")}>
+                          <option value="all">Todas</option>
+                          <option value="attention">Requieren atención</option>
+                          <option value="manual">Con límite elegido</option>
+                        </select>
+                      </label>
+                      <span className={styles.categoryCount} role="status" aria-live="polite">
+                        {filteredCategories.length} de {snapshot.categories.length} categorías
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className={styles.budgetList} data-testid="budget-category-list">
                     <BudgetCard
                       item={snapshot.total}
                       total
@@ -697,7 +735,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       onClearManual={() => clearManual(snapshot.total)}
                     />
 
-                    {snapshot.categories.map((item) => (
+                    {filteredCategories.map((item) => (
                       <BudgetCard
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
@@ -715,6 +753,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       />
                     ))}
 
+                    {snapshot.categories.length > 0 && filteredCategories.length === 0 ? (
+                      <div className={styles.emptyState} role="status">
+                        <strong>No hay categorías con estos filtros</strong>
+                        <p>Prueba con otra búsqueda o vuelve a mostrar todas las categorías.</p>
+                        <button className={styles.secondaryButton} type="button"
+                          onClick={() => { setCategorySearch(""); setCategoryView("all"); }}>Quitar filtros</button>
+                      </div>
+                    ) : null}
                     {snapshot.categories.length === 0 ? (
                       <div className={styles.emptyState}>
                         <span className={styles.cardIcon} style={{ margin: "0 auto" }}><Icon name="category" /></span>
