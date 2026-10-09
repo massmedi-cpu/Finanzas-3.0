@@ -943,3 +943,55 @@ for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "incon
     expect(pageErrors).toEqual([]);
   });
 }
+
+
+test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de meses observados", async ({ page }) => {
+  await mockInicio(page);
+  await page.route("**/api/dashboard?**", async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("scope");
+    if (scope === "activity") {
+      await json(route, {
+        contractVersion: 1, scope: "activity", asOfDate: "2026-09-16",
+        dataThroughDate: "2026-07-31", generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["transactions"], failedSources: [],
+        data: {
+          financial: null, monthly: null, budgets: null, forecast: null,
+          transactions: {
+            ...transactions,
+            rows: transactions.rows.map((row) => ({ ...row, bankDate: "2026-07-31" })),
+          },
+        },
+      });
+      return;
+    }
+    if (scope === "secondary") {
+      await json(route, {
+        contractVersion: 1, scope: "secondary", asOfDate: "2026-09-16",
+        dataThroughDate: "2026-07-31", generatedAt: "2026-09-16T06:00:05.000Z",
+        requestedSources: ["monthly", "budgets", "forecast"], failedSources: [],
+        data: {
+          financial: null,
+          monthly: {
+            dateFrom: "2026-07-01", dateTo: "2026-09-16",
+            rows: [
+              { monthStart: "2026-07-01", incomeCents: 20000, expenseCents: 10000, operatingNetCents: 10000 },
+              { monthStart: "2026-08-01", incomeCents: 999999999, expenseCents: 500000000, operatingNetCents: 499999999 },
+              { monthStart: "2026-09-01", incomeCents: 150000, expenseCents: 70000, operatingNetCents: 80000 },
+            ],
+          },
+          budgets, forecast, transactions: null,
+        },
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/");
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  await expect(chart).toBeVisible();
+  await expect(page.getByTestId("financial-bar-scale-reference")).toContainText("200,00 €");
+  await expect(chart.locator('[data-month-coverage="none"]')).toHaveCount(2);
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(1);
+  await expect(chart.locator('[data-month-coverage="covered"] .incomeBar')).toHaveCount(0);
+});
