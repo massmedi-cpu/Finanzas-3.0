@@ -325,14 +325,21 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
-  const taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
-  const taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
-  const totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/]);
+  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
+  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
+  let totalCents = extractMoneyField(located, [/\btotal\b/, /\bimporte total\b/, /\ba pagar\b/]);
   const warnings: string[] = [];
 
   if (taxBaseCents.value !== null && taxesCents.value !== null && totalCents.value !== null) {
     const delta = Math.abs(taxBaseCents.value + taxesCents.value - totalCents.value);
-    if (delta > 1) warnings.push("base_plus_tax_mismatch");
+    if (delta > 1) {
+      warnings.push("base_plus_tax_mismatch");
+      // An OCR match on each individual number does not resolve a financial
+      // contradiction. Preserve all three raw values, but require review.
+      taxBaseCents = fieldRequiringReview(taxBaseCents);
+      taxesCents = fieldRequiringReview(taxesCents);
+      totalCents = fieldRequiringReview(totalCents);
+    }
   }
   if (result.status === "empty") warnings.push("ocr_empty");
   if (result.status === "needs_review") warnings.push("ocr_needs_review");
