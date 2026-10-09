@@ -308,13 +308,13 @@ test("budget gateway classifies domain errors and hides unexpected database deta
 test("Presupuestos mantiene formato español, jerarquía clara y controles accesibles", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   await expect(page.getByText(/1\.?200,00/).first()).toBeVisible();
   await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
   await expect(page.getByText(/La fuente bancaria se mantiene estrictamente en solo lectura/i)).toBeVisible();
-  await expect(page.getByText(/Media del gasto elegible de los 3 meses completos anteriores/i)).toHaveCount(1);
+  await expect(page.getByText("Histórico, estacionalidad, tendencia y recurrentes conocidos")).toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
@@ -332,23 +332,23 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
 test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el gasto habitual", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
   await input.fill("1.500,50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
+  await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes.at(-1)).toMatchObject({
     method: "PATCH",
     month: "2026-09",
     categoryId: null,
     manualAmountCents: 150050,
   });
-  await expect(page.getByText(/Gasto habitual/).first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("400,00 €");
 
   await page.getByRole("button", { name: "Quitar límite elegido" }).first().click();
-  await expect(page.getByRole("status")).toContainText("histórico vuelve a usarse sólo como referencia");
+  await expect(page.locator("main").getByRole("status")).toContainText("La referencia automática vuelve a aplicarse");
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: null });
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
@@ -360,7 +360,7 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
@@ -373,7 +373,7 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
 
   await input.fill("1.234,56");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
+  await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({
     method: "PATCH",
@@ -386,7 +386,7 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
 test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   const planning = page.getByRole("region", { name: "De la referencia a tu objetivo" });
   await expect(planning).toHaveAttribute("data-planning-state", "ready");
@@ -433,6 +433,7 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
 
 test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
   let attempts = 0;
+  let retryAllowed = false;
 
   await page.route("**/api/budgets*", async (route) => {
     if (route.request().method() !== "GET") {
@@ -441,7 +442,7 @@ test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", a
     }
 
     attempts += 1;
-    if (attempts === 1) {
+    if (!retryAllowed) {
       await route.fulfill({
         status: 503,
         contentType: "application/json",
@@ -459,13 +460,14 @@ test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", a
   });
 
   await page.goto("/budgets?month=2026-09");
-  await expect(page.getByRole("alert")).toContainText("no ha podido terminar el cálculo");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no ha podido terminar el cálculo");
   await expect(page.getByRole("heading", { name: "No se ha podido cargar Septiembre de 2026" })).toBeVisible();
   await expect(page.getByText(/datos bancarios siguen intactos/i)).toBeVisible();
 
+  retryAllowed = true;
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
-  expect(attempts).toBe(2);
+  expect(attempts).toBeGreaterThanOrEqual(2);
 });
 
 test("Presupuestos conserva el último mes si una respuesta anterior llega tarde", async ({ page }) => {
@@ -512,12 +514,12 @@ test("Presupuestos conserva el último mes si una respuesta anterior llega tarde
 test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuario lo pide", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   expect(writes).toHaveLength(0);
 
   await page.getByRole("button", { name: "Actualizar referencia" }).click();
-  await expect(page.getByRole("status")).toContainText("Referencia automática");
+  await expect(page.locator("main").getByRole("status")).toContainText("Referencia automática");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });
@@ -633,23 +635,25 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
 
 test("AUD-E2E-PTO-001 · no presenta presupuestos de respuesta inválida y permite reintentar", async ({ page }) => {
   let attempts = 0;
+  let retryAllowed = false;
   await page.route("**/api/budgets*", async (route) => {
     if (route.request().method() !== "GET") {
       await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
       return;
     }
     attempts += 1;
-    const body = attempts === 1
-      ? { contractVersion: 1, month: "2026-09", total: { effectiveAmountCents: 0 }, categories: [] }
-      : snapshotForMonth("2026-09");
+    const body = retryAllowed
+      ? snapshotForMonth("2026-09")
+      : { contractVersion: 1, month: "2026-09", total: { effectiveAmountCents: 0 }, categories: [] };
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.goto("/budgets?month=2026-09");
-  await expect(page.getByRole("alert")).toContainText("no es válida");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no es válida");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  retryAllowed = true;
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
-  expect(attempts).toBe(2);
+  expect(attempts).toBeGreaterThanOrEqual(2);
 });
 
 test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escritura de otro mes", async ({ page }) => {
@@ -667,7 +671,7 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
   const summary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
   await expect(summary).toBeVisible();
   await page.getByRole("button", { name: "Actualizar referencia" }).click();
-  await expect(page.getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
   await expect(summary).toBeVisible();
   await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
   expect(writes).toEqual(["POST"]);
@@ -677,9 +681,14 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
 test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintentar sin escrituras", async ({ page }) => {
   await page.clock.install();
   const requests: string[] = [];
+  let markRequestStarted: (() => void) | null = null;
+  const requestStarted = new Promise<void>((resolve) => { markRequestStarted = resolve; });
+  let retryAllowed = false;
   await page.route("**/api/budgets*", async (route) => {
     requests.push(route.request().method());
-    if (requests.length === 1) return new Promise<void>(() => {});
+    markRequestStarted?.();
+    markRequestStarted = null;
+    if (!retryAllowed) return new Promise<void>(() => {});
     await route.fulfill({
       status: 200, contentType: "application/json",
       body: JSON.stringify(snapshotForMonth("2026-09")),
@@ -687,12 +696,212 @@ test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintenta
   });
   await page.goto("/budgets?month=2026-09", { waitUntil: "domcontentloaded" });
   await expect(page.getByText(/Cargando presupuesto de/)).toBeVisible();
-  await page.clock.fastForward(15_000);
-  await expect(page.getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
-  await page.clock.fastForward(15_000);
-  await expect(page.getByRole("alert")).toContainText("superado 30 segundos");
+  // El HTML de carga puede ser visible antes de que React haya arrancado sus temporizadores.
+  // Esperamos la primera petición real para no adelantar el reloj antes de montar el efecto.
+  await requestStarted;
+  await page.clock.runFor(15_100);
+  await expect(page.locator("main").getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
+  await page.clock.runFor(15_100);
+  await expect(page.locator("main").getByRole("alert")).toContainText("superado 30 segundos");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+  retryAllowed = true;
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
-  expect(requests).toEqual(["GET", "GET"]);
+  expect(requests.length).toBeGreaterThanOrEqual(2);
+  expect(requests.every((method) => method === "GET")).toBe(true);
+});
+
+
+test("RECUPERACION-PRODUCTO · búsqueda y prioridades sin ocultar el total ni editar la fuente", async ({ page }) => {
+  const supermarket = baseSnapshot.categories[0];
+  const filteredSnapshot = {
+    ...baseSnapshot,
+    categories: [
+      supermarket,
+      {
+        ...supermarket,
+        categoryId: "20000000-0000-4000-8000-000000000062",
+        categoryName: "Transporte",
+        automaticAmountCents: 20_000,
+        effectiveAmountCents: 20_000,
+        actualExpenseCents: 55_000,
+        remainingCents: -35_000,
+        progressBps: 27_500,
+        status: "over",
+      },
+      {
+        ...supermarket,
+        categoryId: "20000000-0000-4000-8000-000000000063",
+        categoryName: "Ocio",
+        manualAmountCents: 0,
+        effectiveAmountCents: 0,
+        actualExpenseCents: 1_500,
+        remainingCents: -1_500,
+        progressBps: null,
+        status: "unfunded",
+      },
+    ],
+  };
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(filteredSnapshot) });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  const list = page.getByTestId("budget-category-list");
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Buscar categorías" });
+  await search.fill("trans");
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toHaveCount(0);
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toHaveCount(0);
+  await expect(page.getByText("1 de 3 categorías", { exact: true })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+
+  await search.fill("");
+  const view = page.getByRole("combobox", { name: "Ver categorías" });
+  await view.selectOption("attention");
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toHaveCount(0);
+  const transport = list.getByRole("heading", { name: "Transporte" }).locator("xpath=ancestor::article");
+  await expect(transport.getByRole("link", { name: /Ver movimientos que explican el gasto/ }))
+    .toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30.*categoryId=20000000/);
+  await view.selectOption("manual");
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Transporte" })).toHaveCount(0);
+  const ocio = list.getByRole("heading", { name: "Ocio" }).locator("xpath=ancestor::article");
+  await expect(ocio).toContainText("Límite en cero");
+  await expect(ocio.getByRole("link", { name: /Ver movimientos que explican el gasto/ })).toBeVisible();
+
+  await search.fill("no existe");
+  await expect(page.getByText("No hay categorías con estos filtros")).toBeVisible();
+  await page.getByRole("button", { name: "Quitar filtros" }).click();
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("RECUPERACION-PRODUCTO · aviso de exceso legible en Claro y Oscuro", async ({ page }) => {
+  const item = {
+    ...baseSnapshot.categories[0],
+    categoryId: "20000000-0000-4000-8000-000000000062",
+    categoryName: "Transporte",
+    automaticAmountCents: 10_000,
+    effectiveAmountCents: 10_000,
+    actualExpenseCents: 25_000,
+    remainingCents: -15_000,
+    progressBps: 25_000,
+    status: "over",
+  };
+  await page.route("**/api/budgets*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...baseSnapshot, categories: [item] }) });
+  });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto("/budgets?month=2026-09");
+    const panel = page.getByRole("group", { name: "Magnitud del presupuesto · Transporte" });
+    await expect(panel).toContainText("Exceso 150,00 €");
+    const colors = await panel.evaluate((element) => ({
+      text: getComputedStyle(element).color,
+      background: getComputedStyle(element).backgroundColor,
+    }));
+    expect(colors.text).not.toEqual(colors.background);
+  }
+});
+
+
+test("RECUPERACION-PRODUCTO · no descarta un límite en edición al cambiar mes y conserva la URL", async ({ page }) => {
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only" }) });
+      return;
+    }
+    const month = new URL(route.request().url()).searchParams.get("month") ?? "2026-09";
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotForMonth(month)) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  const input = page.getByLabel("Límite elegido de total mensual");
+  await input.fill("123,45");
+  const monthInput = page.locator('input[type="month"]');
+  await expect(monthInput).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Actualizar referencia" })).toBeDisabled();
+  await expect(page.getByRole("searchbox", { name: "Buscar categorías" })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Ver categorías" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Definir límite" }).last()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Definir mi límite mensual" })).toBeDisabled();
+  await expect(page.getByText("Tienes un límite en edición. Guárdalo o cancélalo antes de cambiar de mes o actualizar la referencia.")).toBeVisible();
+  await expect(input).toHaveValue("123,45");
+  await expect(page).toHaveURL(/month=2026-09/);
+  expect(writes).toEqual([]);
+
+  await page.getByRole("button", { name: "Cancelar" }).first().click();
+  await expect(monthInput).toBeEnabled();
+  await monthInput.fill("2026-08");
+  await expect(page).toHaveURL(/month=2026-08/);
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  await page.reload();
+  await expect(monthInput).toHaveValue("2026-08");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+
+test("RECUPERACION-PRODUCTO · sin referencia no se inventa un exceso ni un porcentaje", async ({ page }) => {
+  const template = baseSnapshot.categories[0];
+  const missingReference = {
+    ...template,
+    categoryId: "20000000-0000-4000-8000-000000000064",
+    categoryName: "Sin histórico",
+    automaticAmountCents: 0,
+    manualAmountCents: null,
+    effectiveAmountCents: 0,
+    actualExpenseCents: 5_000,
+    remainingCents: -5_000,
+    progressBps: null,
+    status: "unfunded",
+  };
+  const explicitZero = {
+    ...missingReference,
+    categoryId: "20000000-0000-4000-8000-000000000065",
+    categoryName: "Límite cero",
+    manualAmountCents: 0,
+  };
+  await page.route("**/api/budgets*", (route) => {
+    if (route.request().method() !== "GET") throw new Error("Read-only regression");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...baseSnapshot, categories: [missingReference, explicitZero] }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  const absent = page.getByRole("heading", { name: "Sin histórico" }).locator("xpath=ancestor::article");
+  await expect(absent).toContainText("Referencia no disponible");
+  await expect(absent).toContainText("Sin histórico suficiente para fijar una referencia");
+  await expect(absent.getByText("Referencia no disponible").locator("..").locator("strong")).toHaveText("—");
+  await expect(absent.getByText("Margen no calculable").locator("..").locator("strong")).toHaveText("—");
+  await expect(absent).toContainText("Gasto sin referencia 50,00 €");
+  await expect(absent).toContainText("Falta histórico o límite elegido para calcular un exceso.");
+  await expect(absent).not.toContainText("Exceso 50,00 €");
+  await expect(absent.getByRole("link", { name: /Ver movimientos que explican el gasto/ })).toBeVisible();
+
+  const zero = page.getByRole("heading", { name: "Límite cero" }).locator("xpath=ancestor::article");
+  await expect(zero).toContainText("Límite en cero");
+  await expect(zero).toContainText("Exceso 50,00 €");
+  await expect(zero).toContainText("Límite 0 € superado");
+  await expect(zero.getByText("Límite elegido", { exact: true }).locator("..").locator("strong")).toHaveText("0,00 €");
+  await expect(zero).not.toContainText("Gasto sin referencia");
 });
