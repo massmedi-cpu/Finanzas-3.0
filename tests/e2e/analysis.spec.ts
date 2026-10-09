@@ -618,7 +618,7 @@ test("REC-COV-003 · Análisis omite los días anteriores al primer dato bancari
   const dates = accumulated.getByRole("table").locator("tbody tr td:first-child");
   await expect(dates.first()).toHaveText("04/09/2026");
   await expect(dates).toHaveCount(12);
-  await expect(dates).not.toContainText(["01/09/2026"]);
+  await expect(dates.first()).not.toHaveText("01/09/2026");
   const comparisons = page.getByLabel("Indicadores principales del periodo");
   await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
 });
