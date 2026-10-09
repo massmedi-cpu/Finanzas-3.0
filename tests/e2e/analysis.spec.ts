@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 import {
+  dateHasConfirmedCoverage,
+  periodComparisonIsReliable,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
+import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
   type AnalysisSnapshot,
@@ -645,4 +650,42 @@ test("REC-COV-006 · el extremo bancario se solicita para la cuenta realmente se
   await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
   await expect.poll(() => scopes.includes(accountId)).toBe(true);
   await expect(page.getByRole("heading", { level: 1, name: "Análisis" })).toBeVisible();
+});
+
+
+test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histórico", () => {
+  const legacy = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-10-10",
+  });
+  expect(legacy.state).toBe("partial");
+  expect(legacy.fromDate).toBeUndefined();
+  expect(periodComparisonIsReliable(legacy)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-12", legacy)).toBe(false);
+
+  const knownBounds = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: "2026-08-01",
+    latestMovementDate: "2026-10-10",
+  });
+  expect(knownBounds.state).toBe("covered");
+  expect(dateHasConfirmedCoverage("2026-09-12", knownBounds)).toBe(true);
+});
+
+test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-15");
+
+  const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await accumulated.getByText("Ver acumulado por día", { exact: true }).click();
+  const dates = accumulated.getByRole("table").getByRole("row").locator("td:first-child");
+  await expect(dates.first()).toHaveText("04/09/2026");
+  await expect(dates.first()).not.toHaveText("01/09/2026");
+  await expect(dates).toHaveCount(12);
+  const comparisons = page.getByLabel("Indicadores principales del periodo");
+  await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
 });
