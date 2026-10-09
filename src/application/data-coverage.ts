@@ -44,7 +44,14 @@ export function resolvePeriodCoverage(input: {
     return { state: "none", latestMovementDate, throughDate: null, ...fromDate };
   }
   const throughDate = latestMovementDate < input.dateTo ? latestMovementDate : input.dateTo;
-  if (latestMovementDate < input.dateTo || (earliestMovementDate !== null && earliestMovementDate > input.dateFrom)) {
+  // The backwards-compatible gateway returns only a latest date. That date
+  // cannot establish where the historic bank data begins, even when it falls
+  // after the end of the selected period. Keep the observed figures visible
+  // but never label the historic comparison as fully covered.
+  if (earliestMovementDate === null) {
+    return { state: "partial", latestMovementDate, throughDate };
+  }
+  if (latestMovementDate < input.dateTo || earliestMovementDate > input.dateFrom) {
     return { state: "partial", latestMovementDate, throughDate, ...fromDate };
   }
   // Min/max do NOT certify intervening days or completeness of the source:
@@ -62,8 +69,8 @@ export function periodComparisonIsReliable(coverage: PeriodCoverage) {
 
 export function dateHasConfirmedCoverage(date: string, coverage: PeriodCoverage) {
   if (!validDate(date)) return false;
-  if (!coverage.throughDate) return false;
-  if (coverage.fromDate && date < coverage.fromDate) return false;
+  if (!coverage.throughDate || !coverage.fromDate) return false;
+  if (date < coverage.fromDate) return false;
   return (coverage.state === "covered" || coverage.state === "partial")
     && date <= coverage.throughDate;
 }
