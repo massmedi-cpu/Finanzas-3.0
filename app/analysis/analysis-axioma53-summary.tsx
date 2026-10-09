@@ -20,12 +20,16 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   const partial = coverage?.state === "partial";
   // Never draw a flat zero into days beyond the last imported movement.
   const throughDate = observed && coverage?.throughDate ? coverage.throughDate : null;
+  const chartStart = coverage?.fromDate && coverage.fromDate > snapshot.selection.dateFrom
+    ? coverage.fromDate
+    : snapshot.selection.dateFrom;
+  const startsLate = observed && chartStart > snapshot.selection.dateFrom;
   const chartEnd = throughDate && throughDate < snapshot.selection.dateTo
     ? throughDate
     : snapshot.selection.dateTo;
   const rows = observed && throughDate ? buildAccumulatedDailySpend(
     snapshot.dailySpend,
-    snapshot.selection.dateFrom,
+    chartStart,
     chartEnd,
   ) : [];
 
@@ -98,7 +102,7 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
             <strong>{formatMoney(finalCents)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}{hasNegativeDailyAdjustment ? " Los ajustes o devoluciones pueden reducir el acumulado; la escala conserva los máximos y mínimos observados." : ""}</p>
+        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {startsLate ? `Datos registrados desde el ${formatDate(chartStart)} hasta el ${formatDate(chartEnd)}. Los días anteriores no se representan como ceros confirmados.` : partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}{hasNegativeDailyAdjustment ? " Los ajustes o devoluciones pueden reducir el acumulado; la escala conserva los máximos y mínimos observados." : ""}</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
           <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(finalCents)}`}>
             {tickValues.map((value) => {
