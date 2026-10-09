@@ -876,6 +876,9 @@ test("RECUPERACION-PRODUCTO · sin referencia no se inventa un exceso ni un porc
   await page.goto("/budgets?month=2026-09");
   const absent = page.getByRole("heading", { name: "Sin histórico" }).locator("xpath=ancestor::article");
   await expect(absent).toContainText("Referencia no disponible");
+  await expect(absent).toContainText("Sin histórico suficiente para fijar una referencia");
+  await expect(absent.getByText("Referencia no disponible").locator("..").locator("strong")).toHaveText("—");
+  await expect(absent.getByText("Margen no calculable").locator("..").locator("strong")).toHaveText("—");
   await expect(absent).toContainText("Gasto sin referencia 50,00 €");
   await expect(absent).toContainText("Falta histórico o límite elegido para calcular un exceso.");
   await expect(absent).not.toContainText("Exceso 50,00 €");
@@ -885,5 +888,6 @@ test("RECUPERACION-PRODUCTO · sin referencia no se inventa un exceso ni un porc
   await expect(zero).toContainText("Límite en cero");
   await expect(zero).toContainText("Exceso 50,00 €");
   await expect(zero).toContainText("Límite 0 € superado");
+  await expect(zero.getByText("Límite elegido", { exact: true }).locator("..").locator("strong")).toHaveText("0,00 €");
   await expect(zero).not.toContainText("Gasto sin referencia");
 });
