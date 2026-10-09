@@ -51,3 +51,12 @@ Análisis, Comparador, Cash Flow y Previsión se verifican ahora por su resumen 
 El [run 37891179198](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37891179198), HEAD `ecb3f60b`, terminó FALLIDO: 12/14 casos pasaron. Los cinco recorridos de 768–1440 px recorrieron las 21 rutas en ambos temas con backend real y sin overflow ni excepciones. Cash Flow con datos conciliados se desbordaba a 734 px en viewports de 360/390 px: la tabla nativa de apoyo, oculta visualmente con ancho 1 px, conservaba su ancho intrínseco.
 
 La clase de ocultación pasa a un contenedor de bloque que recorta ese ancho, manteniendo la tabla nativa, caption y todas las filas accesibles. El recorrido exige su presencia en el árbol accesible, cuatro encabezados y los 30 días de septiembre. Conserva las comprobaciones de ancho de documento/cuerpo y añade diagnósticos de geometría sin textos financieros. No cambia datos, cálculos ni lógica de la gráfica. La aceptación exige nuevamente el run completo SUCCESS y el cotejo SQL final.
+
+
+## Cuarto recorrido y Presupuestos móvil
+
+El [run 37892129714](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37892129714), HEAD `24392a5a`, terminó FALLIDO: 12/14 casos pasaron. Cash Flow pasó ya a 360/390 px con sus cuatro encabezados y 30 días accesibles. En ambos anchos el recorrido avanzó hasta Presupuestos, cuyos paneles cargados forzaban un ancho de página de 435 px por los mínimos intrínsecos de sus grids y filas de tarjetas. Las cinco anchuras de 768–1440 px volvieron a pasar todas las rutas.
+
+Contenido y rejilla móvil principal usan tracks con mínimo cero; los paneles pueden contraerse, el resumen conserva columnas ajustables (una hasta 400 px) y títulos/estados pueden pasar de línea. No se recorta la página ni se ocultan controles. El ensayo registra todos los desbordamientos de una pasada con aserciones soft que siguen haciendo FALLAR el caso; sólo emite el marcador responsive con overflow=0 cuando no hay errores. Así se revisan también las rutas posteriores antes de aceptar 14/14 y el cotejo SQL final.
+
+Los commits concurrentes `9cce944d` y `14dd99b7` añadieron mínimos cero y el breakpoint compacto de 400 px. Se conservan sus cambios al integrar el salto de filas y la pasada completa de diagnóstico.

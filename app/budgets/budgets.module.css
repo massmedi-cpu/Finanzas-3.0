@@ -347,6 +347,7 @@
 }
 
 .panel {
+  min-width: 0;
   border: 1px solid rgba(137, 173, 255, 0.14);
   border-radius: 1.35rem;
   background: linear-gradient(145deg, rgba(14, 25, 48, 0.84), rgba(7, 14, 29, 0.78));
@@ -421,6 +422,8 @@
   overflow-wrap: anywhere;
   font-size: 1rem;
 }
+
+.cardTitle > div { min-width: 0; }
 
 .cardTitle p {
   margin: 0.18rem 0 0;
@@ -671,7 +674,7 @@
   .heroControls { justify-content: flex-start; min-width: 0; }
   .summaryGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .planningSteps { grid-template-columns: 1fr; }
-  .mainGrid { grid-template-columns: 1fr; }
+  .mainGrid { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 620px) {
@@ -685,7 +688,9 @@
   .planningHeader .status { width: fit-content; white-space: normal; }
   .planningStep { padding: 0.85rem; }
   .amounts { grid-template-columns: 1fr; gap: 0.4rem; }
-  .cardTop { align-items: flex-start; }
+  .cardTop { align-items: flex-start; flex-wrap: wrap; }
+  .cardTitle { max-width: 100%; }
+  .panelHeading { flex-wrap: wrap; }
   .editor { grid-template-columns: 1fr; }
   .editorButtons { align-items: center; }
   .historyRow { grid-template-columns: 3.7rem minmax(0, 1fr); }

@@ -314,12 +314,14 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
           }).slice(0, 12));
           console.log(`AUD_HTTP|diagnostic=layout_overflow|route=${route}|theme=${theme}|viewport=${width}|elements=${JSON.stringify(overflow)}`);
         }
-        expect(dimensions.html, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
-        expect(dimensions.body, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
+        // Collect every affected route in this sweep while retaining a failed
+        // test for any overflow, rather than stopping at the first surface.
+        expect.soft(dimensions.html, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
+        expect.soft(dimensions.body, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
       }
     }
     expect(failed).toEqual([]);
-    console.log(`AUD_HTTP|case=responsive|width=${width}|themes=light,dark|routes=${routes.length}|real_backend=true|page_errors=0|overflow=0`);
+    console.log(`AUD_HTTP|case=${test.info().errors.length ? 'responsive_failed' : 'responsive'}|width=${width}|themes=light,dark|routes=${routes.length}|real_backend=true|page_errors=${failed.length}|overflow=${test.info().errors.length ? 'failed' : 0}`);
   });
 }
 
