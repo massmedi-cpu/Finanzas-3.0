@@ -153,17 +153,46 @@ function extractMoneyField(
   const candidates = lines.flatMap((item) => {
     const normalized = normalizeToken(item.line.text);
     if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
-    const matches = item.line.text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g);
-    const raw = matches?.at(-1);
-    const value = raw ? parseMoneyCents(raw) : null;
-    return raw && value !== null ? [{ item, raw, value, preferred: Boolean(options.prefer?.test(normalized)) }] : [];
+
+    // Do not treat the last number in a whole OCR row as its labelled amount.
+    // Receipts can place TOTAL, cash received and CHANGE on the same row.
+    const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    const labelsFound = labels.flatMap((label) => {
+      const match = label.exec(searchable);
+      return match ? [{ index: match.index, end: match.index + match[0].length }] : [];
+    });
+    const preferred = options.prefer?.exec(searchable) ?? null;
+    const anchorEnd = preferred
+      ? preferred.index + preferred[0].length
+      : labelsFound.reduce((earliest, found) => Math.min(earliest, found.end), Number.POSITIVE_INFINITY);
+    const monies = [...item.line.text.matchAll(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g)]
+      .flatMap((match) => {
+        const value = parseMoneyCents(match[0]);
+        return value === null ? [] : [{ raw: match[0], value, index: match.index }];
+      });
+    const following = monies.filter((money) => money.index >= anchorEnd);
+    const chosen = following[0] ?? monies.at(-1);
+    if (!chosen) return [];
+
+    // A trailing payment label or competing figure weakens field attribution,
+    // even if character-level OCR confidence is high. Preserve source evidence.
+    const intervening = searchable.slice(anchorEnd, chosen.index);
+    const paymentBeforeAmount = /\b(?:efectivo|tarjeta|cambio|recibido|entregado|devolucion)\b/.test(intervening);
+    const conflictingAmounts = new Set(following.map((money) => money.value)).size > 1;
+    return [{
+      item,
+      raw: chosen.raw,
+      value: chosen.value,
+      preferred: Boolean(preferred),
+      needsReview: following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+    }];
   });
   if (!candidates.length) return emptyField<number>();
-  // Prefer an explicit final amount over a generic TOTAL, but do not erase
-  // contradictory alternatives that might be real in the source.
+  // Explicit "total a pagar" wins over a generic TOTAL. Contradictory
+  // alternatives or amounts preceding their label always require review.
   const chosen = candidates.find((candidate) => candidate.preferred) ?? candidates[0];
   const field = fieldFrom(chosen.item, chosen.raw, chosen.value);
-  if (new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
+  if (!chosen.needsReview && new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
   return {
     ...fieldRequiringReview(field),
     evidence: candidates.map((candidate) => evidenceOf(candidate.item)),
