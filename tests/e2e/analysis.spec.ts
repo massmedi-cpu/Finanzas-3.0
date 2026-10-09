@@ -503,12 +503,12 @@ test("REC-ANA-003 · el acumulado conserva el máximo visual anterior a una devo
   await loadMockAnalysis(page, snapshot, "2026-09-15");
 
   const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
-  await expect(accumulation.locator("strong").first()).toHaveText(/10,00\\s*€/);
+  await expect(accumulation.locator("strong").first()).toHaveText(/10,00\s*€/);
   await expect(accumulation).toContainText("ajustes o devoluciones");
   await expect(accumulation.getByRole("img", { name: /Gasto acumulado: 10,00/ })).toBeVisible();
   await expect(accumulation.locator("svg")).toContainText(/100,00/);
   const linePath = await accumulation.locator("path").last().getAttribute("d");
-  const pointsY = [...(linePath ?? "").matchAll(/[ML]\\s+[\\d.]+\\s+(-?[\\d.]+)/g)].map((match) => Number(match[1]));
+  const pointsY = [...(linePath ?? "").matchAll(/[ML]\s+[\d.]+\s+(-?[\d.]+)/g)].map((match) => Number(match[1]));
   expect(pointsY.length).toBe(15);
   expect(pointsY.every((y) => y >= 22 && y <= 204)).toBe(true);
 });
@@ -522,7 +522,7 @@ test("REC-ANA-004 · cero neto por devolución no se muestra como un céntimo", 
   await loadMockAnalysis(page, snapshot, "2026-09-15");
 
   const accumulation = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
-  await expect(accumulation.locator("strong").first()).toHaveText(/0,00\\s*€/);
+  await expect(accumulation.locator("strong").first()).toHaveText(/0,00\s*€/);
   await expect(accumulation.getByRole("img", { name: /Gasto acumulado: 0,00/ })).toBeVisible();
   await expect(accumulation.locator("strong").first()).not.toContainText("0,01");
   await accumulation.getByText("Ver acumulado por día").click();
