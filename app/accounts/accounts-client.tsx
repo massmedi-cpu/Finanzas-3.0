@@ -607,7 +607,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                     </article>
                   ))}
                 </div>
-                {transactions && visibleTransactions.totalCount > visibleTransactions.rows.length ? (
+                {visibleTransactions && visibleTransactions.totalCount > visibleTransactions.rows.length ? (
                   <p className={styles.moreHint}>Mostrando {visibleTransactions.rows.length} de {visibleTransactions.totalCount} movimientos de la cuenta en el periodo.</p>
                 ) : null}
               </section>
