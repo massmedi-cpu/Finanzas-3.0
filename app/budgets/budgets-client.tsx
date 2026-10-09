@@ -742,7 +742,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                           <option value="manual">Con límite elegido</option>
                         </select>
                       </label>
-                      <span className={styles.categoryCount} role="status" aria-live="polite">
+                      <span className={styles.categoryCount} aria-live="polite" aria-atomic="true">
                         {filteredCategories.length} de {snapshot.categories.length} categorías
                       </span>
                     </div>
