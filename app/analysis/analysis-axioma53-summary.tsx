@@ -20,9 +20,18 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   const partial = coverage?.state === "partial";
   // Never draw a flat zero into days beyond the last imported movement.
   const throughDate = observed && coverage?.throughDate ? coverage.throughDate : null;
+  // A legacy gateway exposes no lower banking boundary. In that case the
+  // first actual expense is a safe start for the observed chart; earlier
+  // calendar days must not be silently rendered as confirmed zero spending.
+  const firstObservedSpendDate = snapshot.dailySpend
+    .filter((row) => row.date >= snapshot.selection.dateFrom && row.date <= snapshot.selection.dateTo)
+    .map((row) => row.date)
+    .sort()[0] ?? null;
   const chartStart = coverage?.fromDate && coverage.fromDate > snapshot.selection.dateFrom
     ? coverage.fromDate
-    : snapshot.selection.dateFrom;
+    : !coverage?.fromDate && firstObservedSpendDate && firstObservedSpendDate > snapshot.selection.dateFrom
+      ? firstObservedSpendDate
+      : snapshot.selection.dateFrom;
   const startsLate = observed && chartStart > snapshot.selection.dateFrom;
   const chartEnd = throughDate && throughDate < snapshot.selection.dateTo
     ? throughDate
