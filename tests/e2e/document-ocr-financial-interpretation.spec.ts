@@ -257,3 +257,29 @@ test("OCR does not downgrade consistent duplicate copies of the same total", () 
   expect(interpretation.totalCents.value).toBe(2500);
   expect(interpretation.totalCents.trust).toBe("reliable");
 });
+
+test("OCR distinguishes store hours from an explicit purchase time", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("schedule", "Horario apertura: 09:00 - 21:00", 0.99, 0.12),
+    line("purchase", "Hora: 13:45", 0.97, 0.22),
+  ]));
+  expect(interpretation.time.value).toBe("13:45");
+  expect(interpretation.time.trust).toBe("reliable");
+  expect(interpretation.time.evidence[0]?.lineId).toBe("purchase");
+});
+
+test("OCR does not assign shop opening time as document purchase time", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("schedule", "Horario de apertura: 09:00 - 21:00", 0.99, 0.10),
+  ]));
+  expect(interpretation.time.value).toBeNull();
+  expect(interpretation.time.trust).toBe("not_detected");
+});
+
+test("OCR keeps an unlabelled receipt clock available but doubtful", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("clock", "13:45", 0.99, 0.10),
+  ]));
+  expect(interpretation.time.value).toBe("13:45");
+  expect(interpretation.time.trust).toBe("doubtful");
+});
