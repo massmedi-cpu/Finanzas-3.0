@@ -556,3 +556,22 @@ test("REC-ANA-005 · Ver todos los comercios muestra el resultado completo más 
   await ranking.getByRole("button", { name: "Ver menos" }).click();
   await expect(ranking.getByRole("listitem")).toHaveCount(5);
 });
+
+test("REC-ANA-006 · el tope de 30 comercios del servidor no se presenta como ranking completo", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  const template = snapshot.merchantDrivers[0];
+  snapshot.merchantDrivers = Array.from({ length: 30 }, (_, index) => ({
+    ...template,
+    id: `merchant-limited-${index + 1}`,
+    name: `Comercio disponible ${index + 1}`,
+    href: `/transactions?merchantId=merchant-limited-${index + 1}`,
+  }));
+  await loadMockAnalysis(page, snapshot);
+  const ranking = page.getByRole("heading", { name: "Comercios", exact: true }).locator("..").locator("..");
+  await expect(ranking).toContainText("como máximo los 30 comercios");
+  await expect(ranking).toContainText("Puede haber más fuera de este ranking");
+  await expect(ranking.getByRole("button", { name: "Ver todos los disponibles" })).toBeVisible();
+  await expect(ranking.getByRole("link", { name: "Buscar otros en Movimientos" })).toHaveAttribute(
+    "href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-15",
+  );
+});
