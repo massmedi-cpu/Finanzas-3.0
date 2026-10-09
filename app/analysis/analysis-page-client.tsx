@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
 import type { AnalysisSelectionInput } from "../../src/application/analysis/analysis-loader";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
@@ -42,7 +42,19 @@ export default function AnalysisPageClient({
   const [snapshot, setSnapshot] = useState<AnalysisSnapshot | null>(initialSnapshot);
   const [basicApplied, setBasicApplied] = useState<AnalysisSnapshot | null>(null);
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
-  const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
+  const [scopedFreshness, setScopedFreshness] = useState<{
+    accountId: string | null;
+    value: SourceFreshness | null;
+  } | null>(null);
+  // A newly selected account must not inherit the previous account's banking
+  // bounds for even the first render, before the next freshness effect runs.
+  const selectedAccountId = snapshot?.selection.accountId ?? fallbackSelection.accountId ?? null;
+  const onFreshnessChange = useCallback((value: SourceFreshness | null) => {
+    setScopedFreshness({ accountId: selectedAccountId, value });
+  }, [selectedAccountId]);
+  const freshness = scopedFreshness?.accountId === selectedAccountId
+    ? scopedFreshness.value
+    : null;
 
   useEffect(() => {
     if (initialSnapshot) return;
@@ -104,9 +116,9 @@ export default function AnalysisPageClient({
   return (
     <>
       <AnalysisSourceFreshness
-        key={snapshot?.selection.accountId ?? fallbackSelection.accountId ?? "all"}
-        accountId={snapshot?.selection.accountId ?? fallbackSelection.accountId ?? null}
-        onChange={setFreshness}
+        key={selectedAccountId ?? "all"}
+        accountId={selectedAccountId}
+        onChange={onFreshnessChange}
       />
       <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null} earliestMovementDate={freshness?.earliestMovementDate ?? null}
         onApplied={(next) => { setSnapshot(next); setBasicApplied(next); }} />
