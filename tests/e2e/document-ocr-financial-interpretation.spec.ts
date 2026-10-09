@@ -228,3 +228,32 @@ test("OCR finds an explicitly attributed issuer ID after a generic fiscal ID", (
   expect(interpretation.taxId.value).toBe("87654321X");
   expect(interpretation.taxId.trust).toBe("reliable");
 });
+
+test("OCR ignores discount totals when the payable total is explicit", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("discount", "TOTAL DESCUENTO 30,00", 0.99, 0.60),
+    line("payable", "TOTAL A PAGAR 70,00", 0.98, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(7000);
+  expect(interpretation.totalCents.trust).toBe("reliable");
+  expect(interpretation.totalCents.evidence[0]?.lineId).toBe("payable");
+});
+
+test("OCR keeps conflicting total candidates available but doubtful", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("initial", "TOTAL 95,00", 0.99, 0.55),
+    line("final", "TOTAL A PAGAR 90,00", 0.98, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(9000);
+  expect(interpretation.totalCents.trust).toBe("doubtful");
+  expect(interpretation.totalCents.evidence.map((entry) => entry.lineId)).toEqual(["initial", "final"]);
+});
+
+test("OCR does not downgrade consistent duplicate copies of the same total", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("total", "TOTAL 25,00", 0.98, 0.55),
+    line("card", "TOTAL TARJETA 25,00", 0.97, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(2500);
+  expect(interpretation.totalCents.trust).toBe("reliable");
+});
