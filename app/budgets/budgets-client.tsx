@@ -157,6 +157,7 @@ function BudgetCard({
   monthEnd,
   busy,
   editing,
+  editLocked,
   editValue,
   fieldError,
   onStartEdit,
@@ -171,6 +172,7 @@ function BudgetCard({
   monthEnd: string;
   busy: boolean;
   editing: boolean;
+  editLocked: boolean;
   editValue: string;
   fieldError: string;
   onStartEdit: () => void;
@@ -293,13 +295,13 @@ function BudgetCard({
         </Link>
       ) : null}
       <div className={styles.cardActions}>
-        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editing}>
+        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editLocked}>
           {hasChosenLimit ? "Editar límite elegido" : "Definir límite"}
         </button>
         {hasChosenLimit ? (
           <>
             <span className={styles.manualBadge}>Referencia automática {formatMoney(item.automaticAmountCents)}</span>
-            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy}>
+            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy || editLocked}>
               Quitar límite elegido
             </button>
           </>
@@ -476,13 +478,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [month, mutate]);
 
   const startEdit = useCallback((item: BudgetItem) => {
+    if (editingKey !== null) return;
     const key = item.categoryId ?? "__total__";
     setError("");
     setNotice("");
     setFieldError("");
     setEditingKey(key);
     setEditValue(euroInputFromCents(item.manualAmountCents ?? item.effectiveAmountCents));
-  }, []);
+  }, [editingKey]);
 
   const changeEditValue = useCallback((value: string) => {
     setEditValue(value);
@@ -511,12 +514,13 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [editValue, month, mutate]);
 
   const clearManual = useCallback((item: BudgetItem) => {
+    if (editingKey !== null) return;
     void mutate(
       "PATCH",
       { month, categoryId: item.categoryId, manualAmountCents: null },
       "Se ha quitado el límite elegido. La referencia automática vuelve a aplicarse.",
     );
-  }, [month, mutate]);
+  }, [editingKey, month, mutate]);
 
   const categorySummary = useMemo(() => {
     if (!snapshot) return { attention: 0, onTrack: 0, total: 0 };
@@ -682,7 +686,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                           className={styles.stepLink}
                           type="button"
                           onClick={() => startEdit(snapshot.total)}
-                          disabled={busy}
+                          disabled={busy || editingKey !== null}
                         >
                           Definir mi límite mensual
                         </button>
@@ -725,13 +729,13 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     <div className={styles.categoryToolbar} role="search" aria-label="Encontrar presupuestos por categoría">
                       <label>
                         Buscar categorías
-                        <input type="search" value={categorySearch}
+                        <input type="search" value={categorySearch} disabled={editingKey !== null}
                           onChange={(event) => setCategorySearch(event.target.value)}
                           placeholder="Nombre de la categoría" />
                       </label>
                       <label>
                         Ver categorías
-                        <select value={categoryView}
+                        <select value={categoryView} disabled={editingKey !== null}
                           onChange={(event) => setCategoryView(event.target.value as "all" | "attention" | "manual")}>
                           <option value="all">Todas</option>
                           <option value="attention">Requieren atención</option>
@@ -750,6 +754,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       monthStart={snapshot.monthStart}
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
+                      editLocked={editingKey !== null}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
                       fieldError={editingKey === "__total__" ? fieldError : ""}
@@ -767,6 +772,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                         monthStart={snapshot.monthStart}
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
+                        editLocked={editingKey !== null}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
                         fieldError={editingKey === item.categoryId ? fieldError : ""}
@@ -783,7 +789,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                         <strong>No hay categorías con estos filtros</strong>
                         <p>Prueba con otra búsqueda o vuelve a mostrar todas las categorías.</p>
                         <button className={styles.secondaryButton} type="button"
-                          onClick={() => { setCategorySearch(""); setCategoryView("all"); }}>Quitar filtros</button>
+                          onClick={() => { setCategorySearch(""); setCategoryView("all"); }} disabled={editingKey !== null}>Quitar filtros</button>
                       </div>
                     ) : null}
                     {snapshot.categories.length === 0 ? (
