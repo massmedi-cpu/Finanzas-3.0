@@ -696,3 +696,110 @@ test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintenta
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
   expect(requests).toEqual(["GET", "GET"]);
 });
+
+
+test("RECUPERACION-PRODUCTO · búsqueda y prioridades sin ocultar el total ni editar la fuente", async ({ page }) => {
+  const supermarket = baseSnapshot.categories[0];
+  const filteredSnapshot = {
+    ...baseSnapshot,
+    categories: [
+      supermarket,
+      {
+        ...supermarket,
+        categoryId: "20000000-0000-4000-8000-000000000062",
+        categoryName: "Transporte",
+        automaticAmountCents: 20_000,
+        effectiveAmountCents: 20_000,
+        actualExpenseCents: 55_000,
+        remainingCents: -35_000,
+        progressBps: 27_500,
+        status: "over",
+      },
+      {
+        ...supermarket,
+        categoryId: "20000000-0000-4000-8000-000000000063",
+        categoryName: "Ocio",
+        manualAmountCents: 0,
+        effectiveAmountCents: 0,
+        actualExpenseCents: 1_500,
+        remainingCents: -1_500,
+        progressBps: null,
+        status: "unfunded",
+      },
+    ],
+  };
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only" }) });
+      return;
+    }
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(filteredSnapshot) });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  const list = page.getByTestId("budget-category-list");
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+
+  const search = page.getByRole("searchbox", { name: "Buscar categorías" });
+  await search.fill("trans");
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toHaveCount(0);
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toHaveCount(0);
+  await expect(page.getByText("1 de 3 categorías", { exact: true })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+
+  await search.fill("");
+  const view = page.getByRole("combobox", { name: "Ver categorías" });
+  await view.selectOption("attention");
+  await expect(list.getByRole("heading", { name: "Transporte" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toHaveCount(0);
+  const transport = list.getByRole("heading", { name: "Transporte" }).locator("xpath=ancestor::article");
+  await expect(transport.getByRole("link", { name: /Ver movimientos que explican el gasto/ }))
+    .toHaveAttribute("href", /dateFrom=2026-09-01.*dateTo=2026-09-30.*categoryId=20000000/);
+  await view.selectOption("manual");
+  await expect(list.getByRole("heading", { name: "Ocio" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Transporte" })).toHaveCount(0);
+  const ocio = list.getByRole("heading", { name: "Ocio" }).locator("xpath=ancestor::article");
+  await expect(ocio).toContainText("Límite en cero");
+  await expect(ocio.getByRole("link", { name: /Ver movimientos que explican el gasto/ })).toBeVisible();
+
+  await search.fill("no existe");
+  await expect(page.getByText("No hay categorías con estos filtros")).toBeVisible();
+  await page.getByRole("button", { name: "Quitar filtros" }).click();
+  await expect(list.getByRole("heading", { name: "Supermercado" })).toBeVisible();
+  await expect(list.getByRole("heading", { name: "Presupuesto mensual total" })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("RECUPERACION-PRODUCTO · aviso de exceso legible en Claro y Oscuro", async ({ page }) => {
+  const item = {
+    ...baseSnapshot.categories[0],
+    categoryId: "20000000-0000-4000-8000-000000000062",
+    categoryName: "Transporte",
+    automaticAmountCents: 10_000,
+    effectiveAmountCents: 10_000,
+    actualExpenseCents: 25_000,
+    remainingCents: -15_000,
+    progressBps: 25_000,
+    status: "over",
+  };
+  await page.route("**/api/budgets*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...baseSnapshot, categories: [item] }) });
+  });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto("/budgets?month=2026-09");
+    const panel = page.getByRole("group", { name: "Magnitud del presupuesto · Transporte" });
+    await expect(panel).toContainText("Exceso 150,00 €");
+    const colors = await panel.evaluate((element) => ({
+      text: getComputedStyle(element).color,
+      background: getComputedStyle(element).backgroundColor,
+    }));
+    expect(colors.text).not.toEqual(colors.background);
+  }
+});
