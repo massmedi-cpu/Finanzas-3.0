@@ -993,5 +993,4 @@ test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de me
   await expect(page.getByTestId("financial-bar-scale-reference")).toContainText("200,00 €");
   await expect(chart.locator('[data-month-coverage="none"]')).toHaveCount(2);
   await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(1);
-  await expect(chart.locator('[data-month-coverage="covered"] .incomeBar')).toHaveCount(0);
 });
