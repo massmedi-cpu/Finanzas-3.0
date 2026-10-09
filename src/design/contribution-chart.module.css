@@ -64,6 +64,26 @@
 
 .row:last-child { border-bottom: 0; }
 
+.observedRow {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, auto) minmax(8rem, auto);
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.72rem 0.1rem;
+  border-bottom: 1px solid var(--border-subtle, rgba(137, 173, 255, 0.12));
+}
+
+.observedRow:last-child { border-bottom: 0; }
+.observedRow strong { min-width: 0; overflow-wrap: anywhere; }
+.observedAmount { font-variant-numeric: tabular-nums; font-weight: 800; text-align: end; color: var(--color-text); }
+.observedRow a { justify-self: end; display: inline-flex; min-height: 2.75rem; align-items: center; color: var(--color-primary-bright); font-weight: 750; text-decoration: underline; text-underline-offset: 0.2em; }
+.observedRow a:focus-visible { outline: 2px solid var(--color-primary-bright); outline-offset: 2px; }
+@media (max-width: 42rem) {
+  .observedRow { grid-template-columns: minmax(0, 1fr) minmax(7rem, auto); gap: 0.35rem 0.7rem; }
+  .observedRow a { grid-column: 1 / -1; justify-self: start; }
+}
+
 .label,
 .meta {
   min-width: 0;
