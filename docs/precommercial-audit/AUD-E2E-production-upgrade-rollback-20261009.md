@@ -61,3 +61,9 @@ la aceptación integral VAL-001, el recorrido publicado browser→Next→Edge,
 Drive/exportación/PWA ni la revisión del F11 por su propietario. DOC-002 y VAL-001
 permanecen abiertas hasta superar sus criterios. Producción continúa 10.0.102;
 publicar únicamente la última candidata completa y aceptada.
+
+## Cierre comprobado · 09/10/2026
+
+Los límites anteriores describen la preparación histórica. El [run 37894674844](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37894674844) del candidato exacto `abfad935967fc880d93e7769c25b9c6616a21be5` terminó **SUCCESS**: backup real restaurable, cuatro migraciones, paridad de siete meses, permisos/RLS, designación/reversión y retorno a la superficie anterior, con datos originales preservados. Backup previo: [37877870394](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37877870394).
+
+La migración productiva `20261009064932` / `release_10_0_103_aud_e2e` está aplicada; esquema 14 y gateway `financial-app-db-gateway` ACTIVE v86 verificados. Frontend 10.0.103 publicado en commit `6dad59c6c2db3575618a7c91c49c3060a93bbba1`, deployment `dpl_34WhAcvVpP6YrdbxAckDgm3TWwz5`. [Postflight 37924509634](https://github.com/massmedi-cpu/Finanzas-3.0/actions/runs/37924509634) SUCCESS con sesión financiera forzada read-only. F11 designado Prueba con autorización del propietario y verificación de conservación; solo cambia su designación y una entrada de auditoría. [Evidencias completas](../releases/10.0.103-production-20261009.md).
