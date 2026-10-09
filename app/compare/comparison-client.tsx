@@ -38,8 +38,8 @@ type ComparisonForm = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
+  day: "2-digit",
+  month: "2-digit",
   year: "numeric",
   timeZone: "Europe/Madrid",
 });
@@ -55,7 +55,7 @@ function formFromSelection(selection: ResolvedComparisonSelection): ComparisonFo
 }
 
 function formatDate(value: string) {
-  return dateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+  return dateFormatter.format(new Date(`${value}T12:00:00Z`));
 }
 
 function formatPeriod(dateFrom: string, dateTo: string) {
