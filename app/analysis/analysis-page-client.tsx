@@ -104,7 +104,7 @@ export default function AnalysisPageClient({
   return (
     <>
       <AnalysisSourceFreshness onChange={setFreshness} />
-      <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null}
+      <AnalysisClient initialSnapshot={snapshot} latestMovementDate={freshness?.latestMovementDate ?? null} earliestMovementDate={freshness?.earliestMovementDate ?? null}
         onApplied={(next) => { setSnapshot(next); setBasicApplied(next); }} />
       <AnalysisAxioma53Controls
         key={basicApplied ? [basicApplied.selection.month, basicApplied.selection.range, basicApplied.selection.accountId].join(":") : "initial"}
