@@ -4,6 +4,8 @@ export type PeriodCoverage = {
   state: PeriodCoverageState;
   latestMovementDate: string | null;
   throughDate: string | null;
+  /** First imported banking date; absence means historic coverage unverified. */
+  fromDate?: string | null;
 };
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -25,18 +27,29 @@ export function resolvePeriodCoverage(input: {
   dateFrom: string;
   dateTo: string;
   latestMovementDate: string | null | undefined;
+  earliestMovementDate?: string | null | undefined;
 }): PeriodCoverage {
   const latestMovementDate = validDate(input.latestMovementDate);
-  if (!validDate(input.dateFrom) || !validDate(input.dateTo) || input.dateFrom > input.dateTo || !latestMovementDate) {
-    return { state: "unknown", latestMovementDate, throughDate: null };
+  const earliestMovementDate = validDate(input.earliestMovementDate);
+  const invalidEarliest = input.earliestMovementDate != null && !earliestMovementDate;
+  const fromDate = earliestMovementDate ? { fromDate: earliestMovementDate } : {};
+  if (!validDate(input.dateFrom) || !validDate(input.dateTo)
+    || input.dateFrom > input.dateTo || !latestMovementDate
+    || invalidEarliest || (earliestMovementDate !== null && earliestMovementDate > latestMovementDate)) {
+    return { state: "unknown", latestMovementDate, throughDate: null, ...fromDate };
   }
-  if (latestMovementDate < input.dateFrom) {
-    return { state: "none", latestMovementDate, throughDate: null };
+  // A period entirely outside the observed bank date bounds is not a
+  // confirmed zero. Start and end are both needed to avoid historical gaps.
+  if (latestMovementDate < input.dateFrom || (earliestMovementDate !== null && earliestMovementDate > input.dateTo)) {
+    return { state: "none", latestMovementDate, throughDate: null, ...fromDate };
   }
-  if (latestMovementDate < input.dateTo) {
-    return { state: "partial", latestMovementDate, throughDate: latestMovementDate };
+  const throughDate = latestMovementDate < input.dateTo ? latestMovementDate : input.dateTo;
+  if (latestMovementDate < input.dateTo || (earliestMovementDate !== null && earliestMovementDate > input.dateFrom)) {
+    return { state: "partial", latestMovementDate, throughDate, ...fromDate };
   }
-  return { state: "covered", latestMovementDate, throughDate: input.dateTo };
+  // Min/max do NOT certify intervening days or completeness of the source:
+  // a richer per-source interval model is still required for full assurance.
+  return { state: "covered", latestMovementDate, throughDate, ...fromDate };
 }
 
 export function periodHasObservedData(coverage: PeriodCoverage) {
@@ -50,6 +63,7 @@ export function periodComparisonIsReliable(coverage: PeriodCoverage) {
 export function dateHasConfirmedCoverage(date: string, coverage: PeriodCoverage) {
   if (!validDate(date)) return false;
   if (!coverage.throughDate) return false;
+  if (coverage.fromDate && date < coverage.fromDate) return false;
   return (coverage.state === "covered" || coverage.state === "partial")
     && date <= coverage.throughDate;
 }

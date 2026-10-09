@@ -14,6 +14,7 @@ type SyncStatus = "success" | "partial" | "failed" | "started";
 export type SourceFreshness = {
   available: boolean;
   latestMovementDate: string | null;
+  earliestMovementDate?: string | null;
   sync: null | {
     status: SyncStatus;
     finishedAt: string | null;
@@ -64,6 +65,7 @@ function nullableFiniteNumber(value: unknown): value is number | null {
 function isFreshness(value: unknown): value is SourceFreshness {
   if (!record(value) || typeof value.available !== "boolean") return false;
   if (!nullableString(value.latestMovementDate)) return false;
+  if (value.earliestMovementDate !== undefined && !nullableString(value.earliestMovementDate)) return false;
   if (value.sync === null) return true;
   if (!record(value.sync)) return false;
 

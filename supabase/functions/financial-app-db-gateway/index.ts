@@ -50,6 +50,7 @@ const PREVIEW_READ_ONLY_ACTIONS = new Set([
   "merchant.resolve",
   "rule.list",
   "rule.evaluate",
+  "transaction.date_bounds",
   "transaction.query",
   "transaction.split_detail",
   "test.transaction_split_engine",

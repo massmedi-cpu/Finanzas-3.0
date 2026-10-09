@@ -72,15 +72,25 @@ export async function GET() {
   try {
     const [connectionResult, transactionResult] = await callPersistenceGatewayBatch([
       { action: "source.google_connection_status" },
-      { action: "transaction.query", payload: { limit: 1 } },
+      { action: "transaction.date_bounds" },
     ]);
+    let earliestMovementDate: string | null = null;
+    let latestMovementDate: string | null = null;
 
-    const latestMovementDate = transactionResult?.status === "fulfilled"
-      ? transactionDate(transactionResult.value)
-      : null;
-
-    if (transactionResult?.status === "rejected") {
-      logGatewayFailure("analysis-source-freshness-transactions", transactionResult.reason);
+    if (transactionResult?.status === "fulfilled") {
+      const bounds = record(transactionResult.value);
+      earliestMovementDate = text(bounds?.earliestMovementDate);
+      latestMovementDate = text(bounds?.latestMovementDate);
+    } else if (transactionResult?.status === "rejected") {
+      // Older gateway deployments do not know date_bounds. Preserve the
+      // current best-effort latest date until the isolated backend is upgraded.
+      logGatewayFailure("analysis-source-freshness-bounds", transactionResult.reason);
+      try {
+        const legacy = await callPersistenceGateway<unknown>("transaction.query", { limit: 1 });
+        latestMovementDate = transactionDate(legacy);
+      } catch (error) {
+        logGatewayFailure("analysis-source-freshness-legacy", error);
+      }
     }
 
     if (connectionResult?.status !== "fulfilled") {
@@ -88,7 +98,7 @@ export async function GET() {
         logGatewayFailure("analysis-source-freshness-connection", connectionResult.reason);
       }
       return Response.json(
-        { available: Boolean(latestMovementDate), latestMovementDate, sync: null },
+        { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
         { headers: HEADERS },
       );
     }
@@ -96,7 +106,7 @@ export async function GET() {
     const sourceFileId = connectionSourceFileId(connectionResult.value);
     if (!sourceFileId) {
       return Response.json(
-        { available: Boolean(latestMovementDate), latestMovementDate, sync: null },
+        { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
         { headers: HEADERS },
       );
     }
@@ -106,7 +116,7 @@ export async function GET() {
       const sync = syncSummary(statusPayload);
       const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
       return Response.json(
-        { available: Boolean(sync || latestMovementDate), latestMovementDate, sync },
+        { available: Boolean(sync || latestMovementDate), earliestMovementDate, latestMovementDate, sync },
         {
           headers: {
             ...HEADERS,
@@ -117,14 +127,14 @@ export async function GET() {
     } catch (error) {
       logGatewayFailure("analysis-source-freshness-status", error);
       return Response.json(
-        { available: Boolean(latestMovementDate), latestMovementDate, sync: null },
+        { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
         { headers: HEADERS },
       );
     }
   } catch (error) {
     logGatewayFailure("analysis-source-freshness", error);
     return Response.json(
-      { available: false, latestMovementDate: null, sync: null },
+      { available: false, earliestMovementDate: null, latestMovementDate: null, sync: null },
       { headers: HEADERS },
     );
   }

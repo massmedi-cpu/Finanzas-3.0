@@ -6,6 +6,7 @@ import {
   resolvePeriodCoverage,
 } from "../../src/application/data-coverage";
 import { assembleCashFlow, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
+import { handleTransactionQueryAction } from "../../supabase/functions/financial-app-db-gateway/transaction-query";
 
 const expense: CashFlowTransaction = {
   id: "10000000-0000-4000-8000-000000000001",
@@ -136,4 +137,55 @@ test("AUD-E2E-DAT-001 · cobertura confirmada no legitima fechas posteriores al 
     dateFrom: "2026-08-01", dateTo: "2026-08-31", latestMovementDate: null,
   });
   expect(dateHasConfirmedCoverage("2026-08-15", unknown)).toBe(false);
+});
+
+test("REC-COV-002 · los límites del histórico evitan ceros anteriores al primer movimiento", () => {
+  const bounds = { earliestMovementDate: "2026-07-04", latestMovementDate: "2026-09-29" };
+  const before = resolvePeriodCoverage({ dateFrom: "2025-12-01", dateTo: "2025-12-31", ...bounds });
+  expect(before).toMatchObject({ state: "none", fromDate: "2026-07-04", throughDate: null });
+  expect(periodHasObservedData(before)).toBe(false);
+  const first = resolvePeriodCoverage({ dateFrom: "2026-07-01", dateTo: "2026-07-31", ...bounds });
+  expect(first).toMatchObject({ state: "partial", fromDate: "2026-07-04", throughDate: "2026-07-31" });
+  expect(periodComparisonIsReliable(first)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-07-03", first)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-07-04", first)).toBe(true);
+  const later = resolvePeriodCoverage({ dateFrom: "2026-08-01", dateTo: "2026-08-31", ...bounds });
+  expect(later.state).toBe("covered");
+  const after = resolvePeriodCoverage({ dateFrom: "2026-10-01", dateTo: "2026-10-31", ...bounds });
+  expect(after.state).toBe("none");
+  const impossible = resolvePeriodCoverage({
+    dateFrom: "2026-08-01", dateTo: "2026-08-31",
+    earliestMovementDate: "2026-10-01", latestMovementDate: "2026-09-29",
+  });
+  expect(impossible.state).toBe("unknown");
+  const invalid = resolvePeriodCoverage({
+    dateFrom: "2026-08-01", dateTo: "2026-08-31",
+    earliestMovementDate: "2026-02-30", latestMovementDate: "2026-09-29",
+  });
+  expect(invalid.state).toBe("unknown");
+});
+
+test("REC-COV-004 · date_bounds usa una sola lectura RLS del banco sin calcular movimientos efectivos", async () => {
+  let calls = 0;
+  const sql = async (parts: TemplateStringsArray) => {
+    calls++;
+    const query = parts.join(" ").toLowerCase();
+    expect(query).toContain("from financial_app.transactions");
+    expect(query).toContain("min(bank_date)");
+    expect(query).toContain("max(bank_date)");
+    expect(query).not.toContain("insert ");
+    expect(query).not.toContain("update ");
+    expect(query).not.toContain("delete ");
+    expect(query).not.toContain("transaction_split_snapshot");
+    return [{ earliestMovementDate: "2026-07-04", latestMovementDate: "2026-09-29" }];
+  };
+  const response = await handleTransactionQueryAction({
+    action: "transaction.date_bounds", payload: {}, sql, environment: "preview",
+  });
+  expect(response?.status).toBe(200);
+  expect(await response?.json()).toEqual({
+    earliestMovementDate: "2026-07-04",
+    latestMovementDate: "2026-09-29",
+  });
+  expect(calls).toBe(1);
 });
