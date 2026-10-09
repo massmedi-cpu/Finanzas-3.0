@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { CashFlowEvolutionPoint } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath } from "../../src/application/cash-flow/evolution-plot";
 import { formatMoneyCents } from "../../src/core/money";
 import styles from "./cash-flow.module.css";
 
@@ -39,11 +40,24 @@ export function CashFlowEvolution({
   const [activeIndex, setActiveIndex] = useState(Math.max(0, points.length - 1));
   const safeActiveIndex = Math.min(activeIndex, Math.max(0, points.length - 1));
   const active = points[safeActiveIndex] ?? null;
+  const plotRef = useRef<HTMLDivElement>(null);
+  const [plotWidth, setPlotWidth] = useState<number | null>(null);
+
+  useEffect(() => {
+    const element = plotRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => {
+      if (!entry) return;
+      const measured = Math.max(280, Math.round(entry.contentRect.width));
+      setPlotWidth((previous) => previous === measured ? previous : measured);
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
 
   const chart = useMemo(() => {
-    const width = 1_000;
-    const height = 300;
-    const left = 82;
+    const width = plotWidth ?? 1_000;
+    const height = width < 520 ? 270 : 300;
     const right = 22;
     const top = 24;
     const bottom = 42;
@@ -56,29 +70,28 @@ export function CashFlowEvolution({
     const minimum = Math.min(0, ...values);
     const flatZero = maximum === 0 && minimum === 0;
     const span = Math.max(1, maximum - minimum);
+    const ticks = flatZero
+      ? [0]
+      : Array.from({ length: width < 520 ? 3 : 5 }, (_, index, values) => maximum - (span * index) / (values.length - 1));
+    // Axis labels stay full es-ES monetary amounts, including cents. Reserve
+    // enough room to avoid clipping large numbers instead of truncating them.
+    const labelLength = Math.max(...ticks.map((tick) => formatMoneyCents(Math.round(tick)).length));
+    const left = Math.min(width * 0.45, Math.max(82, Math.ceil(labelLength * 8.2) + 18));
     const innerWidth = width - left - right;
     const innerHeight = height - top - bottom;
-    const x = (index: number) => points.length === 1
-      ? left + innerWidth / 2
-      : left + (index / (points.length - 1)) * innerWidth;
+    const days = cashFlowDayPositions(points);
+    const x = (index: number) => left + (days[index] ?? 0.5) * innerWidth;
     const y = (value: number) => flatZero
       ? top + innerHeight / 2
       : top + ((maximum - value) / span) * innerHeight;
-    const paths = Object.fromEntries(series.map(({ key }) => {
-      let started = false;
-      const commands = points.flatMap((point, index) => {
-        if (point[key] === null) return [];
-        const command = `${started ? "L" : "M"} ${x(index)} ${y(point[key])}`;
-        started = true;
-        return [command];
-      });
-      return [key, commands.join(" ")];
-    })) as Record<SeriesKey, string>;
-    const ticks = flatZero
-      ? [0]
-      : Array.from({ length: 5 }, (_, index) => maximum - (span * index) / 4);
-    return { width, height, left, right, bottom, x, y, paths, ticks, zeroY: y(0), flatZero };
-  }, [points]);
+    const paths = Object.fromEntries(
+      series.map(({ key }) => [key, cashFlowSegmentedPath(points, key, x, y)]),
+    ) as Record<SeriesKey, string>;
+    const isolated = Object.fromEntries(
+      series.map(({ key }) => [key, cashFlowIsolatedPoints(points, key)]),
+    ) as Record<SeriesKey, number[]>;
+    return { width, height, left, right, top, bottom, x, y, paths, isolated, ticks, zeroY: y(0), flatZero };
+  }, [points, plotWidth]);
 
   if (!chart || !active) {
     return (
@@ -101,7 +114,7 @@ export function CashFlowEvolution({
           <p className={styles.eyebrow}>EVOLUCIÓN</p>
           <h2 id="cash-flow-evolution-title">Flujo acumulado del mes</h2>
         </div>
-        <p>No es el saldo de las cuentas: muestra cómo se forma el neto real y qué añadirían los eventos pendientes. Si no hay variación, la escala se mantiene en 0 € sin fabricar céntimos.</p>
+        <p>No es el saldo de las cuentas: muestra cómo se forma el neto real y qué añadirían los eventos pendientes. Si no hay variación, la escala se mantiene en 0 € sin fabricar céntimos. Los días sin cobertura interrumpen las líneas.</p>
       </div>
 
       <div className={styles.evolutionLegend} role="group" aria-label="Series de la evolución">
@@ -110,8 +123,8 @@ export function CashFlowEvolution({
         ) : null)}
       </div>
 
-      <div className={styles.evolutionPlot}>
-        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} role="img" aria-label="Evolución diaria acumulada del Cash Flow">
+      <div className={styles.evolutionPlot} ref={plotRef}>
+        <svg viewBox={`0 0 ${chart.width} ${chart.height}`} style={{ aspectRatio: `${chart.width} / ${chart.height}` }} role="img" aria-label="Evolución diaria acumulada del Cash Flow; las líneas se cortan en días sin datos">
           {chart.ticks.map((tick, index) => {
             const y = chart.y(tick);
             return (
@@ -125,7 +138,13 @@ export function CashFlowEvolution({
           {series.map(({ key, className }) => chart.paths[key] ? (
             <path key={key} className={className} d={chart.paths[key]} />
           ) : null)}
-          <line className={styles.evolutionCursor} x1={activeX} x2={activeX} y1={24} y2={chart.height - chart.bottom} />
+          {series.flatMap(({ key, className }) => chart.isolated[key].map((index) => {
+            const value = points[index][key];
+            return value === null ? null : (
+              <circle key={`${key}-isolated-${index}`} className={className} cx={chart.x(index)} cy={chart.y(value)} r="3.5" />
+            );
+          }))}
+          <line className={styles.evolutionCursor} x1={activeX} x2={activeX} y1={chart.top} y2={chart.height - chart.bottom} />
           {series.map(({ key, className }) => active[key] === null ? null : (
             <circle key={key} className={className} cx={activeX} cy={chart.y(active[key])} r="6" />
           ))}
