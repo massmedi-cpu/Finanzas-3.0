@@ -156,14 +156,23 @@ function extractMoneyField(lines: LocatedLine[], labels: RegExp[]) {
 
 function extractTaxId(lines: LocatedLine[]) {
   const pattern = /\b(?:[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
+  const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
+  const explicitIssuerLabel = /\b(?:emisor|proveedor|comercio|vendedor)\b/;
+  let unassigned: OcrInterpretedField<string> | null = null;
+
   for (const item of lines) {
     const match = item.line.text.toUpperCase().match(pattern);
-    if (match) {
-      const raw = match[0].replace(/\s+/g, "");
-      return fieldFrom(item, raw, raw.replace(/-/g, ""));
-    }
+    if (!match) continue;
+    const normalized = normalizeToken(item.line.text);
+    // Do not show the customer or recipient tax identifier as the issuer ID.
+    if (recipientLabel.test(normalized)) continue;
+    const raw = match[0].replace(/\s+/g, "");
+    const candidate = fieldFrom(item, raw, raw.replace(/-/g, ""));
+    if (explicitIssuerLabel.test(normalized)) return candidate;
+    // A bare CIF/NIF is recognized text, but its owner is not proven.
+    unassigned ??= fieldRequiringReview(candidate);
   }
-  return emptyField<string>();
+  return unassigned ?? emptyField<string>();
 }
 
 function extractDate(lines: LocatedLine[]) {
