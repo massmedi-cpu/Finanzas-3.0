@@ -392,25 +392,30 @@ export default function InicioOverview() {
     }
   }, []);
 
-  const commit = useCallback((source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
-    setData((current) => ({ ...current, [source]: value } as DashboardData));
+  const commit = useCallback((generation: number, source: DashboardSource, value: DashboardData[DashboardSource] | null, isFailed: boolean) => {
+    if (!isFresh(generation)) return;
+    setData((current) => isFresh(generation) ? ({ ...current, [source]: value } as DashboardData) : current);
     setFailed((current) => {
+      if (!isFresh(generation)) return current;
       const next = new Set(current);
       if (isFailed) next.add(source);
       else next.delete(source);
       return [...next];
     });
-  }, []);
+  }, [isFresh]);
 
-  const loadSource = useCallback(async (source: DashboardSource) => {
+  const loadSource = useCallback(async (source: DashboardSource, generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const value = await legacySource(source, madridToday());
-      setIndependentSources((current) => current.includes(source) ? current : [...current, source]);
-      commit(source, value as DashboardData[DashboardSource], false);
+      if (!isFresh(generation)) return;
+      setIndependentSources((current) =>
+        !isFresh(generation) || current.includes(source) ? current : [...current, source]);
+      commit(generation, source, value as DashboardData[DashboardSource], false);
     } catch {
-      commit(source, null, true);
+      commit(generation, source, null, true);
     }
-  }, [commit]);
+  }, [commit, isFresh]);
 
   const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
     try {
