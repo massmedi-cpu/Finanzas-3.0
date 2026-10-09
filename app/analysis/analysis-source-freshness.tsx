@@ -253,15 +253,24 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
 
 export default function AnalysisSourceFreshness({
   onChange,
+  accountId = null,
 }: {
   onChange?: (freshness: SourceFreshness | null) => void;
+  accountId?: string | null;
 }) {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    void fetch("/api/analysis/source-freshness", {
+    // A different bank account must never temporarily reuse another account's coverage.
+    onChange?.(null);
+    const params = new URLSearchParams();
+    if (accountId) params.set("accountId", accountId);
+    const url = params.size > 0
+      ? `/api/analysis/source-freshness?${params.toString()}`
+      : "/api/analysis/source-freshness";
+    void fetch(url, {
       cache: "no-store",
       signal: controller.signal,
     })
@@ -286,7 +295,7 @@ export default function AnalysisSourceFreshness({
       });
 
     return () => controller.abort();
-  }, [onChange]);
+  }, [accountId, onChange]);
 
   if (!freshness) return null;
   const text = statusText(freshness);
