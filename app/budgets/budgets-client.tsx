@@ -180,14 +180,18 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const hasChosenLimit = item.manualAmountCents !== null;
-  const referenceLabel = hasChosenLimit ? "Límite elegido" : "Referencia automática";
-  const remainingLabel = item.remainingCents >= 0
-    ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
-    : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
-  const comparisonLabel = hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
-  const progressLabel = hasChosenLimit && item.effectiveAmountCents === 0
-    ? item.actualExpenseCents > 0 ? "Límite 0 € superado" : "Límite 0 € sin gasto"
-    : formatProgress(item.progressBps);
+  // Sin referencia histórica no equivale a haber elegido un límite de 0 €.
+  const withoutReference = !hasChosenLimit && item.status === "unfunded";
+  const referenceLabel = withoutReference ? "Referencia no disponible" : hasChosenLimit ? "Límite elegido" : "Referencia automática";
+  const remainingLabel = withoutReference ? "Gasto sin referencia"
+    : item.remainingCents >= 0
+      ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
+      : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
+  const comparisonLabel = withoutReference ? "Cobertura del gasto" : hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
+  const progressLabel = withoutReference ? "No calculable sin referencia"
+    : hasChosenLimit && item.effectiveAmountCents === 0
+      ? item.actualExpenseCents > 0 ? "Límite 0 € superado" : "Límite 0 € sin gasto"
+      : formatProgress(item.progressBps);
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
   const excessCents = Math.max(0, -item.remainingCents);
@@ -252,22 +256,26 @@ function BudgetCard({
           role="group"
           aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
           data-budget-state={item.status}
-          className={styles.excessPanel}
+          className={withoutReference ? `${styles.excessPanel} ${styles.noReferencePanel}` : styles.excessPanel}
         >
           <div style={{ display: "flex", justifyContent: "space-between", gap: "1rem", flexWrap: "wrap", alignItems: "baseline" }}>
-            <strong>Exceso {formatMoney(excessCents)}</strong>
+            <strong>{withoutReference ? "Gasto sin referencia" : "Exceso"} {formatMoney(withoutReference ? item.actualExpenseCents : excessCents)}</strong>
             <span style={{ fontVariantNumeric: "tabular-nums" }}>
-              {excessPercent === null
-                ? "Sin base de comparación"
-                : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
+              {withoutReference
+                ? "Falta histórico o límite elegido para calcular un exceso."
+                : excessPercent === null
+                  ? "No existe un porcentaje calculable con límite 0 €"
+                  : `${formatNumberWithDigits(excessPercent, 2)} % ${hasChosenLimit ? "sobre el límite" : "sobre la referencia"}`}
             </span>
           </div>
-          <div aria-hidden="true" className={styles.excessTrack}>
-            <div className={styles.excessFill} style={{
-              width: `${Math.min(100, excessPercent ?? 0)}%`,
-              minWidth: excessCents > 0 ? ".45rem" : 0,
-            }} />
-          </div>
+          {!withoutReference ? (
+            <div aria-hidden="true" className={styles.excessTrack}>
+              <div className={styles.excessFill} style={{
+                width: `${Math.min(100, excessPercent ?? 0)}%`,
+                minWidth: excessCents > 0 ? ".45rem" : 0,
+              }} />
+            </div>
+          ) : null}
           <Link prefetch={false}
             href={causalHref}
             aria-label={`Ver movimientos que explican el gasto de ${item.categoryName ?? "Categoría"}`}
