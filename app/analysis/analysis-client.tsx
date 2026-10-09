@@ -607,15 +607,21 @@ export default function AnalysisClient({
           <section className={`${styles.section} ${styles.changeSection}`} aria-labelledby="change-heading">
             <div className={styles.sectionHeading}>
               <div>
-                <p>QUÉ HA CAMBIADO</p>
+                <p>{coverageIncomplete ? "GASTO OBSERVADO" : "QUÉ HA CAMBIADO"}</p>
                 <h2 id="change-heading">{changeHeadline}</h2>
-                <span>vs. {comparisonLabel(snapshot)}</span>
+                <span>{coverageIncomplete ? "Sin comparación fiable" : `vs. ${comparisonLabel(snapshot)}`}</span>
               </div>
               <span className={coverageIncomplete ? styles.neutralChip : expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
                 {coverageIncomplete ? "Comparación incompleta" : deltaText(expenseDirection)}
               </span>
             </div>
-            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />
+            <ContributionChart
+              rows={coverageIncomplete ? snapshot.categoryDrivers : snapshot.changeDrivers}
+              formatMoney={formatMoney}
+              renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />}
+              comparisonReliable={!coverageIncomplete}
+              currentObserved={coverageHasObservedData}
+            />
           </section>
 
           <div className={styles.twoColumn}>
