@@ -129,6 +129,8 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
               <div
                 key={point.id}
                 className={styles.point}
+                data-forecast-marker={point.kind}
+                data-forecast-date={point.date}
                 style={{ left: `${xFor(index)}%`, top: `${coordinateFor(point.balanceCents)}%` }}
               >
                 {crowdedMarkers ? (
