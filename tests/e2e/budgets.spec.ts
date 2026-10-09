@@ -314,7 +314,7 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
   await expect(page.getByText(/1\.?200,00/).first()).toBeVisible();
   await expect(page.getByText("Supermercado", { exact: true })).toBeVisible();
   await expect(page.getByText(/La fuente bancaria se mantiene estrictamente en solo lectura/i)).toBeVisible();
-  await expect(page.getByText(/Media del gasto elegible de los 3 meses completos anteriores/i)).toHaveCount(1);
+  await expect(page.getByText("Histórico, estacionalidad, tendencia y recurrentes conocidos")).toBeVisible();
 
   const horizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
   expect(horizontalOverflow).toBe(false);
@@ -338,7 +338,7 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
   const input = page.getByLabel("Límite elegido de total mensual");
   await input.fill("1.500,50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
+  await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes.at(-1)).toMatchObject({
     method: "PATCH",
     month: "2026-09",
@@ -348,7 +348,7 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
   await expect(page.getByText(/Gasto habitual/).first()).toBeVisible();
 
   await page.getByRole("button", { name: "Quitar límite elegido" }).first().click();
-  await expect(page.getByRole("status")).toContainText("histórico vuelve a usarse sólo como referencia");
+  await expect(page.locator("main").getByRole("status")).toContainText("La referencia automática vuelve a aplicarse");
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: null });
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
@@ -373,7 +373,7 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
 
   await input.fill("1.234,56");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText("Límite elegido guardado");
+  await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({
     method: "PATCH",
@@ -459,7 +459,7 @@ test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", a
   });
 
   await page.goto("/budgets?month=2026-09");
-  await expect(page.getByRole("alert")).toContainText("no ha podido terminar el cálculo");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no ha podido terminar el cálculo");
   await expect(page.getByRole("heading", { name: "No se ha podido cargar Septiembre de 2026" })).toBeVisible();
   await expect(page.getByText(/datos bancarios siguen intactos/i)).toBeVisible();
 
@@ -517,7 +517,7 @@ test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuar
   expect(writes).toHaveLength(0);
 
   await page.getByRole("button", { name: "Actualizar referencia" }).click();
-  await expect(page.getByRole("status")).toContainText("Referencia automática");
+  await expect(page.locator("main").getByRole("status")).toContainText("Referencia automática");
   expect(writes).toHaveLength(1);
   expect(writes[0]).toMatchObject({ method: "POST", month: "2026-09" });
 });
@@ -645,7 +645,7 @@ test("AUD-E2E-PTO-001 · no presenta presupuestos de respuesta inválida y permi
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.goto("/budgets?month=2026-09");
-  await expect(page.getByRole("alert")).toContainText("no es válida");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no es válida");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
@@ -667,7 +667,7 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
   const summary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
   await expect(summary).toBeVisible();
   await page.getByRole("button", { name: "Actualizar referencia" }).click();
-  await expect(page.getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
   await expect(summary).toBeVisible();
   await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
   expect(writes).toEqual(["POST"]);
@@ -688,9 +688,9 @@ test("AUD-E2E-PTO-001 · a los 15 segundos advierte y a los 30 permite reintenta
   await page.goto("/budgets?month=2026-09", { waitUntil: "domcontentloaded" });
   await expect(page.getByText(/Cargando presupuesto de/)).toBeVisible();
   await page.clock.fastForward(15_000);
-  await expect(page.getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
+  await expect(page.locator("main").getByRole("status").filter({ hasText: "más de 15 segundos" })).toBeVisible();
   await page.clock.fastForward(15_000);
-  await expect(page.getByRole("alert")).toContainText("superado 30 segundos");
+  await expect(page.locator("main").getByRole("alert")).toContainText("superado 30 segundos");
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
   await page.getByRole("button", { name: "Reintentar" }).click();
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
