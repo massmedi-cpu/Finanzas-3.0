@@ -52,7 +52,7 @@ export default function DataTrustPage() {
         </div>
       </header>
 
-      <div className={styles.reviewMeta} aria-label="Revisión del contrato de confianza">
+      <div className={styles.reviewMeta} role="group" aria-label="Revisión del contrato de confianza">
         <span>Contrato v{DATA_TRUST_REVIEW.contractVersion}</span>
         <span>Revisado el {new Intl.DateTimeFormat("es-ES", { dateStyle: "long" }).format(new Date(`${DATA_TRUST_REVIEW.reviewedOn}T12:00:00+02:00`))}</span>
       </div>

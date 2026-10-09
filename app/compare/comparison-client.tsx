@@ -493,7 +493,7 @@ export default function ComparisonClient({
             <p className={styles.headerCopy}>Contrasta dos periodos reales, normaliza su duración y abre cada causa hasta sus movimientos.</p>
           </div>
           {snapshot ? (
-            <div className={styles.periodLegend} aria-label="Leyenda de periodos">
+            <div className={styles.periodLegend} role="group" aria-label="Leyenda de periodos">
               <span><i className={styles.primaryDot} />Principal <strong>{snapshot.selection.primaryDays} días</strong></span>
               <span><i className={styles.referenceDot} />Referencia <strong>{snapshot.selection.referenceDays} días</strong></span>
             </div>

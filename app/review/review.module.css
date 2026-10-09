@@ -4,7 +4,7 @@
   padding: clamp(.8rem, 2vw, 1.5rem);
   color: var(--color-text);
   background:
-    radial-gradient(circle at 12% 0%, rgba(69, 116, 255, .12), transparent 30rem),
+    radial-gradient(circle at 12% 0%, color-mix(in srgb, var(--color-primary-bright) 12%, transparent), transparent 30rem),
     linear-gradient(145deg, #07101f 0%, #0b1324 48%, #10182a 100%);
 }
 
@@ -26,15 +26,15 @@
   padding: .95rem 1.05rem;
   border: 1px solid var(--color-border);
   border-radius: 1rem;
-  background: linear-gradient(145deg, rgba(21, 33, 56, .92), rgba(11, 20, 37, .88));
+  background: linear-gradient(145deg, rgba(21, 33, 56, .92), var(--surface-card));
   box-shadow: 0 16px 38px rgba(0, 0, 0, .18);
 }
 
 .eyebrow,
 .kicker {
   margin: 0;
-  color: #94b2ff;
-  font-size: .72rem;
+  color: var(--color-text-secondary);
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: .12em;
 }
@@ -48,7 +48,7 @@
 
 .hero h1 {
   margin-top: .2rem;
-  font-size: clamp(1.55rem, 2.4vw, 2rem);
+  font-size: var(--font-page-title);
   line-height: 1.05;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .heroStatus strong {
-  color: #fff;
+  color: var(--color-text);
   font-size: 1.4rem;
   font-variant-numeric: tabular-nums;
   line-height: 1;
@@ -69,7 +69,7 @@
 
 .heroStatus span {
   color: var(--color-text-secondary);
-  font-size: .8rem;
+  font-size: var(--font-helper);
 }
 
 .loadingPanel,
@@ -77,7 +77,7 @@
 .compactPanel {
   border: 1px solid var(--color-border);
   border-radius: 1rem;
-  background: rgba(10, 17, 34, .74);
+  background: var(--surface-card);
 }
 
 .loadingPanel {
@@ -103,13 +103,13 @@
 .sectionHeading h2,
 .compactHeading h2 {
   margin-top: .15rem;
-  font-size: 1.05rem;
+  font-size: var(--font-section-title);
   line-height: 1.2;
 }
 
 .sectionHeading > span {
   color: var(--color-text-secondary);
-  font-size: .8rem;
+  font-size: var(--font-helper);
 }
 
 .actionList {
@@ -125,9 +125,9 @@
   align-items: center;
   gap: .8rem;
   padding: .7rem;
-  border: 1px solid rgba(137, 173, 255, .13);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 13%, transparent);
   border-radius: .85rem;
-  background: linear-gradient(135deg, rgba(20, 31, 54, .82), rgba(9, 17, 33, .78));
+  background: linear-gradient(135deg, rgba(20, 31, 54, .82), var(--surface-card));
 }
 
 .count {
@@ -136,10 +136,10 @@
   display: grid;
   place-items: center;
   padding-inline: .45rem;
-  border: 1px solid rgba(77, 141, 255, .32);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 32%, transparent);
   border-radius: .75rem;
-  background: linear-gradient(135deg, rgba(31, 107, 255, .22), rgba(43, 217, 247, .07));
-  color: #fff;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 22%, transparent), color-mix(in srgb, var(--color-cyan) 7%, transparent));
+  color: var(--color-on-primary);
   font-size: 1rem;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -159,7 +159,7 @@
 .cardCopy p {
   margin: .18rem 0 0;
   color: var(--color-text-secondary);
-  font-size: .79rem;
+  font-size: var(--font-helper);
   line-height: 1.4;
 }
 
@@ -170,9 +170,9 @@
   align-items: center;
   justify-content: center;
   padding: .55rem .8rem;
-  border: 1px solid rgba(77, 141, 255, .32);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 32%, transparent);
   border-radius: .75rem;
-  background: rgba(77, 141, 255, .1);
+  background: color-mix(in srgb, var(--color-primary-bright) 10%, transparent);
   color: var(--color-text);
   font-size: var(--font-button);
   font-weight: 750;
@@ -185,8 +185,8 @@
 .action:focus-visible,
 .unavailableList a:hover,
 .unavailableList a:focus-visible {
-  border-color: rgba(77, 141, 255, .55);
-  background: rgba(77, 141, 255, .16);
+  border-color: color-mix(in srgb, var(--color-primary-bright) 55%, transparent);
+  background: color-mix(in srgb, var(--color-primary-bright) 16%, transparent);
   transform: translateY(-1px);
   outline: none;
 }
@@ -196,9 +196,9 @@
   gap: .2rem;
   margin-top: .75rem;
   padding: .8rem;
-  border: 1px solid rgba(82, 203, 145, .2);
+  border: 1px solid color-mix(in srgb, var(--color-success) 20%, transparent);
   border-radius: .8rem;
-  background: rgba(82, 203, 145, .055);
+  background: color-mix(in srgb, var(--color-success) 5.5%, transparent);
 }
 
 .allClear strong {
@@ -207,7 +207,7 @@
 
 .allClear span {
   color: var(--color-text-secondary);
-  font-size: .8rem;
+  font-size: var(--font-helper);
   line-height: 1.4;
 }
 
@@ -243,20 +243,20 @@
   gap: .38rem;
   min-height: 2rem;
   padding: .3rem .55rem;
-  border: 1px solid rgba(82, 203, 145, .17);
+  border: 1px solid color-mix(in srgb, var(--color-success) 17%, transparent);
   border-radius: 999px;
-  background: rgba(82, 203, 145, .045);
+  background: color-mix(in srgb, var(--color-success) 4.5%, transparent);
   color: var(--color-text-secondary);
-  font-size: .78rem;
+  font-size: var(--font-helper);
 }
 
 .compactList li > span:first-child {
-  color: #78d6a7;
+  color: var(--color-success);
   font-weight: 900;
 }
 
 .unavailable {
-  border-color: rgba(255, 190, 87, .18);
+  border-color: color-mix(in srgb, var(--color-warning) 18%, transparent);
 }
 
 .unavailableList {
@@ -270,9 +270,9 @@
   justify-content: space-between;
   gap: .75rem;
   padding: .45rem 0;
-  border-top: 1px solid rgba(137, 173, 255, .08);
+  border-top: 1px solid color-mix(in srgb, var(--color-primary-bright) 8%, transparent);
   color: var(--color-text-secondary);
-  font-size: .82rem;
+  font-size: var(--font-helper);
 }
 
 .unavailableList li:first-child {
@@ -289,9 +289,9 @@
   padding: .68rem .85rem;
   border: 1px solid var(--color-border);
   border-radius: .85rem;
-  background: rgba(10, 17, 34, .66);
+  background: var(--surface-card);
   color: var(--color-text-secondary);
-  font-size: .76rem;
+  font-size: var(--font-helper);
   line-height: 1.45;
 }
 

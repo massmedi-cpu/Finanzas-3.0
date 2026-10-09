@@ -722,7 +722,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
         <Link prefetch={false} href={periodHref(snapshot)}>Ver todos los movimientos</Link>
       </div>
 
-      <div className={styles.dailyOverview} aria-label="Gasto temporal del periodo">
+      <div className={styles.dailyOverview} role="group" aria-label="Gasto temporal del periodo">
         <div className={styles.dailySwitch} role="group" aria-label="Vista del gasto diario">
           <button type="button" aria-pressed={dailyView === "series"} onClick={() => setDailyView("series")}>Evolución diaria</button>
           <button type="button" aria-pressed={dailyView === "heatmap"} onClick={() => setDailyView("heatmap")}>Mapa de calor</button>
@@ -732,7 +732,7 @@ export default function AnalysisMovementInsights({ snapshot }: { snapshot: Analy
       </div>
 
       {snapshot.accountSpend.length > 1 && (
-        <div className={styles.accountStrip} aria-label="Gasto por cuenta">
+        <div className={styles.accountStrip} role="group" aria-label="Gasto por cuenta">
           {snapshot.accountSpend.map((row) => (
             <div key={row.accountId}>
               <span>{row.accountName}</span>

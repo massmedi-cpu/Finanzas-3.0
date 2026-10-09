@@ -81,6 +81,6 @@ test("Inicio · arquitectura, rendimiento y capa visual respetan el Axioma", asy
   expect(css).not.toContain("backdrop-filter");
   expect(css).not.toContain("!important");
   expect(css).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-  expect(chartCss).toContain("repeat(12, minmax(0, 1fr))");
+  expect(chartCss).toContain("repeat(var(--chart-columns, 12), minmax(0, 1fr))");
   expect(chartCss).not.toMatch(/overflow-x\s*:\s*auto/i);
 });

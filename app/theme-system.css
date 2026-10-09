@@ -7,7 +7,7 @@ html[data-theme="dark"] {
 html[data-theme="light"] {
   color-scheme: light;
 
-  --color-bg: #edf2f9;
+  --color-bg: #f4f6f8;
   --color-bg-elevated: #f7f9fd;
   --color-surface: rgba(255, 255, 255, 0.88);
   --color-surface-strong: #ffffff;
@@ -15,7 +15,7 @@ html[data-theme="light"] {
   --color-border-strong: rgba(42, 66, 101, 0.3);
   --color-text: #14233b;
   --color-text-secondary: #43536d;
-  --color-text-muted: #64738a;
+  --color-text-muted: #53647a;
   --color-primary: #315fce;
   --color-primary-bright: #315fce;
   --color-on-primary: #ffffff;
@@ -23,12 +23,14 @@ html[data-theme="light"] {
   --color-gold-bright: #9c7227;
   --color-gold-muted: rgba(156, 114, 39, 0.11);
   --color-cyan: #087f9e;
-  --color-success: #16834d;
+  --color-success: #167343;
   --color-warning: #996200;
-  --color-danger: #bd3853;
+  --color-danger: #ad283f;
+  --color-violet: #6f42b3;
+  --border-control: #728198;
 
-  --surface-card: rgba(255, 255, 255, 0.72);
-  --surface-card-muted: rgba(245, 248, 253, 0.86);
+  --surface-card: #ffffff;
+  --surface-card-muted: #f8fafc;
   --surface-card-hover: rgba(255, 255, 255, 0.96);
   --surface-empty: rgba(238, 243, 250, 0.8);
   --surface-info-soft: rgba(49, 95, 206, 0.07);
@@ -82,7 +84,7 @@ html[data-theme="light"] {
   --gradient-progress: linear-gradient(90deg, transparent, #315fce, #087f9e, transparent);
 
   --shadow-panel: 0 22px 70px rgba(42, 66, 101, 0.12), 0 0 0 1px rgba(42, 66, 101, 0.025);
-  --shadow-card: 0 12px 36px rgba(42, 66, 101, 0.1);
+  --shadow-card: 0 2px 8px rgba(42, 66, 101, 0.05);
   --shadow-card-hover: 0 18px 42px rgba(42, 66, 101, 0.14), 0 0 24px rgba(49, 95, 206, 0.05);
   --shadow-glow: 0 0 0 1px rgba(49, 95, 206, 0.06), 0 16px 48px rgba(49, 95, 206, 0.09);
   --shadow-navigation: 0 12px 32px rgba(42, 66, 101, 0.12);
@@ -101,122 +103,6 @@ html[data-theme="light"],
 html[data-theme="light"] body {
   background-color: var(--color-bg);
   color: var(--color-text);
-}
-
-html[data-theme="light"] .financial-brand {
-  border-color: var(--border-navigation);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.98), rgba(242, 246, 252, 0.94));
-  color: var(--color-text);
-  box-shadow: var(--shadow-card);
-}
-
-html[data-theme="light"] .financial-brand__mark {
-  border-color: rgba(156, 114, 39, 0.3);
-  background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.7), transparent 52%), linear-gradient(145deg, #f4e8c9, #e8d49d 62%);
-  color: #725315;
-  box-shadow: inset 0 0 0 1px rgba(138, 100, 31, 0.08), 0 7px 18px rgba(42, 66, 101, 0.12);
-}
-
-html[data-theme="light"] .premium-primary-nav {
-  border-color: var(--border-navigation) !important;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.94)) !important;
-  box-shadow: var(--shadow-navigation), inset 0 1px 0 rgba(255, 255, 255, 0.72) !important;
-}
-
-html[data-theme="light"] nav[aria-label="Navegación principal"] a[aria-current="page"] {
-  border-color: var(--border-primary-strong) !important;
-  background: radial-gradient(circle at 50% 0%, rgba(49, 95, 206, 0.12), transparent 70%), linear-gradient(135deg, rgba(49, 95, 206, 0.16), rgba(8, 127, 158, 0.07)) !important;
-  color: var(--color-text);
-  box-shadow: inset 0 0 0 1px rgba(49, 95, 206, 0.06), 0 7px 22px rgba(49, 95, 206, 0.08);
-}
-
-html[data-theme="light"] main[aria-busy] > section[aria-label="Estado de los datos bancarios"],
-html[data-theme="light"] main[aria-busy] > section[aria-label="Resumen financiero principal"] > article,
-html[data-theme="light"] main[aria-busy] article,
-html[data-theme="light"] .reset-card,
-html[data-theme="light"] .configuration-hero,
-html[data-theme="light"] .config-panel {
-  border-color: var(--color-border);
-  background: radial-gradient(circle at 92% 0%, rgba(49, 95, 206, 0.055), transparent 18rem), linear-gradient(145deg, rgba(255, 255, 255, 0.94), rgba(245, 248, 253, 0.9));
-  color: var(--color-text);
-  box-shadow: var(--shadow-card);
-}
-
-html[data-theme="light"] .entity-card {
-  border-color: var(--border-card);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(242, 246, 252, 0.74));
-}
-
-html[data-theme="light"] .secondary-button,
-html[data-theme="light"] .icon-button {
-  border-color: var(--color-border);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.9), rgba(238, 243, 250, 0.86));
-  color: var(--color-text-secondary);
-}
-
-html[data-theme="light"] .config-tabs {
-  border-color: var(--color-border);
-  background: rgba(255, 255, 255, 0.72);
-}
-
-html[data-theme="light"] .config-tabs button {
-  color: var(--color-text-secondary);
-}
-
-html[data-theme="light"] .config-tabs button.active {
-  color: var(--color-text);
-  background: var(--gradient-primary-active);
-}
-
-/* Superficie financiera representativa: Movimientos. Se ancla a semántica
-   estable, no a nombres generados por CSS Modules. */
-html[data-theme="light"] #main-content main:has(form[aria-label="Filtros de movimientos"]) > header,
-html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"],
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"],
-html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] {
-  border-color: var(--color-border) !important;
-  background: radial-gradient(circle at 92% 0%, rgba(49, 95, 206, 0.055), transparent 18rem), linear-gradient(145deg, rgba(255, 255, 255, 0.95), rgba(245, 248, 253, 0.92)) !important;
-  color: var(--color-text) !important;
-  box-shadow: var(--shadow-card) !important;
-}
-
-html[data-theme="light"] #main-content main:has(form[aria-label="Filtros de movimientos"]) > header a[href="/"],
-html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] label,
-html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] label > span,
-html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] label,
-html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] label > span {
-  color: var(--color-text-secondary) !important;
-}
-
-html[data-theme="light"] #main-content form[aria-label="Filtros de movimientos"] :is(input, select),
-html[data-theme="light"] #main-content section[aria-label="Edición masiva de movimientos"] select,
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] :is(input, select, textarea) {
-  border-color: var(--color-border) !important;
-  background: var(--surface-control-strong) !important;
-  color: var(--color-text) !important;
-}
-
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] table :is(th, td),
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] td[data-label="Concepto"] strong,
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] details :is(summary, dd) {
-  color: var(--color-text) !important;
-}
-
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] table th,
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] details dt {
-  color: var(--color-text-muted) !important;
-}
-
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] tbody tr:hover,
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] tbody tr:has(input:checked) {
-  background: var(--surface-primary-subtle) !important;
-}
-
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] section[aria-label^="Editar "],
-html[data-theme="light"] #main-content section[aria-labelledby="transaction-list-heading"] section[aria-label^="Revisar "] {
-  border-color: var(--border-primary-soft) !important;
-  background: transparent !important;
-  color: var(--color-text) !important;
 }
 
 html[data-theme="light"] :is(input, select, textarea) {

@@ -327,13 +327,13 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
           <p className={styles.heroText}>
             Consulta el saldo de cada cuenta, su actividad mensual y sus últimos movimientos sin modificar la fuente bancaria.
           </p>
-          <div className={styles.principles} aria-label="Principios de la vista de cuentas">
+          <div className={styles.principles} role="group" aria-label="Principios de la vista de cuentas">
             <span>Fuente bancaria · solo lectura</span>
             <span>Transferencias fuera del ahorro</span>
             <span>EUR · es-ES</span>
           </div>
         </div>
-        <div className={styles.totalCard} aria-label="Saldo total en cuentas">
+        <div className={styles.totalCard} role="group" aria-label="Saldo total en cuentas">
           <span>Saldo total en cuentas</span>
           <strong>{balances ? formatMoney(balances.activeBalanceCents) : "—"}</strong>
           <small>{activeCount} {activeCount === 1 ? "cuenta activa" : "cuentas activas"} · datos hasta {formatDate(balanceDate)}</small>
@@ -489,7 +489,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
 
               {snapshot ? (
                 <>
-                  <div className={styles.metrics} aria-label="Resumen del periodo de la cuenta">
+                  <div className={styles.metrics} role="group" aria-label="Resumen del periodo de la cuenta">
                     <article><span>Ingresos</span><strong>{formatMoney(snapshot.period.incomeCents)}</strong></article>
                     <article><span>Gastos</span><strong>{formatMoney(snapshot.period.expenseCents)}</strong></article>
                     <article><span>Balance neto</span><strong>{formatMoney(snapshot.period.operatingNetCents)}</strong></article>
@@ -505,7 +505,7 @@ export default function AccountsClient({ initialAccountId = null }: { initialAcc
                       <span>{formatDate(snapshot.period.dateFrom)} — {formatDate(snapshot.period.dateTo)}</span>
                     </div>
 
-                    <div className={styles.legend} aria-label="Leyenda y escala de la actividad mensual">
+                    <div className={styles.legend} role="group" aria-label="Leyenda y escala de la actividad mensual">
                       <span><i className={styles.incomeDot} aria-hidden="true" />Ingresos</span>
                       <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
                       <span><i className={styles.netDot} aria-hidden="true" />Neto positivo (+)</span>

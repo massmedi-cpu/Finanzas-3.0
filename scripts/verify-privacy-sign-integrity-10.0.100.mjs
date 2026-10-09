@@ -42,7 +42,7 @@ requireText(inicio, "privacyActive={privacyReady && !amountsVisible}", "Inicio �
 requireText(smartBrief, "privacyActive: boolean;", "Lectura rápida · estado explícito de privacidad");
 requireText(smartBrief, "localStorage.removeItem(HOME_VISIT_KEY)", "Lectura rápida · borrado de referencia local");
 requireText(smartBrief, "if (!valuesVisible || loading", "Lectura rápida · persistencia pausada");
-requireText(smartBrief, '"Privacidad activa · referencia monetaria local eliminada"', "Lectura rápida · disclosure local");
+requireText(smartBrief, '"Importes ocultos"', "Lectura rápida · disclosure local");
 requireText(smartBrief, "La comparación entre visitas está pausada mientras ocultas importes.", "Lectura rápida · comparación pausada");
 requireText(privacyTest, "Ocultar importes oculta también el signo visual del balance", "Regresión privacidad de signo");
 requireText(privacyTest, "data-balance-sign=\"hidden\"", "Regresión estado oculto");

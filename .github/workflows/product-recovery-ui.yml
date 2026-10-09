@@ -1,0 +1,54 @@
+name: Product recovery browser matrix
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - 'src/design/**'
+      - 'tests/e2e/**'
+      - 'playwright*.ts'
+      - 'package*.json'
+      - '.github/workflows/product-recovery-ui.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: recovery-ui-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  synthetic-browser-matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Install locked dependencies and browser
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Build optimized application and run cumulative guards
+        run: npm run build
+      - name: Browser coverage, theme, keyboard and layout checks
+        run: >-
+          npx playwright test --config=playwright.recovery.config.ts
+          tests/e2e/product-recovery-coverage.spec.ts
+          tests/e2e/product-recovery-visual.spec.ts
+          tests/e2e/inicio-smart-brief.spec.ts
+          tests/e2e/inicio-privacy-visual.spec.ts
+          tests/e2e/theme-system-10.0.63.spec.ts
+          tests/e2e/navigation-performance-10.0.30.spec.ts
+          tests/e2e/module-context-navigation.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
+          tests/e2e/dashboard-performance-contract.spec.ts
+          --project=chromium-desktop
+      # Synthetic UI results are distinct from authenticated real persistence.
+      # No financial originals, secrets or production access are used here.

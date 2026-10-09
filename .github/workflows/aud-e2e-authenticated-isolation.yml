@@ -16,7 +16,9 @@ on:
       - 'scripts/aud-e2e-local-network.cjs'
       - 'tests/e2e/aud-e2e-authenticated-isolation.spec.ts'
       - 'tests/e2e/aud-e2e-full-http.spec.ts'
-      - 'app/api/**'
+      - 'app/**'
+      - 'src/design/**'
+      - 'tests/e2e/product-recovery*'
       - 'playwright.authenticated-isolation.config.ts'
       - '.github/workflows/aud-e2e-authenticated-isolation.yml'
 

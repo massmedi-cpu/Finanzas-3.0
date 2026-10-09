@@ -237,7 +237,7 @@ function BudgetCard({
         <span>{comparisonLabel}</span>
         <strong>{formatProgress(item.progressBps)}</strong>
       </div>
-      <div className={styles.progressTrack} aria-label={`${comparisonLabel} ${formatProgress(item.progressBps)}`}>
+      <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel} ${formatProgress(item.progressBps)}`}>
         <div
           className={`${styles.progressFill} ${item.status === "over" ? styles.progressOver : ""}`}
           style={{ width: `${progressWidth(item)}%` }}
@@ -530,7 +530,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
           </p>
         </div>
 
-        <div className={styles.heroControls} aria-label="Controles de presupuesto">
+        <div className={styles.heroControls} role="group" aria-label="Controles de presupuesto">
           <label className={styles.monthField}>
             Mes
             <input

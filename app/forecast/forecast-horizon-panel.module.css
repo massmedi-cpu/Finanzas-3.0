@@ -18,7 +18,7 @@
 
 .heading h2 {
   margin: 3px 0 7px;
-  font-size: clamp(1.35rem, 2.3vw, 2rem);
+  font-size: var(--font-section-title);
   line-height: 1.12;
 }
 
@@ -31,7 +31,7 @@
 
 .eyebrow {
   margin: 0;
-  font-size: .72rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: .12em;
   color: var(--text-secondary, #596273);
@@ -47,7 +47,7 @@
 .openingBalance span,
 .openingBalance small {
   color: var(--text-secondary, #596273);
-  font-size: .78rem;
+  font-size: var(--font-helper);
 }
 
 .openingBalance strong {
@@ -84,7 +84,7 @@
 .horizonDate {
   margin: 3px 0 0;
   color: var(--text-secondary, #596273);
-  font-size: .75rem;
+  font-size: var(--font-helper);
 }
 
 .confidence {
@@ -93,7 +93,7 @@
   border-radius: 999px;
   background: color-mix(in srgb, var(--surface, #fff) 80%, var(--text-primary, #101828) 8%);
   color: var(--text-secondary, #596273);
-  font-size: .68rem;
+  font-size: var(--font-helper);
   font-weight: 750;
   white-space: nowrap;
 }
@@ -106,7 +106,7 @@
 
 .balanceBlock > span {
   color: var(--text-secondary, #596273);
-  font-size: .76rem;
+  font-size: var(--font-helper);
 }
 
 .balanceBlock strong {
@@ -140,13 +140,13 @@
 
 .metrics dt {
   color: var(--text-secondary, #596273);
-  font-size: .68rem;
+  font-size: var(--font-helper);
 }
 
 .metrics dd {
   margin: 3px 0 0;
   overflow-wrap: anywhere;
-  font-size: .82rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   font-variant-numeric: tabular-nums;
 }
@@ -155,7 +155,7 @@
   min-height: 34px;
   margin: 14px 0 0;
   color: var(--text-secondary, #596273);
-  font-size: .71rem;
+  font-size: var(--font-helper);
   line-height: 1.4;
 }
 

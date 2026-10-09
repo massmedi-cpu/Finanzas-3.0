@@ -8,7 +8,7 @@
 .eyebrow {
   margin: 0 0 var(--space-2);
   color: var(--color-gold-bright);
-  font-size: 0.75rem;
+  font-size: var(--font-helper);
   font-weight: 850;
   letter-spacing: 0.12em;
 }
@@ -18,7 +18,7 @@
   justify-content: space-between;
   align-items: end;
   gap: var(--space-6);
-  padding: clamp(1.3rem, 3vw, var(--space-10));
+  padding: var(--space-6);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-panel);
   background:
@@ -29,7 +29,7 @@
 
 .hero h1 {
   margin: 0;
-  font-size: clamp(2rem, 1.4rem + 2.4vw, 3.65rem);
+  font-size: var(--font-page-title);
   line-height: 1.1;
   letter-spacing: -0.04em;
 }

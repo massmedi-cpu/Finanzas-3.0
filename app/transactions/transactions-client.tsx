@@ -974,7 +974,7 @@ async function saveEdit(row: TransactionRow) {
             guarda como cambio manual separado y conserva la trazabilidad hasta la fila original.
           </p>
         </div>
-        <div className={styles.summary} aria-label="Resumen del listado">
+        <div className={styles.summary} role="group" aria-label="Resumen del listado">
           <div><strong>{formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
           <div><strong>{activeFilterCount}</strong><span>Filtros activos</span></div>
           <div><strong>{formatInteger(selectedIds.length)}</strong><span>Seleccionados</span></div>
