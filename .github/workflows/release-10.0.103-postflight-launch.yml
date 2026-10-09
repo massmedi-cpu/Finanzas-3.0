@@ -1,0 +1,43 @@
+name: Release 10.0.103 Postflight and Manifest
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/release-10.0.103-postflight-launch.yml
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: financial-app-release-10.0.103-close
+  cancel-in-progress: false
+
+jobs:
+  close-verified-production:
+    if: github.repository == 'massmedi-cpu/Finanzas-3.0' && contains(github.event.head_commit.message, '[release-10.0.103-postflight]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout reviewed operational commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify canonical postflight before publishing the exact manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/release-10.0.103-postflight-launch.mjs
+
+      - name: Preserve public release identity and postflight result
+        if: success()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: production-release-10.0.103-${{ github.sha }}
+          path: |
+            release-manifest.production.json
+            release-postflight-result.json
+          retention-days: 90
