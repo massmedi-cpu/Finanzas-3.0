@@ -370,10 +370,12 @@ function LoadingSkeleton() {
 export default function AnalysisClient({
   initialSnapshot,
   latestMovementDate = null,
+  earliestMovementDate = null,
   onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
   latestMovementDate?: string | null;
+  earliestMovementDate?: string | null;
   onApplied?: (snapshot: AnalysisSnapshot) => void;
 }) {
   const requestRef = useRef<AbortController | null>(null);
@@ -401,6 +403,7 @@ export default function AnalysisClient({
     dateFrom: snapshot.selection.dateFrom,
     dateTo: snapshot.selection.dateTo,
     latestMovementDate,
+    earliestMovementDate,
   }) : null;
   const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
   const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
@@ -625,6 +628,7 @@ export default function AnalysisClient({
               formatMonth={formatShortMonth}
               partialMonthStart={snapshot.selection.partialMonthStart}
               latestMovementDate={latestMovementDate}
+              earliestMovementDate={earliestMovementDate}
               hrefForMonth={(monthStart) => monthHref(snapshot, monthStart)}
             />
           </section>
