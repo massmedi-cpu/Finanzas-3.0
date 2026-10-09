@@ -170,6 +170,29 @@ function extractMoneyField(
   };
 }
 
+function spanishTaxIdChecksumValid(raw: string): boolean {
+  const value = raw.toUpperCase().replace(/[\s-]/g, "");
+  const dniLetters = "TRWAGMYFPDXBNJZSQVHLCKE";
+  if (/^\d{8}[A-Z]$/.test(value)) {
+    return dniLetters[Number(value.slice(0, 8)) % 23] === value[8];
+  }
+  if (/^[XYZ]\d{7}[A-Z]$/.test(value)) {
+    const numeric = `${{X: "0", Y: "1", Z: "2"}[value[0] as "X" | "Y" | "Z"]}${value.slice(1, 8)}`;
+    return dniLetters[Number(numeric) % 23] === value[8];
+  }
+  if (!/^[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J]$/.test(value)) return false;
+  const digits = value.slice(1, 8).split("").map(Number);
+  const doubled = (digit: number) => { const value = digit * 2; return Math.floor(value / 10) + (value % 10); };
+  const odd = digits[0] + digits[2] + digits[4] + digits[6];
+  const checksum = ((odd === -1 ? 0 : 0) + digits.filter((_, i) => i % 2 === 1).reduce((sum, n) => sum + n, 0)
+    + doubled(digits[0]) + doubled(digits[2]) + doubled(digits[4]) + doubled(digits[6]));
+  const control = (10 - checksum % 10) % 10;
+  const suffix = value[8];
+  const numberAllowed = "ABEH".includes(value[0]) || !"NPQRSW".includes(value[0]);
+  const letterAllowed = !"ABEH".includes(value[0]);
+  return (numberAllowed && suffix === String(control)) || (letterAllowed && suffix === "JABCDEFGHI"[control]);
+}
+
 function extractTaxId(lines: LocatedLine[]) {
   const pattern = /\b(?:[ABCDEFGHJNPQRSUVW]\s*[- ]?\s*\d{7}\s*[- ]?\s*[0-9A-J]|\d{8}\s*[- ]?\s*[A-Z])\b/i;
   const recipientLabel = /\b(?:cliente|destinatario|receptor|comprador|facturar a|datos del cliente)\b/;
