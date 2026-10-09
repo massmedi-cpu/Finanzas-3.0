@@ -824,6 +824,10 @@ test("RECUPERACION-PRODUCTO · no descarta un límite en edición al cambiar mes
   const monthInput = page.locator('input[type="month"]');
   await expect(monthInput).toBeDisabled();
   await expect(page.getByRole("button", { name: "Actualizar referencia" })).toBeDisabled();
+  await expect(page.getByRole("searchbox", { name: "Buscar categorías" })).toBeDisabled();
+  await expect(page.getByRole("combobox", { name: "Ver categorías" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Definir límite" }).last()).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Definir mi límite mensual" })).toBeDisabled();
   await expect(page.getByText("Tienes un límite en edición. Guárdalo o cancélalo antes de cambiar de mes o actualizar la referencia.")).toBeVisible();
   await expect(input).toHaveValue("123,45");
   await expect(page).toHaveURL(/month=2026-09/);
