@@ -176,13 +176,14 @@ async function mockAnalysisApi(
   page: Parameters<typeof test>[0] extends never ? never : any,
   snapshot: AnalysisSnapshot,
   latestMovementDate = snapshot.selection.dateTo,
+  earliestMovementDate?: string | null,
 ) {
   let selectedRequestSeen = false;
   await page.route("**/api/analysis/source-freshness", async (route: any) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate, sync: null }),
+      body: JSON.stringify({ available: true, latestMovementDate, earliestMovementDate, sync: null }),
     });
   });
   await page.route(/\/api\/analysis(?:\?.*)?$/, async (route: any) => {
@@ -197,8 +198,8 @@ async function mockAnalysisApi(
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo) {
-  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate);
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate?: string | null) {
+  const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate, earliestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
   await page.getByRole("button", { name: "1 mes" }).click();
@@ -602,4 +603,22 @@ test("REC-ANA-007 · cifras y fechas del acumulado legibles en 390px", async ({ 
   await expect(region).toContainText("1.234.567,89");
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   expect(overflow).toBeLessThanOrEqual(1);
+});
+
+test("REC-COV-003 · Análisis omite los días anteriores al primer dato bancario", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-15", "2026-09-04");
+
+  const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await expect(accumulated).toContainText("Datos registrados desde el 04/09/2026");
+  await expect(accumulated).toContainText("Los días anteriores no se representan como ceros");
+  const disclosure = accumulated.getByText("Ver acumulado por día", { exact: true });
+  await disclosure.click();
+  const dates = accumulated.getByRole("table").locator("tbody tr td:first-child");
+  await expect(dates.first()).toHaveText("04/09/2026");
+  await expect(dates).toHaveCount(12);
+  await expect(dates).not.toContainText(["01/09/2026"]);
+  const comparisons = page.getByLabel("Indicadores principales del periodo");
+  await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
 });
