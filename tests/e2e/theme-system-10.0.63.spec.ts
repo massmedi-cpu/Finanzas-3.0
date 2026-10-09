@@ -110,10 +110,12 @@ test("AUD-E2E-UI-001 · Presupuestos y Documentos usan superficies claras y text
   }
 });
 
-test("REC-THEME · las superficies grandes de Documentos y Presupuestos se adaptan al tema", async ({ page }) => {
+test("REC-THEME · las superficies de Cuentas, Movimientos, Documentos y Presupuestos respetan los temas", async ({ page }) => {
   for (const theme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: theme });
     for (const route of [
+      { path: "/accounts", title: "Tu dinero, cuenta por cuenta" },
+      { path: "/transactions", title: "Movimientos" },
       { path: "/documents", title: "Documentos" },
       { path: "/budgets", title: "Presupuestos" },
     ]) {
