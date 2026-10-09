@@ -62,6 +62,7 @@ jobs:
           tests/e2e/cash-flow-evolution-plot.spec.ts
           tests/e2e/forecast-chart-timeline.spec.ts
           tests/e2e/comparison-ui.spec.ts
+          tests/e2e/analysis.spec.ts
           --project=chromium-desktop --project=chromium-mobile
       # Synthetic UI results are distinct from authenticated real persistence.
       # No financial originals, secrets or production access are used here.
