@@ -191,3 +191,40 @@ test("marks an unqualified company name as doubtful even with legible OCR", asyn
   expect(interpretation.issuer.value).toBe("CLIENTE INDUSTRIAL SL");
   expect(interpretation.issuer.trust).toBe("doubtful");
 });
+
+test("OCR prefers explicit issuer CIF over an earlier customer CIF", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("recipient-id", "Cliente: CIF B87654321", 0.99, 0.05),
+    line("issuer-id", "Emisor CIF B12345678", 0.96, 0.18),
+  ]));
+  expect(interpretation.taxId.value).toBe("B12345678");
+  expect(interpretation.taxId.trust).toBe("reliable");
+  expect(interpretation.taxId.evidence[0]?.lineId).toBe("issuer-id");
+});
+
+test("OCR never assigns a recipient-only fiscal ID to the issuer", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("client", "Datos del cliente - NIF 12345678Z", 0.99, 0.10),
+    line("total", "TOTAL 23,00", 0.98, 0.90),
+  ]));
+  expect(interpretation.taxId.value).toBeNull();
+  expect(interpretation.taxId.trust).toBe("not_detected");
+});
+
+test("OCR keeps an unassigned NIF as doubtful rather than reliable", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("tax", "CIF B12345678", 0.99, 0.10),
+  ]));
+  expect(interpretation.taxId.value).toBe("B12345678");
+  expect(interpretation.taxId.trust).toBe("doubtful");
+  expect(interpretation.taxId.evidence[0]?.lineId).toBe("tax");
+});
+
+test("OCR finds an explicitly attributed issuer ID after a generic fiscal ID", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("generic", "NIF 12345678Z", 0.99, 0.10),
+    line("supplier", "Proveedor: NIF 87654321X", 0.99, 0.20),
+  ]));
+  expect(interpretation.taxId.value).toBe("87654321X");
+  expect(interpretation.taxId.trust).toBe("reliable");
+});
