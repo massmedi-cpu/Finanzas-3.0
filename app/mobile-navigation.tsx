@@ -83,13 +83,6 @@ export default function MobileNavigation() {
   const secondary = useMemo(() => navigationItems.filter((item) => !primaryHrefs.has(item.href)), [primaryHrefs]);
   const moreActive = secondary.some((item) => isNavigationActive(pathname, item.href));
 
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      primary.forEach((item) => router.prefetch(item.href));
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [primary, router]);
-
   function closeMoreFromPanel() {
     setMoreOpen(false);
     moreButtonRef.current?.focus();

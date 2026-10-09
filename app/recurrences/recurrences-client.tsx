@@ -406,7 +406,7 @@ export default function RecurrencesClient({
           </div>
         ) : null}
 
-        <div className={styles.summaryGrid} aria-label="Resumen de confianza">
+        <div className={styles.summaryGrid} role="group" aria-label="Resumen de confianza">
           <article className={styles.metric}>
             <span>Patrones detectados</span>
             <strong>{counts.total}</strong>

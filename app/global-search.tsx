@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useId, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { formatMoneyCents } from "../src/core/money";
 import { ProductIcon } from "../src/design/product-icons";
 import { MAX_GLOBAL_SEARCH_QUERY_LENGTH, moveGlobalSearchIndex, prepareGlobalSearchQuery } from "./global-search-policy";
@@ -257,7 +258,7 @@ export default function GlobalSearch() {
         <ProductIcon name="search" />
         <span>Buscar</span><kbd>/</kbd>
       </button>
-      {open && (
+      {open && createPortal(
         <div className={styles.backdrop} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <div ref={dialogRef} className={styles.dialog} role="dialog" aria-modal="true" aria-labelledby={`${inputId}-title`} onKeyDown={onDialogKeyDown}>
             <div className={styles.topline}>
@@ -338,7 +339,7 @@ export default function GlobalSearch() {
             </div>
           </div>
         </div>
-      )}
+      , document.body)}
     </>
   );
 }

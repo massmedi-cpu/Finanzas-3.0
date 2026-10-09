@@ -812,7 +812,7 @@ export function ForecastClient({
                           </div>
 
                           {candidateFor === item.id ? (
-                            <div id={candidatesId} className={styles.candidates} aria-label={`Movimientos reales candidatos para ${item.concept}`}>
+                            <div id={candidatesId} className={styles.candidates} role="group" aria-label={`Movimientos reales candidatos para ${item.concept}`}>
                               <div className={styles.candidateHeader}>
                                 <strong>Candidatos reales ±7 días</strong>
                                 <button ref={candidateCloseRef} className={styles.textButton} onClick={() => closeCandidates(item.id)}>Cerrar</button>

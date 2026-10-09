@@ -7,8 +7,8 @@
   padding: 0.9rem 1rem;
   border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.22));
   border-radius: 1rem;
-  background: var(--surface-raised, rgba(15, 23, 42, 0.68));
-  box-shadow: 0 0.75rem 2rem rgba(2, 6, 23, 0.08);
+  background: var(--surface-raised, var(--surface-card));
+  box-shadow: 0 0.75rem 2rem var(--surface-card-muted);
 }
 
 .copy {
@@ -24,7 +24,7 @@
 
 .copy span {
   color: var(--text-secondary, #94a3b8);
-  font-size: 0.84rem;
+  font-size: var(--font-helper);
   line-height: 1.45;
 }
 
@@ -37,7 +37,7 @@
   background: var(--surface-interactive, rgba(30, 41, 59, 0.78));
   color: inherit;
   font: inherit;
-  font-size: 0.84rem;
+  font-size: var(--font-helper);
   font-weight: 700;
   cursor: pointer;
 }

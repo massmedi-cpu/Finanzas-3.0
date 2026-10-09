@@ -405,7 +405,7 @@ export default function ConfigurationClient() {
           <p className="eyebrow">FINANCIAL APP · CONFIGURACIÓN</p>
           <h1>Cuentas y categorías</h1>
         </div>
-        <div className="configuration-summary" aria-label="Resumen de configuración">
+        <div className="configuration-summary" role="group" aria-label="Resumen de configuración">
           <div><strong>{activeAccounts}</strong><span>Cuentas activas</span></div>
           <div><strong>{activeCategories}</strong><span>Categorías activas</span></div>
           <button className="icon-button" type="button" onClick={() => void load()} disabled={loading || busy} aria-label="Actualizar datos"><Icon name="refresh" /></button>
@@ -430,7 +430,7 @@ export default function ConfigurationClient() {
                 : `${archiveImpact.transactionCount} movimientos históricos conservarán la categoría archivada.`}
             </p>
           </div>
-          <div className="impact-grid" aria-label="Impacto de la categoría">
+          <div className="impact-grid" role="group" aria-label="Impacto de la categoría">
             <span><strong>{archiveImpact.transactionCount}</strong> movimientos</span>
             <span><strong>{archiveImpact.ruleConditionCount + archiveImpact.ruleTargetCount}</strong> reglas activas</span>
             <span><strong>{archiveImpact.merchantCount}</strong> comercios</span>

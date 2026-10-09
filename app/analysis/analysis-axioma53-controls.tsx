@@ -214,7 +214,7 @@ export default function AnalysisAxioma53Controls({
 
           {periodMode === "month" && (
             <div className={styles.monthControls}>
-              <div className={styles.quickRanges} aria-label="Rango temporal">
+              <div className={styles.quickRanges} role="group" aria-label="Rango temporal">
                 {QUICK_RANGES.map((option) => (
                   <button
                     key={option.value}

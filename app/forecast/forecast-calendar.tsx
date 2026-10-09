@@ -70,7 +70,7 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
           <h2 id="forecast-calendar-title">Calendario de previsiones</h2>
           <p>Explora cobros y pagos previstos, conciliados o excluidos. Solo aparecen fechas incluidas en el periodo consultado.</p>
         </div>
-        <div className={styles.monthControl} aria-label="Cambiar mes del calendario">
+        <div className={styles.monthControl} role="group" aria-label="Cambiar mes del calendario">
           <button type="button" aria-label="Mes anterior" disabled={month <= firstMonth} onClick={() => { setRequestedMonth(shiftMonth(month, -1)); setRequestedDate(null); }}>‹</button>
           <strong aria-live="polite">{monthLabel.format(new Date(`${month}-01T12:00:00Z`))}</strong>
           <button type="button" aria-label="Mes siguiente" disabled={month >= lastMonth} onClick={() => { setRequestedMonth(shiftMonth(month, 1)); setRequestedDate(null); }}>›</button>
@@ -119,7 +119,7 @@ export function ForecastCalendar({ dateFrom, dateTo, items }: {
         </div>
       </div>
 
-      <div className={styles.legend} aria-label="Leyenda del calendario">
+      <div className={styles.legend} role="group" aria-label="Leyenda del calendario">
         <span><i className={styles.income} /> Ingreso previsto</span>
         <span><i className={styles.expense} /> Gasto previsto</span>
         <span><i className={styles.confirmed} /> Conciliado</span>

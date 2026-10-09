@@ -382,8 +382,8 @@ test("Primera visita crea referencia para el futuro sin inventar cambios", async
   await page.goto("/");
 
   const brief = page.getByRole("region", { name: "Resumen inteligente" });
-  await expect(brief).toContainText("Primera referencia guardada");
-  await expect(brief).toContainText("A partir de la próxima visita");
+  await expect(brief).toContainText("Primera visita");
+  await expect(brief).toContainText("La próxima visita mostrará los cambios");
   await expect(brief).not.toContainText("movimientos nuevos");
 
   await expect.poll(async () => page.evaluate((key) => localStorage.getItem(key), HOME_VISIT_KEY)).not.toBeNull();

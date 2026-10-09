@@ -476,7 +476,7 @@ export default function AnalysisClient({
         </div>
 
         <form className={styles.filters} onSubmit={refresh} aria-label="Filtros del análisis">
-          <div className={styles.rangeSelector} aria-label="Rango temporal">
+          <div className={styles.rangeSelector} role="group" aria-label="Rango temporal">
             {RANGE_OPTIONS.map((option) => (
               <button
                 key={option.value}
@@ -671,7 +671,7 @@ export default function AnalysisClient({
               </div>
               {snapshot.fixedVariable.available ? (
                 <div className={styles.fixedVariable}>
-                  <div className={styles.fixedVariableBar} aria-label={`Gasto fijo ${formatPercentBps(snapshot.fixedVariable.fixedShareBps)}; el resto es variable`}>
+                  <div className={styles.fixedVariableBar} role="img" aria-label={`Gasto fijo ${formatPercentBps(snapshot.fixedVariable.fixedShareBps)}; el resto es variable`}>
                     <span style={{ width: `${Math.max(0, Math.min(100, (snapshot.fixedVariable.fixedShareBps ?? 0) / 100))}%` }} />
                   </div>
                   <dl>

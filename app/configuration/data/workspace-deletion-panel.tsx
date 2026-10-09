@@ -256,7 +256,7 @@ export default function WorkspaceDeletionPanel() {
         </div>
       ) : null}
 
-      <div className={styles.preservedSources} aria-label="Fuentes externas preservadas">
+      <div className={styles.preservedSources} role="group" aria-label="Fuentes externas preservadas">
         <span data-verified={preservedBank ? "true" : "false"}>Fuente bancaria: {preservedBank ? "preservada" : "verificación pendiente"}</span>
         <span data-verified={preservedDrive ? "true" : "false"}>Google Drive externo: {preservedDrive ? "preservado" : "verificación pendiente"}</span>
       </div>

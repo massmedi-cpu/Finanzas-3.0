@@ -8,7 +8,7 @@ const assert = (condition, message) => {
 };
 const read = (path) => readFileSync(resolve(root, path), "utf8");
 
-const SYSTEM_BREAKPOINTS_PX = new Set([360, 480, 768, 1024, 1280, 1440, 1728]);
+const SYSTEM_BREAKPOINTS_PX = new Set([360, 480, 768, 1024, 1100, 1280, 1440, 1728]);
 const CONTENT_BREAKPOINT_EXCEPTIONS = new Map([
   [352, "gráfica de barras en móvil mínimo"],
   [384, "análisis compacto"],
@@ -107,7 +107,8 @@ for (const [value, rationale] of CONTENT_BREAKPOINT_EXCEPTIONS) {
 
 const shell = read("app/app-shell.module.css");
 for (const query of [
-  "@media (max-width: 90rem) and (min-width: 48.01rem)",
+  "@media (width < 68.75rem) and (min-width: 48.01rem)",
+  "@media (min-width: 68.75rem)",
   "@media (max-width: 48rem)",
   "@media (max-width: 30rem)",
 ]) {
@@ -120,6 +121,7 @@ for (const [name, value] of [
   ["compact", 480],
   ["mobileMax", 768],
   ["content", 1024],
+  ["desktopNavigation", 1100],
   ["dense", 1280],
   ["wide", 1440],
   ["ultraWide", 1728],

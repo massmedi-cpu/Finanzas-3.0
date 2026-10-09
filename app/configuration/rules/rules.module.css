@@ -16,7 +16,7 @@
 .kicker {
   margin: 0 0 0.35rem;
   color: var(--color-text-secondary);
-  font-size: 0.8rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: 0.08em;
 }
@@ -28,7 +28,7 @@
 }
 
 .hero h1 {
-  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-size: var(--font-page-title);
   line-height: 1;
 }
 
@@ -56,7 +56,7 @@
 .panel,
 .resultStrip {
   border: 1px solid var(--color-border);
-  background: rgba(8, 15, 31, 0.75);
+  background: var(--surface-card);
 }
 
 .summary > div,
@@ -94,7 +94,7 @@
   border-radius: 0.8rem;
   padding: 0.65rem 0.9rem;
   color: inherit;
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--color-text) 3.5%, transparent);
   font: inherit;
   font-weight: 750;
   cursor: pointer;
@@ -127,17 +127,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .form input,
 .form select {
   width: 100%;
-  border: 1px solid var(--color-border);
+  border: 1px solid var(--border-control);
   border-radius: 0.85rem;
   padding: 0.7rem 0.8rem;
-  background: rgba(8, 15, 31, 0.86);
+  background: var(--surface-control-strong);
   color: inherit;
   font: inherit;
 }
 
 .applyButton,
 .primary {
-  background: linear-gradient(135deg, rgba(31, 107, 255, 0.55), rgba(43, 217, 247, 0.18)) !important;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-primary-bright) 55%, transparent), color-mix(in srgb, var(--color-cyan) 18%, transparent)) !important;
 }
 
 .resultStrip {
@@ -183,7 +183,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(31, 107, 255, 0.12);
+  background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent);
   font-weight: 800;
 }
 
@@ -193,7 +193,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid var(--color-border);
   border-radius: 1rem;
   padding: 0.9rem;
-  background: rgba(255, 255, 255, 0.025);
+  background: color-mix(in srgb, var(--color-text) 2.5%, transparent);
 }
 .ruleCard.disabled { opacity: 0.68; }
 .ruleCard p { margin: 0.55rem 0 0; color: var(--color-text-secondary); overflow-wrap: anywhere; }
@@ -207,13 +207,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   align-items: center;
   padding: 0.3rem 0.6rem;
   border-radius: 999px;
-  font-size: 0.8rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   white-space: nowrap;
 }
-.priority { background: rgba(31, 107, 255, 0.12); }
-.activeBadge { background: rgba(57, 214, 145, 0.11); }
-.disabledBadge { background: rgba(255, 255, 255, 0.07); color: var(--color-text-secondary); }
+.priority { background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent); }
+.activeBadge { background: color-mix(in srgb, var(--color-success) 11%, transparent); }
+.disabledBadge { background: color-mix(in srgb, var(--color-text) 7%, transparent); color: var(--color-text-secondary); }
 .cardActions,
 .formActions { display: flex; flex-wrap: wrap; gap: 0.55rem; margin-top: 0.8rem; }
 
@@ -236,9 +236,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   border: 1px solid var(--color-border);
   border-radius: 0.85rem;
   padding: 0.8rem;
-  background: rgba(2, 7, 17, 0.78);
-  color: #dce6fb;
-  font-size: 0.78rem;
+  background: var(--surface-card);
+  color: var(--color-text);
+  font-size: var(--font-helper);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -249,8 +249,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   padding: 0.85rem 1rem;
   border: 1px solid var(--color-border);
 }
-.error { background: rgba(238, 90, 90, 0.09); }
-.success { background: rgba(57, 214, 145, 0.09); }
+.error { background: color-mix(in srgb, var(--color-danger) 9%, transparent); }
+.success { background: color-mix(in srgb, var(--color-success) 9%, transparent); }
 
 @media (max-width: 900px) {
   .hero,

@@ -104,7 +104,7 @@ export function CashFlowEvolution({
         <p>No es el saldo de las cuentas: muestra cómo se forma el neto real y qué añadirían los eventos pendientes. Si no hay variación, la escala se mantiene en 0 € sin fabricar céntimos.</p>
       </div>
 
-      <div className={styles.evolutionLegend} aria-label="Series de la evolución">
+      <div className={styles.evolutionLegend} role="group" aria-label="Series de la evolución">
         {series.map(({ key, label, className }) => points.some((point) => point[key] !== null) ? (
           <span key={key}><i className={className} />{label}</span>
         ) : null)}

@@ -35,7 +35,7 @@
   min-height: 2.75rem;
   padding: .55rem .7rem;
   border-radius: .75rem;
-  border: 1px solid var(--border, rgba(137, 173, 255, .18));
+  border: 1px solid var(--border-control);
   background: var(--surface, #0d1628);
   color: inherit;
 }

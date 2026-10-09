@@ -28,7 +28,7 @@
 .kicker {
   margin: 0 0 6px;
   color: var(--color-primary-bright);
-  font-size: .75rem;
+  font-size: var(--font-helper);
   font-weight: 800;
   letter-spacing: .1em;
 }
@@ -77,15 +77,15 @@
   padding: 8px;
   border: 1px solid var(--color-border);
   border-radius: 10px;
-  background: rgba(5, 11, 25, .5);
+  background: var(--surface-card-muted);
   color: var(--color-text);
   font: inherit;
   font-size: .875rem;
   font-weight: 750;
   cursor: pointer;
 }
-.day:hover { border-color: var(--color-primary-bright); background: rgba(77, 141, 255, .12); }
-.day.selected { border-color: var(--color-primary-bright); background: rgba(77, 141, 255, .24); box-shadow: inset 0 0 0 1px var(--color-primary-bright); }
+.day:hover { border-color: var(--color-primary-bright); background: color-mix(in srgb, var(--color-primary-bright) 12%, transparent); }
+.day.selected { border-color: var(--color-primary-bright); background: color-mix(in srgb, var(--color-primary-bright) 24%, transparent); box-shadow: inset 0 0 0 1px var(--color-primary-bright); }
 .day:focus-visible, .monthControl button:focus-visible, .detail a:focus-visible, .viewport:focus-visible { outline: 2px solid var(--color-primary-bright); outline-offset: -2px; }
 .outside { padding: 9px; color: var(--color-text-muted); opacity: .4; font-size: .875rem; }
 
@@ -98,7 +98,7 @@
 .legend { gap: 8px 18px; margin: 14px 0 0; color: var(--color-text-secondary); font-size: .875rem; }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 
-.detail, .hint { margin: 18px 0 0; padding: 16px; border-radius: 14px; background: rgba(5, 11, 25, .5); }
+.detail, .hint { margin: 18px 0 0; padding: 16px; border-radius: 14px; background: var(--surface-card-muted); }
 .detail h3 { margin: 0 0 12px; text-transform: capitalize; }
 .detail p, .hint { color: var(--color-text-secondary); font-size: .875rem; line-height: 1.5; }
 .detail p { margin: 0; }

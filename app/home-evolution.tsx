@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { FinancialBarChart, type FinancialBarPoint } from "../src/design/financial-bar-chart";
+import Link from "next/link";
+import { periodHasObservedData, resolvePeriodCoverage } from "../src/application/data-coverage";
+import { FinancialBarChart, monthlyTransactionsHref, type FinancialBarPoint } from "../src/design/financial-bar-chart";
 import styles from "./inicio-overview.module.css";
 
 type EvolutionMode = "balance" | "income_expense" | "net";
@@ -74,6 +76,7 @@ function SingleSeriesBars({
   formatMonth,
   signed = false,
   availableFor,
+  drilldown = false,
 }: {
   rows: Array<FinancialBarPoint | BalanceRow>;
   valueFor: (row: FinancialBarPoint | BalanceRow) => number;
@@ -83,6 +86,7 @@ function SingleSeriesBars({
   formatMonth: (date: string) => string;
   signed?: boolean;
   availableFor?: (row: FinancialBarPoint | BalanceRow) => boolean;
+  drilldown?: boolean;
 }) {
   const availableRows = availableFor ? rows.filter(availableFor) : rows;
   const max = Math.max(1, ...availableRows.map((row) => Math.abs(valueFor(row))));
@@ -119,7 +123,7 @@ function SingleSeriesBars({
               )}
             </div>
             <strong>{available ? formatMoney(value) : "Sin dato"}</strong>
-            <span>{formatMonth(row.monthStart)}</span>
+            {drilldown && available ? <Link prefetch={false} href={monthlyTransactionsHref(row.monthStart)} aria-label={`Ver movimientos de ${formatMonth(row.monthStart)}`}>{formatMonth(row.monthStart)}</Link> : <span>{formatMonth(row.monthStart)}</span>}
           </div>
         );
       })}
@@ -137,6 +141,7 @@ export default function HomeEvolution({
   formatMonth,
   partialMonthStart,
   refreshKey,
+  latestMovementDate,
 }: {
   rows: FinancialBarPoint[];
   dateFrom: string;
@@ -147,7 +152,14 @@ export default function HomeEvolution({
   formatMonth: (date: string) => string;
   partialMonthStart?: string | null;
   refreshKey: number;
+  latestMovementDate: string | null;
 }) {
+  const coveredRows = useMemo(() => rows.map((row) => {
+    const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+    const coverage = resolvePeriodCoverage({ dateFrom: row.monthStart, dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo, latestMovementDate });
+    return { ...row, coverage: coverage.state };
+  }), [dateTo, latestMovementDate, rows]);
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -253,7 +265,7 @@ export default function HomeEvolution({
       {mode === "income_expense" ? (
         <>
           <FinancialBarChart
-            rows={rows}
+            rows={coveredRows}
             maxValue={maxValue}
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
@@ -267,13 +279,15 @@ export default function HomeEvolution({
       {mode === "net" ? (
         <>
           <SingleSeriesBars
-            rows={rows}
+            rows={coveredRows}
+            availableFor={(row) => periodHasObservedData({ state: (row as FinancialBarPoint).coverage ?? "unknown", latestMovementDate, throughDate: latestMovementDate })}
             valueFor={(row) => (row as FinancialBarPoint).operatingNetCents}
             label="Flujo neto por mes"
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
             signed
+            drilldown
           />
           <p className={styles.helper}>Flujo neto = ingresos menos gastos elegibles del mismo motor financiero; las transferencias internas no se cuentan como gasto o ingreso operativo.</p>
         </>
@@ -281,7 +295,7 @@ export default function HomeEvolution({
 
       {mode === "balance" && balanceLoading ? (
         <>
-          <div className={styles.skeleton} aria-label="Cargando evolución del saldo" />
+          <div className={styles.skeleton} role="status" aria-label="Cargando evolución del saldo" />
           {balanceSlowLoading ? <p className={styles.helper} role="status">La lectura del saldo está tardando más de lo habitual. Las otras vistas siguen disponibles.</p> : null}
         </>
       ) : null}

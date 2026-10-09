@@ -3,6 +3,7 @@ export const RESPONSIVE_BREAKPOINTS = {
   compact: 480,
   mobileMax: 768,
   content: 1024,
+  desktopNavigation: 1100,
   dense: 1280,
   wide: 1440,
   ultraWide: 1728,

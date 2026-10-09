@@ -203,7 +203,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
             })}
           </div>
         </div>
-        <div className={styles.legend} aria-label="Leyenda del Cash Flow">
+        <div className={styles.legend} role="group" aria-label="Leyenda del Cash Flow">
           <span><i className={styles.realIncome} /> Entrada real</span><span><i className={styles.realExpense} /> Salida real</span>
           <span><i className={styles.suggested} /> Sugerido</span><span><i className={styles.confirmed} /> Confirmado</span>
           <span><i className={styles.realized} /> Realizado</span><span><i className={styles.discarded} /> Descartado</span>

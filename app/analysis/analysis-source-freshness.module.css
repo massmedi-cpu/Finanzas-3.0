@@ -14,9 +14,9 @@
   gap: 0.6rem;
   min-height: 2.65rem;
   padding: 0.55rem 0.75rem;
-  border: 1px solid rgba(148, 178, 255, 0.16);
+  border: 1px solid color-mix(in srgb, var(--color-primary) 16%, transparent);
   border-radius: var(--radius-md);
-  background: rgba(8, 16, 32, 0.54);
+  background: var(--surface-card-muted);
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
   backdrop-filter: blur(10px);
@@ -30,19 +30,19 @@
 
 .copy strong {
   color: var(--color-text-secondary);
-  font-size: 0.78rem;
+  font-size: var(--font-helper);
   line-height: 1.25;
 }
 
 .copy > span {
   color: var(--color-text-muted);
-  font-size: 0.72rem;
+  font-size: var(--font-helper);
   line-height: 1.35;
 }
 
 .copy small {
   color: var(--color-warning);
-  font-size: 0.7rem;
+  font-size: var(--font-helper);
   font-weight: 700;
   line-height: 1.35;
 }
@@ -57,7 +57,7 @@
   border: 1px solid color-mix(in srgb, var(--color-warning) 34%, transparent);
   border-radius: var(--radius-sm);
   color: var(--color-warning);
-  font-size: 0.7rem;
+  font-size: var(--font-helper);
   font-weight: 750;
   line-height: 1;
   text-decoration: none;
@@ -82,36 +82,36 @@
   margin-top: 0.28rem;
   border-radius: 999px;
   background: var(--color-success);
-  box-shadow: 0 0 0 0.18rem rgba(72, 211, 142, 0.08);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--color-success) 8%, transparent);
 }
 
 .ok {
-  border-color: rgba(72, 211, 142, 0.14);
-  background: linear-gradient(135deg, rgba(72, 211, 142, 0.045), rgba(8, 16, 32, 0.54));
+  border-color: color-mix(in srgb, var(--color-success) 14%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-success) 4.5%, transparent), var(--surface-card-muted));
 }
 
 .warning {
-  border-color: rgba(255, 191, 71, 0.2);
-  background: linear-gradient(135deg, rgba(255, 191, 71, 0.05), rgba(8, 16, 32, 0.54));
+  border-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-warning) 5%, transparent), var(--surface-card-muted));
 }
 
 .warning .dot {
   background: var(--color-warning);
-  box-shadow: 0 0 0 0.18rem rgba(255, 191, 71, 0.08);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--color-warning) 8%, transparent);
 }
 
 .danger {
-  border-color: rgba(255, 93, 115, 0.24);
-  background: linear-gradient(135deg, rgba(255, 93, 115, 0.055), rgba(8, 16, 32, 0.54));
+  border-color: color-mix(in srgb, var(--color-danger) 24%, transparent);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-danger) 5.5%, transparent), var(--surface-card-muted));
 }
 
 .danger .dot {
   background: var(--color-danger);
-  box-shadow: 0 0 0 0.18rem rgba(255, 93, 115, 0.08);
+  box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--color-danger) 8%, transparent);
 }
 
 .danger .copy small {
-  color: #ff9bab;
+  color: var(--color-danger);
 }
 
 @media (max-width: 48rem) {

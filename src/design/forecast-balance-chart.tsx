@@ -64,7 +64,7 @@ export function ForecastBalanceChart({ snapshot }: { snapshot: ForecastSnapshot 
         <span className={styles.meta}>Valores del motor de previsión · sin recálculo visual</span>
       </div>
 
-      <div className={styles.insights} aria-label="Radar de previsión">
+      <div className={styles.insights} role="region" aria-label="Radar de previsión">
         <article>
           <span>Saldo mínimo previsto</span>
           <strong className={minimumPoint.balanceCents < 0 ? styles.riskValue : undefined}>

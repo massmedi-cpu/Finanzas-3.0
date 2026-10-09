@@ -10,7 +10,7 @@
   justify-content: space-between;
   gap: 1rem;
   padding: 0.95rem 1.05rem;
-  border: 1px solid rgba(137, 173, 255, 0.14);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 14%, transparent);
   border-radius: var(--radius-lg);
   background:
     radial-gradient(circle at 95% 0%, color-mix(in srgb, var(--color-cyan) 6%, transparent), transparent 20rem),
@@ -22,14 +22,14 @@
 .cardHeading span {
   margin: 0;
   color: var(--color-primary-bright);
-  font-size: 0.75rem;
+  font-size: var(--font-helper);
   font-weight: 850;
   letter-spacing: 0.09em;
 }
 
 .heading h2 {
   margin: 0.14rem 0 0;
-  font-size: clamp(1rem, 0.96rem + 0.25vw, 1.24rem);
+  font-size: var(--font-section-title);
   line-height: 1.2;
   letter-spacing: -0.018em;
 }
@@ -49,9 +49,9 @@
   display: inline-flex;
   align-items: center;
   padding: 0.42rem 0.7rem;
-  border: 1px solid rgba(77, 141, 255, 0.18);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 18%, transparent);
   border-radius: 0.55rem;
-  background: rgba(77, 141, 255, 0.045);
+  background: color-mix(in srgb, var(--color-primary-bright) 4.5%, transparent);
   color: var(--color-text-secondary);
   font-size: max(var(--font-helper), 0.74rem);
   font-weight: 800;
@@ -59,8 +59,8 @@
 }
 
 .heading > a:hover {
-  border-color: rgba(77, 141, 255, 0.34);
-  background: rgba(77, 141, 255, 0.09);
+  border-color: color-mix(in srgb, var(--color-primary-bright) 34%, transparent);
+  background: color-mix(in srgb, var(--color-primary-bright) 9%, transparent);
   color: var(--color-text);
 }
 
@@ -88,7 +88,7 @@
 .detailCard,
 .accountStrip {
   min-width: 0;
-  border: 1px solid rgba(137, 173, 255, 0.13);
+  border: 1px solid color-mix(in srgb, var(--color-primary-bright) 13%, transparent);
   border-radius: var(--radius-lg);
   background: linear-gradient(145deg, color-mix(in srgb, var(--color-surface-strong) 94%, transparent), color-mix(in srgb, var(--color-surface) 88%, transparent));
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
@@ -108,7 +108,7 @@
   gap: 0.75rem;
   margin-bottom: 0.7rem;
   padding-bottom: 0.58rem;
-  border-bottom: 1px solid rgba(137, 173, 255, 0.08);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-bright) 8%, transparent);
 }
 
 .cardHeading > div { min-width: 0; }
@@ -155,9 +155,9 @@
 .chartData table { width: 100%; border-collapse: collapse; font-size: max(var(--font-helper), 0.76rem); }
 .chartData .wideData { min-width: 32rem; }
 .wideData td:first-child { white-space: nowrap; overflow-wrap: normal; }
-.chartDataHint { display: none; color: var(--color-text-muted); font-size: 0.68rem; }
+.chartDataHint { display: none; color: var(--color-text-muted); font-size: var(--font-helper); }
 .chartData th,
-.chartData td { padding: 0.4rem 0.55rem; border-bottom: 1px solid rgba(137, 173, 255, 0.1); text-align: left; }
+.chartData td { padding: 0.4rem 0.55rem; border-bottom: 1px solid color-mix(in srgb, var(--color-primary-bright) 10%, transparent); text-align: left; }
 .chartData th:not(:first-child),
 .chartData td:not(:first-child) { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .chartData th { color: var(--color-text-secondary); font-weight: 750; }
@@ -185,7 +185,7 @@
 }
 
 .gridLine line {
-  stroke: rgba(137, 173, 255, 0.085);
+  stroke: color-mix(in srgb, var(--color-primary-bright) 8.5%, transparent);
   stroke-width: 1;
 }
 .gridLine text,
@@ -224,7 +224,7 @@
   stroke-width: 3px;
   stroke-linejoin: round;
 }
-.dailyArea { fill: rgba(77, 141, 255, 0.07); }
+.dailyArea { fill: color-mix(in srgb, var(--color-primary-bright) 7%, transparent); }
 .dailyLine {
   fill: none;
   stroke: var(--color-primary-bright);
@@ -242,7 +242,7 @@
 
 .heatCell {
   fill: var(--color-cyan);
-  stroke: rgba(201, 224, 255, 0.28);
+  stroke: color-mix(in srgb, var(--color-primary) 28%, transparent);
   stroke-width: 0.8;
   vector-effect: non-scaling-stroke;
 }
@@ -263,7 +263,7 @@
   gap: 0.3rem;
   margin-top: 0.35rem;
   color: var(--color-text-muted);
-  font-size: 0.69rem;
+  font-size: var(--font-helper);
 }
 .heatLegend i {
   display: block;
@@ -299,31 +299,31 @@
   align-items: flex-end;
   overflow: hidden;
   border-radius: 0.55rem 0.55rem 0.25rem 0.25rem;
-  background: rgba(255, 255, 255, 0.03);
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
 }
 .weekdayColumn i {
   display: block;
   width: 100%;
   height: var(--bar-ratio);
   border-radius: inherit;
-  background: linear-gradient(180deg, rgba(43, 217, 247, 0.72), rgba(77, 141, 255, 0.42));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-cyan) 72%, transparent), color-mix(in srgb, var(--color-primary-bright) 42%, transparent));
 }
-.weekdayColumn strong { font-size: 0.78rem; }
-.weekdayColumn small { color: var(--color-text-muted); font-size: 0.67rem; }
+.weekdayColumn strong { font-size: var(--font-helper); }
+.weekdayColumn small { color: var(--color-text-muted); font-size: var(--font-helper); }
 .weekdayColumn em {
   color: var(--color-text-secondary);
-  font-size: 0.62rem;
+  font-size: var(--font-helper);
   font-style: normal;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .weekdayPeak { color: var(--color-text); }
 .weekdayPeak > div {
-  background: rgba(43, 217, 247, 0.08);
-  box-shadow: inset 0 0 0 1px rgba(43, 217, 247, 0.15);
+  background: color-mix(in srgb, var(--color-cyan) 8%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-cyan) 15%, transparent);
 }
 .weekdayPeak i {
-  background: linear-gradient(180deg, rgba(43, 217, 247, 0.96), rgba(77, 141, 255, 0.62));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--color-cyan) 96%, transparent), color-mix(in srgb, var(--color-primary-bright) 62%, transparent));
 }
 .weekdayPeak small { color: var(--color-text-secondary); }
 
@@ -346,13 +346,13 @@
   height: 0.46rem;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--color-text) 3.5%, transparent);
 }
 .bandRow i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(77, 141, 255, 0.72), rgba(43, 217, 247, 0.74));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary-bright) 72%, transparent), color-mix(in srgb, var(--color-cyan) 74%, transparent));
 }
 
 .scatterAxis {
@@ -360,18 +360,18 @@
   stroke-width: 1;
 }
 .scatterPoint {
-  fill: rgba(77, 141, 255, 0.54);
+  fill: color-mix(in srgb, var(--color-primary-bright) 54%, transparent);
   stroke: color-mix(in srgb, var(--color-text) 72%, transparent);
   stroke-width: 1.35;
 }
 .bubbleLegend {
   margin-top: 0.3rem;
   color: var(--color-text-muted);
-  font-size: 0.69rem;
+  font-size: var(--font-helper);
   text-align: right;
 }
 .concentrationReference {
-  stroke: rgba(255, 191, 71, 0.5);
+  stroke: color-mix(in srgb, var(--color-warning) 50%, transparent);
   stroke-width: 1.2;
   stroke-dasharray: 5 5;
 }
@@ -387,14 +387,14 @@
   min-width: 0;
   padding: 0.62rem 0.68rem;
   border-radius: 0.62rem;
-  background: rgba(77, 141, 255, 0.035);
+  background: color-mix(in srgb, var(--color-primary-bright) 3.5%, transparent);
 }
 .accountStrip span,
 .accountStrip strong,
 .accountStrip small { display: block; }
-.accountStrip span { color: var(--color-text-muted); font-size: 0.72rem; }
+.accountStrip span { color: var(--color-text-muted); font-size: var(--font-helper); }
 .accountStrip strong { margin-top: 0.12rem; font-size: 0.96rem; font-variant-numeric: tabular-nums; }
-.accountStrip small { margin-top: 0.12rem; color: var(--color-text-muted); font-size: 0.7rem; }
+.accountStrip small { margin-top: 0.12rem; color: var(--color-text-muted); font-size: var(--font-helper); }
 
 .conceptList,
 .transactionList { display: grid; }
@@ -405,24 +405,24 @@
   align-items: center;
   gap: 0.72rem;
   padding: 0.52rem 0;
-  border-bottom: 1px solid rgba(137, 173, 255, 0.075);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-bright) 7.5%, transparent);
 }
 .conceptRow:last-child { border-bottom: 0; }
 .conceptRow > div:first-child { min-width: 0; }
 .conceptRow strong { display: block; overflow-wrap: anywhere; font-size: max(var(--font-label), 0.8rem); }
-.conceptRow small { display: block; margin-top: 0.1rem; color: var(--color-text-muted); font-size: 0.7rem; }
+.conceptRow small { display: block; margin-top: 0.1rem; color: var(--color-text-muted); font-size: var(--font-helper); }
 .conceptRow > b { font-size: max(var(--font-label), 0.8rem); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .conceptTrack {
   height: 0.42rem;
   overflow: hidden;
   border-radius: var(--radius-pill);
-  background: rgba(255, 255, 255, 0.035);
+  background: color-mix(in srgb, var(--color-text) 3.5%, transparent);
 }
 .conceptTrack i {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: linear-gradient(90deg, rgba(77, 141, 255, 0.64), rgba(43, 217, 247, 0.68));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--color-primary-bright) 64%, transparent), color-mix(in srgb, var(--color-cyan) 68%, transparent));
 }
 
 .transactionRow {
@@ -433,7 +433,7 @@
   justify-content: space-between;
   gap: 0.85rem;
   padding: 0.52rem 0;
-  border-bottom: 1px solid rgba(137, 173, 255, 0.075);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-primary-bright) 7.5%, transparent);
   color: inherit;
   text-decoration: none;
 }
@@ -444,8 +444,8 @@
 .transactionMain span,
 .transactionMain small { display: block; }
 .transactionMain strong { overflow-wrap: anywhere; font-size: max(var(--font-label), 0.8rem); }
-.transactionMain span { margin-top: 0.1rem; color: var(--color-text-secondary); font-size: 0.72rem; line-height: 1.32; }
-.transactionMain small { margin-top: 0.06rem; color: var(--color-text-muted); font-size: 0.7rem; }
+.transactionMain span { margin-top: 0.1rem; color: var(--color-text-secondary); font-size: var(--font-helper); line-height: 1.32; }
+.transactionMain small { margin-top: 0.06rem; color: var(--color-text-muted); font-size: var(--font-helper); }
 .transactionRow > b {
   flex: 0 0 auto;
   font-size: 0.9rem;
@@ -516,7 +516,7 @@
   .bandRow > div { grid-column: 1 / -1; grid-row: 2; }
   .bandRow > small { grid-column: 1 / -1; grid-row: 3; }
   .transactionRow { align-items: flex-start; }
-  .transactionRow > b { font-size: 0.84rem; }
+  .transactionRow > b { font-size: var(--font-helper); }
 }
 
 @media (max-width: 24rem) {

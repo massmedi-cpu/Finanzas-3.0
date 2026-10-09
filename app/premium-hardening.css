@@ -9,7 +9,7 @@ nav[aria-label="Más secciones"] a:focus-visible,
 nav[aria-label="Más secciones"] button:focus-visible {
   outline: 2px solid var(--color-primary-bright);
   outline-offset: 3px;
-  box-shadow: 0 0 0 4px rgba(79, 124, 255, 0.16);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--color-primary-bright) 16%, transparent);
 }
 
 @media (max-width: 48rem) {
@@ -33,8 +33,8 @@ nav[aria-label="Más secciones"] button:focus-visible {
 
 @media (prefers-contrast: more) {
   :root {
-    --color-border: rgba(182, 204, 255, 0.38);
-    --color-border-strong: rgba(198, 216, 255, 0.62);
+    --color-border: color-mix(in srgb, var(--color-primary) 38%, transparent);
+    --color-border-strong: color-mix(in srgb, var(--color-primary) 62%, transparent);
     --color-text-muted: #a9b8d2;
   }
 

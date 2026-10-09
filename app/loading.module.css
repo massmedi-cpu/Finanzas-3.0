@@ -13,7 +13,7 @@
   padding: 0.7rem 0.85rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
-  background: rgba(10, 17, 34, 0.72);
+  background: var(--surface-card);
 }
 
 .brandMark,
@@ -24,7 +24,7 @@
 .panel {
   position: relative;
   overflow: hidden;
-  background: rgba(137, 173, 255, 0.09);
+  background: color-mix(in srgb, var(--color-primary-bright) 9%, transparent);
 }
 
 .brandMark::after,
@@ -37,7 +37,7 @@
   position: absolute;
   inset: 0;
   transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(137, 173, 255, 0.12), transparent);
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--color-primary-bright) 12%, transparent), transparent);
   animation: route-loading-sheen 1.2s ease-in-out infinite;
 }
 

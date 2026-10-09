@@ -690,12 +690,12 @@ export default function InicioOverview() {
                   : syncHasWarnings
                     ? "Sincronización completada con avisos"
                     : syncSucceeded
-                      ? "Última sincronización completada"
+                      ? "Datos bancarios actualizados"
                       : "Estado de la fuente pendiente"}
             </strong>
             <p>
               {syncSucceeded && syncRun
-                ? `Sincronización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)} · ${latestDataDate ? `movimientos hasta ${formatDate(latestDataDate)}` : "fecha del último movimiento sin confirmar"}.`
+                ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
                 : syncFailed
                   ? "Los datos existentes siguen disponibles. Puedes reintentar la actualización."
                   : latestDataDate
@@ -726,27 +726,6 @@ export default function InicioOverview() {
         </p>
       )}
 
-      <HomeSmartBrief
-        month={today.slice(0, 7)}
-        loading={primaryLoading || activityLoading || secondaryLoading}
-        transactionTotalCount={transactions?.totalCount ?? null}
-        latestTransactionId={transactions?.rows?.[0]?.id ?? null}
-        latestTransactionDate={latestDataDate}
-        incomeCents={financial?.period.incomeCents ?? null}
-        expenseCents={financial?.period.expenseCents ?? null}
-        operatingNetCents={financial?.period.operatingNetCents ?? null}
-        activeBalanceCents={consistency.balancesMatch ? financial?.balances.activeBalanceCents ?? null : null}
-        budgetProgressBps={budget?.total.progressBps ?? null}
-        budgetStatus={budget?.total.status ?? null}
-        overBudgetCount={budget ? overBudgetCount : null}
-        projectedNetCents={forecast?.summary.projectedNetCents ?? null}
-        projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
-        plannedItems={forecast?.summary.plannedItems ?? null}
-        syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
-        displayMoney={displayMoney}
-        valuesVisible={revealAmounts}
-        privacyActive={privacyReady && !amountsVisible}
-      />
 
       <section className={styles.decisionGrid} aria-label="Resumen financiero principal">
         <article className={styles.decisionCard}>
@@ -825,7 +804,7 @@ export default function InicioOverview() {
       <section className={styles.contentGrid}>
         <article className={`${styles.panel} ${styles.evolutionPanel}`}>
           <div className={styles.sectionHeading}>
-            <div><span>CASH FLOW</span><h2>Últimos 12 meses</h2></div>
+            <div><span>EVOLUCIÓN FINANCIERA</span><h2>Últimos 12 meses</h2></div>
             <Link prefetch={false} className={styles.panelAction} href="/analysis">Abrir análisis</Link>
           </div>
           {completedComparison && (
@@ -866,6 +845,7 @@ export default function InicioOverview() {
               formatMoney={displayMoney}
               formatMonth={formatMonth}
               partialMonthStart={homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) ? currentMonthStart : null}
+              latestMovementDate={latestDataDate}
               refreshKey={evolutionRevision}
             />
           ) : secondaryLoading ? (
@@ -873,7 +853,7 @@ export default function InicioOverview() {
           ) : (
             <p className={styles.empty}>{data.monthly ? "No hay evolución disponible." : "La evolución no está disponible ahora."}</p>
           )}
-          {latestDataDate && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
+          {latestDataDate && currentPeriodCoverage.state === "partial" && homeMonthlyRows.some((row) => row.monthStart === currentMonthStart) && (
             <p className={styles.helper}>El mes actual es parcial: incluye movimientos importados hasta el {formatDate(latestDataDate)}.</p>
           )}
         </article>
@@ -939,11 +919,19 @@ export default function InicioOverview() {
           </div>
           {budget ? (
             <>
+              {!currentPeriodObserved ? (
+                <div className={styles.budgetSummary} data-budget-coverage={currentPeriodCoverage.state}>
+                  <strong>Gasto sin confirmar</strong>
+                  <span>Límite del mes: {displayMoney(budget.total.effectiveAmountCents)}</span>
+                  <p className={styles.helper}>{currentCoverageLabel}. El importe gastado y el porcentaje se mostrarán cuando haya cobertura.</p>
+                </div>
+              ) : <>
               <div className={styles.budgetSummary}>
                 <strong>{displayMoney(budget.total.actualExpenseCents)}</strong>
                 <span>gastados de {displayMoney(budget.total.effectiveAmountCents)}</span>
                 <div
                   className={styles.progressTrack}
+                  role="img"
                   aria-label={revealAmounts
                     ? `Presupuesto usado ${Math.max(0, budget.total.progressBps ?? 0) / 100} por ciento`
                     : "Porcentaje de presupuesto oculto por privacidad"}
@@ -967,6 +955,8 @@ export default function InicioOverview() {
                   ))}
                 </ul>
               ) : null}
+              {currentPeriodCoverage.state === "partial" && <p className={styles.helper}>{currentCoverageLabel}. El porcentaje refleja el gasto importado; puede aumentar.</p>}
+              </>}
             </>
           ) : !consistency.budgetMonthMatches ? (
             <p className={styles.empty}>El presupuesto recibido corresponde a otro mes. Abre Presupuestos para revisarlo.</p>
@@ -1002,12 +992,38 @@ export default function InicioOverview() {
               })}
             </ul>
           ) : activityLoading ? (
-            <div className={styles.skeleton} aria-label="Cargando actividad reciente" />
+            <div className={styles.skeleton} role="status" aria-label="Cargando actividad reciente" />
           ) : (
             <p className={styles.empty}>{transactions ? "No hay actividad reciente." : "La actividad reciente no está disponible ahora. El resto del resumen sigue operativo."}</p>
           )}
         </article>
       </section>
+
+      <HomeSmartBrief
+        month={today.slice(0, 7)}
+        periodCoverage={currentPeriodCoverage.state}
+        loading={primaryLoading || activityLoading || secondaryLoading}
+        transactionTotalCount={transactions?.totalCount ?? null}
+        latestTransactionId={transactions?.rows?.[0]?.id ?? null}
+        latestTransactionDate={latestDataDate}
+        incomeCents={financial?.period.incomeCents ?? null}
+        expenseCents={financial?.period.expenseCents ?? null}
+        operatingNetCents={financial?.period.operatingNetCents ?? null}
+        activeBalanceCents={consistency.balancesMatch ? financial?.balances.activeBalanceCents ?? null : null}
+        budgetProgressBps={budget?.total.progressBps ?? null}
+        budgetStatus={budget?.total.status ?? null}
+        overBudgetCount={budget ? overBudgetCount : null}
+        projectedNetCents={forecast?.summary.projectedNetCents ?? null}
+        projectedClosingBalanceCents={forecast?.summary.plannedItems ? forecast.summary.projectedClosingBalanceCents : null}
+        plannedItems={forecast?.summary.plannedItems ?? null}
+        syncState={syncFailed ? "failed" : syncSucceeded ? "success" : "pending"}
+        displayMoney={displayMoney}
+        valuesVisible={revealAmounts}
+        privacyActive={privacyReady && !amountsVisible}
+      />
+
+
+
     </main>
   );
 }
