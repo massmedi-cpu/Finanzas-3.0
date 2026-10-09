@@ -2,7 +2,7 @@ name: Product recovery browser matrix
 
 on:
   pull_request:
-    branches: [main]
+    branches: [main, work/product-recovery-20261009]
     paths:
       - 'app/**'
       - 'src/design/**'
@@ -49,6 +49,7 @@ jobs:
           tests/e2e/module-context-navigation.spec.ts
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
+          tests/e2e/dashboard-orchestration-contract.spec.ts
           --project=chromium-desktop
       # Synthetic UI results are distinct from authenticated real persistence.
       # No financial originals, secrets or production access are used here.
