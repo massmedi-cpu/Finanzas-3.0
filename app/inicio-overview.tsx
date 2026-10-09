@@ -417,21 +417,28 @@ export default function InicioOverview() {
     }
   }, [commit, isFresh]);
 
-  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[]) => {
+  const loadScope = useCallback(async (scope: DashboardScope, sources: DashboardSource[], generation: number) => {
+    if (!isFresh(generation)) return;
     try {
       const envelope = await readJson<DashboardEnvelope>(`/api/dashboard?scope=${scope}`, 5_000);
-      if (scope === "activity" || scope === "primary") setDataThroughDate(envelope.dataThroughDate ?? null);
+      if (!isFresh(generation)) return;
+      if (scope === "activity" || scope === "primary") {
+        setDataThroughDate((current) => isFresh(generation) ? envelope.dataThroughDate ?? null : current);
+      }
       await Promise.all(sources.map(async (source) => {
+        if (!isFresh(generation)) return;
         if (envelope.data[source] !== null && !envelope.failedSources.includes(source)) {
-          commit(source, envelope.data[source], false);
+          commit(generation, source, envelope.data[source], false);
         } else {
-          await loadSource(source);
+          await loadSource(source, generation);
         }
       }));
     } catch {
-      await Promise.all(sources.map(loadSource));
+      if (isFresh(generation)) {
+        await Promise.all(sources.map((source) => loadSource(source, generation)));
+      }
     }
-  }, [commit, loadSource]);
+  }, [commit, loadSource, isFresh]);
 
   const loadSyncStatus = useCallback(async () => {
     try {
