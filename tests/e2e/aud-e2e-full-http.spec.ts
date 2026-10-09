@@ -252,10 +252,25 @@ test('document original, genuine OCR, human review, associations, owner designat
 
 const routes = ['/', '/transactions', '/analysis', '/compare', '/cash-flow', '/accounts', '/budgets', '/recurrences', '/forecast', '/documents', '/alerts', '/review', '/onboarding', '/configuration',
   '/configuration/source', '/configuration/source/diagnostics', '/configuration/merchants', '/configuration/rules', '/configuration/preferences', '/configuration/appearance', '/configuration/data'];
-const routeApi: Record<string, string> = { '/': '/api/dashboard', '/transactions': '/api/transactions', '/analysis': '/api/analysis',
-  '/compare': '/api/compare', '/accounts': '/api/financial', '/budgets': '/api/budgets',
-  '/recurrences': '/api/recurrences', '/forecast': '/api/forecast', '/documents': '/api/documents',
+// These routes request their data in the browser. Server-rendered routes below
+// consume the same real gateway before rendering and need a loaded UI assertion.
+const routeApi: Record<string, string> = { '/': '/api/dashboard', '/transactions': '/api/transactions',
+  '/accounts': '/api/financial', '/budgets': '/api/budgets',
+  '/recurrences': '/api/recurrences', '/documents': '/api/documents',
   '/configuration': '/api/configuration', '/configuration/merchants': '/api/merchants', '/configuration/rules': '/api/rules' };
+const routeSelection: Record<string, string> = {
+  '/analysis': '?month=2026-09&range=1m',
+  '/compare': '?primaryFrom=2026-09-01&primaryTo=2026-09-30&referenceFrom=2026-08-01&referenceTo=2026-08-31',
+  '/cash-flow': '?month=2026-09',
+  '/budgets': '?month=2026-09',
+  '/forecast': '?dateFrom=2026-10-01&dateTo=2026-10-31',
+};
+const serverRenderedSummary: Record<string, string> = {
+  '/analysis': 'Indicadores principales del periodo',
+  '/compare': 'Resumen comparativo',
+  '/cash-flow': 'Resumen de Cash Flow',
+  '/forecast': 'Resumen de previsión',
+};
 for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
   test(`real-data UI sweep ${width}px, light/dark, complete module/configuration routes`, async ({ page }) => {
     test.setTimeout(360_000);
@@ -267,11 +282,15 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
       console.log(`AUD_HTTP|stage=ui_route|width=${width}|route=${route}`);
       const dataResponse = routeApi[route] ? page.waitForResponse(response => new URL(response.url()).pathname === routeApi[route]
         && response.request().method() === 'GET', { timeout: 60_000 }) : null;
-      const response = await page.goto(route);
+      const response = await page.goto(route + (routeSelection[route] ?? ''));
       expect(response?.status(), route).toBe(200);
       await expect(page.locator('#main-content'), route).toBeVisible();
       await expect(page.locator('h1').first(), route).toBeVisible();
       if (dataResponse) expect((await dataResponse).ok(), `${route} real API response`).toBe(true);
+      if (serverRenderedSummary[route]) {
+        await expect(page.getByRole('region', { name: serverRenderedSummary[route], exact: true })).toBeVisible({ timeout: 60_000 });
+        await expect(page.getByText(/No se pudo preparar el análisis inicial|El comparador no está disponible ahora mismo|No se pudo cargar la previsión\./)).toHaveCount(0);
+      }
       if (route === '/cash-flow') {
         await expect(page.getByText('No se han podido cargar juntos el resumen financiero y los movimientos reales.', { exact: false })).toHaveCount(0);
         await expect(page.getByText('No se pudo cargar el motor de Previsión.', { exact: false })).toHaveCount(0);
