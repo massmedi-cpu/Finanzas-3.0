@@ -66,13 +66,23 @@ function logGatewayFailure(scope: string, error: unknown) {
   console.warn(scope, error instanceof Error ? error.message : String(error));
 }
 
-export async function GET() {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+export async function GET(request: Request) {
   const started = performance.now();
 
   try {
+    const params = new URL(request.url).searchParams;
+    if ([...params.keys()].some((key) => key !== "accountId")) {
+      return Response.json({ error: "invalid_parameter" }, { status: 400, headers: HEADERS });
+    }
+    const accountId = params.get("accountId")?.trim() || null;
+    if (accountId && !UUID.test(accountId)) {
+      return Response.json({ error: "invalid_account_id" }, { status: 400, headers: HEADERS });
+    }
     const [connectionResult, transactionResult] = await callPersistenceGatewayBatch([
       { action: "source.google_connection_status" },
-      { action: "transaction.date_bounds" },
+      { action: "transaction.date_bounds", payload: { accountId } },
     ]);
     let earliestMovementDate: string | null = null;
     let latestMovementDate: string | null = null;
@@ -86,7 +96,7 @@ export async function GET() {
       // current best-effort latest date until the isolated backend is upgraded.
       logGatewayFailure("analysis-source-freshness-bounds", transactionResult.reason);
       try {
-        const legacy = await callPersistenceGateway<unknown>("transaction.query", { limit: 1 });
+        const legacy = await callPersistenceGateway<unknown>("transaction.query", { limit: 1, accountId });
         latestMovementDate = transactionDate(legacy);
       } catch (error) {
         logGatewayFailure("analysis-source-freshness-legacy", error);
