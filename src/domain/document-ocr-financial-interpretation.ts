@@ -362,18 +362,52 @@ function extractIssuer(lines: LocatedLine[]) {
 function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
   const result: OcrTaxLine[] = [];
   for (const item of lines) {
-    const normalized = normalizeToken(item.line.text);
-    if (!/\biva\b|\bigic\b|\bimpuesto\b/.test(normalized)) continue;
-    const money = item.line.text.match(/\d{1,3}(?:\.\d{3})*(?:,\d{2})|\d+(?:[,.]\d{2})/g) ?? [];
-    const rate = item.line.text.match(/(\d{1,2}(?:[,.]\d{1,2})?)\s*%/);
-    const values = money.map(parseMoneyCents).filter((value): value is number => value !== null);
+    const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+    if (!/\b(?:iva|igic|impuestos?)\b/.test(searchable)) continue;
+    const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|iva|igic|impuestos?|cuota(?:\s+(?:del?\s+)?(?:iva|igic|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
+      .map((match) => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
+    const amounts = [...item.line.text.matchAll(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g)]
+      .flatMap((match) => {
+        const value = parseMoneyCents(match[0]);
+        return value === null ? [] : [{ start: match.index, value }];
+      });
+    const taxLabel = labels.find((label) => /^(?:iva|igic|impuestos?)$/.test(label.text));
+    const baseLabel = labels.find((label) => /^(?:base|subtotal)\b/.test(label.text));
+    const quotaLabel = labels.find((label) => /^cuota\b/.test(label.text));
+    const amountAfter = (label: (typeof labels)[number] | undefined) => {
+      if (!label) return [] as typeof amounts;
+      const next = labels.find((other) => other.start >= label.end);
+      return amounts.filter((amount) => amount.start >= label.end && (!next || amount.start < next.start));
+    };
+    const taxAmounts = amountAfter(taxLabel);
+    const baseAmounts = amountAfter(baseLabel);
+    const quotaAmounts = amountAfter(quotaLabel);
+    const rateText = taxLabel
+      ? searchable.slice(taxLabel.end, labels.find((label) => label.start >= taxLabel.end)?.start)
+      : "";
+    const rate = rateText.match(/(\d{1,2}(?:[,.]\d{1,2})?)\s*%/);
+
+    // Each amount belongs to the closest explicit field label, not to the
+    // last figure on the OCR row (which might be TOTAL, cash or change).
+    // Two unlabelled amounts following IVA may be base + tax; keep both
+    // candidates but mark the attribution as uncertain.
+    const ambiguousUnlabelled = taxAmounts.length > 1 && baseAmounts.length === 0 && quotaAmounts.length === 0;
+    const baseCents = baseAmounts[0]?.value ?? (ambiguousUnlabelled ? taxAmounts[0].value : null);
+    const taxCents = quotaAmounts[0]?.value
+      ?? (ambiguousUnlabelled ? taxAmounts.at(-1)!.value : taxAmounts[0]?.value ?? null);
+    const uncertain = ambiguousUnlabelled || taxAmounts.length > 1 || baseAmounts.length > 1
+      || quotaAmounts.length > 1 || (quotaAmounts.length > 0 && taxAmounts.length > 0
+        && quotaAmounts[0].value !== taxAmounts[0].value);
     const confidence = item.line.confidence;
+    const detected = taxCents !== null || Boolean(rate);
     result.push({
       ratePercent: rate ? Number(rate[1].replace(",", ".")) : null,
-      baseCents: values.length >= 2 ? values[values.length - 2] : null,
-      taxCents: values.length ? values[values.length - 1] : null,
+      baseCents,
+      taxCents,
       confidence,
-      trust: trustFor(confidence, values.length > 0 || Boolean(rate)),
+      trust: !detected ? "not_detected"
+        : taxCents === null || uncertain ? "doubtful"
+        : trustFor(confidence, true),
       evidence: [evidenceOf(item)],
     });
   }
