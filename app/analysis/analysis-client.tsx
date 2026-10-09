@@ -232,14 +232,18 @@ function DriverRanking({
   expanded,
   onToggle,
   merchant = false,
+  allMovementsHref,
 }: {
   title: string;
   items: Array<AnalysisDriver | AnalysisMerchantDriver>;
   expanded: boolean;
   onToggle: () => void;
   merchant?: boolean;
+  allMovementsHref?: string;
 }) {
-  const visible = expanded ? items.slice(0, 15) : items.slice(0, 5);
+  // The collapsed preview is intentionally short, but "Ver todos" must not
+  // silently cap the real ranking at 15 items.
+  const visible = expanded ? items : items.slice(0, 5);
   const headingId = `${title.toLocaleLowerCase("es-ES").replaceAll(" ", "-")}-heading`;
   return (
     <section className={styles.ranking} aria-labelledby={headingId}>
@@ -276,9 +280,15 @@ function DriverRanking({
       )}
       {items.length > 5 && (
         <button className={styles.textButton} type="button" onClick={onToggle} aria-expanded={expanded}>
-          {expanded ? "Ver menos" : "Ver todos"}
+          {expanded ? "Ver menos" : merchant && items.length >= 30 ? "Ver todos los disponibles" : "Ver todos"}
         </button>
       )}
+      {merchant && items.length >= 30 && allMovementsHref ? (
+        <p className={styles.empty}>
+          Se muestran como máximo los 30 comercios principales. Puede haber más fuera de este ranking.{" "}
+          <Link prefetch={false} href={allMovementsHref}>Buscar otros en Movimientos</Link>
+        </p>
+      ) : null}
     </section>
   );
 }
@@ -813,7 +823,7 @@ export default function AnalysisClient({
                 : merchantConcentrationPresentation?.label ?? "Sin gasto elegible"}</span>
             </div>
             <div className={styles.rankingsGrid}>
-              <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
+              <DriverRanking title="Comercios" items={currentMerchantDrivers} merchant allMovementsHref={periodHref(snapshot)} expanded={merchantsExpanded} onToggle={() => setMerchantsExpanded((value) => !value)} />
             </div>
             <details className={styles.merchantConcentrationDisclosure}>
               <summary>Ver curva de concentración</summary>
