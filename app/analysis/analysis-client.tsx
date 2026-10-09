@@ -239,7 +239,9 @@ function DriverRanking({
   onToggle: () => void;
   merchant?: boolean;
 }) {
-  const visible = expanded ? items.slice(0, 15) : items.slice(0, 5);
+  // The collapsed preview is intentionally short, but "Ver todos" must not
+  // silently cap the real ranking at 15 items.
+  const visible = expanded ? items : items.slice(0, 5);
   const headingId = `${title.toLocaleLowerCase("es-ES").replaceAll(" ", "-")}-heading`;
   return (
     <section className={styles.ranking} aria-labelledby={headingId}>
