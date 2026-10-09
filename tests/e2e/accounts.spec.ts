@@ -267,7 +267,7 @@ test("RECUPERACION-PRODUCTO · al cambiar de cuenta no muestra temporalmente los
   const metrics = page.getByRole("group", { name: "Resumen del periodo de la cuenta" });
   await expect(metrics).toContainText("1.500,00");
   await expect(page.getByLabel("Saldo total en cuentas")).toContainText(
-    "Los saldos individuales proceden de fechas o métodos distintos",
+    "los saldos individuales proceden de fechas o métodos distintos",
   );
   await page.getByRole("button", { name: /Ahorro · 0092/ }).click();
   await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
@@ -299,7 +299,7 @@ test("RECUPERACION-PRODUCTO · rechaza respuestas de otra cuenta sin mezclar ing
   await expect(metrics).toContainText("1.500,00");
   await page.getByRole("button", { name: /Ahorro · 0092/ }).click();
   await expect(page.getByRole("heading", { name: "Ahorro · 0092" })).toBeVisible();
-  await expect(page.getByRole("alert")).toContainText("no corresponde a la cuenta elegida");
+  await expect(page.locator("main").getByRole("alert")).toContainText("no corresponde a la cuenta elegida");
   await expect(metrics).toHaveCount(0);
   await expect(page.getByText("Movimiento prueba")).toHaveCount(0);
 });
@@ -324,5 +324,5 @@ test("RECUPERACION-PRODUCTO · totales simultáneos no llevan aviso de fechas me
   await page.goto("/accounts");
   const total = page.getByLabel("Saldo total en cuentas");
   await expect(total).toContainText("300,00");
-  await expect(total).not.toContainText("Los saldos individuales proceden de fechas o métodos distintos");
+  await expect(total).not.toContainText("los saldos individuales proceden de fechas o métodos distintos");
 });
