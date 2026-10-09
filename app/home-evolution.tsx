@@ -160,6 +160,14 @@ export default function HomeEvolution({
     const coverage = resolvePeriodCoverage({ dateFrom: row.monthStart, dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo, latestMovementDate });
     return { ...row, coverage: coverage.state };
   }), [dateTo, latestMovementDate, rows]);
+  // Scale only from observable bars. Values from an unobserved month must not
+  // compress every real month into an unreadable strip.
+  const observedScale = useMemo(() => {
+    const observed = coveredRows.filter((row) => row.coverage === "covered" || row.coverage === "partial");
+    return observed.length > 0
+      ? Math.max(1, ...observed.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)]))
+      : maxValue;
+  }, [coveredRows, maxValue]);
   const [mode, setMode] = useState<EvolutionMode>("income_expense");
   const [balanceCache, setBalanceCache] = useState<{ key: string; data: BalanceSeries } | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
@@ -266,7 +274,7 @@ export default function HomeEvolution({
         <>
           <FinancialBarChart
             rows={coveredRows}
-            maxValue={maxValue}
+            maxValue={observedScale}
             valuesVisible={valuesVisible}
             formatMoney={formatMoney}
             formatMonth={formatMonth}
