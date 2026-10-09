@@ -145,13 +145,29 @@ function valueAfterLabel(text: string) {
   return tokens.length > 1 ? tokens.slice(1).join(" ").trim() : null;
 }
 
-function extractMoneyField(lines: LocatedLine[], labels: RegExp[]) {
-  const item = findLabelled(lines, labels);
-  if (!item) return emptyField<number>();
-  const matches = item.line.text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g);
-  const raw = matches?.at(-1) ?? null;
-  const value = raw ? parseMoneyCents(raw) : null;
-  return fieldFrom(item, raw, value);
+function extractMoneyField(
+  lines: LocatedLine[],
+  labels: RegExp[],
+  options: { exclude?: RegExp; prefer?: RegExp } = {},
+) {
+  const candidates = lines.flatMap((item) => {
+    const normalized = normalizeToken(item.line.text);
+    if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
+    const matches = item.line.text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g);
+    const raw = matches?.at(-1);
+    const value = raw ? parseMoneyCents(raw) : null;
+    return raw && value !== null ? [{ item, raw, value, preferred: Boolean(options.prefer?.test(normalized)) }] : [];
+  });
+  if (!candidates.length) return emptyField<number>();
+  // Prefer an explicit final amount over a generic TOTAL, but do not erase
+  // contradictory alternatives that might be real in the source.
+  const chosen = candidates.find((candidate) => candidate.preferred) ?? candidates[0];
+  const field = fieldFrom(chosen.item, chosen.raw, chosen.value);
+  if (new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
+  return {
+    ...fieldRequiringReview(field),
+    evidence: candidates.map((candidate) => evidenceOf(candidate.item)),
+  };
 }
 
 function extractTaxId(lines: LocatedLine[]) {
