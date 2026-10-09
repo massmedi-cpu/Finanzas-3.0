@@ -53,6 +53,7 @@ const contextPath = `${dir}/context.json`;
 if (Deno.args[0] === "prepare") {
   const owner = await user("owner"), member = await user("member"), foreign = await user("foreign"), denied = await user("denied");
   const sql = database();
+  const fixtureIds: Record<string, string> = { categoryA, categoryB };
   try {
     await sql`insert into financial_app.workspaces(id,name) values (${workspaceA}::uuid,'AUD authenticated A'),(${workspaceB}::uuid,'AUD authenticated B')`;
     for (const [account, workspace, role] of [[owner, workspaceA, "owner"], [member, workspaceA, "member"], [foreign, workspaceB, "owner"]] as const) {
@@ -63,12 +64,46 @@ if (Deno.args[0] === "prepare") {
       await sql`select pg_catalog.set_config('financial_app.workspace_id',${workspace},false)`;
       await sql`insert into financial_app.categories(id,workspace_id,name,kind,icon_key,color_token) values (${id}::uuid,${workspace}::uuid,'AUD authenticated expense','expense','wallet','category.blue')`;
     }
+    await sql`select pg_catalog.set_config('financial_app.workspace_id',${workspaceA},false)`;
+    for (const [key, balance] of [['account', 50000], ['zeroAccount', 0], ['negativeAccount', -50000]] as const) {
+      const rows = await sql`insert into financial_app.accounts(name,type,opening_balance_cents) values (${'AUD ' + key},'checking',${balance}) returning id`;
+      fixtureIds[key] = rows[0].id;
+    }
+    const fixtureRows = [
+      ['split', '2026-09-25', -1732, 'expense', 'AUD SPLIT', null],
+      ['rule', '2026-09-26', -1900, 'expense', 'AUD RULE SHOP', null],
+      ['income', '2026-09-27', 150000, 'income', 'AUD INCOME', 50000],
+      ['rec1', '2026-06-15', -1000, 'expense', 'AUD MONTHLY PLAN', null],
+      ['rec2', '2026-07-15', -1000, 'expense', 'AUD MONTHLY PLAN', null],
+      ['rec3', '2026-08-15', -1000, 'expense', 'AUD MONTHLY PLAN', null],
+      ['rec4', '2026-09-15', -1000, 'expense', 'AUD MONTHLY PLAN', null],
+      ['duplicate', '2026-09-26', -1900, 'expense', 'AUD RULE SHOP DUPLICATE', null],
+      ['transfer', '2026-09-28', -700, 'transfer', 'AUD TRANSFER', null],
+      ['zero', '2026-09-29', 0, 'income', 'AUD TRUE ZERO', null],
+      ['extreme', '2026-08-20', -900000000, 'expense', 'AUD EXTREME', null],
+    ] as const;
+    for (const [key, date, amount, kind, concept, balance] of fixtureRows) {
+      const identity = '__aud_http_synthetic__::' + key;
+      const source = await sql`insert into financial_app.transaction_source_records(
+        source_file_id,source_sheet_id,source_row_key,source_row_identity,source_fingerprint,source_payload,
+        bank_date,concept_original,amount_cents,balance_after_cents,account_external_key
+      ) values ('__aud_http_synthetic__','isolated',${key},${identity},md5(${identity})||md5(${'fixture:' + key}),
+        ${sql.json({ synthetic: true, scope: 'disposable' })},${date}::date,${concept},${amount},${balance},'AUD account') returning id`;
+      const row = await sql`insert into financial_app.transactions(source_record_id,source_row_identity,account_id,
+        bank_date,concept_normalized,category_id,kind,amount_cents,balance_after_cents,review_state,duplicate_state)
+      values (${source[0].id}::uuid,${identity},${fixtureIds.account}::uuid,${date}::date,${concept},
+        ${kind === 'expense' ? categoryA : null}::uuid,${kind},${amount},${balance},'confirmed',${key === 'duplicate' ? 'suspected' : 'none'}) returning id`;
+      fixtureIds[key] = row[0].id;
+    }
+    const baseline = await sql`select md5(coalesce((select jsonb_agg(to_jsonb(t) order by id)::text from financial_app.transaction_source_records t),'[]')) as source_hash,
+      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
+    await Deno.writeTextFile(`${dir}/bank-baseline.json`, JSON.stringify(baseline[0]), { mode: 0o600 });
   } finally { await sql.end(); }
   const upload = await ok(owner.token, "document.upload_sign", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", sizeBytes: 1000 });
   assert(new URL(upload.signedUrl).hostname === "127.0.0.1", "external_upload_forbidden");
   const registered = await ok(owner.token, "document.register", { type: "ticket", originalFileName: "AUD-synthetic-ticket.png", mimeType: "image/png", storageProvider: "supabase", storageKey: upload.path, sourceDriveFileId: null, sizeBytes: null, sourceModifiedAt: null });
   assert(registered.document?.id, "fixture_document_missing");
-  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, upload, documentId: registered.document.id }), { mode: 0o600 });
+  await Deno.writeTextFile(contextPath, JSON.stringify({ owner, member, foreign, denied, upload, documentId: registered.document.id, fixtureIds }), { mode: 0o600 });
   console.log("AUD_AUTH|stage=prepared|users=4|workspaces=2|real_auth=true");
 } else if (Deno.args[0] === "verify") {
   const c = JSON.parse(await Deno.readTextFile(contextPath));
@@ -94,7 +129,7 @@ if (Deno.args[0] === "prepare") {
   await ok(c.owner.token, "document.test_designation", designation);
   const designated = await ok(c.owner.token, "document.detail", { id });
   assert(designated.document.isTest === true && designated.document.testDesignationReason === designation.reason, "designation_not_persisted");
-  assert((await ok(c.owner.token, "document.list", { scope: "ordinary" })).total === 0, "ordinary_queue_contains_test");
+  assert(!(await ok(c.owner.token, "document.list", { scope: "ordinary" })).items.some((d: any) => d.id === id), "ordinary_queue_contains_test");
   assert((await ok(c.owner.token, "document.list", { scope: "tests" })).total === 1, "test_view_missing");
   assert((await ok(c.foreign.token, "document.list", { scope: "all" })).total === 0, "cross_workspace_read_leak");
   await ok(c.owner.token, "document.test_designation", { ...designation, isTest: false, reason: "Restore ordinary treatment" });
@@ -161,5 +196,15 @@ if (Deno.args[0] === "prepare") {
   const bytes = new Uint8Array(await (await fetch(opened.url)).arrayBuffer());
   const hash = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map((b) => b.toString(16).padStart(2, "0")).join("");
   assert(hash === evidence.sourceSha256, "storage_original_changed");
-  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|oidc_envelope=not_tested");
+  const finalSql = database();
+  try {
+    const baseline = JSON.parse(await Deno.readTextFile(`${dir}/bank-baseline.json`));
+    const after = await finalSql`select md5(coalesce((select jsonb_agg(to_jsonb(t) order by id)::text from financial_app.transaction_source_records t),'[]')) as source_hash,
+      md5(coalesce((select jsonb_agg(to_jsonb(t)-'merchant_id'-'category_id'-'updated_at' order by id)::text from financial_app.transactions t),'[]')) as transaction_hash`;
+    assert(isDeepStrictEqual(after[0], baseline), 'http_mutated_immutable_bank_records');
+    const httpEvidence = JSON.parse(await Deno.readTextFile(`${dir}/http-ocr.json`));
+    const persisted = await finalSql`select raw_result from financial_app.document_ocr_runs where document_id=${httpEvidence.id}::uuid`;
+    assert(persisted.length === 1 && isDeepStrictEqual(persisted[0].raw_result, httpEvidence.raw), 'next_http_ocr_not_persisted_exactly');
+  } finally { await finalSql.end(); }
+  console.log("AUD_AUTH|stage=verified|owner_member=true|cross_workspace_denied=true|save_reload=true|ocr_real_persisted=true|human_review_persisted=true|jsonb_wire_regression=true|original_unchanged=true|immutable_bank_fields_unchanged=true|next_http_ocr_exact_sql=true|oidc_envelope=local_test_trust_anchor");
 } else { throw new Error("expected_prepare_or_verify"); }

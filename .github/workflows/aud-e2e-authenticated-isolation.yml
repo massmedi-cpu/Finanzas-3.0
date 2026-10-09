@@ -12,7 +12,11 @@ on:
       - 'src/application/document-ocr-service.ts'
       - 'src/domain/document-ocr*'
       - 'scripts/aud-e2e-authenticated-isolation.sh'
+      - 'scripts/aud-e2e-http-runtime.mjs'
+      - 'scripts/aud-e2e-local-network.cjs'
       - 'tests/e2e/aud-e2e-authenticated-isolation.spec.ts'
+      - 'tests/e2e/aud-e2e-full-http.spec.ts'
+      - 'app/api/**'
       - 'playwright.authenticated-isolation.config.ts'
       - '.github/workflows/aud-e2e-authenticated-isolation.yml'
 
@@ -26,7 +30,7 @@ concurrency:
 jobs:
   local-supabase-auth-storage-ocr:
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:

@@ -13,6 +13,10 @@ command -v docker >/dev/null
 workdir="$(mktemp -d)"
 export AUD_ISOLATED_DIR="$workdir"
 cleanup() {
+  for pid in "${gateway_pid:-}" "${jwks_pid:-}"; do
+    [[ -z "$pid" ]] || kill "$pid" 2>/dev/null || true
+  done
+  rm -f supabase/functions/financial-app-db-gateway/index.aud-local.ts
   npx --yes supabase@2.120.0 stop --workdir "$workdir" --no-backup >/dev/null 2>&1 || true
   rm -rf -- "$workdir"
 }
@@ -57,9 +61,25 @@ npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.np
   --allow-read --allow-write="$workdir" \
   --config supabase/functions/financial-app-db-gateway/deno.json \
   supabase/tests/aud_e2e_authenticated.ts prepare
+node scripts/aud-e2e-http-runtime.mjs prepare
+set -a
+source "$workdir/http.env"
+set +a
+node scripts/aud-e2e-http-runtime.mjs serve >"$workdir/jwks.log" 2>&1 &
+jwks_pid=$!
+npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
+  --allow-read --config supabase/functions/financial-app-db-gateway/deno.json \
+  supabase/functions/financial-app-db-gateway/index.aud-local.ts >"$workdir/gateway.log" 2>&1 &
+gateway_pid=$!
+for attempt in $(seq 1 90); do
+  if curl -s --max-time 1 -o /dev/null http://127.0.0.1:54331; then break; fi
+  if ! kill -0 "$gateway_pid" 2>/dev/null; then tail -30 "$workdir/gateway.log"; exit 1; fi
+  sleep 1
+done
+curl -fs --max-time 2 http://127.0.0.1:54330/jwks >/dev/null
 npx playwright test --config=playwright.authenticated-isolation.config.ts
 npx --yes deno@2.5.4 run --allow-env --allow-net=127.0.0.1,localhost,registry.npmjs.org,jsr.io \
   --allow-read --allow-write="$workdir" \
   --config supabase/functions/financial-app-db-gateway/deno.json \
   supabase/tests/aud_e2e_authenticated.ts verify
-echo "AUD_AUTH|status=ok|real_supabase_auth=true|real_storage=true|ocr_persisted=true|cloud_access=false|sha=$AUD_VALIDATION_SHA"
+echo "AUD_AUTH|status=ok|real_supabase_auth=true|real_storage=true|ocr_persisted=true|browser_next_gateway_http=true|oidc_signer=disposable_test_key|cloud_access=false|sha=$AUD_VALIDATION_SHA"
