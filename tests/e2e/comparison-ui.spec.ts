@@ -115,7 +115,7 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
 
   await page.goto(`/compare?primaryFrom=2026-10-01&primaryTo=2026-10-06&referenceFrom=2026-09-01&referenceTo=2026-09-06&accountId=${ACCOUNT_ID}`);
   const insight = page.locator("section").filter({ has: page.getByText("LECTURA PRINCIPAL", { exact: true }) });
-  await expect(insight).toContainText("último movimiento importado es del 29 sept 2026");
+  await expect(insight).toContainText("último movimiento importado es del 29/09/2026");
   await expect(insight).toContainText("No interpretamos 0 € como mejora");
   await expect(insight).not.toContainText("El gasto diario baja");
   const metrics = page.getByRole("region", { name: "Resumen comparativo" });
@@ -124,6 +124,33 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
   await expect(metrics.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Sin movimientos confirmados en el periodo");
   await expect(metrics).not.toContainText("−100");
   await expect(metrics).not.toContainText("-100");
+  const categories = page.getByRole("table", { name: /categorías/i });
+  const merchants = page.getByRole("table", { name: /comercios/i });
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  await expect(categories).toContainText("Sin dato");
+  await expect(categories).toContainText("Sin base comparable");
+  await expect(categories).not.toContainText("+30,00 €");
+  await expect(merchants).toContainText("Sin base comparable");
+  await expect(merchants).not.toContainText("+50,00 €");
+});
+
+test("REC-CMP-001 · cobertura parcial conserva importes observados pero no inventa causas del cambio", async ({ page }) => {
+  await mockComparison(page);
+  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({ available: true, latestMovementDate: "2026-09-05", sync: null }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  const categories = page.getByRole("table", { name: /categorías/i });
+  await expect(categories).toContainText("120,00 €");
+  await expect(categories).toContainText("Sin base comparable");
+  await expect(categories).not.toContainText("+30,00 €");
+  await expect(categories.getByRole("link", { name: /Alimentación, periodo principal/ })).toHaveAttribute("href", /categoryId=/);
+  const merchants = page.getByRole("table", { name: /comercios/i });
+  await expect(merchants).toContainText("Sin base comparable");
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("33,3 %");
 });
 
 test("CMP-UI-002 valida solapamientos sin perder la comparación vigente", async ({ page }) => {

@@ -1,26 +1,35 @@
 import type { AnalysisSnapshot } from "../../src/application/analysis/analysis-engine";
+import type { PeriodCoverage } from "../../src/application/data-coverage";
 import { buildAccumulatedDailySpend } from "../../src/application/analysis/analysis-calendar-series";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import styles from "./analysis-axioma53-summary.module.css";
 
 const compactDate = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "Europe/Madrid",
 });
 
 function formatDate(value: string) {
-  return compactDate.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+  return compactDate.format(new Date(`${value}T12:00:00Z`));
 }
 
-export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: AnalysisSnapshot }) {
-  const rows = buildAccumulatedDailySpend(
+export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapshot: AnalysisSnapshot; coverage: PeriodCoverage | null }) {
+  const observed = coverage?.state === "covered" || coverage?.state === "partial";
+  const partial = coverage?.state === "partial";
+  // Never draw a flat zero into days beyond the last imported movement.
+  const throughDate = observed && coverage?.throughDate ? coverage.throughDate : null;
+  const chartEnd = throughDate && throughDate < snapshot.selection.dateTo
+    ? throughDate
+    : snapshot.selection.dateTo;
+  const rows = observed && throughDate ? buildAccumulatedDailySpend(
     snapshot.dailySpend,
     snapshot.selection.dateFrom,
-    snapshot.selection.dateTo,
-  );
+    chartEnd,
+  ) : [];
 
-  if (snapshot.dailySpend.length === 0 || rows.length === 0) {
+  if (!observed || snapshot.dailySpend.length === 0 || rows.length === 0) {
     return (
       <section className={styles.shell} aria-labelledby="axioma53-accumulated-heading">
         <article className={styles.card}>
@@ -30,7 +39,11 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
               <h2 id="axioma53-accumulated-heading">Gasto acumulado del periodo</h2>
             </div>
           </div>
-          <p className={styles.empty}>No hay gastos elegibles en el periodo seleccionado.</p>
+          <p className={styles.empty}>{!observed
+            ? "No hay cobertura bancaria confirmada: todavía no se puede calcular el gasto acumulado."
+            : partial
+              ? "No se han observado gastos elegibles en los datos disponibles. El periodo sigue incompleto."
+              : "No hay gastos elegibles en el periodo seleccionado."}</p>
         </article>
       </section>
     );
@@ -66,11 +79,11 @@ export default function AnalysisAxioma53Summary({ snapshot }: { snapshot: Analys
             <h2 id="axioma53-accumulated-heading">Gasto acumulado del periodo</h2>
           </div>
           <div className={styles.total}>
-            <span>Total reconciliado</span>
+            <span>{partial ? "Gasto observado · parcial" : "Total reconciliado"}</span>
             <strong>{formatMoney(maximum)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye únicamente con el gasto diario elegible que ya cuadra con Movimientos. Los días sin gasto permanecen planos en su posición real del calendario; no introduce un segundo cálculo financiero.</p>
+        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
           <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(maximum)}`}>
             {tickValues.map((value) => {

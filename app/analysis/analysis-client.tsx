@@ -283,7 +283,7 @@ function DriverRanking({
   );
 }
 
-function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
+function QuickRead({ snapshot, comparisonReliable, currentObserved }: { snapshot: AnalysisSnapshot; comparisonReliable: boolean; currentObserved: boolean }) {
   const strongest = snapshot.changeDrivers[0] ?? null;
   const forecast = snapshot.forecast;
   const hasForecastItems = Boolean(forecast && forecast.summary.plannedItems > 0);
@@ -297,7 +297,21 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
         <span>LECTURA RÁPIDA</span>
         <strong>Lo importante del periodo</strong>
       </div>
-      {strongest ? (
+      {!comparisonReliable ? (
+        currentObserved ? (
+          <Link prefetch={false} className={styles.quickReadItem} href={periodHref(snapshot)}>
+            <span>Gasto observado</span>
+            <strong>{formatMoney(snapshot.current.expenseCents)}</strong>
+            <small>Datos incompletos · sin cambio comparable</small>
+          </Link>
+        ) : (
+          <div className={styles.quickReadItem}>
+            <span>Cambios</span>
+            <strong>Sin cobertura</strong>
+            <small>No se pueden identificar variaciones fiables</small>
+          </div>
+        )
+      ) : strongest ? (
         <Link prefetch={false} className={styles.quickReadItem} href={strongest.href ?? periodHref(snapshot)}>
           <span>Mayor cambio</span>
           <strong><CategoryIdentity categoryId={strongest.id} name={strongest.name} /></strong>
@@ -322,10 +336,10 @@ function QuickRead({ snapshot }: { snapshot: AnalysisSnapshot }) {
       </Link>
       <Link prefetch={false} className={styles.quickReadItem} href="#comercios-heading">
         <span>Concentración comercial</span>
-        <strong>{merchantConcentration.available
+        <strong>{!currentObserved ? "Sin dato" : merchantConcentration.available
           ? formatPercentBps(merchantConcentration.valueBps)
           : merchantConcentration.label ?? "Sin gasto elegible"}</strong>
-        <small>{merchantConcentration.available
+        <small>{!currentObserved ? "No hay cobertura bancaria confirmada" : merchantConcentration.available
           ? `del gasto ${topConcentrationContext(merchantConcentration.count, "comercio", "comercios")}`
           : merchantConcentration.detail ?? "concentración no disponible"}</small>
       </Link>
@@ -584,8 +598,8 @@ export default function AnalysisClient({
             />
           </section>
 
-          <AnalysisAxioma53Summary snapshot={snapshot} />
-          <QuickRead snapshot={snapshot} />
+          <AnalysisAxioma53Summary snapshot={snapshot} coverage={coverage} />
+          <QuickRead snapshot={snapshot} comparisonReliable={!coverageIncomplete} currentObserved={coverageHasObservedData} />
 
           <section className={`${styles.section} ${styles.trendSection}`} aria-labelledby="evolution-heading">
             <div className={styles.sectionHeading}>
@@ -607,15 +621,21 @@ export default function AnalysisClient({
           <section className={`${styles.section} ${styles.changeSection}`} aria-labelledby="change-heading">
             <div className={styles.sectionHeading}>
               <div>
-                <p>QUÉ HA CAMBIADO</p>
+                <p>{coverageIncomplete ? "GASTO OBSERVADO" : "QUÉ HA CAMBIADO"}</p>
                 <h2 id="change-heading">{changeHeadline}</h2>
-                <span>vs. {comparisonLabel(snapshot)}</span>
+                <span>{coverageIncomplete ? "Sin comparación fiable" : `vs. ${comparisonLabel(snapshot)}`}</span>
               </div>
               <span className={coverageIncomplete ? styles.neutralChip : expenseDirection > 0 ? styles.changeBad : expenseDirection < 0 ? styles.changeGood : styles.neutralChip}>
                 {coverageIncomplete ? "Comparación incompleta" : deltaText(expenseDirection)}
               </span>
             </div>
-            <ContributionChart rows={snapshot.changeDrivers} formatMoney={formatMoney} renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />} />
+            <ContributionChart
+              rows={coverageIncomplete ? snapshot.categoryDrivers : snapshot.changeDrivers}
+              formatMoney={formatMoney}
+              renderLabel={(row) => <CategoryIdentity categoryId={row.id} name={row.name} />}
+              comparisonReliable={!coverageIncomplete}
+              currentObserved={coverageHasObservedData}
+            />
           </section>
 
           <div className={styles.twoColumn}>

@@ -38,8 +38,8 @@ type ComparisonForm = {
 };
 
 const dateFormatter = new Intl.DateTimeFormat("es-ES", {
-  day: "numeric",
-  month: "short",
+  day: "2-digit",
+  month: "2-digit",
   year: "numeric",
   timeZone: "Europe/Madrid",
 });
@@ -55,7 +55,7 @@ function formFromSelection(selection: ResolvedComparisonSelection): ComparisonFo
 }
 
 function formatDate(value: string) {
-  return dateFormatter.format(new Date(`${value}T12:00:00Z`)).replace(".", "");
+  return dateFormatter.format(new Date(`${value}T12:00:00Z`));
 }
 
 function formatPeriod(dateFrom: string, dateTo: string) {
@@ -240,14 +240,27 @@ function DriverPanel({
   description,
   drivers,
   kind,
+  comparisonReliable,
+  primaryObserved,
+  referenceObserved,
 }: {
   title: string;
   description: string;
   drivers: ComparisonDriver[];
   kind: "categorías" | "comercios";
+  comparisonReliable: boolean;
+  primaryObserved: boolean;
+  referenceObserved: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const visible = expanded ? drivers : drivers.slice(0, 8);
+  // With insufficient coverage, sorting by a supposed "change" invents a
+  // ranking of causes. Keep the available side as the sorting criterion.
+  const orderedDrivers = comparisonReliable ? drivers : [...drivers].sort((a, b) => {
+    const aAmount = primaryObserved ? a.primaryExpenseCents : a.referenceExpenseCents;
+    const bAmount = primaryObserved ? b.primaryExpenseCents : b.referenceExpenseCents;
+    return bAmount - aAmount || a.name.localeCompare(b.name, "es");
+  });
+  const visible = expanded ? orderedDrivers : orderedDrivers.slice(0, 8);
   const hasMore = drivers.length > 8;
   let maximum = 0;
   for (const item of visible) maximum = Math.max(maximum, item.primaryExpenseCents, item.referenceExpenseCents);
@@ -271,13 +284,13 @@ function DriverPanel({
       ) : (
         <div id={`comparison-${kind}-table`} className={styles.tableScroller}>
           <table className={styles.driverTable}>
-            <caption className={styles.srOnly}>{title}: comparación entre periodo principal y referencia</caption>
+            <caption className={styles.srOnly}>{title}: {comparisonReliable ? "comparación entre periodo principal y referencia" : "importes observados sin comparación fiable"}</caption>
             <thead>
               <tr>
                 <th scope="col">{kind === "categorías" ? "Categoría" : "Comercio"}</th>
                 <th scope="col">Principal</th>
                 <th scope="col">Referencia</th>
-                <th scope="col">Diferencia</th>
+                <th scope="col">{comparisonReliable ? "Diferencia" : "Estado"}</th>
               </tr>
             </thead>
             <tbody>
@@ -289,14 +302,18 @@ function DriverPanel({
                   <tr key={`${kind}-${item.id ?? "unassigned"}`}>
                     <th scope="row">
                       <strong>{item.name}</strong>
-                      <span>{formatInteger(item.primaryRows)} vs {formatInteger(item.referenceRows)} mov.</span>
-                      <i className={styles.driverBar} aria-hidden="true"><i style={{ width: `${barWidth}%` }} /></i>
+                      <span>Principal: {primaryObserved ? `${formatInteger(item.primaryRows)} mov.` : "sin cobertura"} · Referencia: {referenceObserved ? `${formatInteger(item.referenceRows)} mov.` : "sin cobertura"}</span>
+                      {comparisonReliable ? <i className={styles.driverBar} aria-hidden="true"><i style={{ width: `${barWidth}%` }} /></i> : null}
                     </th>
-                    <td><DriverValue href={item.primaryHref} cents={item.primaryExpenseCents} label={`${item.name}, periodo principal`} /></td>
-                    <td><DriverValue href={item.referenceHref} cents={item.referenceExpenseCents} label={`${item.name}, referencia`} /></td>
+                    <td>{primaryObserved ? <DriverValue href={item.primaryHref} cents={item.primaryExpenseCents} label={`${item.name}, periodo principal`} /> : "Sin dato"}</td>
+                    <td>{referenceObserved ? <DriverValue href={item.referenceHref} cents={item.referenceExpenseCents} label={`${item.name}, referencia`} /> : "Sin dato"}</td>
                     <td>
-                      <strong className={metricTone(item.deltaCents, false)}>{signedMoney(item.deltaCents)}</strong>
-                      <span>{formatPercent(item.changeBps, true)}</span>
+                      {comparisonReliable ? (
+                        <>
+                          <strong className={metricTone(item.deltaCents, false)}>{signedMoney(item.deltaCents)}</strong>
+                          <span>{formatPercent(item.changeBps, true)}</span>
+                        </>
+                      ) : <span>Sin base comparable</span>}
                     </td>
                   </tr>
                 );
@@ -369,6 +386,13 @@ export default function ComparisonClient({
     dateTo: snapshot.selection.primaryTo,
     latestMovementDate: freshness?.latestMovementDate ?? null,
   }) : null;
+  const referenceCoverage = snapshot ? resolvePeriodCoverage({
+    dateFrom: snapshot.selection.referenceFrom,
+    dateTo: snapshot.selection.referenceTo,
+    latestMovementDate: freshness?.latestMovementDate ?? null,
+  }) : null;
+  const comparisonReliable = primaryCoverage !== null && referenceCoverage !== null
+    && periodComparisonIsReliable(primaryCoverage) && periodComparisonIsReliable(referenceCoverage);
   const activeRequest = useRef<AbortController | null>(null);
   const requestSequence = useRef(0);
 
@@ -578,16 +602,22 @@ export default function ComparisonClient({
 
             <div className={styles.driversGrid}>
               <DriverPanel
-                title="Qué categorías explican la diferencia"
-                description="Ordenadas por el cambio absoluto entre ambos periodos."
+                title={comparisonReliable ? "Qué categorías explican la diferencia" : "Categorías con actividad observada"}
+                description={comparisonReliable ? "Ordenadas por el cambio absoluto entre ambos periodos." : "La cobertura no permite atribuir diferencias. Consulta los importes disponibles sin concluir una mejora o empeoramiento."}
                 drivers={snapshot.categoryDrivers}
                 kind="categorías"
+                comparisonReliable={comparisonReliable}
+                primaryObserved={primaryCoverage !== null && periodHasObservedData(primaryCoverage)}
+                referenceObserved={referenceCoverage !== null && periodHasObservedData(referenceCoverage)}
               />
               <DriverPanel
-                title="Qué comercios explican la diferencia"
-                description="Cada importe enlaza con los movimientos que lo componen."
+                title={comparisonReliable ? "Qué comercios explican la diferencia" : "Comercios con actividad observada"}
+                description={comparisonReliable ? "Cada importe enlaza con los movimientos que lo componen." : "Los importes observados conservan el acceso al detalle; no mostramos diferencias sin una base comparable."}
                 drivers={snapshot.merchantDrivers}
                 kind="comercios"
+                comparisonReliable={comparisonReliable}
+                primaryObserved={primaryCoverage !== null && periodHasObservedData(primaryCoverage)}
+                referenceObserved={referenceCoverage !== null && periodHasObservedData(referenceCoverage)}
               />
             </div>
 
