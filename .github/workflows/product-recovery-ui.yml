@@ -2,7 +2,7 @@ name: Product recovery browser matrix
 
 on:
   pull_request:
-    branches: [main, work/product-recovery-20261009]
+    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009]
     paths:
       - 'app/**'
       - 'src/design/**'
@@ -61,6 +61,7 @@ jobs:
           tests/e2e/global-alerts-engine.spec.ts
           tests/e2e/cash-flow-evolution-plot.spec.ts
           tests/e2e/forecast-chart-timeline.spec.ts
+          tests/e2e/comparison-ui.spec.ts
           --project=chromium-desktop --project=chromium-mobile
       # Synthetic UI results are distinct from authenticated real persistence.
       # No financial originals, secrets or production access are used here.
