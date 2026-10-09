@@ -87,6 +87,9 @@ test("flags inconsistent base plus tax instead of coercing the source", async ()
   const interpretation = interpretDocumentOcrFinancially(raw);
   expect(interpretation.warnings).toContain("base_plus_tax_mismatch");
   expect(interpretation.totalCents.value).toBe(13000);
+  expect(interpretation.taxBaseCents.trust).toBe("doubtful");
+  expect(interpretation.taxesCents.trust).toBe("doubtful");
+  expect(interpretation.totalCents.trust).toBe("doubtful");
   expect(raw.plainText).toContain("TOTAL 130,00");
 });
 
