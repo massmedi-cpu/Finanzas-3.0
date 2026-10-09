@@ -26,7 +26,7 @@ function monthName(month: string) {
 }
 
 function realStatus(state: CashFlowView["actualState"]) {
-  if (state === "incomplete") return "Hay más de 2.000 movimientos o cambió la paginación. El detalle diario real no se muestra como completo.";
+  if (state === "incomplete") return "El detalle de movimientos del periodo no se ha cargado por completo. Los importes reales no se muestran como definitivos. Revisa el periodo o vuelve a cargar esta página.";
   if (state === "mismatch") return "El detalle real no concilia con el motor financiero. No se muestran netos diarios hasta revisar la diferencia.";
   return "No se han podido cargar juntos el resumen financiero y los movimientos reales. No se muestran importes reales.";
 }
