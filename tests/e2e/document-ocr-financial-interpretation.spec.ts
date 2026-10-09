@@ -195,9 +195,9 @@ test("marks an unqualified company name as doubtful even with legible OCR", asyn
 test("OCR prefers explicit issuer CIF over an earlier customer CIF", () => {
   const interpretation = interpretDocumentOcrFinancially(result([
     line("recipient-id", "Cliente: CIF B87654321", 0.99, 0.05),
-    line("issuer-id", "Emisor CIF B12345678", 0.96, 0.18),
+    line("issuer-id", "Emisor CIF B12345674", 0.96, 0.18),
   ]));
-  expect(interpretation.taxId.value).toBe("B12345678");
+  expect(interpretation.taxId.value).toBe("B12345674");
   expect(interpretation.taxId.trust).toBe("reliable");
   expect(interpretation.taxId.evidence[0]?.lineId).toBe("issuer-id");
 });
