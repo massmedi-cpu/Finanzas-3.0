@@ -308,7 +308,7 @@ test("budget gateway classifies domain errors and hides unexpected database deta
 test("Presupuestos mantiene formato español, jerarquía clara y controles accesibles", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   await expect(page.getByText(/1\.?200,00/).first()).toBeVisible();
@@ -332,7 +332,7 @@ test("Presupuestos mantiene formato español, jerarquía clara y controles acces
 test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el gasto habitual", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
@@ -360,7 +360,7 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
@@ -386,7 +386,7 @@ test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español
 test("Presupuestos explica el paso de gasto habitual a límite y ahorro objetivo", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
 
   const planning = page.getByRole("region", { name: "De la referencia a tu objetivo" });
   await expect(planning).toHaveAttribute("data-planning-state", "ready");
@@ -512,7 +512,7 @@ test("Presupuestos conserva el último mes si una respuesta anterior llega tarde
 test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuario lo pide", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.goto("/budgets");
+  await page.goto("/budgets?month=2026-09");
   await expect(page.getByRole("heading", { name: "Presupuestos", level: 1 })).toBeVisible();
   expect(writes).toHaveLength(0);
 
