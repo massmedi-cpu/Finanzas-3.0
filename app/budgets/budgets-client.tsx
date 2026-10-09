@@ -185,6 +185,9 @@ function BudgetCard({
     ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
     : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
   const comparisonLabel = hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
+  const progressLabel = hasChosenLimit && item.effectiveAmountCents === 0
+    ? item.actualExpenseCents > 0 ? "Límite 0 € superado" : "Límite 0 € sin gasto"
+    : formatProgress(item.progressBps);
   const inputRef = useRef<HTMLInputElement>(null);
   const fieldErrorId = `budget-manual-error-${total ? "total" : item.categoryId ?? "category"}`;
   const excessCents = Math.max(0, -item.remainingCents);
@@ -235,9 +238,9 @@ function BudgetCard({
 
       <div className={styles.progressMeta}>
         <span>{comparisonLabel}</span>
-        <strong>{formatProgress(item.progressBps)}</strong>
+        <strong>{progressLabel}</strong>
       </div>
-      <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel} ${formatProgress(item.progressBps)}`}>
+      <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel}: ${progressLabel}`}>
         <div
           className={`${styles.progressFill} ${item.status === "over" ? styles.progressOver : ""}`}
           style={{ width: `${progressWidth(item)}%` }}
@@ -352,6 +355,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const fetchGeneration = useRef(0);
   const fetchController = useRef<AbortController | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
+
+  // La URL es parte del contexto de un presupuesto; permite recargar o compartir el mes sin perderlo.
+  useEffect(() => {
+    const next = new URL(window.location.href);
+    if (next.searchParams.get("month") === month) return;
+    next.searchParams.set("month", month);
+    window.history.replaceState(window.history.state, "", `${next.pathname}${next.search}${next.hash}`);
+  }, [month]);
 
   const fetchSnapshot = useCallback(async (selectedMonth: string) => {
     const generation = ++fetchGeneration.current;
@@ -556,14 +567,20 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               onChange={(event) => {
                 if (event.target.value) setMonth(event.target.value);
               }}
-              disabled={busy}
+              disabled={busy || editingKey !== null}
+              title={editingKey !== null ? "Guarda o cancela la edición antes de cambiar de mes" : undefined}
             />
           </label>
-          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading}>
+          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading || editingKey !== null}>
             <Icon name="refresh" />
             {busy ? "Actualizando…" : "Actualizar referencia"}
           </button>
         </div>
+        {editingKey !== null ? (
+          <p className={styles.editorGuardMessage} role="status">
+            Tienes un límite en edición. Guárdalo o cancélalo antes de cambiar de mes o actualizar la referencia.
+          </p>
+        ) : null}
       </section>
 
       <div className={styles.content}>
