@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
+import { resolvePeriodCoverage } from "../application/data-coverage";
 import styles from "./financial-trend-chart.module.css";
 
 export type FinancialTrendPoint = {
@@ -9,6 +10,7 @@ export type FinancialTrendPoint = {
   incomeCents: number;
   expenseCents: number;
   operatingNetCents: number;
+  rows?: number;
 };
 
 type Props = {
@@ -17,6 +19,7 @@ type Props = {
   formatMonth: (date: string) => string;
   hrefForMonth: (monthStart: string) => string;
   partialMonthStart?: string | null;
+  latestMovementDate?: string | null;
 };
 
 type TrendView = "all" | "flow" | "net";
@@ -43,14 +46,31 @@ export function FinancialTrendChart({
   formatMonth,
   hrefForMonth,
   partialMonthStart = null,
+  latestMovementDate = null,
 }: Props) {
+  const assessed = useMemo(() => rows.map((row) => {
+    const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
+    monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
+    const coverage = resolvePeriodCoverage({
+      dateFrom: row.monthStart,
+      dateTo: monthEnd.toISOString().slice(0, 10),
+      latestMovementDate,
+    });
+    // A populated history is still useful when the freshness request fails,
+    // but its coverage must never be described as confirmed.
+    const observed = coverage.state === "covered" || coverage.state === "partial"
+      || (coverage.state === "unknown" && (row.rows ?? 0) > 0);
+    return { ...row, coverage, observed };
+  }), [latestMovementDate, rows]);
   const tooltipId = useId();
   const [activeMonth, setActiveMonth] = useState(rows.at(-1)?.monthStart ?? null);
   const [view, setView] = useState<TrendView>("all");
-  const active = rows.find((row) => row.monthStart === activeMonth) ?? rows.at(-1) ?? null;
-  const activeIndex = active ? rows.findIndex((row) => row.monthStart === active.monthStart) : -1;
-  const previous = activeIndex > 0 ? rows[activeIndex - 1] : null;
-  const comparablePrevious = active?.monthStart !== partialMonthStart ? previous : null;
+  const active = assessed.find((row) => row.monthStart === activeMonth) ?? assessed.at(-1) ?? null;
+  const activeIndex = active ? assessed.findIndex((row) => row.monthStart === active.monthStart) : -1;
+  const previous = activeIndex > 0 ? assessed[activeIndex - 1] : null;
+  const comparablePrevious = active?.observed && active.coverage.state === "covered"
+    && active.monthStart !== partialMonthStart
+    && previous?.observed && previous.coverage.state === "covered" ? previous : null;
   const netMonthDelta = active && comparablePrevious
     ? active.operatingNetCents - comparablePrevious.operatingNetCents
     : null;
@@ -65,7 +85,8 @@ export function FinancialTrendChart({
     const bottom = 42;
     const innerWidth = width - left - right;
     const innerHeight = height - top - bottom;
-    const values = rows.flatMap((row) => [row.incomeCents, row.expenseCents, row.operatingNetCents]);
+    const values = assessed.filter((row) => row.observed)
+      .flatMap((row) => [row.incomeCents, row.expenseCents, row.operatingNetCents]);
     const maximum = Math.max(1, ...values, 0);
     const minimum = Math.min(0, ...values);
     const span = Math.max(1, maximum - minimum);
@@ -74,19 +95,27 @@ export function FinancialTrendChart({
     const step = innerWidth / rows.length;
     const groupWidth = Math.min(58, step * 0.7);
     const barWidth = Math.max(8, groupWidth * 0.43);
-    const points = rows.map((row, index) => ({
+    const points = assessed.map((row, index) => ({
       x: left + step * index + step / 2,
       y: y(row.operatingNetCents),
+      observed: row.observed,
     }));
     const ticks = Array.from({ length: 5 }, (_, index) => maximum - (span * index) / 4);
     return { width, height, left, right, y, baseline, step, barWidth, points, ticks };
-  }, [rows]);
+  }, [assessed, rows.length]);
 
   if (!chart || rows.length === 0) {
     return <p className={styles.empty}>No hay histórico suficiente para dibujar la evolución.</p>;
   }
+  if (!assessed.some((row) => row.observed)) {
+    return <p className={styles.empty}>No hay meses con datos bancarios observados en este histórico. No dibujamos ceros como si fueran movimientos confirmados.</p>;
+  }
 
-  const path = chart.points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
+  const path = chart.points.map((point, index) => {
+    if (!point.observed) return "";
+    const previousPoint = index > 0 ? chart.points[index - 1] : null;
+    return `${previousPoint?.observed ? "L" : "M"} ${point.x} ${point.y}`;
+  }).filter(Boolean).join(" ");
   const netPointLabel = (row: FinancialTrendPoint) => `Neto ${longMonthLabel(row.monthStart)}: ${formatMoney(row.operatingNetCents)} · ${netState(row.operatingNetCents)}`;
   const netMonthDeltaLabel = (cents: number) => cents === 0
     ? "Neto sin cambios frente al mes anterior"
@@ -135,7 +164,8 @@ export function FinancialTrendChart({
           })}
           <line className={styles.zeroLine} x1={chart.left} x2={chart.width - chart.right} y1={chart.baseline} y2={chart.baseline} />
 
-          {view !== "net" && rows.map((row, index) => {
+          {view !== "net" && assessed.map((row, index) => {
+            if (!row.observed) return null;
             const center = chart.left + chart.step * index + chart.step / 2;
             const incomeY = chart.y(row.incomeCents);
             const expenseY = chart.y(row.expenseCents);
@@ -149,15 +179,15 @@ export function FinancialTrendChart({
           })}
 
           {view !== "flow" && <path className={styles.netLine} d={path} />}
-          {view !== "flow" && chart.points.map((point, index) => (
+          {view !== "flow" && chart.points.map((point, index) => point.observed ? (
             <circle
-              key={rows[index].monthStart}
-              className={rows[index].monthStart === active?.monthStart ? styles.netPointActive : styles.netPoint}
+              key={assessed[index].monthStart}
+              className={assessed[index].monthStart === active?.monthStart ? styles.netPointActive : styles.netPoint}
               cx={point.x}
               cy={point.y}
-              r={rows[index].monthStart === active?.monthStart ? 7 : 4.5}
+              r={assessed[index].monthStart === active?.monthStart ? 7 : 4.5}
             />
-          ))}
+          ) : null)}
         </svg>
       </div>
 
@@ -166,14 +196,14 @@ export function FinancialTrendChart({
           <thead>
             <tr>
               <th scope="col">Métrica</th>
-              {rows.map((row) => <th key={row.monthStart} scope="col">{longMonthLabel(row.monthStart)}</th>)}
+              {assessed.map((row) => <th key={row.monthStart} scope="col">{longMonthLabel(row.monthStart)}</th>)}
             </tr>
           </thead>
           <tbody>
             {tableRows.map((metric) => (
               <tr key={metric.key}>
                 <th scope="row">{metric.label}</th>
-                {rows.map((row) => <td key={`${metric.key}-${row.monthStart}`}>{formatMoney(metric.value(row))}</td>)}
+                {assessed.map((row) => <td key={`${metric.key}-${row.monthStart}`}>{row.observed ? formatMoney(metric.value(row)) : "Sin dato"}</td>)}
               </tr>
             ))}
           </tbody>
@@ -182,8 +212,8 @@ export function FinancialTrendChart({
 
       <div className={styles.monthViewport}>
         <div className={styles.monthRail} style={{ gridTemplateColumns: `repeat(${rows.length}, minmax(2.75rem, 1fr))` }}>
-          {rows.map((row) => {
-            const partial = row.monthStart === partialMonthStart;
+          {assessed.map((row) => {
+            const partial = row.coverage.state === "partial" || row.monthStart === partialMonthStart;
             const selected = row.monthStart === active?.monthStart;
             return (
               <button
@@ -192,12 +222,16 @@ export function FinancialTrendChart({
                 className={selected ? styles.monthButtonActive : styles.monthButton}
                 aria-pressed={selected}
                 aria-describedby={selected ? tooltipId : undefined}
-                aria-label={`${netPointLabel(row)}. Ingresos ${formatMoney(row.incomeCents)}; gastos ${formatMoney(row.expenseCents)}${partial ? "; periodo parcial" : ""}`}
+                data-month-coverage={row.coverage.state}
+                aria-label={row.observed
+                  ? `${netPointLabel(row)}. Ingresos ${formatMoney(row.incomeCents)}; gastos ${formatMoney(row.expenseCents)}${partial ? "; periodo parcial" : ""}${row.coverage.state === "unknown" ? "; cobertura sin confirmar" : ""}`
+                  : `${longMonthLabel(row.monthStart)}: sin datos bancarios confirmados`}
                 onClick={() => setActiveMonth(row.monthStart)}
                 onFocus={() => setActiveMonth(row.monthStart)}
               >
                 <span>{formatMonth(row.monthStart)}</span>
-                {partial && <small>Parcial</small>}
+                {partial && row.observed && <small>Parcial</small>}
+                {!row.observed && <small>Sin dato</small>}
               </button>
             );
           })}
@@ -208,16 +242,19 @@ export function FinancialTrendChart({
         <div id={tooltipId} className={styles.readout} role="tooltip" aria-live="polite">
           <div>
             <strong>{formatMonth(active.monthStart)}</strong>
-            {active.monthStart === partialMonthStart && <span className={styles.partialBadge}>Parcial</span>}
-            <span>{netPointLabel(active)}</span>
+            {(active.coverage.state === "partial" || active.monthStart === partialMonthStart) && active.observed && <span className={styles.partialBadge}>Parcial</span>}
+            <span>{active.observed ? netPointLabel(active) : "Sin datos bancarios confirmados para este mes"}</span>
+            {active.observed && active.coverage.state === "unknown" && <span>Cobertura del mes pendiente de verificar</span>}
             {netMonthDelta !== null && <span>{netMonthDeltaLabel(netMonthDelta)}</span>}
           </div>
-          <dl>
-            <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
-            <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
-            <div><dt>Neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
-          </dl>
-          <Link href={hrefForMonth(active.monthStart)} aria-label={`Ver movimientos de ${longMonthLabel(active.monthStart)}`}>Ver movimientos del periodo</Link>
+          {active.observed ? <>
+            <dl>
+              <div><dt>Ingresos</dt><dd>{formatMoney(active.incomeCents)}</dd></div>
+              <div><dt>Gastos</dt><dd>{formatMoney(active.expenseCents)}</dd></div>
+              <div><dt>Neto</dt><dd className={active.operatingNetCents < 0 ? styles.negative : styles.positive}>{formatMoney(active.operatingNetCents)}</dd></div>
+            </dl>
+            <Link href={hrefForMonth(active.monthStart)} aria-label={`Ver movimientos de ${longMonthLabel(active.monthStart)}`}>Ver movimientos del periodo</Link>
+          </> : null}
         </div>
       )}
     </section>

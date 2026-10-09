@@ -466,3 +466,30 @@ test("AUD-E2E-NAV-001 · avanzado refleja los 3 meses aplicados sin recarga", as
   await expect(advanced.getByRole("button", { name: "3 meses" })).toHaveAttribute("aria-pressed", "true");
   await expect(advanced.getByLabel("Mes para análisis avanzado")).toHaveValue("2026-09");
 });
+
+
+test("REC-ANA-002 · evolución mensual no representa un mes sin cobertura como cero", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.history = [
+    { monthStart: "2026-07-01", rows: 1, incomeCents: 10_000, expenseCents: 2_000, operatingNetCents: 8_000, savingsCents: 8_000, savingsRateBps: 8_000 },
+    { monthStart: "2026-08-01", rows: 3, incomeCents: 20_000, expenseCents: 15_000, operatingNetCents: 5_000, savingsCents: 5_000, savingsRateBps: 2_500 },
+    { monthStart: "2026-09-01", rows: 0, incomeCents: 0, expenseCents: 0, operatingNetCents: 0, savingsCents: 0, savingsRateBps: null },
+  ];
+  await loadMockAnalysis(page, snapshot, "2026-08-31");
+
+  const chart = page.getByRole("region", { name: "Comparativa financiera visual" });
+  await expect(chart).toBeVisible();
+  await expect(chart.locator('button[data-month-coverage="covered"]')).toHaveCount(2);
+  const missing = chart.locator('button[data-month-coverage="none"]');
+  await expect(missing).toHaveCount(1);
+  await expect(missing).toContainText("Sin dato");
+  const data = chart.getByRole("table", { name: "Datos de la comparativa financiera" });
+  await expect(data.getByRole("row", { name: /Ingresos/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await expect(data.getByRole("row", { name: /Gastos/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await expect(data.getByRole("row", { name: /Neto/ }).getByRole("cell").last()).toHaveText("Sin dato");
+  await missing.click();
+  const readout = chart.getByRole("tooltip");
+  await expect(readout).toContainText("Sin datos bancarios confirmados para este mes");
+  await expect(readout).not.toContainText("equilibrio");
+  await expect(readout.getByRole("link", { name: /Ver movimientos/ })).toHaveCount(0);
+});

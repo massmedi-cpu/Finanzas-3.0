@@ -614,6 +614,7 @@ export default function AnalysisClient({
               formatMoney={formatMoney}
               formatMonth={formatShortMonth}
               partialMonthStart={snapshot.selection.partialMonthStart}
+              latestMovementDate={latestMovementDate}
               hrefForMonth={(monthStart) => monthHref(snapshot, monthStart)}
             />
           </section>
