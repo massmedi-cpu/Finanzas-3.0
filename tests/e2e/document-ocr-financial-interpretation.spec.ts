@@ -87,6 +87,9 @@ test("flags inconsistent base plus tax instead of coercing the source", async ()
   const interpretation = interpretDocumentOcrFinancially(raw);
   expect(interpretation.warnings).toContain("base_plus_tax_mismatch");
   expect(interpretation.totalCents.value).toBe(13000);
+  expect(interpretation.taxBaseCents.trust).toBe("doubtful");
+  expect(interpretation.taxesCents.trust).toBe("doubtful");
+  expect(interpretation.totalCents.trust).toBe("doubtful");
   expect(raw.plainText).toContain("TOTAL 130,00");
 });
 
@@ -137,4 +140,158 @@ test("keeps ambiguous weak receipt evidence doubtful instead of promoting it", a
   expect(interpretation.documentNumber.trust).toBe("doubtful");
   expect(interpretation.totalCents.trust).toBe("doubtful");
   expect(interpretation.issuer.trust).toBe("doubtful");
+});
+
+
+test("prioritizes an explicit issue date over an earlier unrelated legal date", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("conditions", "Válido hasta 10/11/2027", 0.99, 0.05),
+    line("period", "Periodo: 01/09/2026 - 30/09/2026", 0.98, 0.10),
+    line("date", "Fecha de emisión: 01/10/2026", 0.96, 0.20),
+  ]));
+  expect(interpretation.date.value).toBe("2026-10-01");
+  expect(interpretation.date.trust).toBe("reliable");
+  expect(interpretation.date.evidence[0]?.lineId).toBe("date");
+});
+
+test("does not invent a document date from expiry and billing period dates", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("expiration", "Fecha de vencimiento: 10/11/2026", 0.99, 0.10),
+    line("period", "Periodo: 01/09/2026 - 30/09/2026", 0.99, 0.20),
+  ]));
+  expect(interpretation.date.value).toBeNull();
+  expect(interpretation.date.trust).toBe("not_detected");
+});
+
+test("keeps an unlabelled receipt date available but requests review", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("date", "01-10-2026 08:31", 0.99, 0.10),
+    line("total", "TOTAL 4,00", 0.99, 0.90),
+  ]));
+  expect(interpretation.date.value).toBe("2026-10-01");
+  expect(interpretation.date.trust).toBe("doubtful");
+  expect(interpretation.date.evidence[0]?.lineId).toBe("date");
+});
+
+test("does not confuse a recipient's company with an explicitly named issuer", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("recipient", "Razón social: CLIENTE INDUSTRIAL SL", 0.99, 0.10),
+    line("issuer", "Emisor: OFICINA SERVICIOS SL", 0.96, 0.18),
+  ]));
+  expect(interpretation.issuer.value).toBe("OFICINA SERVICIOS SL");
+  expect(interpretation.issuer.trust).toBe("reliable");
+  expect(interpretation.issuer.evidence[0]?.lineId).toBe("issuer");
+});
+
+test("marks an unqualified company name as doubtful even with legible OCR", async () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("company", "Razón social: CLIENTE INDUSTRIAL SL", 0.99, 0.10),
+    line("date", "Fecha: 01/10/2026", 0.99, 0.20),
+  ]));
+  expect(interpretation.issuer.value).toBe("CLIENTE INDUSTRIAL SL");
+  expect(interpretation.issuer.trust).toBe("doubtful");
+});
+
+test("OCR prefers explicit issuer CIF over an earlier customer CIF", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("recipient-id", "Cliente: CIF B87654321", 0.99, 0.05),
+    line("issuer-id", "Emisor CIF B12345674", 0.96, 0.18),
+  ]));
+  expect(interpretation.taxId.value).toBe("B12345674");
+  expect(interpretation.taxId.trust).toBe("reliable");
+  expect(interpretation.taxId.evidence[0]?.lineId).toBe("issuer-id");
+});
+
+test("OCR never assigns a recipient-only fiscal ID to the issuer", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("client", "Datos del cliente - NIF 12345678Z", 0.99, 0.10),
+    line("total", "TOTAL 23,00", 0.98, 0.90),
+  ]));
+  expect(interpretation.taxId.value).toBeNull();
+  expect(interpretation.taxId.trust).toBe("not_detected");
+});
+
+test("OCR keeps an unassigned NIF as doubtful rather than reliable", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("tax", "CIF B12345678", 0.99, 0.10),
+  ]));
+  expect(interpretation.taxId.value).toBe("B12345678");
+  expect(interpretation.taxId.trust).toBe("doubtful");
+  expect(interpretation.taxId.evidence[0]?.lineId).toBe("tax");
+});
+
+test("OCR finds an explicitly attributed issuer ID after a generic fiscal ID", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("generic", "NIF 12345678Z", 0.99, 0.10),
+    line("supplier", "Proveedor: NIF 87654321X", 0.99, 0.20),
+  ]));
+  expect(interpretation.taxId.value).toBe("87654321X");
+  expect(interpretation.taxId.trust).toBe("reliable");
+});
+
+test("OCR ignores discount totals when the payable total is explicit", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("discount", "TOTAL DESCUENTO 30,00", 0.99, 0.60),
+    line("payable", "TOTAL A PAGAR 70,00", 0.98, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(7000);
+  expect(interpretation.totalCents.trust).toBe("reliable");
+  expect(interpretation.totalCents.evidence[0]?.lineId).toBe("payable");
+});
+
+test("OCR keeps conflicting total candidates available but doubtful", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("initial", "TOTAL 95,00", 0.99, 0.55),
+    line("final", "TOTAL A PAGAR 90,00", 0.98, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(9000);
+  expect(interpretation.totalCents.trust).toBe("doubtful");
+  expect(interpretation.totalCents.evidence.map((entry) => entry.lineId)).toEqual(["initial", "final"]);
+});
+
+test("OCR does not downgrade consistent duplicate copies of the same total", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("total", "TOTAL 25,00", 0.98, 0.55),
+    line("card", "TOTAL TARJETA 25,00", 0.97, 0.85),
+  ]));
+  expect(interpretation.totalCents.value).toBe(2500);
+  expect(interpretation.totalCents.trust).toBe("reliable");
+});
+
+test("OCR distinguishes store hours from an explicit purchase time", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("schedule", "Horario apertura: 09:00 - 21:00", 0.99, 0.12),
+    line("purchase", "Hora: 13:45", 0.97, 0.22),
+  ]));
+  expect(interpretation.time.value).toBe("13:45");
+  expect(interpretation.time.trust).toBe("reliable");
+  expect(interpretation.time.evidence[0]?.lineId).toBe("purchase");
+});
+
+test("OCR does not assign shop opening time as document purchase time", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("schedule", "Horario de apertura: 09:00 - 21:00", 0.99, 0.10),
+  ]));
+  expect(interpretation.time.value).toBeNull();
+  expect(interpretation.time.trust).toBe("not_detected");
+});
+
+test("OCR keeps an unlabelled receipt clock available but doubtful", () => {
+  const interpretation = interpretDocumentOcrFinancially(result([
+    line("clock", "13:45", 0.99, 0.10),
+  ]));
+  expect(interpretation.time.value).toBe("13:45");
+  expect(interpretation.time.trust).toBe("doubtful");
+});
+
+test("explicit incorrect CIF checksum remains doubtful, not reliable", () => {
+  const x = interpretDocumentOcrFinancially(result([line("bad", "Emisor CIF B12345678", 0.99, 0.10)]));
+  expect(x.taxId.value).toBe("B12345678");
+  expect(x.taxId.trust).toBe("doubtful");
+});
+test("explicit DNI uses the Spanish check letter before declaring a reliable ID", () => {
+  const good = interpretDocumentOcrFinancially(result([line("good", "Proveedor NIF 12345678Z", 0.99, 0.10)]));
+  const bad = interpretDocumentOcrFinancially(result([line("bad", "Proveedor NIF 12345678A", 0.99, 0.10)]));
+  expect(good.taxId.trust).toBe("reliable");
+  expect(bad.taxId.trust).toBe("doubtful");
 });
