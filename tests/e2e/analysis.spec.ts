@@ -744,3 +744,43 @@ test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura ante
     releaseScopedRequest?.();
   }
 });
+
+
+test("REC-COV-010 · volver a todas las cuentas no hereda la cuenta de la URL original", async ({ page }) => {
+  const specific = mockSnapshot();
+  const accountId = specific.accounts[0].id;
+  specific.selection.accountId = accountId;
+  const all = mockSnapshot();
+  const freshnessScopes: Array<string | null> = [];
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    freshnessScopes.push(scope);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(scope === accountId ? specific : all),
+    });
+  });
+
+  await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
+  await expect.poll(() => freshnessScopes.includes(accountId)).toBe(true);
+  await page.getByLabel("Cuenta", { exact: true }).first().selectOption("");
+  const requestsBeforeSwitch = freshnessScopes.length;
+  await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+  await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m(?!.*accountId)/);
+  await expect.poll(() => freshnessScopes.slice(requestsBeforeSwitch).includes(null)).toBe(true);
+});
