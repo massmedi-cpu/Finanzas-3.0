@@ -294,6 +294,10 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
       if (route === '/cash-flow') {
         await expect(page.getByText('No se han podido cargar juntos el resumen financiero y los movimientos reales.', { exact: false })).toHaveCount(0);
         await expect(page.getByText('No se pudo cargar el motor de Previsión.', { exact: false })).toHaveCount(0);
+        const dailyTable = page.getByRole('table', { name: 'Datos diarios acumulados del Cash Flow', exact: true });
+        await expect(dailyTable).toHaveCount(1);
+        await expect(dailyTable.getByRole('columnheader')).toHaveCount(4);
+        await expect(dailyTable.locator('tbody tr')).toHaveCount(30);
       }
       // Wait for actual route data where it exists, rather than only auditing a loader.
       await expect.poll(() => page.locator('main [aria-busy="true"]').count(), { timeout: 35_000 }).toBe(0);
@@ -301,6 +305,15 @@ for (const width of [360, 390, 768, 820, 1024, 1348, 1440]) {
         await page.locator('html').evaluate((element, value) => element.setAttribute('data-theme', value), theme);
         await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
         const dimensions = await page.evaluate(() => ({ width: innerWidth, html: document.documentElement.scrollWidth, body: document.body.scrollWidth }));
+        if (dimensions.html > dimensions.width + 1 || dimensions.body > dimensions.width + 1) {
+          const overflow = await page.locator('#main-content *').evaluateAll(elements => elements.flatMap(element => {
+            const rect = element.getBoundingClientRect();
+            if (rect.right <= innerWidth + 1) return [];
+            const style = getComputedStyle(element);
+            return [{ tag: element.tagName, class: element.className, right: Math.round(rect.right), width: Math.round(rect.width), display: style.display, position: style.position, overflowX: style.overflowX }];
+          }).slice(0, 12));
+          console.log(`AUD_HTTP|diagnostic=layout_overflow|route=${route}|theme=${theme}|viewport=${width}|elements=${JSON.stringify(overflow)}`);
+        }
         expect(dimensions.html, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
         expect(dimensions.body, `${route} ${theme}`).toBeLessThanOrEqual(dimensions.width + 1);
       }
