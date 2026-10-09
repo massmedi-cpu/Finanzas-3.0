@@ -185,7 +185,7 @@ function BudgetCard({
   // Sin referencia histórica no equivale a haber elegido un límite de 0 €.
   const withoutReference = !hasChosenLimit && item.status === "unfunded";
   const referenceLabel = withoutReference ? "Referencia no disponible" : hasChosenLimit ? "Límite elegido" : "Referencia automática";
-  const remainingLabel = withoutReference ? "Gasto sin referencia"
+  const remainingLabel = withoutReference ? "Margen no calculable"
     : item.remainingCents >= 0
       ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
       : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
@@ -219,7 +219,9 @@ function BudgetCard({
             <p>
               {hasChosenLimit
                 ? "Límite elegido por ti"
-                : "Referencia automática · Axioma §52"}
+                : withoutReference
+                  ? "Sin histórico suficiente para fijar una referencia"
+                  : "Referencia automática · Axioma §52"}
               {!total && item.categoryLifecycle === "archived" ? " · categoría archivada" : ""}
             </p>
           </div>
@@ -230,7 +232,7 @@ function BudgetCard({
       <div className={styles.amounts}>
         <div>
           <span>{referenceLabel}</span>
-          <strong>{formatMoney(item.effectiveAmountCents)}</strong>
+          <strong>{withoutReference ? "—" : formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
           <span>Gastado</span>
@@ -238,7 +240,7 @@ function BudgetCard({
         </div>
         <div>
           <span>{remainingLabel}</span>
-          <strong>{formatMoney(Math.abs(item.remainingCents))}</strong>
+          <strong>{withoutReference ? "—" : formatMoney(Math.abs(item.remainingCents))}</strong>
         </div>
       </div>
 
