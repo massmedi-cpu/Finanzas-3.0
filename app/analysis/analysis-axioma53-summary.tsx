@@ -57,18 +57,31 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
   const bottom = 36;
   const innerWidth = width - left - right;
   const innerHeight = height - top - bottom;
-  const maximum = Math.max(1, rows.at(-1)?.accumulatedCents ?? 0);
+  // The last known accumulated amount is a financial total, NOT the visual
+  // maximum. A later refund can lower it; a real zero must remain 0,00 €.
+  const finalCents = rows.at(-1)?.accumulatedCents ?? 0;
+  const domainMin = Math.min(0, ...rows.map((row) => row.accumulatedCents));
+  const domainMax = Math.max(0, ...rows.map((row) => row.accumulatedCents));
+  const domainSpan = Math.max(1, domainMax - domainMin);
+  const flatZero = domainMin === domainMax;
+  const yFor = (value: number) => flatZero
+    ? top + innerHeight
+    : top + ((domainMax - value) / domainSpan) * innerHeight;
+  const baselineY = yFor(0);
   const step = rows.length > 1 ? innerWidth / (rows.length - 1) : 0;
   const points = rows.map((row, index) => ({
     x: rows.length > 1 ? left + (step * index) : left + (innerWidth / 2),
-    y: top + (1 - row.accumulatedCents / maximum) * innerHeight,
+    y: yFor(row.accumulatedCents),
     row,
   }));
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x} ${point.y}`).join(" ");
-  const area = points.length > 1
-    ? `${path} L ${points.at(-1)?.x} ${height - bottom} L ${points[0].x} ${height - bottom} Z`
+  const area = points.length > 1 && !flatZero
+    ? `${path} L ${points.at(-1)?.x} ${baselineY} L ${points[0].x} ${baselineY} Z`
     : "";
-  const tickValues = [0, 0.5, 1].map((ratio) => Math.round(maximum * ratio));
+  const tickValues = flatZero
+    ? [0]
+    : [...new Set([domainMin, Math.round((domainMin + domainMax) / 2), domainMax])];
+  const hasNegativeDailyAdjustment = rows.some((row) => row.expenseCents < 0);
 
   return (
     <section className={styles.shell} aria-labelledby="axioma53-accumulated-heading">
@@ -80,14 +93,14 @@ export default function AnalysisAxioma53Summary({ snapshot, coverage }: { snapsh
           </div>
           <div className={styles.total}>
             <span>{partial ? "Gasto observado · parcial" : "Total reconciliado"}</span>
-            <strong>{formatMoney(maximum)}</strong>
+            <strong>{formatMoney(finalCents)}</strong>
           </div>
         </div>
-        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}</p>
+        <p className={styles.context}>Se construye con gasto diario elegible conciliado con Movimientos y no introduce un segundo cálculo financiero. {partial ? `Datos observados hasta el ${formatDate(chartEnd)}: el resto del periodo no se representa como cero.` : "Los días sin gasto permanecen planos cuando su cobertura bancaria está confirmada."}{hasNegativeDailyAdjustment ? " Los ajustes o devoluciones pueden reducir el acumulado; la escala conserva los máximos y mínimos observados." : ""}</p>
         <div className={styles.chartViewport} role="region" aria-label="Gráfica de gasto acumulado" tabIndex={0}>
-          <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(maximum)}`}>
+          <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Gasto acumulado: ${formatMoney(finalCents)}`}>
             {tickValues.map((value) => {
-              const y = top + (1 - value / maximum) * innerHeight;
+              const y = yFor(value);
               return (
                 <g className={styles.grid} key={value}>
                   <line x1={left} x2={width - right} y1={y} y2={y} />
