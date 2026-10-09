@@ -107,5 +107,31 @@ for (const sample of cases) {
     console.error(`FAIL · ${sample.name}`, error.message);
   }
 }
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length - failures}/${cases.length} PASS`);
+
+const taxLineCases = [
+  { name: "tax line does not steal invoice total", line: "BASE 100,00 IVA 21,00 TOTAL 121,00", base: 10000, tax: 2100, rate: null, trust: "reliable" },
+  { name: "tax line before total without base", line: "IVA 10,00 TOTAL 110,00", base: null, tax: 1000, rate: null, trust: "reliable" },
+  { name: "explicit quota and base identify their own amounts", line: "IVA 21% BASE 100,00 CUOTA 21,00", base: 10000, tax: 2100, rate: 21, trust: "reliable" },
+  { name: "unlabelled amounts require review", line: "IVA 21% 100,00 21,00", base: 10000, tax: 2100, rate: 21, trust: "doubtful" },
+  { name: "invoice total is not tax when tax line has no amount", line: "IVA 21% TOTAL 121,00", base: null, tax: null, rate: 21, trust: "doubtful" },
+  { name: "tax percentage alone is not an amount", line: "IVA 21%", base: null, tax: null, rate: 21, trust: "doubtful" },
+  { name: "change is never taken as a tax", line: "IVA 21% 100,00 21,00 CAMBIO 20,00", base: 10000, tax: 2100, rate: 21, trust: "doubtful" },
+];
+for (const sample of taxLineCases) {
+  const row = interpret([sample.line]).taxLines[0];
+  try {
+    assert.ok(row, sample.name + ": tax row exists");
+    assert.equal(row.baseCents, sample.base, sample.name + ": base");
+    assert.equal(row.taxCents, sample.tax, sample.name + ": tax");
+    assert.equal(row.ratePercent, sample.rate, sample.name + ": rate");
+    assert.equal(row.trust, sample.trust, sample.name + ": trust");
+    assert.equal(row.evidence[0].rawText, sample.line, sample.name + ": original evidence");
+    console.log("PASS · " + sample.name);
+  } catch (error) {
+    failures++;
+    console.error("FAIL · " + sample.name, error.message);
+  }
+}
+
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length - failures}/${cases.length + taxLineCases.length} PASS`);
 if (failures) process.exitCode = 1;
