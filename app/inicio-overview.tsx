@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { checkHomeConsistency } from "../src/application/dashboard/home-consistency";
 import type { HomeAnalysisSummary } from "../src/application/dashboard/home-analysis";
 import {
@@ -378,6 +378,9 @@ export default function InicioOverview() {
   const [evolutionRevision, setEvolutionRevision] = useState(0);
   const [homeAnalysis, setHomeAnalysis] = useState<HomeAnalysisSummary | null>(null);
   const [analysisLoading, setAnalysisLoading] = useState(true);
+  const generationRef = useRef(0);
+  const syncInFlight = useRef(false);
+  const isFresh = useCallback((generation: number) => generationRef.current === generation, []);
 
   useEffect(() => {
     try {
