@@ -839,3 +839,47 @@ test("RECUPERACION-PRODUCTO · no descarta un límite en edición al cambiar mes
   await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+
+test("RECUPERACION-PRODUCTO · sin referencia no se inventa un exceso ni un porcentaje", async ({ page }) => {
+  const template = baseSnapshot.categories[0];
+  const missingReference = {
+    ...template,
+    categoryId: "20000000-0000-4000-8000-000000000064",
+    categoryName: "Sin histórico",
+    automaticAmountCents: 0,
+    manualAmountCents: null,
+    effectiveAmountCents: 0,
+    actualExpenseCents: 5_000,
+    remainingCents: -5_000,
+    progressBps: null,
+    status: "unfunded",
+  };
+  const explicitZero = {
+    ...missingReference,
+    categoryId: "20000000-0000-4000-8000-000000000065",
+    categoryName: "Límite cero",
+    manualAmountCents: 0,
+  };
+  await page.route("**/api/budgets*", (route) => {
+    if (route.request().method() !== "GET") throw new Error("Read-only regression");
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ ...baseSnapshot, categories: [missingReference, explicitZero] }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  const absent = page.getByRole("heading", { name: "Sin histórico" }).locator("xpath=ancestor::article");
+  await expect(absent).toContainText("Referencia no disponible");
+  await expect(absent).toContainText("Gasto sin referencia 50,00 €");
+  await expect(absent).toContainText("Falta histórico o límite elegido para calcular un exceso.");
+  await expect(absent).not.toContainText("Exceso 50,00 €");
+  await expect(absent.getByRole("link", { name: /Ver movimientos que explican el gasto/ })).toBeVisible();
+
+  const zero = page.getByRole("heading", { name: "Límite cero" }).locator("xpath=ancestor::article");
+  await expect(zero).toContainText("Límite en cero");
+  await expect(zero).toContainText("Exceso 50,00 €");
+  await expect(zero).toContainText("Límite 0 € superado");
+  await expect(zero).not.toContainText("Gasto sin referencia");
+});
