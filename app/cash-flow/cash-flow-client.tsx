@@ -76,7 +76,10 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
   const [selected, setSelected] = useState<string | null>(null);
   const actualReady = view.actualState === "ready";
   const forecastReady = view.forecastState === "ready";
-  const selectedDay = view.days.find((day) => day.date === selected) ?? null;
+  // Client navigation can retain component state across month queries. Never
+  // carry a selected day from an earlier month into a new calendar or chart.
+  const selectedInMonth = selected?.startsWith(`${view.month}-`) ? selected : null;
+  const selectedDay = view.days.find((day) => day.date === selectedInMonth) ?? null;
   const offset = (new Date(`${view.dateFrom}T12:00:00Z`).getUTCDay() + 6) % 7;
   const combined = periodComparisonIsReliable(view.actualCoverage)
     && view.actualNetCents !== null
@@ -168,7 +171,7 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
 
       <CashFlowEvolution
         points={view.evolution}
-        selectedDate={selected}
+        selectedDate={selectedInMonth}
         onSelectDate={setSelected}
         onInspectDate={inspectDay}
       />
@@ -188,9 +191,9 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
               const realCount = dayActualCovered ? day.real.filter(countsInCashFlow).length : null;
               const plannedCount = forecastReady ? day.forecasts.filter((item) => item.status === "planned").length : null;
               return (
-                <button key={day.date} type="button" className={`${styles.day} ${selected === day.date ? styles.active : ""}`}
+                <button key={day.date} type="button" className={`${styles.day} ${selectedInMonth === day.date ? styles.active : ""}`}
                   aria-label={`${formatDate(day.date)}: ${signals || (!dayActualCovered ? "sin cobertura bancaria confirmada" : forecastReady ? "sin actividad registrada" : "previsión no disponible")}`}
-                  aria-pressed={selected === day.date} onClick={() => setSelected(day.date)}>
+                  aria-pressed={selectedInMonth === day.date} onClick={() => setSelected(day.date)}>
                   <strong>{Number(day.date.slice(-2))}</strong>
                   <span className={styles.dayCounts}>{realCount || plannedCount
                     ? [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null].filter(Boolean).join(" · ")
