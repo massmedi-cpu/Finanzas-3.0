@@ -295,3 +295,45 @@ test("explicit DNI uses the Spanish check letter before declaring a reliable ID"
   expect(good.taxId.trust).toBe("reliable");
   expect(bad.taxId.trust).toBe("doubtful");
 });
+
+
+test("REC-OCR-016 · Spanish written dates identify invoice issue without confusing other dates", () => {
+  const cases = [
+    { raw: "Nº factura S26XYZ123 emitida el 15 de agosto de 2026", value: "2026-08-15", trust: "reliable" },
+    { raw: "Pedido 11/09/2026; factura S26XYZ123 emitida el 15 de agosto de 2026", value: "2026-08-15", trust: "reliable" },
+    { raw: "Pedido 14 de agosto de 2026; factura emitida el 16/08/2026", value: "2026-08-16", trust: "reliable" },
+    { raw: "Fecha de emisión: 15 de agosto de 2026; emitida el 16/08/2026", value: "2026-08-16", trust: "doubtful" },
+    { raw: "Fecha de emisión: 15 de septiembre de 2026", value: "2026-09-15", trust: "reliable" },
+    { raw: "Fecha de expedición: 8 de octubre de 2026", value: "2026-10-08", trust: "reliable" },
+    { raw: "Fecha: 12 de setiembre de 2026", value: "2026-09-12", trust: "reliable" },
+    { raw: "Nº factura A-991 emitida el 15/08/2026", value: "2026-08-15", trust: "reliable" },
+    { raw: "Entrega el 15 de agosto de 2026", value: "2026-08-15", trust: "doubtful" },
+    { raw: "Vencimiento: 15 de agosto de 2026", value: null, trust: "not_detected" },
+    { raw: "Periodo: 1 de agosto de 2026 a 31 de agosto de 2026", value: null, trust: "not_detected" },
+    { raw: "Fecha de emisión: 31 de febrero de 2026", value: null, trust: "not_detected" },
+  ] as const;
+  for (const [index, sample] of cases.entries()) {
+    const input = line(`date-${index}`, sample.raw, 0.96);
+    const x = interpretDocumentOcrFinancially(result([input]));
+    expect(x.date.value, sample.raw).toBe(sample.value);
+    expect(x.date.trust, sample.raw).toBe(sample.trust);
+    if (sample.value !== null) {
+      expect(x.date.evidence[0]?.lineId).toBe(input.id);
+      expect(x.date.evidence[0]?.rawText).toBe(sample.raw);
+    } else {
+      expect(x.date.evidence).toHaveLength(0);
+    }
+  }
+});
+
+test("REC-OCR-017 · date within a legal or billing period does not override explicit issue date", () => {
+  const x = interpretDocumentOcrFinancially(result([
+    line("expiration", "Fecha de vencimiento: 15 de agosto de 2027", 0.99, 0.05),
+    line("billing", "Periodo: 1 de septiembre de 2026 a 30 de septiembre de 2026", 0.99, 0.10),
+    line("issue", "Factura S26XYZ123 emitida el 15 de octubre de 2026", 0.97, 0.15),
+  ]));
+  expect(x.date.value).toBe("2026-10-15");
+  expect(x.date.trust).toBe("reliable");
+  expect(x.date.evidence).toHaveLength(1);
+  expect(x.date.evidence[0]?.lineId).toBe("issue");
+});
