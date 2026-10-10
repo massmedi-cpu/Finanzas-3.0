@@ -692,7 +692,12 @@ test("REC-VIS-001 · importes grandes en Análisis conservan los céntimos sin r
   await expect(amount).toBeVisible();
   // Visual stress fixture only: never write the amount into banking data.
   await amount.evaluate((element) => { element.textContent = "9.999.999,99\u00a0€"; });
-  for (const width of [360, 430, 768, 1280]) {
+  // Eleven reference widths in both color schemes; keep the very same DOM
+  // stress fixture so this test measures layout only, not banking state.
+  const widths = [320, 360, 375, 390, 414, 430, 480, 768, 1024, 1280, 1440];
+  const cases = (["light", "dark"] as const).flatMap((colorScheme) => widths.map((width) => ({ width, colorScheme })));
+  for (const { width, colorScheme } of cases) {
+    await page.emulateMedia({ colorScheme });
     await page.setViewportSize({ width, height: 950 });
     const geometry = await amount.evaluate((element) => {
       const css = getComputedStyle(element);
