@@ -268,27 +268,36 @@ function extractTaxId(lines: LocatedLine[]) {
 
 function extractDate(lines: LocatedLine[]) {
   const pattern = /\b(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})\b/;
-  // A date in legal conditions, a billing period or an expiration field is not
-  // evidence of the document's issue/purchase date.
+  const writtenPattern = /\b(\d{1,2})\s+de\s+(enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+(\d{4})\b/i;
+  const namedMonth: Record<string, number> = {
+    enero: 1, febrero: 2, marzo: 3, abril: 4, mayo: 5, junio: 6,
+    julio: 7, agosto: 8, septiembre: 9, setiembre: 9,
+    octubre: 10, noviembre: 11, diciembre: 12,
+  };
+  // Billing dates, contract expiry and legal conditions are not evidence of
+  // a receipt purchase or invoice issue date.
   const unrelated = /\b(?:nacimiento|vencimiento|caducidad|vigencia|registro|periodo|hasta|desde|legal)\b/;
-  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura|ticket))?|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  const explicitWritten = /\b(?:emitid[oa]\s+el|fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?\s*[:\-]?)\s*\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b/;
+  const embeddedNumericIssueDate = /\bemitid[oa]\s+el\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
   let unlabelled: OcrInterpretedField<string> | null = null;
 
   for (const item of lines) {
-    const match = item.line.text.match(pattern);
-    if (!match) continue;
+    const numeric = item.line.text.match(pattern);
+    const written = numeric ? null : item.line.text.match(writtenPattern);
+    if (!numeric && !written) continue;
     const normalized = normalizeToken(item.line.text);
     if (unrelated.test(normalized)) continue;
-    const day = Number(match[1]);
-    const month = Number(match[2]);
-    const year = Number(match[3].length === 2 ? "20" + match[3] : match[3]);
+    const day = Number(numeric?.[1] ?? written?.[1]);
+    const month = numeric ? Number(numeric[2]) : namedMonth[(written?.[2] ?? "").toLowerCase()];
+    const sourceYear = numeric?.[3] ?? written?.[3] ?? "";
+    const year = Number(sourceYear.length === 2 ? "20" + sourceYear : sourceYear);
     const candidate = new Date(Date.UTC(year, month - 1, day));
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
     const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
-    const field = fieldFrom(item, match[0], iso);
-    if (directLabel.test(normalized)) return field;
-    // The date may be real, but text recognition alone cannot establish its role.
-    // Preserve the first fallback for review; never promote it to "reliable".
+    const field = fieldFrom(item, numeric?.[0] ?? written?.[0] ?? "", iso);
+    if (directLabel.test(normalized) || explicitWritten.test(normalized) || embeddedNumericIssueDate.test(normalized)) return field;
+    // Unlabelled date text may be correct, but we cannot prove its document role.
     unlabelled ??= fieldRequiringReview(field);
   }
   return unlabelled ?? emptyField<string>();
