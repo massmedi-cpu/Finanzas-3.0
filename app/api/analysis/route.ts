@@ -62,7 +62,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     for (const key of searchParams.keys()) {
-      if (!ALLOWED_QUERY_KEYS.has(key)) throw new Error("invalid_analysis_parameter");
+      if (!ALLOWED_QUERY_KEYS.has(key) || searchParams.getAll(key).length !== 1) throw new Error("invalid_analysis_parameter");
     }
 
     const input: AnalysisSelectionInput = {

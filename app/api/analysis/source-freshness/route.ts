@@ -73,7 +73,7 @@ export async function GET(request: Request) {
 
   try {
     const params = new URL(request.url).searchParams;
-    if ([...params.keys()].some((key) => key !== "accountId")) {
+    if ([...params.keys()].some((key) => key !== "accountId") || params.getAll("accountId").length > 1) {
       return Response.json({ error: "invalid_parameter" }, { status: 400, headers: HEADERS });
     }
     const accountId = params.get("accountId")?.trim() || null;
