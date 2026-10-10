@@ -113,6 +113,20 @@ const cases = [
     trust: "reliable",
   },
   {
+    name: "Unicode mathematical minus keeps negative refund sign",
+    lines: ["TOTAL −12,34"],
+    field: "totalCents",
+    amount: -1234,
+    trust: "reliable",
+  },
+  {
+    name: "En dash refund sign is not silently dropped",
+    lines: ["TOTAL –12,34"],
+    field: "totalCents",
+    amount: -1234,
+    trust: "reliable",
+  },
+  {
     name: "grouped two decimal amount remains valid before punctuation",
     lines: ["TOTAL 1.234,56."],
     field: "totalCents",
@@ -171,6 +185,17 @@ for (const sample of taxLineCases) {
   }
 }
 
+const refund = interpret(["DEVOLUCION PRODUCTO −12,34"]).lines[0];
+try {
+  assert.ok(refund, "refund line item retained");
+  assert.equal(refund.totalCents, -1234, "negative refund retains exact sign in cents");
+  assert.equal(refund.evidence[0].rawText, "DEVOLUCION PRODUCTO −12,34", "refund source preserved");
+  console.log("PASS · refund minus sign remains negative");
+} catch (error) {
+  failures++;
+  console.error("FAIL · refund minus sign remains negative", error.message);
+}
+
 const lineItem = interpret(["MANZANAS 1,234 kg 3,50"]).lines[0];
 try {
   assert.ok(lineItem, "weight line item is retained");
@@ -183,5 +208,5 @@ try {
   console.error("FAIL · three decimal weight does not become unit price", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + 1 - failures}/${cases.length + taxLineCases.length + 1} PASS`);
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + 2 - failures}/${cases.length + taxLineCases.length + 2} PASS`);
 if (failures) process.exitCode = 1;
