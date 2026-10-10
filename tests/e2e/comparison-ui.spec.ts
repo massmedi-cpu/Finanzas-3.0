@@ -125,6 +125,62 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-SYNC-006 · fallo HTTP de frescura muestra reintento y recupera sin escribir datos", async ({ page }) => {
+  await mockComparison(page);
+  let calls = 0;
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => {
+    calls += 1;
+    return route.fulfill(calls === 1
+      ? { status: 503, contentType: "application/json", body: JSON.stringify({ error: "source_unavailable" }) }
+      : {
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            available: true,
+            earliestMovementDate: "2026-01-01",
+            latestMovementDate: "2026-09-25",
+            sync: {
+              status: "success",
+              startedAt: "2026-09-25T07:59:00Z",
+              finishedAt: "2026-09-25T08:00:00Z",
+              rowsSeen: 12, rowsFailed: 0, rowsMissing: 0,
+              duplicatesDetected: 0, warningsCount: 0,
+            },
+          }),
+        });
+  });
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const failure = page.getByRole("status").filter({ hasText: "No se ha podido comprobar la cobertura bancaria" });
+  await expect(failure).toBeVisible();
+  const retry = page.getByRole("button", { name: "Reintentar", exact: true });
+  await expect(retry).toBeVisible();
+  await expect(retry).toHaveCSS("min-height", "44px");
+  await retry.click();
+  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(failure).toHaveCount(0);
+  expect(calls).toBe(2);
+});
+
+test("REC-SYNC-005 · origen declarado no disponible muestra un aviso, no una banda vacía", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: false,
+      earliestMovementDate: null,
+      latestMovementDate: null,
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Cobertura bancaria sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay fecha de movimiento ni estado de sincronización confirmados.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("status", { name: /Cobertura bancaria sin verificar:/ })).toBeVisible();
+  await expect(page.getByText("Datos bancarios disponibles", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
+});
+
 test("REC-SYNC-004 · sync correcta con solo fecha máxima no acredita histórico completo", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
