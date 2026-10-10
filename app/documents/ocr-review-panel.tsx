@@ -623,6 +623,14 @@ export function OcrReviewPanel({
 
   async function openOriginal() {
     if (openingOriginal || activeDocumentId.current !== documentId) return;
+    // Open within the user's click: browsers may block window.open after an
+    // asynchronous signed-URL lookup. Never expose the signed URL in the app.
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError("El navegador ha bloqueado la ventana del original. Permite las ventanas emergentes de Financial App y vuelve a pulsar Abrir.");
+      return;
+    }
+    previewWindow.opener = null;
     const generation = documentGeneration.current;
     const isCurrent = () => generation === documentGeneration.current
       && activeDocumentId.current === documentId;
@@ -630,11 +638,20 @@ export function OcrReviewPanel({
     setError(null);
     try {
       const opened = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=open`, { cache: "no-store" }));
-      if (!isCurrent()) return;
+      if (!isCurrent() || previewWindow.closed) {
+        if (!previewWindow.closed) previewWindow.close();
+        return;
+      }
       if (typeof opened?.url !== "string") throw new Error("document_open_failed");
-      window.open(opened.url, "_blank", "noopener,noreferrer");
+      const destination = new URL(opened.url);
+      if (destination.protocol !== "https:"
+        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
+        throw new Error("document_open_unsafe_url");
+      }
+      previewWindow.location.replace(destination.href);
     } catch {
-      if (isCurrent()) setError("No se ha podido abrir el documento original.");
+      if (!previewWindow.closed) previewWindow.close();
+      if (isCurrent()) setError("No se ha podido abrir el documento original de forma segura.");
     } finally {
       if (isCurrent()) setOpeningOriginal(false);
     }
