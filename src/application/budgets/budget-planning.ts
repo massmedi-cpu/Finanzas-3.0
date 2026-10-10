@@ -180,6 +180,7 @@ function isAutomaticFactors(value: unknown): value is BudgetAutomaticFactors {
 function isBudgetItem(value: unknown): value is BudgetItem {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<BudgetItem>;
+  const historyMonths = item.historyMonths;
   return isNullableString(item.id)
     && typeof item.persisted === "boolean"
     && isNullableString(item.categoryId)
@@ -201,16 +202,16 @@ function isBudgetItem(value: unknown): value is BudgetItem {
     && ["empty", "unfunded", "on_track", "over"].includes(item.status ?? "")
     && typeof item.automaticExplanation === "string"
     && (item.automaticFactors === undefined || item.automaticFactors === null || isAutomaticFactors(item.automaticFactors))
-    && Array.isArray(item.historyMonths)
-    && item.historyMonths.every((row) =>
+    && Array.isArray(historyMonths)
+    && historyMonths.every((row) =>
       Boolean(row) && typeof row === "object"
       && typeof row.month === "string" && MONTH.test(row.month)
       && isSafeInteger(row.expenseCents) && row.expenseCents >= 0,
     )
     // Duplicate history months break React keys and visually double-count
     // periods in comparisons; their order must also be chronological.
-    && item.historyMonths.every((row, index) =>
-      index === 0 || item.historyMonths[index - 1].month < row.month
+    && historyMonths.every((row, index) =>
+      index === 0 || historyMonths[index - 1].month < row.month
     );
 }
 
