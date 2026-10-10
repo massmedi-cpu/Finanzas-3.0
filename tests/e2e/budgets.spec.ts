@@ -867,7 +867,7 @@ test("REC-BUD-029 · evita doble conteo de categorías y meses históricos dupli
       snap.total.historyMonths.reverse();
     } },
     { name: "total con categoría incorrecta", corrupt: (snap) => {
-      snap.total.categoryId = categoryId;
+      Object.assign(snap.total, { categoryId });
     } },
   ];
   let writes = 0;
