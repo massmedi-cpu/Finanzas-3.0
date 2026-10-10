@@ -129,7 +129,7 @@ function statusText(freshness: SourceFreshness) {
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
 
-  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : null;
+  if (!sync) return movementLabel ? `Fuente bancaria · último movimiento ${movementLabel} · sincronización sin verificar` : "Cobertura bancaria sin verificar: no consta fecha de movimiento ni estado de sincronización";
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
