@@ -424,6 +424,13 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         const sync = freshness?.sync;
         const validSync = sync && typeof sync === "object" && !Array.isArray(sync)
           && ["success", "failed", "started", "partial"].includes(sync.status)
+          // A success state without a completion timestamp is not evidence
+          // that the import has actually finished.
+          && (sync.status !== "success" || (
+            typeof sync.finishedAt === "string"
+            && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(sync.finishedAt)
+            && Number.isFinite(Date.parse(sync.finishedAt))
+          ))
           && [
             sync.rowsSeen, sync.rowsFailed, sync.rowsMissing,
             sync.duplicatesDetected, sync.warningsCount,
