@@ -433,6 +433,8 @@ export default function TransactionsClient() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [writeUnverified, setWriteUnverified] = useState(false);
+  const [verifyingWrite, setVerifyingWrite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -467,7 +469,7 @@ export default function TransactionsClient() {
   }, [editingId]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
-    if (append && replaceAbortController.current) return;
+    if (append && replaceAbortController.current) return false;
 
     const replaceEpochAtStart = replaceRequestSequence.current;
     const requestSequence = append
@@ -507,7 +509,7 @@ export default function TransactionsClient() {
         signal: controller.signal,
       });
       const payload = await response.json().catch(() => ({}));
-      if (!isCurrentRequest()) return;
+      if (!isCurrentRequest()) return false;
       if (!response.ok) throw new Error(readableError(payload));
       // HTTP 200 with a malformed payload is not proof of an empty bank history.
       // Validate the pagination envelope before changing any visible rows.
@@ -533,8 +535,9 @@ export default function TransactionsClient() {
       setHasMore(result.hasMore!);
       setNextCursor(result.nextCursor ?? null);
       if (!append) setSelectedIds([]);
+      return true;
     } catch (cause) {
-      if ((controller.signal.aborted && !timedOut) || !isCurrentRequest()) return;
+      if ((controller.signal.aborted && !timedOut) || !isCurrentRequest()) return false;
       setError(timedOut
         ? "La consulta de movimientos ha superado 30 segundos. Puedes volver a leer el listado sin modificar los datos bancarios."
         : cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
@@ -545,15 +548,17 @@ export default function TransactionsClient() {
         setNextCursor(null);
         setSelectedIds([]);
       }
+      return false;
     } finally {
       window.clearTimeout(deadline);
-      if (!isCurrentRequest()) return;
-      if (append) {
-        if (appendAbortController.current === controller) appendAbortController.current = null;
-        setLoadingMore(false);
-      } else {
-        if (replaceAbortController.current === controller) replaceAbortController.current = null;
-        setLoading(false);
+      if (isCurrentRequest()) {
+        if (append) {
+          if (appendAbortController.current === controller) appendAbortController.current = null;
+          setLoadingMore(false);
+        } else {
+          if (replaceAbortController.current === controller) replaceAbortController.current = null;
+          setLoading(false);
+        }
       }
     }
   }, []);
@@ -822,22 +827,69 @@ export default function TransactionsClient() {
     }
   }
 
+  async function submitTransactionWrite(method: "POST" | "PATCH", body: Record<string, unknown>) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
+    try {
+      const response = await fetch("/api/transactions", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setAuthRecovery(authRecoveryFromCode(requestErrorCode(payload)));
+        // An HTTP 5xx can happen after a database commit. Do not permit a
+        // second write until the user has reloaded a valid financial snapshot.
+        if (response.status >= 500) throw new Error("WRITE_UNVERIFIED");
+        throw new Error(readableError(payload));
+      }
+      if (!payload || typeof payload !== "object" || !payload.result ||
+          typeof payload.result !== "object" || Array.isArray(payload.result)) {
+        throw new Error("WRITE_UNVERIFIED");
+      }
+      return payload;
+    } catch (cause) {
+      if (timedOut || cause instanceof TypeError) {
+        throw new Error("WRITE_UNVERIFIED");
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(deadline);
+    }
+  }
+
+  async function verifyAfterUncertainWrite() {
+    if (saving || verifyingWrite) return;
+    setVerifyingWrite(true);
+    try {
+      const ok = await fetchPage(appliedFilters, null, false);
+      if (!ok) return;
+      setWriteUnverified(false);
+      setEditingId(null);
+      setEditor(null);
+      setSelectedIds([]);
+      setSplittingId(null);
+      closeReview();
+      setNotice("Listado actualizado desde el servidor. Comprueba el movimiento afectado antes de hacer otra modificación: esta lectura no demuestra por sí sola si la escritura anterior se aplicó.");
+    } finally {
+      setVerifyingWrite(false);
+    }
+  }
+
   async function patchTransactions(ids: string[], patch: Record<string, unknown>, message: string) {
+    if (saving || writeUnverified) return false;
     setSaving(true);
     setError(null);
     setAuthRecovery(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/transactions", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionIds: ids, patch }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setAuthRecovery(authRecoveryFromCode(requestErrorCode(payload)));
-        throw new Error(readableError(payload));
-      }
+      const payload = await submitTransactionWrite("PATCH", { transactionIds: ids, patch });
       const changed = payload?.result?.changedTransactions;
       setNotice(Number.isInteger(changed) ? `${message} · ${formatInteger(changed)} modificados.` : message);
       setEditingId(null);
@@ -848,7 +900,13 @@ export default function TransactionsClient() {
       await fetchPage(appliedFilters, null, false);
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudieron guardar los cambios.");
+      const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
+      if (uncertain) {
+        setWriteUnverified(true);
+        setError("No se ha podido confirmar el resultado de la edición. Podría haberse guardado. No repitas la operación hasta volver a consultar el listado y comprobar el movimiento.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "No se pudieron guardar los cambios.");
+      }
       return false;
     } finally {
       setSaving(false);
@@ -888,24 +946,25 @@ export default function TransactionsClient() {
   }
 
   async function runReview(command: Record<string, unknown>, message: string) {
+    if (saving || writeUnverified) return;
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(command),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(readableError(payload));
+      await submitTransactionWrite("POST", command);
       setNotice(message);
       closeReview();
       const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
       if (focusId) pendingFocusId.current = focusId;
       await fetchPage(appliedFilters, null, false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
+      const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
+      if (uncertain) {
+        setWriteUnverified(true);
+        setError("No se ha podido confirmar la revisión. Puede haberse aplicado: vuelve a consultar el listado y contrasta su estado antes de repetirla.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
+      }
     } finally {
       setSaving(false);
     }
@@ -1220,7 +1279,7 @@ async function saveEdit(row: TransactionRow) {
           <label><span>Analítica</span><select data-testid="bulk-analytics" value={bulkAnalytics} disabled={saving || loading} onChange={(event) => setBulkAnalytics(event.target.value)}>
             <option value={UNCHANGED}>Sin cambiar</option><option value={ANALYTICS_INCLUDE}>Incluir en analítica</option><option value={ANALYTICS_EXCLUDE}>Excluir de analítica</option>
           </select></label>
-          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || loading || (bulkCategory === UNCHANGED && bulkMerchant === UNCHANGED && bulkReviewState === UNCHANGED && bulkAnalytics === UNCHANGED)}>Aplicar cambios</button>
+          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || writeUnverified || loading || (bulkCategory === UNCHANGED && bulkMerchant === UNCHANGED && bulkReviewState === UNCHANGED && bulkAnalytics === UNCHANGED)}>Aplicar cambios</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setSelectedIds([])} disabled={saving || loading}>Quitar selección</button>
         </section>
       )}
@@ -1234,6 +1293,16 @@ async function saveEdit(row: TransactionRow) {
               Reintentar listado
             </button>
           ) : null}
+        </div>
+      )}
+      {writeUnverified && (
+        <div className={styles.error} role="alert" data-testid="transactions-write-unverified">
+          Una edición o revisión podría haberse aplicado, pero no se ha confirmado. Las escrituras están bloqueadas hasta volver a leer los movimientos. Comprueba el resultado antes de repetirla.
+          <button className={styles.secondaryButton} type="button"
+            disabled={saving || verifyingWrite}
+            onClick={() => void verifyAfterUncertainWrite()}>
+            {verifyingWrite ? "Comprobando movimientos…" : "Volver a consultar sin guardar"}
+          </button>
         </div>
       )}
       {facetsError && (
@@ -1348,7 +1417,7 @@ async function saveEdit(row: TransactionRow) {
                             </label>
                             <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
-                          <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
+                          <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving || writeUnverified}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
                         </section>
                       </td></tr>
                     )}
@@ -1357,7 +1426,7 @@ async function saveEdit(row: TransactionRow) {
                         <TransactionSplitEditor
                           transaction={{ id: row.id, amountCents: row.amountCents, concept: row.concept.effective, split: row.split }}
                           categories={facets.categories}
-                          disabled={saving}
+                          disabled={saving || writeUnverified}
                           onBusyChange={setSaving}
                           onSaved={(snapshot) => handleSplitSaved(row, snapshot)}
                           onCancel={cancelSplit}
@@ -1381,8 +1450,8 @@ async function saveEdit(row: TransactionRow) {
                                 </div>)}
                               </div>
                               <div className={styles.reviewActions}>
-                                <button data-testid="duplicate-confirm" className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "confirmed" }, "Duplicado confirmado y auditado.")} disabled={saving || duplicateGroup.length < 2}>Confirmar duplicado</button>
-                                <button data-testid="duplicate-dismiss" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "dismissed" }, "Aviso de duplicado descartado para esta revisión bancaria.")} disabled={saving || duplicateGroup.length < 2}>No es duplicado</button>
+                                <button data-testid="duplicate-confirm" className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "confirmed" }, "Duplicado confirmado y auditado.")} disabled={saving || writeUnverified || duplicateGroup.length < 2}>Confirmar duplicado</button>
+                                <button data-testid="duplicate-dismiss" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "dismissed" }, "Aviso de duplicado descartado para esta revisión bancaria.")} disabled={saving || writeUnverified || duplicateGroup.length < 2}>No es duplicado</button>
                               </div>
                             </>
                           ) : (
@@ -1393,10 +1462,10 @@ async function saveEdit(row: TransactionRow) {
                                   <div><strong>{candidate.account_name}</strong><span>{formatDate(candidate.bank_date)} · {candidate.concept_normalized}</span></div>
                                   <strong className={candidate.amount_cents >= 0 ? styles.positive : styles.negative}>{formatMoney(candidate.amount_cents)}</strong>
                                   <span>{candidate.day_gap === 0 ? "Mismo día" : candidate.day_gap === 1 ? "1 día" : `${candidate.day_gap} días`}</span>
-                                  {!row.transferPairId && <button data-testid={`transfer-pair-${candidate.id}`} className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "transfer-pair", transactionId: row.id, pairId: candidate.id }, "Transferencia interna emparejada y auditada.")} disabled={saving}>Emparejar</button>}
+                                  {!row.transferPairId && <button data-testid={`transfer-pair-${candidate.id}`} className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "transfer-pair", transactionId: row.id, pairId: candidate.id }, "Transferencia interna emparejada y auditada.")} disabled={saving || writeUnverified}>Emparejar</button>}
                                 </div>)}
                               </div>
-                              {row.transferPairId && <div className={styles.reviewActions}><button data-testid="transfer-unpair" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "transfer-unpair", transactionId: row.id }, "Transferencia desemparejada y auditada.")} disabled={saving}>Desemparejar</button></div>}
+                              {row.transferPairId && <div className={styles.reviewActions}><button data-testid="transfer-unpair" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "transfer-unpair", transactionId: row.id }, "Transferencia desemparejada y auditada.")} disabled={saving || writeUnverified}>Desemparejar</button></div>}
                             </>
                           )}
                         </section>
