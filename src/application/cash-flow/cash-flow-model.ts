@@ -141,6 +141,23 @@ export function countsInCashFlow(row: CashFlowTransaction) {
   return !row.excludedFromAnalytics && row.duplicateState !== "confirmed" && row.kind.effective !== "transfer";
 }
 
+/**
+ * Daily visual signals require confirmed bank coverage. An imported row alone
+ * is not evidence of full coverage, and must never colour an uncovered day.
+ * Ineligible duplicates, transfers and excluded rows cannot produce signals.
+ */
+export function cashFlowObservedDaySignal(
+  day: Pick<CashFlowDay, "real">,
+  hasConfirmedCoverage: boolean,
+  direction: "income" | "expense",
+): boolean {
+  if (!hasConfirmedCoverage) return false;
+  return day.real.some((row) =>
+    countsInCashFlow(row)
+    && (direction === "income" ? row.amountCents > 0 : row.amountCents < 0)
+  );
+}
+
 export function cashFlowEventState(item: ForecastItem): CashFlowEventState {
   if (item.status === "excluded") return "discarded";
   if (item.status === "confirmed") return "realized";
