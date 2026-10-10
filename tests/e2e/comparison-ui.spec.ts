@@ -615,6 +615,9 @@ test("REC-CMP-010 · fuente bancaria no disponible invalida fechas heredadas aun
   }));
   await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
   const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(page.getByText("Fuente bancaria no disponible", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
   await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
   await expect(metrics).not.toContainText("Tasa de ahorro");
   await expect(metrics).not.toContainText("300,00 €");
