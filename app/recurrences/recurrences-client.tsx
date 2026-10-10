@@ -83,6 +83,12 @@ function confidenceLabel(value: Confidence) {
   return "Baja";
 }
 
+function statusLabel(status: RecurrenceStatus) {
+  if (status === "active") return "Activa";
+  if (status === "ignored") return "Ignorada";
+  return "Archivada";
+}
+
 function cadenceLabel(unit: Candidate["intervalUnit"], count: number) {
   if (unit === "week") return count === 1 ? "Semanal" : `Cada ${count} semanas`;
   if (unit === "month") return count === 1 ? "Mensual" : `Cada ${count} meses`;
@@ -137,10 +143,10 @@ function isRecurrenceSnapshot(value: unknown): value is Snapshot {
       && Number.isSafeInteger(c.missedCycles) && (c.missedCycles as number) >= 0
       && validDate(c.firstObservedDate)
       && validDate(c.lastObservedDate)
-      && (c.nextEstimatedDate === null || validDate(c.nextEstimatedDate))
+      && (c.nextEstimatedDate === null || (validDate(c.nextEstimatedDate) && (c.nextEstimatedDate as string) > (row.dateTo as string)))
       && typeof c.stale === "boolean"
       && typeof c.explanation === "string"
-      && (c.existingRecurrenceId === null || typeof c.existingRecurrenceId === "string")
+      && (c.existingRecurrenceId === null || (typeof c.existingRecurrenceId === "string" && /^[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i.test(c.existingRecurrenceId)))
       && (c.existingStatus === null || ["active", "ignored", "archived"].includes(String(c.existingStatus)));
   });
 }
@@ -332,7 +338,7 @@ export default function RecurrencesClient({
                           </span>
                         ) : null}
                         {candidate.existingStatus ? (
-                          <span className={styles.statusBadge}>Estado · {candidate.existingStatus}</span>
+                          <span className={styles.statusBadge}>Estado · {statusLabel(candidate.existingStatus)}</span>
                         ) : null}
                         <h3>{candidate.conceptPattern}</h3>
                       </div>
