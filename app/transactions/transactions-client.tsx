@@ -1295,7 +1295,7 @@ async function saveEdit(row: TransactionRow) {
       {error && (
         <div className={styles.error} role="alert">
           {error}
-          {!loading && rows.length === 0 ? (
+          {listUnverified ? (
             <button className={styles.secondaryButton} type="button" disabled={saving}
               onClick={() => void fetchPage(appliedFilters, null, false)}>
               Reintentar listado
