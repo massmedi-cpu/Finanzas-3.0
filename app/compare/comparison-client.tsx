@@ -449,6 +449,7 @@ export default function ComparisonClient({
     if (initialSnapshot) return;
     const controller = new AbortController();
     activeRequest.current = controller;
+    const timeout = setTimeout(() => controller.abort("timeout"), 20_000);
     void requestComparison(fallbackSelection, controller.signal)
       .then((next) => {
         if (!controller.signal.aborted) {
@@ -457,15 +458,21 @@ export default function ComparisonClient({
         }
       })
       .catch((cause) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted || controller.signal.reason === "timeout") {
           const code = cause instanceof Error ? cause.message : "comparison_unavailable";
-          setError(userError(code));
+          setError(controller.signal.reason === "timeout"
+            ? "La consulta ha tardado demasiado. Comprueba tu conexión y vuelve a intentar la comparación."
+            : userError(code));
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setResolved(true);
+        clearTimeout(timeout);
+        if (!controller.signal.aborted || controller.signal.reason === "timeout") setResolved(true);
       });
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timeout);
+      controller.abort("navigation");
+    };
   }, [
     initialSnapshot,
     fallbackSelection.primaryFrom,
@@ -528,6 +535,7 @@ export default function ComparisonClient({
     activeRequest.current = controller;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
+    const timeout = setTimeout(() => controller.abort("timeout"), 20_000);
     setPending(true);
     setError(null);
 
@@ -538,10 +546,14 @@ export default function ComparisonClient({
       setForm(formFromSelection(next.selection));
       window.history.replaceState(window.history.state, "", `/compare?${comparisonSelectionSearchParams(next.selection).toString()}`);
     } catch (cause) {
-      if (controller.signal.aborted || requestSequence.current !== sequence) return;
+      if ((controller.signal.aborted && controller.signal.reason !== "timeout")
+        || requestSequence.current !== sequence) return;
       const code = cause instanceof Error ? cause.message : "comparison_unavailable";
-      setError(userError(code));
+      setError(controller.signal.reason === "timeout"
+        ? "La consulta ha tardado demasiado. Comprueba tu conexión y vuelve a intentar la comparación."
+        : userError(code));
     } finally {
+      clearTimeout(timeout);
       if (requestSequence.current === sequence) setPending(false);
     }
   }
