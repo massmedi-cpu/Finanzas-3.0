@@ -1,5 +1,7 @@
 export type SourceSyncIncidentInput = {
   status?: string | null;
+  finishedAt?: string | null;
+  rowsSeen?: number | null;
   rowsFailed?: number | null;
   rowsMissing?: number | null;
   duplicatesDetected?: number | null;
@@ -47,4 +49,18 @@ export function hasSourceSyncIncidents(
     || counts.missingRows > 0
     || counts.duplicates > 0
     || counts.additionalWarnings > 0;
+}
+
+// "success" without an actual end-time and complete integer counters is not
+// proof of a finished import, even if min/max movement dates exist.
+// This is deliberately separate from incident detection: a completed run
+// may still contain failures and must then be shown as partial/warning.
+export function hasCompletedSourceSyncEvidence(value: SourceSyncIncidentInput | null | undefined) {
+  if (value?.status !== "success") return false;
+  const ended = value.finishedAt;
+  return typeof ended === "string"
+    && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(ended)
+    && Number.isFinite(Date.parse(ended))
+    && [value.rowsSeen, value.rowsFailed, value.rowsMissing, value.duplicatesDetected, value.warningsCount]
+      .every((count) => typeof count === "number" && Number.isSafeInteger(count) && count >= 0);
 }
