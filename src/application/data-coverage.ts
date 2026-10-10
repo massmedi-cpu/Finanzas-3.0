@@ -1,4 +1,4 @@
-import { hasSourceSyncIncidents, type SourceSyncIncidentInput } from "./source-sync-incidents";
+import { hasCompletedSourceSyncEvidence, hasSourceSyncIncidents, type SourceSyncIncidentInput } from "./source-sync-incidents";
 
 export type PeriodCoverageState = "unknown" | "none" | "partial" | "covered";
 
@@ -65,7 +65,9 @@ export function resolvePeriodCoverage(input: {
   // source is still running or its latest sync reports missing/failed rows,
   // duplicates or warnings. Keep observed amounts visible but do not certify
   // their trend or treat the interval as financially complete.
-  const syncUnverified = input.sync?.status === "started" || hasSourceSyncIncidents(input.sync);
+  const syncUnverified = (input.sync !== null && input.sync !== undefined
+    && !hasCompletedSourceSyncEvidence(input.sync))
+    || hasSourceSyncIncidents(input.sync);
   if (latestMovementDate < input.dateTo || earliestMovementDate > input.dateFrom || syncUnverified) {
     return { state: "partial", latestMovementDate, throughDate, ...fromDate };
   }
