@@ -472,6 +472,13 @@ export default function TransactionsClient() {
       ? ++appendRequestSequence.current
       : ++replaceRequestSequence.current;
     const controller = new AbortController();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      if (!controller.signal.aborted) {
+        timedOut = true;
+        controller.abort();
+      }
+    }, 30_000);
 
     if (append) {
       appendAbortController.current?.abort();
@@ -500,16 +507,35 @@ export default function TransactionsClient() {
       const payload = await response.json().catch(() => ({}));
       if (!isCurrentRequest()) return;
       if (!response.ok) throw new Error(readableError(payload));
-      const result = payload as QueryResponse;
-      const incoming = Array.isArray(result.rows) ? result.rows : [];
+      // HTTP 200 with a malformed payload is not proof of an empty bank history.
+      // Validate the pagination envelope before changing any visible rows.
+      const result = payload as Partial<QueryResponse>;
+      const incoming = result.rows;
+      const cursorValid = result.nextCursor === null ||
+        (result.nextCursor != null && typeof result.nextCursor.bankDate === "string"
+          && DATE.test(result.nextCursor.bankDate) && typeof result.nextCursor.id === "string"
+          && UUID.test(result.nextCursor.id));
+      const valid = Array.isArray(incoming)
+        && incoming.every((row) => row && typeof row === "object"
+          && typeof row.id === "string" && UUID.test(row.id)
+          && typeof row.bankDate === "string" && DATE.test(row.bankDate)
+          && Number.isSafeInteger(row.amountCents)
+          && typeof row.concept?.effective === "string"
+          && typeof row.account?.name === "string")
+        && Number.isSafeInteger(result.totalCount) && result.totalCount! >= 0
+        && typeof result.hasMore === "boolean"
+        && cursorValid && (!result.hasMore || (incoming.length > 0 && result.nextCursor != null));
+      if (!valid) throw new Error("La respuesta del histórico es incompleta o incoherente. No se interpretará como una lista sin movimientos; reintenta la lectura.");
       setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
-      setTotalCount(Number.isInteger(result.totalCount) ? result.totalCount : 0);
-      setHasMore(result.hasMore === true);
+      setTotalCount(result.totalCount!);
+      setHasMore(result.hasMore!);
       setNextCursor(result.nextCursor ?? null);
       if (!append) setSelectedIds([]);
     } catch (cause) {
-      if (controller.signal.aborted || !isCurrentRequest()) return;
-      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
+      if ((controller.signal.aborted && !timedOut) || !isCurrentRequest()) return;
+      setError(timedOut
+        ? "La consulta de movimientos ha superado 30 segundos. Puedes volver a leer el listado sin modificar los datos bancarios."
+        : cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
         setRows([]);
         setTotalCount(0);
@@ -518,6 +544,7 @@ export default function TransactionsClient() {
         setSelectedIds([]);
       }
     } finally {
+      window.clearTimeout(deadline);
       if (!isCurrentRequest()) return;
       if (append) {
         if (appendAbortController.current === controller) appendAbortController.current = null;
@@ -1173,7 +1200,17 @@ async function saveEdit(row: TransactionRow) {
         </section>
       )}
 
-      {error && <div className={styles.error} role="alert">{error}</div>}
+      {error && (
+        <div className={styles.error} role="alert">
+          {error}
+          {!loading && rows.length === 0 ? (
+            <button className={styles.secondaryButton} type="button" disabled={saving}
+              onClick={() => void fetchPage(appliedFilters, null, false)}>
+              Reintentar listado
+            </button>
+          ) : null}
+        </div>
+      )}
       {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/transactions" /> : null}
       {notice && <div className={styles.notice} role="status">{notice}</div>}
 
@@ -1186,7 +1223,9 @@ async function saveEdit(row: TransactionRow) {
           </div>
         </div>
 
-        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
+        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : error && rows.length === 0 ? (
+          <div className={styles.empty}>El listado todavía no se ha podido verificar. No se considera vacío.</div>
+        ) : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead><tr><th scope="col" className={styles.selectHeading}>Sel.</th><th scope="col">Fecha</th><th scope="col">Concepto y trazabilidad</th><th scope="col">Cuenta</th><th scope="col">Categoría</th><th scope="col" className={styles.amountHeading}>Importe</th><th scope="col">Gestión</th></tr></thead>
