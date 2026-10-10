@@ -337,3 +337,26 @@ test("REC-OCR-017 · date within a legal or billing period does not override exp
   expect(x.date.evidence).toHaveLength(1);
   expect(x.date.evidence[0]?.lineId).toBe("issue");
 });
+
+
+test("REC-OCR-018 · domiciliada is a payment method only with credible source context", () => {
+  const cases = [
+    { lines: ["Forma de pago: Domiciliada"], expected: "Domiciliación", trust: "reliable" },
+    { lines: ["Medio de pago: Domiciliado"], expected: "Domiciliación", trust: "reliable" },
+    { lines: ["Método de pago: Domiciliación"], expected: "Domiciliación", trust: "reliable" },
+    { lines: ["Recibo enviado por correo"], expected: null, trust: "not_detected" },
+    { lines: ["No domiciliada"], expected: null, trust: "not_detected" },
+    { lines: ["Recibo domiciliado 2026"], expected: "Domiciliación", trust: "doubtful" },
+    { lines: ["Información sobre tarjeta bancaria", "Forma de pago: Domiciliada"], expected: "Domiciliación", trust: "reliable" },
+  ] as const;
+  for (const sample of cases) {
+    const x = interpretDocumentOcrFinancially(result(sample.lines.map((text, index) => line(`pay-${index}`, text, 0.97, 0.1 + index * 0.06))));
+    expect(x.paymentMethod.value, sample.lines.join(" | ")).toBe(sample.expected);
+    expect(x.paymentMethod.trust, sample.lines.join(" | ")).toBe(sample.trust);
+    if (sample.expected !== null) {
+      expect(sample.lines).toContain(x.paymentMethod.evidence[0]?.rawText);
+    } else {
+      expect(x.paymentMethod.evidence).toHaveLength(0);
+    }
+  }
+});
