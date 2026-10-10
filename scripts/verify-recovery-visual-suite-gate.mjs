@@ -19,4 +19,18 @@ for (const [file, casesInFile] of cases) {
   process.stdout.write(`PASS: ${file} is executed, ${casesInFile.join(", ")} present\n`);
 }
 assert.ok(workflow.includes("'scripts/verify-recovery-visual-suite-gate.mjs'"), "Changes to guard must trigger CI");
+// A passing browser job is not independently reviewable unless its screenshots
+// and failure traces survive the ephemeral CI runner. The first Playwright command
+// clears its output on the next run, so preserve both phases separately.
+const visualEvidence = workflow.indexOf("Retain isolated visual screenshots before Playwright clears its output directory");
+const moduleTests = workflow.indexOf("name: Integrated module regressions on the same optimized build");
+const moduleEvidence = workflow.indexOf("Retain integrated module traces and screenshots");
+const uploadEvidence = workflow.indexOf("Upload isolated synthetic browser evidence");
+assert.ok(visualEvidence > 0 && visualEvidence < moduleTests, "Visual screenshots must be copied before integrated tests overwrite them");
+assert.ok(moduleEvidence > moduleTests && uploadEvidence > moduleEvidence, "Integrated browser traces must be preserved and uploaded");
+assert.match(workflow, /uses: actions\\/upload-artifact@[a-f0-9]{40}/, "Upload action must pin a reviewed full commit SHA");
+assert.ok(workflow.includes("retention-days: 7"), "Synthetic browser evidence must have bounded retention");
+assert.ok(workflow.includes("path: recovery-evidence/"), "Browser artifact must contain both preserved phases");
+process.stdout.write("PASS: synthetic browser screenshots and traces survive the CI runner with bounded retention\\n");
+
 process.stdout.write("PASS: recovery visual suites are executable by the mandatory browser gate\n");
