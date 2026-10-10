@@ -1333,7 +1333,7 @@ async function saveEdit(row: TransactionRow) {
           </div>
         </div>
 
-        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : error && rows.length === 0 ? (
+        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : listUnverified ? (
           <div className={styles.empty}>El listado todavía no se ha podido verificar. No se considera vacío.</div>
         ) : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
           <div className={styles.tableWrap}>
