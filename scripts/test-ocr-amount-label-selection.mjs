@@ -29,6 +29,50 @@ const cases = [
     trust: "reliable",
   },
   {
+    name: "line-separated total retains amount but requires human review",
+    lines: ["TOTAL A PAGAR", "23,45 €"],
+    field: "totalCents",
+    amount: 2345,
+    trust: "doubtful",
+    evidenceLines: ["TOTAL A PAGAR", "23,45 €"],
+  },
+  {
+    name: "line-separated invoice amount retains value but requires review",
+    lines: ["IMPORTE DE LA FACTURA:", "1.234,56 €"],
+    field: "totalCents",
+    amount: 123456,
+    trust: "doubtful",
+    evidenceLines: ["IMPORTE DE LA FACTURA:", "1.234,56 €"],
+  },
+  {
+    name: "a bare total cannot steal cash received from next line",
+    lines: ["TOTAL", "EFECTIVO 50,00"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "a bare total cannot steal two competing adjacent amounts",
+    lines: ["TOTAL", "12,34 14,00"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "an illegible total cannot borrow a following amount",
+    lines: ["TOTAL NO LEGIBLE", "12,34"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "three-decimal amount following total is not truncated",
+    lines: ["TOTAL", "1,234"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
     name: "tender and change must not displace total",
     lines: ["TOTAL 12,50 EFECTIVO 20,00 CAMBIO 7,50"],
     field: "totalCents",
@@ -171,6 +215,11 @@ for (const sample of cases) {
     assert.equal(field.value, sample.amount, `${sample.name}: amount`);
     assert.equal(field.trust, sample.trust, `${sample.name}: trust`);
     if (field.value !== null) assert.ok(field.evidence.length, `${sample.name}: original evidence retained`);
+    if (sample.evidenceLines) assert.deepEqual(
+      field.evidence.map((entry) => entry.rawText),
+      sample.evidenceLines,
+      `${sample.name}: both original OCR lines remain attached`,
+    );
     console.log(`PASS · ${sample.name}`);
   } catch (error) {
     failures++;
