@@ -2,6 +2,7 @@ import type { DocumentOcrProvider } from "../../application/document-ocr-service
 import type { OcrSource, OcrWord } from "../../domain/document-ocr";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
 import { pdfNativeTextNeedsVisualOcr } from "./pdf-native-coverage";
+import { pdfRasterScale } from "./pdf-render-geometry";
 
 const MAX_PAGES = 16;
 const MAX_RENDER_SIDE = 2800;
@@ -75,9 +76,13 @@ async function renderPagePng(
   const canvasFactory = pdf.canvasFactory;
   if (!canvasFactory?.create) throw new Error("ocr_pdf_canvas_unavailable");
   const base = page.getViewport({ scale: 1 });
-  const longest = Math.max(base.width, base.height, 1);
-  const scale = Math.max(0.75, Math.min(MAX_RENDER_SCALE, MAX_RENDER_SIDE / longest));
+  const scale = pdfRasterScale(base.width, base.height, MAX_RENDER_SIDE, MAX_RENDER_SCALE);
   const viewport = page.getViewport({ scale });
+  if (!Number.isFinite(viewport.width) || !Number.isFinite(viewport.height)
+    || viewport.width <= 0 || viewport.height <= 0
+    || viewport.width > MAX_RENDER_SIDE + 1 || viewport.height > MAX_RENDER_SIDE + 1) {
+    throw new Error("ocr_pdf_page_dimensions_invalid");
+  }
   const rendered = canvasFactory.create(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
   try {
     // PDF.js 6.x requires the actual canvas; canvasContext alone is not a
