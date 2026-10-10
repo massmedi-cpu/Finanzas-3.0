@@ -129,6 +129,20 @@ const cases = [
     trust: "not_detected",
   },
   {
+    name: "dotted IVA label keeps explicitly adjacent euro tax",
+    lines: ["I.V.A. 21,00 TOTAL 121,00"],
+    field: "taxesCents",
+    amount: 2100,
+    trust: "reliable",
+  },
+  {
+    name: "dotted IGIC rate does not become a tax amount",
+    lines: ["I.G.I.C. 7,00% TOTAL 107,00"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
     name: "IVA line cannot steal later base and quota",
     lines: ["IVA 21% BASE 100,00 CUOTA 21,00"],
     field: "taxesCents",
@@ -338,6 +352,47 @@ for (const sample of taxTableCases) {
   }
 }
 
+const dottedTaxCases = [
+  {
+    name: "realistic dotted IVA/IGIC base-rate-quota invoice row",
+    line: "I.V.A / I.G.I.C. (Base Imponible: 100,00) 21% EUR 21,00",
+    expected: [21, 10000, 2100],
+  },
+  {
+    name: "decimal dotted IVA/IGIC rate retains base and quota",
+    line: "I.V.A. / I.G.I.C. (Base Imponible: 200.00) 21.0% EUR 42.00",
+    expected: [21, 20000, 4200],
+  },
+  {
+    name: "invoice total cannot masquerade as dotted IVA quota",
+    line: "I.V.A / I.G.I.C. (Base Imponible: 100,00) 21% TOTAL 121,00",
+    expected: null,
+  },
+];
+for (const sample of dottedTaxCases) {
+  try {
+    const interpretation = interpret([sample.line]);
+    const inferred = interpretation.taxLines.filter((row) =>
+      row.baseCents !== null && row.taxCents !== null && row.ratePercent !== null
+    );
+    if (sample.expected) {
+      assert.equal(inferred.length, 1, sample.name + ": exactly one tax line");
+      assert.deepEqual(
+        [inferred[0].ratePercent, inferred[0].baseCents, inferred[0].taxCents],
+        sample.expected, sample.name,
+      );
+      assert.equal(inferred[0].trust, "doubtful", sample.name + ": inferred column association requires review");
+      assert.deepEqual(inferred[0].evidence.map((e) => e.rawText), [sample.line], sample.name + ": source retained");
+    } else {
+      assert.equal(inferred.length, 0, sample.name + ": total is not a tax quota");
+    }
+    console.log("PASS · " + sample.name);
+  } catch (error) {
+    failures++;
+    console.error("FAIL · " + sample.name, error.message);
+  }
+}
+
 const refund = interpret(["DEVOLUCION PRODUCTO −12,34"]).lines[0];
 try {
   assert.ok(refund, "refund line item retained");
@@ -361,5 +416,5 @@ try {
   console.error("FAIL · three decimal weight does not become unit price", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + 2} PASS`);
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2} PASS`);
 if (failures) process.exitCode = 1;
