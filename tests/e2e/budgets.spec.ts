@@ -513,6 +513,63 @@ test("REC-BUD-011 · un cero sintético sin fuente contrastada se muestra como d
   await expect(total).not.toContainText("Dentro de referencia");
 });
 
+test("REC-BUD-012 · una sincronización mal formada no certifica el mes", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      // Dates alone, even if fully bounded, cannot certify a malformed sync.
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-10-01",
+        sync: { status: "success", rowsSeen: 300, rowsFailed: null },
+      }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  const total = page.locator("#budget-total");
+  await expect(total).toContainText("Estado sin verificar");
+  await expect(total.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
+  await expect(total).not.toContainText("Dentro de referencia");
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-BUD-013 · importación parcial conserva lo observado sin prometer cumplimiento", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-10-01",
+        sync: {
+          status: "partial",
+          finishedAt: "2026-10-01T10:00:00Z",
+          startedAt: "2026-10-01T09:00:00Z",
+          rowsSeen: 300, rowsFailed: 4, rowsMissing: 4,
+          duplicatesDetected: 0, warningsCount: 4,
+        },
+      }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "partial");
+  const total = page.locator("#budget-total");
+  await expect(total).toContainText("Estado sin verificar");
+  await expect(total).toContainText("Gasto observado · parcial");
+  await expect(total.getByText("Gasto observado · parcial").locator("..").locator("strong")).toHaveText("400,00 €");
+  await expect(total).toContainText("Margen sin verificar");
+  await expect(total).not.toContainText("Dentro de referencia");
+  expect(writes).toHaveLength(0);
+});
+
 test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve a ser calculable", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
