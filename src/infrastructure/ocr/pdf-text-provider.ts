@@ -64,6 +64,21 @@ function wordsFromContent(
   return words;
 }
 
+/**
+ * Some scanned PDFs retain a tiny selectable stamp, page number or title.
+ * A non-empty native text layer is therefore not proof that the scanned
+ * invoice itself is accessible as text. Only substantial content, or an
+ * identifiable total with decimal cents, can safely bypass visual OCR.
+ */
+export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
+  if (!words.length) return true;
+  const text = words.map((word) => word.text).join(" ").replace(/\s+/g, " ").trim();
+  const chars = [...text].filter((char) => /[\p{L}\p{N}]/u.test(char)).length;
+  if (/\b(?:total|a pagar|importe factura|base imponible)\b[^\n]{0,75}\d+[.,]\d{2}\b/i.test(text)) return false;
+  return words.length < 5 && chars < 80
+    || chars < 35;
+}
+
 async function renderPagePng(
   pdf: PdfWithCanvas,
   page: {
@@ -120,27 +135,49 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
             pdfjs.Util.transform,
           );
 
-          if (nativeWords.length) {
+          if (!pdfNativeTextNeedsVisualOcr(nativeWords)) {
             nativePageCount += 1;
             pages.push({ pageNumber, words: nativeWords });
             continue;
           }
 
-          const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
-          const visual = await this.imageOcr.extract({
-            bytes: new Uint8Array(png),
-            mimeType: "image/png",
-            originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
-          });
-          const visualWords = visual.pages[0]?.words ?? [];
-          if (visualWords.length) {
-            visualOcrPageCount += 1;
-            pages.push({ pageNumber, words: visualWords });
-          } else {
-            pages.push({ pageNumber, words: [] });
-            warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+          // A PDF with only selectable boilerplate may otherwise bypass OCR
+          // on a fully scanned invoice. Keep the original native words if
+          // the visual pass fails or produces less usable content.
+          try {
+            const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
+            const visual = await this.imageOcr.extract({
+              bytes: new Uint8Array(png),
+              mimeType: "image/png",
+              originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
+            });
+            const visualWords = visual.pages[0]?.words ?? [];
+            const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+            const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+            const improved = visualWords.length > 0
+              && (!nativeWords.length || (
+                visualWords.length > nativeWords.length
+                && visualChars >= nativeChars
+              ) || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5));
+            if (improved) {
+              visualOcrPageCount += 1;
+              pages.push({ pageNumber, words: visualWords });
+              if (nativeWords.length) warnings.push(`pdf_page_sparse_native_recovered:${pageNumber}`);
+            } else if (nativeWords.length) {
+              nativePageCount += 1;
+              pages.push({ pageNumber, words: nativeWords });
+              warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+            } else {
+              pages.push({ pageNumber, words: [] });
+              warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+            }
+            for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
+          } catch (error) {
+            if (!nativeWords.length) throw error;
+            nativePageCount += 1;
+            pages.push({ pageNumber, words: nativeWords });
+            warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
           }
-          for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
         } finally {
           try { page.cleanup(); } catch { /* best effort */ }
         }
