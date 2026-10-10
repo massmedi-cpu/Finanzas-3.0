@@ -445,7 +445,7 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
   expect(writes).toHaveLength(0);
 });
 
-test("REC-OCR-038 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
+test("REC-OCR-039 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
   const corruptions = [
     "wrong-document", "wrong-ocr-run", "wrong-total", "source-write",
   ] as const;
@@ -511,9 +511,11 @@ test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisi
   const runId = "98000000-0000-4000-8000-000000000098";
   let patchCount = 0;
   let recovered = false;
+  let lastSubmission: Record<string, unknown> | null = null;
   await page.route("**/api/documents/ocr-review*", async (route) => {
     if (route.request().method() === "PATCH") {
       patchCount += 1;
+      lastSubmission = route.request().postDataJSON() as Record<string, unknown>;
       await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
       return;
     }
@@ -521,7 +523,16 @@ test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisi
       status: 200, contentType: "application/json",
       body: JSON.stringify({
         runs: [{ id: runId, extractor: "pdfjs-6.2.108-native-text", extractedAt: "2026-09-07T07:00:00.000Z" }],
-        reviews: recovered ? [{ revision: 1, ocrRunId: runId }] : [],
+        reviews: recovered && lastSubmission ? [{
+          revision: 1, ocrRunId: runId,
+          reviewedValues: {
+            type: lastSubmission.type,
+            documentDate: lastSubmission.documentDate,
+            taxBaseCents: lastSubmission.taxBaseCents,
+            taxesCents: lastSubmission.taxesCents,
+            totalCents: lastSubmission.totalCents,
+          },
+        }] : [],
       }),
     });
   });
@@ -538,7 +549,7 @@ test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisi
   expect(patchCount).toBe(1);
   await verify.click();
   await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
-    .toContainText("El historial no muestra una revisión nueva");
+    .toContainText("El historial no muestra una revisión nueva que coincida");
   await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
   expect(patchCount).toBe(1);
 
