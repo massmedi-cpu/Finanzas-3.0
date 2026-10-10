@@ -1,0 +1,49 @@
+name: Financial SQL 10k-50k disposable benchmark
+
+on:
+  pull_request:
+    branches:
+      - chat/retry-bank-freshness-status-20261010
+      - chat/postgres-financial-10k50k-lab-20261010
+    paths:
+      - 'supabase/tests/financial_performance_50k_disposable.sql'
+      - 'scripts/financial-performance-disposable-db.sh'
+      - '.github/workflows/financial-db-10k50k.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finance-sql-capacity-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  postgres-benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout exact candidate
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client
+      - name: Run disposable SQL and verify 10k/50k parity with 12 measured reads
+        env:
+          AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
+        run: bash scripts/financial-performance-disposable-db.sh
+      # PostgreSQL exists only inside the runner. Synthetic fixture ROLLBACK
+      # is checked; no Supabase host, secrets or bank originals are contacted.
