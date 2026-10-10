@@ -428,6 +428,27 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-036 · respuesta de revisión sin número no se anuncia como guardada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirmations = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirmations += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await page.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("No se pudo comprobar si la revisión OCR llegó a guardarse");
+  await expect(page.getByText(/Guardada como revisión/)).toHaveCount(0);
+  expect(confirmations).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
