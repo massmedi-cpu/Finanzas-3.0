@@ -124,6 +124,9 @@ test("Presupuestos asocia el error de importe al campo, conserva foco y limpia l
             ...snapshot.total,
             manualAmountCents: 123456,
             effectiveAmountCents: 123456,
+            remainingCents: 123456 - snapshot.total.actualExpenseCents,
+            progressBps: Math.round((snapshot.total.actualExpenseCents * 10000) / 123456),
+            status: "on_track",
           },
         }),
       });
