@@ -487,7 +487,12 @@ test("QA-11 · una mensualidad cero sin cobertura no se representa como gasto ce
   // No imported movement is known inside August, so the all-zero row is not
   // proof that August was a complete zero. Both bars stay unconfirmed.
   await expect(incomeExpense.locator('[data-zero="true"]')).toHaveCount(0);
-  await expect(incomeExpense.locator('[data-series-missing="true"]')).toHaveCount(2);
+  // The accessible income/expense chart uses a month-level missing marker,
+  // not the data-series-missing marker of the separate net-flow chart.
+  const unknownMonth = incomeExpense.locator('[data-month-coverage="unknown"]');
+  await expect(unknownMonth).toHaveCount(1);
+  await expect(unknownMonth).toHaveAccessibleName(/agosto de 2026: sin cobertura bancaria confirmada/);
+  await expect(unknownMonth.locator('span[style*="height"]')).toHaveCount(0);
 
   await page.getByRole("button", { name: "Flujo neto" }).click();
   const netChart = page.getByRole("group", { name: "Flujo neto por mes" });
