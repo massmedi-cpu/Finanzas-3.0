@@ -174,6 +174,28 @@ test("REC-SYNC-001 · sincronización exitosa sin fecha bancaria no significa da
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
 });
 
+test("REC-CMP-006 · missing beginning of period is partial without claiming last movement precedes its end", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-09-05",
+      latestMovementDate: "2026-10-06",
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByRole("heading", {
+    name: "La cobertura bancaria del periodo principal es parcial o presenta incidencias; no podemos concluir mejora ni empeoramiento.",
+  })).toBeVisible();
+  await expect(page.getByText("Cobertura bancaria parcial o con incidencias · el intervalo completo no está verificado.")).toBeVisible();
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics).not.toContainText("33,3 %");
+});
+
 test("REC-CMP-004 · reference outside the imported range cannot certify any change or fake zero", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
@@ -235,6 +257,11 @@ test("REC-CMP-003 · una sincronización con filas ausentes impide certificar va
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
   await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("El gasto diario baja 33,3 %");
   await expect(page.getByText("2 movimientos ausentes de los datos importados", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", {
+    name: "La cobertura bancaria del periodo principal es parcial o presenta incidencias; no podemos concluir mejora ni empeoramiento.",
+  })).toBeVisible();
+  await expect(page.getByText("Cobertura bancaria parcial o con incidencias · el intervalo completo no está verificado.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("datos hasta 10/09/2026");
 });
 
 test("REC-CMP-002 · la frescura del Comparador cambia con la cuenta bancaria aplicada", async ({ page }) => {
