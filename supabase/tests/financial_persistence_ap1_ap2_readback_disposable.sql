@@ -16,7 +16,7 @@ DECLARE
   v_total bigint; v_category bigint; v_snapshot jsonb;
 BEGIN
   SELECT count(*) INTO v_accounts FROM financial_app.accounts;
-  SELECT count(*) INTO v_categories FROM financial_app.categories;
+  SELECT count(*) INTO v_categories FROM financial_app.categories WHERE name='AP1AP2 expense';
   SELECT count(*) INTO v_budgets FROM financial_app.budgets WHERE month='2026-09';
   SELECT count(*) INTO v_audits FROM financial_app.audit_changes
     WHERE entity_type='budget' AND field_name='manual_amount_cents';
@@ -47,7 +47,7 @@ DECLARE
   v_total bigint; v_category bigint; v_snapshot jsonb;
 BEGIN
   SELECT count(*) INTO v_accounts FROM financial_app.accounts;
-  SELECT count(*) INTO v_categories FROM financial_app.categories;
+  SELECT count(*) INTO v_categories FROM financial_app.categories WHERE name='AP1AP2 expense';
   SELECT count(*) INTO v_budgets FROM financial_app.budgets WHERE month='2026-09';
   SELECT count(*) INTO v_audits FROM financial_app.audit_changes
     WHERE entity_type='budget' AND field_name='manual_amount_cents';
