@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath } from "../../src/application/cash-flow/evolution-plot";
-import type { CashFlowEvolutionPoint } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowObservedDaySignal, type CashFlowEvolutionPoint, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
 
 function point(date: string, value: number | null): CashFlowEvolutionPoint {
   return { date, realCumulativeCents: value, plannedCumulativeCents: null, combinedCumulativeCents: null };
@@ -31,4 +31,31 @@ test("one observed day remains visible as an isolated point", () => {
   expect(cashFlowDayPositions(rows)).toEqual([0.5]);
   expect(cashFlowIsolatedPoints(rows, "realCumulativeCents")).toEqual([0]);
   expect(cashFlowSegmentedPath(rows, "realCumulativeCents", () => 50, v => v)).toBe("M 50 -250");
+});
+
+test("Cash Flow calendar hides bank signals without confirmed coverage and excludes transfers/duplicates", () => {
+  const income: CashFlowTransaction = {
+    id: "synthetic-income", bankDate: "2026-10-01", amountCents: 12050,
+    account: { id: "synthetic-account", name: "Fictitious account" },
+    concept: { effective: "Fixture income" },
+    kind: { effective: "income" }, duplicateState: "none", excludedFromAnalytics: false,
+  };
+  const expense: CashFlowTransaction = {
+    ...income, id: "synthetic-expense", amountCents: -3450,
+    kind: { effective: "expense" },
+  };
+  const covered = { real: [income, expense] };
+  expect(cashFlowObservedDaySignal(covered, false, "income")).toBe(false);
+  expect(cashFlowObservedDaySignal(covered, false, "expense")).toBe(false);
+  expect(cashFlowObservedDaySignal(covered, true, "income")).toBe(true);
+  expect(cashFlowObservedDaySignal(covered, true, "expense")).toBe(true);
+
+  // A positive internal transfer or confirmed duplicate is not an income.
+  const ineligible = { real: [
+    { ...income, id: "synthetic-transfer", kind: { effective: "transfer" as const } },
+    { ...income, id: "synthetic-duplicate", duplicateState: "confirmed" as const },
+    { ...expense, id: "synthetic-excluded", excludedFromAnalytics: true },
+  ] };
+  expect(cashFlowObservedDaySignal(ineligible, true, "income")).toBe(false);
+  expect(cashFlowObservedDaySignal(ineligible, true, "expense")).toBe(false);
 });
