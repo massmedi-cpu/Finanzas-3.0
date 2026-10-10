@@ -649,7 +649,7 @@ test("REC-CMP-007 · un fallo del comparador conserva la selección aplicada y p
   });
   await page.locator("fieldset").first().getByLabel("Hasta").fill("2026-09-11");
   await page.getByRole("button", { name: "Comparar periodos" }).click();
-  await expect(page.getByRole("alert")).toContainText("No se ha podido actualizar el comparador");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido actualizar el comparador");
   await expect(originalPeriod).toContainText("Principal 10 días");
   await expect(page.getByRole("button", { name: "Comparar periodos" })).toBeEnabled();
   failed = false;
