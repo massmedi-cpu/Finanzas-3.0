@@ -13,8 +13,9 @@ for (const theme of ["light", "dark"] as const) {
     const notice = page.getByText("El mes solicitado no era válido; se muestra el mes actual.", { exact: true });
     await expect(notice).toBeVisible();
 
-    const colors = await page.evaluate((selector) => {
-      const status = document.querySelector(selector);
+    const colors = await page.evaluate(() => {
+      const status = [...document.querySelectorAll('p[role="status"]')]
+        .find((node) => node.textContent?.includes("El mes solicitado no era válido"));
       if (!status) throw new Error("Missing invalid-month status notice");
       const root = getComputedStyle(document.documentElement);
       const documentColor = (node: Element) => getComputedStyle(node).color;
@@ -31,7 +32,7 @@ for (const theme of ["light", "dark"] as const) {
       };
       extra.remove();
       return result;
-    }, '[role="status"]');
+    });
 
     const hexToRgb = (hex: string) => {
       const match = /^#([a-f0-9]{2})([a-f0-9]{2})([a-f0-9]{2})$/i.exec(hex);
@@ -39,7 +40,7 @@ for (const theme of ["light", "dark"] as const) {
       return match.slice(1).map((part) => parseInt(part, 16));
     };
     const rgb = (color: string) => {
-      const match = /^rgb\\((\\d+), (\\d+), (\\d+)\\)$/.exec(color);
+      const match = /^rgb\((\d+), (\d+), (\d+)\)$/.exec(color);
       if (!match) throw new Error(`Unexpected CSS color: ${color}`);
       return match.slice(1).map(Number);
     };
