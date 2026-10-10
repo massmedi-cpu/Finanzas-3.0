@@ -456,7 +456,27 @@ export function OcrReviewPanel({
       if (!isCurrent()) return;
       const revision = typeof saved?.revision === "number" && Number.isSafeInteger(saved.revision) && saved.revision > 0
         ? saved.revision : null;
-      if (revision === null) {
+      const confirmedValues = saved?.reviewedValues;
+      // Verified against the live, read-only PostgreSQL function contract:
+      // revision alone cannot identify the document or the OCR run, nor
+      // prove that the financial amounts sent by the human were persisted.
+      if (
+        revision === null
+        || revision <= knownReviewRevision.current
+        || saved?.contractVersion !== 2
+        || saved?.documentId !== documentId
+        || saved?.ocrRunId !== ocrRunId
+        || saved?.rawEvidenceImmutable !== true
+        || saved?.bankSource !== "read_only"
+        || saved?.financialWrites !== false
+        || saved?.requiresHumanReview !== true
+        || !confirmedValues || typeof confirmedValues !== "object" || Array.isArray(confirmedValues)
+        || confirmedValues.type !== payload.type
+        || confirmedValues.documentDate !== payload.documentDate
+        || confirmedValues.taxBaseCents !== payload.taxBaseCents
+        || confirmedValues.taxesCents !== payload.taxesCents
+        || confirmedValues.totalCents !== payload.totalCents
+      ) {
         throw new Error("ocr_confirmation_unverified");
       }
       knownReviewRevision.current = Math.max(knownReviewRevision.current, revision);
