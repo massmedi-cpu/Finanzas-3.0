@@ -163,6 +163,9 @@ function snapshotForMonth(month: string) {
     month,
     monthStart: `${month}-01`,
     monthEnd: `${month}-${String(lastDay).padStart(2, "0")}`,
+    // Planning is tied to its own three-month income history. A synthetic
+    // navigation snapshot must not reuse September planning for July/August.
+    planning: month === baseSnapshot.month ? baseSnapshot.planning : undefined,
   };
 }
 
