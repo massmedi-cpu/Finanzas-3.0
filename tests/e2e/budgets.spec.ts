@@ -1138,7 +1138,7 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
 
   await page.goto("/budgets?month=2026-07");
   await expect(page.locator('input[type="month"]')).toHaveValue("2026-07");
-  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
   expect(requestedMonth).toBe("2026-07");
 });
 
@@ -1158,7 +1158,7 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   await page.goto("/budgets?month=2026-07");
   const monthInput = page.locator('input[type="month"]');
   await expect(monthInput).toHaveValue("2026-07");
-  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
 
   // Mobile hides this route behind the More dock; desktop exposes it in the
   // persistent sidebar. Both must navigate through the real product control.
@@ -1179,7 +1179,7 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   await expect(monthInput).toHaveValue(currentMonth);
   await expect(page).toHaveURL(new RegExp(`month=${currentMonth}`));
   await expect.poll(() => requested.includes(currentMonth)).toBe(true);
-  await expect(page.getByText("Julio de 2026", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).not.toContainText("Julio de 2026");
 });
 
 test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
@@ -1256,10 +1256,10 @@ test("Presupuestos conserva el último mes si una respuesta anterior llega tarde
   await augustStarted;
   await monthInput.fill("2026-07");
 
-  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
   await page.waitForTimeout(350);
-  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
-  await expect(page.getByText("Agosto de 2026", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("Julio de 2026");
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).not.toContainText("Agosto de 2026");
 });
 
 test("Presupuestos recalcula de forma explícita sin escribir hasta que el usuario lo pide", async ({ page }) => {
