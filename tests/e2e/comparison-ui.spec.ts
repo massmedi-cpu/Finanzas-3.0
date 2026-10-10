@@ -483,7 +483,16 @@ test("REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras 
       available: true,
       earliestMovementDate: "2026-08-31",
       latestMovementDate: "2026-09-25",
-      sync: null,
+      sync: {
+         status: "success",
+         startedAt: "2026-09-25T07:59:00Z",
+         finishedAt: "2026-09-25T08:00:00Z",
+         rowsSeen: 25,
+         rowsFailed: 0,
+         rowsMissing: 0,
+         duplicatesDetected: 0,
+         warningsCount: 0,
+       },
     }),
   }));
   await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
