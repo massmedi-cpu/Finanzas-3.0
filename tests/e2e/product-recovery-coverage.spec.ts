@@ -35,7 +35,9 @@ test("REC-DAT · el presupuesto parcial muestra su base y reserva una conclusió
 test("REC-CHART · un mes observado conserva cifras, tabla accesible y movimientos del mismo periodo", async ({ page }) => {
   await mockRecoveryHome(page, "covered");
   await page.goto("/");
-  await expect(page.getByRole("region", { name: "Resumen inteligente" })).toContainText("Presupuesto dentro del límite");
+  const brief = page.getByRole("region", { name: "Resumen inteligente" });
+  await expect(brief).toContainText("Presupuesto con datos parciales");
+  await expect(brief).not.toContainText("Presupuesto dentro del límite");
   await page.getByRole("button", { name: /septiembre de 2026.*ingresos/ }).focus();
   const drilldown = page.getByRole("link", { name: "Ver movimientos de este mes" });
   await expect(drilldown).toHaveAttribute("href", "/transactions?dateFrom=2026-09-01&dateTo=2026-09-30");

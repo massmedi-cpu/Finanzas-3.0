@@ -1,5 +1,10 @@
 import { expect, test } from "@playwright/test";
 import {
+  dateHasConfirmedCoverage,
+  periodComparisonIsReliable,
+  resolvePeriodCoverage,
+} from "../../src/application/data-coverage";
+import {
   buildAnalysisSnapshot,
   type AnalysisGatewaySnapshot,
   type AnalysisSnapshot,
@@ -176,7 +181,7 @@ async function mockAnalysisApi(
   page: Parameters<typeof test>[0] extends never ? never : any,
   snapshot: AnalysisSnapshot,
   latestMovementDate = snapshot.selection.dateTo,
-  earliestMovementDate?: string | null,
+  earliestMovementDate: string | null = "2025-01-01",
 ) {
   let selectedRequestSeen = false;
   await page.route("**/api/analysis/source-freshness", async (route: any) => {
@@ -198,7 +203,7 @@ async function mockAnalysisApi(
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate?: string | null) {
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate: string | null = "2025-01-01") {
   const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate, earliestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
@@ -645,4 +650,149 @@ test("REC-COV-006 · el extremo bancario se solicita para la cuenta realmente se
   await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
   await expect.poll(() => scopes.includes(accountId)).toBe(true);
   await expect(page.getByRole("heading", { level: 1, name: "Análisis" })).toBeVisible();
+});
+
+
+test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histórico", () => {
+  const legacy = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-10-10",
+  });
+  // The only known movement is after September: its existence does not
+  // establish that the historical September interval contains any rows.
+  expect(legacy.state).toBe("unknown");
+  expect(legacy.fromDate).toBeUndefined();
+  expect(periodComparisonIsReliable(legacy)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-12", legacy)).toBe(false);
+
+  const currentObserved = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-09-15",
+  });
+  expect(currentObserved.state).toBe("partial");
+  expect(periodComparisonIsReliable(currentObserved)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-15", currentObserved)).toBe(false);
+
+  const knownBounds = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: "2026-08-01",
+    latestMovementDate: "2026-10-10",
+  });
+  expect(knownBounds.state).toBe("covered");
+  expect(dateHasConfirmedCoverage("2026-09-12", knownBounds)).toBe(true);
+});
+
+test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
+  await loadMockAnalysis(page, snapshot, "2026-09-15", null);
+
+  const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
+  await accumulated.getByText("Ver acumulado por día", { exact: true }).click();
+  const dates = accumulated.getByRole("table").getByRole("row").locator("td:first-child");
+  await expect(dates.first()).toHaveText("04/09/2026");
+  await expect(dates.first()).not.toHaveText("01/09/2026");
+  await expect(dates).toHaveCount(12);
+  const comparisons = page.getByLabel("Indicadores principales del periodo");
+  await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+});
+
+
+test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura anterior", async ({ page }) => {
+  const overall = mockSnapshot();
+  const selectedAccountId = overall.accounts[0].id;
+  const individual: AnalysisSnapshot = {
+    ...overall,
+    selection: { ...overall.selection, accountId: selectedAccountId },
+  };
+  let releaseScopedRequest: (() => void) | undefined;
+  const holdScopedRequest = new Promise<void>((resolve) => {
+    releaseScopedRequest = resolve;
+  });
+  let scopedRequestSeen = false;
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    if (account === selectedAccountId) {
+      scopedRequestSeen = true;
+      await holdScopedRequest;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: account ? "2026-09-04" : "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const account = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(account === selectedAccountId ? individual : overall),
+    });
+  });
+
+  try {
+    await page.goto("/analysis?month=2026-09&range=1m");
+    const comparisons = page.getByLabel("Indicadores principales del periodo");
+    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(0);
+    await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption(selectedAccountId);
+    await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+    await expect.poll(() => scopedRequestSeen).toBe(true);
+    // While the new scoped request is pending, the old account's complete
+    // bounds cannot certify the selected account's comparisons.
+    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+  } finally {
+    releaseScopedRequest?.();
+  }
+});
+
+
+test("REC-COV-010 · volver a todas las cuentas no hereda la cuenta de la URL original", async ({ page }) => {
+  const specific = mockSnapshot();
+  const accountId = specific.accounts[0].id;
+  specific.selection.accountId = accountId;
+  const all = mockSnapshot();
+  const freshnessScopes: Array<string | null> = [];
+
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    freshnessScopes.push(scope);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-09-15",
+        sync: null,
+      }),
+    });
+  });
+  await page.route(/\/api\/analysis(?:\?.*)?$/, async (route) => {
+    const scope = new URL(route.request().url()).searchParams.get("accountId");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(scope === accountId ? specific : all),
+    });
+  });
+
+  await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
+  await expect.poll(() => freshnessScopes.includes(accountId)).toBe(true);
+  await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption("");
+  const requestsBeforeSwitch = freshnessScopes.length;
+  await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
+  await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m(?!.*accountId)/);
+  await expect.poll(() => freshnessScopes.slice(requestsBeforeSwitch).includes(null)).toBe(true);
 });
