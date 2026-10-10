@@ -12,6 +12,7 @@ import type {
   AnalysisTrend,
 } from "../../src/application/analysis/analysis-engine";
 import { isAnalysisSnapshot } from "../../src/application/analysis/analysis-contract";
+import type { SourceSyncIncidentInput } from "../../src/application/source-sync-incidents";
 import { analysisModuleLinks } from "../../src/application/navigation/module-context";
 import {
   periodComparisonIsReliable,
@@ -371,11 +372,13 @@ export default function AnalysisClient({
   initialSnapshot,
   latestMovementDate = null,
   earliestMovementDate = null,
+  sourceSync = null,
   onApplied,
 }: {
   initialSnapshot: AnalysisSnapshot | null;
   latestMovementDate?: string | null;
   earliestMovementDate?: string | null;
+  sourceSync?: SourceSyncIncidentInput | null;
   onApplied?: (snapshot: AnalysisSnapshot) => void;
 }) {
   const requestRef = useRef<AbortController | null>(null);
@@ -404,6 +407,7 @@ export default function AnalysisClient({
     dateTo: snapshot.selection.dateTo,
     latestMovementDate,
     earliestMovementDate,
+    sync: sourceSync,
   }) : null;
   const coverageIncomplete = coverage ? !periodComparisonIsReliable(coverage) : true;
   const coverageHasObservedData = coverage ? periodHasObservedData(coverage) : false;
