@@ -149,7 +149,7 @@ function MetricCard({
   const referenceObserved = periodHasObservedData(referenceCoverage);
   const tone = comparable ? metricTone(metric.deltaCents, positiveIsGood) : styles.neutral;
   const coverageDetail = coverage.state === "partial"
-    ? `Importe principal parcial · datos hasta ${formatDate(coverage.throughDate!)}`
+    ? "Importe observado, pero cobertura bancaria del periodo incompleta"
     : coverage.state === "none"
       ? "Periodo principal sin cobertura bancaria confirmada"
       : coverage.state === "unknown"
@@ -378,7 +378,10 @@ function comparisonInsight(
         ? `El periodo principal no tiene cobertura bancaria confirmada: el último movimiento importado es del ${formatDate(coverage.latestMovementDate)}. No interpretamos 0 € como mejora.`
         : "El periodo principal no tiene cobertura bancaria confirmada. No interpretamos 0 € como mejora.";
     }
-    return `Los datos llegan hasta ${formatDate(coverage.throughDate!)} antes del final del periodo principal. La comparación queda incompleta.`;
+    if (coverage.throughDate && coverage.throughDate < snapshot.selection.primaryTo) {
+      return `Hay movimientos observados hasta ${formatDate(coverage.throughDate)}, antes del final seleccionado. La comparación queda incompleta.`;
+    }
+    return "La cobertura bancaria del periodo principal es parcial o presenta incidencias; no podemos concluir mejora ni empeoramiento.";
   }
   const expense = snapshot.metrics.expense;
   if (
@@ -623,7 +626,9 @@ export default function ComparisonClient({
                     : primaryCoverage?.state === "covered"
                       ? "Periodo de referencia sin cobertura completa: las variaciones no son concluyentes."
                     : primaryCoverage?.state === "partial"
-                      ? `Cobertura bancaria parcial · datos observados hasta ${formatDate(primaryCoverage.throughDate!)}.`
+                      ? primaryCoverage.throughDate && primaryCoverage.throughDate < snapshot.selection.primaryTo
+                        ? `Cobertura bancaria parcial · movimientos observados hasta ${formatDate(primaryCoverage.throughDate)}.`
+                        : "Cobertura bancaria parcial o con incidencias · el intervalo completo no está verificado."
                       : primaryCoverage?.state === "none"
                         ? `Sin cobertura bancaria confirmada en el periodo principal${primaryCoverage.latestMovementDate ? ` · último movimiento ${formatDate(primaryCoverage.latestMovementDate)}` : ""}.`
                         : "Cobertura bancaria desconocida · los cambios no se interpretan como mejora ni empeoramiento."}
