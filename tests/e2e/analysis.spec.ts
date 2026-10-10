@@ -181,7 +181,7 @@ async function mockAnalysisApi(
   page: Parameters<typeof test>[0] extends never ? never : any,
   snapshot: AnalysisSnapshot,
   latestMovementDate = snapshot.selection.dateTo,
-  earliestMovementDate?: string | null,
+  earliestMovementDate: string | null = "2025-01-01",
 ) {
   let selectedRequestSeen = false;
   await page.route("**/api/analysis/source-freshness", async (route: any) => {
@@ -203,7 +203,7 @@ async function mockAnalysisApi(
   return () => selectedRequestSeen;
 }
 
-async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate?: string | null) {
+async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMovementDate = snapshot.selection.dateTo, earliestMovementDate: string | null = "2025-01-01") {
   const selectedRequestSeen = await mockAnalysisApi(page, snapshot, latestMovementDate, earliestMovementDate);
   await page.goto("/analysis");
   await page.getByLabel("Mes de referencia").fill("2026-09");
@@ -678,7 +678,7 @@ test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histó
 test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
   const snapshot = mockSnapshot();
   snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];
-  await loadMockAnalysis(page, snapshot, "2026-09-15");
+  await loadMockAnalysis(page, snapshot, "2026-09-15", null);
 
   const accumulated = page.locator('section[aria-labelledby="axioma53-accumulated-heading"]');
   await accumulated.getByText("Ver acumulado por día", { exact: true }).click();
@@ -734,7 +734,7 @@ test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura ante
     await page.goto("/analysis?month=2026-09&range=1m");
     const comparisons = page.getByLabel("Indicadores principales del periodo");
     await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(0);
-    await page.getByLabel("Cuenta", { exact: true }).first().selectOption(selectedAccountId);
+    await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption(selectedAccountId);
     await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
     await expect.poll(() => scopedRequestSeen).toBe(true);
     // While the new scoped request is pending, the old account's complete
@@ -778,7 +778,7 @@ test("REC-COV-010 · volver a todas las cuentas no hereda la cuenta de la URL or
 
   await page.goto(`/analysis?month=2026-09&range=1m&accountId=${accountId}`);
   await expect.poll(() => freshnessScopes.includes(accountId)).toBe(true);
-  await page.getByLabel("Cuenta", { exact: true }).first().selectOption("");
+  await page.getByRole("form", { name: "Filtros del análisis" }).locator("select").selectOption("");
   const requestsBeforeSwitch = freshnessScopes.length;
   await page.getByRole("button", { name: "Aplicar cambios" }).first().click();
   await expect(page).toHaveURL(/\/analysis\?month=2026-09&range=1m(?!.*accountId)/);
