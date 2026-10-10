@@ -290,6 +290,7 @@ export function OcrReviewPanel({
   const documentGeneration = useRef(0);
   const ocrRequest = useRef<AbortController | null>(null);
   const ocrInFlight = useRef(false);
+  const confirmInFlight = useRef(false);
 
   useEffect(() => {
     activeDocumentId.current = documentId;
@@ -297,6 +298,7 @@ export function OcrReviewPanel({
     ocrRequest.current?.abort();
     ocrRequest.current = null;
     ocrInFlight.current = false;
+    confirmInFlight.current = false;
     setResult(null);
     setDraft(null);
     setOcrRunId(null);
@@ -310,6 +312,7 @@ export function OcrReviewPanel({
       documentGeneration.current += 1;
       ocrRequest.current?.abort();
       ocrInFlight.current = false;
+      confirmInFlight.current = false;
     };
   }, [documentId]);
 
@@ -388,7 +391,8 @@ export function OcrReviewPanel({
   }
 
   async function confirmReview() {
-    if (!draft || !ocrRunId || confirming || busy || activeDocumentId.current !== documentId) return;
+    if (!draft || !ocrRunId || confirming || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
+    confirmInFlight.current = true;
     const generation = documentGeneration.current;
     const isCurrent = () => generation === documentGeneration.current
       && activeDocumentId.current === documentId;
@@ -442,7 +446,10 @@ export function OcrReviewPanel({
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
-      if (isCurrent()) setConfirming(false);
+      if (isCurrent()) {
+        confirmInFlight.current = false;
+        setConfirming(false);
+      }
     }
   }
 
