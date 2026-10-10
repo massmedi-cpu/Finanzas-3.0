@@ -809,6 +809,54 @@ test("REC-BUD-024 · readback discordante requiere aprobación explícita antes 
   expect(writes).toBe(1);
 });
 
+test("REC-BUD-025 · importes contradictorios del backend se rechazan sin dibujar resultados", async ({ page }) => {
+  const mutations = [
+    { name: "límite efectivo distinto del manual", total: { manualAmountCents: 90000 } },
+    { name: "margen distinto de límite menos gasto", total: { remainingCents: 80001 } },
+    { name: "categoría con exceso etiquetado dentro del límite", category: { remainingCents: -15000, status: "on_track" } },
+  ];
+  for (const sample of mutations) {
+    const malformed = structuredClone(baseSnapshot);
+    Object.assign(malformed.total, sample.total ?? {});
+    Object.assign(malformed.categories[0], sample.category ?? {});
+    await page.route("**/api/budgets*", async (route) => {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(malformed) });
+    });
+    await page.goto("/budgets?month=2026-09");
+    await expect(page.getByRole("heading", { name: /No se ha podido cargar/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+    await page.unroute("**/api/budgets*");
+  }
+});
+
+test("REC-BUD-026 · dos clics sincronizados no emiten escrituras duplicadas", async ({ page }) => {
+  let writes = 0;
+  let releaseWrite: (() => void) | null = null;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes += 1;
+    await new Promise<void>((resolve) => { releaseWrite = resolve; });
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotWithTotalManual(85000)) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.evaluate(() => {
+    const save = [...document.querySelectorAll("button")].find((button) => button.textContent?.trim() === "Guardar");
+    save?.click();
+    save?.click();
+  });
+  await expect.poll(() => writes).toBe(1);
+  expect(writes).toBe(1);
+  releaseWrite?.();
+  await expect(page.locator("#budget-total").getByText("Límite elegido").locator("..").locator("strong"))
+    .toHaveText("850,00 €");
+  expect(writes).toBe(1);
+});
+
 test("REC-BUD-016 · advertencia de cobertura con color semántico en claro y oscuro", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
