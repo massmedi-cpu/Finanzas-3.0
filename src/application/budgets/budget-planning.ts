@@ -214,6 +214,52 @@ function isBudgetItem(value: unknown): value is BudgetItem {
     );
 }
 
+function isBudgetPlanningContext(value: unknown, snapshot: BudgetSnapshot): value is BudgetPlanningContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const planning = value as Partial<BudgetPlanningContext>;
+  const range = budgetPlanningRange(snapshot.month);
+  const selected = snapshot.total.manualAmountCents;
+  const difference = selected === null ? null : selected - snapshot.total.automaticAmountCents;
+  const savings = planning.averageIncomeCents !== null
+    && planning.averageIncomeCents !== undefined
+    && selected !== null
+    && planning.averageIncomeCents > 0
+    ? planning.averageIncomeCents - selected : null;
+  const incomeMonths = planning.incomeHistoryMonths;
+  return planning.contractVersion === 1
+    && ["ready", "unavailable", "mismatch"].includes(planning.state ?? "")
+    && ["ready", "needs_limit", "no_income", "unavailable", "mismatch"].includes(planning.objectiveState ?? "")
+    && planning.historyDateFrom === range.dateFrom
+    && planning.historyDateTo === range.dateTo
+    && planning.historicalBaselineCents === snapshot.total.automaticAmountCents
+    && planning.selectedLimitCents === selected
+    && planning.trackingReferenceCents === snapshot.total.effectiveAmountCents
+    && planning.differenceFromBaselineCents === difference
+    && (planning.averageIncomeCents === null ||
+      (isSafeInteger(planning.averageIncomeCents) && planning.averageIncomeCents >= 0))
+    && (planning.targetSavingsCents === null || isSafeInteger(planning.targetSavingsCents))
+    && (planning.targetSavingsRateBps === null || isSafeInteger(planning.targetSavingsRateBps))
+    && (planning.objectiveState !== "ready" ||
+      (planning.state === "ready"
+        && savings !== null
+        && Number.isSafeInteger(savings)
+        && planning.targetSavingsCents === savings
+        && planning.targetSavingsRateBps === Math.round((savings / planning.averageIncomeCents!) * 10_000)))
+    && Array.isArray(incomeMonths)
+    && incomeMonths.every((row, index) =>
+      Boolean(row)
+      && typeof row.month === "string"
+      && row.month === range.months[index]
+      && isSafeInteger(row.incomeCents) && row.incomeCents >= 0
+    )
+    && incomeMonths.length <= range.months.length
+    && planning.principles?.historicalBaseline === "axioma_52_budget_reference"
+    && planning.principles?.chosenLimit === "manual_total_budget_only"
+    && planning.principles?.objective === "average_income_minus_chosen_limit"
+    && planning.principles?.incomeSource === "financial_monthly_series"
+    && planning.principles?.financialAdvice === false;
+}
+
 export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<BudgetSnapshot>;
@@ -230,6 +276,7 @@ export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
     // the same spending is presented twice and React may reuse stale cards.
     && snapshot.categories.every((item) => typeof item.categoryId === "string" && item.categoryId.length > 0)
     && new Set(snapshot.categories.map((item) => item.categoryId)).size === snapshot.categories.length
+    && (snapshot.planning === undefined || isBudgetPlanningContext(snapshot.planning, snapshot as BudgetSnapshot))
     && principles.bankSource === "read_only"
     && principles.actualSource === "financial_transaction_allocation_facts"
     && principles.recommendation === "axioma_52_weighted_history_seasonality_trend_recurrence_floor"
