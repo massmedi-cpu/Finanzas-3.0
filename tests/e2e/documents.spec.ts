@@ -397,6 +397,37 @@ test("REC-OCR-034 · dos clics antes del render disparan una sola lectura", asyn
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistidas", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirms = 0;
+  let releaseSave: (() => void) | null = null;
+  const pendingSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirms += 1;
+    await pendingSave;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ revision: 1 }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll("button")];
+    const trigger = buttons.find((button) => button.textContent?.trim() === "Confirmar revisión");
+    trigger?.click();
+    trigger?.click();
+  });
+  await expect.poll(() => confirms).toBe(1);
+  await expect(page.getByRole("button", { name: "Confirmando…" })).toBeDisabled();
+  releaseSave?.();
+  await expect(page.getByText("Guardada como revisión 1.")).toBeVisible();
+  expect(confirms).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
