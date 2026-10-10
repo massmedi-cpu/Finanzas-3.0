@@ -33,11 +33,14 @@ function stateLabel(value: number | null) {
 export function CashFlowEvolution({
   points,
   onInspectDate,
+  selectedDate,
+  onSelectDate,
 }: {
   points: CashFlowEvolutionPoint[];
   onInspectDate: (date: string) => void;
+  selectedDate: string | null;
+  onSelectDate: (date: string) => void;
 }) {
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const safeActiveIndex = cashFlowSelectedDayIndex(points, selectedDate);
   const active = points[safeActiveIndex] ?? null;
   const plotRef = useRef<HTMLDivElement>(null);
@@ -162,7 +165,10 @@ export function CashFlowEvolution({
           value={safeActiveIndex + 1}
           aria-label="Elegir día de la evolución"
           aria-valuetext={formatDate(active.date)}
-          onChange={(event) => setSelectedDate(points[Number(event.target.value) - 1]?.date ?? null)}
+          onChange={(event) => {
+            const selected = points[Number(event.target.value) - 1];
+            if (selected) onSelectDate(selected.date);
+          }}
         />
       </label>
 
