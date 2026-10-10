@@ -1073,7 +1073,7 @@ test("REC-BUD-020 · planificación y mes no aparentan aprobación cuando la fue
   await page.getByRole("button", { name: "Volver a comprobar" }).click();
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
   await expect(page.locator("[data-budget-month-status]")).toHaveAttribute("data-budget-month-status", "estimated");
-  await expect(page.getByText("PLANIFICACIÓN CON GASTOS CONTRASTADOS")).toBeVisible();
+  await expect(page.getByText("PLANIFICACIÓN · COBERTURA ESTIMADA")).toBeVisible();
   expect(writes).toHaveLength(0);
 });
 
