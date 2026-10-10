@@ -370,6 +370,33 @@ test("REC-OCR-033 · rechaza una lectura OCR recibida para otro documento sin ex
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-034 · dos clics antes del render disparan una sola lectura", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let ocrCalls = 0;
+  let releaseOcr: (() => void) | null = null;
+  const gate = new Promise<void>((resolve) => { releaseOcr = resolve; });
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
+    ocrCalls += 1;
+    await gate;
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll("button")];
+    const trigger = buttons.find((button) => button.textContent?.trim() === "Analizar documento");
+    trigger?.click();
+    trigger?.click();
+  });
+  await expect.poll(() => ocrCalls).toBe(1);
+  await expect(page.getByRole("button", { name: "Analizando…" })).toBeDisabled();
+  releaseOcr?.();
+  await expect(page.getByText("Texto nativo PDF")).toBeVisible();
+  expect(ocrCalls).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
