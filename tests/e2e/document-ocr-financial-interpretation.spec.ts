@@ -300,6 +300,9 @@ test("explicit DNI uses the Spanish check letter before declaring a reliable ID"
 test("REC-OCR-016 · Spanish written dates identify invoice issue without confusing other dates", () => {
   const cases = [
     { raw: "Nº factura S26XYZ123 emitida el 15 de agosto de 2026", value: "2026-08-15", trust: "reliable" },
+    { raw: "Pedido 11/09/2026; factura S26XYZ123 emitida el 15 de agosto de 2026", value: "2026-08-15", trust: "reliable" },
+    { raw: "Pedido 14 de agosto de 2026; factura emitida el 16/08/2026", value: "2026-08-16", trust: "reliable" },
+    { raw: "Fecha de emisión: 15 de agosto de 2026; emitida el 16/08/2026", value: "2026-08-16", trust: "doubtful" },
     { raw: "Fecha de emisión: 15 de septiembre de 2026", value: "2026-09-15", trust: "reliable" },
     { raw: "Fecha de expedición: 8 de octubre de 2026", value: "2026-10-08", trust: "reliable" },
     { raw: "Fecha: 12 de setiembre de 2026", value: "2026-09-12", trust: "reliable" },
