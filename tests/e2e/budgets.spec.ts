@@ -886,6 +886,37 @@ test("REC-BUD-029 · evita doble conteo de categorías y meses históricos dupli
   expect(writes).toBe(0);
 });
 
+test("REC-BUD-030 · HTTP 200 con límite incorrecto no anuncia guardado", async ({ page }) => {
+  let writes = 0;
+  let finallyVisible = false;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(finallyVisible ? snapshotWithTotalManual(85000) : baseSnapshot),
+      });
+      return;
+    }
+    writes += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByText(/El servidor respondió, pero el límite guardado no coincide/)).toBeVisible();
+  await expect(page.locator('[data-budget-write-state="unverified"]')).toBeVisible();
+  await expect(page.getByText("Límite elegido guardado.", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
+  expect(writes).toBe(1);
+  finallyVisible = true;
+  await page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" }).click();
+  await expect(page.locator('[data-budget-write-state]')).toHaveCount(0);
+  await expect(page.locator("#budget-total").getByText("Límite elegido").locator("..").locator("strong"))
+    .toHaveText("850,00 €");
+  expect(writes).toBe(1);
+});
+
 test("REC-BUD-026 · dos clics sincronizados no emiten escrituras duplicadas", async ({ page }) => {
   let writes = 0;
   let releaseWrite: (() => void) | null = null;
