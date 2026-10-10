@@ -855,6 +855,37 @@ test("REC-BUD-025 · importes contradictorios del backend se rechazan sin dibuja
   }
 });
 
+test("REC-BUD-029 · evita doble conteo de categorías y meses históricos duplicados", async ({ page }) => {
+  const cases: Array<{ name: string; corrupt: (snapshot: typeof baseSnapshot) => void }> = [
+    { name: "dos categorías con la misma identidad", corrupt: (snap) => {
+      snap.categories.push({ ...snap.categories[0] });
+    } },
+    { name: "dos meses históricos iguales", corrupt: (snap) => {
+      snap.total.historyMonths[1] = { ...snap.total.historyMonths[0] };
+    } },
+    { name: "histórico fuera de orden", corrupt: (snap) => {
+      snap.total.historyMonths.reverse();
+    } },
+    { name: "total con categoría incorrecta", corrupt: (snap) => {
+      snap.total.categoryId = categoryId;
+    } },
+  ];
+  let writes = 0;
+  for (const sample of cases) {
+    const corrupt = structuredClone(baseSnapshot);
+    sample.corrupt(corrupt);
+    await page.route("**/api/budgets*", async (route) => {
+      if (route.request().method() !== "GET") writes += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(corrupt) });
+    });
+    await page.goto("/budgets?month=2026-09");
+    await expect(page.getByRole("heading", { name: /No se ha podido cargar/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+    await page.unroute("**/api/budgets*");
+  }
+  expect(writes).toBe(0);
+});
+
 test("REC-BUD-026 · dos clics sincronizados no emiten escrituras duplicadas", async ({ page }) => {
   let writes = 0;
   let releaseWrite: (() => void) | null = null;
