@@ -35,14 +35,16 @@ function logGatewayError(scope: string, error: PersistenceGatewayError) {
   });
 }
 
-function apiError(error: unknown) {
+function apiError(error: unknown, started: number) {
+  const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+  const responseHeaders = { ...HEADERS, "server-timing": "analysis;dur=" + durationMs };
   if (error instanceof PersistenceGatewayError) {
     logGatewayError("analysis-api-gateway", error);
     return Response.json(
       { error: "analysis_unavailable", code: error.code ?? null },
       {
         status: error.status >= 400 && error.status < 600 ? error.status : 503,
-        headers: HEADERS,
+        headers: responseHeaders,
       },
     );
   }
@@ -53,7 +55,7 @@ function apiError(error: unknown) {
   console.error("analysis-api", code);
   return Response.json(
     { error: status === 400 ? "invalid_request" : "analysis_unavailable", code },
-    { status, headers: HEADERS },
+    { status, headers: responseHeaders },
   );
 }
 
@@ -88,6 +90,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, started);
   }
 }

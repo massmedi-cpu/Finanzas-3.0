@@ -11,6 +11,11 @@ const HEADERS = {
   "x-robots-tag": "noindex",
 };
 
+function timingHeaders(started: number) {
+  const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+  return { ...HEADERS, "server-timing": "analysis-source-freshness;dur=" + durationMs };
+}
+
 type RecordValue = Record<string, unknown>;
 
 function record(value: unknown): RecordValue | null {
@@ -74,11 +79,11 @@ export async function GET(request: Request) {
   try {
     const params = new URL(request.url).searchParams;
     if ([...params.keys()].some((key) => key !== "accountId") || params.getAll("accountId").length > 1) {
-      return Response.json({ error: "invalid_parameter" }, { status: 400, headers: HEADERS });
+      return Response.json({ error: "invalid_parameter" }, { status: 400, headers: timingHeaders(started) });
     }
     const accountId = params.get("accountId")?.trim() || null;
     if (accountId && !UUID.test(accountId)) {
-      return Response.json({ error: "invalid_account_id" }, { status: 400, headers: HEADERS });
+      return Response.json({ error: "invalid_account_id" }, { status: 400, headers: timingHeaders(started) });
     }
     const [connectionResult, transactionResult] = await callPersistenceGatewayBatch([
       { action: "source.google_connection_status" },
@@ -109,7 +114,7 @@ export async function GET(request: Request) {
       }
       return Response.json(
         { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
-        { headers: HEADERS },
+        { headers: timingHeaders(started) },
       );
     }
 
@@ -117,35 +122,29 @@ export async function GET(request: Request) {
     if (!sourceFileId) {
       return Response.json(
         { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
-        { headers: HEADERS },
+        { headers: timingHeaders(started) },
       );
     }
 
     try {
       const statusPayload = await callPersistenceGateway<unknown>("source.status", { sourceFileId });
       const sync = syncSummary(statusPayload);
-      const durationMs = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
       return Response.json(
         { available: Boolean(sync || latestMovementDate), earliestMovementDate, latestMovementDate, sync },
-        {
-          headers: {
-            ...HEADERS,
-            "server-timing": `analysis-source-freshness;dur=${durationMs}`,
-          },
-        },
+        { headers: timingHeaders(started) },
       );
     } catch (error) {
       logGatewayFailure("analysis-source-freshness-status", error);
       return Response.json(
         { available: Boolean(latestMovementDate), earliestMovementDate, latestMovementDate, sync: null },
-        { headers: HEADERS },
+        { headers: timingHeaders(started) },
       );
     }
   } catch (error) {
     logGatewayFailure("analysis-source-freshness", error);
     return Response.json(
       { available: false, earliestMovementDate: null, latestMovementDate: null, sync: null },
-      { headers: HEADERS },
+      { headers: timingHeaders(started) },
     );
   }
 }

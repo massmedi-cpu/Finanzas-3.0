@@ -8,6 +8,7 @@ on:
       - chat/financial-api-server-timing-20261010
       - chat/financial-ambiguous-params-integrity-20261010
       - chat/analysis-freshness-account-scope-guard-20261010
+      - chat/financial-error-timing-diagnostics-20261010
     paths:
       - 'src/domain/effective-transaction.ts'
       - 'src/domain/models.ts'
@@ -15,6 +16,7 @@ on:
       - 'tests/e2e/financial-api-server-timing.spec.ts'
       - 'tests/e2e/financial-account-scope-query-integrity.spec.ts'
       - 'app/api/analysis/route.ts'
+      - 'app/api/compare/route.ts'
       - 'app/api/analysis/source-freshness/route.ts'
       - 'app/api/financial/route.ts'
       - 'playwright.capacity.config.ts'
