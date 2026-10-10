@@ -2,12 +2,27 @@ import { expect, test } from "@playwright/test";
 import { navigationItems } from "../../app/navigation-items";
 
 // Shell-only smoke: isolates live APIs, never certifies banking data or backend behavior.
-const destinations = navigationItems.map((item) => ({ path: item.href, label: item.label }));
+const configurationRoutes = [
+  "/configuration/appearance",
+  "/configuration/data",
+  "/configuration/merchants",
+  "/configuration/preferences",
+  "/configuration/rules",
+  "/configuration/source",
+  "/configuration/source/diagnostics",
+];
+// The Next.js page manifest has 22 static routes. /login is public auth,
+// so only these 21 authenticated product routes count toward the owner matrix.
+const destinations = [
+  ...navigationItems.map((item) => ({ path: item.href, label: item.label })),
+  ...configurationRoutes.map((path) => ({ path, label: "Configuración" })),
+];
+if (destinations.length !== 21) throw new Error("Expected 21 authenticated product routes");
 test.describe("REC-VIS-004 · shell de navegación responsive", () => {
   for (const width of [390, 1440]) for (const colorScheme of ["light", "dark"] as const) {
     test(`${destinations.length} destinos a ${width}px y tema ${colorScheme}`, async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== "chromium-desktop", "Matriz completa recorrida en proyecto desktop");
-      test.setTimeout(180_000);
+      test.setTimeout(240_000);
       await page.setViewportSize({ width, height: 900 });
       await page.emulateMedia({ colorScheme });
       await page.route("**/api/**", async (route) => {
