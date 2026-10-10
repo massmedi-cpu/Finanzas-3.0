@@ -581,3 +581,54 @@ test("REC-TXN-006 · revisión POST con respuesta incierta no se duplica", async
   await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
   expect(postCount).toBe(1);
 });
+
+test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo envío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PUT") {
+      writes += 1;
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "gateway_timeout" }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") === "split") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (req.method() === "GET" && !url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await page.getByTestId("split-amount-0").fill("7,34");
+  await page.getByTestId("split-amount-1").fill("5,00");
+  await expect(page.getByTestId("save-split")).toBeEnabled();
+  await page.getByTestId("save-split").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  expect(writes).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(writes).toBe(1);
+});
