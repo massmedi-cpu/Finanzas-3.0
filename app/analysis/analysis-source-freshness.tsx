@@ -180,7 +180,7 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     incidentParts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
   }
   if (incidents.missingRows > 0) {
-    incidentParts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ya no está en la fuente" : "movimientos ya no están en la fuente"}`);
+    incidentParts.push(`${formatInteger(incidents.missingRows)} ${incidents.missingRows === 1 ? "movimiento ausente de los datos importados" : "movimientos ausentes de los datos importados"}`);
   }
   if (incidents.duplicates > 0) {
     incidentParts.push(`${formatInteger(incidents.duplicates)} ${incidents.duplicates === 1 ? "posible duplicado" : "posibles duplicados"}`);

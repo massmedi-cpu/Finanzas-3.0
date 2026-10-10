@@ -687,6 +687,37 @@ test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histó
   expect(dateHasConfirmedCoverage("2026-09-12", knownBounds)).toBe(true);
 });
 
+test("REC-COV-011 · las incidencias de sincronización invalidan la cobertura completa aparente", () => {
+  const period = {
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: "2026-08-01",
+    latestMovementDate: "2026-10-03",
+  };
+  expect(resolvePeriodCoverage(period).state).toBe("covered");
+  for (const sync of [
+    { status: "started" },
+    { status: "partial", rowsFailed: 2 },
+    { status: "failed" },
+    { status: "success", rowsMissing: 1 },
+    { status: "success", duplicatesDetected: 3 },
+    { status: "success", warningsCount: 1 },
+  ]) {
+    const coverage = resolvePeriodCoverage({ ...period, sync });
+    expect(coverage.state).toBe("partial");
+    expect(periodComparisonIsReliable(coverage)).toBe(false);
+    expect(coverage.throughDate).toBe("2026-09-30");
+  }
+  const clean = resolvePeriodCoverage({ ...period, sync: {
+    status: "success",
+    rowsFailed: 0,
+    rowsMissing: 0,
+    duplicatesDetected: 0,
+    warningsCount: 0,
+  } });
+  expect(clean.state).toBe("covered");
+});
+
 test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
   const snapshot = mockSnapshot();
   snapshot.dailySpend = [{ date: "2026-09-04", expenseCents: 55_000, rows: 12 }];

@@ -102,6 +102,33 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-CMP-003 · una sincronización con filas ausentes impide certificar variaciones", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success",
+        finishedAt: "2026-09-25T08:00:00Z",
+        startedAt: "2026-09-25T07:59:00Z",
+        rowsSeen: 10,
+        rowsFailed: 0,
+        rowsMissing: 2,
+        duplicatesDetected: 0,
+        warningsCount: 2,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("El gasto diario baja 33,3 %");
+  await expect(page.getByText("2 movimientos ausentes de los datos importados", { exact: true })).toBeVisible();
+});
+
 test("REC-CMP-002 · la frescura del Comparador cambia con la cuenta bancaria aplicada", async ({ page }) => {
   const requestedScopes: Array<string | null> = [];
   await mockComparison(page);
