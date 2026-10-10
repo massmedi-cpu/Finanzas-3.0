@@ -40,6 +40,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify OCR labelled amounts against synthetic independent expected values
         run: node scripts/test-ocr-amount-label-selection.mjs
+      - name: Certify PDF scanned-page Node rasterization
+        run: node scripts/test-pdf-render-smoke.mjs
       - name: Verify essential visual regressions are actually executed
         run: node scripts/verify-recovery-visual-suite-gate.mjs
       - name: Build optimized application and run cumulative guards
