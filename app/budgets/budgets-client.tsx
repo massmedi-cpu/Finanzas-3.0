@@ -372,6 +372,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [writeUnverified, setWriteUnverified] = useState(false);
+  // An uncertain write belongs to a specific period. Loading a different
+  // month must never unlock its retry protection.
+  const uncertainWriteMonth = useRef<string | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -490,7 +493,10 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         throw new Error("El servidor devolvió un presupuesto de otro mes.");
       }
       setSnapshot(nextSnapshot);
-      setWriteUnverified(false);
+      if (uncertainWriteMonth.current === null || uncertainWriteMonth.current === selectedMonth) {
+        uncertainWriteMonth.current = null;
+        setWriteUnverified(false);
+      }
       setEditingKey(null);
     } catch (caught) {
       if (generation !== fetchGeneration.current || (controller.signal.aborted && !timedOut)) return;
@@ -549,6 +555,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         throw new Error("No se pudo verificar la respuesta del guardado. La operación podría haberse aplicado: recarga y comprueba el límite antes de repetirla.");
       }
       setSnapshot(payload);
+      uncertainWriteMonth.current = null;
       setWriteUnverified(false);
       setEditingKey(null);
       setEditValue("");
@@ -565,14 +572,17 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       setError(message);
       // A 5xx, lost response, timeout or corrupt success body might follow a
       // committed write. Block retries until a fresh read proves the state.
-      setWriteUnverified(!requestDefinitelyRejected);
+      if (!requestDefinitelyRejected) {
+        uncertainWriteMonth.current = typeof body.month === "string" ? body.month : month;
+        setWriteUnverified(true);
+      }
       actionFeedback.error(feedbackId, message);
       return false;
     } finally {
       window.clearTimeout(deadline);
       setBusy(false);
     }
-  }, [actionFeedback, busy, writeUnverified]);
+  }, [actionFeedback, busy, writeUnverified, month]);
 
   const handleRefresh = useCallback(() => {
     void mutate("POST", { month }, `Referencia automática de ${formatMonth(month)} actualizada.`)
@@ -681,8 +691,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               onChange={(event) => {
                 if (event.target.value) setMonth(event.target.value);
               }}
-              disabled={busy || editingKey !== null}
-              title={editingKey !== null ? "Guarda o cancela la edición antes de cambiar de mes" : undefined}
+              disabled={busy || writeUnverified || editingKey !== null}
+              title={writeUnverified ? "Comprueba el resultado del guardado antes de cambiar de mes"
+                : editingKey !== null ? "Guarda o cancela la edición antes de cambiar de mes" : undefined}
             />
           </label>
           <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || writeUnverified || loading || editingKey !== null}>
