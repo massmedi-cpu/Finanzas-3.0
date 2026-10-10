@@ -93,26 +93,43 @@ export function TransactionSplitEditor({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [readAttempt, setReadAttempt] = useState(0);
   const lineSequence = useRef(0);
 
   const nextKey = () => `split-line-${transaction.id}-${++lineSequence.current}`;
 
   useEffect(() => {
+    let active = true;
+    let timedOut = false;
     const controller = new AbortController();
+    const deadline = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+      if (active) {
+        setError("La lectura del reparto ha superado 15 segundos. Vuelve a consultar; no se ha escrito ningún cambio.");
+        setLoading(false);
+      }
+    }, 15_000);
     async function load() {
       setLoading(true);
       setError(null);
+      setDetail(null);
       try {
         const params = new URLSearchParams({ mode: "split", transactionId: transaction.id });
         const response = await fetch(`/api/transactions?${params.toString()}`, {
           cache: "no-store",
           signal: controller.signal,
         });
-        const payload = await response.json().catch(() => ({}));
+        const payload = await response.json().catch(() => null);
         if (!response.ok) throw new Error(errorMessage(payload));
-        const loaded = payload as SplitDetail;
+        const loaded = payload as SplitDetail | null;
+        if (!loaded || !Number.isSafeInteger(loaded.bankAmountCents)
+          || typeof loaded.canSplit !== "boolean" || !Array.isArray(loaded.allocations)) {
+          throw new Error("La información del reparto está incompleta. No se interpretará como reparto sin datos.");
+        }
+        if (!active || controller.signal.aborted) return;
         setDetail(loaded);
-        if (Array.isArray(loaded.allocations) && loaded.allocations.length >= 2) {
+        if (loaded.allocations.length >= 2) {
           setLines(loaded.allocations.map((allocation) => ({
             key: nextKey(),
             scope: allocation.scope,
@@ -139,16 +156,23 @@ export function TransactionSplitEditor({
           ]);
         }
       } catch (cause) {
-        if (!controller.signal.aborted) {
-          setError(cause instanceof Error ? cause.message : "No se pudo cargar el reparto.");
+        if (active && (!controller.signal.aborted || timedOut)) {
+          setError(timedOut
+            ? "La lectura del reparto ha superado 15 segundos. Puedes volver a consultar."
+            : cause instanceof Error ? cause.message : "No se pudo cargar el reparto.");
         }
       } finally {
-        if (!controller.signal.aborted) setLoading(false);
+        window.clearTimeout(deadline);
+        if (active && (!controller.signal.aborted || timedOut)) setLoading(false);
       }
     }
     void load();
-    return () => controller.abort();
-  }, [transaction.id]);
+    return () => {
+      active = false;
+      window.clearTimeout(deadline);
+      controller.abort();
+    };
+  }, [transaction.id, readAttempt]);
 
   const bankAbs = Math.abs(detail?.bankAmountCents ?? transaction.amountCents);
   const parsed = lines.map((line) => parseInputAmount(line.amount));
@@ -285,7 +309,15 @@ export function TransactionSplitEditor({
         </div>
       ) : null}
 
-      {error ? <div className={styles.error} role="alert">{error}</div> : null}
+      {error ? (
+        <div className={styles.error} role="alert">
+          {error}
+          {!detail ? <button className={styles.secondaryButton} type="button"
+            onClick={() => setReadAttempt((attempt) => attempt + 1)}>
+            Reintentar lectura del reparto
+          </button> : null}
+        </div>
+      ) : null}
 
       <div className={styles.summary}>
         <div><span>Banco</span><strong>{formatMoneyCents(detail?.bankAmountCents ?? transaction.amountCents)}</strong></div>
