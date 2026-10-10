@@ -665,7 +665,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         ) : null}
         {notice ? <div className={styles.notice} role="status">{notice}</div> : null}
 
-        {loading ? (
+        {loading || (snapshot !== null && snapshot.month !== month) ? (
           <section className={styles.panel}>
             <div className={styles.loading} aria-live="polite">
               <div>
