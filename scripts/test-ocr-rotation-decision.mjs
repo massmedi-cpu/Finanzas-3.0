@@ -24,5 +24,9 @@ assert.equal(ocrNeedsRotationFallback(lowConfidenceWords, { width: 1200, height:
   "low confidence still triggers fallback regardless of text count");
 assert.equal(ocrNeedsRotationFallback([], { width: 1200, height: 700 }), true,
   "blank page attempts alternative orientations");
+const highConfidenceNoise = ["Texto", "Lateral", "Documento", "De", "Fondo", "Sin", "Datos", "Financieros", "Utiles"]
+  .map((text) => ({ text, confidence: 0.97 }));
+assert.equal(ocrNeedsRotationFallback(highConfidenceNoise, { width: 1200, height: 700 }), true,
+  "landscape page with plausible but nonfinancial text still checks rotation");
 
-console.log("PASS · six independent OCR orientation fallback decisions");
+console.log("PASS · seven independent OCR orientation fallback decisions");
