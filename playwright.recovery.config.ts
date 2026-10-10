@@ -5,6 +5,9 @@ import base from "./playwright.config";
 // Screenshots and traces remain available; videos are optional diagnostics.
 export default defineConfig({
   ...base,
+  // Keep screenshots captured on successful synthetic visual tests so that
+  // passing axe/layout checks do not replace actual human visual review.
+  preserveOutput: "always",
   use: { ...base.use, video: "off" },
   webServer: {
     command: "npm run start -- --hostname 127.0.0.1",
