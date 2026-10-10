@@ -165,7 +165,7 @@ for (const width of WIDTHS) {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+        body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
       });
     });
 
@@ -424,7 +424,7 @@ test("QA Work · el texto atenuado de Análisis mantiene contraste AA en tema os
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -464,7 +464,7 @@ test("QA-03 · Lectura rápida y Patrones usan superficies legibles en tema clar
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -505,7 +505,7 @@ test("QA-04 · acumulado y ritmo diario respetan el calendario y representan dí
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -544,7 +544,7 @@ test("QA-06 · Análisis identifica la tasa histórica como agregada y no como m
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ available: true, latestMovementDate: "2026-09-15", sync: null }),
+      body: JSON.stringify({ available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null }),
     });
   });
 
@@ -629,7 +629,7 @@ test("AUD-E2E-ANA-001 · desglose de categorías Top 6 expande sin perder import
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(expandedSnapshot) }));
   await page.route("**/api/analysis/source-freshness", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-      available: true, latestMovementDate: "2026-09-15", sync: null,
+      available: true, earliestMovementDate: "2025-01-01", latestMovementDate: "2026-09-15", sync: null,
     }) }));
   await page.goto("/analysis");
   const breakdown = page.locator("section").filter({ has: page.getByRole("heading", { name: "Dónde se concentra el gasto" }) });
