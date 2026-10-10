@@ -215,7 +215,7 @@ test("Ocultar importes protege también las proporciones del cash flow y persist
   await expect(page.getByText("La previsión termina en negativo", { exact: true })).toHaveCount(0);
   // With a legacy upper-only source, the month is partial. Do not claim
   // confirmed savings or reveal a percentage when monetary privacy is on.
-  await expect(page.getByText(/Importes parciales|histórico sin verificar/)).toBeVisible();
+  await expect(page.locator('section[aria-label="Resumen financiero principal"]').getByText(/Importes parciales|histórico sin verificar/)).toBeVisible();
   await expect(page.getByText("Ahorro oculto por privacidad", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Importes ocultos", { exact: true })).toBeVisible();
   await expect(page.getByText(/La comparación entre visitas está pausada mientras ocultas importes/i)).toBeVisible();
