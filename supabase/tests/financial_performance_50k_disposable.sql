@@ -34,6 +34,13 @@ SELECT cfg.tag, n,
 FROM (VALUES ('10k',10000),('50k',50000)) cfg(tag, total)
 CROSS JOIN LATERAL generate_series(1,cfg.total) n;
 
+-- The real source-sync ingestion (trigger-heavy per row) is NOT a read
+-- benchmark. Load only disposable synthetic fixtures as local postgres
+-- superuser with replication triggers temporarily paused, then RE-ENABLE
+-- all triggers BEFORE measuring the real restricted financial SQL functions.
+-- This does not certify 50k source ingestion; that remains an AP-6 blocker.
+SET LOCAL session_replication_role = replica;
+
 WITH inserted AS (
   INSERT INTO financial_app.transaction_source_records(
     source_file_id,source_sheet_id,source_row_key,source_row_identity,source_fingerprint,
@@ -60,10 +67,41 @@ JOIN cap_rows r
  AND r.n=split_part(s.source_row_key,'-',2)::int
 JOIN cap_accounts a ON a.tag=r.tag;
 
+SET LOCAL session_replication_role = origin;
 SET CONSTRAINTS ALL IMMEDIATE;
-RESET ROLE;
+DO $verify$
+DECLARE
+  v_sources bigint;
+  v_transactions bigint;
+  v_inconsistent bigint;
+BEGIN
+  SELECT count(*) INTO v_sources
+    FROM financial_app.transaction_source_records
+    WHERE workspace_id='a0f00000-0000-4000-8000-000000000001'
+      AND source_file_id='__cap_disposable__';
+  SELECT count(*) INTO v_transactions
+    FROM financial_app.transactions
+    WHERE workspace_id='a0f00000-0000-4000-8000-000000000001'
+      AND source_row_identity LIKE '__cap_disposable__::%';
+  SELECT count(*) INTO v_inconsistent
+    FROM financial_app.transactions t
+    LEFT JOIN financial_app.transaction_source_records s ON s.id=t.source_record_id
+    WHERE t.workspace_id='a0f00000-0000-4000-8000-000000000001'
+      AND t.source_row_identity LIKE '__cap_disposable__::%'
+      AND (s.id IS NULL OR s.workspace_id IS DISTINCT FROM t.workspace_id
+           OR s.amount_cents IS DISTINCT FROM t.amount_cents
+           OR s.bank_date IS DISTINCT FROM t.bank_date
+           OR s.source_row_identity IS DISTINCT FROM t.source_row_identity);
+  IF v_sources <> 60000 OR v_transactions <> 60000 OR v_inconsistent <> 0 THEN
+    RAISE EXCEPTION 'CAPACITY_DB_INVALID_FIXTURE sources=% transactions=% inconsistencies=%',
+      v_sources,v_transactions,v_inconsistent;
+  END IF;
+  RAISE NOTICE 'CAPACITY_DB|fixture=verified|sources=%|transactions=%|links_invalid=%|insertion=synthetic_replica_mode_only',
+    v_sources,v_transactions,v_inconsistent;
+END $verify$;
 ANALYZE financial_app.transactions;
 ANALYZE financial_app.transaction_source_records;
+-- All live policy checks on the measured read path remain enabled.
 SET LOCAL ROLE financial_app_gateway;
 
 DO $capacity$
