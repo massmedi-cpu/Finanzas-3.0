@@ -660,10 +660,22 @@ test("REC-COV-007 · el gateway anterior no certifica meses sin inicio de histó
     earliestMovementDate: null,
     latestMovementDate: "2026-10-10",
   });
-  expect(legacy.state).toBe("partial");
+  // The only known movement is after September: its existence does not
+  // establish that the historical September interval contains any rows.
+  expect(legacy.state).toBe("unknown");
   expect(legacy.fromDate).toBeUndefined();
   expect(periodComparisonIsReliable(legacy)).toBe(false);
   expect(dateHasConfirmedCoverage("2026-09-12", legacy)).toBe(false);
+
+  const currentObserved = resolvePeriodCoverage({
+    dateFrom: "2026-09-01",
+    dateTo: "2026-09-30",
+    earliestMovementDate: null,
+    latestMovementDate: "2026-09-15",
+  });
+  expect(currentObserved.state).toBe("partial");
+  expect(periodComparisonIsReliable(currentObserved)).toBe(false);
+  expect(dateHasConfirmedCoverage("2026-09-15", currentObserved)).toBe(false);
 
   const knownBounds = resolvePeriodCoverage({
     dateFrom: "2026-09-01",
