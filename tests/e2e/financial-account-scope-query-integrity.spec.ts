@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { GET as analysisGet } from "../../app/api/analysis/route";
 import { GET as freshnessGet } from "../../app/api/analysis/source-freshness/route";
+import { GET as comparisonGet } from "../../app/api/compare/route";
 
 // Privacy boundary assertions: all requests end in validation BEFORE the
 // database gateway or account-specific bank data can be contacted.
@@ -15,6 +16,8 @@ for (const key of [
     const response = await analysisGet(new Request(url));
     expect(response.status).toBe(400);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(response.headers.get("server-timing")).toMatch(/^analysis-source-freshness;dur=\d+(?:\.\d+)?$/);
+    expect(response.headers.get("server-timing")).toMatch(/^analysis;dur=\d+(?:\.\d+)?$/);
     const result = await response.json();
     expect(result).toMatchObject({ error: "invalid_request", code: "invalid_analysis_parameter" });
   });
@@ -29,3 +32,19 @@ test("CAP-004 · source freshness rejects two account IDs before requesting bank
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   expect(await response.json()).toEqual({ error: "invalid_parameter" });
 });
+
+
+for (const parameter of ["accountId", "primaryFrom", "referenceFrom"]) {
+  test("CAP-005 · Comparador duplicate " + parameter + " exposes timing on rejection", async () => {
+    const url = new URL("https://isolated.local/api/compare");
+    url.searchParams.append(parameter, "first");
+    url.searchParams.append(parameter, "second");
+    const response = await comparisonGet(new Request(url));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("server-timing")).toMatch(/^comparison;dur=\d+(?:\.\d+)?$/);
+    expect(await response.json()).toMatchObject({
+      error: "invalid_request", code: "invalid_comparison_parameter",
+    });
+  });
+}
