@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   hasSourceSyncIncidents,
+  hasCompletedSourceSyncEvidence,
   normalizeSourceSyncIncidents,
 } from "../../src/application/source-sync-incidents";
 import { formatInteger } from "../../src/core/formatters";
@@ -138,6 +139,9 @@ function statusText(freshness: SourceFreshness) {
   const health = syncHealth(sync);
 
   if (sync.status === "success") {
+    if (!hasCompletedSourceSyncEvidence(sync)) {
+      return `Sincronización sin finalización verificable${movement}`;
+    }
     return `Fuente sincronizada${health.labelSuffix}${when}${rows}${health.detail}${movement}`;
   }
   if (sync.status === "partial") {
@@ -184,6 +188,14 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const detail = [movement, timeDetail].filter(Boolean).join(" · ") || null;
   const incidents = normalizeSourceSyncIncidents(sync);
   const incidentParts: string[] = [];
+  if (sync.status === "success" && !hasCompletedSourceSyncEvidence(sync)) {
+    return {
+      label: "Sincronización sin finalización verificada",
+      detail: movement,
+      incidentDetail: "La fuente indica éxito, pero no consta una fecha de finalización válida o un recuento íntegro de las filas. No se puede confirmar la cobertura bancaria.",
+      tone: "warning",
+    };
+  }
 
   if (incidents.failedRows > 0) {
     incidentParts.push(`${formatInteger(incidents.failedRows)} ${incidents.failedRows === 1 ? "fila no procesada" : "filas no procesadas"}`);
@@ -364,8 +376,12 @@ export default function AnalysisSourceFreshness({
       || freshness.sync.status === "partial"
       || freshness.sync.status === "started"
       || syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
     : false;
-  const actionable = freshness.sync ? syncHasIncidents(freshness.sync) : false;
+  const actionable = freshness.sync
+    ? syncHasIncidents(freshness.sync)
+      || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
+    : false;
 
   return (
     <div className={styles.wrap}>
