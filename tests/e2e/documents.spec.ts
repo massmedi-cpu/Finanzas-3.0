@@ -383,11 +383,13 @@ test("REC-OCR-034 · dos clics antes del render disparan una sola lectura", asyn
   });
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
-  await page.evaluate(() => {
-    const buttons = [...document.querySelectorAll("button")];
-    const trigger = buttons.find((button) => button.textContent?.trim() === "Analizar documento");
-    trigger?.click();
-    trigger?.click();
+  const ocrButton = page.getByTestId("ocr-review-panel").getByRole("button", { name: "Analizar documento" });
+  await expect(ocrButton).toBeEnabled();
+  // Wait for hydration and trigger twice in the same browser task, before
+  // React can render its busy state. This must produce exactly one request.
+  await ocrButton.evaluate((trigger: HTMLButtonElement) => {
+    trigger.click();
+    trigger.click();
   });
   await expect.poll(() => ocrCalls).toBe(1);
   await expect(page.getByRole("button", { name: "Analizando…" })).toBeDisabled();
