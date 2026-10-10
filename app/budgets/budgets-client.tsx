@@ -588,6 +588,18 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       if (!isBudgetSnapshot(payload) || payload.month !== body.month) {
         throw new Error("No se pudo verificar la respuesta del guardado. La operación podría haberse aplicado: recarga y comprueba el límite antes de repetirla.");
       }
+      // HTTP 200 means the endpoint replied, not necessarily that the
+      // requested limit is persisted. Never announce a successful PATCH
+      // while its echoed manual amount or category disagrees with the request.
+      if (method === "PATCH") {
+        const requestedCategoryId = typeof body.categoryId === "string" ? body.categoryId : null;
+        const savedItem = requestedCategoryId === null
+          ? payload.total
+          : payload.categories.find((item) => item.categoryId === requestedCategoryId);
+        if (!savedItem || savedItem.manualAmountCents !== body.manualAmountCents) {
+          throw new Error("El servidor respondió, pero el límite guardado no coincide con el solicitado. Puede haberse aplicado más tarde: comprueba el estado antes de volver a guardarlo.");
+        }
+      }
       setSnapshot(payload);
       pendingWrite.current = null;
       uncertainWriteMonth.current = null;
