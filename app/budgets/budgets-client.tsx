@@ -379,21 +379,28 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const fetchController = useRef<AbortController | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
   const [coverageCheck, setCoverageCheck] = useState<{ month: string; coverage: PeriodCoverage } | null>(null);
+  const [coverageAttempt, setCoverageAttempt] = useState(0);
 
   // El importe presupuestado y la cobertura son preguntas distintas. Un
   // gasto observado de 0 € no demuestra que se hayan importado los movimientos.
   // No deducimos "dentro del límite" a partir del snapshot de presupuestos.
   useEffect(() => {
     const controller = new AbortController();
+    let active = true;
     setCoverageCheck(null);
     const [year, number] = month.split("-").map(Number);
     const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
     const lastDay = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][number - 1];
     const unknown: PeriodCoverage = { state: "unknown", latestMovementDate: null, throughDate: null };
+    const deadline = window.setTimeout(() => {
+      if (!active) return;
+      controller.abort();
+      setCoverageCheck({ month, coverage: unknown });
+    }, 10_000);
     void fetch("/api/analysis/source-freshness", { cache: "no-store", signal: controller.signal })
       .then(async (response) => response.ok ? response.json().catch(() => null) : null)
       .then((payload: unknown) => {
-        if (controller.signal.aborted) return;
+        if (!active || controller.signal.aborted) return;
         const freshness = payload && typeof payload === "object" && !Array.isArray(payload)
           ? payload as Partial<SourceFreshness> : null;
         // A malformed success payload must never certify a financial zero or
@@ -422,10 +429,15 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         setCoverageCheck({ month, coverage });
       })
       .catch(() => {
-        if (!controller.signal.aborted) setCoverageCheck({ month, coverage: unknown });
-      });
-    return () => controller.abort();
-  }, [month]);
+        if (active && !controller.signal.aborted) setCoverageCheck({ month, coverage: unknown });
+      })
+      .finally(() => window.clearTimeout(deadline));
+    return () => {
+      active = false;
+      window.clearTimeout(deadline);
+      controller.abort();
+    };
+  }, [month, coverageAttempt]);
 
   const budgetCoverage = coverageCheck?.month === month ? coverageCheck.coverage : null;
   const coverageVerified = budgetCoverage?.state === "covered";
@@ -548,7 +560,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   }, [actionFeedback]);
 
   const handleRefresh = useCallback(() => {
-    void mutate("POST", { month }, `Referencia automática de ${formatMonth(month)} actualizada.`);
+    void mutate("POST", { month }, `Referencia automática de ${formatMonth(month)} actualizada.`)
+      .then((ok) => { if (ok) setCoverageAttempt((attempt) => attempt + 1); });
   }, [month, mutate]);
 
   const startEdit = useCallback((item: BudgetItem) => {
@@ -693,11 +706,11 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         ) : snapshot ? (
           <>
             <section
-              className={`${styles.notice} ${coverageVerified ? "" : styles.coverageWarning}`}
+              className={`${styles.notice} ${styles.coverageNotice} ${coverageVerified ? "" : styles.coverageWarning}`}
               aria-label="Cobertura de los datos del presupuesto"
               data-budget-coverage={budgetCoverage?.state ?? "checking"}
             >
-              {coverageVerified
+              <span>{coverageVerified
                 ? "Cobertura estimada según las fechas bancarias importadas. Consulta los movimientos para comprobar el detalle."
                 : budgetCoverage?.state === "none"
                   ? "Este mes no contiene movimientos bancarios confirmados en el intervalo importado. No se interpreta como gasto cero ni como un límite cumplido."
@@ -705,7 +718,17 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     ? "La cobertura bancaria de este mes es parcial. Se muestran importes observados, pero no se confirma que estés dentro del límite."
                     : budgetCoverage?.state === "unknown"
                       ? "No se ha podido verificar la cobertura bancaria de este mes. Los gastos mostrados pueden ser incompletos y el estado del límite no se certifica."
-                      : "Comprobando la cobertura bancaria antes de interpretar el estado de los límites."}
+                      : "Comprobando la cobertura bancaria antes de interpretar el estado de los límites."}</span>
+              {!coverageVerified && budgetCoverage ? (
+                <button
+                  className={styles.secondaryButton}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setCoverageAttempt((attempt) => attempt + 1)}
+                >
+                  Volver a comprobar
+                </button>
+              ) : null}
             </section>
             <section className={styles.summaryGrid} aria-label="Resumen del presupuesto mensual">
               <article className={styles.metric}>
