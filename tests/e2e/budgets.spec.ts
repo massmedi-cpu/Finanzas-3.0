@@ -624,6 +624,32 @@ test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-BUD-027 · éxito sin hora final no equivale a importación verificada", async ({ page }) => {
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") writes.push(route.request().method());
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+  });
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true, earliestMovementDate: "2026-08-01", latestMovementDate: "2026-10-01",
+        sync: {
+          status: "success", startedAt: "2026-10-01T09:00:00Z", finishedAt: null,
+          rowsSeen: 300, rowsFailed: 0, rowsMissing: 0,
+          duplicatesDetected: 0, warningsCount: 0,
+        },
+      }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator("[data-budget-coverage]")).toHaveAttribute("data-budget-coverage", "unknown");
+  await expect(page.locator("#budget-total")).toContainText("Estado sin verificar");
+  await expect(page.locator("#budget-total")).not.toContainText("Dentro de referencia");
+  expect(writes).toEqual([]);
+});
+
 test("REC-BUD-014 · un 503 tras guardar no se anuncia como escritura descartada", async ({ page }) => {
   let attempts = 0;
   await page.route("**/api/budgets*", async (route) => {
@@ -902,7 +928,7 @@ test("REC-BUD-017 · reintento de cobertura relee el banco sin escribir límites
             earliestMovementDate: "2026-08-01",
             latestMovementDate: "2026-10-01",
             sync: {
-              status: "success", startedAt: null, finishedAt: null,
+              status: "success", startedAt: "2026-10-01T09:00:00Z", finishedAt: "2026-10-01T10:00:00Z",
               rowsSeen: 20, rowsFailed: 0, rowsMissing: 0,
               duplicatesDetected: 0, warningsCount: 0,
             },
