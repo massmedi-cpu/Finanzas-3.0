@@ -608,6 +608,29 @@ test("REC-BUD-014 · un 503 tras guardar no se anuncia como escritura descartada
   expect(attempts).toBe(1);
 });
 
+test("REC-BUD-015 · una desconexión tras PATCH no inventa un rollback", async ({ page }) => {
+  let writes = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes += 1;
+    await route.abort("failed");
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("990,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.locator("main").getByRole("alert").first())
+    .toContainText("Es posible que el límite se haya guardado");
+  await expect(page.locator("main").getByRole("alert").first())
+    .toContainText("recarga y compruébalo");
+  await expect(page.locator("main")).not.toContainText("no se ha guardado ningún cambio");
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled();
+  expect(writes).toBe(1);
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
