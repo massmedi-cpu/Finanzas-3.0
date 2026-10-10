@@ -190,6 +190,13 @@ function isBudgetItem(value: unknown): value is BudgetItem {
     && isSafeInteger(item.effectiveAmountCents) && item.effectiveAmountCents >= 0
     && isSafeInteger(item.actualExpenseCents) && item.actualExpenseCents >= 0
     && isSafeInteger(item.remainingCents)
+    // Validate relationships as well as primitive types. An API payload
+    // whose amounts disagree must not render a plausible but false margin.
+    && item.effectiveAmountCents === (item.manualAmountCents ?? item.automaticAmountCents)
+    && Number.isSafeInteger(item.effectiveAmountCents - item.actualExpenseCents)
+    && item.remainingCents === item.effectiveAmountCents - item.actualExpenseCents
+    && (item.status !== "over" || item.remainingCents < 0)
+    && (item.status !== "on_track" || item.remainingCents >= 0)
     && (item.progressBps === null || isSafeInteger(item.progressBps))
     && ["empty", "unfunded", "on_track", "over"].includes(item.status ?? "")
     && typeof item.automaticExplanation === "string"
