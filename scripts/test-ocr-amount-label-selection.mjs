@@ -213,6 +213,47 @@ for (const sample of taxLineCases) {
   }
 }
 
+const taxTableCases = [
+  {
+    name: "two IVA rates under a separated Base/Cuota header",
+    lines: [
+      "IVA BASE IMPONIBLE (€) CUOTA (€)",
+      "10% 30,00 3,00",
+      "21 % 10,00 2,10",
+      "TOTAL 45,10",
+    ],
+    expected: [[10, 3000, 300], [21, 1000, 210]],
+  },
+  {
+    name: "a malformed three-decimal tax base is not interpreted as cents",
+    lines: ["IVA BASE IMPONIBLE (€) CUOTA (€)", "10% 30,000 3,00"],
+    expected: [],
+  },
+  {
+    name: "stop before unrelated percentage or cash figures",
+    lines: ["IVA BASE IMPONIBLE (€) CUOTA (€)", "10% 30,00 3,00", "21% 10,00 CAMBIO 2,10"],
+    expected: [[10, 3000, 300]],
+  },
+];
+for (const sample of taxTableCases) {
+  try {
+    const interpreted = interpret(sample.lines).taxLines;
+    const inferred = interpreted.filter((row) => row.ratePercent !== null && row.baseCents !== null && row.taxCents !== null);
+    assert.deepEqual(inferred.map((row) => [row.ratePercent, row.baseCents, row.taxCents]), sample.expected, sample.name);
+    for (const row of inferred) {
+      assert.equal(row.trust, "doubtful", sample.name + ": inferred columns require review");
+      assert.equal(row.evidence.length, 2, sample.name + ": header and original row retained");
+      assert.equal(row.evidence[0].rawText, sample.lines[0], sample.name + ": header evidence retained");
+      assert.ok(sample.lines.includes(row.evidence[1].rawText), sample.name + ": row evidence retained");
+    }
+    if (!sample.expected.length) assert.ok(interpreted.every((row) => row.trust !== "reliable"), sample.name + ": malformed row cannot be certified");
+    console.log("PASS · " + sample.name);
+  } catch (error) {
+    failures++;
+    console.error("FAIL · " + sample.name, error.message);
+  }
+}
+
 const refund = interpret(["DEVOLUCION PRODUCTO −12,34"]).lines[0];
 try {
   assert.ok(refund, "refund line item retained");
@@ -236,5 +277,5 @@ try {
   console.error("FAIL · three decimal weight does not become unit price", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + 2 - failures}/${cases.length + taxLineCases.length + 2} PASS`);
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + 2} PASS`);
 if (failures) process.exitCode = 1;

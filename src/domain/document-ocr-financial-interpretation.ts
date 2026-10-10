@@ -384,9 +384,48 @@ function extractIssuer(lines: LocatedLine[]) {
 
 function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
   const result: OcrTaxLine[] = [];
-  for (const item of lines) {
+  for (const [index, item] of lines.entries()) {
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
     if (!/\b(?:iva|igic|impuestos?)\b/.test(searchable)) continue;
+
+    // In real retail receipts, "IVA BASE IMPONIBLE (€) CUOTA (€)" is a
+    // column header. The next rows carry "10% 30,00 3,00" without an IVA
+    // label, so inspecting only the header loses the actual tax lines.
+    // Interpret at most four immediately adjacent rows on the same page.
+    // Text order suggests column ownership; always require human review.
+    if (/\b(?:iva|igic)\b/.test(searchable)
+      && /\bbase\s+imponible\b/.test(searchable)
+      && /\bcuota\b/.test(searchable)) {
+      const tableRows: OcrTaxLine[] = [];
+      for (let offset = 1; offset <= 4 && index + offset < lines.length; offset += 1) {
+        const candidate = lines[index + offset];
+        if (candidate.pageNumber !== item.pageNumber) break;
+        const row = candidate.line.text.match(/^\s*(\d{1,2}(?:[,.]\d{1,2})?)\s*%\s+(.+)$/);
+        if (!row) break;
+        const cells = row[2].trim().split(/\s+/);
+        const validMoneyCell = (cell: string) => {
+          const matches = exactFinancialAmountMatches(cell);
+          return matches.length === 1 && matches[0][0] === cell;
+        };
+        if (cells.length !== 2 || !cells.every(validMoneyCell)) break;
+        const baseCents = parseMoneyCents(cells[0]);
+        const taxCents = parseMoneyCents(cells[1]);
+        if (baseCents === null || taxCents === null) break;
+        tableRows.push({
+          ratePercent: Number(row[1].replace(",", ".")),
+          baseCents,
+          taxCents,
+          confidence: Math.min(item.line.confidence, candidate.line.confidence),
+          trust: "doubtful",
+          evidence: [evidenceOf(item), evidenceOf(candidate)],
+        });
+      }
+      if (tableRows.length) {
+        result.push(...tableRows);
+        continue;
+      }
+    }
+
     const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|iva|igic|impuestos?|cuota(?:\s+(?:del?\s+)?(?:iva|igic|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
       .map((match) => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
     const amounts = exactFinancialAmountMatches(item.line.text)
