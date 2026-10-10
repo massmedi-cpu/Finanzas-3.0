@@ -594,6 +594,54 @@ test("REC-OCR-038 · la propuesta no puede editarse mientras una confirmación e
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-040 · Abrir original conserva el gesto de usuario hasta obtener URL firmada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.context().route("**/storage/v1/object/sign/financial-app-documents/open", (route) =>
+    route.fulfill({ status: 200, contentType: "text/plain", body: "Documento sintético" }));
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
+  ]);
+  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/open");
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toHaveCount(0);
+  await popup.close();
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-041 · un bloqueador de ventanas informa cómo abrir el original", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.evaluate(() => { window.open = () => null; });
+  await page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("ha bloqueado la ventana del original");
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-042 · no navega hacia esquemas de URL peligrosos devueltos por el backend", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "open") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: "javascript:alert('inseguro')" }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
+  ]);
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("No se ha podido abrir el documento original de forma segura");
+  await expect.poll(() => popup.isClosed()).toBe(true);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
