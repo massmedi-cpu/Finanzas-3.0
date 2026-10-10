@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import path from "node:path";
 import { createCanvas } from "@napi-rs/canvas";
 import { createWorker, PSM } from "tesseract.js";
+import { pdfNativeTextNeedsVisualOcr } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
 
 const canvas = createCanvas(1000, 220);
 const context = canvas.getContext("2d");
@@ -18,18 +19,23 @@ assert.ok(png.byteLength > 1000, "synthetic receipt image created");
 // A scanned PDF contains pixels but NO native text. Embed the synthetic
 // raster as a JPEG XObject, rasterize it again using PDF.js and send that
 // resulting PNG through the same local Spanish Tesseract worker.
-function embedRasterInPdf(jpeg, width, height) {
-  const commands = Buffer.from("q\n" + width + " 0 0 " + height + " 0 0 cm\n/Im1 Do\nQ\n", "ascii");
+function embedRasterInPdf(jpeg, width, height, selectableStamp = false) {
+  const imageCommands = "q\n" + width + " 0 0 " + height + " 0 0 cm\n/Im1 Do\nQ\n";
+  const stampCommands = selectableStamp ? "BT\n/F1 8 Tf\n" + (width - 25) + " " + (height - 20) + " Td\n(1) Tj\nET\n" : "";
+  const commands = Buffer.from(imageCommands + stampCommands, "ascii");
   const objects = [
     Buffer.from("<< /Type /Catalog /Pages 2 0 R >>", "ascii"),
     Buffer.from("<< /Type /Pages /Kids [3 0 R] /Count 1 >>", "ascii"),
     Buffer.from("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 " + width + " " + height
-      + "] /Resources << /XObject << /Im1 5 0 R >> >> /Contents 4 0 R >>", "ascii"),
+      + "] /Resources << /XObject << /Im1 5 0 R >>"
+      + (selectableStamp ? " /Font << /F1 6 0 R >>" : "")
+      + " >> /Contents 4 0 R >>", "ascii"),
     Buffer.concat([Buffer.from("<< /Length " + commands.length + " >>\nstream\n", "ascii"), commands, Buffer.from("endstream", "ascii")]),
     Buffer.concat([Buffer.from("<< /Type /XObject /Subtype /Image /Width " + width
       + " /Height " + height + " /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length "
       + jpeg.length + " >>\nstream\n", "ascii"), jpeg, Buffer.from("\nendstream", "ascii")]),
   ];
+  if (selectableStamp) objects.push(Buffer.from("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>", "ascii"));
   const buffers = [Buffer.from("%PDF-1.4\n", "ascii")];
   const offsets = [0];
   let position = buffers[0].length;
@@ -46,7 +52,7 @@ function embedRasterInPdf(jpeg, width, height) {
   return new Uint8Array(Buffer.concat(buffers));
 }
 
-async function rasterizePdfImage(pdfBytes) {
+async function rasterizePdfImage(pdfBytes, expectNativeStamp = false) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const task = pdfjs.getDocument({ data: pdfBytes, useSystemFonts: true });
   try {
@@ -54,6 +60,16 @@ async function rasterizePdfImage(pdfBytes) {
     assert.equal(pdf.numPages, 1, "image-only PDF has exactly one page");
     const page = await pdf.getPage(1);
     try {
+      const native = await page.getTextContent();
+      const tokens = native.items.map((entry) => entry.str ?? "").filter(Boolean);
+      if (expectNativeStamp) {
+        assert.deepEqual(tokens, ["1"], "hybrid scanned page has one selectable stamp but no body text");
+        assert.equal(pdfNativeTextNeedsVisualOcr(tokens.map((text) => ({
+          text, confidence: 1, box: { x: 0.9, y: 0.1, width: 0.02, height: 0.02 },
+        }))), true, "sparse native stamp must not bypass the visual OCR path");
+      } else {
+        assert.deepEqual(tokens, [], "image-only page cannot be mistaken for native text PDF");
+      }
       const viewport = page.getViewport({ scale: 1 });
       const target = pdf.canvasFactory.create(Math.ceil(viewport.width), Math.ceil(viewport.height));
       try {
@@ -70,7 +86,9 @@ async function rasterizePdfImage(pdfBytes) {
   }
 }
 
-const renderedScan = await rasterizePdfImage(embedRasterInPdf(canvas.toBuffer("image/jpeg"), 1000, 220));
+const rasterJpeg = canvas.toBuffer("image/jpeg");
+const renderedScan = await rasterizePdfImage(embedRasterInPdf(rasterJpeg, 1000, 220));
+const renderedHybrid = await rasterizePdfImage(embedRasterInPdf(rasterJpeg, 1000, 220, true), true);
 assert.deepEqual([...renderedScan.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10], "scanned PDF rendered into PNG");
 
 const root = process.cwd();
@@ -94,6 +112,11 @@ try {
   assert.match(scannedText, /TOTAL/i, "Spanish OCR detects label through scanned PDF");
   assert.match(scannedText, /23[,.]45/, "Spanish OCR retains financial decimals through JPEG/PDF/PNG pipeline");
   console.log("PASS · image-only PDF rasterized and recognized via local Spanish Tesseract");
+  const hybridResult = await worker.recognize(renderedHybrid, { rotateRadians: 0 }, { text: true });
+  const hybridText = String(hybridResult.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(hybridText, /TOTAL/i, "hybrid PDF visual body retains its invoice label");
+  assert.match(hybridText, /23[,.]45/, "hybrid PDF visual body retains exact financial decimal");
+  console.log("PASS · sparse-native hybrid PDF was correctly flagged and its raster recognized");
 } finally {
   await worker?.terminate();
 }
