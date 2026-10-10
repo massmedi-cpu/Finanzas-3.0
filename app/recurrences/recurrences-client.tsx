@@ -179,7 +179,7 @@ export default function RecurrencesClient({
   const [error, setError] = useState("");
   const [confirmedImpact, setConfirmedImpact] = useState<ConfirmedImpact | null>(null);
   // The list is briefly unmounted while rechecking a saved decision. Keep
-  // the user\u0027s history expansion choice instead of collapsing it on every refresh.
+  // the user's history expansion choice instead of collapsing it on every refresh.
   const [historyExpanded, setHistoryExpanded] = useState(false);
 
   const activeRead = useRef<AbortController | null>(null);
