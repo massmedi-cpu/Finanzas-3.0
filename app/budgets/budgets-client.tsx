@@ -66,7 +66,7 @@ function progressWidth(item: BudgetItem) {
   return Math.min(100, item.progressBps / 100);
 }
 
-function readableError(payload: any) {
+function readableError(payload: any, afterWrite = false) {
   const code = typeof payload?.code === "string" ? payload.code : "";
   if (code.includes("budget_month")) return "El mes seleccionado no es válido.";
   if (code.includes("budget_manual_amount")) return "El límite elegido debe ser un importe positivo o cero.";
@@ -74,10 +74,14 @@ function readableError(payload: any) {
   if (code.includes("budget_category_must_be_expense")) return "Solo las categorías de gasto pueden tener presupuesto.";
   if (payload?.error === "authentication_required") return "Tu sesión ha caducado. Vuelve a iniciar sesión.";
   if (code === "invalid_budget_snapshot") {
-    return "La información de presupuestos no es válida. No se mostrarán cifras incoherentes; reintenta la consulta.";
+    return afterWrite
+      ? "La respuesta al guardado es incoherente. Comprueba el límite al recargar antes de repetir la operación."
+      : "La información de presupuestos no es válida. No se mostrarán cifras incoherentes; reintenta la consulta.";
   }
   if (payload?.error === "persistence_failed") {
-    return "Presupuestos no ha podido terminar el cálculo. Reintenta; no se ha guardado ningún cambio.";
+    return afterWrite
+      ? "No se ha podido confirmar si el cambio se guardó. Recarga el presupuesto y comprueba el límite antes de volver a guardarlo."
+      : "Presupuestos no ha podido terminar el cálculo. Puedes reintentar esta consulta sin modificar límites.";
   }
   return "No se pudo completar la operación de presupuestos.";
 }
@@ -514,9 +518,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         body: JSON.stringify(body),
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload) throw new Error(readableError(payload));
+      if (!response.ok || !payload) throw new Error(readableError(payload, true));
       if (!isBudgetSnapshot(payload) || payload.month !== body.month) {
-        throw new Error("No se pudo verificar el presupuesto actualizado. Los datos anteriores siguen visibles; vuelve a consultar.");
+        throw new Error("No se pudo verificar la respuesta del guardado. La operación podría haberse aplicado: recarga y comprueba el límite antes de repetirla.");
       }
       setSnapshot(payload);
       setEditingKey(null);
@@ -525,7 +529,10 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       actionFeedback.success(feedbackId, successMessage);
       return true;
     } catch (caught) {
-      const message = caught instanceof Error ? caught.message : "No se pudo actualizar el presupuesto.";
+      const message = caught instanceof TypeError
+        ? "Se perdió la conexión durante la operación. Es posible que el límite se haya guardado: recarga y compruébalo antes de repetirla."
+        : caught instanceof Error ? caught.message
+          : "No se ha podido confirmar el guardado. Recarga el presupuesto antes de volver a intentarlo.";
       setError(message);
       actionFeedback.error(feedbackId, message);
       return false;
