@@ -61,7 +61,7 @@ BEGIN
   SELECT count(*) INTO v_categories FROM financial_app.categories;
   SELECT count(*) INTO v_budgets FROM financial_app.budgets;
   IF v_accounts <> 0 OR v_categories <> 0 OR v_budgets <> 0 THEN
-    RAISE EXCEPTION 'AP1_CROSS_TENANT_READ_LEAK';
+    RAISE EXCEPTION 'AP1_CROSS_TENANT_READ_LEAK accounts=% categories=% budgets=% scope=% role=%', v_accounts,v_categories,v_budgets,pg_catalog.current_setting('financial_app.workspace_id',true),current_user;
   END IF;
 
   UPDATE financial_app.budgets
