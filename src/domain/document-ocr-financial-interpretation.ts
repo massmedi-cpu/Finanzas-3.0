@@ -362,14 +362,24 @@ function extractPaymentMethod(lines: LocatedLine[]) {
     { pattern: /\befectivo\b|\bcash\b/, value: "Efectivo" },
     { pattern: /\btransferencia\b/, value: "Transferencia" },
     { pattern: /\bbizum\b/, value: "Bizum" },
-    { pattern: /\bdomiciliacion\b|\brecibo\b/, value: "Domiciliación" },
+    { pattern: /\bdomiciliacion\b|\bdomiciliad[oa]s?\b|\b(?:pago|cargo)\s+(?:por|mediante|con)\s+recibo\b/, value: "Domiciliación" },
   ];
+  let unlabelled: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
+    // A denied direct debit is not a confirmed payment method.
+    if (/\b(?:no|sin)\s+domiciliad[oa]s?\b/.test(normalized)) continue;
     const hit = keywords.find((entry) => entry.pattern.test(normalized));
-    if (hit) return fieldFrom(item, item.line.text.trim(), hit.value);
+    if (!hit) continue;
+    const field = fieldFrom(item, item.line.text.trim(), hit.value);
+    const explicitlyLabelled = /\b(?:forma|medio|metodo)\s+de\s+pago\b|\bpago\s*[:=-]/.test(normalized);
+    if (explicitlyLabelled) return field;
+    // A merchant may mention a card or direct debit outside the payment
+    // summary. Preserve the first candidate, but do not override a later
+    // explicitly labelled payment line or certify an unlabelled direct debit.
+    unlabelled ??= hit.value === "Domiciliación" ? fieldRequiringReview(field) : field;
   }
-  return emptyField<string>();
+  return unlabelled ?? emptyField<string>();
 }
 
 function extractIssuer(lines: LocatedLine[]) {
