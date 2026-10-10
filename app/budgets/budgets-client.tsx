@@ -608,7 +608,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       setEditingKey(null);
       setEditValue("");
       setNotice(successMessage);
-      actionFeedback.success(feedbackId, successMessage);
+      // The page already presents a persistent, contextual success message.
+      // Clear the global pending spinner instead of showing it a second time.
+      actionFeedback.dismiss(feedbackId);
       return true;
     } catch (caught) {
       const message = controller.signal.aborted
@@ -632,7 +634,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         setWriteMismatch(false);
         setWriteUnverified(true);
       }
-      actionFeedback.error(feedbackId, message);
+      // The error remains in the local alert. Avoid a duplicate global alert.
+      actionFeedback.dismiss(feedbackId);
       return false;
     } finally {
       window.clearTimeout(deadline);
