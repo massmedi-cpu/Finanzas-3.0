@@ -130,6 +130,42 @@ test("REC-SYNC-001 · sincronización exitosa sin fecha bancaria no significa da
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
 });
 
+test("REC-CMP-004 · reference outside the imported range cannot certify any change or fake zero", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      available: true, earliestMovementDate: "2026-09-01", latestMovementDate: "2026-10-06", sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics.getByText("Referencia —", { exact: true })).toHaveCount(3);
+  await expect(metrics).not.toContainText("−50,00 €");
+  await expect(metrics).not.toContainText("33,3 %");
+  await expect(page.getByRole("heading", { name: "La referencia no tiene cobertura bancaria completa: no podemos concluir mejora ni empeoramiento." })).toBeVisible();
+  await expect(page.getByText("Periodo de referencia sin cobertura completa: las variaciones no son concluyentes.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  await expect(page.getByRole("table", { name: /categorías/i })).toContainText("Sin dato");
+});
+
+test("REC-CMP-005 · partial reference keeps observed amount but never reports percentage improvement", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      available: true, earliestMovementDate: "2026-08-03", latestMovementDate: "2026-10-06", sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics.getByText("Referencia 150,00 €", { exact: true })).toHaveCount(1);
+  await expect(metrics).not.toContainText("33,3 %");
+  await expect(page.getByRole("heading", { name: "La referencia no tiene cobertura bancaria completa: no podemos concluir mejora ni empeoramiento." })).toBeVisible();
+});
+
 test("REC-CMP-003 · una sincronización con filas ausentes impide certificar variaciones", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
