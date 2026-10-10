@@ -16,7 +16,6 @@ for (const key of [
     const response = await analysisGet(new Request(url));
     expect(response.status).toBe(400);
     expect(response.headers.get("cache-control")).toBe("private, no-store");
-  expect(response.headers.get("server-timing")).toMatch(/^analysis-source-freshness;dur=\d+(?:\.\d+)?$/);
     expect(response.headers.get("server-timing")).toMatch(/^analysis;dur=\d+(?:\.\d+)?$/);
     const result = await response.json();
     expect(result).toMatchObject({ error: "invalid_request", code: "invalid_analysis_parameter" });
@@ -30,6 +29,7 @@ test("CAP-004 · source freshness rejects two account IDs before requesting bank
   const response = await freshnessGet(new Request(url));
   expect(response.status).toBe(400);
   expect(response.headers.get("cache-control")).toBe("private, no-store");
+  expect(response.headers.get("server-timing")).toMatch(/^analysis-source-freshness;dur=\d+(?:\.\d+)?$/);
   expect(await response.json()).toEqual({ error: "invalid_parameter" });
 });
 
