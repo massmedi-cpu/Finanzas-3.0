@@ -1644,7 +1644,7 @@ test("RECUPERACION-PRODUCTO · no descarta un límite en edición al cambiar mes
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   const input = page.getByLabel("Límite elegido de total mensual");
   await input.fill("123,45");
-  const monthInput = page.locator('input[type="month"]');
+  const monthInput = page.locator('#main-content input[type="month"]');
   await expect(monthInput).toBeDisabled();
   await expect(page.getByRole("button", { name: "Actualizar referencia" })).toBeDisabled();
   await expect(page.getByRole("searchbox", { name: "Buscar categorías" })).toBeDisabled();
