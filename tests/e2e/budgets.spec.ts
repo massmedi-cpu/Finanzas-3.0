@@ -431,6 +431,70 @@ test("REC-BUD-008 · límite se conserva al recargar y vuelve a automático tras
   // Durable database persistence is separately exercised by the AP1/AP2 SQL CI lab.
 });
 
+test("REC-BUD-009 · sin cobertura bancaria el presupuesto no afirma estar dentro del límite", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: false,
+        earliestMovementDate: null,
+        latestMovementDate: null,
+        sync: null,
+      }),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  await expect(page.getByLabel("Cobertura de los datos del presupuesto")).toContainText("No se ha podido verificar");
+  const total = page.locator("#budget-total");
+  await expect(total).toContainText("Estado sin verificar");
+  await expect(total).toContainText("Gasto observado · sin verificar");
+  await expect(total).toContainText("Margen sin verificar");
+  await expect(total).not.toContainText("Dentro de referencia");
+  await expect(total).not.toContainText("Dentro del límite");
+  // Los importes llegados de la API se pueden consultar, pero no se afirma
+  // que 0 € signifique un mes sin gastos ni que el margen esté disponible.
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve a ser calculable", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-10-01",
+        sync: {
+          status: "success",
+          finishedAt: "2026-10-01T10:00:00Z",
+          startedAt: "2026-10-01T09:00:00Z",
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
+  const total = page.locator("#budget-total");
+  await expect(total).toContainText("Dentro de referencia");
+  await expect(total).toContainText("Margen de referencia");
+  await expect(total).not.toContainText("Estado sin verificar");
+  expect(writes).toHaveLength(0);
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
