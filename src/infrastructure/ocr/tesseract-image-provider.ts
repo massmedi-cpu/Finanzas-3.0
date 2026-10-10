@@ -4,7 +4,7 @@ import type { DocumentOcrProvider } from "../../application/document-ocr-service
 import type { OcrWord } from "../../domain/document-ocr";
 import { isReceiptMoney } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
-import { ocrNeedsRotationFallback } from "./ocr-rotation-decision";
+import { ocrNeedsRotationFallback, ocrRecognitionOutputFlags } from "./ocr-rotation-decision";
 
 const SUPPORTED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIDE = 12_000;
@@ -572,7 +572,7 @@ async function recognizeCandidate(
     : { rotateRadians: rotationRadians };
   if (rectangle) options.rectangle = rectangle;
   const recognition = await withTimeout(
-    worker.recognize(Buffer.from(bytes), options, { text: true, tsv: true, imageColor: true }),
+    worker.recognize(Buffer.from(bytes), options, ocrRecognitionOutputFlags(autoRotate)),
     OCR_TIMEOUT_MS,
     "recognize",
   );
