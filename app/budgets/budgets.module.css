@@ -181,6 +181,16 @@
   color: var(--text-warning-soft);
 }
 
+.coverageNotice {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.coverageNotice > span {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
 .summaryGrid {
   display: grid;
   min-width: 0;
