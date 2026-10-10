@@ -491,3 +491,55 @@ test("REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras 
   await expect(categories).toContainText("Sin dato");
   await expect(categories).toContainText("Sin base comparable");
 });
+
+test("REC-CMP-005 · histórico que empieza a mitad del periodo no se confunde con datos que faltan al final", async ({ page }) => {
+  await mockComparison(page);
+  // Primary 01–10 Sept: last banking row is after the period, but the first
+  // banking row is on 05 Sept. The missing evidence is at the START.
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-09-05",
+      latestMovementDate: "2026-09-25",
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const insight = page.getByRole("heading", { level: 2, name: /Cobertura bancaria parcial/ });
+  await expect(insight).toContainText("el histórico comienza el 05/09/2026 después del inicio");
+  await expect(insight).not.toContainText("antes del final");
+  await expect(insight).toContainText("No podemos interpretar la variación");
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("El gasto diario baja");
+});
+
+test("REC-CMP-006 · incidencia de sincronización no se diagnostica falsamente como un periodo truncado", async ({ page }) => {
+  await mockComparison(page);
+  // Both date boundaries are outside the selected periods. Only the import
+  // integrity is incomplete: two missing banking rows.
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success",
+        startedAt: "2026-09-25T07:59:00Z",
+        finishedAt: "2026-09-25T08:00:00Z",
+        rowsSeen: 10,
+        rowsFailed: 0,
+        rowsMissing: 2,
+        duplicatesDetected: 0,
+        warningsCount: 2,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const insight = page.getByRole("heading", { level: 2, name: /cobertura bancaria del periodo principal no está completamente verificada/i });
+  await expect(insight).not.toContainText("antes del final");
+  await expect(insight).toContainText("No podemos interpretar la variación");
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
+});
