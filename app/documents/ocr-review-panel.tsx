@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { interpretDocumentOcrFinancially, type DocumentOcrFinancialInterpretation } from "../../src/domain/document-ocr-financial-interpretation";
@@ -286,8 +286,17 @@ export function OcrReviewPanel({
   const [openingOriginal, setOpeningOriginal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const activeDocumentId = useRef(documentId);
+  const documentGeneration = useRef(0);
+  const ocrRequest = useRef<AbortController | null>(null);
+  const ocrInFlight = useRef(false);
 
   useEffect(() => {
+    activeDocumentId.current = documentId;
+    documentGeneration.current += 1;
+    ocrRequest.current?.abort();
+    ocrRequest.current = null;
+    ocrInFlight.current = false;
     setResult(null);
     setDraft(null);
     setOcrRunId(null);
@@ -297,17 +306,28 @@ export function OcrReviewPanel({
     setConfirming(false);
     setOpeningOriginal(false);
     setCopyState("idle");
+    return () => {
+      documentGeneration.current += 1;
+      ocrRequest.current?.abort();
+      ocrInFlight.current = false;
+    };
   }, [documentId]);
 
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
   const review = useMemo(() => result ? summarizeDocumentOcrReview(result) : null, [result]);
 
-  async function hydrateConfirmation(parsed: OcrResult, interpretation: DocumentOcrFinancialInterpretation) {
+  async function hydrateConfirmation(
+    parsed: OcrResult,
+    interpretation: DocumentOcrFinancialInterpretation,
+    generation: number,
+    signal: AbortSignal,
+  ) {
     try {
       const [detailResponse, historyResponse] = await Promise.all([
-        readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })),
-        readJson(await fetch(`/api/documents/ocr-review?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })),
+        readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}`, { cache: "no-store", signal })),
+        readJson(await fetch(`/api/documents/ocr-review?id=${encodeURIComponent(documentId)}`, { cache: "no-store", signal })),
       ]);
+      if (signal.aborted || generation !== documentGeneration.current || activeDocumentId.current !== documentId) return;
       const detail = detailResponse?.document && typeof detailResponse.document === "object"
         ? detailResponse.document as DocumentDetailForReview
         : null;
@@ -320,12 +340,21 @@ export function OcrReviewPanel({
         setError("La lectura se ha completado, pero no se ha podido enlazar con su evidencia persistida. Puedes revisar los datos, pero no confirmarlos todavía.");
       }
     } catch {
-      setError("La lectura se ha completado, pero no se ha podido preparar la confirmación persistente. El OCR bruto sigue visible para revisión.");
+      if (!signal.aborted && generation === documentGeneration.current && activeDocumentId.current === documentId) {
+        setError("La lectura se ha completado, pero no se ha podido preparar la confirmación persistente. El OCR bruto sigue visible para revisión.");
+      }
     }
   }
 
   async function runOcr() {
-    if (!supported || busy) return;
+    if (!supported || busy || ocrInFlight.current) return;
+    const generation = documentGeneration.current;
+    const controller = new AbortController();
+    const isCurrent = () => !controller.signal.aborted
+      && generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
+    ocrInFlight.current = true;
+    ocrRequest.current = controller;
     setBusy(true);
     setError(null);
     setCopyState("idle");
@@ -334,20 +363,27 @@ export function OcrReviewPanel({
     const feedbackId = `documents:ocr:${documentId}`;
     actionFeedback.begin(feedbackId, "Analizando documento con OCR…");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { method: "POST", cache: "no-store" }));
+      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { method: "POST", cache: "no-store", signal: controller.signal }));
+      if (!isCurrent()) return;
       const parsed = parseOcrResult(data);
+      if (parsed.documentId !== documentId) throw new Error("ocr_response_invalid");
       const interpretation = interpretDocumentOcrFinancially(parsed);
       setResult(parsed);
       setDraft(reviewDraft(interpretation));
       actionFeedback.success(feedbackId, "Lectura OCR completada. Revisa el resultado antes de confirmar sus datos.");
-      await hydrateConfirmation(parsed, interpretation);
+      await hydrateConfirmation(parsed, interpretation, generation, controller.signal);
     } catch (caught) {
+      if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = errorLabel(code);
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        ocrInFlight.current = false;
+        if (ocrRequest.current === controller) ocrRequest.current = null;
+        setBusy(false);
+      }
     }
   }
 
