@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { CashFlowDay, CashFlowEventState, CashFlowView } from "../../src/application/cash-flow/cash-flow-model";
-import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow } from "../../src/application/cash-flow/cash-flow-model";
+import { cashFlowEventState, shiftCashFlowMonth, countsInCashFlow, cashFlowObservedDaySignal } from "../../src/application/cash-flow/cash-flow-model";
 import { formatMoneyCents } from "../../src/core/money";
 import { dateHasConfirmedCoverage, periodComparisonIsReliable } from "../../src/application/data-coverage";
 import { CashFlowEvolution } from "./cash-flow-evolution";
@@ -191,8 +191,8 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
                     ? [realCount ? `${realCount} real` : null, plannedCount ? `${plannedCount} prev.` : null].filter(Boolean).join(" · ")
                     : realCount === null ? "Sin cobertura" : plannedCount === null ? "Previsión no disponible" : "—"}</span>
                   <span className={styles.signals} aria-hidden="true">
-                    {dayActualCovered && day.real.some((row) => countsInCashFlow(row) && row.amountCents > 0) ? <i className={styles.realIncome} /> : null}
-                    {dayActualCovered && day.real.some((row) => countsInCashFlow(row) && row.amountCents < 0) ? <i className={styles.realExpense} /> : null}
+                    {cashFlowObservedDaySignal(day, dayActualCovered, "income") ? <i className={styles.realIncome} /> : null}
+                    {cashFlowObservedDaySignal(day, dayActualCovered, "expense") ? <i className={styles.realExpense} /> : null}
                     {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "suggested") ? <i className={styles.suggested} /> : null}
                     {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "confirmed") ? <i className={styles.confirmed} /> : null}
                     {forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "realized") ? <i className={styles.realized} /> : null}
