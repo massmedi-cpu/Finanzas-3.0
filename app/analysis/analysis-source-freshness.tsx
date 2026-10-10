@@ -264,6 +264,15 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
+  if (!freshness.earliestMovementDate) {
+    return {
+      label: "Cobertura histórica sin verificar",
+      detail,
+      incidentDetail: "Se conoce el último movimiento, pero no la fecha inicial del histórico bancario.",
+      tone: "warning",
+    };
+  }
+
   return {
     label: "Datos al día",
     detail,
