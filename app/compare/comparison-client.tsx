@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { formatBasisPoints, formatInteger } from "../../src/core/formatters";
 import { formatMoneyCents as formatMoney } from "../../src/core/money";
 import {
@@ -380,15 +380,29 @@ export default function ComparisonClient({
   const [resolved, setResolved] = useState(Boolean(initialSnapshot));
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
+  const [scopedFreshness, setScopedFreshness] = useState<{
+    accountId: string | null;
+    value: SourceFreshness | null;
+  } | null>(null);
+  // Do not transfer all-account freshness to a selected bank account (or
+  // vice versa) while the newly scoped request is still loading.
+  const selectedAccountId = snapshot?.selection.accountId ?? null;
+  const onFreshnessChange = useCallback((value: SourceFreshness | null) => {
+    setScopedFreshness({ accountId: selectedAccountId, value });
+  }, [selectedAccountId]);
+  const freshness = scopedFreshness?.accountId === selectedAccountId
+    ? scopedFreshness.value
+    : null;
   const primaryCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.primaryFrom,
     dateTo: snapshot.selection.primaryTo,
+    earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
   }) : null;
   const referenceCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.referenceFrom,
     dateTo: snapshot.selection.referenceTo,
+    earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
   }) : null;
   const comparisonReliable = primaryCoverage !== null && referenceCoverage !== null
@@ -499,7 +513,7 @@ export default function ComparisonClient({
 
   return (
     <>
-      <AnalysisSourceFreshness onChange={setFreshness} />
+      <AnalysisSourceFreshness key={selectedAccountId ?? "all"} accountId={selectedAccountId} onChange={onFreshnessChange} />
       {snapshot ? (
         <ModuleContextNavigation
           links={comparisonModuleLinks(snapshot.selection)}
