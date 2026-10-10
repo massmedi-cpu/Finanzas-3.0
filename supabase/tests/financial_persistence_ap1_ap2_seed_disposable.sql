@@ -31,7 +31,7 @@ INSERT INTO financial_app.accounts(id,name,type,opening_balance_cents)
 VALUES ('aa110000-0000-4000-8000-000000000011','AP1AP2 account','checking',125000);
 
 INSERT INTO financial_app.categories(id,name,kind,icon_key,color_token)
-VALUES ('aa110000-0000-4000-8000-000000000033','AP1AP2 expense','expense','wallet','neutral');
+VALUES ('aa110000-0000-4000-8000-000000000033','AP1AP2 expense','expense','wallet','category.blue');
 
 -- Real business SQL functions, not mocked API responses.
 SELECT financial_app.set_budget_manual_amount('2026-09',NULL,123456);
@@ -84,7 +84,7 @@ INSERT INTO financial_app.accounts(id,name,type,opening_balance_cents)
 VALUES ('bb220000-0000-4000-8000-000000000022','AP1AP2 account','checking',50000);
 
 INSERT INTO financial_app.categories(id,name,kind,icon_key,color_token)
-VALUES ('bb220000-0000-4000-8000-000000000044','AP1AP2 expense','expense','wallet','neutral');
+VALUES ('bb220000-0000-4000-8000-000000000044','AP1AP2 expense','expense','wallet','category.blue');
 
 SELECT financial_app.set_budget_manual_amount('2026-09',NULL,654321);
 SELECT financial_app.set_budget_manual_amount(
