@@ -63,6 +63,7 @@ jobs:
           npx playwright test --config=playwright.recovery.config.ts
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
+          tests/e2e/documents.spec.ts
           tests/e2e/transactions-race.spec.ts
           tests/e2e/transactions.spec.ts
           tests/e2e/accounts.spec.ts
