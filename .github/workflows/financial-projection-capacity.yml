@@ -3,6 +3,8 @@ name: Financial projection 10k-50k lab
 on:
   pull_request:
     branches:
+      - chat/twenty-one-routes-responsive-shell-20261010
+      - chat/integrated-b-e-c-visual-20261010
       - chat/eleven-width-currency-layout-gate-20261010
       - chat/finance-50k-projection-capacity-20261010
       - chat/financial-api-server-timing-20261010
