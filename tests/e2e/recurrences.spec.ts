@@ -569,7 +569,7 @@ test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupe
     });
   });
   await page.goto("/recurrences");
-  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar el listado");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar el listado");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["—", "—", "—", "—"]);
   await expect(page.getByText(/No se puede confirmar cuántos patrones existen/)).toBeVisible();
   await expect(page.getByRole("button", { name: "Confirmar recurrencia" })).toHaveCount(0);
@@ -593,7 +593,7 @@ test("REC-REC-003 · GET 200 con contrato corrupto no inventa ausencia; cero vá
     });
   });
   await page.goto("/recurrences");
-  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByRole("status")).toContainText("Patrones recalculados");
@@ -619,7 +619,7 @@ test("REC-REC-004 · lectura de actualización fallida oculta candidatos obsolet
   await page.goto("/recurrences");
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
-  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
@@ -645,8 +645,8 @@ test("REC-REC-005 · POST incierto no afirma reversión ni repite la decisión a
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
   const card = page.locator("article").filter({ hasText: "supermercado mensual" });
   await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
-  await expect(page.getByRole("alert")).toContainText("No podemos confirmar si la decisión se guardó");
-  await expect(page.getByRole("alert")).toContainText("comprueba su estado antes de repetirla");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("comprueba su estado antes de repetirla");
   await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
   expect(methods).toEqual(["POST"]);
 });
@@ -665,7 +665,7 @@ test("REC-REC-006 · PATCH incierto no afirma que se haya archivado", async ({ p
   const history = page.locator("details").filter({ hasText: /Históricos/ });
   await history.locator("summary").click();
   await history.getByRole("button", { name: "Archivar" }).click();
-  await expect(page.getByRole("alert")).toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No podemos confirmar si el estado cambió");
   await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
   expect(methods).toEqual(["PATCH"]);
 });
@@ -718,7 +718,7 @@ test("REC-REC-008 · los estados bancarios se presentan en español y las próxi
     });
   });
   await page.goto("/recurrences");
-  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
   await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
