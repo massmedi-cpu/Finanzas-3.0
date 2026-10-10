@@ -144,7 +144,9 @@ function exactFinancialAmountMatches(text: string) {
       || (/[.,]/.test(previous) && /\d/.test(previousPrevious));
     const endsInsideNumber = /\d/.test(next)
       || (/[.,]/.test(next) && /\d/.test(nextNext));
-    return !startsInsideNumber && !endsInsideNumber;
+    // Percentages such as "IVA 21,00%" are rates, never euro values.
+    const isPercentage = /^\s*%/.test(text.slice(end));
+    return !startsInsideNumber && !endsInsideNumber && !isPercentage;
   });
 }
 
@@ -171,7 +173,7 @@ function valueAfterLabel(text: string) {
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean } = {},
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
@@ -193,8 +195,15 @@ function extractMoneyField(
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ raw: match[0], value, index: match.index }];
       });
-    const following = monies.filter((money) => money.index >= anchorEnd);
-    let chosen = following[0] ?? monies.at(-1);
+    // BASE / IVA often share a line with TOTAL, payment or another field.
+    // Only amounts before the next *different* financial label belong to
+    // BASE / IVA. Never borrow an invoice total as a tax or a tax as a base.
+    const nextOwner = options.ownLabelOnly
+      ? searchable.slice(anchorEnd).search(/\b(?:base(?: imponible)?|subtotal|iva|igic|impuestos?|cuota(?: del? iva)?|total|importe total|a pagar|efectivo|tarjeta|cambio)\b/)
+      : -1;
+    const segmentEnd = nextOwner >= 0 ? anchorEnd + nextOwner : Number.POSITIVE_INFINITY;
+    const following = monies.filter((money) => money.index >= anchorEnd && money.index < segmentEnd);
+    let chosen = following[0] ?? (options.ownLabelOnly ? undefined : monies.at(-1));
     let adjacent: LocatedLine | null = null;
     if (!chosen && options.adjacentAmount) {
       // Layout engines often break "TOTAL A PAGAR" and "23,45 €" into
@@ -559,8 +568,8 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
-  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
-  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
+  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/], { ownLabelOnly: true });
+  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/], { ownLabelOnly: true });
   // Spanish utilities and telecom invoices often use "IMPORTE FACTURA"
   // rather than a standalone TOTAL. Preserve contradictory candidates for
   // human review instead of silently treating the invoice amount as absent.
