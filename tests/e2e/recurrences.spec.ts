@@ -599,7 +599,7 @@ test("REC-REC-003 · GET 200 con contrato corrupto no inventa ausencia; cero vá
   await expect(page.getByRole("main").getByRole("alert")).toContainText("No se ha podido verificar");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
   await page.getByRole("button", { name: "Recalcular patrones" }).click();
-  await expect(page.getByRole("status")).toContainText("Patrones recalculados");
+  await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Patrones recalculados" })).toContainText("Patrones recalculados");
   await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["0", "0", "0", "0"]);
   await expect(page.getByText(/No hay patrones con al menos 3 apariciones/)).toBeVisible();
 });
