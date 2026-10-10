@@ -69,7 +69,10 @@ for (const token of [
 for (const token of [
   "No interpretamos 0 € como mejora",
   "El periodo principal no tiene cobertura bancaria confirmada",
-  "Cobertura bancaria del periodo principal desconocida",
+  "comparisonCoverageReason(coverage, referenceCoverage)",
+  "periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage)",
+  'describe(primary, "Periodo principal")',
+  'describe(reference, "Periodo de referencia")',
   "La comparación queda incompleta",
   "periodComparisonIsReliable(coverage)",
   "Comparación incompleta",
@@ -108,6 +111,7 @@ for (const token of [
 ]) requireText(homeTests, token, "regresión Inicio");
 for (const token of [
   "QA-02 · no interpreta como mejora un periodo posterior al último movimiento importado",
+  "REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras aunque el periodo principal esté cubierto",
 ]) requireText(compareTests, token, "regresión Comparador");
 for (const token of [
   "QA-02 · Análisis no convierte un periodo sin cobertura completa en tendencia favorable",
