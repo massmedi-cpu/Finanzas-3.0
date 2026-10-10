@@ -191,6 +191,30 @@
   min-width: 0;
 }
 
+.uncertainWrite {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  border: 1px solid var(--border-warning-soft);
+  background: var(--surface-warning-soft);
+  color: var(--text-warning-soft);
+  border-radius: 1rem;
+  padding: 1rem;
+  font-size: 0.9375rem;
+}
+
+.uncertainWrite > span {
+  flex: 1 1 18rem;
+  min-width: 0;
+}
+
+.uncertainWrite button {
+  flex: 0 1 auto;
+  color: var(--color-text);
+}
+
 .summaryGrid {
   display: grid;
   min-width: 0;
