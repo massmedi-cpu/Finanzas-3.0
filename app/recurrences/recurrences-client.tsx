@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatMoneyCents as money } from "../../src/core/money";
 import {
   forecastHrefForContext,
@@ -101,6 +101,51 @@ async function parseResponse(response: Response) {
   return payload;
 }
 
+// A 200 response is not enough to certify either a true empty set or safe
+// decisions. Fail closed on malformed, incomplete or unexpected contracts.
+function isRecurrenceSnapshot(value: unknown): value is Snapshot {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  const countsValid = Array.isArray(row.candidates)
+    && Number.isSafeInteger(row.candidateCount)
+    && row.candidateCount === row.candidates.length
+    && Number.isSafeInteger(row.minOccurrences);
+  if (row.contractVersion !== 1 || !countsValid || typeof row.dateTo !== "string") return false;
+  const principles = row.principles as Record<string, unknown> | null;
+  if (!principles || principles.bankSource !== "read_only" || principles.automaticPersistence !== false) return false;
+  return (row.candidates as unknown[]).every((item) => {
+    if (!item || typeof item !== "object" || Array.isArray(item)) return false;
+    const c = item as Record<string, unknown>;
+    return typeof c.candidateKey === "string" && /^[a-f0-9]{32}$/i.test(c.candidateKey)
+      && typeof c.conceptPattern === "string"
+      && ["high", "medium", "low"].includes(String(c.confidence))
+      && ["income", "expense"].includes(String(c.kind))
+      && Number.isSafeInteger(c.usualAmountCents)
+      && Number.isSafeInteger(c.occurrenceCount)
+      && Number.isSafeInteger(c.missedCycles)
+      && typeof c.lastObservedDate === "string"
+      && typeof c.stale === "boolean"
+      && typeof c.explanation === "string"
+      && (c.existingStatus === null || ["active", "ignored", "archived"].includes(String(c.existingStatus)));
+  });
+}
+
+async function sendDecision(method: "POST" | "PATCH", body: Record<string, unknown>) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    const response = await fetch("/api/recurrences", {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    return await parseResponse(response);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 export default function RecurrencesClient({
   forecastContext = null,
 }: {
@@ -113,26 +158,49 @@ export default function RecurrencesClient({
   const [error, setError] = useState("");
   const [confirmedImpact, setConfirmedImpact] = useState<ConfirmedImpact | null>(null);
 
+  const activeRead = useRef<AbortController | null>(null);
+  const readSequence = useRef(0);
+  const mutationInFlight = useRef(false);
+
   const load = useCallback(async (announce = false) => {
+    const sequence = ++readSequence.current;
+    activeRead.current?.abort();
+    const controller = new AbortController();
+    activeRead.current = controller;
+    const timeout = setTimeout(() => controller.abort(), 15_000);
     setLoading(true);
+    setSnapshot(null);
     setError("");
     try {
       const response = await fetch("/api/recurrences?minOccurrences=3", {
         headers: { accept: "application/json" },
         cache: "no-store",
+        signal: controller.signal,
       });
-      const payload = await parseResponse(response) as Snapshot;
+      const payload: unknown = await parseResponse(response);
+      if (!isRecurrenceSnapshot(payload)) throw new Error("recurrence_contract_invalid");
+      if (sequence !== readSequence.current || controller.signal.aborted) return false;
       setSnapshot(payload);
       if (announce) setMessage("Patrones recalculados con los movimientos actuales.");
+      return true;
     } catch {
-      setError("No se han podido cargar los patrones recurrentes.");
+      if (sequence !== readSequence.current) return false;
+      // Failed or malformed reads cannot be displayed as a genuine 0.
+      setError("No se ha podido verificar el listado de patrones. Recalcula antes de tomar una decisión.");
+      return false;
     } finally {
-      setLoading(false);
+      clearTimeout(timeout);
+      if (activeRead.current === controller) activeRead.current = null;
+      if (sequence === readSequence.current) setLoading(false);
     }
   }, []);
 
   useEffect(() => {
     void load(false);
+    return () => {
+      readSequence.current += 1;
+      activeRead.current?.abort();
+    };
   }, [load]);
 
   const counts = useMemo(() => {
@@ -147,22 +215,19 @@ export default function RecurrencesClient({
   }, [snapshot]);
 
   async function persistCandidate(candidate: Candidate, status: RecurrenceStatus) {
+    if (mutationInFlight.current || loading) return;
+    mutationInFlight.current = true;
     setPendingKey(candidate.candidateKey);
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/recurrences", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          candidateKey: candidate.candidateKey,
-          status,
-          dateFrom: snapshot?.dateFrom ?? null,
-          dateTo: snapshot?.dateTo ?? null,
-          minOccurrences: snapshot?.minOccurrences ?? 3,
-        }),
+      const saved = await sendDecision("POST", {
+        candidateKey: candidate.candidateKey,
+        status,
+        dateFrom: snapshot?.dateFrom ?? null,
+        dateTo: snapshot?.dateTo ?? null,
+        minOccurrences: snapshot?.minOccurrences ?? 3,
       });
-      const saved = await parseResponse(response);
       const recurrenceId = recurrenceIdFromResponse(saved)
         ?? recurrenceIdFromResponse({ id: candidate.existingRecurrenceId });
       setMessage(
@@ -187,24 +252,22 @@ export default function RecurrencesClient({
       }
       await load(false);
     } catch {
-      setError("No se ha podido guardar la decisión sobre este patrón.");
+      setConfirmedImpact(null);
+      setError("No podemos confirmar si la decisión se guardó. Recalcula patrones y comprueba su estado antes de repetirla.");
     } finally {
+      mutationInFlight.current = false;
       setPendingKey(null);
     }
   }
 
   async function changeStatus(candidate: Candidate, status: RecurrenceStatus) {
-    if (!candidate.existingRecurrenceId) return;
+    if (!candidate.existingRecurrenceId || mutationInFlight.current || loading) return;
+    mutationInFlight.current = true;
     setPendingKey(candidate.candidateKey);
     setError("");
     setMessage("");
     try {
-      const response = await fetch("/api/recurrences", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ id: candidate.existingRecurrenceId, status }),
-      });
-      await parseResponse(response);
+      await sendDecision("PATCH", { id: candidate.existingRecurrenceId, status });
       setMessage(
         status === "ignored"
           ? "Recurrencia ignorada."
@@ -215,8 +278,10 @@ export default function RecurrencesClient({
       }
       await load(false);
     } catch {
-      setError("No se ha podido cambiar el estado de la recurrencia.");
+      setConfirmedImpact(null);
+      setError("No podemos confirmar si el estado cambió. Recalcula patrones y comprueba su estado antes de repetir la operación.");
     } finally {
+      mutationInFlight.current = false;
       setPendingKey(null);
     }
   }
@@ -277,7 +342,7 @@ export default function RecurrencesClient({
                           <button
                             className={styles.primaryButton}
                             type="button"
-                            disabled={pending}
+                            disabled={loading || pendingKey !== null}
                             onClick={() => void persistCandidate(candidate, "active")}
                           >
                             {pending ? "Guardando…" : "Confirmar recurrencia"}
@@ -285,7 +350,7 @@ export default function RecurrencesClient({
                           <button
                             className={styles.secondaryButton}
                             type="button"
-                            disabled={pending}
+                            disabled={loading || pendingKey !== null}
                             onClick={() => void persistCandidate(candidate, "ignored")}
                           >
                             Ignorar patrón
@@ -297,7 +362,7 @@ export default function RecurrencesClient({
                             <button
                               className={styles.primaryButton}
                               type="button"
-                              disabled={pending}
+                              disabled={loading || pendingKey !== null}
                               onClick={() => void persistCandidate(candidate, "active")}
                             >
                               Reactivar y recalcular
@@ -307,7 +372,7 @@ export default function RecurrencesClient({
                               <button
                                 className={styles.primaryButton}
                                 type="button"
-                                disabled={pending}
+                                disabled={loading || pendingKey !== null}
                                 onClick={() => void persistCandidate(candidate, "active")}
                               >
                                 Actualizar cálculo
@@ -315,7 +380,7 @@ export default function RecurrencesClient({
                               <button
                                 className={styles.secondaryButton}
                                 type="button"
-                                disabled={pending}
+                                disabled={loading || pendingKey !== null}
                                 onClick={() => void changeStatus(candidate, "ignored")}
                               >
                                 Ignorar
@@ -326,7 +391,7 @@ export default function RecurrencesClient({
                             <button
                               className={styles.textButton}
                               type="button"
-                              disabled={pending}
+                              disabled={loading || pendingKey !== null}
                               onClick={() => void changeStatus(candidate, "archived")}
                             >
                               Archivar
@@ -409,23 +474,23 @@ export default function RecurrencesClient({
         <div className={styles.summaryGrid} role="group" aria-label="Resumen de confianza">
           <article className={styles.metric}>
             <span>Patrones detectados</span>
-            <strong>{counts.total}</strong>
+            <strong>{snapshot ? counts.total : "—"}</strong>
             <small>No se guardan automáticamente</small>
           </article>
           <article className={styles.metric}>
             <span>Confianza alta</span>
-            <strong>{counts.high}</strong>
+            <strong>{snapshot ? counts.high : "—"}</strong>
             <small>Cadencia e importe estables</small>
           </article>
           <article className={styles.metric}>
             <span>Confianza media</span>
-            <strong>{counts.medium}</strong>
+            <strong>{snapshot ? counts.medium : "—"}</strong>
             <small>Conviene revisar antes de confirmar</small>
           </article>
           <article className={styles.metric}>
             <span>Confianza baja</span>
-            <strong>{counts.low}</strong>
-            <small>{counts.stale} con ciclos esperados no observados</small>
+            <strong>{snapshot ? counts.low : "—"}</strong>
+            <small>{snapshot ? `${counts.stale} con ciclos esperados no observados` : "Datos sin verificar"}</small>
           </article>
         </div>
 
@@ -438,9 +503,11 @@ export default function RecurrencesClient({
             <span className={styles.readOnlyBadge}>Origen bancario · solo lectura</span>
           </div>
 
-          {loading && !snapshot ? (
-            <div className={styles.empty}>Analizando los movimientos…</div>
-          ) : snapshot?.candidates.length ? (
+          {!snapshot ? (
+            <div className={styles.empty}>
+              {loading ? "Analizando los movimientos…" : "No se puede confirmar cuántos patrones existen. Pulsa «Recalcular patrones» para reintentar la lectura."}
+            </div>
+          ) : snapshot.candidates.length ? (
             <div className={styles.candidateList}>
               {orderedCandidates.current.map(renderCandidate)}
               {orderedCandidates.historical.length > 0 ? (
