@@ -1041,13 +1041,41 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
 
   await page.goto("/budgets");
   const history = page.getByRole("region", { name: "Tres meses recientes visibles de la referencia automática" });
-  await expect(history).toContainText("0,00");
+  await expect(history).toContainText("Gastos registrados, sin confirmación de cobertura completa");
+  const zeroMonth = history.locator('[data-history-month="2026-07"]');
+  await expect(zeroMonth.locator("strong")).toHaveText("—");
+  await expect(zeroMonth.locator("strong")).toHaveAttribute("title", "No se puede certificar que el gasto fuese cero");
+  await expect(history.locator('[data-history-month="2026-06"] strong')).toHaveText("1.000,00 €");
+  await expect(history.locator('[data-history-month="2026-08"] strong')).toHaveText("1.400,00 €");
   const zeroBar = history.locator('[data-budget-history-bar="true"][data-zero="true"]');
   await expect(zeroBar).toHaveCount(1);
   expect(await zeroBar.evaluate((element) => (element as HTMLElement).style.width)).toBe("0%");
   expect(await zeroBar.evaluate((element) => element.getBoundingClientRect().width)).toBe(0);
 });
 
+
+test("REC-BUD-019 · el histórico no convierte un mes sin importaciones en cero confirmado", async ({ page }) => {
+  const historySnapshot = structuredClone(baseSnapshot);
+  historySnapshot.total.historyMonths = [
+    { month: "2026-06", expenseCents: 45000 },
+    { month: "2026-07", expenseCents: 0 },
+    { month: "2026-08", expenseCents: 71000 },
+  ];
+  await page.route("**/api/budgets*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(historySnapshot),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  const region = page.getByRole("region", { name: "Tres meses recientes visibles de la referencia automática" });
+  await expect(region.locator('[data-history-month="2026-07"] strong')).toHaveText("—");
+  await expect(region.locator('[data-history-month="2026-08"] strong')).toHaveText("710,00 €");
+  await expect(region).toContainText("sin confirmación de cobertura completa");
+  await expect(region.locator('[data-history-month="2026-07"] [data-budget-history-bar]'))
+    .toHaveAttribute("data-zero", "true");
+});
 
 test("AUD-E2E-PTO-001 · no presenta presupuestos de respuesta inválida y permite reintentar", async ({ page }) => {
   let attempts = 0;
