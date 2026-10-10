@@ -177,7 +177,7 @@ a { color: inherit; }
 .config-message { margin: 0 0 1rem; padding: .75rem .9rem; border-radius: var(--radius-md); font-size: var(--font-label); font-weight: 650; }
 .config-message.error { border: 1px solid color-mix(in srgb, var(--color-danger) 26%, transparent); background: color-mix(in srgb, var(--color-danger) 8%, transparent); color: var(--color-danger); }
 .config-message.success { border: 1px solid color-mix(in srgb, var(--color-success) 23%, transparent); background: color-mix(in srgb, var(--color-success) 7%, transparent); color: var(--color-success); }
-.config-message.warning { border: 1px solid color-mix(in srgb, var(--color-warning) 38%, transparent); background: color-mix(in srgb, var(--color-warning) 8%, transparent); color: color-mix(in srgb, var(--color-warning) 78%, white); }
+.config-message.warning { border: 1px solid color-mix(in srgb, var(--color-warning) 38%, transparent); background: var(--surface-warning-soft); color: var(--text-warning-soft); }
 .category-swatch.category-blue { background: color-mix(in srgb, var(--color-primary-bright) 20%, transparent); color: var(--color-primary-bright); }
 .category-swatch.category-cyan { background: color-mix(in srgb, var(--color-cyan) 16%, transparent); color: var(--color-cyan); }
 .category-swatch.category-green { background: color-mix(in srgb, var(--color-success) 16%, transparent); color: var(--color-success); }
