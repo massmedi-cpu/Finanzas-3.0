@@ -1431,6 +1431,7 @@ async function saveEdit(row: TransactionRow) {
                           disabled={saving || writeUnverified}
                           onBusyChange={setSaving}
                           onSaved={(snapshot) => handleSplitSaved(row, snapshot)}
+                          onWriteUnverified={() => setWriteUnverified(true)}
                           onCancel={cancelSplit}
                         />
                       </td></tr>
