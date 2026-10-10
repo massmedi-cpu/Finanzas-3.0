@@ -103,7 +103,7 @@ jobs:
         with:
           name: financial-app-recovery-${{ github.event.pull_request.head.sha }}
           path: recovery-evidence/
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 7
       # Synthetic UI results are distinct from authenticated real persistence.
       # Preserve only data created by local synthetic tests; never upload real banking originals or secrets.
