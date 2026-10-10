@@ -105,6 +105,7 @@ function fieldRequiringReview<T>(field: OcrInterpretedField<T>): OcrInterpretedF
 
 function parseMoneyCents(raw: string): number | null {
   const cleaned = raw
+    .replace(/[\u2212\u2013]/g, "-")
     .replace(/\s/g, "")
     .replace(/€/g, "")
     .replace(/[^\d,.-]/g, "");
@@ -129,7 +130,7 @@ function parseMoneyCents(raw: string): number | null {
 // tokens (1,234). Never interpret the prefix "1,23" of "1,234" as money.
 // Preserve punctuation at the end of a sentence, but reject continuations
 // that belong to the same numeric token.
-const FINANCIAL_AMOUNT_TOKEN = /-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g;
+const FINANCIAL_AMOUNT_TOKEN = /[-\u2212\u2013]?\d{1,3}(?:\.\d{3})*(?:,\d{2})|[-\u2212\u2013]?\d+(?:[,.]\d{2})/g;
 
 function exactFinancialAmountMatches(text: string) {
   return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN)].filter((match) => {
