@@ -2,12 +2,13 @@ name: Product recovery browser matrix
 
 on:
   pull_request:
-    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009, chat/compare-coverage-truth-20261009, chat/home-evolution-covered-scale-20261009, chat/analysis-history-coverage-20261009, chat/ocr-total-evidence-20261009, chat/ocr-tax-line-evidence-20261009, chat/analysis-accumulated-scale-truth-20261009, chat/analysis-all-merchants-20261009, chat/analysis-accumulated-axis-legibility-20261009, chat/theme-semantic-surfaces-20261009, chat/analysis-bidirectional-coverage-20261009, chat/analysis-account-coverage-scope-20261009, chat/analysis-legacy-range-trust-20261010, chat/ocr-numeric-boundaries-20261010, chat/ocr-refund-sign-integrity-20261010, chat/home-compare-e2e-coverage-20261010, chat/coverage-sync-integrity-20261010, chat/ocr-receipt-refund-consistency-20261010, chat/ocr-negative-numeric-columns-20261010, chat/source-freshness-empty-data-honesty-20261010, chat/ocr-invoice-amount-label-20261010, chat/ocr-iva-tax-table-20261010, chat/ocr-spanish-invoice-written-dates-20261010, chat/ocr-invoice-payment-domiciliation-20261010, chat/source-freshness-no-sync-truth-20261010, chat/premium-kpi-amount-legibility-20261010, chat/premium-light-theme-contrast-20261010, chat/eleven-width-currency-layout-gate-20261010, chat/visual-gate-execution-integrity-20261010, chat/navigation-route-responsive-smoke-20261010]
+    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009, chat/compare-coverage-truth-20261009, chat/home-evolution-covered-scale-20261009, chat/analysis-history-coverage-20261009, chat/ocr-total-evidence-20261009, chat/ocr-tax-line-evidence-20261009, chat/analysis-accumulated-scale-truth-20261009, chat/analysis-all-merchants-20261009, chat/analysis-accumulated-axis-legibility-20261009, chat/theme-semantic-surfaces-20261009, chat/analysis-bidirectional-coverage-20261009, chat/analysis-account-coverage-scope-20261009, chat/analysis-legacy-range-trust-20261010, chat/ocr-numeric-boundaries-20261010, chat/ocr-refund-sign-integrity-20261010, chat/home-compare-e2e-coverage-20261010, chat/coverage-sync-integrity-20261010, chat/ocr-receipt-refund-consistency-20261010, chat/ocr-negative-numeric-columns-20261010, chat/source-freshness-empty-data-honesty-20261010, chat/ocr-invoice-amount-label-20261010, chat/ocr-iva-tax-table-20261010, chat/ocr-spanish-invoice-written-dates-20261010, chat/ocr-invoice-payment-domiciliation-20261010, chat/source-freshness-no-sync-truth-20261010, chat/premium-kpi-amount-legibility-20261010, chat/premium-light-theme-contrast-20261010, chat/eleven-width-currency-layout-gate-20261010, chat/visual-gate-execution-integrity-20261010, chat/navigation-route-responsive-smoke-20261010, chat/recovery-visual-gate-manifest-20261010]
     paths:
       - 'app/**'
       - 'src/design/**'
       - 'src/domain/document-ocr-financial-interpretation.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
+      - 'scripts/verify-recovery-visual-suite-gate.mjs'
       - 'tests/e2e/**'
       - 'playwright*.ts'
       - 'package*.json'
@@ -39,6 +40,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify OCR labelled amounts against synthetic independent expected values
         run: node scripts/test-ocr-amount-label-selection.mjs
+      - name: Verify essential visual regressions are actually executed
+        run: node scripts/verify-recovery-visual-suite-gate.mjs
       - name: Build optimized application and run cumulative guards
         run: npm run build
       - name: Browser coverage, theme, keyboard and layout checks
