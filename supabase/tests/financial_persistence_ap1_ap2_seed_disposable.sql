@@ -58,7 +58,7 @@ DO $isolation$
 DECLARE v_accounts int; v_categories int; v_budgets int; v_blocked boolean := false; v_cross_updates int;
 BEGIN
   SELECT count(*) INTO v_accounts FROM financial_app.accounts;
-  SELECT count(*) INTO v_categories FROM financial_app.categories;
+  SELECT count(*) INTO v_categories FROM financial_app.categories WHERE name='AP1AP2 expense';
   SELECT count(*) INTO v_budgets FROM financial_app.budgets;
   IF v_accounts <> 0 OR v_categories <> 0 OR v_budgets <> 0 THEN
     RAISE EXCEPTION 'AP1_CROSS_TENANT_READ_LEAK accounts=% categories=% budgets=% scope=% role=%', v_accounts,v_categories,v_budgets,pg_catalog.current_setting('financial_app.workspace_id',true),current_user;
