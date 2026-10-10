@@ -70,6 +70,30 @@ const snapshot = {
 };
 
 async function mockBudgetRead(page: Parameters<typeof test>[0] extends never ? never : any) {
+  // The text/contrast fixture is explicitly a fully observed month. Without
+  // this stub it would now correctly render "Estado sin verificar" instead
+  // of the legacy "Dentro de referencia" tested for font size.
+  await page.route("**/api/analysis/source-freshness*", async (route: any) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: TEST_MONTH_START,
+        latestMovementDate: TEST_MONTH_END,
+        sync: {
+          status: "success",
+          finishedAt: TEST_MONTH_END + "T11:00:00Z",
+          startedAt: TEST_MONTH_END + "T10:00:00Z",
+          rowsSeen: 3,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
   await page.route("**/api/budgets**", async (route: any) => {
     if (route.request().method() === "GET") {
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshot) });
