@@ -605,7 +605,8 @@ test("REC-BUD-018 · importes positivos visibles sin certificar un cero de otra 
   await expect(supermarket).not.toContainText("Dentro de referencia");
   const empty = page.getByRole("heading", { name: "Sin movimientos" }).locator("xpath=ancestor::article");
   await expect(empty.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
-  await expect(empty).not.toContainText("0,00 €");
+  // Coincidencia exacta: «0,00 €» es subcadena de «400,00 €», la referencia válida.
+  await expect(empty.getByText("0,00 €", { exact: true })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
 
