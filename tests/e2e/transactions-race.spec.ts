@@ -176,3 +176,73 @@ test("Movimientos ignora una paginación antigua si se aplica un filtro nuevo mi
   await expect(page.getByRole("button", { name: "Cargar 50 más" })).toHaveCount(0);
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
 });
+
+test("REC-TXN-001 · HTTP 200 sin filas verificables no se presenta como extracto vacío y permite relectura", async ({ page }) => {
+  let reads = 0;
+  const writes: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+      return;
+    }
+    if (new URL(route.request().url()).searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    reads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(reads === 1 ? { rows: null, totalCount: 0, hasMore: false } :
+        { rows: [baseRow], totalCount: 1, hasMore: false, nextCursor: null }),
+    });
+  });
+
+  await page.goto("/transactions");
+  await expect(page.locator("main").getByRole("alert")).toContainText("La respuesta del histórico es incompleta");
+  await expect(page.getByText("El listado todavía no se ha podido verificar. No se considera vacío.")).toBeVisible();
+  await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toHaveCount(0);
+  await page.getByRole("button", { name: "Reintentar listado" }).click();
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  expect(reads).toBe(2);
+  expect(writes).toEqual([]);
+});
+
+test("REC-TXN-002 · una página incoherente no elimina los movimientos previamente cargados", async ({ page }) => {
+  let continuationReads = 0;
+  await page.route("**/api/transactions**", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    if (url.searchParams.has("cursorId")) {
+      continuationReads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(continuationReads === 1
+          ? { rows: [stalePageRow], totalCount: 2, hasMore: true, nextCursor: null }
+          : { rows: [stalePageRow], totalCount: 2, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        rows: [baseRow], totalCount: 2, hasMore: true,
+        nextCursor: { bankDate: baseRow.bankDate, id: baseRow.id },
+      }),
+    });
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("La respuesta del histórico es incompleta");
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("PÁGINA ANTIGUA", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Cargar 50 más" }).click();
+  await expect(page.getByText("PÁGINA ANTIGUA", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  expect(continuationReads).toBe(2);
+});
