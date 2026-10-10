@@ -20,6 +20,9 @@ test("Cash Flow navega por meses y abre el detalle diario sin inventar cifras", 
 
   await page.getByRole("link", { name: "Mes siguiente: marzo de 2028" }).click();
   await expect(page.getByRole("group", { name: "Días de marzo de 2028" }).locator("button[aria-pressed]")).toHaveCount(31);
+  // A date selected in February must never mark a March cell or chart cursor.
+  await expect(page.getByRole("group", { name: "Días de marzo de 2028" }).locator('button[aria-pressed="true"]')).toHaveCount(0);
+  await expect(page.getByRole("region", { name: /Detalle del .*29 de febrero de 2028/ })).toHaveCount(0);
 
   // Sin identidad de gateway la app ofrece huecos explícitos y sus enlaces, nunca un balance inventado.
   if (await page.getByText(/No se muestran importes reales/).isVisible()) {
