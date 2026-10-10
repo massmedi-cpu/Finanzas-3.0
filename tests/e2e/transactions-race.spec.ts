@@ -246,3 +246,41 @@ test("REC-TXN-002 · una página incoherente no elimina los movimientos previame
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
   expect(continuationReads).toBe(2);
 });
+
+test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento solo lee", async ({ page }) => {
+  let facetReads = 0;
+  let listReads = 0;
+  const mutations: string[] = [];
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() !== "GET") {
+      mutations.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+      return;
+    }
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "facets") {
+      facetReads += 1;
+      if (facetReads === 1) {
+        await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "facets_timeout" }) });
+      } else {
+        await fulfillFacets(route);
+      }
+      return;
+    }
+    listReads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ rows: [baseRow], totalCount: 1, hasMore: false, nextCursor: null }),
+    });
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.locator("main").getByRole("alert")).toContainText("No se han podido verificar las cuentas y categorías");
+  await page.getByRole("button", { name: "Reintentar cuentas y categorías" }).click();
+  await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
+  await expect(page.getByTestId("account-filter")).toContainText("Cuenta de prueba");
+  await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  expect(facetReads).toBe(2);
+  expect(listReads).toBe(1);
+  expect(mutations).toEqual([]);
+});
