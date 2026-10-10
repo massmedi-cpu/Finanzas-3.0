@@ -432,6 +432,7 @@ export default function TransactionsClient() {
   const [nextCursor, setNextCursor] = useState<Cursor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [listReadFailed, setListReadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [writeUnverified, setWriteUnverified] = useState(false);
   const [verifyingWrite, setVerifyingWrite] = useState(false);
@@ -496,6 +497,7 @@ export default function TransactionsClient() {
       appendAbortController.current = null;
       setLoading(true);
       setLoadingMore(false);
+      setListReadFailed(false);
     }
 
     const isCurrentRequest = () => append
@@ -534,7 +536,10 @@ export default function TransactionsClient() {
       setTotalCount(result.totalCount!);
       setHasMore(result.hasMore!);
       setNextCursor(result.nextCursor ?? null);
-      if (!append) setSelectedIds([]);
+      if (!append) {
+        setSelectedIds([]);
+        setListReadFailed(false);
+      }
       return true;
     } catch (cause) {
       if ((controller.signal.aborted && !timedOut) || !isCurrentRequest()) return false;
@@ -542,6 +547,7 @@ export default function TransactionsClient() {
         ? "La consulta de movimientos ha superado 30 segundos. Puedes volver a leer el listado sin modificar los datos bancarios."
         : cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
+        setListReadFailed(true);
         setRows([]);
         setTotalCount(0);
         setHasMore(false);
@@ -722,7 +728,7 @@ export default function TransactionsClient() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allLoadedSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row.id));
 
-  const listUnverified = !loading && Boolean(error) && rows.length === 0;
+  const listUnverified = !loading && listReadFailed && rows.length === 0;
   const visibleSummary = useMemo(() => {
     if (loading) return "Leyendo movimientos…";
     if (listUnverified) return "Histórico sin verificar";
