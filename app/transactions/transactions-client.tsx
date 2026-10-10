@@ -421,6 +421,8 @@ export default function TransactionsClient() {
   const searchParams = useSearchParams();
   const filterSearch = searchParams.toString();
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
+  const [facetsError, setFacetsError] = useState<string | null>(null);
+  const [facetsRetry, setFacetsRetry] = useState(0);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -558,29 +560,52 @@ export default function TransactionsClient() {
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 15_000);
+    setFacetsError(null);
     async function bootstrap() {
       try {
-        const response = await fetch("/api/transactions?mode=facets", { cache: "no-store" });
+        const response = await fetch("/api/transactions?mode=facets", {
+          cache: "no-store", signal: controller.signal,
+        });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(readableError(payload));
+        if (!Array.isArray(payload.accounts) || !Array.isArray(payload.categories)
+          || !Array.isArray(payload.merchants)) {
+          throw new Error("El servidor ha devuelto filtros auxiliares incompletos.");
+        }
         if (!cancelled) {
           setFacets({
-            accounts: Array.isArray(payload.accounts) ? payload.accounts : [],
-            categories: Array.isArray(payload.categories) ? payload.categories : [],
-            merchants: Array.isArray(payload.merchants) ? payload.merchants : [],
+            accounts: payload.accounts,
+            categories: payload.categories,
+            merchants: payload.merchants,
             channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
             reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
             years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
             tags: Array.isArray(payload.tags) ? payload.tags.filter((value: unknown): value is string => typeof value === "string") : [],
           });
+          setFacetsError(null);
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los filtros.");
+        if (cancelled) return;
+        setFacetsError(timedOut
+          ? "La consulta de cuentas y categorías ha superado 15 segundos."
+          : cause instanceof Error ? cause.message : "No se pudieron cargar los filtros auxiliares.");
+      } finally {
+        window.clearTimeout(timeout);
       }
     }
     void bootstrap();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [facetsRetry]);
 
   useEffect(() => {
     const params = new URLSearchParams(filterSearch);
@@ -1209,6 +1234,14 @@ async function saveEdit(row: TransactionRow) {
               Reintentar listado
             </button>
           ) : null}
+        </div>
+      )}
+      {facetsError && (
+        <div className={styles.error} role="alert">
+          No se han podido verificar las cuentas y categorías: {facetsError} La lectura del listado sigue disponible.
+          <button className={styles.secondaryButton} type="button" onClick={() => setFacetsRetry((count) => count + 1)}>
+            Reintentar cuentas y categorías
+          </button>
         </div>
       )}
       {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/transactions" /> : null}
