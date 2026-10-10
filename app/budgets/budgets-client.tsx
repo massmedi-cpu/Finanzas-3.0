@@ -375,6 +375,13 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   // An uncertain write belongs to a specific period. Loading a different
   // month must never unlock its retry protection.
   const uncertainWriteMonth = useRef<string | null>(null);
+  const pendingWrite = useRef<{
+    month: string;
+    method: "POST" | "PATCH";
+    categoryId: string | null;
+    manualAmountCents: number | null;
+  } | null>(null);
+  const [writeMismatch, setWriteMismatch] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -493,9 +500,30 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         throw new Error("El servidor devolvió un presupuesto de otro mes.");
       }
       setSnapshot(nextSnapshot);
-      if (uncertainWriteMonth.current === null || uncertainWriteMonth.current === selectedMonth) {
+      const pending = pendingWrite.current;
+      if (pending && pending.month === selectedMonth && pending.method === "PATCH") {
+        const savedItem = pending.categoryId === null
+          ? nextSnapshot.total
+          : nextSnapshot.categories.find((item) => item.categoryId === pending.categoryId);
+        if (!savedItem || savedItem.manualAmountCents !== pending.manualAmountCents) {
+          setWriteMismatch(true);
+          setWriteUnverified(true);
+          setError("La lectura no coincide con el límite que intentaste guardar. Puede no haberse aplicado o estar pendiente de reflejarse. Comprueba el valor actual antes de decidir si deseas repetir la operación.");
+        } else {
+          pendingWrite.current = null;
+          uncertainWriteMonth.current = null;
+          setWriteMismatch(false);
+          setWriteUnverified(false);
+          setNotice("El límite guardado coincide con la nueva lectura del presupuesto. No se ha repetido la escritura.");
+        }
+      } else if (uncertainWriteMonth.current === null || uncertainWriteMonth.current === selectedMonth) {
+        pendingWrite.current = null;
         uncertainWriteMonth.current = null;
+        setWriteMismatch(false);
         setWriteUnverified(false);
+        if (pending?.method === "POST") {
+          setNotice("Se ha consultado el presupuesto actualizado sin repetir la operación. Revisa la referencia antes de volver a actualizar.");
+        }
       }
       setEditingKey(null);
     } catch (caught) {
@@ -555,7 +583,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         throw new Error("No se pudo verificar la respuesta del guardado. La operación podría haberse aplicado: recarga y comprueba el límite antes de repetirla.");
       }
       setSnapshot(payload);
+      pendingWrite.current = null;
       uncertainWriteMonth.current = null;
+      setWriteMismatch(false);
       setWriteUnverified(false);
       setEditingKey(null);
       setEditValue("");
@@ -573,7 +603,15 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       // A 5xx, lost response, timeout or corrupt success body might follow a
       // committed write. Block retries until a fresh read proves the state.
       if (!requestDefinitelyRejected) {
-        uncertainWriteMonth.current = typeof body.month === "string" ? body.month : month;
+        const uncertainMonth = typeof body.month === "string" ? body.month : month;
+        uncertainWriteMonth.current = uncertainMonth;
+        pendingWrite.current = {
+          month: uncertainMonth,
+          method,
+          categoryId: typeof body.categoryId === "string" ? body.categoryId : null,
+          manualAmountCents: typeof body.manualAmountCents === "number" ? body.manualAmountCents : null,
+        };
+        setWriteMismatch(false);
         setWriteUnverified(true);
       }
       actionFeedback.error(feedbackId, message);
@@ -710,11 +748,23 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
 
       <div className={styles.content}>
         {writeUnverified ? (
-          <div className={styles.uncertainWrite} role="status" data-budget-write-state="unverified">
-            <span>Hay un cambio cuyo resultado no se ha podido confirmar. Antes de repetirlo, consulta el estado guardado.</span>
-            <button type="button" className={styles.secondaryButton} onClick={() => void fetchSnapshot(month)} disabled={busy || loading}>
+          <div className={styles.uncertainWrite} role="status" data-budget-write-state={writeMismatch ? "mismatch" : "unverified"}>
+            <span>{writeMismatch
+              ? "El límite que devuelve el servidor no coincide con el cambio solicitado. La escritura puede no haberse aplicado o seguir pendiente."
+              : "Hay un cambio cuyo resultado no se ha podido confirmar. Antes de repetirlo, consulta el estado guardado."}</span>
+            <button type="button" className={styles.secondaryButton} onClick={() => { setWriteMismatch(false); void fetchSnapshot(month); }} disabled={busy || loading}>
               Comprobar resultado sin volver a guardar
             </button>
+            {writeMismatch ? (
+              <button type="button" className={styles.secondaryButton} disabled={busy || loading} onClick={() => {
+                pendingWrite.current = null;
+                uncertainWriteMonth.current = null;
+                setWriteUnverified(false);
+                setWriteMismatch(false);
+                setError("");
+                setNotice("Has revisado el valor actual y puedes volver a editar. La lectura anterior no demuestra que la escritura fallida se haya revertido.");
+              }}>He revisado el resultado; permitir nueva edición</button>
+            ) : null}
           </div>
         ) : null}
         {error ? (
