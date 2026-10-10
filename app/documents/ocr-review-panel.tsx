@@ -388,7 +388,10 @@ export function OcrReviewPanel({
   }
 
   async function confirmReview() {
-    if (!draft || !ocrRunId || confirming) return;
+    if (!draft || !ocrRunId || confirming || busy || activeDocumentId.current !== documentId) return;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     setConfirming(true);
     setError(null);
     const feedbackId = `documents:ocr-confirm:${documentId}`;
@@ -423,11 +426,15 @@ export function OcrReviewPanel({
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       }));
+      // Do not abort an already submitted confirmation (the server may have
+      // committed it); only suppress feedback for an unrelated new document.
+      if (!isCurrent()) return;
       const revision = typeof saved?.revision === "number" ? saved.revision : null;
       setConfirmedRevision(revision);
       if (onConfirmed) await onConfirmed();
       actionFeedback.success(feedbackId, revision ? `Revisión OCR confirmada · revisión ${revision}.` : "Revisión OCR confirmada.");
     } catch (caught) {
+      if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = code.startsWith("invalid_")
         ? "Hay un dato de la revisión con formato no válido. Corrígelo antes de confirmar."
@@ -435,7 +442,7 @@ export function OcrReviewPanel({
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
-      setConfirming(false);
+      if (isCurrent()) setConfirming(false);
     }
   }
 
@@ -467,31 +474,38 @@ export function OcrReviewPanel({
   }
 
   async function openOriginal() {
-    if (openingOriginal) return;
+    if (openingOriginal || activeDocumentId.current !== documentId) return;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     setOpeningOriginal(true);
     setError(null);
     try {
       const opened = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=open`, { cache: "no-store" }));
+      if (!isCurrent()) return;
       if (typeof opened?.url !== "string") throw new Error("document_open_failed");
       window.open(opened.url, "_blank", "noopener,noreferrer");
     } catch {
-      setError("No se ha podido abrir el documento original.");
+      if (isCurrent()) setError("No se ha podido abrir el documento original.");
     } finally {
-      setOpeningOriginal(false);
+      if (isCurrent()) setOpeningOriginal(false);
     }
   }
 
   async function copyReading() {
-    if (!result?.plainText.trim()) return;
+    if (!result?.plainText.trim() || activeDocumentId.current !== documentId) return;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     const reviewText = result.pages
       .map((page) => page.reviewText?.trim() || page.layoutText.trim() || page.plainText.trim())
       .filter(Boolean)
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(reviewText || result.plainText);
-      setCopyState("copied");
+      if (isCurrent()) setCopyState("copied");
     } catch {
-      setCopyState("error");
+      if (isCurrent()) setCopyState("error");
     }
   }
 
