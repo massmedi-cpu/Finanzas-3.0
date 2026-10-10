@@ -426,12 +426,15 @@ export default function ComparisonClient({
   const freshness = scopedFreshness?.accountId === selectedAccountId
     ? scopedFreshness.value
     : null;
+  // The API may retain stale banking dates while the requested source is
+  // unavailable. Such dates are NOT evidence for this selected account.
+  const verifiedSource = freshness?.available === true ? freshness : null;
   const primaryCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.primaryFrom,
     dateTo: snapshot.selection.primaryTo,
-    earliestMovementDate: freshness?.earliestMovementDate ?? null,
-    latestMovementDate: freshness?.latestMovementDate ?? null,
-    sync: freshness?.sync ?? null,
+    earliestMovementDate: verifiedSource?.earliestMovementDate ?? null,
+    latestMovementDate: verifiedSource?.latestMovementDate ?? null,
+    sync: verifiedSource?.sync ?? null,
     // A first/last banking date cannot certify a full comparison if the
     // importing source has no verifiably finished synchronization.
     requireCompletedSyncEvidence: true,
@@ -439,9 +442,9 @@ export default function ComparisonClient({
   const referenceCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.referenceFrom,
     dateTo: snapshot.selection.referenceTo,
-    earliestMovementDate: freshness?.earliestMovementDate ?? null,
-    latestMovementDate: freshness?.latestMovementDate ?? null,
-    sync: freshness?.sync ?? null,
+    earliestMovementDate: verifiedSource?.earliestMovementDate ?? null,
+    latestMovementDate: verifiedSource?.latestMovementDate ?? null,
+    sync: verifiedSource?.sync ?? null,
     // A first/last banking date cannot certify a full comparison if the
     // importing source has no verifiably finished synchronization.
     requireCompletedSyncEvidence: true,
