@@ -289,11 +289,15 @@ export default function AnalysisSourceFreshness({
   accountId?: string | null;
 }) {
   const [freshness, setFreshness] = useState<SourceFreshness | null>(null);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     const controller = new AbortController();
 
-    // A different bank account must never temporarily reuse another account's coverage.
+    // A different bank account or retry must clear any old coverage/error.
+    setFailed(false);
+    setFreshness(null);
     onChange?.(null);
     const params = new URLSearchParams();
     if (accountId) params.set("accountId", accountId);
@@ -316,6 +320,7 @@ export default function AnalysisSourceFreshness({
           // for an account with no imported movement date or connection.
           // Invalid/failed HTTP requests are still handled as unknown.
           const next = payload;
+          setFailed(next === null);
           setFreshness(next);
           onChange?.(next);
         }
@@ -323,15 +328,34 @@ export default function AnalysisSourceFreshness({
       .catch(() => {
         if (!controller.signal.aborted) {
           setFreshness(null);
+          setFailed(true);
           onChange?.(null);
         }
         // La frescura es información auxiliar: nunca bloquea ni degrada Análisis.
       });
 
     return () => controller.abort();
-  }, [accountId, onChange]);
+  }, [accountId, onChange, attempt]);
 
-  if (!freshness) return null;
+  if (!freshness) {
+    if (!failed) return null;
+    // A request error/invalid payload is not proof of an empty account, so
+    // show a retryable warning without inventing a bank date or movement.
+    return (
+      <div className={styles.wrap}>
+        <div className={`${styles.status} ${styles.danger}`}>
+          <span className={styles.dot} aria-hidden="true" />
+          <span className={styles.copy} role="status" aria-live="polite">
+            <strong>No se ha podido comprobar la cobertura bancaria</strong>
+            <small>Sin estado bancario verificado. Puedes volver a consultar sin cambiar tus datos.</small>
+          </span>
+          <button className={`${styles.action} ${styles.retry}`} type="button" onClick={() => setAttempt((value) => value + 1)}>
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
   const text = statusText(freshness);
   if (!text) return null;
   const summary = userSummary(freshness);
