@@ -742,6 +742,73 @@ test("REC-BUD-022 · error de validación 400 conserva la posibilidad de corregi
   expect(writes).toBe(2);
 });
 
+test("REC-BUD-023 · un readback distinto del límite solicitado no desbloquea PATCH", async ({ page }) => {
+  let writes = 0;
+  let serveSaved = false;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(serveSaved ? snapshotWithTotalManual(85000) : baseSnapshot),
+      });
+      return;
+    }
+    writes += 1;
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ error: "persistence_failed", code: "gateway_timeout" }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  const verify = page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" });
+  await expect(verify).toBeVisible();
+  await expect(page.locator('input[type="month"]')).toBeDisabled();
+  await verify.click();
+  await expect(page.locator('[data-budget-write-state="mismatch"]')).toBeVisible();
+  await expect(page.getByRole("button", { name: "Definir límite" }).first()).toBeDisabled();
+  await expect(page.locator('input[type="month"]')).toBeDisabled();
+  await expect(page.locator("#budget-total").getByText("Referencia automática").first()).toBeVisible();
+  expect(writes).toBe(1);
+
+  serveSaved = true;
+  await verify.click();
+  await expect(page.locator('[data-budget-write-state]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Editar límite elegido" }).first()).toBeEnabled();
+  await expect(page.locator('input[type="month"]')).toBeEnabled();
+  await expect(page.locator("#budget-total").getByText("Límite elegido").locator("..").locator("strong"))
+    .toHaveText("850,00 €");
+  expect(writes).toBe(1);
+});
+
+test("REC-BUD-024 · readback discordante requiere aprobación explícita antes de reintentar", async ({ page }) => {
+  let writes = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes += 1;
+    await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" }).click();
+  const button = page.getByRole("button", { name: "He revisado el resultado; permitir nueva edición" });
+  await expect(page.locator('[data-budget-write-state="mismatch"]')).toBeVisible();
+  await expect(button).toBeVisible();
+  expect(writes).toBe(1);
+  await button.click();
+  await expect(page.locator('[data-budget-write-state]')).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Definir límite" }).first()).toBeEnabled();
+  await expect(page.getByText(/La lectura anterior no demuestra que la escritura fallida se haya revertido/)).toBeVisible();
+  expect(writes).toBe(1);
+});
+
 test("REC-BUD-016 · advertencia de cobertura con color semántico en claro y oscuro", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
