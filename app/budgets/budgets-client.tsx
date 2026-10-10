@@ -511,11 +511,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
     setFieldError("");
     const feedbackId = method === "POST" ? "budgets:refresh" : "budgets:save-limit";
     actionFeedback.begin(feedbackId, method === "POST" ? "Actualizando referencias del presupuesto…" : "Guardando límite de presupuesto…");
+    const controller = new AbortController();
+    const deadline = window.setTimeout(() => controller.abort(), 30_000);
     try {
       const response = await fetch("/api/budgets", {
         method,
         headers: { "content-type": "application/json" },
         body: JSON.stringify(body),
+        signal: controller.signal,
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload) throw new Error(readableError(payload, true));
@@ -529,14 +532,17 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       actionFeedback.success(feedbackId, successMessage);
       return true;
     } catch (caught) {
-      const message = caught instanceof TypeError
-        ? "Se perdió la conexión durante la operación. Es posible que el límite se haya guardado: recarga y compruébalo antes de repetirla."
+      const message = controller.signal.aborted
+        ? "La operación ha superado 30 segundos. No sabemos si llegó a guardarse: recarga y comprueba el límite antes de repetirla."
+        : caught instanceof TypeError
+          ? "Se perdió la conexión durante la operación. Es posible que el límite se haya guardado: recarga y compruébalo antes de repetirla."
         : caught instanceof Error ? caught.message
           : "No se ha podido confirmar el guardado. Recarga el presupuesto antes de volver a intentarlo.";
       setError(message);
       actionFeedback.error(feedbackId, message);
       return false;
     } finally {
+      window.clearTimeout(deadline);
       setBusy(false);
     }
   }, [actionFeedback]);
