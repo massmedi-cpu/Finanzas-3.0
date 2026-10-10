@@ -1,6 +1,6 @@
 // Synthetic policy test. Counts recognition passes; not an OCR accuracy benchmark.
 import assert from "node:assert/strict";
-import { ocrNeedsRotationFallback } from "../src/infrastructure/ocr/ocr-rotation-decision.ts";
+import { ocrNeedsRotationFallback, ocrRecognitionOutputFlags } from "../src/infrastructure/ocr/ocr-rotation-decision.ts";
 
 const confidentWords = [
   "Factura", "Supermercado", "Línea", "Cantidad", "Precio", "Importe", "Total", "Pagado",
@@ -29,4 +29,8 @@ const highConfidenceNoise = ["Texto", "Lateral", "Documento", "De", "Fondo", "Si
 assert.equal(ocrNeedsRotationFallback(highConfidenceNoise, { width: 1200, height: 700 }), true,
   "landscape page with plausible but nonfinancial text still checks rotation");
 
-console.log("PASS · seven independent OCR orientation fallback decisions");
+assert.deepEqual(ocrRecognitionOutputFlags(true), { text: true, tsv: true, imageColor: true },
+  "autoorientation needs the returned color image to establish dimensions");
+assert.deepEqual(ocrRecognitionOutputFlags(false), { text: true, tsv: true, imageColor: false },
+  "manual rotated OCR must not return redundant large image buffers");
+console.log("PASS · nine OCR orientation and output-memory regression cases");
