@@ -2,6 +2,13 @@
 -- NEVER run on Supabase production. Only CI's disposable Postgres 17 database.
 -- The outer CI shell creates and drops the ENTIRE local database; no user data.
 \set ON_ERROR_STOP on
+-- Fail closed if someone accidentally supplies a remote/production database.
+DO $ci_local_guard$
+BEGIN
+  IF current_database() <> 'financial_app_pre001_disposable' THEN
+    RAISE EXCEPTION 'AP1AP2_FIXTURE_MUST_USE_DISPOSABLE_LOCAL_DB';
+  END IF;
+END $ci_local_guard$;
 BEGIN;
 
 INSERT INTO financial_app.workspaces(id,name) VALUES
