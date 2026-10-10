@@ -48,6 +48,11 @@ psql_db -f supabase/tests/financial_persistence_ap1_ap2_final_readback_disposabl
 psql_db -f supabase/tests/financial_movements_ap1_ap2_seed_disposable.sql >/dev/null
 psql_db -f supabase/tests/financial_movements_ap1_ap2_readback_disposable.sql
 
+# Final two sessions restore original inherited movement values and confirm
+# the metadata clear/audit is durable after reconnect, sources still unchanged.
+psql_db -f supabase/tests/financial_movements_ap1_ap2_clear_disposable.sql >/dev/null
+psql_db -f supabase/tests/financial_movements_ap1_ap2_clear_readback_disposable.sql
+
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
