@@ -283,11 +283,16 @@ function extractDate(lines: LocatedLine[]) {
   let unlabelled: OcrInterpretedField<string> | null = null;
 
   for (const item of lines) {
-    const numeric = item.line.text.match(pattern);
-    const written = numeric ? null : item.line.text.match(writtenPattern);
-    if (!numeric && !written) continue;
     const normalized = normalizeToken(item.line.text);
     if (unrelated.test(normalized)) continue;
+    // Match the date FOLLOWING its issue label, not an unrelated number
+    // earlier on the same invoice row (e.g. order date before "emitida el").
+    const labelledWritten = normalized.match(explicitWritten)?.[0].match(writtenPattern) ?? null;
+    const labelledNumeric = (normalized.match(directLabel)?.[0]
+      ?? normalized.match(embeddedNumericIssueDate)?.[0])?.match(pattern) ?? null;
+    const numeric = labelledNumeric ?? (labelledWritten ? null : item.line.text.match(pattern));
+    const written = labelledWritten ?? (numeric ? null : item.line.text.match(writtenPattern));
+    if (!numeric && !written) continue;
     const day = Number(numeric?.[1] ?? written?.[1]);
     const month = numeric ? Number(numeric[2]) : namedMonth[(written?.[2] ?? "").toLowerCase()];
     const sourceYear = numeric?.[3] ?? written?.[3] ?? "";
@@ -296,7 +301,10 @@ function extractDate(lines: LocatedLine[]) {
     if (candidate.getUTCFullYear() !== year || candidate.getUTCMonth() !== month - 1 || candidate.getUTCDate() !== day) continue;
     const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
     const field = fieldFrom(item, numeric?.[0] ?? written?.[0] ?? "", iso);
-    if (directLabel.test(normalized) || explicitWritten.test(normalized) || embeddedNumericIssueDate.test(normalized)) return field;
+    if (labelledNumeric || labelledWritten) {
+      // Two competing labelled dates on one OCR row cannot both be trusted.
+      return labelledNumeric && labelledWritten ? fieldRequiringReview(field) : field;
+    }
     // Unlabelled date text may be correct, but we cannot prove its document role.
     unlabelled ??= fieldRequiringReview(field);
   }
