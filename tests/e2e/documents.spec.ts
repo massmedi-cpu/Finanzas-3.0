@@ -585,7 +585,7 @@ test("REC-OCR-038 · la propuesta no puede editarse mientras una confirmación e
   await expect(form.getByLabel("Total (€)", { exact: true })).toBeDisabled();
   await expect(form.getByRole("button", { name: "Añadir línea" })).toBeDisabled();
   await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
-  await expect(page.getByRole("button", { name: "Analizar documento" })).toBeDisabled();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("button", { name: /^(Analizar documento|Volver a analizar)$/ })).toBeDisabled();
   expect(attempts).toBe(1);
   await page.getByRole("button", { name: "He comprobado el historial; permitir nuevo intento" }).click();
   await expect(form.getByLabel("Emisor")).toBeEnabled();
