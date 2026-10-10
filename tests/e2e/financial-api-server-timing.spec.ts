@@ -24,3 +24,23 @@ for (const scenario of [
     expect(timing).not.toMatch(/account|date|amount|source|user|token/i);
   });
 }
+
+
+// Financial account selection is a privacy/integrity boundary, not a list.
+// A duplicated selector cannot fall back silently to the first element.
+for (const parameter of [
+  "accountId", "dateFrom", "dateTo", "mode", "includeArchived",
+]) {
+  test("CAP-003 · duplicate " + parameter + " is rejected before any bank gateway request", async () => {
+    const url = new URL("https://test.local/api/financial");
+    url.searchParams.append(parameter, "first");
+    url.searchParams.append(parameter, "second");
+    const response = await GET(new Request(url));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(response.headers.get("server-timing")).toMatch(/^financial;dur=\d+(?:\.\d+)?$/);
+    const body = await response.json();
+    expect(body.error).toBe("invalid_request");
+    expect(body.code).toBe("invalid_duplicate_financial_parameter");
+  });
+}

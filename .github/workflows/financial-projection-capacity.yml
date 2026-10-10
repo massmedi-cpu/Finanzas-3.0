@@ -6,6 +6,7 @@ on:
       - chat/eleven-width-currency-layout-gate-20261010
       - chat/finance-50k-projection-capacity-20261010
       - chat/financial-api-server-timing-20261010
+      - chat/financial-ambiguous-params-integrity-20261010
     paths:
       - 'src/domain/effective-transaction.ts'
       - 'src/domain/models.ts'

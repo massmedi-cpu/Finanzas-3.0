@@ -9,6 +9,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUEST_ERROR_CODE = /^invalid_[a-z0-9_]+$/i;
 const MODES = new Set(["snapshot", "period", "balances", "balance_series", "monthly", "reconciliation"]);
+const FINANCIAL_SCOPE_PARAMETERS = ["mode", "dateFrom", "dateTo", "accountId", "includeArchived"] as const;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
 
 // Response-server duration for safe comparison of financial reads on the
@@ -88,6 +89,14 @@ export async function GET(request: Request) {
   const started = performance.now();
   try {
     const { searchParams } = new URL(request.url);
+    // Never silently select the first value of an ambiguous account/date.
+    // Competing account IDs could otherwise show a different financial scope
+    // from the one the UI displays. Reject before contacting persistence.
+    for (const name of FINANCIAL_SCOPE_PARAMETERS) {
+      if (searchParams.getAll(name).length > 1) {
+        throw new Error("invalid_duplicate_financial_parameter");
+      }
+    }
     const mode = optionalText(searchParams, "mode", 16) ?? "snapshot";
     if (!MODES.has(mode)) throw new Error("invalid_mode");
 
