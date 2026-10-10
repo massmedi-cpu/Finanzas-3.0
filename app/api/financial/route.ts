@@ -9,7 +9,15 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const REQUEST_ERROR_CODE = /^invalid_[a-z0-9_]+$/i;
 const MODES = new Set(["snapshot", "period", "balances", "balance_series", "monthly", "reconciliation"]);
+const FINANCIAL_SCOPE_PARAMETERS = ["mode", "dateFrom", "dateTo", "accountId", "includeArchived"] as const;
 const HEADERS = { "cache-control": "no-store", "x-robots-tag": "noindex" };
+
+// Response-server duration for safe comparison of financial reads on the
+// same route. Does not log account IDs, payloads, amounts or row contents.
+function timingHeaders(started: number) {
+  const duration = Math.max(0, Math.round((performance.now() - started) * 10) / 10);
+  return { ...HEADERS, "server-timing": "financial;dur=" + duration };
+}
 
 function optionalText(params: URLSearchParams, key: string, maxLength: number) {
   const value = params.get(key)?.trim() ?? "";
@@ -49,37 +57,46 @@ function optionalBoolean(params: URLSearchParams, key: string) {
   throw new Error(`invalid_${key}`);
 }
 
-function apiError(error: unknown) {
+function apiError(error: unknown, started: number) {
   if (error instanceof PersistenceGatewayError) {
     if (error.status === 404 && error.code === "financial_account_not_found") {
       return Response.json(
         { error: "not_found", code: error.code },
-        { status: 404, headers: HEADERS },
+        { status: 404, headers: timingHeaders(started) },
       );
     }
     return Response.json(
       { error: "persistence_failed", code: error.code ?? null },
-      { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
+      { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: timingHeaders(started) },
     );
   }
 
   if (error instanceof Error && REQUEST_ERROR_CODE.test(error.message)) {
     return Response.json(
       { error: "invalid_request", code: error.message },
-      { status: 400, headers: HEADERS },
+      { status: 400, headers: timingHeaders(started) },
     );
   }
 
   console.error("financial-api-internal", error instanceof Error ? error.name : typeof error);
   return Response.json(
     { error: "internal_error", code: null },
-    { status: 500, headers: HEADERS },
+    { status: 500, headers: timingHeaders(started) },
   );
 }
 
 export async function GET(request: Request) {
+  const started = performance.now();
   try {
     const { searchParams } = new URL(request.url);
+    // Never silently select the first value of an ambiguous account/date.
+    // Competing account IDs could otherwise show a different financial scope
+    // from the one the UI displays. Reject before contacting persistence.
+    for (const name of FINANCIAL_SCOPE_PARAMETERS) {
+      if (searchParams.getAll(name).length > 1) {
+        throw new Error("invalid_duplicate_financial_parameter");
+      }
+    }
     const mode = optionalText(searchParams, "mode", 16) ?? "snapshot";
     if (!MODES.has(mode)) throw new Error("invalid_mode");
 
@@ -109,8 +126,8 @@ export async function GET(request: Request) {
       : { dateFrom, dateTo, accountId, includeArchived };
 
     const result = await callPersistenceGateway(action, payload);
-    return Response.json(result, { headers: HEADERS });
+    return Response.json(result, { headers: timingHeaders(started) });
   } catch (error) {
-    return apiError(error);
+    return apiError(error, started);
   }
 }

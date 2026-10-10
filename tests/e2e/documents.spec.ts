@@ -334,6 +334,314 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-033 · rechaza una lectura OCR recibida para otro documento sin exponer su contenido", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const otherDocumentId = "93000000-0000-4000-8000-000000000099";
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId: otherDocumentId,
+        status: "ready",
+        source: "pdf_text",
+        extractor: "pdfjs-6.2.108-native-text",
+        extractedAt: "2026-09-07T07:00:00.000Z",
+        confidence: 1,
+        plainText: "FACTURA AJENA CON DATOS PRIVADOS",
+        warnings: [],
+        pages: [],
+        principles: {
+          bankSource: "read_only",
+          financialWrites: false,
+          requiresHumanReview: true,
+          preservesGeometry: true,
+        },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+  await expect(page.getByText("FACTURA AJENA CON DATOS PRIVADOS")).toHaveCount(0);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-034 · dos clics antes del render disparan una sola lectura", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let ocrCalls = 0;
+  let releaseOcr: (() => void) | null = null;
+  const gate = new Promise<void>((resolve) => { releaseOcr = resolve; });
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
+    ocrCalls += 1;
+    await gate;
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll("button")];
+    const trigger = buttons.find((button) => button.textContent?.trim() === "Analizar documento");
+    trigger?.click();
+    trigger?.click();
+  });
+  await expect.poll(() => ocrCalls).toBe(1);
+  await expect(page.getByRole("button", { name: "Analizando…" })).toBeDisabled();
+  releaseOcr?.();
+  await expect(page.getByText("Texto nativo PDF")).toBeVisible();
+  expect(ocrCalls).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistidas", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirms = 0;
+  let releaseSave: (() => void) | null = null;
+  const pendingSave = new Promise<void>((resolve) => { releaseSave = resolve; });
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirms += 1;
+    await pendingSave;
+    const request = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 2, revision: 1,
+        documentId: request.documentId,
+        ocrRunId: request.ocrRunId,
+        rawEvidenceImmutable: true, bankSource: "read_only",
+        financialWrites: false, requiresHumanReview: true,
+        reviewedValues: {
+          type: request.type,
+          documentDate: request.documentDate,
+          taxBaseCents: request.taxBaseCents,
+          taxesCents: request.taxesCents,
+          totalCents: request.totalCents,
+        },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await page.evaluate(() => {
+    const buttons = [...document.querySelectorAll("button")];
+    const trigger = buttons.find((button) => button.textContent?.trim() === "Confirmar revisión");
+    trigger?.click();
+    trigger?.click();
+  });
+  await expect.poll(() => confirms).toBe(1);
+  await expect(page.getByRole("button", { name: "Confirmando…" })).toBeDisabled();
+  releaseSave?.();
+  await expect(page.getByText("Guardada como revisión 1.")).toBeVisible();
+  expect(confirms).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-039 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
+  const corruptions = [
+    "wrong-document", "wrong-ocr-run", "wrong-total", "source-write",
+  ] as const;
+  let writes = 0;
+  for (const corruption of corruptions) {
+    await mockDocumentApi(page, []);
+    await page.route("**/api/documents/ocr-review*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      writes += 1;
+      const requested = route.request().postDataJSON() as Record<string, unknown>;
+      const response = {
+        contractVersion: 2, revision: 1,
+        documentId: corruption === "wrong-document" ? "93000000-0000-4000-8000-000000000099" : requested.documentId,
+        ocrRunId: corruption === "wrong-ocr-run" ? "98000000-0000-4000-8000-000000000099" : requested.ocrRunId,
+        bankSource: "read_only",
+        financialWrites: corruption === "source-write",
+        rawEvidenceImmutable: true, requiresHumanReview: true,
+        reviewedValues: {
+          type: requested.type, documentDate: requested.documentDate,
+          taxBaseCents: requested.taxBaseCents, taxesCents: requested.taxesCents,
+          totalCents: corruption === "wrong-total" ? 0 : requested.totalCents,
+        },
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(response) });
+    });
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+    await page.getByRole("button", { name: "Analizar documento" }).click();
+    const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+    await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+    await expect(page.getByText(/Guardada como revisión/)).toHaveCount(0);
+    await page.unroute("**/api/documents/ocr-review*");
+  }
+  expect(writes).toBe(corruptions.length);
+});
+
+test("REC-OCR-036 · respuesta de revisión sin número no se anuncia como guardada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirmations = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    confirmations += 1;
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  await page.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("No se pudo comprobar si la revisión OCR llegó a guardarse");
+  await expect(page.getByText(/Guardada como revisión/)).toHaveCount(0);
+  expect(confirmations).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisión guardada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const runId = "98000000-0000-4000-8000-000000000098";
+  let patchCount = 0;
+  let recovered = false;
+  let lastSubmission: Record<string, unknown> | null = null;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchCount += 1;
+      lastSubmission = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        runs: [{ id: runId, extractor: "pdfjs-6.2.108-native-text", extractedAt: "2026-09-07T07:00:00.000Z" }],
+        reviews: recovered && lastSubmission ? [{
+          revision: 1, ocrRunId: runId,
+          reviewedValues: {
+            type: lastSubmission.type,
+            documentDate: lastSubmission.documentDate,
+            taxBaseCents: lastSubmission.taxBaseCents,
+            taxesCents: lastSubmission.taxesCents,
+            totalCents: lastSubmission.totalCents,
+          },
+        }] : [],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+
+  const verify = page.getByRole("button", { name: "Comprobar revisión sin volver a guardar" });
+  await expect(verify).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(patchCount).toBe(1);
+  await verify.click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("El historial no muestra una revisión nueva que coincida");
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  expect(patchCount).toBe(1);
+
+  recovered = true;
+  await verify.click();
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toHaveCount(0);
+  await expect(page.getByText("Guardada como revisión 1.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmado ✓" })).toBeDisabled();
+  expect(patchCount).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-038 · la propuesta no puede editarse mientras una confirmación es incierta", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let attempts = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() === "PATCH") {
+      attempts += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const form = page.getByTestId("ocr-confirmation-form");
+  await expect(form.getByLabel("Emisor")).toBeEnabled();
+  await form.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  await expect(form.getByLabel("Emisor")).toBeDisabled();
+  await expect(form.getByLabel("Total (€)", { exact: true })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Añadir línea" })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Analizar documento" })).toBeDisabled();
+  expect(attempts).toBe(1);
+  await page.getByRole("button", { name: "He comprobado el historial; permitir nuevo intento" }).click();
+  await expect(form.getByLabel("Emisor")).toBeEnabled();
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  expect(attempts).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-040 · Abrir original conserva el gesto de usuario hasta obtener URL firmada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.context().route("**/storage/v1/object/sign/financial-app-documents/open", (route) =>
+    route.fulfill({ status: 200, contentType: "text/plain", body: "Documento sintético" }));
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
+  ]);
+  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/open");
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toHaveCount(0);
+  await popup.close();
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-041 · un bloqueador de ventanas informa cómo abrir el original", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.evaluate(() => { window.open = () => null; });
+  await page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("ha bloqueado la ventana del original");
+  expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-042 · no navega hacia esquemas de URL peligrosos devueltos por el backend", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "open") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: "javascript:alert('inseguro')" }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByTestId("ocr-review-panel").getByRole("button", { name: "Abrir", exact: true }).click(),
+  ]);
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("No se ha podido abrir el documento original de forma segura");
+  await expect.poll(() => popup.isClosed()).toBe(true);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);

@@ -421,6 +421,8 @@ export default function TransactionsClient() {
   const searchParams = useSearchParams();
   const filterSearch = searchParams.toString();
   const [facets, setFacets] = useState<Facets>(EMPTY_FACETS);
+  const [facetsError, setFacetsError] = useState<string | null>(null);
+  const [facetsRetry, setFacetsRetry] = useState(0);
   const [draftFilters, setDraftFilters] = useState<Filters>(EMPTY_FILTERS);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -430,7 +432,10 @@ export default function TransactionsClient() {
   const [nextCursor, setNextCursor] = useState<Cursor | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [listReadFailed, setListReadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [writeUnverified, setWriteUnverified] = useState(false);
+  const [verifyingWrite, setVerifyingWrite] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [authRecovery, setAuthRecovery] = useState<AuthRecoveryState | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -465,13 +470,20 @@ export default function TransactionsClient() {
   }, [editingId]);
 
   const fetchPage = useCallback(async (filters: Filters, cursor: Cursor | null, append: boolean) => {
-    if (append && replaceAbortController.current) return;
+    if (append && replaceAbortController.current) return false;
 
     const replaceEpochAtStart = replaceRequestSequence.current;
     const requestSequence = append
       ? ++appendRequestSequence.current
       : ++replaceRequestSequence.current;
     const controller = new AbortController();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      if (!controller.signal.aborted) {
+        timedOut = true;
+        controller.abort();
+      }
+    }, 30_000);
 
     if (append) {
       appendAbortController.current?.abort();
@@ -485,6 +497,7 @@ export default function TransactionsClient() {
       appendAbortController.current = null;
       setLoading(true);
       setLoadingMore(false);
+      setListReadFailed(false);
     }
 
     const isCurrentRequest = () => append
@@ -498,62 +511,112 @@ export default function TransactionsClient() {
         signal: controller.signal,
       });
       const payload = await response.json().catch(() => ({}));
-      if (!isCurrentRequest()) return;
+      if (!isCurrentRequest()) return false;
       if (!response.ok) throw new Error(readableError(payload));
-      const result = payload as QueryResponse;
-      const incoming = Array.isArray(result.rows) ? result.rows : [];
+      // HTTP 200 with a malformed payload is not proof of an empty bank history.
+      // Validate the pagination envelope before changing any visible rows.
+      const result = payload as Partial<QueryResponse>;
+      const incoming = result.rows;
+      const cursorValid = result.nextCursor == null ||
+        (result.nextCursor != null && typeof result.nextCursor.bankDate === "string"
+          && DATE.test(result.nextCursor.bankDate) && typeof result.nextCursor.id === "string"
+          && UUID.test(result.nextCursor.id));
+      const valid = Array.isArray(incoming)
+        && incoming.every((row) => row && typeof row === "object"
+          && typeof row.id === "string" && UUID.test(row.id)
+          && typeof row.bankDate === "string" && DATE.test(row.bankDate)
+          && Number.isSafeInteger(row.amountCents)
+          && typeof row.concept?.effective === "string"
+          && typeof row.account?.name === "string")
+        && Number.isSafeInteger(result.totalCount) && result.totalCount! >= 0
+        && typeof result.hasMore === "boolean"
+        && cursorValid && (!result.hasMore || (incoming.length > 0 && result.nextCursor != null));
+      if (!valid) throw new Error("La respuesta del histórico es incompleta o incoherente. No se interpretará como una lista sin movimientos; reintenta la lectura.");
       setRows((current) => Array.from(new Map((append ? [...current, ...incoming] : incoming).map((row) => [row.id, row])).values()));
-      setTotalCount(Number.isInteger(result.totalCount) ? result.totalCount : 0);
-      setHasMore(result.hasMore === true);
+      setTotalCount(result.totalCount!);
+      setHasMore(result.hasMore!);
       setNextCursor(result.nextCursor ?? null);
-      if (!append) setSelectedIds([]);
-    } catch (cause) {
-      if (controller.signal.aborted || !isCurrentRequest()) return;
-      setError(cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
       if (!append) {
+        setSelectedIds([]);
+        setListReadFailed(false);
+      }
+      return true;
+    } catch (cause) {
+      if ((controller.signal.aborted && !timedOut) || !isCurrentRequest()) return false;
+      setError(timedOut
+        ? "La consulta de movimientos ha superado 30 segundos. Puedes volver a leer el listado sin modificar los datos bancarios."
+        : cause instanceof Error ? cause.message : "No se pudieron cargar los movimientos.");
+      if (!append) {
+        setListReadFailed(true);
         setRows([]);
         setTotalCount(0);
         setHasMore(false);
         setNextCursor(null);
         setSelectedIds([]);
       }
+      return false;
     } finally {
-      if (!isCurrentRequest()) return;
-      if (append) {
-        if (appendAbortController.current === controller) appendAbortController.current = null;
-        setLoadingMore(false);
-      } else {
-        if (replaceAbortController.current === controller) replaceAbortController.current = null;
-        setLoading(false);
+      window.clearTimeout(deadline);
+      if (isCurrentRequest()) {
+        if (append) {
+          if (appendAbortController.current === controller) appendAbortController.current = null;
+          setLoadingMore(false);
+        } else {
+          if (replaceAbortController.current === controller) replaceAbortController.current = null;
+          setLoading(false);
+        }
       }
     }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
+    const controller = new AbortController();
+    let timedOut = false;
+    const timeout = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 15_000);
+    setFacetsError(null);
     async function bootstrap() {
       try {
-        const response = await fetch("/api/transactions?mode=facets", { cache: "no-store" });
+        const response = await fetch("/api/transactions?mode=facets", {
+          cache: "no-store", signal: controller.signal,
+        });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(readableError(payload));
+        if (!Array.isArray(payload.accounts) || !Array.isArray(payload.categories)
+          || !Array.isArray(payload.merchants)) {
+          throw new Error("El servidor ha devuelto filtros auxiliares incompletos.");
+        }
         if (!cancelled) {
           setFacets({
-            accounts: Array.isArray(payload.accounts) ? payload.accounts : [],
-            categories: Array.isArray(payload.categories) ? payload.categories : [],
-            merchants: Array.isArray(payload.merchants) ? payload.merchants : [],
+            accounts: payload.accounts,
+            categories: payload.categories,
+            merchants: payload.merchants,
             channels: Array.isArray(payload.channels) ? payload.channels.filter((value: unknown): value is string => typeof value === "string") : [],
             reconciliationStates: Array.isArray(payload.reconciliationStates) ? payload.reconciliationStates.filter((value: unknown): value is string => typeof value === "string") : [],
             years: Array.isArray(payload.years) ? payload.years.filter((value: unknown): value is number => Number.isInteger(value)) : [],
             tags: Array.isArray(payload.tags) ? payload.tags.filter((value: unknown): value is string => typeof value === "string") : [],
           });
+          setFacetsError(null);
         }
       } catch (cause) {
-        if (!cancelled) setError(cause instanceof Error ? cause.message : "No se pudieron cargar los filtros.");
+        if (cancelled) return;
+        setFacetsError(timedOut
+          ? "La consulta de cuentas y categorías ha superado 15 segundos."
+          : cause instanceof Error ? cause.message : "No se pudieron cargar los filtros auxiliares.");
+      } finally {
+        window.clearTimeout(timeout);
       }
     }
     void bootstrap();
-    return () => { cancelled = true; };
-  }, []);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [facetsRetry]);
 
   useEffect(() => {
     const params = new URLSearchParams(filterSearch);
@@ -665,12 +728,14 @@ export default function TransactionsClient() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allLoadedSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row.id));
 
+  const listUnverified = !loading && listReadFailed && rows.length === 0;
   const visibleSummary = useMemo(() => {
     if (loading) return "Leyendo movimientos…";
+    if (listUnverified) return "Histórico sin verificar";
     if (totalCount === 0) return "0 movimientos";
     if (rows.length === totalCount) return `${formatInteger(totalCount)} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
     return `${formatInteger(rows.length)} de ${formatInteger(totalCount)}`;
-  }, [loading, rows.length, totalCount]);
+  }, [loading, listUnverified, rows.length, totalCount]);
 
   useEffect(() => {
     const id = pendingFocusId.current;
@@ -770,22 +835,69 @@ export default function TransactionsClient() {
     }
   }
 
+  async function submitTransactionWrite(method: "POST" | "PATCH", body: Record<string, unknown>) {
+    const controller = new AbortController();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
+    try {
+      const response = await fetch("/api/transactions", {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        setAuthRecovery(authRecoveryFromCode(requestErrorCode(payload)));
+        // An HTTP 5xx can happen after a database commit. Do not permit a
+        // second write until the user has reloaded a valid financial snapshot.
+        if (response.status >= 500) throw new Error("WRITE_UNVERIFIED");
+        throw new Error(readableError(payload));
+      }
+      if (!payload || typeof payload !== "object" || !payload.result ||
+          typeof payload.result !== "object" || Array.isArray(payload.result)) {
+        throw new Error("WRITE_UNVERIFIED");
+      }
+      return payload;
+    } catch (cause) {
+      if (timedOut || cause instanceof TypeError) {
+        throw new Error("WRITE_UNVERIFIED");
+      }
+      throw cause;
+    } finally {
+      window.clearTimeout(deadline);
+    }
+  }
+
+  async function verifyAfterUncertainWrite() {
+    if (saving || verifyingWrite) return;
+    setVerifyingWrite(true);
+    try {
+      const ok = await fetchPage(appliedFilters, null, false);
+      if (!ok) return;
+      setWriteUnverified(false);
+      setEditingId(null);
+      setEditor(null);
+      setSelectedIds([]);
+      setSplittingId(null);
+      closeReview();
+      setNotice("Listado actualizado desde el servidor. Comprueba el movimiento afectado antes de hacer otra modificación: esta lectura no demuestra por sí sola si la escritura anterior se aplicó.");
+    } finally {
+      setVerifyingWrite(false);
+    }
+  }
+
   async function patchTransactions(ids: string[], patch: Record<string, unknown>, message: string) {
+    if (saving || writeUnverified) return false;
     setSaving(true);
     setError(null);
     setAuthRecovery(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/transactions", {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ transactionIds: ids, patch }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        setAuthRecovery(authRecoveryFromCode(requestErrorCode(payload)));
-        throw new Error(readableError(payload));
-      }
+      const payload = await submitTransactionWrite("PATCH", { transactionIds: ids, patch });
       const changed = payload?.result?.changedTransactions;
       setNotice(Number.isInteger(changed) ? `${message} · ${formatInteger(changed)} modificados.` : message);
       setEditingId(null);
@@ -796,7 +908,13 @@ export default function TransactionsClient() {
       await fetchPage(appliedFilters, null, false);
       return true;
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudieron guardar los cambios.");
+      const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
+      if (uncertain) {
+        setWriteUnverified(true);
+        setError("No se ha podido confirmar el resultado de la edición. Podría haberse guardado. No repitas la operación hasta volver a consultar el listado y comprobar el movimiento.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "No se pudieron guardar los cambios.");
+      }
       return false;
     } finally {
       setSaving(false);
@@ -836,24 +954,25 @@ export default function TransactionsClient() {
   }
 
   async function runReview(command: Record<string, unknown>, message: string) {
+    if (saving || writeUnverified) return;
     setSaving(true);
     setError(null);
     setNotice(null);
     try {
-      const response = await fetch("/api/transactions", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(command),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(readableError(payload));
+      await submitTransactionWrite("POST", command);
       setNotice(message);
       closeReview();
       const focusId = typeof command.transactionId === "string" ? command.transactionId : null;
       if (focusId) pendingFocusId.current = focusId;
       await fetchPage(appliedFilters, null, false);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
+      const uncertain = cause instanceof Error && cause.message === "WRITE_UNVERIFIED";
+      if (uncertain) {
+        setWriteUnverified(true);
+        setError("No se ha podido confirmar la revisión. Puede haberse aplicado: vuelve a consultar el listado y contrasta su estado antes de repetirla.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "No se pudo guardar la revisión.");
+      }
     } finally {
       setSaving(false);
     }
@@ -975,7 +1094,7 @@ async function saveEdit(row: TransactionRow) {
           </p>
         </div>
         <div className={styles.summary} role="group" aria-label="Resumen del listado">
-          <div><strong>{formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
+          <div><strong>{loading || listUnverified ? "—" : formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
           <div><strong>{activeFilterCount}</strong><span>Filtros activos</span></div>
           <div><strong>{formatInteger(selectedIds.length)}</strong><span>Seleccionados</span></div>
         </div>
@@ -1168,12 +1287,40 @@ async function saveEdit(row: TransactionRow) {
           <label><span>Analítica</span><select data-testid="bulk-analytics" value={bulkAnalytics} disabled={saving || loading} onChange={(event) => setBulkAnalytics(event.target.value)}>
             <option value={UNCHANGED}>Sin cambiar</option><option value={ANALYTICS_INCLUDE}>Incluir en analítica</option><option value={ANALYTICS_EXCLUDE}>Excluir de analítica</option>
           </select></label>
-          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || loading || (bulkCategory === UNCHANGED && bulkMerchant === UNCHANGED && bulkReviewState === UNCHANGED && bulkAnalytics === UNCHANGED)}>Aplicar cambios</button>
+          <button data-testid="bulk-apply" className={styles.primaryButton} type="button" onClick={() => void applyBulk()} disabled={saving || writeUnverified || loading || (bulkCategory === UNCHANGED && bulkMerchant === UNCHANGED && bulkReviewState === UNCHANGED && bulkAnalytics === UNCHANGED)}>Aplicar cambios</button>
           <button className={styles.secondaryButton} type="button" onClick={() => setSelectedIds([])} disabled={saving || loading}>Quitar selección</button>
         </section>
       )}
 
-      {error && <div className={styles.error} role="alert">{error}</div>}
+      {error && (
+        <div className={styles.error} role="alert">
+          {error}
+          {listUnverified ? (
+            <button className={styles.secondaryButton} type="button" disabled={saving}
+              onClick={() => void fetchPage(appliedFilters, null, false)}>
+              Reintentar listado
+            </button>
+          ) : null}
+        </div>
+      )}
+      {writeUnverified && (
+        <div className={styles.error} role="alert" data-testid="transactions-write-unverified">
+          Una edición o revisión podría haberse aplicado, pero no se ha confirmado. Las escrituras están bloqueadas hasta volver a leer los movimientos. Comprueba el resultado antes de repetirla.
+          <button className={styles.secondaryButton} type="button"
+            disabled={saving || verifyingWrite}
+            onClick={() => void verifyAfterUncertainWrite()}>
+            {verifyingWrite ? "Comprobando movimientos…" : "Volver a consultar sin guardar"}
+          </button>
+        </div>
+      )}
+      {facetsError && (
+        <div className={styles.error} role="alert">
+          No se han podido verificar las cuentas y categorías: {facetsError} La lectura del listado sigue disponible.
+          <button className={styles.secondaryButton} type="button" onClick={() => setFacetsRetry((count) => count + 1)}>
+            Reintentar cuentas y categorías
+          </button>
+        </div>
+      )}
       {authRecovery ? <DraftRecoveryNotice state={authRecovery} nextPath="/transactions" /> : null}
       {notice && <div className={styles.notice} role="status">{notice}</div>}
 
@@ -1186,7 +1333,9 @@ async function saveEdit(row: TransactionRow) {
           </div>
         </div>
 
-        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
+        {loading ? <div className={styles.loading} role="status">Leyendo movimientos persistidos…</div> : listUnverified ? (
+          <div className={styles.empty}>El listado todavía no se ha podido verificar. No se considera vacío.</div>
+        ) : rows.length === 0 ? <div className={styles.empty}>{appliedFilters.signMismatch === "true" ? "No hay movimientos con el signo incoherente." : "No hay movimientos que coincidan con los filtros actuales."}</div> : (
           <div className={styles.tableWrap}>
             <table className={styles.table}>
               <thead><tr><th scope="col" className={styles.selectHeading}>Sel.</th><th scope="col">Fecha</th><th scope="col">Concepto y trazabilidad</th><th scope="col">Cuenta</th><th scope="col">Categoría</th><th scope="col" className={styles.amountHeading}>Importe</th><th scope="col">Gestión</th></tr></thead>
@@ -1276,7 +1425,7 @@ async function saveEdit(row: TransactionRow) {
                             </label>
                             <label className={`${styles.checkboxLabel} ${styles.analyticsField}`}><input type="checkbox" checked={editor.excludedFromAnalytics} onChange={(event) => setEditor({ ...editor, excludedFromAnalytics: event.target.checked })} /><span>Excluir de analítica</span></label>
                           </div>
-                          <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
+                          <div className={styles.editorActions}><button className={styles.secondaryButton} type="button" onClick={cancelEdit} disabled={saving}>Cancelar</button><button data-testid="save-edit" className={styles.primaryButton} type="button" onClick={() => void saveEdit(row)} disabled={saving || writeUnverified}>{saving ? "Guardando…" : "Guardar cambios"}</button></div>
                         </section>
                       </td></tr>
                     )}
@@ -1285,9 +1434,10 @@ async function saveEdit(row: TransactionRow) {
                         <TransactionSplitEditor
                           transaction={{ id: row.id, amountCents: row.amountCents, concept: row.concept.effective, split: row.split }}
                           categories={facets.categories}
-                          disabled={saving}
+                          disabled={saving || writeUnverified}
                           onBusyChange={setSaving}
                           onSaved={(snapshot) => handleSplitSaved(row, snapshot)}
+                          onWriteUnverified={() => setWriteUnverified(true)}
                           onCancel={cancelSplit}
                         />
                       </td></tr>
@@ -1309,8 +1459,8 @@ async function saveEdit(row: TransactionRow) {
                                 </div>)}
                               </div>
                               <div className={styles.reviewActions}>
-                                <button data-testid="duplicate-confirm" className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "confirmed" }, "Duplicado confirmado y auditado.")} disabled={saving || duplicateGroup.length < 2}>Confirmar duplicado</button>
-                                <button data-testid="duplicate-dismiss" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "dismissed" }, "Aviso de duplicado descartado para esta revisión bancaria.")} disabled={saving || duplicateGroup.length < 2}>No es duplicado</button>
+                                <button data-testid="duplicate-confirm" className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "confirmed" }, "Duplicado confirmado y auditado.")} disabled={saving || writeUnverified || duplicateGroup.length < 2}>Confirmar duplicado</button>
+                                <button data-testid="duplicate-dismiss" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "duplicate-review", transactionId: row.id, decision: "dismissed" }, "Aviso de duplicado descartado para esta revisión bancaria.")} disabled={saving || writeUnverified || duplicateGroup.length < 2}>No es duplicado</button>
                               </div>
                             </>
                           ) : (
@@ -1321,10 +1471,10 @@ async function saveEdit(row: TransactionRow) {
                                   <div><strong>{candidate.account_name}</strong><span>{formatDate(candidate.bank_date)} · {candidate.concept_normalized}</span></div>
                                   <strong className={candidate.amount_cents >= 0 ? styles.positive : styles.negative}>{formatMoney(candidate.amount_cents)}</strong>
                                   <span>{candidate.day_gap === 0 ? "Mismo día" : candidate.day_gap === 1 ? "1 día" : `${candidate.day_gap} días`}</span>
-                                  {!row.transferPairId && <button data-testid={`transfer-pair-${candidate.id}`} className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "transfer-pair", transactionId: row.id, pairId: candidate.id }, "Transferencia interna emparejada y auditada.")} disabled={saving}>Emparejar</button>}
+                                  {!row.transferPairId && <button data-testid={`transfer-pair-${candidate.id}`} className={styles.primaryButton} type="button" onClick={() => void runReview({ action: "transfer-pair", transactionId: row.id, pairId: candidate.id }, "Transferencia interna emparejada y auditada.")} disabled={saving || writeUnverified}>Emparejar</button>}
                                 </div>)}
                               </div>
-                              {row.transferPairId && <div className={styles.reviewActions}><button data-testid="transfer-unpair" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "transfer-unpair", transactionId: row.id }, "Transferencia desemparejada y auditada.")} disabled={saving}>Desemparejar</button></div>}
+                              {row.transferPairId && <div className={styles.reviewActions}><button data-testid="transfer-unpair" className={styles.secondaryButton} type="button" onClick={() => void runReview({ action: "transfer-unpair", transactionId: row.id }, "Transferencia desemparejada y auditada.")} disabled={saving || writeUnverified}>Desemparejar</button></div>}
                             </>
                           )}
                         </section>

@@ -40,6 +40,12 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify OCR labelled amounts against synthetic independent expected values
         run: node scripts/test-ocr-amount-label-selection.mjs
+      - name: Certify PDF scanned-page Node rasterization
+        run: node scripts/test-pdf-render-smoke.mjs
+      - name: Certify OCR rotation fallback efficiency
+        run: node scripts/test-ocr-rotation-decision.mjs
+      - name: Certify Spanish Tesseract worker on a real synthetic raster
+        run: node scripts/test-ocr-native-engine-smoke.mjs
       - name: Verify essential visual regressions are actually executed
         run: node scripts/verify-recovery-visual-suite-gate.mjs
       - name: Build optimized application and run cumulative guards
@@ -63,12 +69,17 @@ jobs:
           npx playwright test --config=playwright.recovery.config.ts
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
+          tests/e2e/documents.spec.ts
+          tests/e2e/transactions-race.spec.ts
+          tests/e2e/transactions.spec.ts
           tests/e2e/accounts.spec.ts
           tests/e2e/alerts-center.spec.ts
           tests/e2e/global-alerts-engine.spec.ts
           tests/e2e/cash-flow-evolution-plot.spec.ts
+          tests/e2e/cash-flow-theme-contrast.spec.ts
           tests/e2e/forecast-chart-timeline.spec.ts
           tests/e2e/comparison-ui.spec.ts
+          tests/e2e/recurrences.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
           tests/e2e/aud-e2e-analysis-light-contrast.spec.ts

@@ -100,13 +100,77 @@ function madridToday() {
   return `${value.year}-${value.month}-${value.day}`;
 }
 
-async function readJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function nonnegativeCount(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function moneyCents(value: unknown) {
+  return typeof value === "number" && Number.isSafeInteger(value);
+}
+
+function isDashboardEnvelope(value: unknown): value is DashboardEnvelope {
+  if (!isObject(value) || !Array.isArray(value.failedSources)
+    || !value.failedSources.every((item: unknown) => typeof item === "string")
+    || !isObject(value.data)) return false;
+  const data = value.data;
+  if (data.financial !== null) {
+    if (!isObject(data.financial) || !isObject(data.financial.period)
+      || !moneyCents(data.financial.period.operatingNetCents)
+      || !isObject(data.financial.period.quality)
+      || !nonnegativeCount(data.financial.period.quality.suspectedDuplicateRows)
+      || !nonnegativeCount(data.financial.period.quality.signMismatchRows)) return false;
+  }
+  if (data.budgets !== null) {
+    if (!isObject(data.budgets) || !Array.isArray(data.budgets.categories)
+      || !data.budgets.categories.every((item: unknown) =>
+        isObject(item)
+        && (item.categoryName === null || typeof item.categoryName === "string")
+        && (item.progressBps === null || moneyCents(item.progressBps))
+        && ["empty", "unfunded", "on_track", "over"].includes(String(item.status)))) return false;
+  }
+  if (data.forecast !== null) {
+    if (!isObject(data.forecast) || !isObject(data.forecast.summary)
+      || !moneyCents(data.forecast.summary.projectedClosingBalanceCents)
+      || !nonnegativeCount(data.forecast.summary.plannedItems)
+      || !Array.isArray(data.forecast.items)
+      || !data.forecast.items.every((item: unknown) =>
+        isObject(item)
+        && typeof item.date === "string"
+        && typeof item.concept === "string"
+        && moneyCents(item.amountCents)
+        && ["planned", "excluded", "confirmed"].includes(String(item.status))
+        && typeof item.affectsProjection === "boolean")) return false;
+  }
+  return true;
+}
+
+function isSyncStatus(value: unknown): value is SyncStatus {
+  if (!isObject(value)) return false;
+  if (value.run === null) return true;
+  return isObject(value.run)
+    && ["success", "failed", "started", "partial"].includes(String(value.run.status))
+    && nonnegativeCount(value.run.rowsMissing)
+    && nonnegativeCount(value.run.duplicatesDetected)
+    && nonnegativeCount(value.run.warningsCount);
+}
+
+function isTransactionCount(value: unknown): value is TransactionCount {
+  return isObject(value) && nonnegativeCount(value.totalCount);
+}
+
+async function readJson<T>(url: string, timeoutMs = 8_000, verify?: (value: unknown) => value is T): Promise<T> {
   const controller = new AbortController();
   const timer = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!response.ok) throw new Error(`request_failed_${response.status}`);
-    return response.json() as Promise<T>;
+    const payload: unknown = await response.json();
+    if (verify && !verify(payload)) throw new Error("invalid_read_contract");
+    return payload as T;
   } finally {
     window.clearTimeout(timer);
   }
@@ -163,9 +227,9 @@ export default function AlertsClient() {
     setError(null);
     const today = madridToday();
     const [dashboardResult, syncResult, uncategorizedResult, documentsResult] = await Promise.allSettled([
-      readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000),
-      readJson<SyncStatus>("/api/source/google/sync", 6_000),
-      readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000),
+      readJson<DashboardEnvelope>("/api/dashboard?scope=all", 10_000, isDashboardEnvelope),
+      readJson<SyncStatus>("/api/source/google/sync", 6_000, isSyncStatus),
+      readJson<TransactionCount>("/api/transactions?uncategorized=true&limit=1", 8_000, isTransactionCount),
       loadDocumentSummary(),
     ]);
 
@@ -254,15 +318,15 @@ export default function AlertsClient() {
       ) : null}
 
       <section className={styles.summaryGrid} aria-label="Resumen de alertas">
-        <article className={`${styles.summaryCard} ${styles.dangerSummary}`}><span>Críticas</span><strong>{summary.danger}</strong><small>Requieren atención prioritaria</small></article>
-        <article className={`${styles.summaryCard} ${styles.warningSummary}`}><span>Avisos</span><strong>{summary.warning}</strong><small>Conviene revisarlos</small></article>
-        <article className={`${styles.summaryCard} ${styles.infoSummary}`}><span>Informativas</span><strong>{summary.info}</strong><small>Próximos pasos y contexto</small></article>
+        <article className={`${styles.summaryCard} ${styles.dangerSummary}`}><span>Críticas</span><strong>{snapshot ? summary.danger : "—"}</strong><small>Requieren atención prioritaria</small></article>
+        <article className={`${styles.summaryCard} ${styles.warningSummary}`}><span>Avisos</span><strong>{snapshot ? summary.warning : "—"}</strong><small>Conviene revisarlos</small></article>
+        <article className={`${styles.summaryCard} ${styles.infoSummary}`}><span>Informativas</span><strong>{snapshot ? summary.info : "—"}</strong><small>Próximos pasos y contexto</small></article>
       </section>
 
       <section className={styles.alertSection} aria-labelledby="active-alerts-title">
         <div className={styles.sectionHeading}>
           <div><span>PRIORIDAD</span><h2 id="active-alerts-title">Alertas activas</h2></div>
-          <strong>{summary.total}</strong>
+          <strong>{snapshot ? summary.total : "—"}</strong>
         </div>
 
         {loading && !snapshot ? <div className={styles.loading} role="status">Leyendo señales persistidas…</div> : null}

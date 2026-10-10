@@ -56,6 +56,8 @@ export type DocumentOcrFinancialInterpretation = {
 type LocatedLine = { pageNumber: number; line: OcrLine };
 
 const RELIABLE_CONFIDENCE = 0.82;
+// Spanish invoices use IVA, I.V.A., IGIC and I.G.I.C. interchangeably.
+const TAX_ACRONYM = /\b(?:i\.?v\.?a|i\.?g\.?i\.?c)\b\.?/;
 
 function normalizeToken(value: string) {
   return value
@@ -131,9 +133,18 @@ function parseMoneyCents(raw: string): number | null {
 // Preserve punctuation at the end of a sentence, but reject continuations
 // that belong to the same numeric token.
 const FINANCIAL_AMOUNT_TOKEN = /[-\u2212\u2013]?\d{1,3}(?:\.\d{3})*(?:,\d{2})|[-\u2212\u2013]?\d+(?:[,.]\d{2})/g;
+// An integer is money only when the OCR line explicitly prints € after it.
+// A bare 21, 100 or 1.234 could instead be a rate, quantity or document ID.
+const INTEGER_EURO_TOKEN = /[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)(?=\s*€)/g;
+// Some receipts place the currency *before* a whole-euro amount: TOTAL € 50
+// or TOTAL EUR 1.234. Only an explicit currency token permits integer euros;
+// the boundary checks below reject accidental prefixes of decimal/weight data.
+const PREFIXED_EURO_INTEGER_TOKEN = /(?:€|\bEUR\b)\s*[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)/gi;
 
 function exactFinancialAmountMatches(text: string) {
-  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN)].filter((match) => {
+  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN), ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN)]
+    .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+    .filter((match) => {
     const start = match.index;
     const end = start + match[0].length;
     const previous = text[start - 1] ?? "";
@@ -144,7 +155,9 @@ function exactFinancialAmountMatches(text: string) {
       || (/[.,]/.test(previous) && /\d/.test(previousPrevious));
     const endsInsideNumber = /\d/.test(next)
       || (/[.,]/.test(next) && /\d/.test(nextNext));
-    return !startsInsideNumber && !endsInsideNumber;
+    // Percentages such as "IVA 21,00%" are rates, never euro values.
+    const isPercentage = /^\s*%/.test(text.slice(end));
+    return !startsInsideNumber && !endsInsideNumber && !isPercentage;
   });
 }
 
@@ -171,9 +184,9 @@ function valueAfterLabel(text: string) {
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean } = {},
 ) {
-  const candidates = lines.flatMap((item) => {
+  const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
     if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
 
@@ -193,8 +206,37 @@ function extractMoneyField(
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ raw: match[0], value, index: match.index }];
       });
-    const following = monies.filter((money) => money.index >= anchorEnd);
-    const chosen = following[0] ?? monies.at(-1);
+    // BASE / IVA often share a line with TOTAL, payment or another field.
+    // Only amounts before the next *different* financial label belong to
+    // BASE / IVA. Never borrow an invoice total as a tax or a tax as a base.
+    const nextOwner = options.ownLabelOnly
+      ? searchable.slice(anchorEnd).search(/\b(?:base(?: imponible)?|subtotal|i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|cuota(?: del? iva)?|total|importe total|a pagar|efectivo|tarjeta|cambio)\b/)
+      : -1;
+    const segmentEnd = nextOwner >= 0 ? anchorEnd + nextOwner : Number.POSITIVE_INFINITY;
+    const following = monies.filter((money) => money.index >= anchorEnd && money.index < segmentEnd);
+    let chosen = following[0] ?? (options.ownLabelOnly ? undefined : monies.at(-1));
+    let adjacent: LocatedLine | null = null;
+    if (!chosen && options.adjacentAmount) {
+      // Layout engines often break "TOTAL A PAGAR" and "23,45 €" into
+      // distinct OCR lines. Recover only a *bare* label with a single
+      // standalone money token on the next line of the same page. This is
+      // evidence for review, not automatic certification.
+      const bareTotal = /^(?:total(?: a pagar| importe factura| factura| final)?|importe(?: de la)? factura|importe total|a pagar)\s*[:=-]?\s*$/.test(normalized);
+      const next = lines[index + 1];
+      if (bareTotal && next?.pageNumber === item.pageNumber) {
+        const amountMatches = exactFinancialAmountMatches(next.line.text);
+        const remainder = amountMatches.length === 1
+          ? next.line.text.replace(amountMatches[0][0], "").replace(/[€\s:=.-]/g, "")
+          : "?";
+        const amount = amountMatches.length === 1 && remainder === ""
+          ? parseMoneyCents(amountMatches[0][0])
+          : null;
+        if (amount !== null) {
+          chosen = { raw: amountMatches[0][0], value: amount, index: 0 };
+          adjacent = next;
+        }
+      }
+    }
     if (!chosen) return [];
 
     // A trailing payment label or competing figure weakens field attribution,
@@ -207,7 +249,8 @@ function extractMoneyField(
       raw: chosen.raw,
       value: chosen.value,
       preferred: Boolean(preferred),
-      needsReview: following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+      needsReview: adjacent !== null || following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+      adjacent,
     }];
   });
   if (!candidates.length) return emptyField<number>();
@@ -218,7 +261,11 @@ function extractMoneyField(
   if (!chosen.needsReview && new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
   return {
     ...fieldRequiringReview(field),
-    evidence: candidates.map((candidate) => evidenceOf(candidate.item)),
+    confidence: chosen.adjacent ? Math.min(chosen.item.line.confidence, chosen.adjacent.line.confidence) : field.confidence,
+    evidence: candidates.flatMap((candidate) => [
+      evidenceOf(candidate.item),
+      ...(candidate.adjacent ? [evidenceOf(candidate.adjacent)] : []),
+    ]),
   };
 }
 
@@ -401,7 +448,7 @@ function extractIssuer(lines: LocatedLine[]) {
   for (const item of lines.slice(0, 8)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
-    if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized)) continue;
+    if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
     }
@@ -413,14 +460,49 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
   const result: OcrTaxLine[] = [];
   for (const [index, item] of lines.entries()) {
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-    if (!/\b(?:iva|igic|impuestos?)\b/.test(searchable)) continue;
+    if (!TAX_ACRONYM.test(searchable) && !/\bimpuestos?\b/.test(searchable)) continue;
+
+    // A real-world invoice layout uses "I.V.A / I.G.I.C. (Base Imponible:
+    // 100,00) 21% EUR 21,00". The two explicit monetary values straddle
+    // an identified tax *percentage*. A TOTAL or payment label appearing
+    // before the second value invalidates this inference. Keep it doubtful.
+    const vatIgicPair = /\bi\.?v\.?a\b\.?\s*\/\s*\bi\.?g\.?i\.?c\b\.?/.test(searchable);
+    const baseHeader = /\bbase\s+imponible\b/.exec(searchable);
+    const taxRate = /\b(\d{1,2}(?:[,.]\d{1,2})?)\s*%/.exec(searchable);
+    if (vatIgicPair && baseHeader && taxRate) {
+      const amounts = exactFinancialAmountMatches(item.line.text).flatMap((match) => {
+        const cents = parseMoneyCents(match[0]);
+        return cents === null ? [] : [{ index: match.index, value: cents }];
+      });
+      const rateStart = taxRate.index;
+      const rateEnd = rateStart + taxRate[0].length;
+      const second = amounts[1];
+      const forbidden = second
+        ? /\b(?:total|efectivo|tarjeta|cambio|devolucion|recibido|entregado)\b/.test(searchable.slice(rateEnd, second.index))
+        : true;
+      if (amounts.length === 2 && second
+        && amounts[0].index >= baseHeader.index + baseHeader[0].length
+        && amounts[0].index < rateStart
+        && second.index >= rateEnd
+        && !forbidden) {
+        result.push({
+          ratePercent: Number(taxRate[1].replace(",", ".")),
+          baseCents: amounts[0].value,
+          taxCents: second.value,
+          confidence: item.line.confidence,
+          trust: "doubtful",
+          evidence: [evidenceOf(item)],
+        });
+        continue;
+      }
+    }
 
     // In real retail receipts, "IVA BASE IMPONIBLE (€) CUOTA (€)" is a
     // column header. The next rows carry "10% 30,00 3,00" without an IVA
     // label, so inspecting only the header loses the actual tax lines.
     // Interpret at most four immediately adjacent rows on the same page.
     // Text order suggests column ownership; always require human review.
-    if (/\b(?:iva|igic)\b/.test(searchable)
+    if (TAX_ACRONYM.test(searchable)
       && /\bbase\s+imponible\b/.test(searchable)
       && /\bcuota\b/.test(searchable)) {
       const tableRows: OcrTaxLine[] = [];
@@ -453,14 +535,14 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
       }
     }
 
-    const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|iva|igic|impuestos?|cuota(?:\s+(?:del?\s+)?(?:iva|igic|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
+    const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|cuota(?:\s+(?:del?\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
       .map((match) => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
     const amounts = exactFinancialAmountMatches(item.line.text)
       .flatMap((match) => {
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ start: match.index, value }];
       });
-    const taxLabel = labels.find((label) => /^(?:iva|igic|impuestos?)$/.test(label.text));
+    const taxLabel = labels.find((label) => TAX_ACRONYM.test(label.text) || /^impuestos?$/.test(label.text));
     const baseLabel = labels.find((label) => /^(?:base|subtotal)\b/.test(label.text));
     const quotaLabel = labels.find((label) => /^cuota\b/.test(label.text));
     const amountAfter = (label: (typeof labels)[number] | undefined) => {
@@ -508,7 +590,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   for (const item of lines) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
-    if (!text || /\b(total|subtotal|base|iva|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized)) continue;
+    if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     const moneyMatches = exactFinancialAmountMatches(text).map((match) => match[0]);
     if (!moneyMatches.length) continue;
     const lastMoney = moneyMatches.at(-1) ?? null;
@@ -532,8 +614,8 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
-  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/]);
-  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/]);
+  let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/], { ownLabelOnly: true });
+  let taxesCents = extractMoneyField(located, [TAX_ACRONYM, /\bimpuestos?\b/], { ownLabelOnly: true });
   // Spanish utilities and telecom invoices often use "IMPORTE FACTURA"
   // rather than a standalone TOTAL. Preserve contradictory candidates for
   // human review instead of silently treating the invoice amount as absent.
@@ -545,6 +627,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
   ], {
     exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
     prefer: /\b(?:total\s+a\s+pagar|total\s+importe\s+factura|importe\s+total|importe(?:\s+de\s+la)?\s+factura|a\s+pagar|total\s+factura|total\s+final)\b/,
+    adjacentAmount: true,
   });
   const warnings: string[] = [];
 

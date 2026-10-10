@@ -163,3 +163,44 @@ test("RECUPERACION-PRODUCTO · 50000 documentos no generan paginación masiva en
   expect(reads.filter((read) => read.unassociated === null && read.status === "pending_review"))
     .toHaveLength(reads.length / 2);
 });
+
+
+test("REC-ALT-001 · cuatro lecturas inválidas no se representan como cero alertas comprobadas", async ({ page }) => {
+  const methods: string[] = [];
+  await page.route(/\/api\/(?:dashboard\?scope=all|source\/google\/sync|transactions\?uncategorized=true&limit=1|documents\?scope=ordinary&.*)$/, async (route) => {
+    methods.push(route.request().method());
+    await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/alerts");
+  await expect(page.getByRole("alert")).toContainText("No se han podido leer las señales de alertas");
+  await expect(page.locator('section[aria-label="Resumen de alertas"] strong')).toHaveText(["—", "—", "—"]);
+  await expect(page.locator('[class*="sectionHeading"] > strong')).toHaveText("—");
+  await expect(page.getByText("No hay alertas activas con las señales disponibles.")).toHaveCount(0);
+  expect(methods.length).toBeGreaterThanOrEqual(5);
+  expect(methods.every((method) => method === "GET")).toBe(true);
+});
+
+test("REC-ALT-002 · dashboard malformado pasa a lectura parcial, preserva las demás alertas y no bloquea", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/dashboard?scope=all", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ failedSources: null, data: { financial: null, budgets: null, forecast: null } }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("Lectura parcial: no se pudo consultar resumen financiero");
+  await expect(page.getByText("3 movimientos sin categorizar", { exact: true })).toBeVisible();
+  await expect(page.getByText("1 documento sin asociar", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
+});
+
+test("REC-ALT-003 · sync 200 corrupta no se clasifica como fuente correcta ni detiene Alertas", async ({ page }) => {
+  await mockAlerts(page);
+  await page.route("**/api/source/google/sync", (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({ run: { status: "success", rowsMissing: "0", duplicatesDetected: 0, warningsCount: 0 } }),
+  }));
+  await page.goto("/alerts");
+  await expect(page.locator('[class*="partialNotice"][role="status"]')).toContainText("Lectura parcial: no se pudo consultar sincronización");
+  await expect(page.getByText("3 movimientos sin categorizar", { exact: true })).toBeVisible();
+  await expect(page.locator("main")).toHaveAttribute("aria-busy", "false");
+});

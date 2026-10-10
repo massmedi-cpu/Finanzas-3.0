@@ -4,6 +4,7 @@ import type { DocumentOcrProvider } from "../../application/document-ocr-service
 import type { OcrWord } from "../../domain/document-ocr";
 import { isReceiptMoney } from "../../domain/receipt-money";
 import { readOcrImageMetadata, type OcrImageMetadata } from "./image-metadata";
+import { ocrNeedsRotationFallback, ocrRecognitionOutputFlags } from "./ocr-rotation-decision";
 
 const SUPPORTED_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_SIDE = 12_000;
@@ -215,12 +216,6 @@ function wordStats(words: OcrWord[]) {
 function candidateScore(words: OcrWord[]) {
   const stats = wordStats(words);
   return stats.averageConfidence * 100 + Math.min(stats.chars, 500) * 0.12 + Math.min(words.length, 80) * 0.35;
-}
-
-function needsOrientationFallback(words: OcrWord[], metadata: OcrImageMetadata) {
-  const stats = wordStats(words);
-  const landscape = metadata.width > metadata.height * 1.12;
-  return landscape || words.length < 5 || stats.chars < 24 || stats.averageConfidence < 0.62;
 }
 
 function textWeight(word: OcrWord) {
@@ -577,7 +572,7 @@ async function recognizeCandidate(
     : { rotateRadians: rotationRadians };
   if (rectangle) options.rectangle = rectangle;
   const recognition = await withTimeout(
-    worker.recognize(Buffer.from(bytes), options, { text: true, tsv: true, imageColor: true }),
+    worker.recognize(Buffer.from(bytes), options, ocrRecognitionOutputFlags(autoRotate)),
     OCR_TIMEOUT_MS,
     "recognize",
   );
@@ -647,7 +642,7 @@ export class TesseractImageOcrProvider implements DocumentOcrProvider {
         try {
           const initial = await recognizeCandidate(worker, input.bytes, metadata, 0, true);
           let best = initial;
-          if (needsOrientationFallback(initial.words, metadata)) {
+          if (ocrNeedsRotationFallback(initial.words, metadata)) {
             for (const rotationRadians of [-Math.PI / 2, Math.PI / 2, Math.PI]) {
               const candidate = await recognizeCandidate(worker, input.bytes, metadata, rotationRadians, false);
               if (candidate.score > best.score) best = candidate;

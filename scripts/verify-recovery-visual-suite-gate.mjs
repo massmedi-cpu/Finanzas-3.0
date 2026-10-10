@@ -7,6 +7,7 @@ const cases = [
   ["tests/e2e/premium-analysis-visual.spec.ts", ["REC-VIS-001"]],
   ["tests/e2e/aud-e2e-analysis-light-contrast.spec.ts", ["REC-VIS-003"]],
   ["tests/e2e/recovery-route-shell-responsive.spec.ts", ["REC-VIS-004"]],
+  ["tests/e2e/cash-flow-theme-contrast.spec.ts", ["REC-VIS-005"]],
 ];
 const integrated = workflow.split("name: Integrated module regressions on the same optimized build")[1]?.split("      # Synthetic UI results")[0] ?? "";
 assert.ok(integrated.includes("npx playwright test"), "The real browser test command must exist");

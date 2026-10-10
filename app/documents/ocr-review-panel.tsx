@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { formatNumberWithDigits } from "../../src/core/formatters";
 import { summarizeDocumentOcrReview, type DocumentOcrReviewField } from "../../src/application/document-ocr-review";
 import { interpretDocumentOcrFinancially, type DocumentOcrFinancialInterpretation } from "../../src/domain/document-ocr-financial-interpretation";
@@ -53,10 +53,30 @@ type DocumentDetailForReview = {
   notes?: string;
 };
 
+type ReviewedFinancialEvidence = {
+  type: "ticket" | "invoice" | "other";
+  documentDate: string | null;
+  taxBaseCents: number | null;
+  taxesCents: number | null;
+  totalCents: number | null;
+};
+
 type OcrHistory = {
   runs?: Array<{ id?: string; extractor?: string; extractedAt?: string }>;
-  reviews?: Array<{ revision?: number; ocrRunId?: string | null }>;
+  reviews?: Array<{ revision?: number; ocrRunId?: string | null; reviewedValues?: Partial<ReviewedFinancialEvidence> }>;
 };
+
+function sameReviewedFinancialEvidence(
+  observed: Partial<ReviewedFinancialEvidence> | null | undefined,
+  expected: ReviewedFinancialEvidence | null,
+) {
+  return Boolean(expected && observed
+    && observed.type === expected.type
+    && observed.documentDate === expected.documentDate
+    && observed.taxBaseCents === expected.taxBaseCents
+    && observed.taxesCents === expected.taxesCents
+    && observed.totalCents === expected.totalCents);
+}
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
   ready: "Lectura disponible",
@@ -86,6 +106,14 @@ function warningLabel(warning: string) {
   if (warning.startsWith("pdf_page_requires_visual_ocr:")) {
     const page = warning.split(":")[1];
     return `La página ${page} parece escaneada y necesita OCR visual.`;
+  }
+  if (warning.startsWith("pdf_page_sparse_native_recovered:")) {
+    const page = warning.split(":")[1];
+    return `La página ${page} contenía muy poco texto digital; se recuperó más información mediante OCR visual. Contrasta el resultado con el original.`;
+  }
+  if (warning.startsWith("pdf_page_sparse_native_unverified:")) {
+    const page = warning.split(":")[1];
+    return `La página ${page} solo tenía texto digital parcial y la lectura visual no lo completó. No se debe dar por íntegra la factura sin revisar el original.`;
   }
   return warning.replaceAll("_", " ");
 }
@@ -283,31 +311,64 @@ export function OcrReviewPanel({
   const [confirmedRevision, setConfirmedRevision] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [confirmationUnverified, setConfirmationUnverified] = useState(false);
+  const [checkingConfirmation, setCheckingConfirmation] = useState(false);
+  const knownReviewRevision = useRef(0);
+  const pendingFinancialEvidence = useRef<ReviewedFinancialEvidence | null>(null);
   const [openingOriginal, setOpeningOriginal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
+  const activeDocumentId = useRef(documentId);
+  const documentGeneration = useRef(0);
+  const ocrRequest = useRef<AbortController | null>(null);
+  const ocrInFlight = useRef(false);
+  const confirmInFlight = useRef(false);
 
   useEffect(() => {
+    activeDocumentId.current = documentId;
+    documentGeneration.current += 1;
+    ocrRequest.current?.abort();
+    ocrRequest.current = null;
+    ocrInFlight.current = false;
+    confirmInFlight.current = false;
     setResult(null);
     setDraft(null);
     setOcrRunId(null);
     setConfirmedRevision(null);
+    setConfirmationUnverified(false);
+    setCheckingConfirmation(false);
+    knownReviewRevision.current = 0;
+    pendingFinancialEvidence.current = null;
     setError(null);
     setBusy(false);
     setConfirming(false);
     setOpeningOriginal(false);
     setCopyState("idle");
+    return () => {
+      documentGeneration.current += 1;
+      ocrRequest.current?.abort();
+      ocrInFlight.current = false;
+      confirmInFlight.current = false;
+    };
   }, [documentId]);
+
+  const editsLocked = busy || confirming || confirmationUnverified;
 
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
   const review = useMemo(() => result ? summarizeDocumentOcrReview(result) : null, [result]);
 
-  async function hydrateConfirmation(parsed: OcrResult, interpretation: DocumentOcrFinancialInterpretation) {
+  async function hydrateConfirmation(
+    parsed: OcrResult,
+    interpretation: DocumentOcrFinancialInterpretation,
+    generation: number,
+    signal: AbortSignal,
+  ) {
     try {
       const [detailResponse, historyResponse] = await Promise.all([
-        readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })),
-        readJson(await fetch(`/api/documents/ocr-review?id=${encodeURIComponent(documentId)}`, { cache: "no-store" })),
+        readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}`, { cache: "no-store", signal })),
+        readJson(await fetch(`/api/documents/ocr-review?id=${encodeURIComponent(documentId)}`, { cache: "no-store", signal })),
       ]);
+      if (signal.aborted || generation !== documentGeneration.current || activeDocumentId.current !== documentId) return;
       const detail = detailResponse?.document && typeof detailResponse.document === "object"
         ? detailResponse.document as DocumentDetailForReview
         : null;
@@ -315,44 +376,70 @@ export function OcrReviewPanel({
       const run = history.runs?.find((candidate) => candidate.extractor === parsed.extractor && sameInstant(candidate.extractedAt, parsed.extractedAt));
       setDraft(reviewDraft(interpretation, detail));
       setOcrRunId(typeof run?.id === "string" ? run.id : null);
+      knownReviewRevision.current = (history.reviews ?? [])
+        .filter((review) => review.ocrRunId === run?.id
+          && typeof review.revision === "number" && Number.isSafeInteger(review.revision))
+        .reduce((max, review) => Math.max(max, review.revision ?? 0), 0);
       setConfirmedRevision(null);
       if (!run?.id) {
         setError("La lectura se ha completado, pero no se ha podido enlazar con su evidencia persistida. Puedes revisar los datos, pero no confirmarlos todavía.");
       }
     } catch {
-      setError("La lectura se ha completado, pero no se ha podido preparar la confirmación persistente. El OCR bruto sigue visible para revisión.");
+      if (!signal.aborted && generation === documentGeneration.current && activeDocumentId.current === documentId) {
+        setError("La lectura se ha completado, pero no se ha podido preparar la confirmación persistente. El OCR bruto sigue visible para revisión.");
+      }
     }
   }
 
   async function runOcr() {
-    if (!supported || busy) return;
+    if (!supported || busy || confirming || confirmationUnverified || ocrInFlight.current || activeDocumentId.current !== documentId) return;
+    const generation = documentGeneration.current;
+    const controller = new AbortController();
+    const isCurrent = () => !controller.signal.aborted
+      && generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
+    ocrInFlight.current = true;
+    ocrRequest.current = controller;
     setBusy(true);
     setError(null);
     setCopyState("idle");
     setOcrRunId(null);
     setConfirmedRevision(null);
+    knownReviewRevision.current = 0;
     const feedbackId = `documents:ocr:${documentId}`;
     actionFeedback.begin(feedbackId, "Analizando documento con OCR…");
     try {
-      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { method: "POST", cache: "no-store" }));
+      const data = await readJson(await fetch(`/api/documents/ocr?id=${encodeURIComponent(documentId)}`, { method: "POST", cache: "no-store", signal: controller.signal }));
+      if (!isCurrent()) return;
       const parsed = parseOcrResult(data);
+      if (parsed.documentId !== documentId) throw new Error("ocr_response_invalid");
       const interpretation = interpretDocumentOcrFinancially(parsed);
       setResult(parsed);
       setDraft(reviewDraft(interpretation));
       actionFeedback.success(feedbackId, "Lectura OCR completada. Revisa el resultado antes de confirmar sus datos.");
-      await hydrateConfirmation(parsed, interpretation);
+      await hydrateConfirmation(parsed, interpretation, generation, controller.signal);
     } catch (caught) {
+      if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = errorLabel(code);
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
-      setBusy(false);
+      if (isCurrent()) {
+        ocrInFlight.current = false;
+        if (ocrRequest.current === controller) ocrRequest.current = null;
+        setBusy(false);
+      }
     }
   }
 
   async function confirmReview() {
-    if (!draft || !ocrRunId || confirming) return;
+    if (!draft || !ocrRunId || confirming || confirmedRevision !== null || confirmationUnverified || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
+    confirmInFlight.current = true;
+    pendingFinancialEvidence.current = null;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     setConfirming(true);
     setError(null);
     const feedbackId = `documents:ocr-confirm:${documentId}`;
@@ -382,33 +469,135 @@ export function OcrReviewPanel({
           })),
         notes: draft.notes,
       };
+      pendingFinancialEvidence.current = {
+        type: payload.type,
+        documentDate: payload.documentDate,
+        taxBaseCents: payload.taxBaseCents,
+        taxesCents: payload.taxesCents,
+        totalCents: payload.totalCents,
+      };
       const saved = await readJson(await fetch("/api/documents/ocr-review", {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify(payload),
       }));
-      const revision = typeof saved?.revision === "number" ? saved.revision : null;
+      // Do not abort an already submitted confirmation (the server may have
+      // committed it); only suppress feedback for an unrelated new document.
+      if (!isCurrent()) return;
+      const revision = typeof saved?.revision === "number" && Number.isSafeInteger(saved.revision) && saved.revision > 0
+        ? saved.revision : null;
+      const confirmedValues = saved?.reviewedValues;
+      // Verified against the live, read-only PostgreSQL function contract:
+      // revision alone cannot identify the document or the OCR run, nor
+      // prove that the financial amounts sent by the human were persisted.
+      if (
+        revision === null
+        || revision <= knownReviewRevision.current
+        || saved?.contractVersion !== 2
+        || saved?.documentId !== documentId
+        || saved?.ocrRunId !== ocrRunId
+        || saved?.rawEvidenceImmutable !== true
+        || saved?.bankSource !== "read_only"
+        || saved?.financialWrites !== false
+        || saved?.requiresHumanReview !== true
+        || !confirmedValues || typeof confirmedValues !== "object" || Array.isArray(confirmedValues)
+        || confirmedValues.type !== payload.type
+        || confirmedValues.documentDate !== payload.documentDate
+        || confirmedValues.taxBaseCents !== payload.taxBaseCents
+        || confirmedValues.taxesCents !== payload.taxesCents
+        || confirmedValues.totalCents !== payload.totalCents
+      ) {
+        throw new Error("ocr_confirmation_unverified");
+      }
+      knownReviewRevision.current = Math.max(knownReviewRevision.current, revision);
+      pendingFinancialEvidence.current = null;
+      setConfirmationUnverified(false);
       setConfirmedRevision(revision);
-      if (onConfirmed) await onConfirmed();
-      actionFeedback.success(feedbackId, revision ? `Revisión OCR confirmada · revisión ${revision}.` : "Revisión OCR confirmada.");
+      actionFeedback.success(feedbackId, `Revisión OCR confirmada · revisión ${revision}.`);
+      // Refreshing the parent list is not part of the PATCH transaction.
+      // A failed post-save refresh must never claim that persistence failed.
+      if (onConfirmed) {
+        try {
+          await onConfirmed();
+        } catch {
+          if (isCurrent()) {
+            setError("La revisión se ha guardado, pero no se pudo actualizar el listado. Puedes recargar Documentos; no confirmes de nuevo.");
+          }
+        }
+      }
     } catch (caught) {
+      if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = code.startsWith("invalid_")
         ? "Hay un dato de la revisión con formato no válido. Corrígelo antes de confirmar."
-        : "No se ha podido guardar la revisión OCR confirmada.";
+        : "No se pudo comprobar si la revisión OCR llegó a guardarse. Consulta su historial antes de volver a confirmar para evitar duplicados.";
       setError(message);
+      if (!code.startsWith("invalid_")) setConfirmationUnverified(true);
+      else pendingFinancialEvidence.current = null;
       actionFeedback.error(feedbackId, message);
     } finally {
-      setConfirming(false);
+      if (isCurrent()) {
+        confirmInFlight.current = false;
+        setConfirming(false);
+      }
+    }
+  }
+
+  async function checkReviewConfirmation() {
+    if (!confirmationUnverified || !ocrRunId || checkingConfirmation || confirmInFlight.current) return;
+    const generation = documentGeneration.current;
+    const currentRunId = ocrRunId;
+    setCheckingConfirmation(true);
+    setError(null);
+    try {
+      const history = await readJson(await fetch(
+        `/api/documents/ocr-review?id=${encodeURIComponent(documentId)}`,
+        { cache: "no-store" },
+      )) as OcrHistory;
+      if (generation !== documentGeneration.current || activeDocumentId.current !== documentId) return;
+      const confirmed = (history.reviews ?? [])
+        .filter((review) => review.ocrRunId === currentRunId
+          && typeof review.revision === "number" && Number.isSafeInteger(review.revision)
+          && sameReviewedFinancialEvidence(review.reviewedValues, pendingFinancialEvidence.current))
+        .reduce((max, review) => Math.max(max, review.revision ?? 0), 0);
+      if (confirmed > knownReviewRevision.current) {
+        knownReviewRevision.current = confirmed;
+        pendingFinancialEvidence.current = null;
+        setConfirmedRevision(confirmed);
+        setConfirmationUnverified(false);
+        setError(null);
+        actionFeedback.success(`documents:ocr-confirm:${documentId}`, `Revisión OCR verificada en el historial · revisión ${confirmed}.`);
+        if (onConfirmed) {
+          try {
+            await onConfirmed();
+          } catch {
+            if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
+              setError("La revisión se ha verificado, pero el listado no pudo actualizarse. Puedes recargar Documentos sin guardar otra vez.");
+            }
+          }
+        }
+      } else {
+        setError("El historial no muestra una revisión nueva que coincida con esta lectura y los importes solicitados. La confirmación sigue sin verificarse; solo repítela tras revisar el original y el resultado actual.");
+      }
+    } catch {
+      if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
+        setError("No se ha podido consultar el historial de revisiones. No se ha repetido ninguna confirmación.");
+      }
+    } finally {
+      if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
+        setCheckingConfirmation(false);
+      }
     }
   }
 
   function updateDraft<K extends keyof ReviewDraft>(key: K, value: ReviewDraft[K]) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? { ...current, [key]: value } : current);
     setConfirmedRevision(null);
   }
 
   function updateLine(index: number, key: keyof ReviewLineDraft, value: string) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => {
       if (!current) return current;
       const lineItems = current.lineItems.map((line, lineIndex) => lineIndex === index ? { ...line, [key]: value } : line);
@@ -418,6 +607,7 @@ export function OcrReviewPanel({
   }
 
   function addLine() {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? {
       ...current,
       lineItems: [...current.lineItems, { description: "", quantity: "", unitPrice: "", total: "" }],
@@ -426,36 +616,61 @@ export function OcrReviewPanel({
   }
 
   function removeLine(index: number) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? { ...current, lineItems: current.lineItems.filter((_, lineIndex) => lineIndex !== index) } : current);
     setConfirmedRevision(null);
   }
 
   async function openOriginal() {
-    if (openingOriginal) return;
+    if (openingOriginal || activeDocumentId.current !== documentId) return;
+    // Open within the user's click: browsers may block window.open after an
+    // asynchronous signed-URL lookup. Never expose the signed URL in the app.
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError("El navegador ha bloqueado la ventana del original. Permite las ventanas emergentes de Financial App y vuelve a pulsar Abrir.");
+      return;
+    }
+    previewWindow.opener = null;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     setOpeningOriginal(true);
     setError(null);
     try {
       const opened = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=open`, { cache: "no-store" }));
+      if (!isCurrent() || previewWindow.closed) {
+        if (!previewWindow.closed) previewWindow.close();
+        return;
+      }
       if (typeof opened?.url !== "string") throw new Error("document_open_failed");
-      window.open(opened.url, "_blank", "noopener,noreferrer");
+      const destination = new URL(opened.url);
+      if (destination.protocol !== "https:"
+        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
+        throw new Error("document_open_unsafe_url");
+      }
+      previewWindow.location.replace(destination.href);
     } catch {
-      setError("No se ha podido abrir el documento original.");
+      if (!previewWindow.closed) previewWindow.close();
+      if (isCurrent()) setError("No se ha podido abrir el documento original de forma segura.");
     } finally {
-      setOpeningOriginal(false);
+      if (isCurrent()) setOpeningOriginal(false);
     }
   }
 
   async function copyReading() {
-    if (!result?.plainText.trim()) return;
+    if (!result?.plainText.trim() || activeDocumentId.current !== documentId) return;
+    const generation = documentGeneration.current;
+    const isCurrent = () => generation === documentGeneration.current
+      && activeDocumentId.current === documentId;
     const reviewText = result.pages
       .map((page) => page.reviewText?.trim() || page.layoutText.trim() || page.plainText.trim())
       .filter(Boolean)
       .join("\n\n");
     try {
       await navigator.clipboard.writeText(reviewText || result.plainText);
-      setCopyState("copied");
+      if (isCurrent()) setCopyState("copied");
     } catch {
-      setCopyState("error");
+      if (isCurrent()) setCopyState("error");
     }
   }
 
@@ -467,7 +682,7 @@ export function OcrReviewPanel({
           <h3 id="ocr-review-title">Revisar con OCR</h3>
           <p>Lee el original, reconstruye su texto e interpreta los datos financieros sin sustituir la evidencia OCR. Nada se confirma sin revisión humana.</p>
         </div>
-        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
+        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy || confirming || confirmationUnverified}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
         </button>
       </div>
@@ -491,6 +706,21 @@ export function OcrReviewPanel({
       {!supported ? <p className={styles.muted}>Este formato no admite OCR.</p> : null}
       {supported && storageProvider === "google_drive" ? <div className={ocrStyles.info}>Drive se lee mediante Financial App Reader con permiso de solo lectura sobre el archivo original. Si la carpeta Documentos aún no está compartida con esa identidad, el análisis se detendrá sin usar vistas previas ni ampliar permisos.</div> : null}
       {error ? <div className={ocrStyles.error} role="alert">{error}</div> : null}
+      {confirmationUnverified ? (
+        <div className={ocrStyles.info} role="status" data-ocr-confirmation="unverified">
+          <p>La última confirmación podría haberse guardado. Antes de repetirla, comprueba su historial.</p>
+          <button className={styles.secondaryButton} type="button" onClick={() => void checkReviewConfirmation()} disabled={checkingConfirmation || confirming}>
+            {checkingConfirmation ? "Comprobando…" : "Comprobar revisión sin volver a guardar"}
+          </button>
+          <button className={styles.secondaryButton} type="button" onClick={() => {
+            pendingFinancialEvidence.current = null;
+            setConfirmationUnverified(false);
+            setError("Has desbloqueado la edición después de comprobar el historial. No se puede afirmar que la revisión anterior haya sido revertida.");
+          }} disabled={checkingConfirmation || confirming}>
+            He comprobado el historial; permitir nuevo intento
+          </button>
+        </div>
+      ) : null}
 
       {result && review ? (
         <div className={ocrStyles.result} aria-live="polite">
@@ -519,39 +749,39 @@ export function OcrReviewPanel({
                   <h3>Corregir y confirmar datos</h3>
                   <p>La propuesta parte del OCR, pero estos campos son editables y no sustituyen al original hasta que los confirmes.</p>
                 </div>
-                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || confirming || result.status === "empty"}>
+                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || confirming || confirmedRevision !== null || confirmationUnverified || result.status === "empty"}>
                   {confirming ? "Confirmando…" : confirmedRevision ? "Confirmado ✓" : "Confirmar revisión"}
                 </button>
               </div>
 
               <div className={styles.formGrid}>
-                <label>Tipo<select value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>
-                <label>Fecha<input type="date" value={draft.documentDate} onChange={(event) => updateDraft("documentDate", event.target.value)} /></label>
-                <label>Hora<input type="time" value={draft.documentTime} onChange={(event) => updateDraft("documentTime", event.target.value)} /></label>
-                <label>Emisor<input value={draft.issuerName} maxLength={300} onChange={(event) => updateDraft("issuerName", event.target.value)} /></label>
-                <label>CIF / NIF<input value={draft.issuerTaxId} maxLength={40} onChange={(event) => updateDraft("issuerTaxId", event.target.value)} /></label>
-                <label>Número<input value={draft.documentNumber} maxLength={120} onChange={(event) => updateDraft("documentNumber", event.target.value)} /></label>
-                <label>Periodo<input value={draft.billingPeriod} maxLength={200} onChange={(event) => updateDraft("billingPeriod", event.target.value)} /></label>
-                <label>Base imponible (€)<input inputMode="decimal" value={draft.taxBase} onChange={(event) => updateDraft("taxBase", event.target.value)} /></label>
-                <label>Impuestos (€)<input inputMode="decimal" value={draft.taxes} onChange={(event) => updateDraft("taxes", event.target.value)} /></label>
-                <label>Total (€)<input inputMode="decimal" value={draft.total} onChange={(event) => updateDraft("total", event.target.value)} /></label>
-                <label>Método de pago<input value={draft.paymentMethod} maxLength={120} onChange={(event) => updateDraft("paymentMethod", event.target.value)} /></label>
+                <label>Tipo<select disabled={editsLocked} value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>
+                <label>Fecha<input disabled={editsLocked} type="date" value={draft.documentDate} onChange={(event) => updateDraft("documentDate", event.target.value)} /></label>
+                <label>Hora<input disabled={editsLocked} type="time" value={draft.documentTime} onChange={(event) => updateDraft("documentTime", event.target.value)} /></label>
+                <label>Emisor<input disabled={editsLocked} value={draft.issuerName} maxLength={300} onChange={(event) => updateDraft("issuerName", event.target.value)} /></label>
+                <label>CIF / NIF<input disabled={editsLocked} value={draft.issuerTaxId} maxLength={40} onChange={(event) => updateDraft("issuerTaxId", event.target.value)} /></label>
+                <label>Número<input disabled={editsLocked} value={draft.documentNumber} maxLength={120} onChange={(event) => updateDraft("documentNumber", event.target.value)} /></label>
+                <label>Periodo<input disabled={editsLocked} value={draft.billingPeriod} maxLength={200} onChange={(event) => updateDraft("billingPeriod", event.target.value)} /></label>
+                <label>Base imponible (€)<input disabled={editsLocked} inputMode="decimal" value={draft.taxBase} onChange={(event) => updateDraft("taxBase", event.target.value)} /></label>
+                <label>Impuestos (€)<input disabled={editsLocked} inputMode="decimal" value={draft.taxes} onChange={(event) => updateDraft("taxes", event.target.value)} /></label>
+                <label>Total (€)<input disabled={editsLocked} inputMode="decimal" value={draft.total} onChange={(event) => updateDraft("total", event.target.value)} /></label>
+                <label>Método de pago<input disabled={editsLocked} value={draft.paymentMethod} maxLength={120} onChange={(event) => updateDraft("paymentMethod", event.target.value)} /></label>
               </div>
-              <label>Notas<textarea rows={3} value={draft.notes} maxLength={2000} onChange={(event) => updateDraft("notes", event.target.value)} /></label>
+              <label>Notas<textarea disabled={editsLocked} rows={3} value={draft.notes} maxLength={2000} onChange={(event) => updateDraft("notes", event.target.value)} /></label>
 
               <div className={ocrStyles.pages} data-testid="ocr-confirmation-lines">
                 <div className={ocrStyles.page}>
                   <div className={ocrStyles.pageHeader}>
                     <strong>Líneas del documento</strong>
-                    <button className={styles.secondaryButton} type="button" onClick={addLine}>Añadir línea</button>
+                    <button className={styles.secondaryButton} type="button" onClick={addLine} disabled={editsLocked}>Añadir línea</button>
                   </div>
                   {draft.lineItems.length ? draft.lineItems.map((line, index) => (
                     <div className={styles.formGrid} key={`${index}-${line.description}`}>
-                      <label>Descripción<input value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} /></label>
-                      <label>Cantidad<input inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} /></label>
-                      <label>Precio unitario (€)<input inputMode="decimal" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /></label>
-                      <label>Total línea (€)<input inputMode="decimal" value={line.total} onChange={(event) => updateLine(index, "total", event.target.value)} /></label>
-                      <button className={styles.dangerButton} type="button" onClick={() => removeLine(index)}>Quitar línea</button>
+                      <label>Descripción<input disabled={editsLocked} value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} /></label>
+                      <label>Cantidad<input disabled={editsLocked} inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} /></label>
+                      <label>Precio unitario (€)<input disabled={editsLocked} inputMode="decimal" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /></label>
+                      <label>Total línea (€)<input disabled={editsLocked} inputMode="decimal" value={line.total} onChange={(event) => updateLine(index, "total", event.target.value)} /></label>
+                      <button className={styles.dangerButton} type="button" onClick={() => removeLine(index)} disabled={editsLocked}>Quitar línea</button>
                     </div>
                   )) : <p className={styles.muted}>No se han detectado líneas. Añádelas sólo si puedes comprobarlas en el original.</p>}
                 </div>

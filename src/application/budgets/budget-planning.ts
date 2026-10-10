@@ -180,6 +180,7 @@ function isAutomaticFactors(value: unknown): value is BudgetAutomaticFactors {
 function isBudgetItem(value: unknown): value is BudgetItem {
   if (!value || typeof value !== "object") return false;
   const item = value as Partial<BudgetItem>;
+  const historyMonths = item.historyMonths;
   return isNullableString(item.id)
     && typeof item.persisted === "boolean"
     && isNullableString(item.categoryId)
@@ -190,16 +191,84 @@ function isBudgetItem(value: unknown): value is BudgetItem {
     && isSafeInteger(item.effectiveAmountCents) && item.effectiveAmountCents >= 0
     && isSafeInteger(item.actualExpenseCents) && item.actualExpenseCents >= 0
     && isSafeInteger(item.remainingCents)
+    // Validate relationships as well as primitive types. An API payload
+    // whose amounts disagree must not render a plausible but false margin.
+    && item.effectiveAmountCents === (item.manualAmountCents ?? item.automaticAmountCents)
+    && Number.isSafeInteger(item.effectiveAmountCents - item.actualExpenseCents)
+    && item.remainingCents === item.effectiveAmountCents - item.actualExpenseCents
+    && (item.status !== "over" || item.remainingCents < 0)
+    && (item.status !== "on_track" || item.remainingCents >= 0)
     && (item.progressBps === null || isSafeInteger(item.progressBps))
     && ["empty", "unfunded", "on_track", "over"].includes(item.status ?? "")
     && typeof item.automaticExplanation === "string"
     && (item.automaticFactors === undefined || item.automaticFactors === null || isAutomaticFactors(item.automaticFactors))
-    && Array.isArray(item.historyMonths)
-    && item.historyMonths.every((row) =>
+    && Array.isArray(historyMonths)
+    && historyMonths.every((row) =>
       Boolean(row) && typeof row === "object"
       && typeof row.month === "string" && MONTH.test(row.month)
       && isSafeInteger(row.expenseCents) && row.expenseCents >= 0,
+    )
+    // Duplicate history months break React keys and visually double-count
+    // periods in comparisons; their order must also be chronological.
+    && historyMonths.every((row, index) =>
+      index === 0 || historyMonths[index - 1].month < row.month
     );
+}
+
+function isBudgetPlanningContext(value: unknown, snapshot: BudgetSnapshot): value is BudgetPlanningContext {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const planning = value as Partial<BudgetPlanningContext>;
+  const range = budgetPlanningRange(snapshot.month);
+  const selected = snapshot.total.manualAmountCents;
+  const difference = selected === null ? null : selected - snapshot.total.automaticAmountCents;
+  const savings = planning.averageIncomeCents !== null
+    && planning.averageIncomeCents !== undefined
+    && selected !== null
+    && planning.averageIncomeCents > 0
+    ? planning.averageIncomeCents - selected : null;
+  const incomeMonths = planning.incomeHistoryMonths;
+  return planning.contractVersion === 1
+    && ["ready", "unavailable", "mismatch"].includes(planning.state ?? "")
+    && ["ready", "needs_limit", "no_income", "unavailable", "mismatch"].includes(planning.objectiveState ?? "")
+    && planning.historyDateFrom === range.dateFrom
+    && planning.historyDateTo === range.dateTo
+    && planning.historicalBaselineCents === snapshot.total.automaticAmountCents
+    && planning.selectedLimitCents === selected
+    && planning.trackingReferenceCents === snapshot.total.effectiveAmountCents
+    && planning.differenceFromBaselineCents === difference
+    && (planning.averageIncomeCents === null ||
+      (isSafeInteger(planning.averageIncomeCents) && planning.averageIncomeCents >= 0))
+    && (planning.targetSavingsCents === null || isSafeInteger(planning.targetSavingsCents))
+    && (planning.targetSavingsRateBps === null || isSafeInteger(planning.targetSavingsRateBps))
+    && (planning.objectiveState !== "ready" ||
+      (planning.state === "ready"
+        && savings !== null
+        && Number.isSafeInteger(savings)
+        && planning.targetSavingsCents === savings
+        && planning.targetSavingsRateBps === Math.round((savings / planning.averageIncomeCents!) * 10_000)))
+    && Array.isArray(incomeMonths)
+    && incomeMonths.every((row, index) =>
+      Boolean(row)
+      && typeof row.month === "string"
+      && row.month === range.months[index]
+      && isSafeInteger(row.incomeCents) && row.incomeCents >= 0
+    )
+    && incomeMonths.length <= range.months.length
+    // A "ready" savings forecast requires every monthly income input, and
+    // its displayed mean must be derivable from those actual source rows.
+    && (planning.state !== "ready" || (
+      incomeMonths.length === range.months.length
+      && planning.averageIncomeCents === safeAverage(incomeMonths.map((row) => row.incomeCents))
+    ))
+    && (planning.objectiveState === "ready" || (
+      planning.targetSavingsCents === null
+      && planning.targetSavingsRateBps === null
+    ))
+    && planning.principles?.historicalBaseline === "axioma_52_budget_reference"
+    && planning.principles?.chosenLimit === "manual_total_budget_only"
+    && planning.principles?.objective === "average_income_minus_chosen_limit"
+    && planning.principles?.incomeSource === "financial_monthly_series"
+    && planning.principles?.financialAdvice === false;
 }
 
 export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
@@ -212,16 +281,25 @@ export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
     && snapshot.monthStart === `${snapshot.month}-01`
     && snapshot.monthEnd === monthEnd(snapshot.month)
     && isBudgetItem(snapshot.total)
+    && snapshot.total.categoryId === null
     && Array.isArray(snapshot.categories) && snapshot.categories.every(isBudgetItem)
+    // A category can appear only once within a budget snapshot. Otherwise
+    // the same spending is presented twice and React may reuse stale cards.
+    && snapshot.categories.every((item) => typeof item.categoryId === "string" && item.categoryId.length > 0)
+    && new Set(snapshot.categories.map((item) => item.categoryId)).size === snapshot.categories.length
+    && (snapshot.planning === undefined || isBudgetPlanningContext(snapshot.planning, snapshot as BudgetSnapshot))
     && principles.bankSource === "read_only"
     && principles.actualSource === "financial_transaction_allocation_facts"
     && principles.recommendation === "axioma_52_weighted_history_seasonality_trend_recurrence_floor"
-    && typeof principles.transfersConsumeBudget === "boolean"
-    && typeof principles.confirmedDuplicatesConsumeBudget === "boolean"
-    && typeof principles.manualAnalyticsExclusionsRespected === "boolean"
+    // These are product invariants, not configurable preferences. Accepting
+    // opposite booleans would silently turn internal transfers, duplicates
+    // or analytics exclusions into spend while still showing an Axioma badge.
+    && principles.transfersConsumeBudget === false
+    && principles.confirmedDuplicatesConsumeBudget === false
+    && principles.manualAnalyticsExclusionsRespected === true
     && typeof principles.refundsNetAgainstExpense === "boolean"
-    && typeof principles.manualOverrideWins === "boolean"
-    && typeof principles.parentCategoryIncludesDescendants === "boolean";
+    && principles.manualOverrideWins === true
+    && principles.parentCategoryIncludesDescendants === true;
 }
 
 function readMonthlySeries(

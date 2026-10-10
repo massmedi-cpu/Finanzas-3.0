@@ -551,3 +551,205 @@ test("AUD-E2E-REC-001 · todos los ciclos omitidos son visibles aun sin marca de
   await history.locator("summary").click();
   await expect(history.getByText("3 ciclos no observados")).toBeVisible();
 });
+
+
+test("REC-REC-002 · GET 503 no inventa cero ni permite operar; reintento recupera sin escritura", async ({ page }) => {
+  let reads = 0;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409, body: "unexpected_write" });
+    }
+    reads += 1;
+    await route.fulfill({
+      status: reads === 1 ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(reads === 1 ? { code: "source_unavailable" } : baseSnapshot),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar el listado");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["—", "—", "—", "—"]);
+  await expect(page.getByText(/No se puede confirmar cuántos patrones existen/)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmar recurrencia" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("2");
+  expect(reads).toBe(2);
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-003 · GET 200 con contrato corrupto no inventa ausencia; cero válido sí se representa", async ({ page }) => {
+  let reads = 0;
+  await page.route("**/api/recurrences*", async (route) => {
+    reads += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(reads === 1
+        ? { ...baseSnapshot, candidateCount: 0 }
+        : { ...baseSnapshot, candidateCount: 0, candidates: [] }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByRole("status")).toContainText("Patrones recalculados");
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong")).toHaveText(["0", "0", "0", "0"]);
+  await expect(page.getByText(/No hay patrones con al menos 3 apariciones/)).toBeVisible();
+});
+
+test("REC-REC-004 · lectura de actualización fallida oculta candidatos obsoletos y permite recuperación", async ({ page }) => {
+  let reads = 0;
+  const writes: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409 });
+    }
+    reads += 1;
+    await route.fulfill({
+      status: reads === 2 ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(reads === 2 ? { code: "source_unavailable" } : baseSnapshot),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("group", { name: "Resumen de confianza" }).locator("strong").first()).toHaveText("—");
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  expect(writes).toEqual([]);
+  expect(reads).toBe(3);
+});
+
+test("REC-REC-005 · POST incierto no afirma reversión ni repite la decisión automáticamente", async ({ page }) => {
+  const methods: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") return route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot),
+    });
+    methods.push(method);
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ code: "persistence_gateway_failed" }),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  const card = page.locator("article").filter({ hasText: "supermercado mensual" });
+  await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
+  await expect(page.getByRole("alert")).toContainText("No podemos confirmar si la decisión se guardó");
+  await expect(page.getByRole("alert")).toContainText("comprueba su estado antes de repetirla");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia confirmada" })).toHaveCount(0);
+  expect(methods).toEqual(["POST"]);
+});
+
+test("REC-REC-006 · PATCH incierto no afirma que se haya archivado", async ({ page }) => {
+  const methods: string[] = [];
+  await page.route("**/api/recurrences*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") return route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot),
+    });
+    methods.push(method);
+    await route.fulfill({ status: 503, contentType: "application/json", body: "{}" });
+  });
+  await page.goto("/recurrences");
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  await history.getByRole("button", { name: "Archivar" }).click();
+  await expect(page.getByRole("alert")).toContainText("No podemos confirmar si el estado cambió");
+  await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
+  expect(methods).toEqual(["PATCH"]);
+});
+
+
+for (const theme of ["light", "dark"] as const) {
+  test(`REC-REC-007 · el enlace para ver el impacto usa colores de éxito legibles en tema ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    const writes: Array<Record<string, unknown>> = [];
+    await mockRecurrenceApi(page, writes);
+    await page.goto(`/recurrences?source=forecast&forecastDateFrom=2026-09-07&forecastDateTo=2026-09-08&forecastAccountId=${forecastAccountId}`);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const card = page.locator("article").filter({ hasText: "supermercado mensual" });
+    await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
+    const link = page.getByRole("link", { name: "Actualizar y ver impacto en Previsión" });
+    await expect(link).toBeVisible();
+    const colors = await link.evaluate((node) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-success-soft)";
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        actual: getComputedStyle(node).color,
+        expected,
+        background: getComputedStyle(node).backgroundColor,
+      };
+    });
+    expect(colors.actual).toBe(colors.expected);
+    expect(colors.background).not.toBe("rgb(154, 235, 186)");
+    expect(writes).toHaveLength(1);
+  });
+}
+
+
+test("REC-REC-008 · los estados bancarios se presentan en español y las próximas fechas nunca retroceden", async ({ page }) => {
+  const writes: string[] = [];
+  let reads = 0;
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409 });
+    }
+    reads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(reads === 1
+        ? { ...baseSnapshot, candidates: baseSnapshot.candidates.map((c, i) => i === 0 ? { ...c, nextEstimatedDate: "2026-09-06" } : c) }
+        : baseSnapshot),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  await expect(history.getByText("Estado · Activa", { exact: true })).toBeVisible();
+  await expect(history.getByText("Estado · active", { exact: true })).toHaveCount(0);
+  expect(reads).toBe(2);
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-009 · los candidatos y sus decisiones no desbordan 320-1440 px en claro y oscuro", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockRecurrenceApi(page, writes);
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const width of [320, 360, 375, 390, 768, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const geometry = await page.evaluate(() => {
+        const tiny = [...document.querySelectorAll("main button")].filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && rect.height < 44;
+        }).length;
+        return { overflow: document.documentElement.scrollWidth > window.innerWidth + 1, tiny };
+      });
+      expect(geometry.overflow, `${theme} a ${width}px no debe tener desbordamiento horizontal`).toBe(false);
+      expect(geometry.tiny, `${theme} a ${width}px requiere objetivos táctiles de 44px`).toBe(0);
+    }
+  }
+  expect(writes).toEqual([]);
+});

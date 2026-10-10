@@ -122,6 +122,20 @@ async function requestComparison(input: ComparisonSelectionInput, signal: AbortS
   return payload;
 }
 
+function comparisonCoverageReason(primary: PeriodCoverage, reference: PeriodCoverage): string | null {
+  const describe = (coverage: PeriodCoverage, label: string) => {
+    if (periodComparisonIsReliable(coverage)) return null;
+    if (coverage.state === "partial") {
+      return `${label}: cobertura parcial${coverage.throughDate ? ` · datos hasta ${formatDate(coverage.throughDate)}` : ""}`;
+    }
+    return coverage.state === "none"
+      ? `${label}: sin cobertura bancaria confirmada`
+      : `${label}: cobertura bancaria desconocida`;
+  };
+  return [describe(primary, "Periodo principal"), describe(reference, "Periodo de referencia")]
+    .filter((item): item is string => Boolean(item)).join(" · ") || null;
+}
+
 function metricTone(deltaCents: number, positiveIsGood: boolean) {
   if (deltaCents === 0) return styles.neutral;
   return (deltaCents > 0) === positiveIsGood ? styles.good : styles.bad;
@@ -133,23 +147,20 @@ function MetricCard({
   positiveIsGood,
   footer,
   coverage,
+  referenceCoverage,
 }: {
   label: string;
   metric: ComparisonMoneyMetric;
   positiveIsGood: boolean;
   footer?: ReactNode;
   coverage: PeriodCoverage;
+  referenceCoverage: PeriodCoverage;
 }) {
-  const comparable = periodComparisonIsReliable(coverage);
+  const comparable = periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage);
   const observed = periodHasObservedData(coverage);
+  const referenceObserved = periodHasObservedData(referenceCoverage);
   const tone = comparable ? metricTone(metric.deltaCents, positiveIsGood) : styles.neutral;
-  const coverageDetail = coverage.state === "partial"
-    ? `Importe principal parcial · datos hasta ${formatDate(coverage.throughDate!)}`
-    : coverage.state === "none"
-      ? "Periodo principal sin cobertura bancaria confirmada"
-      : coverage.state === "unknown"
-        ? "Cobertura bancaria del periodo principal desconocida"
-        : null;
+  const coverageDetail = comparisonCoverageReason(coverage, referenceCoverage);
 
   return (
     <article className={styles.metricCard}>
@@ -158,7 +169,7 @@ function MetricCard({
         <strong className={tone}>{comparable ? signedMoney(metric.deltaCents) : "Comparación incompleta"}</strong>
       </div>
       <strong className={styles.metricValue}>{observed ? formatMoney(metric.primaryCents) : "—"}</strong>
-      <span className={styles.metricReference}>Referencia {formatMoney(metric.referenceCents)}</span>
+      <span className={styles.metricReference}>Referencia {referenceObserved ? formatMoney(metric.referenceCents) : "Sin dato"}</span>
       <div className={styles.metricDetails}>
         {comparable ? (
           <>
@@ -180,22 +191,27 @@ function NetSavingsMetric({
   rate,
   rateDelta,
   coverage,
+  referenceCoverage,
 }: {
   net: ComparisonMoneyMetric;
   savings: ComparisonMoneyMetric;
   rate: number | null;
   rateDelta: number | null;
   coverage: PeriodCoverage;
+  referenceCoverage: PeriodCoverage;
 }) {
   const equivalent = net.primaryCents === savings.primaryCents
     && net.referenceCents === savings.referenceCents;
   const observed = periodHasObservedData(coverage);
-  const comparable = periodComparisonIsReliable(coverage);
-  const coverageLabel = coverage.state === "unknown"
-    ? "Cobertura bancaria desconocida"
-    : coverage.state === "none"
-      ? "Sin movimientos confirmados en el periodo"
-      : "Importes parciales, comparación incompleta";
+  const referenceObserved = periodHasObservedData(referenceCoverage);
+  const comparable = periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage);
+  const coverageLabel = periodComparisonIsReliable(coverage)
+    ? comparisonCoverageReason(coverage, referenceCoverage) ?? "Comparación incompleta"
+    : coverage.state === "unknown"
+      ? "Cobertura bancaria desconocida"
+      : coverage.state === "none"
+        ? "Sin movimientos confirmados en el periodo"
+        : "Importes parciales, comparación incompleta";
 
   return (
     <article className={`${styles.metricCard} ${styles.netSavingsCard}`} aria-label="Neto operativo y ahorro">
@@ -209,16 +225,16 @@ function NetSavingsMetric({
         <div>
           <span>Neto operativo</span>
           <strong className={styles.metricValue}>{observed ? formatMoney(net.primaryCents) : "—"}</strong>
-          <small>Referencia {formatMoney(net.referenceCents)}</small>
+          <small>Referencia {referenceObserved ? formatMoney(net.referenceCents) : "Sin dato"}</small>
           {comparable ? <small>{formatMoney(net.primaryDailyCents)}/día · {signedMoney(net.dailyDeltaCents)}</small> : null}
         </div>
-        {equivalent ? (
+        {equivalent && comparable ? (
           <p>El ahorro coincide con el neto operativo en ambos periodos; no se repite el mismo importe.</p>
         ) : (
           <div>
             <span>Ahorro · cálculo propio</span>
             <strong className={styles.metricValue}>{observed ? formatMoney(savings.primaryCents) : "—"}</strong>
-            <small>Referencia {formatMoney(savings.referenceCents)}</small>
+            <small>Referencia {referenceObserved ? formatMoney(savings.referenceCents) : "Sin dato"}</small>
             {comparable ? <small>Cambio del ahorro {signedMoney(savings.deltaCents)} · {formatMoney(savings.primaryDailyCents)}/día</small> : null}
           </div>
         )}
@@ -339,7 +355,12 @@ function DriverPanel({
   );
 }
 
-function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverage) {
+function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverage, referenceCoverage: PeriodCoverage) {
+  // A covered principal period alone is not a valid comparison: the reference
+  // may predate the first imported banking row or carry a sync incident.
+  if (periodComparisonIsReliable(coverage) && !periodComparisonIsReliable(referenceCoverage)) {
+    return `${comparisonCoverageReason(coverage, referenceCoverage)}. No atribuimos cambios a mejora ni empeoramiento.`;
+  }
   if (!periodComparisonIsReliable(coverage)) {
     if (coverage.state === "unknown") {
       return "Cobertura bancaria desconocida: la comparación no permite concluir mejora ni empeoramiento.";
@@ -349,7 +370,19 @@ function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverag
         ? `El periodo principal no tiene cobertura bancaria confirmada: el último movimiento importado es del ${formatDate(coverage.latestMovementDate)}. No interpretamos 0 € como mejora.`
         : "El periodo principal no tiene cobertura bancaria confirmada. No interpretamos 0 € como mejora.";
     }
-    return `Los datos llegan hasta ${formatDate(coverage.throughDate!)} antes del final del periodo principal. La comparación queda incompleta.`;
+    // "partial" is not synonymous with "the latest row predates the end".
+    // It can also mean that the source starts after the requested period,
+    // or that a sync incident prevents certifying complete imports.
+    const selection = snapshot.selection;
+    const missingStart = coverage.fromDate && coverage.fromDate > selection.primaryFrom;
+    const missingEnd = coverage.throughDate && coverage.throughDate < selection.primaryTo;
+    const limitations = [
+      missingStart ? `el histórico comienza el ${formatDate(coverage.fromDate!)} después del inicio del periodo (${formatDate(selection.primaryFrom)})` : null,
+      missingEnd ? `los movimientos disponibles llegan al ${formatDate(coverage.throughDate!)} antes del final (${formatDate(selection.primaryTo)})` : null,
+    ].filter((detail): detail is string => detail !== null);
+    return limitations.length
+      ? `Cobertura bancaria parcial: ${limitations.join("; ")}. No podemos interpretar la variación como una mejora o empeoramiento.`
+      : "La cobertura bancaria del periodo principal no está completamente verificada. No podemos interpretar la variación como una mejora o empeoramiento.";
   }
   const expense = snapshot.metrics.expense;
   if (
@@ -393,19 +426,28 @@ export default function ComparisonClient({
   const freshness = scopedFreshness?.accountId === selectedAccountId
     ? scopedFreshness.value
     : null;
+  // The API may retain stale banking dates while the requested source is
+  // unavailable. Such dates are NOT evidence for this selected account.
+  const verifiedSource = freshness?.available === true ? freshness : null;
   const primaryCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.primaryFrom,
     dateTo: snapshot.selection.primaryTo,
-    earliestMovementDate: freshness?.earliestMovementDate ?? null,
-    latestMovementDate: freshness?.latestMovementDate ?? null,
-    sync: freshness?.sync ?? null,
+    earliestMovementDate: verifiedSource?.earliestMovementDate ?? null,
+    latestMovementDate: verifiedSource?.latestMovementDate ?? null,
+    sync: verifiedSource?.sync ?? null,
+    // A first/last banking date cannot certify a full comparison if the
+    // importing source has no verifiably finished synchronization.
+    requireCompletedSyncEvidence: true,
   }) : null;
   const referenceCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.referenceFrom,
     dateTo: snapshot.selection.referenceTo,
-    earliestMovementDate: freshness?.earliestMovementDate ?? null,
-    latestMovementDate: freshness?.latestMovementDate ?? null,
-    sync: freshness?.sync ?? null,
+    earliestMovementDate: verifiedSource?.earliestMovementDate ?? null,
+    latestMovementDate: verifiedSource?.latestMovementDate ?? null,
+    sync: verifiedSource?.sync ?? null,
+    // A first/last banking date cannot certify a full comparison if the
+    // importing source has no verifiably finished synchronization.
+    requireCompletedSyncEvidence: true,
   }) : null;
   const comparisonReliable = primaryCoverage !== null && referenceCoverage !== null
     && periodComparisonIsReliable(primaryCoverage) && periodComparisonIsReliable(referenceCoverage);
@@ -416,6 +458,7 @@ export default function ComparisonClient({
     if (initialSnapshot) return;
     const controller = new AbortController();
     activeRequest.current = controller;
+    const timeout = setTimeout(() => controller.abort("timeout"), 20_000);
     void requestComparison(fallbackSelection, controller.signal)
       .then((next) => {
         if (!controller.signal.aborted) {
@@ -424,15 +467,21 @@ export default function ComparisonClient({
         }
       })
       .catch((cause) => {
-        if (!controller.signal.aborted) {
+        if (!controller.signal.aborted || controller.signal.reason === "timeout") {
           const code = cause instanceof Error ? cause.message : "comparison_unavailable";
-          setError(userError(code));
+          setError(controller.signal.reason === "timeout"
+            ? "La consulta ha tardado demasiado. Comprueba tu conexión y vuelve a intentar la comparación."
+            : userError(code));
         }
       })
       .finally(() => {
-        if (!controller.signal.aborted) setResolved(true);
+        clearTimeout(timeout);
+        if (!controller.signal.aborted || controller.signal.reason === "timeout") setResolved(true);
       });
-    return () => controller.abort();
+    return () => {
+      clearTimeout(timeout);
+      controller.abort("navigation");
+    };
   }, [
     initialSnapshot,
     fallbackSelection.primaryFrom,
@@ -495,6 +544,7 @@ export default function ComparisonClient({
     activeRequest.current = controller;
     const sequence = requestSequence.current + 1;
     requestSequence.current = sequence;
+    const timeout = setTimeout(() => controller.abort("timeout"), 20_000);
     setPending(true);
     setError(null);
 
@@ -505,10 +555,14 @@ export default function ComparisonClient({
       setForm(formFromSelection(next.selection));
       window.history.replaceState(window.history.state, "", `/compare?${comparisonSelectionSearchParams(next.selection).toString()}`);
     } catch (cause) {
-      if (controller.signal.aborted || requestSequence.current !== sequence) return;
+      if ((controller.signal.aborted && controller.signal.reason !== "timeout")
+        || requestSequence.current !== sequence) return;
       const code = cause instanceof Error ? cause.message : "comparison_unavailable";
-      setError(userError(code));
+      setError(controller.signal.reason === "timeout"
+        ? "La consulta ha tardado demasiado. Comprueba tu conexión y vuelve a intentar la comparación."
+        : userError(code));
     } finally {
+      clearTimeout(timeout);
       if (requestSequence.current === sequence) setPending(false);
     }
   }
@@ -587,11 +641,13 @@ export default function ComparisonClient({
             <section className={styles.insight} aria-labelledby="comparison-insight-title">
               <div>
                 <p>LECTURA PRINCIPAL</p>
-                <h2 id="comparison-insight-title">{comparisonInsight(snapshot, primaryCoverage!)}</h2>
+                <h2 id="comparison-insight-title">{comparisonInsight(snapshot, primaryCoverage!, referenceCoverage!)}</h2>
                 <span>
-                  {primaryCoverage?.state === "covered"
-                    ? "Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración."
-                    : primaryCoverage?.state === "partial"
+                  {primaryCoverage?.state === "covered" && !comparisonReliable
+                    ? comparisonCoverageReason(primaryCoverage, referenceCoverage!)
+                    : primaryCoverage?.state === "covered"
+                      ? "Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración."
+                      : primaryCoverage?.state === "partial"
                       ? `Cobertura bancaria parcial · datos observados hasta ${formatDate(primaryCoverage.throughDate!)}.`
                       : primaryCoverage?.state === "none"
                         ? `Sin cobertura bancaria confirmada en el periodo principal${primaryCoverage.latestMovementDate ? ` · último movimiento ${formatDate(primaryCoverage.latestMovementDate)}` : ""}.`
@@ -605,14 +661,15 @@ export default function ComparisonClient({
             </section>
 
             <section className={styles.metrics} aria-label="Resumen comparativo">
-              <MetricCard label="Ingresos" metric={snapshot.metrics.income} positiveIsGood coverage={primaryCoverage!} />
-              <MetricCard label="Gasto" metric={snapshot.metrics.expense} positiveIsGood={false} coverage={primaryCoverage!} />
+              <MetricCard label="Ingresos" metric={snapshot.metrics.income} positiveIsGood coverage={primaryCoverage!} referenceCoverage={referenceCoverage!} />
+              <MetricCard label="Gasto" metric={snapshot.metrics.expense} positiveIsGood={false} coverage={primaryCoverage!} referenceCoverage={referenceCoverage!} />
               <NetSavingsMetric
                 net={snapshot.metrics.operatingNet}
                 savings={snapshot.metrics.savings}
                 rate={snapshot.savingsRate.primaryBps}
                 rateDelta={snapshot.savingsRate.deltaBps}
                 coverage={primaryCoverage!}
+                referenceCoverage={referenceCoverage!}
               />
             </section>
 

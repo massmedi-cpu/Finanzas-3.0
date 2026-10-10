@@ -64,6 +64,26 @@
   white-space: nowrap;
 }
 
+.retry {
+  min-height: 2.75rem;
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+  background: transparent;
+  font: inherit;
+  font-size: var(--font-helper);
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.retry:hover {
+  background: var(--surface-warning-soft);
+}
+
+.retry:focus-visible {
+  outline: 3px solid var(--color-primary);
+  outline-offset: 3px;
+}
+
 .action:hover {
   border-color: color-mix(in srgb, var(--color-warning) 58%, transparent);
   background: color-mix(in srgb, var(--color-warning) 9%, transparent);

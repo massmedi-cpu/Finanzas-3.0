@@ -72,11 +72,13 @@ async function addPlanningContext(month: string, snapshot: unknown) {
   } catch {
     // Presupuestos sigue disponible si falla únicamente el contexto de ingresos.
   }
-  return assembleBudgetPlanning(budgetSnapshot(snapshot), monthly);
+  return assembleBudgetPlanning(budgetSnapshot(snapshot, month), monthly);
 }
 
-function budgetSnapshot(value: unknown): BudgetSnapshot {
-  if (!isBudgetSnapshot(value)) throw new BudgetSnapshotContractError();
+function budgetSnapshot(value: unknown, expectedMonth: string): BudgetSnapshot {
+  if (!isBudgetSnapshot(value) || value.month !== expectedMonth) {
+    throw new BudgetSnapshotContractError();
+  }
   return value;
 }
 
@@ -136,14 +138,16 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
-    const month = monthValue(searchParams.get("month"));
+    const requestedMonths = searchParams.getAll("month");
+    if (requestedMonths.length !== 1) throw new Error("invalid_budget_month");
+    const month = monthValue(requestedMonths[0]);
     const [budgetResult, monthlyResult] = await callPersistenceGatewayBatch([
       { action: "budget.snapshot", payload: { month } },
       { action: "financial.monthly", payload: monthlyPayload(month) },
     ]);
     if (budgetResult.status === "rejected") throw budgetResult.reason;
     const monthly = monthlyResult.status === "fulfilled" ? monthlyResult.value : null;
-    const result = assembleBudgetPlanning(budgetSnapshot(budgetResult.value), monthly);
+    const result = assembleBudgetPlanning(budgetSnapshot(budgetResult.value, month), monthly);
     return Response.json(result, { headers: HEADERS });
   } catch (error) {
     return apiError(error);

@@ -2,6 +2,7 @@
 // document, independent ground-truth corpus or an OCR precision measurement.
 import assert from "node:assert/strict";
 import { interpretDocumentOcrFinancially } from "../src/domain/document-ocr-financial-interpretation.ts";
+import { pdfNativeTextNeedsVisualOcr } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
 
 function interpret(lines) {
   return interpretDocumentOcrFinancially({
@@ -27,6 +28,135 @@ const cases = [
     field: "totalCents",
     amount: 2300,
     trust: "reliable",
+  },
+  {
+    name: "integer price explicitly followed by euros is financial",
+    lines: ["TOTAL 50 €"],
+    field: "totalCents",
+    amount: 5000,
+    trust: "reliable",
+  },
+  {
+    name: "integer grouped thousands explicitly followed by euros",
+    lines: ["TOTAL 1.234 €"],
+    field: "totalCents",
+    amount: 123400,
+    trust: "reliable",
+  },
+  {
+    name: "integer amount without explicit euros remains ambiguous",
+    lines: ["TOTAL 1234"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "three-digit fractional comma with euro sign is not truncated",
+    lines: ["TOTAL 1,234 €"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "integer euro total separated from its label needs review",
+    lines: ["TOTAL A PAGAR", "200 €"],
+    field: "totalCents",
+    amount: 20000,
+    trust: "doubtful",
+    evidenceLines: ["TOTAL A PAGAR", "200 €"],
+  },
+  {
+    name: "invoice tax percentage without money cannot steal total",
+    lines: ["IVA 21% TOTAL 150 €"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "euro symbol before integer total",
+    lines: ["TOTAL € 50"],
+    field: "totalCents",
+    amount: 5000,
+    trust: "reliable",
+  },
+  {
+    name: "EUR before grouped integer total",
+    lines: ["TOTAL EUR 1.234"],
+    field: "totalCents",
+    amount: 123400,
+    trust: "reliable",
+  },
+  {
+    name: "EUR before a full decimal retains exact cents",
+    lines: ["TOTAL EUR 50,25"],
+    field: "totalCents",
+    amount: 5025,
+    trust: "reliable",
+  },
+  {
+    name: "EUR before three decimal digits does not truncate",
+    lines: ["TOTAL EUR 1,234"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "EUR 21 followed by percent is a rate and not a sum",
+    lines: ["TOTAL EUR 21%"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "IVA cannot borrow the euro-prefixed invoice total",
+    lines: ["IVA 21% TOTAL € 121"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "line-separated total retains amount but requires human review",
+    lines: ["TOTAL A PAGAR", "23,45 €"],
+    field: "totalCents",
+    amount: 2345,
+    trust: "doubtful",
+    evidenceLines: ["TOTAL A PAGAR", "23,45 €"],
+  },
+  {
+    name: "line-separated invoice amount retains value but requires review",
+    lines: ["IMPORTE DE LA FACTURA:", "1.234,56 €"],
+    field: "totalCents",
+    amount: 123456,
+    trust: "doubtful",
+    evidenceLines: ["IMPORTE DE LA FACTURA:", "1.234,56 €"],
+  },
+  {
+    name: "a bare total cannot steal cash received from next line",
+    lines: ["TOTAL", "EFECTIVO 50,00"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "a bare total cannot steal two competing adjacent amounts",
+    lines: ["TOTAL", "12,34 14,00"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "an illegible total cannot borrow a following amount",
+    lines: ["TOTAL NO LEGIBLE", "12,34"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "three-decimal amount following total is not truncated",
+    lines: ["TOTAL", "1,234"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
   },
   {
     name: "tender and change must not displace total",
@@ -68,7 +198,56 @@ const cases = [
     lines: ["BASE 100,00 IVA 21,00 TOTAL 121,00"],
     field: "taxesCents",
     amount: 2100,
-    trust: "doubtful",
+    trust: "reliable",
+  },
+  {
+    name: "tax percentage alone cannot steal a following total",
+    lines: ["IVA 21% TOTAL 121,00"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "decimal percentage alone cannot turn into euros",
+    lines: ["IVA 21,00% TOTAL 121,00"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "dotted IVA label keeps explicitly adjacent euro tax",
+    lines: ["I.V.A. 21,00 TOTAL 121,00"],
+    field: "taxesCents",
+    amount: 2100,
+    trust: "reliable",
+  },
+  {
+    name: "dotted IGIC rate does not become a tax amount",
+    lines: ["I.G.I.C. 7,00% TOTAL 107,00"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "IVA line cannot steal later base and quota",
+    lines: ["IVA 21% BASE 100,00 CUOTA 21,00"],
+    field: "taxesCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "base without amount cannot borrow IVA or total",
+    lines: ["BASE IVA 21,00 TOTAL 121,00"],
+    field: "taxBaseCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "base amount stays within its own labelled segment",
+    lines: ["BASE 100,00 IVA 21,00 TOTAL 121,00"],
+    field: "taxBaseCents",
+    amount: 10000,
+    trust: "reliable",
   },
   {
     name: "total selected from label in a shared tax line",
@@ -163,6 +342,18 @@ const cases = [
   },
 ];
 
+// An invoice can be visually scanned even when its PDF has a selectable
+// page stamp. Test native coverage decisions independently of OCR accuracy.
+const nativeDecisionCases = [
+  { name: "blank scan needs visual OCR", texts: [], visual: true },
+  { name: "selectable page number on scan needs visual OCR", texts: ["Página", "1"], visual: true },
+  { name: "isolated invoice header is not sufficient text", texts: ["FACTURA 2026"], visual: true },
+  { name: "a selectable total alone does not certify the rest of the scanned invoice", texts: ["TOTAL", "23,45"], visual: true },
+  { name: "a tiny native total and invoice number still need visual review", texts: ["Factura 19", "TOTAL 121,00", "IVA"], visual: true },
+  { name: "short but reasonably structured native text is not rescanned needlessly", texts: ["Factura del proveedor", "Base imponible 100,00", "IVA 21% 21,00", "TOTAL 121,00", "Pago por transferencia bancaria"], visual: false },
+  { name: "substantial native invoice text is kept", texts: ["Factura del suministro correspondiente al periodo 01-09 a 30-09", "Proveedor y domicilio fiscal detallados, CIF, condiciones de pago", "Concepto, base imponible e impuestos aplicables para cada producto", "Número de factura emitida, importe", "Datos completos de la operación"], visual: false },
+];
+
 let failures = 0;
 for (const sample of cases) {
   const result = interpret(sample.lines);
@@ -171,6 +362,25 @@ for (const sample of cases) {
     assert.equal(field.value, sample.amount, `${sample.name}: amount`);
     assert.equal(field.trust, sample.trust, `${sample.name}: trust`);
     if (field.value !== null) assert.ok(field.evidence.length, `${sample.name}: original evidence retained`);
+    if (sample.evidenceLines) assert.deepEqual(
+      field.evidence.map((entry) => entry.rawText),
+      sample.evidenceLines,
+      `${sample.name}: both original OCR lines remain attached`,
+    );
+    console.log(`PASS · ${sample.name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL · ${sample.name}`, error.message);
+  }
+}
+
+for (const sample of nativeDecisionCases) {
+  try {
+    const words = sample.texts.map((text, index) => ({
+      text, confidence: 0.98,
+      box: { x: 0.08, y: 0.05 + index * 0.06, width: 0.6, height: 0.04 },
+    }));
+    assert.equal(pdfNativeTextNeedsVisualOcr(words), sample.visual, sample.name);
     console.log(`PASS · ${sample.name}`);
   } catch (error) {
     failures++;
@@ -254,6 +464,47 @@ for (const sample of taxTableCases) {
   }
 }
 
+const dottedTaxCases = [
+  {
+    name: "realistic dotted IVA/IGIC base-rate-quota invoice row",
+    line: "I.V.A / I.G.I.C. (Base Imponible: 100,00) 21% EUR 21,00",
+    expected: [21, 10000, 2100],
+  },
+  {
+    name: "decimal dotted IVA/IGIC rate retains base and quota",
+    line: "I.V.A. / I.G.I.C. (Base Imponible: 200.00) 21.0% EUR 42.00",
+    expected: [21, 20000, 4200],
+  },
+  {
+    name: "invoice total cannot masquerade as dotted IVA quota",
+    line: "I.V.A / I.G.I.C. (Base Imponible: 100,00) 21% TOTAL 121,00",
+    expected: null,
+  },
+];
+for (const sample of dottedTaxCases) {
+  try {
+    const interpretation = interpret([sample.line]);
+    const inferred = interpretation.taxLines.filter((row) =>
+      row.baseCents !== null && row.taxCents !== null && row.ratePercent !== null
+    );
+    if (sample.expected) {
+      assert.equal(inferred.length, 1, sample.name + ": exactly one tax line");
+      assert.deepEqual(
+        [inferred[0].ratePercent, inferred[0].baseCents, inferred[0].taxCents],
+        sample.expected, sample.name,
+      );
+      assert.equal(inferred[0].trust, "doubtful", sample.name + ": inferred column association requires review");
+      assert.deepEqual(inferred[0].evidence.map((e) => e.rawText), [sample.line], sample.name + ": source retained");
+    } else {
+      assert.equal(inferred.length, 0, sample.name + ": total is not a tax quota");
+    }
+    console.log("PASS · " + sample.name);
+  } catch (error) {
+    failures++;
+    console.error("FAIL · " + sample.name, error.message);
+  }
+}
+
 const refund = interpret(["DEVOLUCION PRODUCTO −12,34"]).lines[0];
 try {
   assert.ok(refund, "refund line item retained");
@@ -277,5 +528,5 @@ try {
   console.error("FAIL · three decimal weight does not become unit price", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + 2} PASS`);
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2} PASS`);
 if (failures) process.exitCode = 1;

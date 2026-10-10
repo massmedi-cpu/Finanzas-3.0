@@ -213,6 +213,41 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMov
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
 
+test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await mockAnalysisApi(page, snapshot);
+  let finishedAt: string | null = null;
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2025-01-01",
+        latestMovementDate: "2026-09-15",
+        sync: {
+          status: "success",
+          startedAt: "2026-10-01T09:00:00Z",
+          finishedAt,
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+  await page.goto("/analysis?month=2026-09&range=1m");
+  await expect(page.getByText("Sincronización sin finalización verificada")).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+
+  finishedAt = "2026-10-01T10:00:00Z";
+  await page.reload();
+  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sincronización sin finalización verificada")).toHaveCount(0);
+});
+
 test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
   const snapshot = mockSnapshot();
   const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
@@ -710,12 +745,27 @@ test("REC-COV-011 · las incidencias de sincronización invalidan la cobertura c
   }
   const clean = resolvePeriodCoverage({ ...period, sync: {
     status: "success",
+    startedAt: "2026-10-03T09:00:00Z",
+    finishedAt: "2026-10-03T09:01:00Z",
+    rowsSeen: 300,
     rowsFailed: 0,
     rowsMissing: 0,
     duplicatesDetected: 0,
     warningsCount: 0,
   } });
   expect(clean.state).toBe("covered");
+
+  // A "success" string without evidence of a completed run must not
+  // silently upgrade date bounds into verified financial coverage.
+  for (const sync of [
+    { status: "success", finishedAt: null, rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "not-a-date", rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "2026-10-03T09:01:00Z", rowsSeen: null, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+  ]) {
+    const partial = resolvePeriodCoverage({ ...period, sync });
+    expect(partial.state).toBe("partial");
+    expect(periodComparisonIsReliable(partial)).toBe(false);
+  }
 });
 
 test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {

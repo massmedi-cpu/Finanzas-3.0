@@ -1,6 +1,8 @@
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
 import type { OcrSource, OcrWord } from "../../domain/document-ocr";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
+import { pdfNativeTextNeedsVisualOcr } from "./pdf-native-coverage";
+import { pdfRasterScale } from "./pdf-render-geometry";
 
 const MAX_PAGES = 16;
 const MAX_RENDER_SIDE = 2800;
@@ -74,12 +76,18 @@ async function renderPagePng(
   const canvasFactory = pdf.canvasFactory;
   if (!canvasFactory?.create) throw new Error("ocr_pdf_canvas_unavailable");
   const base = page.getViewport({ scale: 1 });
-  const longest = Math.max(base.width, base.height, 1);
-  const scale = Math.max(0.75, Math.min(MAX_RENDER_SCALE, MAX_RENDER_SIDE / longest));
+  const scale = pdfRasterScale(base.width, base.height, MAX_RENDER_SIDE, MAX_RENDER_SCALE);
   const viewport = page.getViewport({ scale });
+  if (!Number.isFinite(viewport.width) || !Number.isFinite(viewport.height)
+    || viewport.width <= 0 || viewport.height <= 0
+    || viewport.width > MAX_RENDER_SIDE + 1 || viewport.height > MAX_RENDER_SIDE + 1) {
+    throw new Error("ocr_pdf_page_dimensions_invalid");
+  }
   const rendered = canvasFactory.create(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
   try {
-    await page.render({ canvasContext: rendered.context, viewport, canvasFactory }).promise;
+    // PDF.js 6.x requires the actual canvas; canvasContext alone is not a
+    // valid substitute for the render target in Node.
+    await page.render({ canvas: rendered.canvas, canvasContext: rendered.context, viewport, canvasFactory }).promise;
     const png = Buffer.from(rendered.canvas.toBuffer("image/png"));
     if (!png.byteLength) throw new Error("ocr_pdf_render_empty");
     return png;
@@ -120,27 +128,49 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
             pdfjs.Util.transform,
           );
 
-          if (nativeWords.length) {
+          if (!pdfNativeTextNeedsVisualOcr(nativeWords)) {
             nativePageCount += 1;
             pages.push({ pageNumber, words: nativeWords });
             continue;
           }
 
-          const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
-          const visual = await this.imageOcr.extract({
-            bytes: new Uint8Array(png),
-            mimeType: "image/png",
-            originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
-          });
-          const visualWords = visual.pages[0]?.words ?? [];
-          if (visualWords.length) {
-            visualOcrPageCount += 1;
-            pages.push({ pageNumber, words: visualWords });
-          } else {
-            pages.push({ pageNumber, words: [] });
-            warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+          // A PDF with only selectable boilerplate may otherwise bypass OCR
+          // on a fully scanned invoice. Keep the original native words if
+          // the visual pass fails or produces less usable content.
+          try {
+            const png = await renderPagePng(pdf as unknown as PdfWithCanvas, page as unknown as Parameters<typeof renderPagePng>[1]);
+            const visual = await this.imageOcr.extract({
+              bytes: new Uint8Array(png),
+              mimeType: "image/png",
+              originalFileName: `${input.originalFileName}.page-${pageNumber}.png`,
+            });
+            const visualWords = visual.pages[0]?.words ?? [];
+            const nativeChars = nativeWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+            const visualChars = visualWords.reduce((sum, word) => sum + word.text.trim().length, 0);
+            const improved = visualWords.length > 0
+              && (!nativeWords.length || (
+                visualWords.length > nativeWords.length
+                && visualChars >= nativeChars
+              ) || visualChars >= Math.max(nativeChars + 30, nativeChars * 1.5));
+            if (improved) {
+              visualOcrPageCount += 1;
+              pages.push({ pageNumber, words: visualWords });
+              if (nativeWords.length) warnings.push(`pdf_page_sparse_native_recovered:${pageNumber}`);
+            } else if (nativeWords.length) {
+              nativePageCount += 1;
+              pages.push({ pageNumber, words: nativeWords });
+              warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
+            } else {
+              pages.push({ pageNumber, words: [] });
+              warnings.push(`pdf_page_visual_ocr_empty:${pageNumber}`);
+            }
+            for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
+          } catch (error) {
+            if (!nativeWords.length) throw error;
+            nativePageCount += 1;
+            pages.push({ pageNumber, words: nativeWords });
+            warnings.push(`pdf_page_sparse_native_unverified:${pageNumber}`);
           }
-          for (const warning of visual.warnings ?? []) warnings.push(`pdf_page_${pageNumber}:${warning}`);
         } finally {
           try { page.cleanup(); } catch { /* best effort */ }
         }
