@@ -49,7 +49,14 @@ export function resolvePeriodCoverage(input: {
   // after the end of the selected period. Keep the observed figures visible
   // but never label the historic comparison as fully covered.
   if (earliestMovementDate === null) {
-    return { state: "partial", latestMovementDate, throughDate };
+    // Without a first date, a latest movement in a later period gives no
+    // evidence that this historical interval has any imported transactions.
+    // Never turn that uncertainty into a confirmed zero or even a partial
+    // observation. If the latest date itself falls in the interval, at least
+    // one imported banking movement is known and partial is justified.
+    return latestMovementDate > input.dateTo
+      ? { state: "unknown", latestMovementDate, throughDate: null }
+      : { state: "partial", latestMovementDate, throughDate };
   }
   if (latestMovementDate < input.dateTo || earliestMovementDate > input.dateFrom) {
     return { state: "partial", latestMovementDate, throughDate, ...fromDate };
