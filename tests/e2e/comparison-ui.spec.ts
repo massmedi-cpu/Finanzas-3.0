@@ -462,3 +462,31 @@ test("AUD-E2E-CMP-001 · neto y ahorro coincidentes se agrupan sin duplicar impo
   await expect(group).toContainText("Tasa de ahorro");
   await expect(group.getByText("300,00 €", { exact: true })).toHaveCount(1);
 });
+
+test("REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras aunque el periodo principal esté cubierto", async ({ page }) => {
+  await mockComparison(page);
+  // Both ranges have synthetic financial amounts, but the bank only supplies
+  // coverage from late August onwards. The earlier reference is NOT a zero.
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-08-31",
+      latestMovementDate: "2026-09-25",
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const insight = page.locator("section").filter({ has: page.getByText("LECTURA PRINCIPAL", { exact: true }) });
+  await expect(insight).toContainText("Periodo de referencia: sin cobertura bancaria confirmada");
+  await expect(insight).not.toContainText("El gasto diario baja");
+  await expect(insight).not.toContainText("Comparamos importes totales y ritmo diario");
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics).toContainText("Referencia Sin dato");
+  await expect(metrics).not.toContainText("−33,3 %");
+  const categories = page.getByRole("table", { name: /categorías/i });
+  await expect(categories).toContainText("Sin dato");
+  await expect(categories).toContainText("Sin base comparable");
+});
