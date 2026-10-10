@@ -7,8 +7,11 @@ SET LOCAL statement_timeout = '90s';
 INSERT INTO financial_app.workspaces(id,name) VALUES
   ('a0f00000-0000-4000-8000-000000000001','CAPACITY LAB synthetic only');
 SELECT pg_catalog.set_config('financial_app.workspace_id','a0f00000-0000-4000-8000-000000000001',true);
-SET LOCAL ROLE financial_app_gateway;
-
+-- Seed fixture as the local disposable DB owner, not the restricted
+-- financial_app_gateway. RLS checks on each synthetic INSERT can dominate
+-- a 60k-record load and measure ingestion instead of read aggregation.
+-- Schema constraints, FKs and user integrity triggers stay enabled.
+-- Every measured financial SELECT below runs AS financial_app_gateway.
 CREATE TEMP TABLE cap_accounts (tag text PRIMARY KEY, id uuid NOT NULL) ON COMMIT DROP;
 WITH inserted AS (
   INSERT INTO financial_app.accounts(name,type,opening_balance_cents)
