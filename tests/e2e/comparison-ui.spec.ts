@@ -102,6 +102,44 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-SYNC-002 · API legacy sin sync no confirma cobertura bancaria", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: null,
+      latestMovementDate: null,
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Cobertura bancaria sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay fecha de movimiento ni estado de sincronización confirmados.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos bancarios disponibles", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
+});
+
+test("REC-SYNC-003 · fecha legacy sin estado de sync se presenta como observada, no completa", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: null,
+      latestMovementDate: "2026-09-25",
+      sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Último movimiento disponible", { exact: true })).toBeVisible();
+  await expect(page.getByText("El estado de sincronización no está disponible; no se puede confirmar la cobertura completa.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
+});
+
 test("REC-SYNC-001 · sincronización exitosa sin fecha bancaria no significa datos al día", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
