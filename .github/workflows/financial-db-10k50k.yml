@@ -3,6 +3,8 @@ name: Financial SQL 10k-50k disposable benchmark
 on:
   pull_request:
     branches:
+      - chat/twenty-one-routes-responsive-shell-20261010
+      - chat/integrated-b-e-c-visual-20261010
       - chat/retry-bank-freshness-status-20261010
       - chat/postgres-financial-10k50k-lab-20261010
     paths:
