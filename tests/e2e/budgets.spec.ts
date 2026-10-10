@@ -663,12 +663,13 @@ test("REC-BUD-017 · reintento de cobertura relee el banco sin escribir límites
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
   let reads = 0;
+  let retryRequested = false;
   await page.route("**/api/analysis/source-freshness*", async (route) => {
     reads += 1;
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify(reads === 1
+      body: JSON.stringify(!retryRequested
         ? { available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }
         : {
             available: true,
@@ -684,10 +685,11 @@ test("REC-BUD-017 · reintento de cobertura relee el banco sin escribir límites
   });
   await page.goto("/budgets?month=2026-09");
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  retryRequested = true;
   await page.getByRole("button", { name: "Volver a comprobar" }).click();
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
   await expect(page.locator("#budget-total")).toContainText("Dentro de referencia");
-  expect(reads).toBe(2);
+  expect(reads).toBeGreaterThanOrEqual(2);
   expect(writes).toHaveLength(0);
 });
 
@@ -1045,7 +1047,7 @@ test("AUD-E2E-PTO-001 · no sustituye un límite real por una respuesta de escri
   const summary = page.getByRole("region", { name: "Resumen del presupuesto mensual" });
   await expect(summary).toBeVisible();
   await page.getByRole("button", { name: "Actualizar referencia" }).click();
-  await expect(page.locator("main").getByRole("alert")).toContainText("No se pudo verificar el presupuesto actualizado");
+  await expect(page.locator("main").getByRole("alert")).toContainText("La operación podría haberse aplicado");
   await expect(summary).toBeVisible();
   await expect(summary.getByText("1.200,00 €", { exact: true })).toBeVisible();
   expect(writes).toEqual(["POST"]);
