@@ -645,6 +645,8 @@ test("REC-BUD-014 · un 503 tras guardar no se anuncia como escritura descartada
   await expect(page.locator("main").getByRole("alert").first()).toContainText("No se ha podido confirmar si el cambio se guardó");
   await expect(page.locator("main").getByRole("alert").first()).toContainText("Recarga el presupuesto");
   await expect(page.locator("main")).not.toContainText("no se ha guardado ningún cambio");
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" })).toBeVisible();
   expect(attempts).toBe(1);
 });
 
@@ -667,8 +669,77 @@ test("REC-BUD-015 · una desconexión tras PATCH no inventa un rollback", async 
   await expect(page.locator("main").getByRole("alert").first())
     .toContainText("recarga y compruébalo");
   await expect(page.locator("main")).not.toContainText("no se ha guardado ningún cambio");
-  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" })).toBeVisible();
   expect(writes).toBe(1);
+});
+
+test("REC-BUD-021 · escritura posiblemente aplicada solo se desbloquea tras readback", async ({ page }) => {
+  let saved = false;
+  let writes = 0;
+  let reads = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      reads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(saved ? snapshotWithTotalManual(85000) : baseSnapshot),
+      });
+      return;
+    }
+    writes += 1;
+    saved = true; // Persistencia simulada antes de perder la respuesta de PATCH.
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ error: "persistence_failed", code: "gateway_timeout" }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+
+  const verify = page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" });
+  await expect(verify).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
+  expect(writes).toBe(1);
+  await verify.click();
+  await expect(verify).toHaveCount(0);
+  await expect(page.locator("#budget-total").getByText("Límite elegido").locator("..").locator("strong"))
+    .toHaveText("850,00 €");
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toHaveCount(0);
+  expect(reads).toBeGreaterThanOrEqual(2);
+  expect(writes).toBe(1);
+});
+
+test("REC-BUD-022 · error de validación 400 conserva la posibilidad de corregir", async ({ page }) => {
+  let writes = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    writes += 1;
+    if (writes === 1) {
+      await route.fulfill({
+        status: 400, contentType: "application/json",
+        body: JSON.stringify({ code: "invalid_budget_manual_amount", error: "invalid_budget_manual_amount" }),
+      });
+    } else {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotWithTotalManual(90000)) });
+    }
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("900,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.locator("main").getByRole("alert").first()).toContainText("importe positivo o cero");
+  await expect(page.getByRole("button", { name: "Comprobar resultado sin volver a guardar" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.locator("#budget-total").getByText("Límite elegido").locator("..").locator("strong"))
+    .toHaveText("900,00 €");
+  expect(writes).toBe(2);
 });
 
 test("REC-BUD-016 · advertencia de cobertura con color semántico en claro y oscuro", async ({ page }) => {
