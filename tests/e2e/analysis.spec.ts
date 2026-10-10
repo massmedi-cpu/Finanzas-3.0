@@ -751,7 +751,9 @@ test("REC-COV-009 · cambiar de cuenta invalida inmediatamente la cobertura ante
     await expect.poll(() => scopedRequestSeen).toBe(true);
     // While the new scoped request is pending, the old account's complete
     // bounds cannot certify the selected account's comparisons.
-    await expect(comparisons.getByText("Comparación incompleta", { exact: true })).toHaveCount(4);
+    // A pending account-scoped freshness fetch has no trusted banking bounds.
+    // The correct UI state is UNKNOWN, not a comparison approved from account A.
+    await expect(comparisons.getByText("Cobertura desconocida · comparación no disponible", { exact: true })).toHaveCount(4);
   } finally {
     releaseScopedRequest?.();
   }

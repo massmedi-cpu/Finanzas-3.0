@@ -447,7 +447,7 @@ test("QA-05 · Inicio no atribuye al día de consulta un saldo agregado con fech
 });
 
 
-test("QA-11 · las gráficas no dibujan barras positivas para valores exactamente cero", async ({ page }) => {
+test("QA-11 · una mensualidad cero sin cobertura no se representa como gasto cero confirmado", async ({ page }) => {
   await mockInicio(page);
 
   await page.route("**/api/dashboard?**", async (route) => {
@@ -484,19 +484,15 @@ test("QA-11 · las gráficas no dibujan barras positivas para valores exactament
   await page.goto("/");
 
   const incomeExpense = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
-  const zeroIncomeExpenseBars = incomeExpense.locator('[data-zero="true"]');
-  await expect(zeroIncomeExpenseBars).toHaveCount(2);
-  for (const bar of await zeroIncomeExpenseBars.all()) {
-    await expect(bar).toHaveCSS("height", "0px");
-    await expect(bar).toHaveCSS("min-height", "0px");
-  }
+  // No imported movement is known inside August, so the all-zero row is not
+  // proof that August was a complete zero. Both bars stay unconfirmed.
+  await expect(incomeExpense.locator('[data-zero="true"]')).toHaveCount(0);
+  await expect(incomeExpense.locator('[data-series-missing="true"]')).toHaveCount(2);
 
   await page.getByRole("button", { name: "Flujo neto" }).click();
   const netChart = page.getByRole("group", { name: "Flujo neto por mes" });
-  const zeroNetBar = netChart.locator('[data-zero="true"]');
-  await expect(zeroNetBar).toHaveCount(1);
-  await expect(zeroNetBar).toHaveCSS("height", "0px");
-  await expect(zeroNetBar).toHaveCSS("min-height", "0px");
+  await expect(netChart.locator('[data-zero="true"]')).toHaveCount(0);
+  await expect(netChart.locator('[data-series-missing="true"]')).toHaveCount(1);
 });
 
 
@@ -555,7 +551,8 @@ test("QA-12 · Flujo neto sitúa positivos y negativos a lados opuestos de cero"
   expect(positiveBox.y + positiveBox.height).toBeLessThanOrEqual(baseline + 2);
   expect(negativeBox.y).toBeGreaterThanOrEqual(baseline - 2);
   expect(negativeBox.y + negativeBox.height).toBeGreaterThan(baseline);
-  await expect(zero).toHaveCSS("height", "0px");
+  await expect(zero).toHaveCount(0);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(1);
 });
 
 test("QA-13 · Saldo explica una serie sin cuentas en lugar de dibujar ceros falsos", async ({ page }) => {
@@ -945,6 +942,20 @@ for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "incon
   });
 }
 
+
+test("REC-HOME-003 · importes históricos no cero siguen visibles pero no se certifican completos", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  await expect(chart).toBeVisible();
+  // The gateway only provides an upper date bound. Nonzero reconciled monthly
+  // aggregates are observed; a complete bank history is not established.
+  await expect(chart.locator('[data-month-coverage="partial"]')).toHaveCount(3);
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(0);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(0);
+  await expect(chart.getByRole("button", { name: /julio de 2026.*ingresos/i })).toBeVisible();
+  await expect(chart.getByRole("button", { name: /agosto de 2026.*ingresos/i })).toBeVisible();
+});
 
 test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de meses observados", async ({ page }) => {
   await mockInicio(page);

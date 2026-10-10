@@ -158,7 +158,12 @@ export default function HomeEvolution({
     const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
     monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
     const coverage = resolvePeriodCoverage({ dateFrom: row.monthStart, dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo, latestMovementDate });
-    return { ...row, coverage: coverage.state };
+    // A non-zero monthly financial aggregate proves that amounts were imported
+    // for this month even when the legacy freshness endpoint only exposes an
+    // upper date bound. It DOES NOT prove that the month is complete.
+    // Conversely, an all-zero row is never evidence of an observed zero.
+    const hasRecordedAmount = row.incomeCents !== 0 || row.expenseCents !== 0 || row.operatingNetCents !== 0;
+    return { ...row, coverage: coverage.state === "unknown" && hasRecordedAmount ? "partial" as const : coverage.state };
   }), [dateTo, latestMovementDate, rows]);
   // Scale only from observable bars. Values from an unobserved month must not
   // compress every real month into an unreadable strip.

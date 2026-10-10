@@ -74,7 +74,7 @@ function snapshotFor(url: URL, extendedDrivers = false) {
 }
 
 async function mockComparison(page: Page, extendedDrivers = false) {
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, earliestMovementDate: "2026-07-01", latestMovementDate: "2026-09-25", sync: null }),
@@ -102,8 +102,36 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-CMP-002 · la frescura del Comparador cambia con la cuenta bancaria aplicada", async ({ page }) => {
+  const requestedScopes: Array<string | null> = [];
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, async (route) => {
+    const selected = new URL(route.request().url()).searchParams.get("accountId");
+    requestedScopes.push(selected);
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-07-01",
+        latestMovementDate: "2026-09-25",
+        sync: null,
+      }),
+    });
+  });
+
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect.poll(() => requestedScopes.includes(ACCOUNT_ID)).toBe(true);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Tasa de ahorro");
+
+  await page.getByRole("form", { name: "Periodos de comparación" }).getByLabel("Cuenta").selectOption("");
+  await page.getByRole("button", { name: "Comparar periodos" }).click();
+  await expect.poll(() => requestedScopes.includes(null)).toBe(true);
+  await expect(page).not.toHaveURL(/accountId=/);
+});
+
 test("QA-02 · no interpreta como mejora un periodo posterior al último movimiento importado", async ({ page }) => {
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, latestMovementDate: "2026-09-29", sync: null }),
@@ -136,7 +164,7 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
 
 test("REC-CMP-001 · cobertura parcial conserva importes observados pero no inventa causas del cambio", async ({ page }) => {
   await mockComparison(page);
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, latestMovementDate: "2026-09-05", sync: null }),
