@@ -10,6 +10,8 @@ export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
   if (!words.length) return true;
   const text = words.map((word) => word.text).join(" ").replace(/\s+/g, " ").trim();
   const chars = [...text].filter((char) => /[\p{L}\p{N}]/u.test(char)).length;
-  if (/\b(?:total|a pagar|importe factura|base imponible)\b[^\n]{0,75}\d+[.,]\d{2}\b/i.test(text)) return false;
-  return (words.length < 5 && chars < 80) || chars < 35;
+  // A lone selectable TOTAL on a scanned invoice must not prevent OCR of
+  // the body of the page. Text quantity and layout coverage matter more
+  // than recognizing one financially relevant label in a tiny native layer.
+  return chars < 110 && (words.length < 5 || chars < 70);
 }
