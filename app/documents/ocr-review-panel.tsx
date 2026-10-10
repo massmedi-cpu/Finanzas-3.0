@@ -53,10 +53,30 @@ type DocumentDetailForReview = {
   notes?: string;
 };
 
+type ReviewedFinancialEvidence = {
+  type: "ticket" | "invoice" | "other";
+  documentDate: string | null;
+  taxBaseCents: number | null;
+  taxesCents: number | null;
+  totalCents: number | null;
+};
+
 type OcrHistory = {
   runs?: Array<{ id?: string; extractor?: string; extractedAt?: string }>;
-  reviews?: Array<{ revision?: number; ocrRunId?: string | null }>;
+  reviews?: Array<{ revision?: number; ocrRunId?: string | null; reviewedValues?: Partial<ReviewedFinancialEvidence> }>;
 };
+
+function sameReviewedFinancialEvidence(
+  observed: Partial<ReviewedFinancialEvidence> | null | undefined,
+  expected: ReviewedFinancialEvidence | null,
+) {
+  return Boolean(expected && observed
+    && observed.type === expected.type
+    && observed.documentDate === expected.documentDate
+    && observed.taxBaseCents === expected.taxBaseCents
+    && observed.taxesCents === expected.taxesCents
+    && observed.totalCents === expected.totalCents);
+}
 
 const STATUS_LABELS: Record<OcrStatus, string> = {
   ready: "Lectura disponible",
@@ -294,6 +314,7 @@ export function OcrReviewPanel({
   const [confirmationUnverified, setConfirmationUnverified] = useState(false);
   const [checkingConfirmation, setCheckingConfirmation] = useState(false);
   const knownReviewRevision = useRef(0);
+  const pendingFinancialEvidence = useRef<ReviewedFinancialEvidence | null>(null);
   const [openingOriginal, setOpeningOriginal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
@@ -317,6 +338,7 @@ export function OcrReviewPanel({
     setConfirmationUnverified(false);
     setCheckingConfirmation(false);
     knownReviewRevision.current = 0;
+    pendingFinancialEvidence.current = null;
     setError(null);
     setBusy(false);
     setConfirming(false);
@@ -414,6 +436,7 @@ export function OcrReviewPanel({
   async function confirmReview() {
     if (!draft || !ocrRunId || confirming || confirmedRevision !== null || confirmationUnverified || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
     confirmInFlight.current = true;
+    pendingFinancialEvidence.current = null;
     const generation = documentGeneration.current;
     const isCurrent = () => generation === documentGeneration.current
       && activeDocumentId.current === documentId;
@@ -445,6 +468,13 @@ export function OcrReviewPanel({
             totalCents: moneyCents(line.total, `document_line_${index}_total`),
           })),
         notes: draft.notes,
+      };
+      pendingFinancialEvidence.current = {
+        type: payload.type,
+        documentDate: payload.documentDate,
+        taxBaseCents: payload.taxBaseCents,
+        taxesCents: payload.taxesCents,
+        totalCents: payload.totalCents,
       };
       const saved = await readJson(await fetch("/api/documents/ocr-review", {
         method: "PATCH",
@@ -480,6 +510,7 @@ export function OcrReviewPanel({
         throw new Error("ocr_confirmation_unverified");
       }
       knownReviewRevision.current = Math.max(knownReviewRevision.current, revision);
+      pendingFinancialEvidence.current = null;
       setConfirmationUnverified(false);
       setConfirmedRevision(revision);
       actionFeedback.success(feedbackId, `Revisión OCR confirmada · revisión ${revision}.`);
@@ -502,6 +533,7 @@ export function OcrReviewPanel({
         : "No se pudo comprobar si la revisión OCR llegó a guardarse. Consulta su historial antes de volver a confirmar para evitar duplicados.";
       setError(message);
       if (!code.startsWith("invalid_")) setConfirmationUnverified(true);
+      else pendingFinancialEvidence.current = null;
       actionFeedback.error(feedbackId, message);
     } finally {
       if (isCurrent()) {
@@ -525,10 +557,12 @@ export function OcrReviewPanel({
       if (generation !== documentGeneration.current || activeDocumentId.current !== documentId) return;
       const confirmed = (history.reviews ?? [])
         .filter((review) => review.ocrRunId === currentRunId
-          && typeof review.revision === "number" && Number.isSafeInteger(review.revision))
+          && typeof review.revision === "number" && Number.isSafeInteger(review.revision)
+          && sameReviewedFinancialEvidence(review.reviewedValues, pendingFinancialEvidence.current))
         .reduce((max, review) => Math.max(max, review.revision ?? 0), 0);
       if (confirmed > knownReviewRevision.current) {
         knownReviewRevision.current = confirmed;
+        pendingFinancialEvidence.current = null;
         setConfirmedRevision(confirmed);
         setConfirmationUnverified(false);
         setError(null);
@@ -543,7 +577,7 @@ export function OcrReviewPanel({
           }
         }
       } else {
-        setError("El historial no muestra una revisión nueva para esta lectura. La confirmación anterior sigue sin verificarse; solo repítela si has comprobado que es necesario.");
+        setError("El historial no muestra una revisión nueva que coincida con esta lectura y los importes solicitados. La confirmación sigue sin verificarse; solo repítela tras revisar el original y el resultado actual.");
       }
     } catch {
       if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
@@ -662,6 +696,7 @@ export function OcrReviewPanel({
             {checkingConfirmation ? "Comprobando…" : "Comprobar revisión sin volver a guardar"}
           </button>
           <button className={styles.secondaryButton} type="button" onClick={() => {
+            pendingFinancialEvidence.current = null;
             setConfirmationUnverified(false);
             setError("Has desbloqueado la edición después de comprobar el historial. No se puede afirmar que la revisión anterior haya sido revertida.");
           }} disabled={checkingConfirmation || confirming}>
