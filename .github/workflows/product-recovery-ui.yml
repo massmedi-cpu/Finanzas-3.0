@@ -63,6 +63,11 @@ jobs:
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
           --project=chromium-desktop
+      - name: Retain isolated visual screenshots before Playwright clears its output directory
+        if: ${{ always() }}
+        run: |
+          mkdir -p recovery-evidence/visual
+          if [ -d test-results ]; then cp -R test-results/. recovery-evidence/visual/; fi
       - name: Integrated module regressions on the same optimized build
         if: ${{ !cancelled() }}
         run: >-
@@ -85,5 +90,19 @@ jobs:
           tests/e2e/aud-e2e-analysis-light-contrast.spec.ts
           tests/e2e/analysis.spec.ts
           --project=chromium-desktop --project=chromium-mobile
+      - name: Retain integrated module traces and screenshots
+        if: ${{ always() }}
+        run: |
+          mkdir -p recovery-evidence/modules
+          if [ -d test-results ]; then cp -R test-results/. recovery-evidence/modules/; fi
+      - name: Upload isolated synthetic browser evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0, Node.js 24
+        with:
+          name: financial-app-recovery-${{ github.event.pull_request.head.sha }}
+          path: recovery-evidence/
+          if-no-files-found: warn
+          retention-days: 7
       # Synthetic UI results are distinct from authenticated real persistence.
+      # Preserve only data created by local synthetic tests; never upload real banking originals or secrets.
       # No financial originals, secrets or production access are used here.
