@@ -50,7 +50,11 @@ INSERT INTO financial_app.transactions(
 SELECT s.id,'__cap_disposable__::'||r.tag||'-'||r.n,a.id,r.bank_date,
   'CAPACITY SYNTHETIC '||r.n,r.kind,r.amount_cents,NULL,'confirmed','none'
 FROM inserted s
-JOIN cap_rows r ON s.source_row_key=r.tag||'-'||r.n
+-- Join on indexed typed (tag,n) keys instead of recomputing string
+-- concatenation on all 60k fixture rows for each source record.
+JOIN cap_rows r
+  ON r.tag=split_part(s.source_row_key,'-',1)
+ AND r.n=split_part(s.source_row_key,'-',2)::int
 JOIN cap_accounts a ON a.tag=r.tag;
 
 SET CONSTRAINTS ALL IMMEDIATE;
