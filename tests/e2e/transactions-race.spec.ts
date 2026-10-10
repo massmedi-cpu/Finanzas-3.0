@@ -287,3 +287,25 @@ test("REC-TXN-003 · el fallo de facetas no invalida la lista y el reintento sol
   expect(listReads).toBe(1);
   expect(mutations).toEqual([]);
 });
+
+test("REC-TXN-009 · un filtro inválido no convierte un extracto vacío bien leído en histórico sin verificar", async ({ page }) => {
+  await page.route("**/api/transactions**", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") === "facets") {
+      await fulfillFacets(route);
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ rows: [], totalCount: 0, hasMore: false, nextCursor: null }),
+    });
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("0 movimientos", { exact: true }).first()).toBeVisible();
+  await page.locator('input[type="date"]').nth(0).fill("2026-10-20");
+  await page.locator('input[type="date"]').nth(1).fill("2026-10-01");
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
+  await expect(page.locator("main").getByRole("alert")).toContainText("La fecha inicial no puede ser posterior");
+  await expect(page.getByLabel("Resumen del listado").locator("div").first().locator("strong")).toHaveText("0");
+  await expect(page.getByText("Histórico sin verificar", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toBeVisible();
+});
