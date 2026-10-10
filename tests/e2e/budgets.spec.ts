@@ -954,6 +954,27 @@ test("REC-BUD-031 · rechaza una proyección de ahorro alterada o de otros meses
   expect(writes).toBe(0);
 });
 
+test("REC-BUD-032 · los indicadores Axioma no pueden aprobar reglas bancarias invertidas", async ({ page }) => {
+  const contradictions = [
+    { transfersConsumeBudget: true },
+    { confirmedDuplicatesConsumeBudget: true },
+    { manualAnalyticsExclusionsRespected: false },
+    { manualOverrideWins: false },
+    { parentCategoryIncludesDescendants: false },
+  ];
+  for (const opposite of contradictions) {
+    const malformed = structuredClone(baseSnapshot);
+    Object.assign(malformed.principles, opposite);
+    await page.route("**/api/budgets*", (route) => route.fulfill({
+      status: 200, contentType: "application/json", body: JSON.stringify(malformed),
+    }));
+    await page.goto("/budgets?month=2026-09");
+    await expect(page.getByRole("heading", { name: /No se ha podido cargar/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toHaveCount(0);
+    await page.unroute("**/api/budgets*");
+  }
+});
+
 test("REC-BUD-026 · dos clics sincronizados no emiten escrituras duplicadas", async ({ page }) => {
   let writes = 0;
   let releaseWrite: (() => void) | null = null;
