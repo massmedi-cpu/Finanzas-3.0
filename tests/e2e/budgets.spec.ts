@@ -584,6 +584,30 @@ test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-BUD-014 · un 503 tras guardar no se anuncia como escritura descartada", async ({ page }) => {
+  let attempts = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(baseSnapshot) });
+      return;
+    }
+    attempts += 1;
+    // Simula un fallo de respuesta después de haber recibido la escritura.
+    await route.fulfill({
+      status: 503, contentType: "application/json",
+      body: JSON.stringify({ error: "persistence_failed", code: "gateway_timeout" }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("850,00");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.locator("main").getByRole("alert").first()).toContainText("No se ha podido confirmar si el cambio se guardó");
+  await expect(page.locator("main").getByRole("alert").first()).toContainText("Recarga el presupuesto");
+  await expect(page.locator("main")).not.toContainText("no se ha guardado ningún cambio");
+  expect(attempts).toBe(1);
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
