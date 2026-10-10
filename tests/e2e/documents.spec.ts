@@ -383,11 +383,16 @@ test("REC-OCR-034 · dos clics antes del render disparan una sola lectura", asyn
   });
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
-  await page.evaluate(() => {
-    const buttons = [...document.querySelectorAll("button")];
-    const trigger = buttons.find((button) => button.textContent?.trim() === "Analizar documento");
-    trigger?.click();
-    trigger?.click();
+  // On mobile the OCR panel may mount one frame after the document button
+  // resolves. Require the real, enabled target instead of silently clicking
+  // an optional element that is not present yet.
+  const ocrTrigger = page.getByTestId("ocr-review-panel").getByRole("button", { name: "Analizar documento" });
+  await expect(ocrTrigger).toBeEnabled();
+  // Both clicks happen in one browser task, before React can rerender.
+  // The synchronous in-flight ref must suppress the second network request.
+  await ocrTrigger.evaluate((button) => {
+    (button as HTMLButtonElement).click();
+    (button as HTMLButtonElement).click();
   });
   await expect.poll(() => ocrCalls).toBe(1);
   await expect(page.getByRole("button", { name: "Analizando…" })).toBeDisabled();
