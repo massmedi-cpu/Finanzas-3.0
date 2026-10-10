@@ -257,3 +257,69 @@ test("structured receipt review verifies totals above one thousand euros", () =>
     lineTotalMatchesDocumentTotal: true,
   });
 });
+
+
+test("REC-OCR-012 · refunds retain negative cents, currency formatting, and reject truncated numeric tokens", () => {
+  for (const raw of ["-3,50", "−3,50", "–3,50", "-3.50", "−3,50 €"]) {
+    expect(isReceiptMoney(raw)).toBe(true);
+    expect(receiptMoneyCents(raw)).toBe(-350);
+    expect(normalizeReceiptMoneyEs(raw)).toBe("-3,50");
+  }
+  expect(receiptMoneyCents("−1.234,56")).toBe(-123456);
+  expect(normalizeReceiptMoneyEs("–1,234.56")).toBe("-1.234,56");
+  expect(normalizeReceiptMoneyEs("−0,00")).toBe("0,00");
+  for (const invalid of ["−1,234", "−1.234,567", "−-3,50", "–3,5"]) {
+    expect(isReceiptMoney(invalid)).toBe(false);
+    expect(receiptMoneyCents(invalid)).toBeNull();
+  }
+});
+
+test("REC-OCR-013 · receipt reconciliation includes negative product refunds without changing raw text", () => {
+  const page = reconstructOcrPage(1, [
+    word("DESCRIPCION", 0.14, 0.25, 0.14),
+    word("UDS", 0.56, 0.25, 0.04),
+    word("PRECIO", 0.66, 0.25, 0.07),
+    word("IMPORTE", 0.80, 0.25, 0.08),
+    word("PRODUCTO", 0.14, 0.30, 0.09), word("NORMAL", 0.24, 0.30, 0.08),
+    word("1", 0.57, 0.30, 0.02), word("10,00", 0.67, 0.30, 0.06), word("10,00", 0.81, 0.30, 0.06),
+    word("DEVOLUCION", 0.14, 0.35, 0.11), word("ARTICULO", 0.26, 0.35, 0.09),
+    word("1", 0.57, 0.35, 0.02), word("−3,00", 0.67, 0.35, 0.07), word("−3,00", 0.81, 0.35, 0.07),
+    word("Base", 0.64, 0.45, 0.06), word("7,00", 0.81, 0.45, 0.05),
+    word("IVA", 0.64, 0.50, 0.04), word("0,00", 0.81, 0.50, 0.05),
+    word("Total", 0.64, 0.55, 0.06), word("7,00", 0.81, 0.55, 0.05),
+  ]);
+  expect(page.plainText).toContain("−3,00");
+  expect(page.reviewText).toMatch(/DEVOLUCION ARTICULO\s+1\s+-3,00\s+-3,00/);
+  expect(page.receiptIntegrity).toMatchObject({
+    status: "verified",
+    productRows: 2,
+    candidateProductRows: 2,
+    unresolvedProductRows: 0,
+    arithmeticRowsChecked: 2,
+    arithmeticRowsMatching: 2,
+    lineTotalMatchesDocumentTotal: true,
+    basePlusTaxMatchesTotal: true,
+  });
+});
+
+test("REC-OCR-014 · all-refund receipt has a negative reconciled total", () => {
+  const page = reconstructOcrPage(1, [
+    word("DESCRIPCION", 0.14, 0.25, 0.14),
+    word("UDS", 0.56, 0.25, 0.04),
+    word("PRECIO", 0.66, 0.25, 0.07),
+    word("IMPORTE", 0.80, 0.25, 0.08),
+    word("REEMBOLSO", 0.14, 0.30, 0.11), word("UNO", 0.27, 0.30, 0.05),
+    word("1", 0.57, 0.30, 0.02), word("−2,00", 0.67, 0.30, 0.07), word("−2,00", 0.81, 0.30, 0.07),
+    word("REEMBOLSO", 0.14, 0.35, 0.11), word("DOS", 0.27, 0.35, 0.05),
+    word("1", 0.57, 0.35, 0.02), word("–3,00", 0.67, 0.35, 0.07), word("–3,00", 0.81, 0.35, 0.07),
+    word("Total", 0.64, 0.45, 0.06), word("−5,00", 0.81, 0.45, 0.07),
+  ]);
+  expect(page.reviewText).toContain("Total: -5,00");
+  expect(page.plainText).toContain("–3,00");
+  expect(page.receiptIntegrity).toMatchObject({
+    status: "verified",
+    productRows: 2,
+    arithmeticRowsMatching: 2,
+    lineTotalMatchesDocumentTotal: true,
+  });
+});
