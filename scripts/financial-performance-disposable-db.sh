@@ -38,6 +38,10 @@ done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sor
 # The entire database is CI-local and removed by PRE001's exit trap.
 psql_db -f supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql >/dev/null
 psql_db -f supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql
+# A third connection edits/clears, and a fourth READ ONLY connection
+# proves those changes survive COMMIT without touching the other tenant.
+psql_db -f supabase/tests/financial_persistence_ap1_ap2_mutate_disposable.sql >/dev/null
+psql_db -f supabase/tests/financial_persistence_ap1_ap2_final_readback_disposable.sql
 
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
