@@ -357,6 +357,71 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
   expect(writes.at(-1)).toMatchObject({ method: "PATCH", manualAmountCents: 150050 });
 });
 
+test("REC-BUD-008 · límite se conserva al recargar y vuelve a automático tras retirarlo", async ({ page }) => {
+  let savedManualCents: number | null = null;
+  let patchCount = 0;
+  let readCount = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    const method = route.request().method();
+    if (method === "GET") {
+      readCount += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(
+          patchCount === 0 ? baseSnapshot : snapshotWithTotalManual(savedManualCents),
+        ),
+      });
+      return;
+    }
+    if (method !== "PATCH") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "unsupported_test_write" }) });
+      return;
+    }
+    const payload = route.request().postDataJSON() as {
+      month: string;
+      categoryId: string | null;
+      manualAmountCents: number | null;
+    };
+    expect(payload.month).toBe("2026-09");
+    expect(payload.categoryId).toBeNull();
+    expect(payload.manualAmountCents === null || Number.isSafeInteger(payload.manualAmountCents)).toBe(true);
+    savedManualCents = payload.manualAmountCents;
+    patchCount += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(snapshotWithTotalManual(savedManualCents)),
+    });
+  });
+
+  await page.goto("/budgets?month=2026-09");
+  await page.getByRole("button", { name: "Definir límite" }).first().click();
+  await page.getByLabel("Límite elegido de total mensual").fill("1.500,50");
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
+  expect(savedManualCents).toBe(150050);
+  expect(patchCount).toBe(1);
+
+  const readsBeforeReload = readCount;
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Quitar límite elegido" }).first()).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen del presupuesto mensual" })).toContainText("1.500,50");
+  expect(patchCount).toBe(1);
+  expect(readCount).toBeGreaterThan(readsBeforeReload);
+
+  await page.getByRole("button", { name: "Quitar límite elegido" }).first().click();
+  await expect(page.locator("main").getByRole("status")).toContainText("La referencia automática vuelve a aplicarse");
+  expect(patchCount).toBe(2);
+  expect(savedManualCents).toBeNull();
+
+  await page.reload();
+  await expect(page.getByRole("button", { name: "Definir límite" }).first()).toBeVisible();
+  expect(patchCount).toBe(2);
+  // This proves the UI rereads persisted API state; the API itself is a stateful mock.
+  // Durable database persistence is separately exercised by the AP1/AP2 SQL CI lab.
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
