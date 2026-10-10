@@ -511,7 +511,7 @@ export default function TransactionsClient() {
       // Validate the pagination envelope before changing any visible rows.
       const result = payload as Partial<QueryResponse>;
       const incoming = result.rows;
-      const cursorValid = result.nextCursor === null ||
+      const cursorValid = result.nextCursor == null ||
         (result.nextCursor != null && typeof result.nextCursor.bankDate === "string"
           && DATE.test(result.nextCursor.bankDate) && typeof result.nextCursor.id === "string"
           && UUID.test(result.nextCursor.id));
