@@ -1,6 +1,7 @@
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
 import type { OcrSource, OcrWord } from "../../domain/document-ocr";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
+import { pdfNativeTextNeedsVisualOcr } from "./pdf-native-coverage";
 
 const MAX_PAGES = 16;
 const MAX_RENDER_SIDE = 2800;
@@ -62,21 +63,6 @@ function wordsFromContent(
     words.push({ text, confidence: 1, box: { x, y, width, height } });
   }
   return words;
-}
-
-/**
- * Some scanned PDFs retain a tiny selectable stamp, page number or title.
- * A non-empty native text layer is therefore not proof that the scanned
- * invoice itself is accessible as text. Only substantial content, or an
- * identifiable total with decimal cents, can safely bypass visual OCR.
- */
-export function pdfNativeTextNeedsVisualOcr(words: OcrWord[]) {
-  if (!words.length) return true;
-  const text = words.map((word) => word.text).join(" ").replace(/\s+/g, " ").trim();
-  const chars = [...text].filter((char) => /[\p{L}\p{N}]/u.test(char)).length;
-  if (/\b(?:total|a pagar|importe factura|base imponible)\b[^\n]{0,75}\d+[.,]\d{2}\b/i.test(text)) return false;
-  return words.length < 5 && chars < 80
-    || chars < 35;
 }
 
 async function renderPagePng(
