@@ -18,7 +18,14 @@ export function ocrNeedsRotationFallback(
     weightedConfidence += length * word.confidence;
   }
   const confidence = chars ? weightedConfidence / chars : 0;
-  if (words.length >= 8 && chars >= 40 && confidence >= 0.78) return false;
   const landscape = metadata.width > metadata.height * 1.12;
+  // For landscape images, confidence alone can be misleading if the first
+  // pass recognized unrelated background or gibberish. Require at least one
+  // recognizable financial cue before skipping alternative orientations.
+  const financialCue = words.some((word) =>
+    /\b(?:total|importe|factura|recibo|iva|igic|eur)\b|\d+[,.]\d{2}/i.test(word.text)
+  );
+  if (words.length >= 8 && chars >= 40 && confidence >= 0.78
+    && (!landscape || financialCue)) return false;
   return landscape || words.length < 5 || chars < 24 || confidence < 0.62;
 }
