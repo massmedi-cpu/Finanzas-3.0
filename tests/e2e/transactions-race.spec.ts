@@ -201,9 +201,12 @@ test("REC-TXN-001 · HTTP 200 sin filas verificables no se presenta como extract
   await page.goto("/transactions");
   await expect(page.locator("main").getByRole("alert")).toContainText("La respuesta del histórico es incompleta");
   await expect(page.getByText("El listado todavía no se ha podido verificar. No se considera vacío.")).toBeVisible();
+  await expect(page.getByLabel("Resumen del listado").locator("div").first().locator("strong")).toHaveText("—");
+  await expect(page.getByText("Histórico sin verificar", { exact: true })).toBeVisible();
   await expect(page.getByText("No hay movimientos que coincidan con los filtros actuales.")).toHaveCount(0);
   await page.getByRole("button", { name: "Reintentar listado" }).click();
   await expect(page.getByText("RESULTADO INICIAL", { exact: true }).first()).toBeVisible();
+  await expect(page.getByLabel("Resumen del listado").locator("div").first().locator("strong")).toHaveText("1");
   await expect(page.locator("main").getByRole("alert")).toHaveCount(0);
   expect(reads).toBe(2);
   expect(writes).toEqual([]);
