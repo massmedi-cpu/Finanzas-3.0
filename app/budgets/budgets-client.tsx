@@ -767,7 +767,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               >
                 <div className={styles.planningHeader}>
                   <div>
-                    <p className={styles.planningEyebrow}>{coverageVerified ? "PLANIFICACIÓN CON GASTOS CONTRASTADOS" : "PLANIFICACIÓN PROVISIONAL · DATOS INCOMPLETOS"}</p>
+                    <p className={styles.planningEyebrow}>{coverageVerified ? "PLANIFICACIÓN · COBERTURA ESTIMADA" : "PLANIFICACIÓN PROVISIONAL · DATOS INCOMPLETOS"}</p>
                     <h2 id="budget-planning-title">De la referencia a tu objetivo</h2>
                     <p>Cada cifra cumple una función distinta: referencia automática, decisión y resultado esperado.</p>
                   </div>
