@@ -722,12 +722,14 @@ export default function TransactionsClient() {
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const allLoadedSelected = rows.length > 0 && rows.every((row) => selectedSet.has(row.id));
 
+  const listUnverified = !loading && Boolean(error) && rows.length === 0;
   const visibleSummary = useMemo(() => {
     if (loading) return "Leyendo movimientos…";
+    if (listUnverified) return "Histórico sin verificar";
     if (totalCount === 0) return "0 movimientos";
     if (rows.length === totalCount) return `${formatInteger(totalCount)} ${totalCount === 1 ? "movimiento" : "movimientos"}`;
     return `${formatInteger(rows.length)} de ${formatInteger(totalCount)}`;
-  }, [loading, rows.length, totalCount]);
+  }, [loading, listUnverified, rows.length, totalCount]);
 
   useEffect(() => {
     const id = pendingFocusId.current;
@@ -1086,7 +1088,7 @@ async function saveEdit(row: TransactionRow) {
           </p>
         </div>
         <div className={styles.summary} role="group" aria-label="Resumen del listado">
-          <div><strong>{formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
+          <div><strong>{loading || listUnverified ? "—" : formatInteger(totalCount)}</strong><span>Coincidencias</span></div>
           <div><strong>{activeFilterCount}</strong><span>Filtros activos</span></div>
           <div><strong>{formatInteger(selectedIds.length)}</strong><span>Seleccionados</span></div>
         </div>
