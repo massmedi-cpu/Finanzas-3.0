@@ -398,12 +398,14 @@ export default function ComparisonClient({
     dateTo: snapshot.selection.primaryTo,
     earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
+    sync: freshness?.sync ?? null,
   }) : null;
   const referenceCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.referenceFrom,
     dateTo: snapshot.selection.referenceTo,
     earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
+    sync: freshness?.sync ?? null,
   }) : null;
   const comparisonReliable = primaryCoverage !== null && referenceCoverage !== null
     && periodComparisonIsReliable(primaryCoverage) && periodComparisonIsReliable(referenceCoverage);
