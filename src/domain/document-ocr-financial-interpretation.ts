@@ -136,9 +136,13 @@ const FINANCIAL_AMOUNT_TOKEN = /[-\u2212\u2013]?\d{1,3}(?:\.\d{3})*(?:,\d{2})|[-
 // An integer is money only when the OCR line explicitly prints € after it.
 // A bare 21, 100 or 1.234 could instead be a rate, quantity or document ID.
 const INTEGER_EURO_TOKEN = /[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)(?=\s*€)/g;
+// Some receipts place the currency *before* a whole-euro amount: TOTAL € 50
+// or TOTAL EUR 1.234. Only an explicit currency token permits integer euros;
+// the boundary checks below reject accidental prefixes of decimal/weight data.
+const PREFIXED_EURO_INTEGER_TOKEN = /(?:€|\bEUR\b)\s*[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)/gi;
 
 function exactFinancialAmountMatches(text: string) {
-  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN)]
+  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN), ...text.matchAll(PREFIXED_EURO_INTEGER_TOKEN)]
     .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
     .filter((match) => {
     const start = match.index;
