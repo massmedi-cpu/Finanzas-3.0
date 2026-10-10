@@ -254,6 +254,16 @@ function isBudgetPlanningContext(value: unknown, snapshot: BudgetSnapshot): valu
       && isSafeInteger(row.incomeCents) && row.incomeCents >= 0
     )
     && incomeMonths.length <= range.months.length
+    // A "ready" savings forecast requires every monthly income input, and
+    // its displayed mean must be derivable from those actual source rows.
+    && (planning.state !== "ready" || (
+      incomeMonths.length === range.months.length
+      && planning.averageIncomeCents === safeAverage(incomeMonths.map((row) => row.incomeCents))
+    ))
+    && (planning.objectiveState === "ready" || (
+      planning.targetSavingsCents === null
+      && planning.targetSavingsRateBps === null
+    ))
     && planning.principles?.historicalBaseline === "axioma_52_budget_reference"
     && planning.principles?.chosenLimit === "manual_total_budget_only"
     && planning.principles?.objective === "average_income_minus_chosen_limit"
