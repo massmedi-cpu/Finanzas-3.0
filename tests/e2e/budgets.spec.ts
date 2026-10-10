@@ -376,6 +376,8 @@ test("Presupuestos guarda y elimina un límite elegido sin confundirlo con el ga
   await input.fill("1.500,50");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.locator("main").getByRole("status")).toContainText("Límite elegido guardado");
+  // One contextual confirmation: no simultaneous duplicate global toast.
+  await expect(page.getByTestId("action-feedback-region")).not.toContainText("Límite elegido guardado.");
   expect(writes.at(-1)).toMatchObject({
     method: "PATCH",
     month: "2026-09",
@@ -908,6 +910,7 @@ test("REC-BUD-030 · HTTP 200 con límite incorrecto no anuncia guardado", async
   await page.getByLabel("Límite elegido de total mensual").fill("850,00");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.locator("#main-content").getByText(/El servidor respondió, pero el límite guardado no coincide/)).toBeVisible();
+  await expect(page.getByTestId("action-feedback-region")).not.toContainText("El servidor respondió, pero el límite guardado no coincide");
   await expect(page.locator('[data-budget-write-state="unverified"]')).toBeVisible();
   await expect(page.getByText("Límite elegido guardado.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
