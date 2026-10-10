@@ -495,6 +495,38 @@ test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisi
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-038 · la propuesta no puede editarse mientras una confirmación es incierta", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let attempts = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() === "PATCH") {
+      attempts += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const form = page.getByTestId("ocr-confirmation-form");
+  await expect(form.getByLabel("Emisor")).toBeEnabled();
+  await form.getByRole("button", { name: "Confirmar revisión" }).click();
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  await expect(form.getByLabel("Emisor")).toBeDisabled();
+  await expect(form.getByLabel("Total (€)", { exact: true })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Añadir línea" })).toBeDisabled();
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Analizar documento" })).toBeDisabled();
+  expect(attempts).toBe(1);
+  await page.getByRole("button", { name: "He comprobado el historial; permitir nuevo intento" }).click();
+  await expect(form.getByLabel("Emisor")).toBeEnabled();
+  await expect(form.getByRole("button", { name: "Confirmar revisión" })).toBeEnabled();
+  expect(attempts).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
