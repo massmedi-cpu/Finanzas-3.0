@@ -126,7 +126,7 @@ test("REC-CMP-003 · una sincronización con filas ausentes impide certificar va
   await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
   await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("El gasto diario baja 33,3 %");
-  await expect(page.getByText(/2 movimientos ausentes de la fuente/i)).toBeVisible();
+  await expect(page.getByText("2 movimientos ausentes de los datos importados", { exact: true })).toBeVisible();
 });
 
 test("REC-CMP-002 · la frescura del Comparador cambia con la cuenta bancaria aplicada", async ({ page }) => {
