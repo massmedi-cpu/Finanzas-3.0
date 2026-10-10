@@ -80,7 +80,9 @@ async function renderPagePng(
   const viewport = page.getViewport({ scale });
   const rendered = canvasFactory.create(Math.max(1, Math.ceil(viewport.width)), Math.max(1, Math.ceil(viewport.height)));
   try {
-    await page.render({ canvasContext: rendered.context, viewport, canvasFactory }).promise;
+    // PDF.js 6.x requires the actual canvas; canvasContext alone is not a
+    // valid substitute for the render target in Node.
+    await page.render({ canvas: rendered.canvas, canvasContext: rendered.context, viewport, canvasFactory }).promise;
     const png = Buffer.from(rendered.canvas.toBuffer("image/png"));
     if (!png.byteLength) throw new Error("ocr_pdf_render_empty");
     return png;
