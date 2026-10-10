@@ -330,6 +330,8 @@ export function OcrReviewPanel({
     };
   }, [documentId]);
 
+  const editsLocked = busy || confirming || confirmationUnverified;
+
   const supported = mimeType === "application/pdf" || mimeType === "image/jpeg" || mimeType === "image/png" || mimeType === "image/webp";
   const review = useMemo(() => result ? summarizeDocumentOcrReview(result) : null, [result]);
 
@@ -535,11 +537,13 @@ export function OcrReviewPanel({
   }
 
   function updateDraft<K extends keyof ReviewDraft>(key: K, value: ReviewDraft[K]) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? { ...current, [key]: value } : current);
     setConfirmedRevision(null);
   }
 
   function updateLine(index: number, key: keyof ReviewLineDraft, value: string) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => {
       if (!current) return current;
       const lineItems = current.lineItems.map((line, lineIndex) => lineIndex === index ? { ...line, [key]: value } : line);
@@ -549,6 +553,7 @@ export function OcrReviewPanel({
   }
 
   function addLine() {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? {
       ...current,
       lineItems: [...current.lineItems, { description: "", quantity: "", unitPrice: "", total: "" }],
@@ -557,6 +562,7 @@ export function OcrReviewPanel({
   }
 
   function removeLine(index: number) {
+    if (editsLocked || confirmInFlight.current || ocrInFlight.current) return;
     setDraft((current) => current ? { ...current, lineItems: current.lineItems.filter((_, lineIndex) => lineIndex !== index) } : current);
     setConfirmedRevision(null);
   }
@@ -677,33 +683,33 @@ export function OcrReviewPanel({
               </div>
 
               <div className={styles.formGrid}>
-                <label>Tipo<select value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>
-                <label>Fecha<input type="date" value={draft.documentDate} onChange={(event) => updateDraft("documentDate", event.target.value)} /></label>
-                <label>Hora<input type="time" value={draft.documentTime} onChange={(event) => updateDraft("documentTime", event.target.value)} /></label>
-                <label>Emisor<input value={draft.issuerName} maxLength={300} onChange={(event) => updateDraft("issuerName", event.target.value)} /></label>
-                <label>CIF / NIF<input value={draft.issuerTaxId} maxLength={40} onChange={(event) => updateDraft("issuerTaxId", event.target.value)} /></label>
-                <label>Número<input value={draft.documentNumber} maxLength={120} onChange={(event) => updateDraft("documentNumber", event.target.value)} /></label>
-                <label>Periodo<input value={draft.billingPeriod} maxLength={200} onChange={(event) => updateDraft("billingPeriod", event.target.value)} /></label>
-                <label>Base imponible (€)<input inputMode="decimal" value={draft.taxBase} onChange={(event) => updateDraft("taxBase", event.target.value)} /></label>
-                <label>Impuestos (€)<input inputMode="decimal" value={draft.taxes} onChange={(event) => updateDraft("taxes", event.target.value)} /></label>
-                <label>Total (€)<input inputMode="decimal" value={draft.total} onChange={(event) => updateDraft("total", event.target.value)} /></label>
-                <label>Método de pago<input value={draft.paymentMethod} maxLength={120} onChange={(event) => updateDraft("paymentMethod", event.target.value)} /></label>
+                <label>Tipo<select disabled={editsLocked} value={draft.type} onChange={(event) => updateDraft("type", event.target.value as ReviewDraft["type"])}><option value="ticket">Ticket</option><option value="invoice">Factura</option><option value="other">Otro</option></select></label>
+                <label>Fecha<input disabled={editsLocked} type="date" value={draft.documentDate} onChange={(event) => updateDraft("documentDate", event.target.value)} /></label>
+                <label>Hora<input disabled={editsLocked} type="time" value={draft.documentTime} onChange={(event) => updateDraft("documentTime", event.target.value)} /></label>
+                <label>Emisor<input disabled={editsLocked} value={draft.issuerName} maxLength={300} onChange={(event) => updateDraft("issuerName", event.target.value)} /></label>
+                <label>CIF / NIF<input disabled={editsLocked} value={draft.issuerTaxId} maxLength={40} onChange={(event) => updateDraft("issuerTaxId", event.target.value)} /></label>
+                <label>Número<input disabled={editsLocked} value={draft.documentNumber} maxLength={120} onChange={(event) => updateDraft("documentNumber", event.target.value)} /></label>
+                <label>Periodo<input disabled={editsLocked} value={draft.billingPeriod} maxLength={200} onChange={(event) => updateDraft("billingPeriod", event.target.value)} /></label>
+                <label>Base imponible (€)<input disabled={editsLocked} inputMode="decimal" value={draft.taxBase} onChange={(event) => updateDraft("taxBase", event.target.value)} /></label>
+                <label>Impuestos (€)<input disabled={editsLocked} inputMode="decimal" value={draft.taxes} onChange={(event) => updateDraft("taxes", event.target.value)} /></label>
+                <label>Total (€)<input disabled={editsLocked} inputMode="decimal" value={draft.total} onChange={(event) => updateDraft("total", event.target.value)} /></label>
+                <label>Método de pago<input disabled={editsLocked} value={draft.paymentMethod} maxLength={120} onChange={(event) => updateDraft("paymentMethod", event.target.value)} /></label>
               </div>
-              <label>Notas<textarea rows={3} value={draft.notes} maxLength={2000} onChange={(event) => updateDraft("notes", event.target.value)} /></label>
+              <label>Notas<textarea disabled={editsLocked} rows={3} value={draft.notes} maxLength={2000} onChange={(event) => updateDraft("notes", event.target.value)} /></label>
 
               <div className={ocrStyles.pages} data-testid="ocr-confirmation-lines">
                 <div className={ocrStyles.page}>
                   <div className={ocrStyles.pageHeader}>
                     <strong>Líneas del documento</strong>
-                    <button className={styles.secondaryButton} type="button" onClick={addLine}>Añadir línea</button>
+                    <button className={styles.secondaryButton} type="button" onClick={addLine} disabled={editsLocked}>Añadir línea</button>
                   </div>
                   {draft.lineItems.length ? draft.lineItems.map((line, index) => (
                     <div className={styles.formGrid} key={`${index}-${line.description}`}>
-                      <label>Descripción<input value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} /></label>
-                      <label>Cantidad<input inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} /></label>
-                      <label>Precio unitario (€)<input inputMode="decimal" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /></label>
-                      <label>Total línea (€)<input inputMode="decimal" value={line.total} onChange={(event) => updateLine(index, "total", event.target.value)} /></label>
-                      <button className={styles.dangerButton} type="button" onClick={() => removeLine(index)}>Quitar línea</button>
+                      <label>Descripción<input disabled={editsLocked} value={line.description} maxLength={500} onChange={(event) => updateLine(index, "description", event.target.value)} /></label>
+                      <label>Cantidad<input disabled={editsLocked} inputMode="decimal" value={line.quantity} onChange={(event) => updateLine(index, "quantity", event.target.value)} /></label>
+                      <label>Precio unitario (€)<input disabled={editsLocked} inputMode="decimal" value={line.unitPrice} onChange={(event) => updateLine(index, "unitPrice", event.target.value)} /></label>
+                      <label>Total línea (€)<input disabled={editsLocked} inputMode="decimal" value={line.total} onChange={(event) => updateLine(index, "total", event.target.value)} /></label>
+                      <button className={styles.dangerButton} type="button" onClick={() => removeLine(index)} disabled={editsLocked}>Quitar línea</button>
                     </div>
                   )) : <p className={styles.muted}>No se han detectado líneas. Añádelas sólo si puedes comprobarlas en el original.</p>}
                 </div>
