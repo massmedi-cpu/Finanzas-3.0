@@ -334,6 +334,42 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-033 · rechaza una lectura OCR recibida para otro documento sin exponer su contenido", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const otherDocumentId = "93000000-0000-4000-8000-000000000099";
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1,
+        documentId: otherDocumentId,
+        status: "ready",
+        source: "pdf_text",
+        extractor: "pdfjs-6.2.108-native-text",
+        extractedAt: "2026-09-07T07:00:00.000Z",
+        confidence: 1,
+        plainText: "FACTURA AJENA CON DATOS PRIVADOS",
+        warnings: [],
+        pages: [],
+        principles: {
+          bankSource: "read_only",
+          financialWrites: false,
+          requiresHumanReview: true,
+          preservesGeometry: true,
+        },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(page.getByRole("alert")).toContainText("la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+  await expect(page.getByText("FACTURA AJENA CON DATOS PRIVADOS")).toHaveCount(0);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
