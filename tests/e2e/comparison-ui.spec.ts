@@ -102,6 +102,34 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-SYNC-004 · sync correcta con solo fecha máxima no acredita histórico completo", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: null,
+      latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success",
+        startedAt: "2026-09-25T07:59:00Z",
+        finishedAt: "2026-09-25T08:00:00Z",
+        rowsSeen: 14,
+        rowsFailed: 0,
+        rowsMissing: 0,
+        duplicatesDetected: 0,
+        warningsCount: 0,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Cobertura histórica sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("Se conoce el último movimiento, pero no la fecha inicial del histórico bancario.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
+});
+
 test("REC-SYNC-002 · API legacy sin sync no confirma cobertura bancaria", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
