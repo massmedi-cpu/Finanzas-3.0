@@ -9,6 +9,8 @@ on:
       - chat/postgres-financial-10k50k-lab-20261010
     paths:
       - 'supabase/tests/financial_performance_50k_disposable.sql'
+      - 'supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql'
+      - 'supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql'
       - 'scripts/financial-performance-disposable-db.sh'
       - '.github/workflows/financial-db-10k50k.yml'
 
@@ -43,7 +45,7 @@ jobs:
           persist-credentials: false
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client
-      - name: Run disposable SQL and verify 10k/50k parity with 12 measured reads
+      - name: Verify AP1/AP2 durable synthetic persistence and 10k/50k SQL parity
         env:
           AUD_VALIDATION_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/financial-performance-disposable-db.sh
