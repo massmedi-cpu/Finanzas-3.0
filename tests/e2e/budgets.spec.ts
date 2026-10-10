@@ -170,6 +170,7 @@ async function mockBudgetApi(
   page: import("@playwright/test").Page,
   writes: Array<Record<string, unknown>>,
 ) {
+  await mockCoveredBudgetSource(page);
   await page.route("**/api/budgets*", async (route) => {
     const method = route.request().method();
     if (method === "GET") {
@@ -476,13 +477,40 @@ test("REC-BUD-009 · sin cobertura bancaria el presupuesto no afirma estar dentr
   await expect(page.getByLabel("Cobertura de los datos del presupuesto")).toContainText("No se ha podido verificar");
   const total = page.locator("#budget-total");
   await expect(total).toContainText("Estado sin verificar");
-  await expect(total).toContainText("Gasto observado · sin verificar");
+  await expect(total).toContainText("Gasto sin confirmar");
+  await expect(total.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
   await expect(total).toContainText("Margen sin verificar");
   await expect(total).not.toContainText("Dentro de referencia");
   await expect(total).not.toContainText("Dentro del límite");
   // Los importes llegados de la API se pueden consultar, pero no se afirma
   // que 0 € signifique un mes sin gastos ni que el margen esté disponible.
   expect(writes).toHaveLength(0);
+});
+
+test("REC-BUD-011 · un cero sintético sin fuente contrastada se muestra como dato ausente", async ({ page }) => {
+  const zeroSnapshot = structuredClone(baseSnapshot);
+  zeroSnapshot.total.actualExpenseCents = 0;
+  zeroSnapshot.total.remainingCents = 120000;
+  zeroSnapshot.total.progressBps = 0;
+  await page.route("**/api/budgets*", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(zeroSnapshot) });
+  });
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  const spent = page.getByRole("region", { name: "Resumen del presupuesto mensual" })
+    .getByText("Gastado").locator("..").locator("strong");
+  await expect(spent).toHaveText("—");
+  const total = page.locator("#budget-total");
+  await expect(total).toContainText("Estado sin verificar");
+  await expect(total.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
+  await expect(total).not.toContainText("Dentro de referencia");
 });
 
 test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve a ser calculable", async ({ page }) => {
