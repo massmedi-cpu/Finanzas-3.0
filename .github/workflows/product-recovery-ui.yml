@@ -72,6 +72,7 @@ jobs:
           tests/e2e/cash-flow-theme-contrast.spec.ts
           tests/e2e/forecast-chart-timeline.spec.ts
           tests/e2e/comparison-ui.spec.ts
+          tests/e2e/recurrences.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
           tests/e2e/premium-analysis-visual.spec.ts
           tests/e2e/aud-e2e-analysis-light-contrast.spec.ts
