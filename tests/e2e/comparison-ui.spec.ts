@@ -74,7 +74,7 @@ function snapshotFor(url: URL, extendedDrivers = false) {
 }
 
 async function mockComparison(page: Page, extendedDrivers = false) {
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, earliestMovementDate: "2026-07-01", latestMovementDate: "2026-09-25", sync: null }),
@@ -103,7 +103,7 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
 });
 
 test("QA-02 · no interpreta como mejora un periodo posterior al último movimiento importado", async ({ page }) => {
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, latestMovementDate: "2026-09-29", sync: null }),
@@ -136,7 +136,7 @@ test("QA-02 · no interpreta como mejora un periodo posterior al último movimie
 
 test("REC-CMP-001 · cobertura parcial conserva importes observados pero no inventa causas del cambio", async ({ page }) => {
   await mockComparison(page);
-  await page.route("**/api/analysis/source-freshness", (route) => route.fulfill({
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
     body: JSON.stringify({ available: true, latestMovementDate: "2026-09-05", sync: null }),
