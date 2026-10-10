@@ -129,7 +129,7 @@ function statusText(freshness: SourceFreshness) {
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
 
-  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : null;
+  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : "Cobertura bancaria sin fecha de movimiento confirmada";
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
@@ -153,12 +153,19 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const sync = freshness.sync;
 
   if (!sync) {
-    return {
-      label: "Datos bancarios disponibles",
-      detail: movement,
-      incidentDetail: null,
-      tone: "ok",
-    };
+    return movementLabel
+      ? {
+        label: "Movimientos importados",
+        detail: movement,
+        incidentDetail: "No consta una última sincronización verificable.",
+        tone: "warning",
+      }
+      : {
+        label: "Cobertura bancaria sin verificar",
+        detail: null,
+        incidentDetail: "No consta ninguna fecha bancaria ni sincronización verificable.",
+        tone: "warning",
+      };
   }
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
@@ -256,7 +263,7 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   }
 
   return {
-    label: "Datos al día",
+    label: "Sincronización completada",
     detail,
     incidentDetail: null,
     tone: "ok",
