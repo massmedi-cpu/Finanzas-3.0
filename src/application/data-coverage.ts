@@ -1,3 +1,5 @@
+import { hasSourceSyncIncidents, type SourceSyncIncidentInput } from "./source-sync-incidents";
+
 export type PeriodCoverageState = "unknown" | "none" | "partial" | "covered";
 
 export type PeriodCoverage = {
@@ -28,6 +30,7 @@ export function resolvePeriodCoverage(input: {
   dateTo: string;
   latestMovementDate: string | null | undefined;
   earliestMovementDate?: string | null | undefined;
+  sync?: SourceSyncIncidentInput | null;
 }): PeriodCoverage {
   const latestMovementDate = validDate(input.latestMovementDate);
   const earliestMovementDate = validDate(input.earliestMovementDate);
@@ -58,7 +61,12 @@ export function resolvePeriodCoverage(input: {
       ? { state: "unknown", latestMovementDate, throughDate: null }
       : { state: "partial", latestMovementDate, throughDate };
   }
-  if (latestMovementDate < input.dateTo || earliestMovementDate > input.dateFrom) {
+  // Even good date bounds do not establish a complete data import when the
+  // source is still running or its latest sync reports missing/failed rows,
+  // duplicates or warnings. Keep observed amounts visible but do not certify
+  // their trend or treat the interval as financially complete.
+  const syncUnverified = input.sync?.status === "started" || hasSourceSyncIncidents(input.sync);
+  if (latestMovementDate < input.dateTo || earliestMovementDate > input.dateFrom || syncUnverified) {
     return { state: "partial", latestMovementDate, throughDate, ...fromDate };
   }
   // Min/max do NOT certify intervening days or completeness of the source:
