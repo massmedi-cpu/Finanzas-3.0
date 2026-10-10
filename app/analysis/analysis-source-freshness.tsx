@@ -153,12 +153,21 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const sync = freshness.sync;
 
   if (!sync) {
-    return {
-      label: "Datos bancarios disponibles",
-      detail: movement,
-      incidentDetail: null,
-      tone: "ok",
-    };
+    // Legacy/partial freshness responses may have neither a sync report nor
+    // any observed movement. Do not imply the account contains bank data.
+    return movementLabel
+      ? {
+          label: "Último movimiento disponible",
+          detail: movement,
+          incidentDetail: "El estado de sincronización no está disponible; no se puede confirmar la cobertura completa.",
+          tone: "warning",
+        }
+      : {
+          label: "Cobertura bancaria sin verificar",
+          detail: null,
+          incidentDetail: "No hay fecha de movimiento ni estado de sincronización confirmados.",
+          tone: "warning",
+        };
   }
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
