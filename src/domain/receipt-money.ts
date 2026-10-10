@@ -39,6 +39,15 @@ export function isReceiptMoney(text: string) {
   return receiptMoneyCents(text) !== null;
 }
 
+// Numeric-column recognition is deliberately broader than verified money:
+// malformed or three-decimal tokens are candidates for OCR reinspection,
+// never valid financial amounts. Mathematical minus and en dash must still
+// reach the numeric recovery pipeline rather than being treated as prose.
+export function isReceiptNumericLike(text: string) {
+  const token = compactReceiptMoney(text);
+  return /\d/.test(token) && /^[\d,./:\-\u2212\u2013]+$/.test(token);
+}
+
 export function receiptMoneyKey(text: string) {
   const cents = receiptMoneyCents(text);
   return cents === null ? null : `money:${cents}`;

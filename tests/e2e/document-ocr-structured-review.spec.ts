@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { buildDocumentOcrResult, reconstructOcrPage, type OcrWord } from "../../src/domain/document-ocr";
-import { isReceiptMoney, normalizeReceiptMoneyEs, receiptMoneyCents } from "../../src/domain/receipt-money";
+import { isReceiptMoney, isReceiptNumericLike, normalizeReceiptMoneyEs, receiptMoneyCents } from "../../src/domain/receipt-money";
 import { productRowArithmeticMismatch } from "../../src/infrastructure/ocr/receipt-row-cell-consensus-provider";
 
 function word(text: string, x: number, y: number, width = 0.06, confidence = 0.9): OcrWord {
@@ -322,4 +322,22 @@ test("REC-OCR-014 · all-refund receipt has a negative reconciled total", () => 
     arithmeticRowsMatching: 2,
     lineTotalMatchesDocumentTotal: true,
   });
+});
+
+
+test("REC-OCR-015 · numeric recovery keeps Unicode refunds without trusting malformed amounts", () => {
+  for (const raw of ["-3,00", "−3,00", "–3,00", "−1.234,56", "–1,234.56"]) {
+    expect(isReceiptNumericLike(raw)).toBe(true);
+    expect(isReceiptMoney(raw)).toBe(true);
+  }
+  // The OCR recovery stage must still inspect corrupted numerical evidence,
+  // while the financial parser refuses to claim it is valid currency.
+  for (const raw of ["−1,234", "–1.234,567", "1,234"]) {
+    expect(isReceiptNumericLike(raw)).toBe(true);
+    expect(isReceiptMoney(raw)).toBe(false);
+  }
+  for (const raw of ["DEVOLUCION", "PESO 1,234 kg", "−ABC", "−3,00kg"]) {
+    expect(isReceiptNumericLike(raw)).toBe(false);
+  }
+  expect(isReceiptNumericLike("−3,00 €")).toBe(true);
 });
