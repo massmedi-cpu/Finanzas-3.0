@@ -110,7 +110,14 @@ function isRecurrenceSnapshot(value: unknown): value is Snapshot {
     && Number.isSafeInteger(row.candidateCount)
     && row.candidateCount === row.candidates.length
     && Number.isSafeInteger(row.minOccurrences);
-  if (row.contractVersion !== 1 || !countsValid || typeof row.dateTo !== "string") return false;
+  const validDate = (date: unknown) => {
+    if (typeof date !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date)) return false;
+    const parsed = new Date(`${date}T00:00:00Z`);
+    return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === date;
+  };
+  if (row.contractVersion !== 1 || !countsValid || !validDate(row.dateTo)
+    || (row.dateFrom !== null && !validDate(row.dateFrom))
+    || (row.minOccurrences as number) < 3 || (row.minOccurrences as number) > 24) return false;
   const principles = row.principles as Record<string, unknown> | null;
   if (!principles || principles.bankSource !== "read_only" || principles.automaticPersistence !== false) return false;
   return (row.candidates as unknown[]).every((item) => {
@@ -120,12 +127,20 @@ function isRecurrenceSnapshot(value: unknown): value is Snapshot {
       && typeof c.conceptPattern === "string"
       && ["high", "medium", "low"].includes(String(c.confidence))
       && ["income", "expense"].includes(String(c.kind))
+      && ["high", "medium", "low"].includes(String(c.observedConfidence))
+      && ["week", "month", "quarter", "year"].includes(String(c.intervalUnit))
+      && Number.isSafeInteger(c.intervalCount) && (c.intervalCount as number) > 0
       && Number.isSafeInteger(c.usualAmountCents)
-      && Number.isSafeInteger(c.occurrenceCount)
-      && Number.isSafeInteger(c.missedCycles)
-      && typeof c.lastObservedDate === "string"
+      && Number.isSafeInteger(c.amountToleranceCents) && (c.amountToleranceCents as number) >= 0
+      && Number.isSafeInteger(c.dateToleranceDays) && (c.dateToleranceDays as number) >= 0
+      && Number.isSafeInteger(c.occurrenceCount) && (c.occurrenceCount as number) >= 3
+      && Number.isSafeInteger(c.missedCycles) && (c.missedCycles as number) >= 0
+      && validDate(c.firstObservedDate)
+      && validDate(c.lastObservedDate)
+      && (c.nextEstimatedDate === null || validDate(c.nextEstimatedDate))
       && typeof c.stale === "boolean"
       && typeof c.explanation === "string"
+      && (c.existingRecurrenceId === null || typeof c.existingRecurrenceId === "string")
       && (c.existingStatus === null || ["active", "ignored", "archived"].includes(String(c.existingStatus)));
   });
 }
@@ -171,6 +186,7 @@ export default function RecurrencesClient({
     setLoading(true);
     setSnapshot(null);
     setError("");
+    if (announce) { setMessage(""); setConfirmedImpact(null); }
     try {
       const response = await fetch("/api/recurrences?minOccurrences=3", {
         headers: { accept: "application/json" },
@@ -230,6 +246,7 @@ export default function RecurrencesClient({
       });
       const recurrenceId = recurrenceIdFromResponse(saved)
         ?? recurrenceIdFromResponse({ id: candidate.existingRecurrenceId });
+      if (!recurrenceId) throw new Error("recurrence_write_contract_invalid");
       setMessage(
         status === "active"
           ? candidate.existingStatus === "active"
