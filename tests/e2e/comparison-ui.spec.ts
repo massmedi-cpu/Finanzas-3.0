@@ -77,7 +77,13 @@ async function mockComparison(page: Page, extendedDrivers = false) {
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
     status: 200,
     contentType: "application/json",
-    body: JSON.stringify({ available: true, earliestMovementDate: "2026-07-01", latestMovementDate: "2026-09-25", sync: null }),
+    body: JSON.stringify({
+      available: true, earliestMovementDate: "2026-07-01", latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success", startedAt: "2026-09-25T07:59:00Z", finishedAt: "2026-09-25T08:00:00Z",
+        rowsSeen: 12, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      },
+    }),
   }));
   await page.route("**/api/compare?**", async (route) => {
     const snapshot = snapshotFor(new URL(route.request().url()), extendedDrivers);
@@ -317,7 +323,10 @@ test("REC-CMP-002 · la frescura del Comparador cambia con la cuenta bancaria ap
         available: true,
         earliestMovementDate: "2026-07-01",
         latestMovementDate: "2026-09-25",
-        sync: null,
+        sync: {
+          status: "success", startedAt: "2026-09-25T07:59:00Z", finishedAt: "2026-09-25T08:00:00Z",
+          rowsSeen: 12, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+        },
       }),
     });
   });
@@ -544,6 +553,49 @@ test("REC-CMP-006 · incidencia de sincronización no se diagnostica falsamente 
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
 });
 
+
+
+test("REC-CMP-008 · fechas límite sin prueba de sincronización no justifican una tendencia financiera", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true, earliestMovementDate: "2026-07-01", latestMovementDate: "2026-09-25", sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics).not.toContainText("Tasa de ahorro");
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  const reading = page.locator("section").filter({ has: page.getByText("LECTURA PRINCIPAL", { exact: true }) });
+  await expect(reading).toContainText("No podemos interpretar la variación");
+  await expect(reading).not.toContainText("El gasto diario baja");
+  await expect(page.getByText("Último movimiento disponible", { exact: true })).toBeVisible();
+});
+
+test("REC-CMP-009 · sync success sin finishedAt tampoco certifica diferencias", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success", startedAt: "2026-09-25T07:59:00Z", finishedAt: null,
+        rowsSeen: 12, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Sincronización sin finalización verificada", { exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).toContainText("Comparación incompleta");
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("Tasa de ahorro");
+});
 
 test("REC-CMP-007 · un fallo del comparador conserva la selección aplicada y permite reintentar solo GET", async ({ page }) => {
   await openComparison(page);
