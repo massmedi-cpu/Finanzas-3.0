@@ -669,3 +669,33 @@ test("REC-REC-006 · PATCH incierto no afirma que se haya archivado", async ({ p
   await expect(page.getByRole("status").filter({ hasText: "Recurrencia archivada" })).toHaveCount(0);
   expect(methods).toEqual(["PATCH"]);
 });
+
+
+for (const theme of ["light", "dark"] as const) {
+  test(`REC-REC-007 · el enlace para ver el impacto usa colores de éxito legibles en tema ${theme}`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme: theme });
+    const writes: Array<Record<string, unknown>> = [];
+    await mockRecurrenceApi(page, writes);
+    await page.goto(`/recurrences?source=forecast&forecastDateFrom=2026-09-07&forecastDateTo=2026-09-08&forecastAccountId=${forecastAccountId}`);
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    const card = page.locator("article").filter({ hasText: "supermercado mensual" });
+    await card.getByRole("button", { name: "Confirmar recurrencia" }).click();
+    const link = page.getByRole("link", { name: "Actualizar y ver impacto en Previsión" });
+    await expect(link).toBeVisible();
+    const colors = await link.evaluate((node) => {
+      const probe = document.createElement("span");
+      probe.style.color = "var(--text-success-soft)";
+      document.body.appendChild(probe);
+      const expected = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        actual: getComputedStyle(node).color,
+        expected,
+        background: getComputedStyle(node).backgroundColor,
+      };
+    });
+    expect(colors.actual).toBe(colors.expected);
+    expect(colors.background).not.toBe("rgb(154, 235, 186)");
+    expect(writes).toHaveLength(1);
+  });
+}
