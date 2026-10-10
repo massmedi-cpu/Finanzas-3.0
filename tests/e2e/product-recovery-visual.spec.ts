@@ -32,6 +32,48 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto(route);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // A Next.js 404 contains an H1 too. A route matrix must reject that
+      // failure explicitly instead of claiming the product rendered.
+      await expect(page.getByText("Esta página no existe", { exact: true })).toHaveCount(0);
+      if (route === "/configuration/accounts" || route === "/configuration/categories") {
+        const selected = route.endsWith("/categories") ? "categories" : "accounts";
+        await expect(page).toHaveURL(new RegExp(`/configuration\\?tab=${selected}import { expect, test, type Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import { navigationItems } from "../../app/navigation-items";
+import { mockRecoveryHome } from "./helpers/recovery-home";
+
+const widths = [360, 390, 430, 600, 768, 820, 1024, 1100, 1366, 1440, 1920];
+const routes = [...navigationItems.map((item) => item.href), "/configuration/accounts", "/configuration/categories", "/configuration/merchants", "/configuration/rules", "/configuration/source", "/configuration/data", "/configuration/appearance"];
+
+async function noOverflow(page: Page, width: number) {
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const layout = await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    offenders: [...document.querySelectorAll("body *")].flatMap((element) => {
+      const box = element.getBoundingClientRect();
+      const css = getComputedStyle(element);
+      return box.width && box.right > innerWidth + 1 && css.visibility !== "hidden" && css.position !== "fixed"
+        ? [{ tag: element.tagName, className: element.className, right: Math.round(box.right) }] : [];
+    }).slice(0, 12),
+  }));
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth), {
+    timeout: 1500, message: `${width}px: ${JSON.stringify(layout.offenders)}`,
+  }).toBeLessThanOrEqual(1);
+}
+
+// This matrix verifies browser rendering with synthetic data and unavailable states.
+// Real persistence is evaluated separately by authenticated isolation, without mocks.
+for (const theme of ["light", "dark"] as const) {
+  for (const route of routes) {
+    test(`REC-UI · ${theme} ${route} · 11 tamaños y accesibilidad`, async ({ page }, info) => {
+      await mockRecoveryHome(page, "covered");
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.goto(route);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+));
+        const tabs = page.getByRole("navigation", { name: "Secciones de configuración" });
+        await expect(tabs.getByRole("button", { name: selected === "categories" ? /Categorías/ : /Cuentas/ })).toHaveClass(/active/);
+      }
       await page.waitForTimeout(150);
       for (const width of widths) {
         await page.setViewportSize({ width, height: width < 768 ? 900 : 1024 });
