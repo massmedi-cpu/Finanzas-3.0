@@ -1,6 +1,7 @@
 // Synthetic rasterization smoke test for PDF.js 6.x on Node.
 // This certifies the scanned-page rendering prerequisite, NOT OCR text accuracy.
 import assert from "node:assert/strict";
+import { pdfRasterScale } from "../src/infrastructure/ocr/pdf-render-geometry.ts";
 
 function onePageShapePdf() {
   const drawing = "q\n0 0 0 rg\n18 18 140 70 re\nf\nQ\n";
@@ -25,6 +26,16 @@ function onePageShapePdf() {
   output += "startxref\n" + xrefOffset + "\n%%EOF\n";
   return new Uint8Array(Buffer.from(output, "ascii"));
 }
+
+// Renderer resource bounds: huge PDF MediaBox values must not allocate
+// canvases larger than the requested raster side or turn NaN into a size.
+assert.equal(pdfRasterScale(100, 200), 2.5, "small documents can be upscaled");
+assert.equal(pdfRasterScale(14_000, 7_000), 0.2, "huge pages scale down instead of using 0.75 minimum");
+assert.ok(pdfRasterScale(100_000, 100_000) * 100_000 <= 2800, "arbitrarily large page is capped");
+for (const invalid of [0, -5, Number.NaN, Number.POSITIVE_INFINITY]) {
+  assert.throws(() => pdfRasterScale(invalid, 100), /ocr_pdf_page_dimensions_invalid/);
+}
+console.log("PASS · PDF scanned-page render size stays bounded");
 
 const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
 const task = pdfjs.getDocument({ data: onePageShapePdf(), useSystemFonts: true });
