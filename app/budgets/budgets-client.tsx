@@ -767,7 +767,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               >
                 <div className={styles.planningHeader}>
                   <div>
-                    <p className={styles.planningEyebrow}>PLANIFICACIÓN CON DATOS REALES</p>
+                    <p className={styles.planningEyebrow}>{coverageVerified ? "PLANIFICACIÓN CON GASTOS CONTRASTADOS" : "PLANIFICACIÓN PROVISIONAL · DATOS INCOMPLETOS"}</p>
                     <h2 id="budget-planning-title">De la referencia a tu objetivo</h2>
                     <p>Cada cifra cumple una función distinta: referencia automática, decisión y resultado esperado.</p>
                   </div>
@@ -822,7 +822,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                 </div>
 
                 <p className={styles.planningNote}>
-                  La referencia usa el motor Axioma §52; la proyección de ahorro usa tus ingresos recientes. Ninguna modifica la fuente bancaria ni constituye asesoramiento financiero.
+                  La referencia usa el motor Axioma §52; la proyección de ahorro usa tus ingresos recientes. {coverageVerified ? "La cobertura del mes seleccionado es estimada y debe contrastarse con los movimientos." : "La cobertura bancaria no está verificada: los importes y objetivos son orientativos y podrían cambiar al importar datos pendientes."} Ninguna modifica la fuente bancaria ni constituye asesoramiento financiero.
                 </p>
               </section>
             ) : null}
@@ -835,7 +835,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       <h2>Límites y referencias del mes</h2>
                       <p>Tu límite elegido tiene prioridad; sin él, la referencia automática se usa para comparar.</p>
                     </div>
-                    <span className={`${styles.status} ${styles[snapshot.total.status]}`}>{formatMonth(snapshot.month)}</span>
+                    <span data-budget-month-status={coverageVerified ? "estimated" : "unverified"} className={`${styles.status} ${coverageVerified ? styles[snapshot.total.status] : ""}`}>{formatMonth(snapshot.month)}</span>
                   </div>
 
                   {snapshot.categories.length > 0 ? (
