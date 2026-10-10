@@ -543,3 +543,36 @@ test("REC-CMP-006 · incidencia de sincronización no se diagnostica falsamente 
   await expect(insight).toContainText("No podemos interpretar la variación");
   await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Comparación incompleta");
 });
+
+
+test("REC-CMP-007 · un fallo del comparador conserva la selección aplicada y permite reintentar solo GET", async ({ page }) => {
+  await openComparison(page);
+  const originalPeriod = page.getByRole("group", { name: "Leyenda de periodos" });
+  await expect(originalPeriod).toContainText("Principal 10 días");
+  const methods: string[] = [];
+  let failed = true;
+  await page.route("**/api/compare?**", async (route) => {
+    methods.push(route.request().method());
+    if (failed) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ code: "comparison_backend_unavailable" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(snapshotFor(new URL(route.request().url()))),
+    });
+  });
+  await page.locator("fieldset").first().getByLabel("Hasta").fill("2026-09-11");
+  await page.getByRole("button", { name: "Comparar periodos" }).click();
+  await expect(page.getByRole("alert")).toContainText("No se ha podido actualizar el comparador");
+  await expect(originalPeriod).toContainText("Principal 10 días");
+  await expect(page.getByRole("button", { name: "Comparar periodos" })).toBeEnabled();
+  failed = false;
+  await page.getByRole("button", { name: "Comparar periodos" }).click();
+  await expect(originalPeriod).toContainText("Principal 11 días");
+  await expect(page).toHaveURL(/primaryTo=2026-09-11/);
+  expect(methods).toEqual(["GET", "GET"]);
+});
