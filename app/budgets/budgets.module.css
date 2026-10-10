@@ -780,6 +780,11 @@
   border-color: var(--border-success-soft);
   color: var(--color-success);
 }
+:global(html[data-theme="light"]) .notice.coverageWarning {
+  background: var(--surface-warning-soft);
+  border-color: var(--border-warning-soft);
+  color: var(--text-warning-soft);
+}
 :global(html[data-theme="light"]) .status.over { color: var(--color-danger); }
 :global(html[data-theme="light"]) .status.unfunded { color: var(--color-warning); }
 :global(html[data-theme="light"]) .status.on_track { color: var(--color-success); }
