@@ -745,12 +745,27 @@ test("REC-COV-011 · las incidencias de sincronización invalidan la cobertura c
   }
   const clean = resolvePeriodCoverage({ ...period, sync: {
     status: "success",
+    startedAt: "2026-10-03T09:00:00Z",
+    finishedAt: "2026-10-03T09:01:00Z",
+    rowsSeen: 300,
     rowsFailed: 0,
     rowsMissing: 0,
     duplicatesDetected: 0,
     warningsCount: 0,
   } });
   expect(clean.state).toBe("covered");
+
+  // A "success" string without evidence of a completed run must not
+  // silently upgrade date bounds into verified financial coverage.
+  for (const sync of [
+    { status: "success", finishedAt: null, rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "not-a-date", rowsSeen: 300, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    { status: "success", finishedAt: "2026-10-03T09:01:00Z", rowsSeen: null, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+  ]) {
+    const partial = resolvePeriodCoverage({ ...period, sync });
+    expect(partial.state).toBe("partial");
+    expect(periodComparisonIsReliable(partial)).toBe(false);
+  }
 });
 
 test("REC-COV-008 · el acumulado legacy empieza donde existe gasto observado", async ({ page }) => {
