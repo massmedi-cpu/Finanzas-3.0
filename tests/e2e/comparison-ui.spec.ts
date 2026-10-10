@@ -485,6 +485,7 @@ test("REC-CMP-004 · una referencia sin cobertura nunca permite inferir mejoras 
   const metrics = page.getByRole("region", { name: "Resumen comparativo" });
   await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
   await expect(metrics).toContainText("Referencia Sin dato");
+  await expect(metrics).not.toContainText("El ahorro coincide con el neto operativo en ambos periodos");
   await expect(metrics).not.toContainText("−33,3 %");
   const categories = page.getByRole("table", { name: /categorías/i });
   await expect(categories).toContainText("Sin dato");
