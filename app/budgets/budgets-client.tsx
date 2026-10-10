@@ -392,18 +392,27 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         if (controller.signal.aborted) return;
         const freshness = payload && typeof payload === "object" && !Array.isArray(payload)
           ? payload as Partial<SourceFreshness> : null;
-        // Failure, unavailable bounds, or an unverified sync all fail closed.
+        // A malformed success payload must never certify a financial zero or
+        // "within budget". Older endpoints may omit incident counts: until
+        // they supply evidence, the coverage remains unverified.
+        const sync = freshness?.sync;
+        const validSync = sync && typeof sync === "object" && !Array.isArray(sync)
+          && ["success", "failed", "started", "partial"].includes(sync.status)
+          && [
+            sync.rowsSeen, sync.rowsFailed, sync.rowsMissing,
+            sync.duplicatesDetected, sync.warningsCount,
+          ].every((value) => typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
         const valid = freshness?.available === true
           && (typeof freshness.latestMovementDate === "string" || freshness.latestMovementDate === null)
           && (freshness.earliestMovementDate === undefined || typeof freshness.earliestMovementDate === "string" || freshness.earliestMovementDate === null)
-          && (freshness.sync === null || (typeof freshness.sync === "object" && freshness.sync !== undefined));
+          && validSync;
         const coverage = valid
           ? resolvePeriodCoverage({
               dateFrom: `${month}-01`,
               dateTo: `${month}-${String(lastDay).padStart(2, "0")}`,
               latestMovementDate: freshness.latestMovementDate,
               earliestMovementDate: freshness.earliestMovementDate,
-              sync: freshness.sync ?? { status: "failed" },
+              sync,
             })
           : unknown;
         setCoverageCheck({ month, coverage });
