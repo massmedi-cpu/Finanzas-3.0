@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath } from "../../src/application/cash-flow/evolution-plot";
+import { cashFlowDayPositions, cashFlowIsolatedPoints, cashFlowSegmentedPath, cashFlowSelectedDayIndex } from "../../src/application/cash-flow/evolution-plot";
 import { cashFlowObservedDaySignal, type CashFlowEvolutionPoint, type CashFlowTransaction } from "../../src/application/cash-flow/cash-flow-model";
 
 function point(date: string, value: number | null): CashFlowEvolutionPoint {
@@ -31,6 +31,19 @@ test("one observed day remains visible as an isolated point", () => {
   expect(cashFlowDayPositions(rows)).toEqual([0.5]);
   expect(cashFlowIsolatedPoints(rows, "realCumulativeCents")).toEqual([0]);
   expect(cashFlowSegmentedPath(rows, "realCumulativeCents", () => 50, v => v)).toBe("M 50 -250");
+});
+
+test("selected chart day follows its calendar identity across refreshed or shorter periods", () => {
+  const october = [point("2026-10-01", 100), point("2026-10-02", 200), point("2026-10-03", 300)];
+  const longerOctober = [...october, point("2026-10-04", 400)];
+  const november = [point("2026-11-01", 500), point("2026-11-02", 600)];
+  expect(cashFlowSelectedDayIndex(october, null)).toBe(2);
+  expect(cashFlowSelectedDayIndex(longerOctober, "2026-10-02")).toBe(1);
+  expect(cashFlowSelectedDayIndex(october, "2026-10-02")).toBe(1);
+  // A new period cannot silently turn the old second day into November 2.
+  expect(cashFlowSelectedDayIndex(november, "2026-10-02")).toBe(1);
+  expect(cashFlowSelectedDayIndex([point("2026-11-01", 500)], "2026-10-02")).toBe(0);
+  expect(cashFlowSelectedDayIndex([], "2026-10-02")).toBe(0);
 });
 
 test("Cash Flow calendar hides bank signals without confirmed coverage and excludes transfers/duplicates", () => {
