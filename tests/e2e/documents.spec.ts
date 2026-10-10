@@ -449,6 +449,52 @@ test("REC-OCR-036 · respuesta de revisión sin número no se anuncia como guard
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-037 · un PATCH incierto se recupera únicamente leyendo la revisión guardada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const runId = "98000000-0000-4000-8000-000000000098";
+  let patchCount = 0;
+  let recovered = false;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() === "PATCH") {
+      patchCount += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "persistence_failed" }) });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        runs: [{ id: runId, extractor: "pdfjs-6.2.108-native-text", extractedAt: "2026-09-07T07:00:00.000Z" }],
+        reviews: recovered ? [{ revision: 1, ocrRunId: runId }] : [],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+
+  const verify = page.getByRole("button", { name: "Comprobar revisión sin volver a guardar" });
+  await expect(verify).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmar revisión" })).toBeDisabled();
+  expect(patchCount).toBe(1);
+  await verify.click();
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert"))
+    .toContainText("El historial no muestra una revisión nueva");
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+  expect(patchCount).toBe(1);
+
+  recovered = true;
+  await verify.click();
+  await expect(page.locator('[data-ocr-confirmation="unverified"]')).toHaveCount(0);
+  await expect(page.getByText("Guardada como revisión 1.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmado ✓" })).toBeDisabled();
+  expect(patchCount).toBe(1);
+  expect(writes).toHaveLength(0);
+});
+
 test("Documentos confirms suggestions explicitly and allows reversible associations", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
