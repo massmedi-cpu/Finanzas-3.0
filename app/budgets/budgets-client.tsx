@@ -166,6 +166,7 @@ function BudgetCard({
   busy,
   editing,
   editLocked,
+  writeBlocked,
   editValue,
   fieldError,
   onStartEdit,
@@ -182,6 +183,7 @@ function BudgetCard({
   busy: boolean;
   editing: boolean;
   editLocked: boolean;
+  writeBlocked: boolean;
   editValue: string;
   fieldError: string;
   onStartEdit: () => void;
@@ -309,13 +311,13 @@ function BudgetCard({
         </Link>
       ) : null}
       <div className={styles.cardActions}>
-        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editLocked}>
+        <button className={styles.textButton} type="button" onClick={onStartEdit} disabled={busy || editLocked || writeBlocked}>
           {hasChosenLimit ? "Editar límite elegido" : "Definir límite"}
         </button>
         {hasChosenLimit ? (
           <>
             <span className={styles.manualBadge}>Referencia automática {formatMoney(item.automaticAmountCents)}</span>
-            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy || editLocked}>
+            <button className={styles.textButton} type="button" onClick={onClearManual} disabled={busy || editLocked || writeBlocked}>
               Quitar límite elegido
             </button>
           </>
@@ -349,7 +351,7 @@ function BudgetCard({
           </label>
           <div className={styles.editorButtons}>
             <button className={styles.secondaryButton} type="button" onClick={onCancelEdit} disabled={busy}>Cancelar</button>
-            <button className={styles.actionButton} type="button" onClick={onSave} disabled={busy}>Guardar</button>
+            <button className={styles.actionButton} type="button" onClick={onSave} disabled={busy || writeBlocked}>Guardar</button>
           </div>
         </div>
       ) : null}
@@ -369,6 +371,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [writeUnverified, setWriteUnverified] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
@@ -487,6 +490,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         throw new Error("El servidor devolvió un presupuesto de otro mes.");
       }
       setSnapshot(nextSnapshot);
+      setWriteUnverified(false);
       setEditingKey(null);
     } catch (caught) {
       if (generation !== fetchGeneration.current || (controller.signal.aborted && !timedOut)) return;
@@ -518,10 +522,12 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
     body: Record<string, unknown>,
     successMessage: string,
   ) => {
+    if (writeUnverified || busy) return false;
     setBusy(true);
     setError("");
     setNotice("");
     setFieldError("");
+    let requestDefinitelyRejected = false;
     const feedbackId = method === "POST" ? "budgets:refresh" : "budgets:save-limit";
     actionFeedback.begin(feedbackId, method === "POST" ? "Actualizando referencias del presupuesto…" : "Guardando límite de presupuesto…");
     const controller = new AbortController();
@@ -534,11 +540,16 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         signal: controller.signal,
       });
       const payload = await response.json().catch(() => null);
-      if (!response.ok || !payload) throw new Error(readableError(payload, true));
+      if (!response.ok) {
+        requestDefinitelyRejected = response.status >= 400 && response.status < 500;
+        throw new Error(readableError(payload, true));
+      }
+      if (!payload) throw new Error(readableError(payload, true));
       if (!isBudgetSnapshot(payload) || payload.month !== body.month) {
         throw new Error("No se pudo verificar la respuesta del guardado. La operación podría haberse aplicado: recarga y comprueba el límite antes de repetirla.");
       }
       setSnapshot(payload);
+      setWriteUnverified(false);
       setEditingKey(null);
       setEditValue("");
       setNotice(successMessage);
@@ -552,13 +563,16 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         : caught instanceof Error ? caught.message
           : "No se ha podido confirmar el guardado. Recarga el presupuesto antes de volver a intentarlo.";
       setError(message);
+      // A 5xx, lost response, timeout or corrupt success body might follow a
+      // committed write. Block retries until a fresh read proves the state.
+      setWriteUnverified(!requestDefinitelyRejected);
       actionFeedback.error(feedbackId, message);
       return false;
     } finally {
       window.clearTimeout(deadline);
       setBusy(false);
     }
-  }, [actionFeedback]);
+  }, [actionFeedback, busy, writeUnverified]);
 
   const handleRefresh = useCallback(() => {
     void mutate("POST", { month }, `Referencia automática de ${formatMonth(month)} actualizada.`)
@@ -671,7 +685,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               title={editingKey !== null ? "Guarda o cancela la edición antes de cambiar de mes" : undefined}
             />
           </label>
-          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || loading || editingKey !== null}>
+          <button className={styles.actionButton} type="button" onClick={handleRefresh} disabled={busy || writeUnverified || loading || editingKey !== null}>
             <Icon name="refresh" />
             {busy ? "Actualizando…" : "Actualizar referencia"}
           </button>
@@ -684,6 +698,14 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       </section>
 
       <div className={styles.content}>
+        {writeUnverified ? (
+          <div className={styles.uncertainWrite} role="status" data-budget-write-state="unverified">
+            <span>Hay un cambio cuyo resultado no se ha podido confirmar. Antes de repetirlo, consulta el estado guardado.</span>
+            <button type="button" className={styles.secondaryButton} onClick={() => void fetchSnapshot(month)} disabled={busy || loading}>
+              Comprobar resultado sin volver a guardar
+            </button>
+          </div>
+        ) : null}
         {error ? (
           <div className={styles.alert} role="alert">
             <Icon name="warning" />
@@ -799,7 +821,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                           className={styles.stepLink}
                           type="button"
                           onClick={() => startEdit(snapshot.total)}
-                          disabled={busy || editingKey !== null}
+                          disabled={busy || writeUnverified || editingKey !== null}
                         >
                           Definir mi límite mensual
                         </button>
@@ -869,6 +891,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
                       editLocked={editingKey !== null}
+                      writeBlocked={writeUnverified}
                       editing={editingKey === "__total__"}
                       editValue={editValue}
                       fieldError={editingKey === "__total__" ? fieldError : ""}
@@ -888,6 +911,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
                         editLocked={editingKey !== null}
+                        writeBlocked={writeUnverified}
                         editing={editingKey === item.categoryId}
                         editValue={editValue}
                         fieldError={editingKey === item.categoryId ? fieldError : ""}
