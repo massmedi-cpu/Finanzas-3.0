@@ -1054,6 +1054,29 @@ test("QA-22 · Presupuestos no dibuja gasto para meses exactamente a cero", asyn
 });
 
 
+test("REC-BUD-020 · planificación y mes no aparentan aprobación cuando la fuente no está contrastada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  await expect(page.locator("[data-budget-month-status]")).toHaveAttribute("data-budget-month-status", "unverified");
+  await expect(page.getByText("PLANIFICACIÓN PROVISIONAL · DATOS INCOMPLETOS")).toBeVisible();
+  await expect(page.getByText(/La cobertura bancaria no está verificada: los importes y objetivos son orientativos/)).toBeVisible();
+  await mockCoveredBudgetSource(page);
+  await page.getByRole("button", { name: "Volver a comprobar" }).click();
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
+  await expect(page.locator("[data-budget-month-status]")).toHaveAttribute("data-budget-month-status", "estimated");
+  await expect(page.getByText("PLANIFICACIÓN CON GASTOS CONTRASTADOS")).toBeVisible();
+  expect(writes).toHaveLength(0);
+});
+
 test("REC-BUD-019 · el histórico no convierte un mes sin importaciones en cero confirmado", async ({ page }) => {
   const historySnapshot = structuredClone(baseSnapshot);
   historySnapshot.total.historyMonths = [
