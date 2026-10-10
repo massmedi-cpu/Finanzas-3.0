@@ -507,3 +507,77 @@ test("10.0.21 · selección masiva respeta 200, permite liberar y guarda una sol
   await page.getByRole('button', { name: 'Quitar selección' }).click();
   await expect(page.getByLabel('Edición masiva de movimientos')).toHaveCount(0);
 });
+
+test("REC-TXN-004 · PATCH con 503 bloquea escrituras hasta nueva lectura comprobable", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  let reads = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() === "PATCH") {
+      writes.push(req.postDataJSON() as Record<string, unknown>);
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "backend_timeout" }) });
+      return;
+    }
+    if (req.method() === "GET" && url.searchParams.get("mode") !== "facets") reads += 1;
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Posiblemente guardado");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toContainText("podría haberse aplicado");
+  await expect(page.getByTestId("save-edit")).toBeDisabled();
+  expect(writes).toHaveLength(1);
+  const readCount = reads;
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(reads).toBe(readCount + 1);
+  expect(writes).toHaveLength(1);
+  await expect(page.getByText("Compra supermercado corregida", { exact: true }).first()).toBeVisible();
+});
+
+test("REC-TXN-005 · rechazo de validación 400 no bloquea el editor ni induce un segundo PATCH", async ({ page }) => {
+  let writes = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "PATCH") {
+      writes += 1;
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "invalid_payload", code: "invalid_patch" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`edit-${firstId}`).click();
+  await page.getByTestId("edit-concept").fill("Texto corregible");
+  await page.getByTestId("save-edit").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  await expect(page.getByTestId("save-edit")).toBeEnabled();
+  expect(writes).toBe(1);
+});
+
+test("REC-TXN-006 · revisión POST con respuesta incierta no se duplica", async ({ page }) => {
+  let postCount = 0;
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    if (route.request().method() === "POST") {
+      postCount += 1;
+      await route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "gateway_timeout" }) });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`review-duplicate-${firstId}`).click();
+  await expect(page.getByTestId("duplicate-confirm")).toBeEnabled();
+  await page.getByTestId("duplicate-confirm").click();
+  await expect(page.getByTestId("transactions-write-unverified")).toBeVisible();
+  await expect(page.getByTestId("duplicate-confirm")).toBeDisabled();
+  expect(postCount).toBe(1);
+  await page.getByRole("button", { name: "Volver a consultar sin guardar" }).click();
+  await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
+  expect(postCount).toBe(1);
+});
