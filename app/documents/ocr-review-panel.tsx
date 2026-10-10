@@ -391,7 +391,7 @@ export function OcrReviewPanel({
   }
 
   async function confirmReview() {
-    if (!draft || !ocrRunId || confirming || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
+    if (!draft || !ocrRunId || confirming || confirmedRevision !== null || confirmInFlight.current || busy || activeDocumentId.current !== documentId) return;
     confirmInFlight.current = true;
     const generation = documentGeneration.current;
     const isCurrent = () => generation === documentGeneration.current
@@ -433,16 +433,30 @@ export function OcrReviewPanel({
       // Do not abort an already submitted confirmation (the server may have
       // committed it); only suppress feedback for an unrelated new document.
       if (!isCurrent()) return;
-      const revision = typeof saved?.revision === "number" ? saved.revision : null;
+      const revision = typeof saved?.revision === "number" && Number.isSafeInteger(saved.revision) && saved.revision > 0
+        ? saved.revision : null;
+      if (revision === null) {
+        throw new Error("ocr_confirmation_unverified");
+      }
       setConfirmedRevision(revision);
-      if (onConfirmed) await onConfirmed();
-      actionFeedback.success(feedbackId, revision ? `Revisión OCR confirmada · revisión ${revision}.` : "Revisión OCR confirmada.");
+      actionFeedback.success(feedbackId, `Revisión OCR confirmada · revisión ${revision}.`);
+      // Refreshing the parent list is not part of the PATCH transaction.
+      // A failed post-save refresh must never claim that persistence failed.
+      if (onConfirmed) {
+        try {
+          await onConfirmed();
+        } catch {
+          if (isCurrent()) {
+            setError("La revisión se ha guardado, pero no se pudo actualizar el listado. Puedes recargar Documentos; no confirmes de nuevo.");
+          }
+        }
+      }
     } catch (caught) {
       if (!isCurrent()) return;
       const code = caught instanceof Error ? caught.message : "request_failed";
       const message = code.startsWith("invalid_")
         ? "Hay un dato de la revisión con formato no válido. Corrígelo antes de confirmar."
-        : "No se ha podido guardar la revisión OCR confirmada.";
+        : "No se pudo comprobar si la revisión OCR llegó a guardarse. Consulta su historial antes de volver a confirmar para evitar duplicados.";
       setError(message);
       actionFeedback.error(feedbackId, message);
     } finally {
@@ -576,7 +590,7 @@ export function OcrReviewPanel({
                   <h3>Corregir y confirmar datos</h3>
                   <p>La propuesta parte del OCR, pero estos campos son editables y no sustituyen al original hasta que los confirmes.</p>
                 </div>
-                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || confirming || result.status === "empty"}>
+                <button className={styles.primaryButton} type="button" onClick={() => void confirmReview()} disabled={!ocrRunId || confirming || confirmedRevision !== null || result.status === "empty"}>
                   {confirming ? "Confirmando…" : confirmedRevision ? "Confirmado ✓" : "Confirmar revisión"}
                 </button>
               </div>
