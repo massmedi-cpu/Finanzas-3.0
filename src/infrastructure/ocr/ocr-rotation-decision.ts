@@ -29,3 +29,13 @@ export function ocrNeedsRotationFallback(
     && (!landscape || financialCue)) return false;
   return landscape || words.length < 5 || chars < 24 || confidence < 0.62;
 }
+
+/**
+ * Only the automatic orientation pass needs the color image produced by
+ * Tesseract to recover output dimensions. Explicit quarter turns and crop
+ * passes already know their geometry; avoid returning large base64 images
+ * for each secondary OCR pass.
+ */
+export function ocrRecognitionOutputFlags(autoRotate: boolean) {
+  return { text: true, tsv: true, imageColor: autoRotate };
+}
