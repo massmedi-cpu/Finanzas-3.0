@@ -904,7 +904,7 @@ test("REC-BUD-030 · HTTP 200 con límite incorrecto no anuncia guardado", async
   await page.getByRole("button", { name: "Definir límite" }).first().click();
   await page.getByLabel("Límite elegido de total mensual").fill("850,00");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
-  await expect(page.getByText(/El servidor respondió, pero el límite guardado no coincide/)).toBeVisible();
+  await expect(page.locator("#main-content").getByText(/El servidor respondió, pero el límite guardado no coincide/)).toBeVisible();
   await expect(page.locator('[data-budget-write-state="unverified"]')).toBeVisible();
   await expect(page.getByText("Límite elegido guardado.", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Guardar", exact: true })).toBeDisabled();
