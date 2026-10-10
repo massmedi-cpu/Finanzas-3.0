@@ -243,6 +243,18 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
     };
   }
 
+  // A successful sync is not evidence that any bank movement date was
+  // imported. A missing date may mean an empty account or an unavailable
+  // legacy bounds endpoint. Never display "Datos al día" in that situation.
+  if (!movementLabel) {
+    return {
+      label: "Cobertura bancaria sin verificar",
+      detail,
+      incidentDetail: "No hay ninguna fecha de movimiento bancario confirmada.",
+      tone: "warning",
+    };
+  }
+
   return {
     label: "Datos al día",
     detail,

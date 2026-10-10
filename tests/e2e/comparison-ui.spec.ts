@@ -102,6 +102,34 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-SYNC-001 · sincronización exitosa sin fecha bancaria no significa datos al día", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: null,
+      latestMovementDate: null,
+      sync: {
+        status: "success",
+        finishedAt: "2026-09-25T08:00:00Z",
+        startedAt: "2026-09-25T07:59:00Z",
+        rowsSeen: 0,
+        rowsFailed: 0,
+        rowsMissing: 0,
+        duplicatesDetected: 0,
+        warningsCount: 0,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Cobertura bancaria sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("No hay ninguna fecha de movimiento bancario confirmada.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
+});
+
 test("REC-CMP-003 · una sincronización con filas ausentes impide certificar variaciones", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
