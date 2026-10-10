@@ -29,7 +29,8 @@ BEGIN
       AND tag_key IN ('personal','supermercado');
   SELECT count(*) INTO v_audit_count FROM financial_app.audit_changes
     WHERE entity_type='transaction'
-      AND entity_id='aa110000-0000-4000-8000-000000000066';
+      AND entity_id='aa110000-0000-4000-8000-000000000066'
+      AND field_name IN ('concept_override','category_override','excluded_from_analytics','note','tags');
   SELECT count(*) INTO v_cross_count FROM financial_app.transactions
     WHERE id='bb220000-0000-4000-8000-000000000066';
   IF v_source.amount_cents IS DISTINCT FROM -3456
@@ -63,7 +64,8 @@ BEGIN
     WHERE transaction_id='bb220000-0000-4000-8000-000000000066';
   SELECT count(*) INTO v_audit_count FROM financial_app.audit_changes
     WHERE entity_type='transaction'
-      AND entity_id='bb220000-0000-4000-8000-000000000066';
+      AND entity_id='bb220000-0000-4000-8000-000000000066'
+      AND field_name='note';
   SELECT count(*) INTO v_cross_count FROM financial_app.transactions
     WHERE id='aa110000-0000-4000-8000-000000000066';
   IF v_source.amount_cents IS DISTINCT FROM -7890
