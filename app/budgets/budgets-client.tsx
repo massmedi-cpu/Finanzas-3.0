@@ -932,13 +932,22 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                   </div>
 
                   <div className={styles.history} role="region" aria-label="Tres meses recientes visibles de la referencia automática">
+                    <p className={styles.historyNote}>
+                      Gastos registrados, sin confirmación de cobertura completa para cada mes.
+                      Un importe ausente no se presenta como gasto cero.
+                    </p>
                     {snapshot.total.historyMonths.map((row) => {
                       const maximum = Math.max(1, ...snapshot.total.historyMonths.map((entry) => entry.expenseCents));
+                      const hasObservedSpend = row.expenseCents > 0;
                       return (
-                        <div className={styles.historyRow} key={row.month}>
+                        <div className={styles.historyRow} key={row.month} data-history-month={row.month}>
                           <span>{shortMonth(row.month)}</span>
-                          <div className={styles.historyBar}><i data-budget-history-bar="true" data-zero={row.expenseCents === 0 ? "true" : undefined} style={{ width: `${row.expenseCents === 0 ? 0 : Math.max(3, (row.expenseCents / maximum) * 100)}%` }} /></div>
-                          <strong>{formatMoney(row.expenseCents)}</strong>
+                          <div className={styles.historyBar} aria-label={hasObservedSpend ? "Gasto registrado · incompleto" : "Gasto sin confirmar"}>
+                            <i data-budget-history-bar="true" data-zero={!hasObservedSpend ? "true" : undefined} style={{ width: `${hasObservedSpend ? Math.max(3, (row.expenseCents / maximum) * 100) : 0}%` }} />
+                          </div>
+                          <strong title={hasObservedSpend ? "Gasto registrado sin cobertura completa verificada" : "No se puede certificar que el gasto fuese cero"}>
+                            {hasObservedSpend ? formatMoney(row.expenseCents) : "—"}
+                          </strong>
                         </div>
                       );
                     })}
