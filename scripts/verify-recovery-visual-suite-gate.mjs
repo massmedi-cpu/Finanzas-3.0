@@ -28,9 +28,9 @@ const moduleEvidence = workflow.indexOf("Retain integrated module traces and scr
 const uploadEvidence = workflow.indexOf("Upload isolated synthetic browser evidence");
 assert.ok(visualEvidence > 0 && visualEvidence < moduleTests, "Visual screenshots must be copied before integrated tests overwrite them");
 assert.ok(moduleEvidence > moduleTests && uploadEvidence > moduleEvidence, "Integrated browser traces must be preserved and uploaded");
-assert.match(workflow, /uses: actions\\/upload-artifact@[a-f0-9]{40}/, "Upload action must pin a reviewed full commit SHA");
+assert.match(workflow, /uses: actions\/upload-artifact@[a-f0-9]{40}/, "Upload action must pin a reviewed full commit SHA");
 assert.ok(workflow.includes("retention-days: 7"), "Synthetic browser evidence must have bounded retention");
 assert.ok(workflow.includes("path: recovery-evidence/"), "Browser artifact must contain both preserved phases");
-process.stdout.write("PASS: synthetic browser screenshots and traces survive the CI runner with bounded retention\\n");
+process.stdout.write("PASS: synthetic browser screenshots and traces survive the CI runner with bounded retention\n");
 
 process.stdout.write("PASS: recovery visual suites are executable by the mandatory browser gate\n");
