@@ -39,8 +39,8 @@ function forecastStatus(state: CashFlowView["forecastState"]) {
 
 function daySignals(day: CashFlowDay, actualReady: boolean, forecastReady: boolean) {
   return [
-    actualReady && day.realIncomeCents > 0 ? "entradas reales" : null,
-    actualReady && day.realExpenseCents < 0 ? "salidas reales" : null,
+    cashFlowObservedDaySignal(day, actualReady, "income") ? "entradas reales" : null,
+    cashFlowObservedDaySignal(day, actualReady, "expense") ? "salidas reales" : null,
     forecastReady && day.plannedIncomeCents > 0 ? "entradas previstas" : null,
     forecastReady && day.plannedExpenseCents < 0 ? "salidas previstas" : null,
     forecastReady && day.forecasts.some((item) => cashFlowEventState(item) === "suggested") ? "eventos sugeridos" : null,
