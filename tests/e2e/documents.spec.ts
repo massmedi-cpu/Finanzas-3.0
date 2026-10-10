@@ -407,7 +407,24 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
     if (route.request().method() !== "PATCH") return route.fallback();
     confirms += 1;
     await pendingSave;
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ revision: 1 }) });
+    const request = route.request().postDataJSON() as Record<string, unknown>;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 2, revision: 1,
+        documentId: request.documentId,
+        ocrRunId: request.ocrRunId,
+        rawEvidenceImmutable: true, bankSource: "read_only",
+        financialWrites: false, requiresHumanReview: true,
+        reviewedValues: {
+          type: request.type,
+          documentDate: request.documentDate,
+          taxBaseCents: request.taxBaseCents,
+          taxesCents: request.taxesCents,
+          totalCents: request.totalCents,
+        },
+      }),
+    });
   });
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
@@ -426,6 +443,45 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
   await expect(page.getByText("Guardada como revisión 1.")).toBeVisible();
   expect(confirms).toBe(1);
   expect(writes).toHaveLength(0);
+});
+
+test("REC-OCR-038 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
+  const corruptions = [
+    "wrong-document", "wrong-ocr-run", "wrong-total", "source-write",
+  ] as const;
+  let writes = 0;
+  for (const corruption of corruptions) {
+    await mockDocumentApi(page, []);
+    await page.route("**/api/documents/ocr-review*", async (route) => {
+      if (route.request().method() !== "PATCH") return route.fallback();
+      writes += 1;
+      const requested = route.request().postDataJSON() as Record<string, unknown>;
+      const response = {
+        contractVersion: 2, revision: 1,
+        documentId: corruption === "wrong-document" ? "93000000-0000-4000-8000-000000000099" : requested.documentId,
+        ocrRunId: corruption === "wrong-ocr-run" ? "98000000-0000-4000-8000-000000000099" : requested.ocrRunId,
+        bankSource: "read_only",
+        financialWrites: corruption === "source-write",
+        rawEvidenceImmutable: true, requiresHumanReview: true,
+        reviewedValues: {
+          type: requested.type, documentDate: requested.documentDate,
+          taxBaseCents: requested.taxBaseCents, taxesCents: requested.taxesCents,
+          totalCents: corruption === "wrong-total" ? 0 : requested.totalCents,
+        },
+      };
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(response) });
+    });
+    await page.goto("/documents");
+    await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+    await page.getByRole("button", { name: "Analizar documento" }).click();
+    const confirm = page.getByRole("button", { name: "Confirmar revisión" });
+    await expect(confirm).toBeEnabled();
+    await confirm.click();
+    await expect(page.locator('[data-ocr-confirmation="unverified"]')).toBeVisible();
+    await expect(page.getByText(/Guardada como revisión/)).toHaveCount(0);
+    await page.unroute("**/api/documents/ocr-review*");
+  }
+  expect(writes).toBe(corruptions.length);
 });
 
 test("REC-OCR-036 · respuesta de revisión sin número no se anuncia como guardada", async ({ page }) => {
