@@ -101,6 +101,10 @@ BEGIN
 END $verify$;
 ANALYZE financial_app.transactions;
 ANALYZE financial_app.transaction_source_records;
+-- The restricted gateway must read the reference-only temporary fixture during
+-- the parity assertion. GRANT affects disposable session temp tables only;
+-- permanent tables, RLS and gateway grants remain unchanged.
+GRANT SELECT ON TABLE cap_accounts, cap_rows TO financial_app_gateway;
 -- All live policy checks on the measured read path remain enabled.
 SET LOCAL ROLE financial_app_gateway;
 
