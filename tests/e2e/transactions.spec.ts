@@ -632,3 +632,50 @@ test("REC-TXN-007 · reparto PUT con resultado desconocido bloquea un segundo en
   await expect(page.getByTestId("transactions-write-unverified")).toHaveCount(0);
   expect(writes).toBe(1);
 });
+
+test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin inventar un reparto vacío", async ({ page }) => {
+  const split = {
+    exists: false, active: false, stale: false, canSplit: true,
+    bankAmountCents: -1234, sourceAmountCents: null,
+    personalAmountCents: -1234, otherAmountCents: 0, allocationCount: 0, categoryCount: 0,
+  };
+  const rowWithSplit = { ...firstRow, split };
+  let reads = 0;
+  const mutations: string[] = [];
+  await mockTransactionApi(page);
+  await page.route("**/api/transactions**", async (route) => {
+    const req = route.request();
+    const url = new URL(req.url());
+    if (req.method() !== "GET") {
+      mutations.push(req.method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: "{}" });
+      return;
+    }
+    if (url.searchParams.get("mode") === "split") {
+      reads += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify(reads === 1 ? {} :
+          { ...split, effectiveKind: "expense", baseCategoryId: null, allocations: [] }),
+      });
+      return;
+    }
+    if (!url.searchParams.has("mode")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ rows: [rowWithSplit], totalCount: 1, hasMore: false, nextCursor: null }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/transactions");
+  await page.getByTestId(`split-${firstId}`).click();
+  await expect(page.getByRole("alert")).toContainText("La información del reparto está incompleta");
+  await expect(page.getByTestId("save-split")).toBeDisabled();
+  await page.getByRole("button", { name: "Reintentar lectura del reparto" }).click();
+  await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
+  await expect(page.getByRole("button", { name: "Reintentar lectura del reparto" })).toHaveCount(0);
+  expect(reads).toBe(2);
+  expect(mutations).toEqual([]);
+});
