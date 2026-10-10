@@ -449,6 +449,12 @@ test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vig
   await expect(monthInput).toHaveValue("2026-07");
   await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
 
+  // Mobile hides this route behind the More dock; desktop exposes it in the
+  // persistent sidebar. Both must navigate through the real product control.
+  const mobileDock = page.getByRole("navigation", { name: "Navegación móvil" });
+  if (await mobileDock.isVisible()) {
+    await mobileDock.getByRole("button", { name: "Más", exact: true }).click();
+  }
   const navigationLink = page.locator('a[href="/budgets"]:visible').first();
   await expect(navigationLink).toBeVisible();
   await navigationLink.click();
