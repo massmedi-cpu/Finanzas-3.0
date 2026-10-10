@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { expect, test } from "@playwright/test";
 import { navigationItems } from "../../app/navigation-items";
@@ -13,8 +13,14 @@ const configurationRoutes = [
   "/configuration/source",
   "/configuration/source/diagnostics",
 ];
-// The Next.js page manifest has 22 static routes. /login is public auth,
-// so only these 21 authenticated product routes count toward the owner matrix.
+// These legacy deep links redirect to an existing editor tab. They are not
+// additional functional product destinations, but must exist and stay tested.
+const compatibilityRedirects = new Map([
+  ["/configuration/accounts", "/configuration?tab=accounts"],
+  ["/configuration/categories", "/configuration?tab=categories"],
+]);
+// The canonical product retains 21 authenticated destinations plus /login.
+// Compatibility aliases are certified separately as redirects.
 const destinations = [
   ...navigationItems.map((item) => ({ path: item.href, label: item.label })),
   ...configurationRoutes.map((path) => ({ path, label: "Configuración" })),
@@ -36,9 +42,15 @@ test("REC-VIS-004 · manifiesto de páginas reales coincide con los 21 destinos 
     }
   };
   visit(root);
-  const actual = pages.filter((path) => path !== "/login").sort();
+  const actual = pages.filter((path) => path !== "/login" && !compatibilityRedirects.has(path)).sort();
   const expected = destinations.map((route) => route.path).sort();
-  expect(actual, "Every authenticated Next.js page must belong to the smoke matrix").toEqual(expected);
+  expect(actual, "Every canonical authenticated Next.js page must belong to the smoke matrix").toEqual(expected);
+  for (const [alias, destination] of compatibilityRedirects) {
+    expect(pages, `Compatibility route ${alias} must have a page`).toContain(alias);
+    const redirectSource = readFileSync(join(root, alias.slice(1), "page.tsx"), "utf8");
+    expect(redirectSource, `Compatibility route ${alias} must redirect instead of duplicating an editor`)
+      .toContain(`redirect("${destination}")`);
+  }
 });
 
 test.describe("REC-VIS-004 · shell de navegación responsive", () => {
