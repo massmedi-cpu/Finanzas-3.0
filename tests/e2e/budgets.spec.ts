@@ -431,6 +431,40 @@ test("QA Work · Presupuestos abre el mes recibido desde otro módulo", async ({
   expect(requestedMonth).toBe("2026-07");
 });
 
+test("REC-BUD-007 · la navegación interna a Presupuestos restablece el mes vigente sin arrastrar otro mes", async ({ page }) => {
+  const requested: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      await route.fulfill({ status: 405, contentType: "application/json", body: JSON.stringify({ error: "read_only_test" }) });
+      return;
+    }
+    const month = new URL(route.request().url()).searchParams.get("month") ?? "";
+    requested.push(month);
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(snapshotForMonth(month)) });
+  });
+  // Start at a deliberately older month, then navigate to the SAME Next.js
+  // route using the real product sidebar link (without the old query).
+  await page.goto("/budgets?month=2026-07");
+  const monthInput = page.locator('input[type="month"]');
+  await expect(monthInput).toHaveValue("2026-07");
+  await expect(page.getByText("Julio de 2026", { exact: true })).toBeVisible();
+
+  const navigationLink = page.locator('a[href="/budgets"]:visible').first();
+  await expect(navigationLink).toBeVisible();
+  await navigationLink.click();
+
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    year: "numeric", month: "2-digit", timeZone: "Europe/Madrid",
+  }).formatToParts(new Date());
+  const year = parts.find((part) => part.type === "year")!.value;
+  const monthNumber = parts.find((part) => part.type === "month")!.value;
+  const currentMonth = `${year}-${monthNumber}`;
+  await expect(monthInput).toHaveValue(currentMonth);
+  await expect(page).toHaveURL(new RegExp(`month=${currentMonth}`));
+  await expect.poll(() => requested.includes(currentMonth)).toBe(true);
+  await expect(page.getByText("Julio de 2026", { exact: true })).toHaveCount(0);
+});
+
 test("QA Work · Presupuestos ofrece reintento tras un fallo de persistencia", async ({ page }) => {
   let attempts = 0;
   let retryAllowed = false;
