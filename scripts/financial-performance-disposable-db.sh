@@ -43,6 +43,11 @@ psql_db -f supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql
 psql_db -f supabase/tests/financial_persistence_ap1_ap2_mutate_disposable.sql >/dev/null
 psql_db -f supabase/tests/financial_persistence_ap1_ap2_final_readback_disposable.sql
 
+# AP1/AP2 real movement metadata: bank source read-only, isolated notes,
+# categories/tags, cross-tenant rejection and COMMIT/readback on new session.
+psql_db -f supabase/tests/financial_movements_ap1_ap2_seed_disposable.sql >/dev/null
+psql_db -f supabase/tests/financial_movements_ap1_ap2_readback_disposable.sql
+
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
