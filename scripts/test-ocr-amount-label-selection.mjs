@@ -2,6 +2,7 @@
 // document, independent ground-truth corpus or an OCR precision measurement.
 import assert from "node:assert/strict";
 import { interpretDocumentOcrFinancially } from "../src/domain/document-ocr-financial-interpretation.ts";
+import { pdfNativeTextNeedsVisualOcr } from "../src/infrastructure/ocr/pdf-text-provider.ts";
 
 function interpret(lines) {
   return interpretDocumentOcrFinancially({
@@ -299,6 +300,16 @@ const cases = [
   },
 ];
 
+// An invoice can be visually scanned even when its PDF has a selectable
+// page stamp. Test native coverage decisions independently of OCR accuracy.
+const nativeDecisionCases = [
+  { name: "blank scan needs visual OCR", texts: [], visual: true },
+  { name: "selectable page number on scan needs visual OCR", texts: ["Página", "1"], visual: true },
+  { name: "isolated invoice header is not sufficient text", texts: ["FACTURA 2026"], visual: true },
+  { name: "native total and decimal amount suffice", texts: ["TOTAL", "23,45"], visual: false },
+  { name: "substantial native invoice text is kept", texts: ["Factura del suministro correspondiente al periodo 01-09 a 30-09", "Proveedor y domicilio fiscal detallados, CIF, condiciones de pago", "Concepto, base imponible e impuestos aplicables para cada producto", "Número de factura emitida, importe", "Datos completos de la operación"], visual: false },
+];
+
 let failures = 0;
 for (const sample of cases) {
   const result = interpret(sample.lines);
@@ -312,6 +323,20 @@ for (const sample of cases) {
       sample.evidenceLines,
       `${sample.name}: both original OCR lines remain attached`,
     );
+    console.log(`PASS · ${sample.name}`);
+  } catch (error) {
+    failures++;
+    console.error(`FAIL · ${sample.name}`, error.message);
+  }
+}
+
+for (const sample of nativeDecisionCases) {
+  try {
+    const words = sample.texts.map((text, index) => ({
+      text, confidence: 0.98,
+      box: { x: 0.08, y: 0.05 + index * 0.06, width: 0.6, height: 0.04 },
+    }));
+    assert.equal(pdfNativeTextNeedsVisualOcr(words), sample.visual, sample.name);
     console.log(`PASS · ${sample.name}`);
   } catch (error) {
     failures++;
