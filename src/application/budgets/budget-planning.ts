@@ -291,12 +291,15 @@ export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
     && principles.bankSource === "read_only"
     && principles.actualSource === "financial_transaction_allocation_facts"
     && principles.recommendation === "axioma_52_weighted_history_seasonality_trend_recurrence_floor"
-    && typeof principles.transfersConsumeBudget === "boolean"
-    && typeof principles.confirmedDuplicatesConsumeBudget === "boolean"
-    && typeof principles.manualAnalyticsExclusionsRespected === "boolean"
+    // These are product invariants, not configurable preferences. Accepting
+    // opposite booleans would silently turn internal transfers, duplicates
+    // or analytics exclusions into spend while still showing an Axioma badge.
+    && principles.transfersConsumeBudget === false
+    && principles.confirmedDuplicatesConsumeBudget === false
+    && principles.manualAnalyticsExclusionsRespected === true
     && typeof principles.refundsNetAgainstExpense === "boolean"
-    && typeof principles.manualOverrideWins === "boolean"
-    && typeof principles.parentCategoryIncludesDescendants === "boolean";
+    && principles.manualOverrideWins === true
+    && principles.parentCategoryIncludesDescendants === true;
 }
 
 function readMonthlySeries(
