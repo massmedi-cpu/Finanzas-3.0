@@ -2,6 +2,13 @@
 -- Only run after financial_persistence_ap1_ap2_seed_disposable.sql in CI.
 -- READ ONLY and always ROLLBACK; the disposable DB is dropped by the shell.
 \set ON_ERROR_STOP on
+-- Fail closed if someone accidentally supplies a remote/production database.
+DO $ci_local_guard$
+BEGIN
+  IF current_database() <> 'financial_app_pre001_disposable' THEN
+    RAISE EXCEPTION 'AP1AP2_FIXTURE_MUST_USE_DISPOSABLE_LOCAL_DB';
+  END IF;
+END $ci_local_guard$;
 BEGIN READ ONLY;
 SET LOCAL ROLE financial_app_gateway;
 
