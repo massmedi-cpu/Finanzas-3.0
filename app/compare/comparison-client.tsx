@@ -122,6 +122,20 @@ async function requestComparison(input: ComparisonSelectionInput, signal: AbortS
   return payload;
 }
 
+function comparisonCoverageReason(primary: PeriodCoverage, reference: PeriodCoverage): string | null {
+  const describe = (coverage: PeriodCoverage, label: string) => {
+    if (periodComparisonIsReliable(coverage)) return null;
+    if (coverage.state === "partial") {
+      return `${label}: cobertura parcial${coverage.throughDate ? ` · datos hasta ${formatDate(coverage.throughDate)}` : ""}`;
+    }
+    return coverage.state === "none"
+      ? `${label}: sin cobertura bancaria confirmada`
+      : `${label}: cobertura bancaria desconocida`;
+  };
+  return [describe(primary, "Periodo principal"), describe(reference, "Periodo de referencia")]
+    .filter((item): item is string => Boolean(item)).join(" · ") || null;
+}
+
 function metricTone(deltaCents: number, positiveIsGood: boolean) {
   if (deltaCents === 0) return styles.neutral;
   return (deltaCents > 0) === positiveIsGood ? styles.good : styles.bad;
@@ -133,23 +147,20 @@ function MetricCard({
   positiveIsGood,
   footer,
   coverage,
+  referenceCoverage,
 }: {
   label: string;
   metric: ComparisonMoneyMetric;
   positiveIsGood: boolean;
   footer?: ReactNode;
   coverage: PeriodCoverage;
+  referenceCoverage: PeriodCoverage;
 }) {
-  const comparable = periodComparisonIsReliable(coverage);
+  const comparable = periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage);
   const observed = periodHasObservedData(coverage);
+  const referenceObserved = periodHasObservedData(referenceCoverage);
   const tone = comparable ? metricTone(metric.deltaCents, positiveIsGood) : styles.neutral;
-  const coverageDetail = coverage.state === "partial"
-    ? `Importe principal parcial · datos hasta ${formatDate(coverage.throughDate!)}`
-    : coverage.state === "none"
-      ? "Periodo principal sin cobertura bancaria confirmada"
-      : coverage.state === "unknown"
-        ? "Cobertura bancaria del periodo principal desconocida"
-        : null;
+  const coverageDetail = comparisonCoverageReason(coverage, referenceCoverage);
 
   return (
     <article className={styles.metricCard}>
@@ -158,7 +169,7 @@ function MetricCard({
         <strong className={tone}>{comparable ? signedMoney(metric.deltaCents) : "Comparación incompleta"}</strong>
       </div>
       <strong className={styles.metricValue}>{observed ? formatMoney(metric.primaryCents) : "—"}</strong>
-      <span className={styles.metricReference}>Referencia {formatMoney(metric.referenceCents)}</span>
+      <span className={styles.metricReference}>Referencia {referenceObserved ? formatMoney(metric.referenceCents) : "Sin dato"}</span>
       <div className={styles.metricDetails}>
         {comparable ? (
           <>
@@ -180,22 +191,27 @@ function NetSavingsMetric({
   rate,
   rateDelta,
   coverage,
+  referenceCoverage,
 }: {
   net: ComparisonMoneyMetric;
   savings: ComparisonMoneyMetric;
   rate: number | null;
   rateDelta: number | null;
   coverage: PeriodCoverage;
+  referenceCoverage: PeriodCoverage;
 }) {
   const equivalent = net.primaryCents === savings.primaryCents
     && net.referenceCents === savings.referenceCents;
   const observed = periodHasObservedData(coverage);
-  const comparable = periodComparisonIsReliable(coverage);
-  const coverageLabel = coverage.state === "unknown"
-    ? "Cobertura bancaria desconocida"
-    : coverage.state === "none"
-      ? "Sin movimientos confirmados en el periodo"
-      : "Importes parciales, comparación incompleta";
+  const referenceObserved = periodHasObservedData(referenceCoverage);
+  const comparable = periodComparisonIsReliable(coverage) && periodComparisonIsReliable(referenceCoverage);
+  const coverageLabel = periodComparisonIsReliable(coverage)
+    ? comparisonCoverageReason(coverage, referenceCoverage) ?? "Comparación incompleta"
+    : coverage.state === "unknown"
+      ? "Cobertura bancaria desconocida"
+      : coverage.state === "none"
+        ? "Sin movimientos confirmados en el periodo"
+        : "Importes parciales, comparación incompleta";
 
   return (
     <article className={`${styles.metricCard} ${styles.netSavingsCard}`} aria-label="Neto operativo y ahorro">
@@ -209,7 +225,7 @@ function NetSavingsMetric({
         <div>
           <span>Neto operativo</span>
           <strong className={styles.metricValue}>{observed ? formatMoney(net.primaryCents) : "—"}</strong>
-          <small>Referencia {formatMoney(net.referenceCents)}</small>
+          <small>Referencia {referenceObserved ? formatMoney(net.referenceCents) : "Sin dato"}</small>
           {comparable ? <small>{formatMoney(net.primaryDailyCents)}/día · {signedMoney(net.dailyDeltaCents)}</small> : null}
         </div>
         {equivalent ? (
@@ -218,7 +234,7 @@ function NetSavingsMetric({
           <div>
             <span>Ahorro · cálculo propio</span>
             <strong className={styles.metricValue}>{observed ? formatMoney(savings.primaryCents) : "—"}</strong>
-            <small>Referencia {formatMoney(savings.referenceCents)}</small>
+            <small>Referencia {referenceObserved ? formatMoney(savings.referenceCents) : "Sin dato"}</small>
             {comparable ? <small>Cambio del ahorro {signedMoney(savings.deltaCents)} · {formatMoney(savings.primaryDailyCents)}/día</small> : null}
           </div>
         )}
@@ -339,7 +355,12 @@ function DriverPanel({
   );
 }
 
-function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverage) {
+function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverage, referenceCoverage: PeriodCoverage) {
+  // A covered principal period alone is not a valid comparison: the reference
+  // may predate the first imported banking row or carry a sync incident.
+  if (periodComparisonIsReliable(coverage) && !periodComparisonIsReliable(referenceCoverage)) {
+    return `${comparisonCoverageReason(coverage, referenceCoverage)}. No atribuimos cambios a mejora ni empeoramiento.`;
+  }
   if (!periodComparisonIsReliable(coverage)) {
     if (coverage.state === "unknown") {
       return "Cobertura bancaria desconocida: la comparación no permite concluir mejora ni empeoramiento.";
@@ -587,11 +608,13 @@ export default function ComparisonClient({
             <section className={styles.insight} aria-labelledby="comparison-insight-title">
               <div>
                 <p>LECTURA PRINCIPAL</p>
-                <h2 id="comparison-insight-title">{comparisonInsight(snapshot, primaryCoverage!)}</h2>
+                <h2 id="comparison-insight-title">{comparisonInsight(snapshot, primaryCoverage!, referenceCoverage!)}</h2>
                 <span>
-                  {primaryCoverage?.state === "covered"
-                    ? "Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración."
-                    : primaryCoverage?.state === "partial"
+                  {primaryCoverage?.state === "covered" && !comparisonReliable
+                    ? comparisonCoverageReason(primaryCoverage, referenceCoverage!)
+                    : primaryCoverage?.state === "covered"
+                      ? "Comparamos importes totales y ritmo diario para no confundir periodos de distinta duración."
+                      : primaryCoverage?.state === "partial"
                       ? `Cobertura bancaria parcial · datos observados hasta ${formatDate(primaryCoverage.throughDate!)}.`
                       : primaryCoverage?.state === "none"
                         ? `Sin cobertura bancaria confirmada en el periodo principal${primaryCoverage.latestMovementDate ? ` · último movimiento ${formatDate(primaryCoverage.latestMovementDate)}` : ""}.`
@@ -605,14 +628,15 @@ export default function ComparisonClient({
             </section>
 
             <section className={styles.metrics} aria-label="Resumen comparativo">
-              <MetricCard label="Ingresos" metric={snapshot.metrics.income} positiveIsGood coverage={primaryCoverage!} />
-              <MetricCard label="Gasto" metric={snapshot.metrics.expense} positiveIsGood={false} coverage={primaryCoverage!} />
+              <MetricCard label="Ingresos" metric={snapshot.metrics.income} positiveIsGood coverage={primaryCoverage!} referenceCoverage={referenceCoverage!} />
+              <MetricCard label="Gasto" metric={snapshot.metrics.expense} positiveIsGood={false} coverage={primaryCoverage!} referenceCoverage={referenceCoverage!} />
               <NetSavingsMetric
                 net={snapshot.metrics.operatingNet}
                 savings={snapshot.metrics.savings}
                 rate={snapshot.savingsRate.primaryBps}
                 rateDelta={snapshot.savingsRate.deltaBps}
                 coverage={primaryCoverage!}
+                referenceCoverage={referenceCoverage!}
               />
             </section>
 
