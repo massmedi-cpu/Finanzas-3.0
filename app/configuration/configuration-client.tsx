@@ -134,8 +134,8 @@ async function requestConfiguration(operation: string, payload: Record<string, u
   return data;
 }
 
-export default function ConfigurationClient() {
-  const [tab, setTab] = useState<Tab>("accounts");
+export default function ConfigurationClient({ initialTab = "accounts" }: { initialTab?: Tab }) {
+  const [tab, setTab] = useState<Tab>(initialTab);
   const [data, setData] = useState<ConfigPayload>({ accounts: [], categories: [] });
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -413,8 +413,8 @@ export default function ConfigurationClient() {
       </header>
 
       <nav className="config-tabs" aria-label="Secciones de configuración">
-        <button className={tab === "accounts" ? "active" : ""} onClick={() => setTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
-        <button className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
+        <button type="button" aria-pressed={tab === "accounts"} className={tab === "accounts" ? "active" : ""} onClick={() => setTab("accounts")}><Icon name="account" />Cuentas <span>{data.accounts.length}</span></button>
+        <button type="button" aria-pressed={tab === "categories"} className={tab === "categories" ? "active" : ""} onClick={() => setTab("categories")}><CategoryGlyph name="wallet" />Categorías <span>{activeCategories}</span></button>
       </nav>
 
       {error && <div className="config-message error" role="alert">{error}</div>}
