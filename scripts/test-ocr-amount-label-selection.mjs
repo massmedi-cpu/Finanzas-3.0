@@ -112,7 +112,7 @@ const cases = [
     lines: ["BASE 100,00 IVA 21,00 TOTAL 121,00"],
     field: "taxesCents",
     amount: 2100,
-    trust: "doubtful",
+    trust: "reliable",
   },
   {
     name: "tax percentage alone cannot steal a following total",
@@ -147,7 +147,7 @@ const cases = [
     lines: ["BASE 100,00 IVA 21,00 TOTAL 121,00"],
     field: "taxBaseCents",
     amount: 10000,
-    trust: "doubtful",
+    trust: "reliable",
   },
   {
     name: "total selected from label in a shared tax line",
