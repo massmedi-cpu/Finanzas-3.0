@@ -198,6 +198,30 @@ async function mockBudgetApi(
   });
 }
 
+async function mockCoveredBudgetSource(page: import("@playwright/test").Page) {
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2026-08-01",
+        latestMovementDate: "2026-10-01",
+        sync: {
+          status: "success",
+          finishedAt: "2026-10-01T10:00:00Z",
+          startedAt: "2026-10-01T09:00:00Z",
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+}
+
 test("budget API rejects ambiguous or invalid writes before persistence", async ({ request }) => {
   const invalidMonth = await request.get("/api/budgets?month=2026-13");
   expect(invalidMonth.status()).toBe(400);
@@ -464,27 +488,7 @@ test("REC-BUD-009 · sin cobertura bancaria el presupuesto no afirma estar dentr
 test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve a ser calculable", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
-  await page.route("**/api/analysis/source-freshness*", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        available: true,
-        earliestMovementDate: "2026-08-01",
-        latestMovementDate: "2026-10-01",
-        sync: {
-          status: "success",
-          finishedAt: "2026-10-01T10:00:00Z",
-          startedAt: "2026-10-01T09:00:00Z",
-          rowsSeen: 300,
-          rowsFailed: 0,
-          rowsMissing: 0,
-          duplicatesDetected: 0,
-          warningsCount: 0,
-        },
-      }),
-    });
-  });
+  await mockCoveredBudgetSource(page);
 
   await page.goto("/budgets?month=2026-09");
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
@@ -983,6 +987,7 @@ test("RECUPERACION-PRODUCTO · aviso de exceso legible en Claro y Oscuro", async
   await page.route("**/api/budgets*", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ...baseSnapshot, categories: [item] }) });
   });
+  await mockCoveredBudgetSource(page);
   for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });
     await page.goto("/budgets?month=2026-09");
@@ -1065,6 +1070,7 @@ test("RECUPERACION-PRODUCTO · sin referencia no se inventa un exceso ni un porc
       body: JSON.stringify({ ...baseSnapshot, categories: [missingReference, explicitZero] }),
     });
   });
+  await mockCoveredBudgetSource(page);
   await page.goto("/budgets?month=2026-09");
   const absent = page.getByRole("heading", { name: "Sin histórico" }).locator("xpath=ancestor::article");
   await expect(absent).toContainText("Referencia no disponible");
