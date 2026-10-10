@@ -341,6 +341,8 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
   const incomeCard = history.locator("article").filter({ hasText: "ingreso periódico" });
   await incomeCard.getByRole("button", { name: "Actualizar cálculo" }).click();
   await expect(recurrenceStatus(page, "Recurrencia actualizada")).toContainText("Recurrencia actualizada con los movimientos actuales.");
+  // Refresh must preserve an already-expanded history, not hide actions.
+  await expect(history).toHaveAttribute("open", "");
   expect(writes.at(-1)).toEqual({
     method: "POST",
     candidateKey: incomeCandidateKey,
@@ -352,6 +354,7 @@ test("Recurrentes persiste solo identidad y decisión; el motor central recalcul
 
   await incomeCard.getByRole("button", { name: "Ignorar" }).click();
   await expect(recurrenceStatus(page, "Recurrencia ignorada")).toContainText("Recurrencia ignorada");
+  await expect(history).toHaveAttribute("open", "");
   expect(writes.at(-1)).toEqual({
     method: "PATCH",
     id: activeRecurrenceId,
