@@ -129,7 +129,7 @@ function statusText(freshness: SourceFreshness) {
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
 
-  if (!sync) return movementLabel ? `Datos · último movimiento ${movementLabel}` : null;
+  if (!sync) return movementLabel ? `Fuente bancaria · último movimiento ${movementLabel} · sincronización sin verificar` : "Cobertura bancaria sin verificar: no consta fecha de movimiento ni estado de sincronización";
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
   const timestampLabel = timestamp ? formatSyncDate(timestamp) : null;
@@ -153,12 +153,21 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
   const sync = freshness.sync;
 
   if (!sync) {
-    return {
-      label: "Datos bancarios disponibles",
-      detail: movement,
-      incidentDetail: null,
-      tone: "ok",
-    };
+    // Legacy/partial freshness responses may have neither a sync report nor
+    // any observed movement. Do not imply the account contains bank data.
+    return movementLabel
+      ? {
+          label: "Último movimiento disponible",
+          detail: movement,
+          incidentDetail: "El estado de sincronización no está disponible; no se puede confirmar la cobertura completa.",
+          tone: "warning",
+        }
+      : {
+          label: "Cobertura bancaria sin verificar",
+          detail: null,
+          incidentDetail: "No hay fecha de movimiento ni estado de sincronización confirmados.",
+          tone: "warning",
+        };
   }
 
   const timestamp = sync.finishedAt ?? sync.startedAt;
@@ -251,6 +260,15 @@ function userSummary(freshness: SourceFreshness): FreshnessSummary {
       label: "Cobertura bancaria sin verificar",
       detail,
       incidentDetail: "No hay ninguna fecha de movimiento bancario confirmada.",
+      tone: "warning",
+    };
+  }
+
+  if (!freshness.earliestMovementDate) {
+    return {
+      label: "Cobertura histórica sin verificar",
+      detail,
+      incidentDetail: "Se conoce el último movimiento, pero no la fecha inicial del histórico bancario.",
       tone: "warning",
     };
   }
