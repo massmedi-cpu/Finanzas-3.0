@@ -311,7 +311,11 @@ export default function AnalysisSourceFreshness({
       })
       .then((payload) => {
         if (!controller.signal.aborted) {
-          const next = payload?.available ? payload : null;
+          // "available: false" is itself a valid source-health result from
+          // a successful API request. Suppressing it hid the warning added
+          // for an account with no imported movement date or connection.
+          // Invalid/failed HTTP requests are still handled as unknown.
+          const next = payload;
           setFreshness(next);
           onChange?.(next);
         }
