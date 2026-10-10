@@ -177,7 +177,8 @@ test("Inicio inteligente resume el estado actual sin crear un segundo motor", as
   await expect(brief).toBeVisible();
   await expect(brief.getByRole("heading", { name: "Ahora mismo" })).toBeVisible();
   await expect(brief).toContainText("Balance registrado en positivo");
-  await expect(brief).toContainText("Presupuesto dentro del límite");
+  await expect(brief).toContainText("Presupuesto con datos parciales");
+  await expect(brief).not.toContainText("Presupuesto dentro del límite");
   await expect(brief).toContainText("Sin movimientos previstos");
   await expect(brief).toContainText("Datos hasta 16 sept");
 
@@ -992,5 +993,8 @@ test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de me
   await expect(chart).toBeVisible();
   await expect(page.getByTestId("financial-bar-scale-reference")).toContainText("200,00 €");
   await expect(chart.locator('[data-month-coverage="none"]')).toHaveCount(2);
-  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(1);
+  // Only the latest bank date is available: July is observed but the start
+  // of the account history is unknown, so it cannot be declared covered.
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(0);
+  await expect(chart.locator('[data-month-coverage="partial"]')).toHaveCount(1);
 });
