@@ -125,6 +125,28 @@ function parseMoneyCents(raw: string): number | null {
   return Number.isSafeInteger(cents) ? cents : null;
 }
 
+// OCR can mix prices (12,34) with weights, ratios and incomplete numeric
+// tokens (1,234). Never interpret the prefix "1,23" of "1,234" as money.
+// Preserve punctuation at the end of a sentence, but reject continuations
+// that belong to the same numeric token.
+const FINANCIAL_AMOUNT_TOKEN = /-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g;
+
+function exactFinancialAmountMatches(text: string) {
+  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN)].filter((match) => {
+    const start = match.index;
+    const end = start + match[0].length;
+    const previous = text[start - 1] ?? "";
+    const previousPrevious = text[start - 2] ?? "";
+    const next = text[end] ?? "";
+    const nextNext = text[end + 1] ?? "";
+    const startsInsideNumber = /\d/.test(previous)
+      || (/[.,]/.test(previous) && /\d/.test(previousPrevious));
+    const endsInsideNumber = /\d/.test(next)
+      || (/[.,]/.test(next) && /\d/.test(nextNext));
+    return !startsInsideNumber && !endsInsideNumber;
+  });
+}
+
 function findLabelled(lines: LocatedLine[], labels: RegExp[]) {
   return lines.find((item) => labels.some((label) => label.test(normalizeToken(item.line.text)))) ?? null;
 }
@@ -165,7 +187,7 @@ function extractMoneyField(
     const anchorEnd = preferred
       ? preferred.index + preferred[0].length
       : labelsFound.reduce((earliest, found) => Math.min(earliest, found.end), Number.POSITIVE_INFINITY);
-    const monies = [...item.line.text.matchAll(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g)]
+    const monies = exactFinancialAmountMatches(item.line.text)
       .flatMap((match) => {
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ raw: match[0], value, index: match.index }];
@@ -366,7 +388,7 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
     if (!/\b(?:iva|igic|impuestos?)\b/.test(searchable)) continue;
     const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|iva|igic|impuestos?|cuota(?:\s+(?:del?\s+)?(?:iva|igic|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
       .map((match) => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
-    const amounts = [...item.line.text.matchAll(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g)]
+    const amounts = exactFinancialAmountMatches(item.line.text)
       .flatMap((match) => {
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ start: match.index, value }];
@@ -420,7 +442,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     if (!text || /\b(total|subtotal|base|iva|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized)) continue;
-    const moneyMatches = text.match(/-?\d{1,3}(?:\.\d{3})*(?:,\d{2})|-?\d+(?:[,.]\d{2})/g) ?? [];
+    const moneyMatches = exactFinancialAmountMatches(text).map((match) => match[0]);
     if (!moneyMatches.length) continue;
     const lastMoney = moneyMatches.at(-1) ?? null;
     const totalCents = lastMoney ? parseMoneyCents(lastMoney) : null;

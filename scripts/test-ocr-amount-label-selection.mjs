@@ -91,6 +91,34 @@ const cases = [
     amount: null,
     trust: "not_detected",
   },
+  {
+    name: "three decimal quantity is not a euro total",
+    lines: ["TOTAL 1,234"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "grouped amount with three decimal digits is not truncated",
+    lines: ["TOTAL 1.234,567"],
+    field: "totalCents",
+    amount: null,
+    trust: "not_detected",
+  },
+  {
+    name: "full two decimal amount before sentence punctuation remains valid",
+    lines: ["TOTAL 12,34."],
+    field: "totalCents",
+    amount: 1234,
+    trust: "reliable",
+  },
+  {
+    name: "grouped two decimal amount remains valid before punctuation",
+    lines: ["TOTAL 1.234,56."],
+    field: "totalCents",
+    amount: 123456,
+    trust: "reliable",
+  },
 ];
 
 let failures = 0;
@@ -117,6 +145,16 @@ const taxLineCases = [
   { name: "tax percentage alone is not an amount", line: "IVA 21%", base: null, tax: null, rate: 21, trust: "doubtful" },
   { name: "change is never taken as a tax", line: "IVA 21% 100,00 21,00 CAMBIO 20,00", base: 10000, tax: 2100, rate: 21, trust: "doubtful" },
 ];
+// The base has three decimal digits (possibly weight), so the OCR parser
+// must not interpret its "1,23" prefix as a taxable amount.
+taxLineCases.push({
+  name: "three decimal base cannot be silently truncated to cents",
+  line: "IVA 21% BASE 1,234 CUOTA 2,10",
+  base: null,
+  tax: 210,
+  rate: 21,
+  trust: "reliable",
+});
 for (const sample of taxLineCases) {
   const row = interpret([sample.line]).taxLines[0];
   try {
@@ -133,5 +171,17 @@ for (const sample of taxLineCases) {
   }
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length - failures}/${cases.length + taxLineCases.length} PASS`);
+const lineItem = interpret(["MANZANAS 1,234 kg 3,50"]).lines[0];
+try {
+  assert.ok(lineItem, "weight line item is retained");
+  assert.equal(lineItem.totalCents, 350, "line item total uses full 3,50 only");
+  assert.equal(lineItem.unitPriceCents, null, "weight 1,234 is not 1,23 euros");
+  assert.equal(lineItem.evidence[0].rawText, "MANZANAS 1,234 kg 3,50", "line item source preserved");
+  console.log("PASS · three decimal weight does not become unit price");
+} catch (error) {
+  failures++;
+  console.error("FAIL · three decimal weight does not become unit price", error.message);
+}
+
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + 1 - failures}/${cases.length + taxLineCases.length + 1} PASS`);
 if (failures) process.exitCode = 1;
