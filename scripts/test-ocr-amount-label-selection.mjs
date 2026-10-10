@@ -2,7 +2,7 @@
 // document, independent ground-truth corpus or an OCR precision measurement.
 import assert from "node:assert/strict";
 import { interpretDocumentOcrFinancially } from "../src/domain/document-ocr-financial-interpretation.ts";
-import { pdfNativeTextNeedsVisualOcr } from "../src/infrastructure/ocr/pdf-text-provider.ts";
+import { pdfNativeTextNeedsVisualOcr } from "../src/infrastructure/ocr/pdf-native-coverage.ts";
 
 function interpret(lines) {
   return interpretDocumentOcrFinancially({
