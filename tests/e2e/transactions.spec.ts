@@ -671,7 +671,7 @@ test("REC-TXN-008 · detalle de reparto mal formado permite relectura sin invent
   });
   await page.goto("/transactions");
   await page.getByTestId(`split-${firstId}`).click();
-  await expect(page.getByRole("alert")).toContainText("La información del reparto está incompleta");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("La información del reparto está incompleta");
   await expect(page.getByTestId("save-split")).toBeDisabled();
   await page.getByRole("button", { name: "Reintentar lectura del reparto" }).click();
   await expect(page.getByTestId("split-amount-0")).toHaveValue("12,34");
