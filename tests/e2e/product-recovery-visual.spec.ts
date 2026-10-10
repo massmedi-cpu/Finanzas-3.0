@@ -42,7 +42,8 @@ for (const theme of ["light", "dark"] as const) {
           await expect.poll(() => nav.evaluate((element) => element.getBoundingClientRect().width)).toBeLessThan(224);
           expect(await page.locator("#main-content").evaluate((element) => element.getBoundingClientRect().left)).toBeGreaterThanOrEqual(224);
         }
-        if (width === 360 || width === 1366) {
+        // Keep representative mobile, tablet and desktop captures for human visual review.
+        if ([360, 820, 1366].includes(width)) {
           await page.screenshot({ path: info.outputPath(`${theme}-${width}.png`), fullPage: true });
         }
       }
