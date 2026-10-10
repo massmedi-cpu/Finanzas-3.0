@@ -925,6 +925,12 @@ test("REC-BUD-031 · rechaza una proyección de ahorro alterada o de otros meses
     { label: "ahorro estimado incompatible", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
       Object.assign(snapshot.planning, { targetSavingsCents: 200 });
     } },
+    { label: "ingreso medio diferente al promedio de tres meses", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      Object.assign(snapshot.planning, { averageIncomeCents: 300000 });
+    } },
+    { label: "ahorro proyectado sin un mes de ingresos", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      snapshot.planning.incomeHistoryMonths.pop();
+    } },
     { label: "historia de ingresos desalineada", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
       snapshot.planning.incomeHistoryMonths[1].month = "2026-05";
     } },
