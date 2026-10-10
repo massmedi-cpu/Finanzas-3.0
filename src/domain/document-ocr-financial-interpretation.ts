@@ -133,9 +133,14 @@ function parseMoneyCents(raw: string): number | null {
 // Preserve punctuation at the end of a sentence, but reject continuations
 // that belong to the same numeric token.
 const FINANCIAL_AMOUNT_TOKEN = /[-\u2212\u2013]?\d{1,3}(?:\.\d{3})*(?:,\d{2})|[-\u2212\u2013]?\d+(?:[,.]\d{2})/g;
+// An integer is money only when the OCR line explicitly prints € after it.
+// A bare 21, 100 or 1.234 could instead be a rate, quantity or document ID.
+const INTEGER_EURO_TOKEN = /[-\u2212\u2013]?(?:\d{1,3}(?:\.\d{3})+|\d+)(?=\s*€)/g;
 
 function exactFinancialAmountMatches(text: string) {
-  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN)].filter((match) => {
+  return [...text.matchAll(FINANCIAL_AMOUNT_TOKEN), ...text.matchAll(INTEGER_EURO_TOKEN)]
+    .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+    .filter((match) => {
     const start = match.index;
     const end = start + match[0].length;
     const previous = text[start - 1] ?? "";
