@@ -126,6 +126,11 @@ function syncHealth(sync: NonNullable<SourceFreshness["sync"]>) {
 }
 
 function statusText(freshness: SourceFreshness) {
+  // A retained sync receipt cannot certify a bank that declares itself
+  // unavailable for the selected account.
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return "Fuente bancaria no disponible para la cuenta consultada";
+  }
   const sync = freshness.sync;
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? ` · último movimiento ${movementLabel}` : "";
@@ -152,6 +157,14 @@ function statusText(freshness: SourceFreshness) {
 }
 
 function userSummary(freshness: SourceFreshness): FreshnessSummary {
+  if (!freshness.available && (freshness.latestMovementDate || freshness.sync)) {
+    return {
+      label: "Fuente bancaria no disponible",
+      detail: null,
+      incidentDetail: "La fuente no está disponible para esta cuenta. No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores.",
+      tone: "warning",
+    };
+  }
   const movementLabel = freshness.latestMovementDate ? formatBankDate(freshness.latestMovementDate) : null;
   const movement = movementLabel ? `Último movimiento ${movementLabel}` : null;
   const sync = freshness.sync;
@@ -378,10 +391,10 @@ export default function AnalysisSourceFreshness({
       || syncHasIncidents(freshness.sync)
       || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
     : false;
-  const actionable = freshness.sync
+  const actionable = !freshness.available || (freshness.sync
     ? syncHasIncidents(freshness.sync)
       || (freshness.sync.status === "success" && !hasCompletedSourceSyncEvidence(freshness.sync))
-    : false;
+    : false);
 
   return (
     <div className={styles.wrap}>
