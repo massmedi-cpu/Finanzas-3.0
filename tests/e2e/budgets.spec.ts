@@ -952,6 +952,9 @@ test("RECUPERACION-PRODUCTO · búsqueda y prioridades sin ocultar el total ni e
       },
     ],
   };
+  // El aviso de exceso solo se muestra con un mes bancario contrastado.
+  // El fixture del filtro prueba esa situación y no una fuente desconocida.
+  await mockCoveredBudgetSource(page);
   const writes: string[] = [];
   await page.route("**/api/budgets*", async (route) => {
     if (route.request().method() !== "GET") {
