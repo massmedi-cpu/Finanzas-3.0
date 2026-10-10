@@ -439,7 +439,7 @@ function extractIssuer(lines: LocatedLine[]) {
   for (const item of lines.slice(0, 8)) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
-    if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized)) continue;
+    if (!text || /\b(factura|ticket|fecha|nif|cif|total|base|iva)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     if ((text.match(/\p{L}/gu) ?? []).length >= 3 && !/^\d/.test(text)) {
       return fieldRequiringReview(fieldFrom(item, text, text));
     }
@@ -471,7 +471,7 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
       const forbidden = second
         ? /\b(?:total|efectivo|tarjeta|cambio|devolucion|recibido|entregado)\b/.test(searchable.slice(rateEnd, second.index))
         : true;
-      if (amounts.length === 2
+      if (amounts.length === 2 && second
         && amounts[0].index >= baseHeader.index + baseHeader[0].length
         && amounts[0].index < rateStart
         && second.index >= rateEnd
