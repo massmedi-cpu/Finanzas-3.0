@@ -171,9 +171,9 @@ function valueAfterLabel(text: string) {
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean } = {},
 ) {
-  const candidates = lines.flatMap((item) => {
+  const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
     if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
 
@@ -194,7 +194,29 @@ function extractMoneyField(
         return value === null ? [] : [{ raw: match[0], value, index: match.index }];
       });
     const following = monies.filter((money) => money.index >= anchorEnd);
-    const chosen = following[0] ?? monies.at(-1);
+    let chosen = following[0] ?? monies.at(-1);
+    let adjacent: LocatedLine | null = null;
+    if (!chosen && options.adjacentAmount) {
+      // Layout engines often break "TOTAL A PAGAR" and "23,45 €" into
+      // distinct OCR lines. Recover only a *bare* label with a single
+      // standalone money token on the next line of the same page. This is
+      // evidence for review, not automatic certification.
+      const bareTotal = /^(?:total(?: a pagar| importe factura| factura| final)?|importe(?: de la)? factura|importe total|a pagar)\s*[:=-]?\s*$/.test(normalized);
+      const next = lines[index + 1];
+      if (bareTotal && next?.pageNumber === item.pageNumber) {
+        const amountMatches = exactFinancialAmountMatches(next.line.text);
+        const remainder = amountMatches.length === 1
+          ? next.line.text.replace(amountMatches[0][0], "").replace(/[€\s:=.-]/g, "")
+          : "?";
+        const amount = amountMatches.length === 1 && remainder === ""
+          ? parseMoneyCents(amountMatches[0][0])
+          : null;
+        if (amount !== null) {
+          chosen = { raw: amountMatches[0][0], value: amount, index: 0 };
+          adjacent = next;
+        }
+      }
+    }
     if (!chosen) return [];
 
     // A trailing payment label or competing figure weakens field attribution,
@@ -207,7 +229,8 @@ function extractMoneyField(
       raw: chosen.raw,
       value: chosen.value,
       preferred: Boolean(preferred),
-      needsReview: following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+      needsReview: adjacent !== null || following.length === 0 || paymentBeforeAmount || conflictingAmounts,
+      adjacent,
     }];
   });
   if (!candidates.length) return emptyField<number>();
@@ -218,7 +241,11 @@ function extractMoneyField(
   if (!chosen.needsReview && new Set(candidates.map((candidate) => candidate.value)).size <= 1) return field;
   return {
     ...fieldRequiringReview(field),
-    evidence: candidates.map((candidate) => evidenceOf(candidate.item)),
+    confidence: chosen.adjacent ? Math.min(chosen.item.line.confidence, chosen.adjacent.line.confidence) : field.confidence,
+    evidence: candidates.flatMap((candidate) => [
+      evidenceOf(candidate.item),
+      ...(candidate.adjacent ? [evidenceOf(candidate.adjacent)] : []),
+    ]),
   };
 }
 
@@ -545,6 +572,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
   ], {
     exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
     prefer: /\b(?:total\s+a\s+pagar|total\s+importe\s+factura|importe\s+total|importe(?:\s+de\s+la)?\s+factura|a\s+pagar|total\s+factura|total\s+final)\b/,
+    adjacentAmount: true,
   });
   const warnings: string[] = [];
 
