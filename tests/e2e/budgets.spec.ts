@@ -203,6 +203,15 @@ test("budget API rejects ambiguous or invalid writes before persistence", async 
   expect(invalidMonth.status()).toBe(400);
   await expect(invalidMonth.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_month" });
 
+  const missingMonth = await request.get("/api/budgets");
+  expect(missingMonth.status()).toBe(400);
+  await expect(missingMonth.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_month" });
+
+  // Ambiguous date parameters must fail before reaching the financial gateway.
+  const duplicateMonth = await request.get("/api/budgets?month=2026-09&month=2026-10");
+  expect(duplicateMonth.status()).toBe(400);
+  await expect(duplicateMonth.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_month" });
+
   const invalidBody = await request.post("/api/budgets", { data: [] });
   expect(invalidBody.status()).toBe(400);
   await expect(invalidBody.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_budget_body" });
