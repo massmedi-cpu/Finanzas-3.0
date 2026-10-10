@@ -364,7 +364,7 @@ test("REC-OCR-033 · rechaza una lectura OCR recibida para otro documento sin ex
   await page.goto("/documents");
   await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
   await page.getByRole("button", { name: "Analizar documento" }).click();
-  await expect(page.getByRole("alert")).toContainText("la respuesta OCR no tiene el formato esperado");
+  await expect(page.getByTestId("ocr-review-panel").getByRole("alert")).toContainText("la respuesta OCR no tiene el formato esperado");
   await expect(page.getByTestId("ocr-confirmation-form")).toHaveCount(0);
   await expect(page.getByText("FACTURA AJENA CON DATOS PRIVADOS")).toHaveCount(0);
   expect(writes).toHaveLength(0);
