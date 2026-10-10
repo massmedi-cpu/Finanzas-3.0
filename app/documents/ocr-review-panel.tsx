@@ -87,6 +87,14 @@ function warningLabel(warning: string) {
     const page = warning.split(":")[1];
     return `La página ${page} parece escaneada y necesita OCR visual.`;
   }
+  if (warning.startsWith("pdf_page_sparse_native_recovered:")) {
+    const page = warning.split(":")[1];
+    return `La página ${page} contenía muy poco texto digital; se recuperó más información mediante OCR visual. Contrasta el resultado con el original.`;
+  }
+  if (warning.startsWith("pdf_page_sparse_native_unverified:")) {
+    const page = warning.split(":")[1];
+    return `La página ${page} solo tenía texto digital parcial y la lectura visual no lo completó. No se debe dar por íntegra la factura sin revisar el original.`;
+  }
   return warning.replaceAll("_", " ");
 }
 
