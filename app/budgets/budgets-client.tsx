@@ -13,6 +13,7 @@ import {
 } from "../../src/application/budgets/budget-planning";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
 import { resolvePeriodCoverage, type PeriodCoverage } from "../../src/application/data-coverage";
+import { hasCompletedSourceSyncEvidence } from "../../src/application/source-sync-incidents";
 import type { SourceFreshness } from "../analysis/analysis-source-freshness";
 import { useActionFeedback } from "../action-feedback";
 import { CategoryIdentity } from "../category-identity";
@@ -424,13 +425,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         const sync = freshness?.sync;
         const validSync = sync && typeof sync === "object" && !Array.isArray(sync)
           && ["success", "failed", "started", "partial"].includes(sync.status)
-          // A success state without a completion timestamp is not evidence
-          // that the import has actually finished.
-          && (sync.status !== "success" || (
-            typeof sync.finishedAt === "string"
-            && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(sync.finishedAt)
-            && Number.isFinite(Date.parse(sync.finishedAt))
-          ))
+          // Shared with Analysis: never announce successful bank coverage
+          // without a complete and timestamped source-sync record.
+          && (sync.status !== "success" || hasCompletedSourceSyncEvidence(sync))
           && [
             sync.rowsSeen, sync.rowsFailed, sync.rowsMissing,
             sync.duplicatesDetected, sync.warningsCount,
