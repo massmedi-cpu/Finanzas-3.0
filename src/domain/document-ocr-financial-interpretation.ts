@@ -56,6 +56,8 @@ export type DocumentOcrFinancialInterpretation = {
 type LocatedLine = { pageNumber: number; line: OcrLine };
 
 const RELIABLE_CONFIDENCE = 0.82;
+// Spanish invoices use IVA, I.V.A., IGIC and I.G.I.C. interchangeably.
+const TAX_ACRONYM = /\b(?:i\.?v\.?a|i\.?g\.?i\.?c)\b\.?/;
 
 function normalizeToken(value: string) {
   return value
@@ -199,7 +201,7 @@ function extractMoneyField(
     // Only amounts before the next *different* financial label belong to
     // BASE / IVA. Never borrow an invoice total as a tax or a tax as a base.
     const nextOwner = options.ownLabelOnly
-      ? searchable.slice(anchorEnd).search(/\b(?:base(?: imponible)?|subtotal|iva|igic|impuestos?|cuota(?: del? iva)?|total|importe total|a pagar|efectivo|tarjeta|cambio)\b/)
+      ? searchable.slice(anchorEnd).search(/\b(?:base(?: imponible)?|subtotal|i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|cuota(?: del? iva)?|total|importe total|a pagar|efectivo|tarjeta|cambio)\b/)
       : -1;
     const segmentEnd = nextOwner >= 0 ? anchorEnd + nextOwner : Number.POSITIVE_INFINITY;
     const following = monies.filter((money) => money.index >= anchorEnd && money.index < segmentEnd);
@@ -449,14 +451,14 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
   const result: OcrTaxLine[] = [];
   for (const [index, item] of lines.entries()) {
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-    if (!/\b(?:iva|igic|impuestos?)\b/.test(searchable)) continue;
+    if (!TAX_ACRONYM.test(searchable) && !/\bimpuestos?\b/.test(searchable)) continue;
 
     // In real retail receipts, "IVA BASE IMPONIBLE (€) CUOTA (€)" is a
     // column header. The next rows carry "10% 30,00 3,00" without an IVA
     // label, so inspecting only the header loses the actual tax lines.
     // Interpret at most four immediately adjacent rows on the same page.
     // Text order suggests column ownership; always require human review.
-    if (/\b(?:iva|igic)\b/.test(searchable)
+    if (TAX_ACRONYM.test(searchable)
       && /\bbase\s+imponible\b/.test(searchable)
       && /\bcuota\b/.test(searchable)) {
       const tableRows: OcrTaxLine[] = [];
@@ -489,14 +491,14 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
       }
     }
 
-    const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|iva|igic|impuestos?|cuota(?:\s+(?:del?\s+)?(?:iva|igic|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
+    const labels = [...searchable.matchAll(/\b(?:base(?:\s+imponible)?|subtotal|i\.?v\.?a|i\.?g\.?i\.?c|impuestos?|cuota(?:\s+(?:del?\s+)?(?:i\.?v\.?a|i\.?g\.?i\.?c|impuestos?))?|importe\s+total|total(?:\s+a\s+pagar)?|a\s+pagar|efectivo|tarjeta|cambio)\b/g)]
       .map((match) => ({ text: match[0], start: match.index, end: match.index + match[0].length }));
     const amounts = exactFinancialAmountMatches(item.line.text)
       .flatMap((match) => {
         const value = parseMoneyCents(match[0]);
         return value === null ? [] : [{ start: match.index, value }];
       });
-    const taxLabel = labels.find((label) => /^(?:iva|igic|impuestos?)$/.test(label.text));
+    const taxLabel = labels.find((label) => TAX_ACRONYM.test(label.text) || /^impuestos?$/.test(label.text));
     const baseLabel = labels.find((label) => /^(?:base|subtotal)\b/.test(label.text));
     const quotaLabel = labels.find((label) => /^cuota\b/.test(label.text));
     const amountAfter = (label: (typeof labels)[number] | undefined) => {
@@ -544,7 +546,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   for (const item of lines) {
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
-    if (!text || /\b(total|subtotal|base|iva|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized)) continue;
+    if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     const moneyMatches = exactFinancialAmountMatches(text).map((match) => match[0]);
     if (!moneyMatches.length) continue;
     const lastMoney = moneyMatches.at(-1) ?? null;
@@ -569,7 +571,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
 export function interpretDocumentOcrFinancially(result: DocumentOcrResult): DocumentOcrFinancialInterpretation {
   const located: LocatedLine[] = result.pages.flatMap((page) => page.lines.map((line) => ({ pageNumber: page.pageNumber, line })));
   let taxBaseCents = extractMoneyField(located, [/\bbase imponible\b/, /^base\b/, /\bsubtotal\b/], { ownLabelOnly: true });
-  let taxesCents = extractMoneyField(located, [/\biva\b/, /\bigic\b/, /\bimpuestos?\b/], { ownLabelOnly: true });
+  let taxesCents = extractMoneyField(located, [TAX_ACRONYM, /\bimpuestos?\b/], { ownLabelOnly: true });
   // Spanish utilities and telecom invoices often use "IMPORTE FACTURA"
   // rather than a standalone TOTAL. Preserve contradictory candidates for
   // human review instead of silently treating the invoice amount as absent.
