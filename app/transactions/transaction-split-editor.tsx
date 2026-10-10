@@ -64,6 +64,7 @@ type Props = {
   disabled: boolean;
   onBusyChange: (busy: boolean) => void;
   onSaved: (snapshot: TransactionSplitSummary) => void | Promise<void>;
+  onWriteUnverified: () => void;
   onCancel: () => void;
 };
 
@@ -84,6 +85,7 @@ export function TransactionSplitEditor({
   disabled,
   onBusyChange,
   onSaved,
+  onWriteUnverified,
   onCancel,
 }: Props) {
   const [detail, setDetail] = useState<SplitDetail | null>(null);
@@ -202,23 +204,44 @@ export function TransactionSplitEditor({
   }
 
   async function persist(allocations: Array<Record<string, unknown>>) {
+    if (saving || disabled) return;
     setSaving(true);
     onBusyChange(true);
     setError(null);
+    const controller = new AbortController();
+    let timedOut = false;
+    const deadline = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 30_000);
     try {
       const response = await fetch("/api/transactions", {
         method: "PUT",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ transactionId: transaction.id, allocations }),
+        signal: controller.signal,
       });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(errorMessage(payload));
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) {
+        if (response.status >= 500) throw new Error("WRITE_UNVERIFIED");
+        throw new Error(errorMessage(payload));
+      }
       const snapshot = payload?.result as TransactionSplitSummary | undefined;
-      if (!snapshot) throw new Error("No se recibió la confirmación del reparto.");
+      if (!snapshot || typeof snapshot.exists !== "boolean" || !Number.isSafeInteger(snapshot.bankAmountCents)) {
+        throw new Error("WRITE_UNVERIFIED");
+      }
       await onSaved(snapshot);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "No se pudo guardar el reparto.");
+      const uncertain = timedOut || cause instanceof TypeError
+        || (cause instanceof Error && cause.message === "WRITE_UNVERIFIED");
+      if (uncertain) {
+        onWriteUnverified();
+        setError("No se ha confirmado si el reparto se guardó. No repitas el envío hasta consultar el movimiento actualizado.");
+      } else {
+        setError(cause instanceof Error ? cause.message : "No se pudo guardar el reparto.");
+      }
     } finally {
+      window.clearTimeout(deadline);
       setSaving(false);
       onBusyChange(false);
     }
