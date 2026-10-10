@@ -166,7 +166,12 @@ export function CashFlowClient({ view }: { view: CashFlowView & { invalidMonth: 
         <Link prefetch={false} className={styles.statesLink} href={`/forecast?dateFrom=${view.dateFrom}&dateTo=${view.dateTo}`}>Revisar y gestionar previsiones</Link>
       </section>
 
-      <CashFlowEvolution points={view.evolution} onInspectDate={inspectDay} />
+      <CashFlowEvolution
+        points={view.evolution}
+        selectedDate={selected}
+        onSelectDate={setSelected}
+        onInspectDate={inspectDay}
+      />
 
       <section className={styles.calendar} aria-labelledby="cash-flow-calendar-title">
         <div className={styles.sectionTitle}>
