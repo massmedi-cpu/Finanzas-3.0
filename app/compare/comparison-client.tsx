@@ -370,7 +370,19 @@ function comparisonInsight(snapshot: ComparisonSnapshot, coverage: PeriodCoverag
         ? `El periodo principal no tiene cobertura bancaria confirmada: el último movimiento importado es del ${formatDate(coverage.latestMovementDate)}. No interpretamos 0 € como mejora.`
         : "El periodo principal no tiene cobertura bancaria confirmada. No interpretamos 0 € como mejora.";
     }
-    return `Los datos llegan hasta ${formatDate(coverage.throughDate!)} antes del final del periodo principal. La comparación queda incompleta.`;
+    // "partial" is not synonymous with "the latest row predates the end".
+    // It can also mean that the source starts after the requested period,
+    // or that a sync incident prevents certifying complete imports.
+    const selection = snapshot.selection;
+    const missingStart = coverage.fromDate && coverage.fromDate > selection.primaryFrom;
+    const missingEnd = coverage.throughDate && coverage.throughDate < selection.primaryTo;
+    const limitations = [
+      missingStart ? `el histórico comienza el ${formatDate(coverage.fromDate!)} después del inicio del periodo (${formatDate(selection.primaryFrom)})` : null,
+      missingEnd ? `los movimientos disponibles llegan al ${formatDate(coverage.throughDate!)} antes del final (${formatDate(selection.primaryTo)})` : null,
+    ].filter((detail): detail is string => detail !== null);
+    return limitations.length
+      ? `Cobertura bancaria parcial: ${limitations.join("; ")}. No podemos interpretar la variación como una mejora o empeoramiento.`
+      : "La cobertura bancaria del periodo principal no está completamente verificada. No podemos interpretar la variación como una mejora o empeoramiento.";
   }
   const expense = snapshot.metrics.expense;
   if (
