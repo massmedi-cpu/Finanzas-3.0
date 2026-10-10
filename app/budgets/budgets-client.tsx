@@ -693,7 +693,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
         ) : snapshot ? (
           <>
             <section
-              className={styles.notice}
+              className={`${styles.notice} ${coverageVerified ? "" : styles.coverageWarning}`}
               aria-label="Cobertura de los datos del presupuesto"
               data-budget-coverage={budgetCoverage?.state ?? "checking"}
             >
