@@ -597,6 +597,33 @@ test("REC-CMP-009 · sync success sin finishedAt tampoco certifica diferencias",
   await expect(page.getByRole("region", { name: "Resumen comparativo" })).not.toContainText("Tasa de ahorro");
 });
 
+
+test("REC-CMP-010 · fuente bancaria no disponible invalida fechas heredadas aunque parezcan completas", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      available: false,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-25",
+      sync: {
+        status: "success", startedAt: "2026-09-25T07:59:00Z", finishedAt: "2026-09-25T08:00:00Z",
+        rowsSeen: 12, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0,
+      },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  const metrics = page.getByRole("region", { name: "Resumen comparativo" });
+  await expect(metrics.getByText("Comparación incompleta", { exact: true })).toHaveCount(3);
+  await expect(metrics).not.toContainText("Tasa de ahorro");
+  await expect(metrics).not.toContainText("300,00 €");
+  await expect(page.getByRole("heading", { name: "Categorías con actividad observada" })).toBeVisible();
+  const reading = page.locator("section").filter({ has: page.getByText("LECTURA PRINCIPAL", { exact: true }) });
+  await expect(reading).toContainText("Cobertura bancaria desconocida");
+  await expect(reading).not.toContainText("El gasto diario baja");
+});
+
 test("REC-CMP-007 · un fallo del comparador conserva la selección aplicada y permite reintentar solo GET", async ({ page }) => {
   await openComparison(page);
   const originalPeriod = page.getByRole("group", { name: "Leyenda de periodos" });
