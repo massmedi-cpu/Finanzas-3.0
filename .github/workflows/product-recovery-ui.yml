@@ -67,6 +67,7 @@ jobs:
           tests/e2e/alerts-center.spec.ts
           tests/e2e/global-alerts-engine.spec.ts
           tests/e2e/cash-flow-evolution-plot.spec.ts
+          tests/e2e/cash-flow-theme-contrast.spec.ts
           tests/e2e/forecast-chart-timeline.spec.ts
           tests/e2e/comparison-ui.spec.ts
           tests/e2e/recovery-route-shell-responsive.spec.ts
