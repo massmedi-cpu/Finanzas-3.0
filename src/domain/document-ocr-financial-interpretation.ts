@@ -281,6 +281,8 @@ function extractDate(lines: LocatedLine[]) {
   const explicitWritten = /\b(?:emitid[oa]\s+el|fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?\s*[:\-]?)\s*\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b/;
   const embeddedNumericIssueDate = /\bemitid[oa]\s+el\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
   let unlabelled: OcrInterpretedField<string> | null = null;
+  let firstExplicit: OcrInterpretedField<string> | null = null;
+  const competingIssueDates: OcrInterpretedField<string>[] = [];
 
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
@@ -302,11 +304,25 @@ function extractDate(lines: LocatedLine[]) {
     const iso = String(year).padStart(4, "0") + "-" + String(month).padStart(2, "0") + "-" + String(day).padStart(2, "0");
     const field = fieldFrom(item, numeric?.[0] ?? written?.[0] ?? "", iso);
     if (labelledNumeric || labelledWritten) {
-      // Two competing labelled dates on one OCR row cannot both be trusted.
-      return labelledNumeric && labelledWritten ? fieldRequiringReview(field) : field;
+      // Distinct issue dates may appear on separate pages/lines (or on the
+      // same OCR line). Never promote an arbitrary first date as reliable.
+      const explicit = labelledNumeric && labelledWritten
+        ? fieldRequiringReview(field)
+        : field;
+      if (!firstExplicit) firstExplicit = explicit;
+      else if (explicit.value !== firstExplicit.value) competingIssueDates.push(explicit);
+      continue;
     }
     // Unlabelled date text may be correct, but we cannot prove its document role.
     unlabelled ??= fieldRequiringReview(field);
+  }
+  if (firstExplicit) {
+    return competingIssueDates.length
+      ? {
+        ...fieldRequiringReview(firstExplicit),
+        evidence: [ ...firstExplicit.evidence, ...competingIssueDates.flatMap((field) => field.evidence) ],
+      }
+      : firstExplicit;
   }
   return unlabelled ?? emptyField<string>();
 }

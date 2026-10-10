@@ -360,3 +360,33 @@ test("REC-OCR-018 · domiciliada is a payment method only with credible source c
     }
   }
 });
+
+
+test("REC-OCR-019 · contradictory issue dates are doubtful and retain both original lines", () => {
+  const source = result([
+    line("first", "Fecha de emisión: 01/10/2026", 0.98, 0.10),
+    line("second", "Factura F-123 emitida el 2 de octubre de 2026", 0.99, 0.20),
+  ]);
+  const interpreted = interpretDocumentOcrFinancially(source);
+  expect(interpreted.date.value).toBe("2026-10-01");
+  expect(interpreted.date.trust).toBe("doubtful");
+  expect(interpreted.date.evidence.map((item) => item.lineId)).toEqual(["first", "second"]);
+  expect(interpreted.date.evidence.map((item) => item.rawText)).toEqual([
+    "Fecha de emisión: 01/10/2026",
+    "Factura F-123 emitida el 2 de octubre de 2026",
+  ]);
+  // The source itself must remain intact for review.
+  expect(source.pages[0].lines[0].text).toBe("Fecha de emisión: 01/10/2026");
+});
+
+test("REC-OCR-020 · repeated matching issue dates remain usable and exclude unlabelled distractions", () => {
+  const interpreted = interpretDocumentOcrFinancially(result([
+    line("shipment", "Entrega prevista 29 de septiembre de 2026", 0.99, 0.05),
+    line("first", "Fecha de emisión: 01/10/2026", 0.99, 0.10),
+    line("repeat", "Factura F-123 emitida el 1 de octubre de 2026", 0.98, 0.20),
+  ]));
+  expect(interpreted.date.value).toBe("2026-10-01");
+  expect(interpreted.date.trust).toBe("reliable");
+  expect(interpreted.date.evidence[0]?.lineId).toBe("first");
+  expect(interpreted.date.evidence).toHaveLength(1);
+});
