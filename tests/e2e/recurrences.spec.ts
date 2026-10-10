@@ -699,3 +699,57 @@ for (const theme of ["light", "dark"] as const) {
     expect(writes).toHaveLength(1);
   });
 }
+
+
+test("REC-REC-008 · los estados bancarios se presentan en español y las próximas fechas nunca retroceden", async ({ page }) => {
+  const writes: string[] = [];
+  let reads = 0;
+  await page.route("**/api/recurrences*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      return route.fulfill({ status: 409 });
+    }
+    reads += 1;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(reads === 1
+        ? { ...baseSnapshot, candidates: baseSnapshot.candidates.map((c, i) => i === 0 ? { ...c, nextEstimatedDate: "2026-09-06" } : c) }
+        : baseSnapshot),
+    });
+  });
+  await page.goto("/recurrences");
+  await expect(page.getByRole("alert")).toContainText("No se ha podido verificar");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Recalcular patrones" }).click();
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  const history = page.locator("details").filter({ hasText: /Históricos/ });
+  await history.locator("summary").click();
+  await expect(history.getByText("Estado · Activa", { exact: true })).toBeVisible();
+  await expect(history.getByText("Estado · active", { exact: true })).toHaveCount(0);
+  expect(reads).toBe(2);
+  expect(writes).toEqual([]);
+});
+
+test("REC-REC-009 · los candidatos y sus decisiones no desbordan 320-1440 px en claro y oscuro", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockRecurrenceApi(page, writes);
+  await page.goto("/recurrences");
+  await expect(page.getByText("supermercado mensual", { exact: true })).toBeVisible();
+  for (const theme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: theme });
+    await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+    for (const width of [320, 360, 375, 390, 768, 1280, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const geometry = await page.evaluate(() => {
+        const tiny = [...document.querySelectorAll("main button")].filter((node) => {
+          const rect = node.getBoundingClientRect();
+          return rect.width > 0 && rect.height > 0 && rect.height < 44;
+        }).length;
+        return { overflow: document.documentElement.scrollWidth > window.innerWidth + 1, tiny };
+      });
+      expect(geometry.overflow, `${theme} a ${width}px no debe tener desbordamiento horizontal`).toBe(false);
+      expect(geometry.tiny, `${theme} a ${width}px requiere objetivos táctiles de 44px`).toBe(0);
+    }
+  }
+  expect(writes).toEqual([]);
+});
