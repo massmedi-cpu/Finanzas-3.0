@@ -371,6 +371,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const [snapshot, setSnapshot] = useState<BudgetSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const mutationInFlight = useRef(false);
   const [writeUnverified, setWriteUnverified] = useState(false);
   // An uncertain write belongs to a specific period. Loading a different
   // month must never unlock its retry protection.
@@ -556,7 +557,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
     body: Record<string, unknown>,
     successMessage: string,
   ) => {
-    if (writeUnverified || busy) return false;
+    if (writeUnverified || busy || mutationInFlight.current) return false;
+    mutationInFlight.current = true;
     setBusy(true);
     setError("");
     setNotice("");
@@ -618,6 +620,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
       return false;
     } finally {
       window.clearTimeout(deadline);
+      mutationInFlight.current = false;
       setBusy(false);
     }
   }, [actionFeedback, busy, writeUnverified, month]);
