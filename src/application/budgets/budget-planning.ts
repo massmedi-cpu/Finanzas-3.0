@@ -206,6 +206,11 @@ function isBudgetItem(value: unknown): value is BudgetItem {
       Boolean(row) && typeof row === "object"
       && typeof row.month === "string" && MONTH.test(row.month)
       && isSafeInteger(row.expenseCents) && row.expenseCents >= 0,
+    )
+    // Duplicate history months break React keys and visually double-count
+    // periods in comparisons; their order must also be chronological.
+    && item.historyMonths.every((row, index) =>
+      index === 0 || item.historyMonths[index - 1].month < row.month
     );
 }
 
@@ -219,7 +224,12 @@ export function isBudgetSnapshot(value: unknown): value is BudgetSnapshot {
     && snapshot.monthStart === `${snapshot.month}-01`
     && snapshot.monthEnd === monthEnd(snapshot.month)
     && isBudgetItem(snapshot.total)
+    && snapshot.total.categoryId === null
     && Array.isArray(snapshot.categories) && snapshot.categories.every(isBudgetItem)
+    // A category can appear only once within a budget snapshot. Otherwise
+    // the same spending is presented twice and React may reuse stale cards.
+    && snapshot.categories.every((item) => typeof item.categoryId === "string" && item.categoryId.length > 0)
+    && new Set(snapshot.categories.map((item) => item.categoryId)).size === snapshot.categories.length
     && principles.bankSource === "read_only"
     && principles.actualSource === "financial_transaction_allocation_facts"
     && principles.recommendation === "axioma_52_weighted_history_seasonality_trend_recurrence_floor"
