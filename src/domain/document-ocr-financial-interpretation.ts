@@ -453,6 +453,41 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
     const searchable = item.line.text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
     if (!TAX_ACRONYM.test(searchable) && !/\bimpuestos?\b/.test(searchable)) continue;
 
+    // A real-world invoice layout uses "I.V.A / I.G.I.C. (Base Imponible:
+    // 100,00) 21% EUR 21,00". The two explicit monetary values straddle
+    // an identified tax *percentage*. A TOTAL or payment label appearing
+    // before the second value invalidates this inference. Keep it doubtful.
+    const vatIgicPair = /\bi\.?v\.?a\b\.?\s*\/\s*\bi\.?g\.?i\.?c\b\.?/.test(searchable);
+    const baseHeader = /\bbase\s+imponible\b/.exec(searchable);
+    const taxRate = /\b(\d{1,2}(?:[,.]\d{1,2})?)\s*%/.exec(searchable);
+    if (vatIgicPair && baseHeader && taxRate) {
+      const amounts = exactFinancialAmountMatches(item.line.text).flatMap((match) => {
+        const cents = parseMoneyCents(match[0]);
+        return cents === null ? [] : [{ index: match.index, value: cents }];
+      });
+      const rateStart = taxRate.index;
+      const rateEnd = rateStart + taxRate[0].length;
+      const second = amounts[1];
+      const forbidden = second
+        ? /\b(?:total|efectivo|tarjeta|cambio|devolucion|recibido|entregado)\b/.test(searchable.slice(rateEnd, second.index))
+        : true;
+      if (amounts.length === 2
+        && amounts[0].index >= baseHeader.index + baseHeader[0].length
+        && amounts[0].index < rateStart
+        && second.index >= rateEnd
+        && !forbidden) {
+        result.push({
+          ratePercent: Number(taxRate[1].replace(",", ".")),
+          baseCents: amounts[0].value,
+          taxCents: second.value,
+          confidence: item.line.confidence,
+          trust: "doubtful",
+          evidence: [evidenceOf(item)],
+        });
+        continue;
+      }
+    }
+
     // In real retail receipts, "IVA BASE IMPONIBLE (€) CUOTA (€)" is a
     // column header. The next rows carry "10% 30,00 3,00" without an IVA
     // label, so inspecting only the header loses the actual tax lines.
