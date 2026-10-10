@@ -11,6 +11,8 @@ on:
       - 'supabase/tests/financial_performance_50k_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql'
+      - 'supabase/tests/financial_persistence_ap1_ap2_mutate_disposable.sql'
+      - 'supabase/tests/financial_persistence_ap1_ap2_final_readback_disposable.sql'
       - 'scripts/financial-performance-disposable-db.sh'
       - '.github/workflows/financial-db-10k50k.yml'
 
