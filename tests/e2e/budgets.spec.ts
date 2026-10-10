@@ -477,8 +477,8 @@ test("REC-BUD-009 · sin cobertura bancaria el presupuesto no afirma estar dentr
   await expect(page.getByLabel("Cobertura de los datos del presupuesto")).toContainText("No se ha podido verificar");
   const total = page.locator("#budget-total");
   await expect(total).toContainText("Estado sin verificar");
-  await expect(total).toContainText("Gasto sin confirmar");
-  await expect(total.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
+  await expect(total).toContainText("Gasto registrado · incompleto");
+  await expect(total.getByText("Gasto registrado · incompleto").locator("..").locator("strong")).toHaveText("400,00 €");
   await expect(total).toContainText("Margen sin verificar");
   await expect(total).not.toContainText("Dentro de referencia");
   await expect(total).not.toContainText("Dentro del límite");
@@ -533,7 +533,7 @@ test("REC-BUD-012 · una sincronización mal formada no certifica el mes", async
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
   const total = page.locator("#budget-total");
   await expect(total).toContainText("Estado sin verificar");
-  await expect(total.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
+  await expect(total.getByText("Gasto registrado · incompleto").locator("..").locator("strong")).toHaveText("400,00 €");
   await expect(total).not.toContainText("Dentro de referencia");
   expect(writes).toHaveLength(0);
 });
@@ -563,11 +563,50 @@ test("REC-BUD-013 · importación parcial conserva lo observado sin prometer cum
   await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "partial");
   const total = page.locator("#budget-total");
   await expect(total).toContainText("Estado sin verificar");
-  await expect(total).toContainText("Gasto observado · parcial");
-  await expect(total.getByText("Gasto observado · parcial").locator("..").locator("strong")).toHaveText("400,00 €");
+  await expect(total).toContainText("Gasto registrado · incompleto");
+  await expect(total.getByText("Gasto registrado · incompleto").locator("..").locator("strong")).toHaveText("400,00 €");
   await expect(total).toContainText("Margen sin verificar");
   await expect(total).not.toContainText("Dentro de referencia");
   expect(writes).toHaveLength(0);
+});
+
+test("REC-BUD-018 · importes positivos visibles sin certificar un cero de otra categoría", async ({ page }) => {
+  const zero = {
+    ...baseSnapshot.categories[0],
+    categoryId: "20000000-0000-4000-8000-000000000068",
+    categoryName: "Sin movimientos",
+    actualExpenseCents: 0,
+    remainingCents: 40000,
+    progressBps: 0,
+  };
+  const writes: string[] = [];
+  await page.route("**/api/budgets*", async (route) => {
+    if (route.request().method() !== "GET") {
+      writes.push(route.request().method());
+      await route.fulfill({ status: 405, contentType: "application/json", body: '{"error":"read_only"}' });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ ...baseSnapshot, categories: [...baseSnapshot.categories, zero] }),
+    });
+  });
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  const supermarket = page.getByRole("heading", { name: "Supermercado" }).locator("xpath=ancestor::article");
+  await expect(supermarket.getByText("Gasto registrado · incompleto").locator("..").locator("strong")).toHaveText("150,00 €");
+  await expect(supermarket).toContainText("Estado sin verificar");
+  await expect(supermarket).not.toContainText("Dentro de referencia");
+  const empty = page.getByRole("heading", { name: "Sin movimientos" }).locator("xpath=ancestor::article");
+  await expect(empty.getByText("Gasto sin confirmar").locator("..").locator("strong")).toHaveText("—");
+  await expect(empty).not.toContainText("0,00 €");
+  expect(writes).toEqual([]);
 });
 
 test("REC-BUD-010 · con fechas y sincronización contrastadas el estado vuelve a ser calculable", async ({ page }) => {
