@@ -32,6 +32,9 @@ for (const theme of ["light", "dark"] as const) {
       await page.goto(route);
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+      // Next.js 404 pages contain an h1. A "visible heading" alone used to
+      // let two missing configuration routes pass all 11 viewport checks.
+      await expect(page.getByText("Esta página no existe", { exact: true })).toHaveCount(0);
       await page.waitForTimeout(150);
       for (const width of widths) {
         await page.setViewportSize({ width, height: width < 768 ? 900 : 1024 });
@@ -43,7 +46,7 @@ for (const theme of ["light", "dark"] as const) {
           expect(await page.locator("#main-content").evaluate((element) => element.getBoundingClientRect().left)).toBeGreaterThanOrEqual(224);
         }
         if (width === 360 || width === 1366) {
-          await page.screenshot({ path: info.outputPath(`${theme}-${width}.png`), fullPage: true });
+          await page.screenshot({ path: info.outputPath(`${theme}-${route === "/" ? "inicio" : route.slice(1).replaceAll("/", "-")}-${width}.png`), fullPage: true });
         }
       }
       const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
@@ -51,6 +54,22 @@ for (const theme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("REC-UI-CONFIG · account/category routes render the shared settings with their correct selection", async ({ page }) => {
+  await mockRecoveryHome(page);
+  const cases = [
+    { path: "/configuration/accounts", selected: "Cuentas", unselected: "Categorías" },
+    { path: "/configuration/categories", selected: "Categorías", unselected: "Cuentas" },
+  ];
+  for (const scenario of cases) {
+    await page.goto(scenario.path);
+    await expect(page.getByRole("heading", { name: "Cuentas y categorías", level: 1 })).toBeVisible();
+    await expect(page.getByText("Esta página no existe", { exact: true })).toHaveCount(0);
+    const navigation = page.getByRole("navigation", { name: "Secciones de configuración" });
+    await expect(navigation.getByRole("button", { name: new RegExp(scenario.selected) })).toHaveAttribute("aria-pressed", "true");
+    await expect(navigation.getByRole("button", { name: new RegExp(scenario.unselected) })).toHaveAttribute("aria-pressed", "false");
+  }
+});
 
 for (const width of [360, 820, 1366]) {
   test(`REC-UI · buscador abierto y teclado a ${width}px`, async ({ page }) => {
