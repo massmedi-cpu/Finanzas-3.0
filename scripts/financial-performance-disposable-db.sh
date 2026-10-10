@@ -33,6 +33,12 @@ while IFS= read -r migration; do
   fi
 done < <(find supabase/migrations -maxdepth 1 -type f -name '*.sql' -print | sort)
 
+# AP1/AP2 persistence: first psql connection COMMITS fictional budgets; the
+# next separate connection verifies durable readback and RLS isolation.
+# The entire database is CI-local and removed by PRE001's exit trap.
+psql_db -f supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql >/dev/null
+psql_db -f supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql
+
 # BEGIN/ROLLBACK live in SQL. This uses PostgreSQL, not a mocked gateway.
 psql_db -f supabase/tests/financial_performance_50k_disposable.sql
 
