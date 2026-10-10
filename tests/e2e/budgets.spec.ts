@@ -631,6 +631,34 @@ test("REC-BUD-015 · una desconexión tras PATCH no inventa un rollback", async 
   expect(writes).toBe(1);
 });
 
+test("REC-BUD-016 · advertencia de cobertura con color semántico en claro y oscuro", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({ available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }),
+    });
+  });
+  for (const colorScheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme });
+    await page.goto("/budgets?month=2026-09");
+    const banner = page.getByLabel("Cobertura de los datos del presupuesto");
+    await expect(banner).toHaveAttribute("data-budget-coverage", "unknown");
+    const colors = await banner.evaluate((element) => {
+      const expected = document.createElement("span");
+      expected.style.color = "var(--text-warning-soft)";
+      document.body.appendChild(expected);
+      const semanticWarning = getComputedStyle(expected).color;
+      expected.remove();
+      return { actual: getComputedStyle(element).color, semanticWarning };
+    });
+    expect(colors.semanticWarning).not.toBe("");
+    expect(colors.actual).toBe(colors.semanticWarning);
+  }
+  expect(writes).toHaveLength(0);
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
