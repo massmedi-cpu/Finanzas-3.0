@@ -306,7 +306,9 @@ const nativeDecisionCases = [
   { name: "blank scan needs visual OCR", texts: [], visual: true },
   { name: "selectable page number on scan needs visual OCR", texts: ["Página", "1"], visual: true },
   { name: "isolated invoice header is not sufficient text", texts: ["FACTURA 2026"], visual: true },
-  { name: "native total and decimal amount suffice", texts: ["TOTAL", "23,45"], visual: false },
+  { name: "a selectable total alone does not certify the rest of the scanned invoice", texts: ["TOTAL", "23,45"], visual: true },
+  { name: "a tiny native total and invoice number still need visual review", texts: ["Factura 19", "TOTAL 121,00", "IVA"], visual: true },
+  { name: "short but reasonably structured native text is not rescanned needlessly", texts: ["Factura del proveedor", "Base imponible 100,00", "IVA 21% 21,00", "TOTAL 121,00", "Pago por transferencia bancaria"], visual: false },
   { name: "substantial native invoice text is kept", texts: ["Factura del suministro correspondiente al periodo 01-09 a 30-09", "Proveedor y domicilio fiscal detallados, CIF, condiciones de pago", "Concepto, base imponible e impuestos aplicables para cada producto", "Número de factura emitida, importe", "Datos completos de la operación"], visual: false },
 ];
 
