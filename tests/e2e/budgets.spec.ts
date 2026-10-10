@@ -917,6 +917,37 @@ test("REC-BUD-030 · HTTP 200 con límite incorrecto no anuncia guardado", async
   expect(writes).toBe(1);
 });
 
+test("REC-BUD-031 · rechaza una proyección de ahorro alterada o de otros meses", async ({ page }) => {
+  const corruptions = [
+    { label: "referencia distinta", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      Object.assign(snapshot.planning, { trackingReferenceCents: 1 });
+    } },
+    { label: "ahorro estimado incompatible", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      Object.assign(snapshot.planning, { targetSavingsCents: 200 });
+    } },
+    { label: "historia de ingresos desalineada", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      snapshot.planning.incomeHistoryMonths[1].month = "2026-05";
+    } },
+    { label: "pretensión de asesoramiento", edit: (snapshot: ReturnType<typeof snapshotWithTotalManual>) => {
+      Object.assign(snapshot.planning.principles, { financialAdvice: true });
+    } },
+  ];
+  let writes = 0;
+  for (const corrupt of corruptions) {
+    const impossible = structuredClone(snapshotWithTotalManual(85000));
+    corrupt.edit(impossible);
+    await page.route("**/api/budgets*", async (route) => {
+      if (route.request().method() !== "GET") writes += 1;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(impossible) });
+    });
+    await page.goto("/budgets?month=2026-09");
+    await expect(page.getByRole("heading", { name: /No se ha podido cargar/i })).toBeVisible();
+    await expect(page.getByRole("region", { name: "De la referencia a tu objetivo" })).toHaveCount(0);
+    await page.unroute("**/api/budgets*");
+  }
+  expect(writes).toBe(0);
+});
+
 test("REC-BUD-026 · dos clics sincronizados no emiten escrituras duplicadas", async ({ page }) => {
   let writes = 0;
   let releaseWrite: (() => void) | null = null;
