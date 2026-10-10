@@ -102,6 +102,50 @@ test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page 
   await expect(page.getByText("Totales reconciliados")).toBeVisible();
 });
 
+test("REC-SYNC-002 · a legacy source with no dates or sync does not hide its unknown coverage", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      available: true, earliestMovementDate: null, latestMovementDate: null, sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Cobertura bancaria sin verificar", { exact: true })).toBeVisible();
+  await expect(page.getByText("No consta ninguna fecha bancaria ni sincronización verificable.", { exact: true })).toBeVisible();
+  await expect(page.getByRole("article", { name: "Neto operativo y ahorro" })).toContainText("Cobertura bancaria desconocida");
+});
+
+test("REC-SYNC-003 · successful sync with historical movements does not assert freshness today", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      available: true,
+      earliestMovementDate: "2026-07-01",
+      latestMovementDate: "2026-09-25",
+      sync: { status: "success", startedAt: "2026-09-26T07:00:00Z", finishedAt: "2026-09-26T07:02:00Z", rowsSeen: 100, rowsFailed: 0, rowsMissing: 0, duplicatesDetected: 0, warningsCount: 0 },
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Sincronización completada", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Último movimiento 25\/09\/2026/)).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+});
+
+test("REC-SYNC-004 · legacy bank date without a sync run is not certified as up to date", async ({ page }) => {
+  await mockComparison(page);
+  await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
+    status: 200, contentType: "application/json",
+    body: JSON.stringify({
+      available: true, earliestMovementDate: null, latestMovementDate: "2026-09-25", sync: null,
+    }),
+  }));
+  await page.goto(`/compare?primaryFrom=2026-09-01&primaryTo=2026-09-10&referenceFrom=2026-08-01&referenceTo=2026-08-05&accountId=${ACCOUNT_ID}`);
+  await expect(page.getByText("Movimientos importados", { exact: true })).toBeVisible();
+  await expect(page.getByText("No consta una última sincronización verificable.", { exact: true })).toBeVisible();
+});
+
 test("REC-SYNC-001 · sincronización exitosa sin fecha bancaria no significa datos al día", async ({ page }) => {
   await mockComparison(page);
   await page.route(/\/api\/analysis\/source-freshness(?:\?.*)?$/, (route) => route.fulfill({
