@@ -503,6 +503,15 @@ export function OcrReviewPanel({
         setConfirmationUnverified(false);
         setError(null);
         actionFeedback.success(`documents:ocr-confirm:${documentId}`, `Revisión OCR verificada en el historial · revisión ${confirmed}.`);
+        if (onConfirmed) {
+          try {
+            await onConfirmed();
+          } catch {
+            if (generation === documentGeneration.current && activeDocumentId.current === documentId) {
+              setError("La revisión se ha verificado, pero el listado no pudo actualizarse. Puedes recargar Documentos sin guardar otra vez.");
+            }
+          }
+        }
       } else {
         setError("El historial no muestra una revisión nueva para esta lectura. La confirmación anterior sigue sin verificarse; solo repítela si has comprobado que es necesario.");
       }
