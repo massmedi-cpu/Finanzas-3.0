@@ -172,7 +172,7 @@ test("REC-ALT-001 · cuatro lecturas inválidas no se representan como cero aler
     await route.fulfill({ status: 200, contentType: "application/json", body: "{}" });
   });
   await page.goto("/alerts");
-  await expect(page.getByRole("alert")).toContainText("No se han podido leer las señales de alertas");
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("No se han podido leer las señales de alertas");
   await expect(page.locator('section[aria-label="Resumen de alertas"] strong')).toHaveText(["—", "—", "—"]);
   await expect(page.locator('[class*="sectionHeading"] > strong')).toHaveText("—");
   await expect(page.getByText("No hay alertas activas con las señales disponibles.")).toHaveCount(0);
