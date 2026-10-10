@@ -157,6 +157,7 @@ function BudgetCard({
   item,
   total = false,
   coverageVerified,
+  expenseObserved,
   monthStart,
   monthEnd,
   busy,
@@ -173,6 +174,7 @@ function BudgetCard({
   item: BudgetItem;
   total?: boolean;
   coverageVerified: boolean;
+  expenseObserved: boolean;
   monthStart: string;
   monthEnd: string;
   busy: boolean;
@@ -240,8 +242,8 @@ function BudgetCard({
           <strong>{withoutReference ? "—" : formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
-          <span>{coverageVerified ? "Gastado" : "Gasto observado · sin verificar"}</span>
-          <strong>{formatMoney(item.actualExpenseCents)}</strong>
+          <span>{coverageVerified ? "Gastado" : expenseObserved ? "Gasto observado · parcial" : "Gasto sin confirmar"}</span>
+          <strong>{expenseObserved ? formatMoney(item.actualExpenseCents) : "—"}</strong>
         </div>
         <div>
           <span>{remainingLabel}</span>
@@ -414,6 +416,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
 
   const budgetCoverage = coverageCheck?.month === month ? coverageCheck.coverage : null;
   const coverageVerified = budgetCoverage?.state === "covered";
+  const expenseObserved = coverageVerified || budgetCoverage?.state === "partial";
 
   // La URL es parte del contexto de un presupuesto; permite recargar o compartir el mes sin perderlo.
   useEffect(() => {
@@ -699,8 +702,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="spent" /> Gastado</span>
-                <strong>{formatMoney(snapshot.total.actualExpenseCents)}</strong>
-                <small>{coverageVerified ? "Gasto elegible de" : "Gasto observado sin cobertura completa confirmada ·"} {formatMonth(snapshot.month)}</small>
+                <strong>{expenseObserved ? formatMoney(snapshot.total.actualExpenseCents) : "—"}</strong>
+                <small>{coverageVerified ? "Gasto elegible de" : expenseObserved ? "Gasto parcial observado en" : "Importe no confirmado para"} {formatMonth(snapshot.month)}</small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="progress" /> Ahorro objetivo</span>
@@ -816,6 +819,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       item={snapshot.total}
                       total
                       coverageVerified={coverageVerified}
+                      expenseObserved={expenseObserved}
                       monthStart={snapshot.monthStart}
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
@@ -835,6 +839,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
                         coverageVerified={coverageVerified}
+                        expenseObserved={expenseObserved}
                         monthStart={snapshot.monthStart}
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
