@@ -347,7 +347,7 @@ export function OcrReviewPanel({
   }
 
   async function runOcr() {
-    if (!supported || busy || ocrInFlight.current) return;
+    if (!supported || busy || confirming || ocrInFlight.current || activeDocumentId.current !== documentId) return;
     const generation = documentGeneration.current;
     const controller = new AbortController();
     const isCurrent = () => !controller.signal.aborted
@@ -517,7 +517,7 @@ export function OcrReviewPanel({
           <h3 id="ocr-review-title">Revisar con OCR</h3>
           <p>Lee el original, reconstruye su texto e interpreta los datos financieros sin sustituir la evidencia OCR. Nada se confirma sin revisión humana.</p>
         </div>
-        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy}>
+        <button className={styles.primaryButton} type="button" onClick={() => void runOcr()} disabled={!supported || busy || confirming}>
           {busy ? "Analizando…" : result ? "Volver a analizar" : "Analizar documento"}
         </button>
       </div>
