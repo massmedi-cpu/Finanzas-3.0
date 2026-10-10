@@ -432,6 +432,9 @@ export default function ComparisonClient({
     earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
     sync: freshness?.sync ?? null,
+    // A first/last banking date cannot certify a full comparison if the
+    // importing source has no verifiably finished synchronization.
+    requireCompletedSyncEvidence: true,
   }) : null;
   const referenceCoverage = snapshot ? resolvePeriodCoverage({
     dateFrom: snapshot.selection.referenceFrom,
@@ -439,6 +442,9 @@ export default function ComparisonClient({
     earliestMovementDate: freshness?.earliestMovementDate ?? null,
     latestMovementDate: freshness?.latestMovementDate ?? null,
     sync: freshness?.sync ?? null,
+    // A first/last banking date cannot certify a full comparison if the
+    // importing source has no verifiably finished synchronization.
+    requireCompletedSyncEvidence: true,
   }) : null;
   const comparisonReliable = primaryCoverage !== null && referenceCoverage !== null
     && periodComparisonIsReliable(primaryCoverage) && periodComparisonIsReliable(referenceCoverage);
