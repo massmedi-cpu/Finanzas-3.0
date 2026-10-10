@@ -12,6 +12,8 @@ import {
   type BudgetSnapshot,
 } from "../../src/application/budgets/budget-planning";
 import { ProductIcon, type ProductIconName } from "../../src/design/product-icons";
+import { resolvePeriodCoverage, type PeriodCoverage } from "../../src/application/data-coverage";
+import type { SourceFreshness } from "../analysis/analysis-source-freshness";
 import { useActionFeedback } from "../action-feedback";
 import { CategoryIdentity } from "../category-identity";
 import styles from "./budgets.module.css";
@@ -99,7 +101,8 @@ function Icon({ name }: { name: BudgetIconName }) {
   return <ProductIcon name={name} size={18} />;
 }
 
-function statusLabel(item: BudgetItem) {
+function statusLabel(item: BudgetItem, coverageVerified: boolean) {
+  if (!coverageVerified) return "Estado sin verificar";
   const hasChosenLimit = item.manualAmountCents !== null;
   if (item.status === "over") return hasChosenLimit ? "Límite superado" : "Sobre la referencia";
   if (item.status === "unfunded") return hasChosenLimit ? "Límite en cero" : "Sin referencia";
@@ -153,6 +156,7 @@ function objectiveText(planning: BudgetPlanningContext) {
 function BudgetCard({
   item,
   total = false,
+  coverageVerified,
   monthStart,
   monthEnd,
   busy,
@@ -168,6 +172,7 @@ function BudgetCard({
 }: {
   item: BudgetItem;
   total?: boolean;
+  coverageVerified: boolean;
   monthStart: string;
   monthEnd: string;
   busy: boolean;
@@ -185,12 +190,12 @@ function BudgetCard({
   // Sin referencia histórica no equivale a haber elegido un límite de 0 €.
   const withoutReference = !hasChosenLimit && item.status === "unfunded";
   const referenceLabel = withoutReference ? "Referencia no disponible" : hasChosenLimit ? "Límite elegido" : "Referencia automática";
-  const remainingLabel = withoutReference ? "Margen no calculable"
+  const remainingLabel = !coverageVerified ? "Margen sin verificar" : withoutReference ? "Margen no calculable"
     : item.remainingCents >= 0
       ? hasChosenLimit ? "Margen del límite" : "Margen de referencia"
       : hasChosenLimit ? "Exceso del límite" : "Sobre la referencia";
-  const comparisonLabel = withoutReference ? "Cobertura del gasto" : hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
-  const progressLabel = withoutReference ? "No calculable sin referencia"
+  const comparisonLabel = !coverageVerified ? "Uso sin verificar" : withoutReference ? "Cobertura del gasto" : hasChosenLimit ? "Uso del límite" : "Uso de la referencia";
+  const progressLabel = !coverageVerified ? "Sin cobertura bancaria confirmada" : withoutReference ? "No calculable sin referencia"
     : hasChosenLimit && item.effectiveAmountCents === 0
       ? item.actualExpenseCents > 0 ? "Límite 0 € superado" : "Límite 0 € sin gasto"
       : formatProgress(item.progressBps);
@@ -226,7 +231,7 @@ function BudgetCard({
             </p>
           </div>
         </div>
-        <span className={`${styles.status} ${styles[item.status]}`}>{statusLabel(item)}</span>
+        <span className={`${styles.status} ${coverageVerified ? styles[item.status] : ""}`}>{statusLabel(item, coverageVerified)}</span>
       </div>
 
       <div className={styles.amounts}>
@@ -235,12 +240,12 @@ function BudgetCard({
           <strong>{withoutReference ? "—" : formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
-          <span>Gastado</span>
+          <span>{coverageVerified ? "Gastado" : "Gasto observado · sin verificar"}</span>
           <strong>{formatMoney(item.actualExpenseCents)}</strong>
         </div>
         <div>
           <span>{remainingLabel}</span>
-          <strong>{withoutReference ? "—" : formatMoney(Math.abs(item.remainingCents))}</strong>
+          <strong>{!coverageVerified || withoutReference ? "—" : formatMoney(Math.abs(item.remainingCents))}</strong>
         </div>
       </div>
 
@@ -251,11 +256,11 @@ function BudgetCard({
       <div className={styles.progressTrack} role="img" aria-label={`${comparisonLabel}: ${progressLabel}`}>
         <div
           className={`${styles.progressFill} ${item.status === "over" ? styles.progressOver : ""}`}
-          style={{ width: `${progressWidth(item)}%` }}
+          style={{ width: `${coverageVerified ? progressWidth(item) : 0}%` }}
         />
       </div>
 
-      {!total && (item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0)) && causalHref ? (
+      {coverageVerified && !total && (item.status === "over" || (item.status === "unfunded" && item.actualExpenseCents > 0)) && causalHref ? (
         <div
           role="group"
           aria-label={`Magnitud del presupuesto · ${item.categoryName ?? "Categoría"}`}
@@ -290,8 +295,8 @@ function BudgetCard({
         </div>
       ) : null}
 
-      {!total && item.actualExpenseCents > 0 && causalHref && item.status !== "over"
-        && !(item.status === "unfunded" && item.actualExpenseCents > 0) ? (
+      {!total && item.actualExpenseCents > 0 && causalHref && (!coverageVerified || (item.status !== "over"
+        && !(item.status === "unfunded" && item.actualExpenseCents > 0))) ? (
         <Link className={styles.excessLink} prefetch={false} href={causalHref}>
           Ver movimientos de esta categoría
         </Link>
@@ -367,6 +372,48 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
   const fetchGeneration = useRef(0);
   const fetchController = useRef<AbortController | null>(null);
   const [slowLoading, setSlowLoading] = useState(false);
+  const [coverageCheck, setCoverageCheck] = useState<{ month: string; coverage: PeriodCoverage } | null>(null);
+
+  // El importe presupuestado y la cobertura son preguntas distintas. Un
+  // gasto observado de 0 € no demuestra que se hayan importado los movimientos.
+  // No deducimos "dentro del límite" a partir del snapshot de presupuestos.
+  useEffect(() => {
+    const controller = new AbortController();
+    setCoverageCheck(null);
+    const [year, number] = month.split("-").map(Number);
+    const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+    const lastDay = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][number - 1];
+    const unknown: PeriodCoverage = { state: "unknown", latestMovementDate: null, throughDate: null };
+    void fetch("/api/analysis/source-freshness", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => response.ok ? response.json().catch(() => null) : null)
+      .then((payload: unknown) => {
+        if (controller.signal.aborted) return;
+        const freshness = payload && typeof payload === "object" && !Array.isArray(payload)
+          ? payload as Partial<SourceFreshness> : null;
+        // Failure, unavailable bounds, or an unverified sync all fail closed.
+        const valid = freshness?.available === true
+          && (typeof freshness.latestMovementDate === "string" || freshness.latestMovementDate === null)
+          && (freshness.earliestMovementDate === undefined || typeof freshness.earliestMovementDate === "string" || freshness.earliestMovementDate === null)
+          && (freshness.sync === null || (typeof freshness.sync === "object" && freshness.sync !== undefined));
+        const coverage = valid
+          ? resolvePeriodCoverage({
+              dateFrom: `${month}-01`,
+              dateTo: `${month}-${String(lastDay).padStart(2, "0")}`,
+              latestMovementDate: freshness.latestMovementDate,
+              earliestMovementDate: freshness.earliestMovementDate,
+              sync: freshness.sync ?? { status: "failed" },
+            })
+          : unknown;
+        setCoverageCheck({ month, coverage });
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setCoverageCheck({ month, coverage: unknown });
+      });
+    return () => controller.abort();
+  }, [month]);
+
+  const budgetCoverage = coverageCheck?.month === month ? coverageCheck.coverage : null;
+  const coverageVerified = budgetCoverage?.state === "covered";
 
   // La URL es parte del contexto de un presupuesto; permite recargar o compartir el mes sin perderlo.
   useEffect(() => {
@@ -620,6 +667,21 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
           </section>
         ) : snapshot ? (
           <>
+            <section
+              className={styles.notice}
+              aria-label="Cobertura de los datos del presupuesto"
+              data-budget-coverage={budgetCoverage?.state ?? "checking"}
+            >
+              {coverageVerified
+                ? "Cobertura estimada según las fechas bancarias importadas. Consulta los movimientos para comprobar el detalle."
+                : budgetCoverage?.state === "none"
+                  ? "Este mes no contiene movimientos bancarios confirmados en el intervalo importado. No se interpreta como gasto cero ni como un límite cumplido."
+                  : budgetCoverage?.state === "partial"
+                    ? "La cobertura bancaria de este mes es parcial. Se muestran importes observados, pero no se confirma que estés dentro del límite."
+                    : budgetCoverage?.state === "unknown"
+                      ? "No se ha podido verificar la cobertura bancaria de este mes. Los gastos mostrados pueden ser incompletos y el estado del límite no se certifica."
+                      : "Comprobando la cobertura bancaria antes de interpretar el estado de los límites."}
+            </section>
             <section className={styles.summaryGrid} aria-label="Resumen del presupuesto mensual">
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="wallet" /> Referencia automática</span>
@@ -638,7 +700,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="spent" /> Gastado</span>
                 <strong>{formatMoney(snapshot.total.actualExpenseCents)}</strong>
-                <small>Gasto elegible de {formatMonth(snapshot.month)}</small>
+                <small>{coverageVerified ? "Gasto elegible de" : "Gasto observado sin cobertura completa confirmada ·"} {formatMonth(snapshot.month)}</small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="progress" /> Ahorro objetivo</span>
@@ -660,8 +722,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     <h2 id="budget-planning-title">De la referencia a tu objetivo</h2>
                     <p>Cada cifra cumple una función distinta: referencia automática, decisión y resultado esperado.</p>
                   </div>
-                  <span className={`${styles.status} ${styles[snapshot.total.status]}`}>
-                    {categorySummary.total
+                  <span className={`${styles.status} ${coverageVerified ? styles[snapshot.total.status] : ""}`}>
+                    {!coverageVerified ? "Estados sin verificar" : categorySummary.total
                       ? `${categorySummary.onTrack} dentro · ${categorySummary.attention} por revisar`
                       : "Sin categorías activas"}
                   </span>
@@ -753,6 +815,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                     <BudgetCard
                       item={snapshot.total}
                       total
+                      coverageVerified={coverageVerified}
                       monthStart={snapshot.monthStart}
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
@@ -771,6 +834,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       <BudgetCard
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
+                        coverageVerified={coverageVerified}
                         monthStart={snapshot.monthStart}
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
