@@ -2,7 +2,7 @@ name: Product recovery browser matrix
 
 on:
   pull_request:
-    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009, chat/compare-coverage-truth-20261009, chat/home-evolution-covered-scale-20261009, chat/analysis-history-coverage-20261009, chat/ocr-total-evidence-20261009, chat/ocr-tax-line-evidence-20261009, chat/analysis-accumulated-scale-truth-20261009, chat/analysis-all-merchants-20261009, chat/analysis-accumulated-axis-legibility-20261009, chat/theme-semantic-surfaces-20261009, chat/analysis-bidirectional-coverage-20261009, chat/analysis-account-coverage-scope-20261009, chat/analysis-legacy-range-trust-20261010, chat/ocr-numeric-boundaries-20261010, chat/ocr-refund-sign-integrity-20261010, chat/home-compare-e2e-coverage-20261010, chat/coverage-sync-integrity-20261010, chat/ocr-receipt-refund-consistency-20261010, chat/ocr-negative-numeric-columns-20261010, chat/source-freshness-empty-data-honesty-20261010, chat/ocr-invoice-amount-label-20261010, chat/ocr-iva-tax-table-20261010, chat/ocr-spanish-invoice-written-dates-20261010, chat/ocr-invoice-payment-domiciliation-20261010, chat/ocr-conflicting-issue-dates-20261010, chat/compare-reference-coverage-truth-20261010, chat/sync-status-freshness-accuracy-20261010, chat/compare-partial-reason-truth-20261010]
+    branches: [main, work/product-recovery-20261009, work/recovery-validation-20261009, chat/compare-coverage-truth-20261009, chat/home-evolution-covered-scale-20261009, chat/analysis-history-coverage-20261009, chat/ocr-total-evidence-20261009, chat/ocr-tax-line-evidence-20261009, chat/analysis-accumulated-scale-truth-20261009, chat/analysis-all-merchants-20261009, chat/analysis-accumulated-axis-legibility-20261009, chat/theme-semantic-surfaces-20261009, chat/analysis-bidirectional-coverage-20261009, chat/analysis-account-coverage-scope-20261009, chat/analysis-legacy-range-trust-20261010, chat/ocr-numeric-boundaries-20261010, chat/ocr-refund-sign-integrity-20261010, chat/home-compare-e2e-coverage-20261010, chat/coverage-sync-integrity-20261010, chat/ocr-receipt-refund-consistency-20261010, chat/ocr-negative-numeric-columns-20261010, chat/source-freshness-empty-data-honesty-20261010, chat/ocr-invoice-amount-label-20261010, chat/ocr-iva-tax-table-20261010, chat/ocr-spanish-invoice-written-dates-20261010, chat/ocr-invoice-payment-domiciliation-20261010, chat/ocr-conflicting-issue-dates-20261010, chat/compare-reference-coverage-truth-20261010, chat/sync-status-freshness-accuracy-20261010, chat/compare-partial-reason-truth-20261010, chat/recovery-visual-artifact-evidence-20261010]
     paths:
       - 'app/**'
       - 'src/design/**'
@@ -54,6 +54,17 @@ jobs:
           tests/e2e/dashboard-orchestration-contract.spec.ts
           tests/e2e/dashboard-performance-contract.spec.ts
           --project=chromium-desktop
+      - name: Preserve synthetic visual screenshots for human QA
+        if: ${{ always() && !cancelled() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: recovery-visual-${{ github.event.pull_request.number }}-${{ github.run_attempt }}
+          path: test-results/**/*.png
+          if-no-files-found: warn
+          retention-days: 3
+          compression-level: 6
+      # Keep this upload between Playwright invocations: the next run cleans
+      # test-results, otherwise screenshots from the visual matrix are lost.
       - name: Integrated module regressions on the same optimized build
         if: ${{ !cancelled() }}
         run: >-
