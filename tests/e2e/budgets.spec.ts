@@ -659,6 +659,38 @@ test("REC-BUD-016 · advertencia de cobertura con color semántico en claro y os
   expect(writes).toHaveLength(0);
 });
 
+test("REC-BUD-017 · reintento de cobertura relee el banco sin escribir límites", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockBudgetApi(page, writes);
+  let reads = 0;
+  await page.route("**/api/analysis/source-freshness*", async (route) => {
+    reads += 1;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(reads === 1
+        ? { available: false, earliestMovementDate: null, latestMovementDate: null, sync: null }
+        : {
+            available: true,
+            earliestMovementDate: "2026-08-01",
+            latestMovementDate: "2026-10-01",
+            sync: {
+              status: "success", startedAt: null, finishedAt: null,
+              rowsSeen: 20, rowsFailed: 0, rowsMissing: 0,
+              duplicatesDetected: 0, warningsCount: 0,
+            },
+          }),
+    });
+  });
+  await page.goto("/budgets?month=2026-09");
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "unknown");
+  await page.getByRole("button", { name: "Volver a comprobar" }).click();
+  await expect(page.locator('[data-budget-coverage]')).toHaveAttribute("data-budget-coverage", "covered");
+  await expect(page.locator("#budget-total")).toContainText("Dentro de referencia");
+  expect(reads).toBe(2);
+  expect(writes).toHaveLength(0);
+});
+
 test("Presupuestos rechaza comas ambiguas y acepta el formato monetario español", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockBudgetApi(page, writes);
