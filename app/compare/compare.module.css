@@ -261,7 +261,7 @@
 .metricTop { min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
 .metricTop > span { color: var(--color-text-secondary); font-size: var(--font-helper); font-weight: 780; }
 .metricTop > strong { font-size: var(--font-helper); white-space: nowrap; }
-.metricValue { margin-top: 0.46rem; overflow-wrap: anywhere; font-size: clamp(1.25rem, 1.08rem + 0.54vw, 1.62rem); line-height: 1.1; letter-spacing: -0.03em; }
+.metricValue { margin-top: 0.46rem; overflow-wrap: normal; word-break: normal; white-space: nowrap; font-variant-numeric: tabular-nums; font-size: clamp(1rem, 1.08rem + 0.54vw, 1.62rem); line-height: 1.1; letter-spacing: -0.03em; }
 .metricReference { margin-top: 0.2rem; color: var(--color-text-muted); font-size: var(--font-helper); }
 .metricDetails { display: grid; gap: 0.12rem; margin-top: 0.7rem; padding-top: 0.6rem; border-top: 1px solid color-mix(in srgb, var(--color-primary-bright) 9%, transparent); color: var(--color-text-secondary); font-size: var(--font-helper); }
 .metricFooter { margin-top: auto; padding-top: 0.5rem; color: var(--color-text); font-size: var(--font-helper); }

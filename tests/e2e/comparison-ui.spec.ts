@@ -91,6 +91,24 @@ async function openComparison(page: Page) {
   await expect(page.getByRole("heading", { name: "Comparador", level: 1 })).toBeVisible();
 }
 
+test("REC-VIS-002 · tarjetas de Comparador muestran importes completos sin cortes arbitrarios", async ({ page }) => {
+  await openComparison(page);
+  const value = page.locator('[class*="metricValue"]').first();
+  await expect(value).toBeVisible();
+  await value.evaluate((element) => { element.textContent = "9.999.999,99\u00a0€"; });
+  for (const width of [360, 430, 768, 1280]) {
+    await page.setViewportSize({ width, height: 950 });
+    const geometry = await value.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { overflowWrap: css.overflowWrap, whiteSpace: css.whiteSpace,
+        scrollWidth: element.scrollWidth, clientWidth: element.clientWidth };
+    });
+    expect(geometry.overflowWrap).toBe("normal");
+    expect(geometry.whiteSpace).toBe("nowrap");
+    expect(geometry.scrollWidth, `width ${width} must show full euro amount`).toBeLessThanOrEqual(geometry.clientWidth + 2);
+  }
+});
+
 test("CMP-UI-001 muestra una comparación explicable y trazable", async ({ page }) => {
   await openComparison(page);
   await expect(page.getByText("El gasto diario baja 33,3 %", { exact: false })).toBeVisible();

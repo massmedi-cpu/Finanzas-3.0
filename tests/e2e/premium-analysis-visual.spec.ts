@@ -683,6 +683,30 @@ test("AUD-E2E-ANA-001 · la narrativa presenta evolución y categorías antes de
   expect(anomalies).toBeGreaterThan(patterns);
 });
 
+test("REC-VIS-001 · importes grandes en Análisis conservan los céntimos sin recortarse en móvil", async ({ page }) => {
+  await page.route("**/api/analysis**", async (route) => {
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
+  });
+  await page.goto("/analysis", { waitUntil: "domcontentloaded" });
+  const amount = page.locator('article[class*="kpi_income"] > strong');
+  await expect(amount).toBeVisible();
+  // Visual stress fixture only: never write the amount into banking data.
+  await amount.evaluate((element) => { element.textContent = "9.999.999,99\u00a0€"; });
+  for (const width of [360, 430, 768, 1280]) {
+    await page.setViewportSize({ width, height: 950 });
+    const geometry = await amount.evaluate((element) => {
+      const css = getComputedStyle(element);
+      return { text: element.textContent, overflowWrap: css.overflowWrap, wordBreak: css.wordBreak,
+        whiteSpace: css.whiteSpace, scrollWidth: element.scrollWidth, clientWidth: element.clientWidth };
+    });
+    expect(geometry.text).toBe("9.999.999,99\u00a0€");
+    expect(geometry.overflowWrap).toBe("normal");
+    expect(geometry.wordBreak).not.toBe("break-all");
+    expect(geometry.whiteSpace).toBe("nowrap");
+    expect(geometry.scrollWidth, `width ${width} does not clip euro cents`).toBeLessThanOrEqual(geometry.clientWidth + 2);
+  }
+});
+
 test("AUD-E2E-ANA-001 · concentración solo se abre desde ranking de comercios", async ({ page }) => {
   await page.route("**/api/analysis**", async (route) => {
     await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(SNAPSHOT) });
