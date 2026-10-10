@@ -943,6 +943,20 @@ for (const defect of ["invalid_date", "wrong_period", "fractional_cents", "incon
 }
 
 
+test("REC-HOME-003 · importes históricos no cero siguen visibles pero no se certifican completos", async ({ page }) => {
+  await mockInicio(page);
+  await page.goto("/");
+  const chart = page.getByRole("group", { name: /Ingresos y gastos por mes/ });
+  await expect(chart).toBeVisible();
+  // The gateway only provides an upper date bound. Nonzero reconciled monthly
+  // aggregates are observed; a complete bank history is not established.
+  await expect(chart.locator('[data-month-coverage="partial"]')).toHaveCount(3);
+  await expect(chart.locator('[data-month-coverage="covered"]')).toHaveCount(0);
+  await expect(chart.locator('[data-series-missing="true"]')).toHaveCount(0);
+  await expect(chart.getByRole("button", { name: /julio de 2026.*ingresos/i })).toBeVisible();
+  await expect(chart.getByRole("button", { name: /agosto de 2026.*ingresos/i })).toBeVisible();
+});
+
 test("REC-HOME-002 · una mensualidad sin cobertura no comprime las barras de meses observados", async ({ page }) => {
   await mockInicio(page);
   await page.route("**/api/dashboard?**", async (route) => {
