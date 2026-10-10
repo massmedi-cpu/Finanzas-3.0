@@ -213,6 +213,41 @@ async function loadMockAnalysis(page: any, snapshot: AnalysisSnapshot, latestMov
   await expect(page.getByRole("heading", { name: "Análisis", level: 1 })).toBeVisible();
 }
 
+test("REC-ANA-028 · Análisis no anuncia datos al día para sync sin cierre verificable", async ({ page }) => {
+  const snapshot = mockSnapshot();
+  await mockAnalysisApi(page, snapshot);
+  let finishedAt: string | null = null;
+  await page.route("**/api/analysis/source-freshness", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        available: true,
+        earliestMovementDate: "2025-01-01",
+        latestMovementDate: "2026-09-15",
+        sync: {
+          status: "success",
+          startedAt: "2026-10-01T09:00:00Z",
+          finishedAt,
+          rowsSeen: 300,
+          rowsFailed: 0,
+          rowsMissing: 0,
+          duplicatesDetected: 0,
+          warningsCount: 0,
+        },
+      }),
+    });
+  });
+  await page.goto("/analysis?month=2026-09&range=1m");
+  await expect(page.getByText("Sincronización sin finalización verificada")).toBeVisible();
+  await expect(page.getByText("Datos al día", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Revisar fuente" })).toBeVisible();
+
+  finishedAt = "2026-10-01T10:00:00Z";
+  await page.reload();
+  await expect(page.getByText("Datos al día", { exact: true })).toBeVisible();
+  await expect(page.getByText("Sincronización sin finalización verificada")).toHaveCount(0);
+});
+
 test("QA Work · Continuar desde Análisis usa el periodo realmente aplicado", async ({ page }) => {
   const snapshot = mockSnapshot();
   const selectedRequestSeen = await mockAnalysisApi(page, snapshot);
