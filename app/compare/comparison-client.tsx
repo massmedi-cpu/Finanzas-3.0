@@ -228,7 +228,7 @@ function NetSavingsMetric({
           <small>Referencia {referenceObserved ? formatMoney(net.referenceCents) : "Sin dato"}</small>
           {comparable ? <small>{formatMoney(net.primaryDailyCents)}/día · {signedMoney(net.dailyDeltaCents)}</small> : null}
         </div>
-        {equivalent ? (
+        {equivalent && comparable ? (
           <p>El ahorro coincide con el neto operativo en ambos periodos; no se repite el mismo importe.</p>
         ) : (
           <div>
