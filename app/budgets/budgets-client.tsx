@@ -161,7 +161,6 @@ function BudgetCard({
   item,
   total = false,
   coverageVerified,
-  expenseObserved,
   monthStart,
   monthEnd,
   busy,
@@ -178,7 +177,6 @@ function BudgetCard({
   item: BudgetItem;
   total?: boolean;
   coverageVerified: boolean;
-  expenseObserved: boolean;
   monthStart: string;
   monthEnd: string;
   busy: boolean;
@@ -193,6 +191,9 @@ function BudgetCard({
   onClearManual: () => void;
 }) {
   const hasChosenLimit = item.manualAmountCents !== null;
+  // Positive imported spending is observed even when source completeness is
+  // unknown. An imported zero, however, must not imply that nothing was spent.
+  const recordedExpense = coverageVerified || item.actualExpenseCents > 0;
   // Sin referencia histórica no equivale a haber elegido un límite de 0 €.
   const withoutReference = !hasChosenLimit && item.status === "unfunded";
   const referenceLabel = withoutReference ? "Referencia no disponible" : hasChosenLimit ? "Límite elegido" : "Referencia automática";
@@ -246,8 +247,8 @@ function BudgetCard({
           <strong>{withoutReference ? "—" : formatMoney(item.effectiveAmountCents)}</strong>
         </div>
         <div>
-          <span>{coverageVerified ? "Gastado" : expenseObserved ? "Gasto observado · parcial" : "Gasto sin confirmar"}</span>
-          <strong>{expenseObserved ? formatMoney(item.actualExpenseCents) : "—"}</strong>
+          <span>{coverageVerified ? "Gastado" : recordedExpense ? "Gasto registrado · incompleto" : "Gasto sin confirmar"}</span>
+          <strong>{recordedExpense ? formatMoney(item.actualExpenseCents) : "—"}</strong>
         </div>
         <div>
           <span>{remainingLabel}</span>
@@ -441,7 +442,7 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
 
   const budgetCoverage = coverageCheck?.month === month ? coverageCheck.coverage : null;
   const coverageVerified = budgetCoverage?.state === "covered";
-  const expenseObserved = coverageVerified || budgetCoverage?.state === "partial";
+  const recordedTotalExpense = coverageVerified || (snapshot?.total.actualExpenseCents ?? 0) > 0;
 
   // La URL es parte del contexto de un presupuesto; permite recargar o compartir el mes sin perderlo.
   useEffect(() => {
@@ -715,9 +716,9 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                 : budgetCoverage?.state === "none"
                   ? "Este mes no contiene movimientos bancarios confirmados en el intervalo importado. No se interpreta como gasto cero ni como un límite cumplido."
                   : budgetCoverage?.state === "partial"
-                    ? "La cobertura bancaria de este mes es parcial. Se muestran importes observados, pero no se confirma que estés dentro del límite."
+                    ? "La cobertura bancaria de este mes es parcial. Los gastos registrados pueden estar incompletos; no se confirma que estés dentro del límite."
                     : budgetCoverage?.state === "unknown"
-                      ? "No se ha podido verificar la cobertura bancaria de este mes. Los gastos mostrados pueden ser incompletos y el estado del límite no se certifica."
+                      ? "No se ha podido verificar la cobertura bancaria de este mes. Las cantidades registradas pueden estar incompletas; no se confirma el estado del límite."
                       : "Comprobando la cobertura bancaria antes de interpretar el estado de los límites."}</span>
               {!coverageVerified && budgetCoverage ? (
                 <button
@@ -747,8 +748,8 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="spent" /> Gastado</span>
-                <strong>{expenseObserved ? formatMoney(snapshot.total.actualExpenseCents) : "—"}</strong>
-                <small>{coverageVerified ? "Gasto elegible de" : expenseObserved ? "Gasto parcial observado en" : "Importe no confirmado para"} {formatMonth(snapshot.month)}</small>
+                <strong>{recordedTotalExpense ? formatMoney(snapshot.total.actualExpenseCents) : "—"}</strong>
+                <small>{coverageVerified ? "Gasto elegible de" : recordedTotalExpense ? "Gasto registrado sin cobertura completa en" : "Importe no confirmado para"} {formatMonth(snapshot.month)}</small>
               </article>
               <article className={styles.metric}>
                 <span className={styles.metricLabel}><Icon name="progress" /> Ahorro objetivo</span>
@@ -864,7 +865,6 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                       item={snapshot.total}
                       total
                       coverageVerified={coverageVerified}
-                      expenseObserved={expenseObserved}
                       monthStart={snapshot.monthStart}
                       monthEnd={snapshot.monthEnd}
                       busy={busy}
@@ -884,7 +884,6 @@ export default function BudgetsClient({ initialMonth }: { initialMonth?: string 
                         key={item.categoryId ?? item.id ?? item.categoryName ?? "category"}
                         item={item}
                         coverageVerified={coverageVerified}
-                        expenseObserved={expenseObserved}
                         monthStart={snapshot.monthStart}
                         monthEnd={snapshot.monthEnd}
                         busy={busy}
