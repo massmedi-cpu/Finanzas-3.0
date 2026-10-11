@@ -80,6 +80,7 @@ jobs:
           tests/e2e/budgets.spec.ts
           tests/e2e/budgets-accessibility.spec.ts
           tests/e2e/documents.spec.ts
+          tests/e2e/document-pagination.spec.ts
           tests/e2e/drive-auto-detection-10.0.72.spec.ts
           tests/e2e/transactions-race.spec.ts
           tests/e2e/transactions.spec.ts
