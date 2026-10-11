@@ -21,6 +21,7 @@ import styles from "./documents.module.css";
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
+type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string };
 type StorageProvider = "supabase" | "google_drive";
 type MetadataEditor = {
   type: DocumentType;
@@ -161,6 +162,24 @@ function validatedDocumentList(payload: unknown): DocumentList {
     ids.add(item.id);
   }
   return row as DocumentList;
+}
+
+// The finalized record must be for this exact private object. A successful
+// HTTP response for an unrelated document cannot release an upload lock.
+function validatedFinalizedUpload(payload: unknown, pending: PendingFinalize): DocumentDetail {
+  const data = payload as DocumentDetail | null;
+  if (!data || ![1, 2, 3].includes(data.contractVersion)
+    || !data.document || typeof data.document.id !== "string" || !DOCUMENT_UUID.test(data.document.id)
+    || data.document.storageProvider !== "supabase"
+    || data.document.storageKey !== pending.path
+    || data.document.originalFileName !== pending.originalFileName
+    || data.document.type !== pending.type || data.document.mimeType !== pending.mimeType
+    || !data.principles || data.principles.bankSource !== "read_only"
+    || data.principles.getHasSideEffects !== false || data.principles.suggestionsPersisted !== false
+    || data.principles.associationsRequireConfirmation !== true) {
+    throw new Error("document_upload_unverified");
+  }
+  return data;
 }
 
 type Candidate = {
@@ -504,6 +523,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const detailSequence = useRef(0);
   const originalOpenInFlight = useRef(false);
   const uploadInFlight = useRef(false);
+  // A failed response does not prove finalize failed. Preserve the original
+  // signed object path; repeating finalize is idempotent on (provider, key).
+  const unverifiedFinalizeRef = useRef<PendingFinalize | null>(null);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
@@ -787,24 +809,55 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [listUrl, loadList, loadDetail]);
 
   async function verifyUncertainUpload() {
-    if (!uploadUnverified || loadingList || busy) return;
-    // A previous finalize may have committed. Require a successful readback
-    // of the ordinary archive before allowing any repeated private upload.
-    const verified = await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
-    if (verified !== true) {
-      setUploadUnverified(true);
-      setError("No se ha podido consultar el archivo de documentos. El nuevo envío sigue bloqueado para evitar duplicados; reintenta la comprobación.");
+    if (!uploadUnverified || busy || uploadInFlight.current) return;
+    const pending = unverifiedFinalizeRef.current;
+    if (!pending) {
+      setError("La sesión no conserva la referencia de la subida anterior. No repitas el envío: comprueba el archivo de documentos.");
       return;
     }
-    setScope("ordinary");
-    setStatusFilter("");
-    setUnassociatedOnly(false);
-    setQuery("");
-    setDebouncedQuery("");
-    setOffset(0);
-    setUploadUnverified(false);
+    // A list of the first 50 documents cannot prove an uncertain finalize
+    // was not committed. Re-finalize the SAME private object instead of
+    // creating another signed path and uploading a duplicate.
+    uploadInFlight.current = true;
+    setBusy("upload-verify");
     setError(null);
-    setNotice("Lista recargada. Comprueba si el documento figura antes de volver a enviarlo.");
+    setNotice(null);
+    try {
+      const result = await readJson(await fetch("/api/documents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(pending),
+      }));
+      const confirmed = validatedFinalizedUpload(result, pending);
+      unverifiedFinalizeRef.current = null;
+      setUploadUnverified(false);
+      setFile(null);
+      for (const inputId of ["document-file", "document-camera"]) {
+        const input = document.getElementById(inputId) as HTMLInputElement | null;
+        if (input) input.value = "";
+      }
+      setScope("ordinary");
+      setStatusFilter("");
+      setUnassociatedOnly(false);
+      setQuery("");
+      setDebouncedQuery("");
+      setOffset(0);
+      await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+      if (metadataDirtyRef.current) {
+        setPendingExit({ type: "document", id: confirmed.document.id });
+        setNotice("Se ha confirmado el registro del original anterior sin subirlo otra vez. Resuelve los cambios pendientes antes de abrir su ficha.");
+      } else {
+        selectedIdRef.current = confirmed.document.id;
+        setSelectedId(confirmed.document.id);
+        setNotice("Registro del original confirmado sin repetir la subida privada. El OCR sólo se ejecutará si lo solicitas.");
+      }
+    } catch {
+      setUploadUnverified(true);
+      setError("No se ha podido confirmar el registro del mismo original. Sigue bloqueado para evitar duplicados; reintenta la comprobación sin volver a subir el archivo.");
+    } finally {
+      uploadInFlight.current = false;
+      setBusy(null);
+    }
   }
 
   async function uploadDocument(event: FormEvent) {
@@ -829,6 +882,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     // Once the original reaches private Storage, a failed finalize response
     // cannot prove whether the document record was created on the server.
     let finalizeAttempted = false;
+    let attemptedFinalize: PendingFinalize | null = null;
     try {
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
@@ -862,23 +916,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
       if (!upload.ok) throw new Error("document_upload_not_found");
 
+      attemptedFinalize = { action: "upload_finalize", type: uploadType, originalFileName: file.name, mimeType: file.type, path: sign.path };
       finalizeAttempted = true;
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "upload_finalize", type: uploadType, originalFileName: file.name, mimeType: file.type, path: sign.path }),
-      })) as DocumentDetail;
-      const id = finalized?.document?.id;
-      if (typeof id !== "string" || !DOCUMENT_UUID.test(id)
-        || ![1, 2, 3].includes(finalized?.contractVersion)
-        || finalized.document.storageProvider !== "supabase"
-        || finalized.document.originalFileName !== file.name
-        || finalized.document.type !== uploadType
-        || !finalized.principles || finalized.principles.bankSource !== "read_only"
-        || finalized.principles.getHasSideEffects !== false
-        || finalized.principles.suggestionsPersisted !== false) {
-        throw new Error("document_upload_unverified");
-      }
+        body: JSON.stringify(attemptedFinalize),
+      }));
+      const id = validatedFinalizedUpload(finalized, attemptedFinalize).document.id;
+      unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
       for (const inputId of ["document-file", "document-camera"]) {
@@ -907,9 +953,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setNotice("Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
       }
     } catch (caught) {
-      if (finalizeAttempted) {
+      if (finalizeAttempted && attemptedFinalize) {
+        unverifiedFinalizeRef.current = attemptedFinalize;
         setUploadUnverified(true);
-        setError("El original llegó al almacenamiento privado, pero no se ha confirmado su registro en Documentos. Consulta la lista antes de repetir: otro envío podría duplicarlo.");
+        setError("El original llegó al almacenamiento privado, pero no se ha confirmado su registro. Reintenta el registro del mismo original sin subirlo de nuevo.");
       } else {
         setError(friendlyError(caught));
       }
@@ -1258,10 +1305,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
             {uploadUnverified ? (
               <div role="status" data-testid="document-upload-unverified">
-                <p>Subida sin confirmar. Revisa el listado y comprueba si el original ya aparece; no lo envíes dos veces.</p>
-                <button className={styles.secondaryButton} type="button" disabled={busy === "upload" || loadingList}
+                <p>Subida sin confirmar. No vuelvas a enviarla: puedes completar o comprobar su registro usando el mismo original privado, sin crear otra subida.</p>
+                <button className={styles.secondaryButton} type="button" disabled={busy !== null}
                   onClick={() => void verifyUncertainUpload()}>
-                  {loadingList ? "Comprobando lista…" : "Comprobar lista antes de permitir otro envío"}
+                  {busy === "upload-verify" ? "Verificando registro…" : "Reintentar registro del mismo original"}
                 </button>
               </div>
             ) : null}
