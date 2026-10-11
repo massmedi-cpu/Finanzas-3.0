@@ -90,6 +90,15 @@ async function mockInicio(page: Page) {
   await page.clock.setFixedTime(new Date("2026-09-16T12:00:00+02:00"));
   await page.route("**/*", async (route) => {
     const url = new URL(route.request().url());
+    // The source exposes only its last imported date. Historical nonzero
+    // aggregates remain partial; earlier empty months remain unverified.
+    if (url.pathname === "/api/analysis/source-freshness") {
+      await json(route, {
+        available: true, earliestMovementDate: null,
+        latestMovementDate: "2026-09-16", sync: null,
+      });
+      return;
+    }
     if (url.pathname === "/api/source/google/sync") {
       await json(route, {
         run: {
