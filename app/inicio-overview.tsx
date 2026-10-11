@@ -543,7 +543,12 @@ export default function InicioOverview() {
   });
   const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;
   const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;
-  const latestDataDate = sourceFreshness?.available ? sourceFreshness.latestMovementDate : null;
+  const bankProvenanceConflict = Boolean(dataThroughDate
+    && sourceFreshness?.available === true
+    && sourceFreshness.latestMovementDate
+    && dataThroughDate !== sourceFreshness.latestMovementDate);
+  const latestDataDate = !bankProvenanceConflict && sourceFreshness?.available
+    ? sourceFreshness.latestMovementDate : null;
   const currentPeriodCoverage = resolveHomeBankCoverage({
     dateFrom: currentMonthStart,
     dateTo: today,
@@ -557,15 +562,18 @@ export default function InicioOverview() {
       ? `Importes parciales · cobertura observada hasta ${formatDate(currentPeriodCoverage.throughDate)}`
       : currentPeriodCoverage.state === "none"
         ? `Sin cobertura bancaria confirmada este mes · último movimiento ${formatDate(currentPeriodCoverage.latestMovementDate)}`
-        : sourceFreshness?.available === false
-          ? "Fuente bancaria no disponible · importes sin verificar"
-          : "Cobertura bancaria pendiente de confirmar";
+        : bankProvenanceConflict
+          ? "Fechas bancarias discordantes · importes sin verificar"
+          : sourceFreshness?.available === false
+            ? "Fuente bancaria no disponible · importes sin verificar"
+            : "Cobertura bancaria pendiente de confirmar";
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
   const syncHasWarnings = syncSucceeded && hasSourceSyncIncidents(syncRun);
   const bankUnavailable = sourceFreshness?.available === false;
   const certifiedSync = syncSucceeded && sourceFreshness?.available === true
+    && !bankProvenanceConflict
     && hasCompletedSourceSyncEvidence(sourceFreshness.sync)
     && !hasSourceSyncIncidents(sourceFreshness.sync);
   const syncPersistentNotice = syncFeedback ? null : syncStatusNotice(syncRun);
@@ -635,6 +643,15 @@ export default function InicioOverview() {
 
   const attentionItems = useMemo<AttentionItem[]>(() => {
     const items: AttentionItem[] = [];
+    if (bankProvenanceConflict) {
+      items.push({
+        title: "La fecha bancaria no coincide con los movimientos",
+        detail: "Los resúmenes afectados permanecen sin verificar. Comprueba el último movimiento y el estado del origen.",
+        href: "/configuration/source",
+        action: "Revisar origen",
+        tone: "warning",
+      });
+    }
     if (syncFailed) {
       items.push({
         title: "La última actualización falló",
@@ -701,7 +718,7 @@ export default function InicioOverview() {
       });
     }
     return items.slice(0, 3);
-  }, [forecast, displayMoney, failed.length, financial, currentPeriodObserved, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
+  }, [forecast, displayMoney, failed.length, financial, currentPeriodObserved, bankProvenanceConflict, overBudgetCount, revealAmounts, syncFailed, syncHasWarnings, syncRun]);
 
   return (
     <main className={styles.shell} aria-busy={primaryLoading || activityLoading || secondaryLoading || analysisLoading}>
@@ -726,7 +743,7 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings || bankUnavailable ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
@@ -739,15 +756,19 @@ export default function InicioOverview() {
                   ? "La última actualización falló"
                   : syncHasWarnings
                     ? "Sincronización completada con avisos"
-                    : bankUnavailable
+                    : bankProvenanceConflict
+                      ? "Fechas bancarias discordantes"
+                      : bankUnavailable
                       ? "Fuente bancaria no disponible"
                       : certifiedSync
                         ? "Datos bancarios actualizados"
                         : "Cobertura bancaria sin verificar"}
             </strong>
             <p>
-              {bankUnavailable
-                ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
+              {bankProvenanceConflict
+                ? "La fuente y el resumen de movimientos indican distintas fechas de actualización. No se certifican las cifras afectadas."
+                : bankUnavailable
+                  ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
                 : certifiedSync && syncRun
                   ? `${latestDataDate ? `Movimientos hasta ${formatDate(latestDataDate)}` : "Fecha del último movimiento sin confirmar"}. Actualización ${formatDateTime(syncRun.finishedAt ?? syncRun.startedAt)}.`
                   : syncFailed
