@@ -21,7 +21,7 @@ import styles from "./documents.module.css";
 type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
-type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string };
+type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string; sizeBytes: number | null };
 type PendingPrivateUpload = PendingFinalize & {
   signedUrl: string | null;
   file: File | null;
@@ -52,7 +52,8 @@ function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivate
       || !["application/pdf", "image/jpeg", "image/png", "image/webp"].includes(value.mimeType)
       || typeof value.path !== "string"
       || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(value.path)
-      || typeof value.storagePutConfirmed !== "boolean") {
+      || typeof value.storagePutConfirmed !== "boolean"
+      || (value.sizeBytes !== undefined && (!Number.isSafeInteger(value.sizeBytes) || value.sizeBytes <= 0 || value.sizeBytes > 15_728_640))) {
       return { present: true, pending: null };
     }
     return {
@@ -63,6 +64,7 @@ function readPrivateUploadJournal(): { present: boolean; pending: PendingPrivate
         originalFileName: value.originalFileName,
         mimeType: value.mimeType,
         path: value.path,
+        sizeBytes: value.sizeBytes ?? null, // legacy in-tab journal remains recoverable
         storagePutConfirmed: value.storagePutConfirmed,
         signedUrl: null,
         file: null,
@@ -81,7 +83,8 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
     sessionStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, JSON.stringify({
       version: 1, action: pending.action, type: pending.type,
       originalFileName: pending.originalFileName, mimeType: pending.mimeType,
-      path: pending.path, storagePutConfirmed: pending.storagePutConfirmed,
+      path: pending.path, sizeBytes: pending.sizeBytes,
+      storagePutConfirmed: pending.storagePutConfirmed,
     }));
   } catch {
     throw new Error("document_upload_recovery_unavailable");
@@ -250,6 +253,7 @@ function validatedFinalizedUpload(payload: unknown, pending: PendingFinalize): D
     || data.document.storageKey !== pending.path
     || data.document.originalFileName !== pending.originalFileName
     || data.document.type !== pending.type || data.document.mimeType !== pending.mimeType
+    || (pending.sizeBytes !== null && data.document.sizeBytes !== pending.sizeBytes)
     || !data.principles || data.principles.bankSource !== "read_only"
     || data.principles.getHasSideEffects !== false || data.principles.suggestionsPersisted !== false
     || data.principles.associationsRequireConfirmation !== true) {
@@ -1028,8 +1032,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
       attemptedPrivateUpload = {
         action: "upload_finalize", type: uploadType, originalFileName: file.name,
-        mimeType: file.type, path: sign.path, signedUrl: uploadUrl.href,
-        file, storagePutConfirmed: false,
+        mimeType: file.type, path: sign.path, sizeBytes: file.size,
+        signedUrl: uploadUrl.href, file, storagePutConfirmed: false,
       };
       const body = new FormData();
       body.append("cacheControl", "3600");
