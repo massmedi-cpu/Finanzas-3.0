@@ -114,8 +114,18 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
   }
 }
 
-function clearPrivateUploadJournal() {
+function clearPrivateUploadJournal(confirmed: PendingPrivateUpload) {
   try {
+    // Even when the backend confirms successfully, another tab or an
+    // extension could replace the journal in the meantime. Never erase a
+    // DIFFERENT upload's durable recovery handle.
+    const current = readPrivateUploadJournal();
+    if (!current.present || !current.pending
+      || current.pending.path !== confirmed.path
+      || current.pending.expectedSha256 !== confirmed.expectedSha256
+      || current.pending.sizeBytes !== confirmed.sizeBytes) {
+      throw new Error("document_upload_recovery_unavailable");
+    }
     // Never permit another upload until both the old and durable handles
     // are cleared after verified server-side registration.
     localStorage.removeItem(PENDING_PRIVATE_UPLOAD_KEY);
@@ -963,6 +973,31 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [listUrl, loadList, loadDetail]);
 
   async function verifyUncertainUpload() {
+    if (!uploadUnverified || busy || uploadInFlight.current || uploadLockPendingRef.current) return;
+    // Re-finalization is idempotent for the same path, but clearing its
+    // journal must not race with another tab acquiring a new upload path.
+    // Use the SAME lock as uploadDocument, including the clear operation.
+    if (!navigator.locks?.request) {
+      setError("Este navegador no dispone del bloqueo seguro entre pestañas. Recupera el documento desde un navegador actualizado, sin subir otra copia.");
+      return;
+    }
+    uploadLockPendingRef.current = true;
+    try {
+      await navigator.locks.request(PENDING_PRIVATE_UPLOAD_KEY, { mode: "exclusive", ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          setError("Otra pestaña está gestionando un documento. Comprueba la recuperación allí antes de repetirla aquí.");
+          return;
+        }
+        await verifyUncertainUploadExclusive();
+      });
+    } catch {
+      setError("No se ha podido proteger la recuperación entre pestañas. El original sigue bloqueado; no generes un envío nuevo.");
+    } finally {
+      uploadLockPendingRef.current = false;
+    }
+  }
+
+  async function verifyUncertainUploadExclusive() {
     if (!uploadUnverified || busy || uploadInFlight.current) return;
     const pending = unverifiedFinalizeRef.current;
     if (!pending) {
@@ -1007,7 +1042,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         }),
       }));
       const confirmed = validatedFinalizedUpload(result, pending);
-      clearPrivateUploadJournal();
+      clearPrivateUploadJournal(pending);
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
@@ -1166,7 +1201,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         }),
       }));
       const id = validatedFinalizedUpload(finalized, attemptedPrivateUpload).document.id;
-      clearPrivateUploadJournal();
+      clearPrivateUploadJournal(attemptedPrivateUpload);
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
