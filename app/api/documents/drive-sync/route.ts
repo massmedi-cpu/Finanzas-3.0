@@ -85,11 +85,21 @@ function changed(file: DiscoveredDriveDocument, previous: ExistingDocument | und
   );
 }
 
+class DriveDocumentInventoryError extends Error {
+  constructor() {
+    super("document_drive_inventory_incomplete");
+    this.name = "DriveDocumentInventoryError";
+  }
+}
+
 async function existingDriveDocuments() {
   const result = new Map<string, ExistingDocument>();
   let offset = 0;
-  let total = 0;
+  let expectedTotal: number | null = null;
 
+  // This inventory is what prevents re-importing existing originals from
+  // Google Drive. A partial gateway page is NOT a valid empty inventory:
+  // abort rather than treating all missing rows as fresh documents.
   do {
     const page = await callPersistenceGateway<DocumentList>("document.list", {
       status: null,
@@ -98,13 +108,29 @@ async function existingDriveDocuments() {
       offset,
       scope: "all",
     });
-    total = page.total;
+    if (!page || !Array.isArray(page.items)
+      || !Number.isSafeInteger(page.total) || page.total < 0
+      || page.items.length > PAGE_SIZE
+      || (expectedTotal !== null && page.total !== expectedTotal)
+      || page.items.length > page.total - offset) {
+      throw new DriveDocumentInventoryError();
+    }
+    if (expectedTotal === null) expectedTotal = page.total;
+    if (page.items.length === 0 && offset < expectedTotal) {
+      throw new DriveDocumentInventoryError();
+    }
     for (const item of page.items) {
+      if (!item || (item.sourceDriveFileId !== null
+        && typeof item.sourceDriveFileId !== "string")
+        || typeof item.mimeType !== "string"
+        || (item.sizeBytes !== null && !Number.isSafeInteger(item.sizeBytes))
+        || (item.sourceModifiedAt !== null && typeof item.sourceModifiedAt !== "string")) {
+        throw new DriveDocumentInventoryError();
+      }
       if (item.sourceDriveFileId) result.set(item.sourceDriveFileId, item);
     }
     offset += page.items.length;
-    if (page.items.length === 0) break;
-  } while (offset < total);
+  } while (offset < (expectedTotal ?? 0));
 
   return result;
 }
@@ -147,6 +173,12 @@ async function verifyCandidates(
 }
 
 function apiError(error: unknown) {
+  if (error instanceof DriveDocumentInventoryError) {
+    return Response.json(
+      { error: "drive_auto_detection_persistence_failed", code: error.message },
+      { status: 503, headers: HEADERS },
+    );
+  }
   if (error instanceof GoogleDriveDocumentDiscoveryError) {
     const status = error.code === "google_drive_document_discovery_access_denied" ? 409 : 503;
     return Response.json(
