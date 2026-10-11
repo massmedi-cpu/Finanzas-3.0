@@ -385,7 +385,7 @@ function extractDate(lines: LocatedLine[]) {
 
 function extractTime(lines: LocatedLine[]) {
   const pattern = /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/;
-  const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas)\b/;
+  const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas|vencimiento|caducidad|vigencia|plazo\s+de\s+pago)\b/;
   const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
   // Receipt printers frequently put date and time on one line, labelled
   // FECHA/HORA or FECHA Y HORA. Prefer that timestamp, not opening hours.
