@@ -1732,7 +1732,7 @@ test("REC-DOC-080 · finalize incierto reintenta la MISMA ruta firmada sin crear
   expect(signCalls).toBe(1);
   expect(finalizeCalls).toBe(1);
   expect(privateUploads).toBe(1);
-  await page.getByRole("button", { name: "Reintentar registro del mismo original" }).click();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByRole("heading", { name: "pago-sin-confirmar.pdf" })).toBeVisible();
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
   expect(signCalls).toBe(1);
@@ -1769,11 +1769,11 @@ test("REC-DOC-081 · un error repetido al reintentar registro mantiene el bloque
   });
   const submit = page.getByRole("button", { name: "Guardar original" });
   await submit.click();
-  const retry = page.getByRole("button", { name: "Reintentar registro del mismo original" });
+  const retry = page.getByRole("button", { name: "Recuperar el mismo original" });
   await expect(retry).toBeVisible();
   await expect(submit).toBeDisabled();
   await retry.click();
-  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueado para evitar duplicados");
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueada para evitar copias duplicadas");
   await expect(submit).toBeDisabled();
   expect(signCalls).toBe(1);
   expect(finalizeCalls).toBe(2);
@@ -1819,11 +1819,119 @@ test("REC-DOC-082 · un finalize de otro objeto no elimina el bloqueo por un HTT
   });
   const submit = page.getByRole("button", { name: "Guardar original" });
   await submit.click();
-  await page.getByRole("button", { name: "Reintentar registro del mismo original" }).click();
-  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueado para evitar duplicados");
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueada para evitar copias duplicadas");
   await expect(submit).toBeDisabled();
   expect(finalizeCalls).toBe(2);
   expect(writes.filter(row => row.action === "upload_finalize")).toHaveLength(0);
+});
+
+test("REC-DOC-083 · un PUT privado 503 se recupera en la misma ruta sin solicitar otra firma", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signed = 0;
+  let privatePutCount = 0;
+  let privatePath: string | null = null;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_sign") signed += 1;
+    return route.fallback();
+  });
+  await page.route(signedUploadUrl, async route => {
+    privatePutCount += 1;
+    const path = new URL(route.request().url()).pathname;
+    if (!privatePath) privatePath = path;
+    expect(path).toBe(privatePath);
+    await route.fulfill({
+      status: privatePutCount === 1 ? 503 : 200, body: privatePutCount === 1 ? "inconclusive" : "ok",
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "envio-red-interrumpida.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 seguro"),
+  });
+  const save = page.getByRole("button", { name: "Guardar original" });
+  await save.click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(save).toBeDisabled();
+  expect(signed).toBe(1);
+  expect(privatePutCount).toBe(1);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "envio-red-interrumpida.pdf" })).toBeVisible();
+  expect(signed).toBe(1);
+  expect(privatePutCount).toBe(2);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(1);
+});
+
+test("REC-DOC-084 · un conflicto PUT de objeto ya presente se resuelve mediante finalize de la misma ruta", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let privatePutCount = 0;
+  let signed = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_sign") signed += 1;
+    return route.fallback();
+  });
+  await page.route(signedUploadUrl, async route => {
+    privatePutCount += 1;
+    await route.fulfill({
+      status: privatePutCount === 1 ? 503 : 409,
+      json: { error: privatePutCount === 1 ? "storage_response_lost" : "object_already_exists" },
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "original-ya-presente.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 existe en storage"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "original-ya-presente.pdf" })).toBeVisible();
+  expect(signed).toBe(1);
+  expect(privatePutCount).toBe(2);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(1);
+});
+
+test("REC-DOC-085 · ni PUT ni finalize comprobables mantienen bloqueada la copia", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signed = 0;
+  let putCalls = 0;
+  let finalizeCalls = 0;
+  await page.route(signedUploadUrl, async route => {
+    putCalls += 1;
+    await route.fulfill({ status: 503, body: "unknown" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const action = route.request().postDataJSON()?.action;
+    if (action === "upload_sign") signed += 1;
+    if (action === "upload_finalize") {
+      finalizeCalls += 1;
+      await route.fulfill({ status: 404, json: { error: "document_upload_not_found" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "incertidumbre-persistente.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 pendiente"),
+  });
+  const save = page.getByRole("button", { name: "Guardar original" });
+  await save.click();
+  await expect(save).toBeDisabled();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueada");
+  await expect(save).toBeDisabled();
+  expect(signed).toBe(1);
+  expect(putCalls).toBe(2);
+  expect(finalizeCalls).toBe(1);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
 });
 
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
