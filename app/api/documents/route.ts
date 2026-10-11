@@ -48,6 +48,14 @@ function uuid(value: unknown, code: string) {
   return value;
 }
 
+function optionalQueryInteger(raw: string | null, code: string, fallback: number, min: number, max: number) {
+  if (raw === null) return fallback;
+  // Number("") and Number(" ") silently become zero. Document queries must
+  // use an unambiguous, canonical non-negative integer.
+  if (!/^(0|[1-9]\\d*)$/.test(raw)) throw new Error(code);
+  return integer(Number(raw), code, min, max);
+}
+
 function nullableDate(value: unknown, code: string) {
   if (value === null || value === undefined || value === "") return null;
   if (typeof value !== "string" || !DATE.test(value)) throw new Error(code);
@@ -142,16 +150,21 @@ function apiError(error: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // Never let URLSearchParams.get() silently pick the first of two
+    // contradictory filters or document IDs.
+    for (const key of ["id", "mode", "days", "limit", "offset", "status", "q", "scope", "unassociated"]) {
+      if (searchParams.getAll(key).length > 1) throw new Error("invalid_document_query_duplicate");
+    }
     const idRaw = searchParams.get("id");
     const mode = searchParams.get("mode");
 
-    if (idRaw) {
+    if (idRaw !== null) {
       const id = uuid(idRaw, "invalid_document_id");
       if (mode === "candidates") {
         const daysRaw = searchParams.get("days");
         const limitRaw = searchParams.get("limit");
-        const days = daysRaw === null ? 7 : integer(Number(daysRaw), "invalid_document_candidate_days", 0, 31);
-        const limit = limitRaw === null ? 8 : integer(Number(limitRaw), "invalid_document_candidate_limit", 1, 20);
+        const days = optionalQueryInteger(daysRaw, "invalid_document_candidate_days", 7, 0, 31);
+        const limit = optionalQueryInteger(limitRaw, "invalid_document_candidate_limit", 8, 1, 20);
         const result = await callPersistenceGateway("document.candidates", { id, days, limit });
         return Response.json(result, { headers: HEADERS });
       }
@@ -169,8 +182,8 @@ export async function GET(request: Request) {
     const query = nullableText(searchParams.get("q"), "invalid_document_query", 200);
     const limitRaw = searchParams.get("limit");
     const offsetRaw = searchParams.get("offset");
-    const limit = limitRaw === null ? 50 : integer(Number(limitRaw), "invalid_document_limit", 1, 100);
-    const offset = offsetRaw === null ? 0 : integer(Number(offsetRaw), "invalid_document_offset", 0, 100000);
+    const limit = optionalQueryInteger(limitRaw, "invalid_document_limit", 50, 1, 100);
+    const offset = optionalQueryInteger(offsetRaw, "invalid_document_offset", 0, 0, 100000);
     const scope = searchParams.get("scope") ?? "ordinary";
     if (!SCOPES.has(scope)) throw new Error("invalid_document_scope");
     const unassociatedRaw = searchParams.get("unassociated");
