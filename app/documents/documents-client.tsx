@@ -756,12 +756,18 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // private Supabase Storage bucket via its signed upload endpoint.
       if (sign?.bucket !== "financial-app-documents"
         || typeof sign.path !== "string" || !/^uploads[/][0-9a-f-]+[/][0-9a-f-]+[.](?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
-        || typeof sign.signedUrl !== "string") throw new Error("document_upload_unsafe_url");
+        || typeof sign.signedUrl !== "string"
+        || typeof sign.token !== "string" || !sign.token
+        || sign.originalFileName !== file.name || sign.mimeType !== file.type
+        || sign.sizeBytes !== file.size || !Number.isSafeInteger(sign.maxFileBytes)
+        || sign.maxFileBytes < file.size) throw new Error("document_upload_unsafe_url");
       let uploadUrl: URL;
       try { uploadUrl = new URL(sign.signedUrl); }
       catch { throw new Error("document_upload_unsafe_url"); }
       if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== SUPABASE_ORIGIN
         || uploadUrl.pathname !== `/storage/v1/object/upload/sign/financial-app-documents/${sign.path}`
+        || uploadUrl.searchParams.getAll("token").length !== 1
+        || uploadUrl.searchParams.get("token") !== sign.token
         || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
         throw new Error("document_upload_unsafe_url");
       }
