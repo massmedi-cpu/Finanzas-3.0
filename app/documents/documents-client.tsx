@@ -570,7 +570,24 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           for (const item of next.items) ids.add(item.id);
           all.push(...next.items);
         }
-        const filtered = all.filter((item) => item.status !== "archived" && item.associationCount === 0);
+        // Two non-atomic reads may observe different repository revisions.
+        // A changed page invalidates the reconstructed snapshot rather than
+        // silently mixing two archives and skipping or duplicating records.
+        const originalWindow = all.slice(first.offset, first.offset + first.limit);
+        if (originalWindow.length !== first.items.length
+          || first.items.some((item, index) => {
+            const original = originalWindow[index];
+            return !original || original.id !== item.id
+              || original.status !== item.status
+              || original.associationCount !== item.associationCount
+              || original.updatedAt !== item.updatedAt;
+          })) {
+          throw new Error("document_filter_incomplete");
+        }
+        // When the owner explicitly requests archived documents, do not
+        // remove them merely because the backend uses an older contract.
+        const filtered = all.filter((item) => item.associationCount === 0
+          && (statusFilter === "archived" || item.status !== "archived"));
         // Keep the requested page and its 50-row limit. Returning the entire
         // archive as a single page defeated navigation and mobile rendering.
         data = {
@@ -605,7 +622,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     } finally {
       if (sequence === listSequence.current) setLoadingList(false);
     }
-  }, [listUrl, unassociatedOnly]);
+  }, [listUrl, unassociatedOnly, statusFilter]);
 
   const loadDetail = useCallback(async (id: string, silent = false, preserveEditor = false) => {
     const sequence = ++detailSequence.current;
