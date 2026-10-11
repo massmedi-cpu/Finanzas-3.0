@@ -150,3 +150,23 @@ test("NAV-005 · cambios concurrentes entre páginas antiguas invalidan un filtr
   await expect(page.getByRole("navigation", { name: "Paginación documental" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /Documento 121\.png/ })).toHaveCount(0);
 });
+
+test("NAV-006 · cambio del importe sin fecha de modificación invalida una lista legacy", async ({ page }) => {
+  await page.route("**/api/**", route => route.fulfill({ status: 503, json: { error: "isolated_source_unavailable" } }));
+  await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+    const url = new URL(route.request().url());
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    const items = legacyRows.slice(offset, offset + limit).map(item => ({ ...item }));
+    // The backend forgot to bump updatedAt, but the imported amount changed
+    // between snapshots: the client must not combine them in a trusted list.
+    if (offset === 100 && limit === 100) items[0].totalCents = 1234567;
+    await route.fulfill({ json: {
+      contractVersion: 2, total: legacyRows.length, offset, limit, items, principles,
+    } });
+  });
+  await page.goto("/documents?unassociated=true&offset=100");
+  await expect(page.getByTestId("documents-alert")).toContainText("La lista recibida está incompleta");
+  await expect(page.getByTestId("documents-list-error")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Paginación documental" })).toHaveCount(0);
+});
