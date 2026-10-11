@@ -1,5 +1,12 @@
 import { expect, test } from "@playwright/test";
 
+// Mock the complete, current read-only contract. A legacy stub without
+// principles masked pagination regressions by being rejected as invalid.
+const principles = {
+  bankSource: "read_only", ocrEnabled: true,
+  getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true,
+};
+
 for (const width of [360, 1440]) {
   test(`NAV-001 document pagination, reload and filter reset at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 936 });
@@ -17,8 +24,11 @@ for (const width of [360, 1440]) {
         originalFileName: `Documento ${offset + i + 1}.png`,
         type: "other", status: "pending_review", mimeType: "image/png", notes: "",
         documentDate: null, totalCents: null, associationCount: 0, isTest: false,
+        createdAt: "2026-10-11T08:00:00Z", updatedAt: "2026-10-11T08:00:00Z",
+        sizeBytes: 1200, issuerName: null, storageProvider: "supabase",
+        sourceModifiedAt: null, sourceDriveFileId: null,
       }));
-      await route.fulfill({ json: { contractVersion: 3, total, offset, limit, items, testCount: 0 } });
+      await route.fulfill({ json: { contractVersion: 3, total, offset, limit, items, testCount: 0, principles } });
     });
     await page.goto("/documents?unassociated=true");
     const pagination = page.getByRole("navigation", { name: "Paginación documental" });
