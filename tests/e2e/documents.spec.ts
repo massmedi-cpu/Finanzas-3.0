@@ -126,7 +126,7 @@ async function mockDocumentApi(
     }
     if (method === "POST" && body.action === "upload_sign") {
       signedSizeBytes = body.sizeBytes;
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640, hashVerificationVersion: 1, hashAlgorithm: "sha256" }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
       detail = {
@@ -2524,6 +2524,47 @@ test("REC-DOC-102 · API rechaza tamaños y huellas incorrectas antes de contact
     const payload = await response.json();
     expect(payload.error).toBe("invalid_request");
   }
+});
+
+test("REC-DOC-103 · gateway antiguo sin SHA-256 se bloquea ANTES de enviar un solo byte", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signCalls = 0;
+  let puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_sign") {
+      const body = route.request().postDataJSON();
+      signCalls += 1;
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          bucket: "financial-app-documents", path: signedUploadPath,
+          token: "token", signedUrl: signedUploadUrl,
+          originalFileName: body.originalFileName, mimeType: body.mimeType,
+          sizeBytes: body.sizeBytes, maxFileBytes: 15728640,
+          // Legacy gateway omits hashVerificationVersion/hashAlgorithm.
+        }),
+      });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "no-enviar-a-servidor-antiguo.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 protegido"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("aún no admite la verificación segura SHA-256");
+  expect(signCalls).toBe(1);
+  expect(puts).toBe(0);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
 });
 
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
