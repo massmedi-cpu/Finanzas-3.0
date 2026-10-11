@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
+import { resolvePdfOcrSource } from "../../src/infrastructure/ocr/pdf-source-provenance";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
 const unknownDocumentId = "91000000-0000-4000-8000-000000000091";
@@ -138,6 +139,19 @@ async function mockDocumentApi(
   await page.route(signedUploadUrl, async (route) => route.fulfill({ status: 200, body: "ok" }));
   await page.route("**/api/transactions*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [{ id: transactionId, bankDate: "2026-09-02", amountCents: -5404, account: { id: "95000000-0000-4000-8000-000000000095", name: "Cuenta corriente" }, concept: { original: "COMUNIDAD BLOQUE", processed: "COMUNIDAD BLOQUE", effective: "COMUNIDAD BLOQUE" }, merchant: { effectiveName: null }, category: { effectiveName: null }, kind: { effective: "expense" } }], totalCount: 1, hasMore: false, nextCursor: null }) }));
 }
+
+test("REC-OCR-056 · un PDF escaneado vacío no se etiqueta como texto nativo", () => {
+  expect(resolvePdfOcrSource({ nativePageCount: 0, visualOcrPageCount: 0, visualOcrAttempted: 1 }))
+    .toBe("pdf_ocr");
+  expect(resolvePdfOcrSource({ nativePageCount: 0, visualOcrPageCount: 1, visualOcrAttempted: 1 }))
+    .toBe("pdf_ocr");
+  expect(resolvePdfOcrSource({ nativePageCount: 1, visualOcrPageCount: 1, visualOcrAttempted: 1 }))
+    .toBe("hybrid");
+  expect(resolvePdfOcrSource({ nativePageCount: 1, visualOcrPageCount: 0, visualOcrAttempted: 1 }))
+    .toBe("pdf_text");
+  expect(resolvePdfOcrSource({ nativePageCount: 1, visualOcrPageCount: 0, visualOcrAttempted: 0 }))
+    .toBe("pdf_text");
+});
 
 test("REC-OCR-055 · el OCR rechaza dos identificadores antes de tocar persistencia", async ({ request }) => {
   for (const method of ["GET", "POST"] as const) {
