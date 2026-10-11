@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./drive-auto-sync.module.css";
 
 type DriveSyncResult = {
+  contractVersion: 1;
+  source: "google_drive";
+  mode: "automatic_incremental_read_only";
+  principles: { bankSource: "read_only"; driveSource: "read_only"; duplicateSafe: true; nonBlocking: true };
   imported: number;
   scanned: number;
   detectedChanges: number;
@@ -26,23 +30,63 @@ type Phase = "idle" | "syncing" | "ready" | "error";
 const SESSION_KEY = "financial-app:document-drive-sync:10.0.72";
 const SESSION_TTL_MS = 2 * 60 * 1000;
 
+function validDriveSyncResult(value: unknown): value is DriveSyncResult {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const result = value as Partial<DriveSyncResult>;
+  if (result.contractVersion !== 1 || result.source !== "google_drive"
+    || result.mode !== "automatic_incremental_read_only"
+    || result.principles?.bankSource !== "read_only"
+    || result.principles?.driveSource !== "read_only"
+    || result.principles?.duplicateSafe !== true
+    || result.principles?.nonBlocking !== true
+    || result.truncated !== true && result.truncated !== false
+    || typeof result.completedAt !== "string" || !Number.isFinite(Date.parse(result.completedAt))) return false;
+  const counters = [
+    result.imported, result.scanned, result.detectedChanges, result.unchanged,
+    result.failed, result.pending, result.skippedUnsupported, result.skippedInvalid,
+  ];
+  if (!counters.every((value) => Number.isSafeInteger(value) && Number(value) >= 0)) return false;
+  return result.detectedChanges! + result.unchanged! === result.scanned!
+    && result.imported! <= result.detectedChanges!
+    && result.failed! <= result.detectedChanges!
+    && result.pending! <= result.detectedChanges!;
+}
+
 function validStoredResult(value: unknown): StoredResult | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const stored = value as Partial<StoredResult>;
-  if (typeof stored.savedAt !== "number" || !stored.result || typeof stored.result !== "object") return null;
-  if (Date.now() - stored.savedAt > SESSION_TTL_MS) return null;
+  if (typeof stored.savedAt !== "number" || !Number.isFinite(stored.savedAt)
+    || stored.savedAt > Date.now() || Date.now() - stored.savedAt > SESSION_TTL_MS
+    || !validDriveSyncResult(stored.result)) return null;
   return stored as StoredResult;
 }
 
 function summary(result: DriveSyncResult) {
+  const partial = result.failed > 0 || result.pending > 0 || result.truncated
+    || result.skippedInvalid > 0;
+  const notes: string[] = [];
   if (result.imported > 0) {
-    const suffix = result.imported === 1 ? "documento nuevo" : "documentos nuevos";
-    return `${result.imported} ${suffix} detectados en Drive y añadidos a Documentos.`;
+    notes.push(result.imported + " " + (result.imported === 1 ? "documento nuevo incorporado" : "documentos nuevos incorporados") + " desde Drive.");
   }
-  if (result.detectedChanges > 0 && result.failed > 0) {
-    return "Drive se ha comprobado, pero algún documento no pudo validarse. Puedes seguir usando la app.";
+  if (result.failed > 0) {
+    notes.push(result.failed + " " + (result.failed === 1 ? "documento no pudo validarse" : "documentos no pudieron validarse") + ".");
   }
-  return "Drive al día · no hay documentos nuevos que importar.";
+  if (result.pending > 0) {
+    notes.push(result.pending + " " + (result.pending === 1 ? "cambio pendiente" : "cambios pendientes") + " de procesar.");
+  }
+  if (result.truncated) notes.push("La exploración de Drive está incompleta.");
+  if (result.skippedInvalid > 0) {
+    notes.push(result.skippedInvalid + " " + (result.skippedInvalid === 1 ? "archivo inválido omitido" : "archivos inválidos omitidos") + ".");
+  }
+  if (result.skippedUnsupported > 0) {
+    notes.push(result.skippedUnsupported + " " + (result.skippedUnsupported === 1 ? "archivo con formato no admitido" : "archivos con formato no admitido") + " ignorados.");
+  }
+  if (partial) return notes.join(" ") + " La sincronización no está completa; comprueba Drive de nuevo.";
+  if (result.detectedChanges > result.imported) {
+    return notes.join(" ") + " Hay cambios detectados que no se han incorporado. Comprueba el archivo antes de dar Drive por actualizado.";
+  }
+  if (notes.length) return notes.join(" ");
+  return "Carpeta comprobada. No hay documentos nuevos que importar.";
 }
 
 export function DriveAutoSync() {
@@ -79,8 +123,8 @@ export function DriveAutoSync() {
         headers: { accept: "application/json" },
         cache: "no-store",
       });
-      const body = await response.json().catch(() => null) as DriveSyncResult | null;
-      if (!response.ok || !body || typeof body.imported !== "number") throw new Error("drive_sync_failed");
+      const body = await response.json().catch(() => null);
+      if (!response.ok || !validDriveSyncResult(body)) throw new Error("drive_sync_failed");
 
       setResult(body);
       setPhase("ready");
@@ -120,7 +164,7 @@ export function DriveAutoSync() {
           <span>{summary(result)}</span>
         ) : null}
         {phase === "error" ? (
-          <span>La detección automática de Drive no está disponible ahora. Documentos sigue funcionando con normalidad.</span>
+          <span>No se ha podido verificar Drive. El estado de los documentos debe comprobarse por separado; pulsa «Comprobar ahora» para reintentar.</span>
         ) : null}
         {phase === "idle" ? <span>Preparando comprobación automática…</span> : null}
       </div>
