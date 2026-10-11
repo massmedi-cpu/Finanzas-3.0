@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
+import { parseDocumentQueryInteger } from "../../src/application/document-query-integer";
 import { resolvePdfOcrSource } from "../../src/infrastructure/ocr/pdf-source-provenance";
 
 const isProtectedPreview = Boolean(process.env.VERCEL_PREVIEW_URL);
@@ -181,6 +182,29 @@ test("REC-OCR-055 · el OCR rechaza dos identificadores antes de tocar persisten
       error: "ocr_failed", code: "invalid_ocr_document_id",
     });
   }
+});
+
+test("REC-DOC-077 · enteros canónicos permiten filtrar, paginar y buscar candidatos", () => {
+  const parse = parseDocumentQueryInteger;
+  // These are ordinary requests from the Documentos UI and must not be
+  // rejected before the private persistence gateway can even be called.
+  expect(parse("50", "invalid_document_limit", 50, 1, 100)).toBe(50);
+  expect(parse("100", "invalid_document_limit", 50, 1, 100)).toBe(100);
+  expect(parse("1000", "invalid_document_offset", 0, 0, 100000)).toBe(1000);
+  expect(parse("7", "invalid_document_candidate_days", 7, 0, 31)).toBe(7);
+  expect(parse("8", "invalid_document_candidate_limit", 8, 1, 20)).toBe(8);
+  expect(parse("20", "invalid_document_candidate_limit", 8, 1, 20)).toBe(20);
+  expect(parse("0", "invalid_document_offset", 0, 0, 100000)).toBe(0);
+  expect(parse(null, "invalid_document_limit", 50, 1, 100)).toBe(50);
+  const invalid = ["", " ", "08", "00", "01", "-1", "+1", "1.5", "1e2", "0x10", "9007199254740992"];
+  for (const raw of invalid) {
+    expect(() => parse(raw, "invalid_document_limit", 50, 1, 100), raw)
+      .toThrow("invalid_document_limit");
+  }
+  expect(() => parse("0", "invalid_document_limit", 50, 1, 100))
+    .toThrow("invalid_document_limit");
+  expect(() => parse("32", "invalid_document_candidate_days", 7, 0, 31))
+    .toThrow("invalid_document_candidate_days");
 });
 
 test("document API rejects invalid inputs before persistence", async ({ request }) => {
