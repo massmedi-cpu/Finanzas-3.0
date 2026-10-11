@@ -314,6 +314,9 @@ function friendlyError(error: unknown) {
     document_test_designation_incomplete: "No se ha podido comprobar el cambio de tratamiento. Conservamos tu revisión para que puedas reintentarlo.",
     document_revalidation_incomplete: "La operación puede haberse aplicado, pero no se pudo verificar al recargar. Actualiza el documento antes de repetirla.",
     document_detail_mismatch: "El servidor no ha devuelto el documento solicitado. No mostraremos datos de otro documento; reintenta la consulta.",
+    document_open_blocked: "El navegador ha bloqueado la ventana del documento. Permite ventanas emergentes para Financial App y vuelve a pulsar Abrir.",
+    document_open_failed: "No se ha podido abrir el original. Reintenta desde la ficha del documento.",
+    document_open_unsafe_url: "Se ha rechazado un enlace de archivo no seguro. El original no se ha abierto.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -408,6 +411,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   const listSequence = useRef(0);
   const detailSequence = useRef(0);
+  const originalOpenInFlight = useRef(false);
   const selectedIdRef = useRef<string | null>(null);
   const feedbackActionRef = useRef<string | null>(null);
   const metadataDirtyRef = useRef(false);
@@ -796,15 +800,41 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }
 
   async function openDocument() {
-    if (!detail) return;
+    if (!detail || busy || originalOpenInFlight.current) return;
+    const id = detail.document.id;
+    // A window opened after await fetch can be blocked by the browser.
+    // Open it synchronously and only navigate after validating the signed URL.
+    const previewWindow = window.open("about:blank", "_blank");
+    if (!previewWindow) {
+      setError(friendlyError(new Error("document_open_blocked")));
+      return;
+    }
+    previewWindow.opener = null;
+    originalOpenInFlight.current = true;
     setBusy("open");
     setError(null);
     try {
-      const result = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(detail.document.id)}&mode=open`, { cache: "no-store" }));
-      if (typeof result.url !== "string") throw new Error("document_open_failed");
-      window.open(result.url, "_blank", "noopener,noreferrer");
-    } catch (caught) { setError(friendlyError(caught)); }
-    finally { setBusy(null); }
+      const result = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(id)}&mode=open`, { cache: "no-store" }));
+      // Do not open an old document if the user changed selection while fetching.
+      if (selectedIdRef.current !== id || previewWindow.closed) {
+        if (!previewWindow.closed) previewWindow.close();
+        return;
+      }
+      if (typeof result?.url !== "string") throw new Error("document_open_failed");
+      const destination = new URL(result.url);
+      if (destination.protocol !== "https:"
+        && !(destination.protocol === "http:" && ["localhost", "127.0.0.1"].includes(destination.hostname))) {
+        throw new Error("document_open_unsafe_url");
+      }
+      previewWindow.location.replace(destination.href);
+      setNotice("Original abierto en otra pestaña.");
+    } catch (caught) {
+      if (!previewWindow.closed) previewWindow.close();
+      if (selectedIdRef.current === id) setError(friendlyError(caught));
+    } finally {
+      originalOpenInFlight.current = false;
+      setBusy(null);
+    }
   }
 
   async function findCandidates() {
