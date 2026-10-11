@@ -152,6 +152,8 @@ test("REC-DOC-055 · parámetros duplicados o vacíos se rechazan antes de consu
     ["/api/documents?unassociated=false&unassociated=true", "invalid_document_query_duplicate"],
     ["/api/documents?id=" + documentId + "&id=" + unknownDocumentId, "invalid_document_query_duplicate"],
     ["/api/documents?id=", "invalid_document_id"],
+    ["/api/documents?mode=", "invalid_document_mode"],
+    ["/api/documents?id=" + documentId + "&mode=", "invalid_document_mode"],
     ["/api/documents?limit=", "invalid_document_limit"],
     ["/api/documents?offset=%20", "invalid_document_offset"],
     ["/api/documents?id=" + documentId + "&mode=candidates&days=", "invalid_document_candidate_days"],
@@ -1076,5 +1078,52 @@ test("REC-DOC-057 · respuesta de otra página no sustituye el listado solicitad
   await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
   await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
   await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-DOC-058 · abrir desde la ficha conserva el gesto del navegador y la URL firmada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.context().route("**/storage/v1/object/sign/financial-app-documents/open", (route) =>
+    route.fulfill({ status: 200, contentType: "text/plain", body: "Documento sintético" }));
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByRole("button", { name: /Abrir documento/i }).click(),
+  ]);
+  await expect.poll(() => popup.url()).toContain("/storage/v1/object/sign/financial-app-documents/open");
+  await expect(page.getByTestId("documents-alert")).toHaveCount(0);
+  await popup.close();
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-059 · URL de original insegura se bloquea también desde la ficha", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "open") return route.fallback();
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ url: "javascript:alert(1)" }) });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const [popup] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByRole("button", { name: /Abrir documento/i }).click(),
+  ]);
+  await expect(page.getByTestId("documents-alert")).toContainText(/enlace de archivo no seguro/i);
+  await expect.poll(() => popup.isClosed()).toBe(true);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-060 · bloqueo de emergentes se explica sin intentar una escritura", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.evaluate(() => { window.open = () => null; });
+  await page.getByRole("button", { name: /Abrir documento/i }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/bloqueado la ventana del documento/i);
   expect(writes).toEqual([]);
 });
