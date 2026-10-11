@@ -35,7 +35,9 @@ requireText(e2e, "const unknownMonth = incomeExpense.locator('[data-month-covera
 requireText(e2e, "await expect(unknownMonth).toHaveAccessibleName(/agosto de 2026: sin cobertura bancaria confirmada/);", "QA-11 · marcador accesible de cobertura desconocida");
 requireText(e2e, "await expect(unknownMonth.locator('span[style*=\"height\"]')).toHaveCount(0);", "QA-11 · nunca representar cero con barras");
 requireText(home, 'const hasRecordedAmount = row.incomeCents !== 0 || row.expenseCents !== 0 || row.operatingNetCents !== 0', "Inicio · evidencia bancaria parcial");
-requireText(home, 'coverage.state === "unknown" && hasRecordedAmount ? "partial" as const : coverage.state', "Inicio · no confundir actividad con cobertura completa");
+requireText(home, 'coverage.state === "unknown" && sourceFreshness?.available === true && hasRecordedAmount', "Inicio · parcial exige fuente bancaria disponible y movimientos observados");
+requireText(home, '? "partial" as const : coverage.state', "Inicio · los importes recuperados se etiquetan solo como parciales");
+requireText(home, 'resolveHomeBankCoverage({', "Inicio · usar los límites de cobertura y sincronización contrastados");
 requireText(home, 'data-zero-line="true"', "línea cero Flujo neto");
 requireText(home, 'data-sign={sign}', "signo visual Flujo neto");
 requireText(home, "No hay saldos bancarios disponibles para este periodo.", "estado vacío Saldo");
