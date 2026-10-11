@@ -415,6 +415,11 @@ export function OcrReviewPanel({
     setBusy(true);
     setError(null);
     setCopyState("idle");
+    // Every explicit OCR attempt is a new reading. Keeping the previous result
+    // on screen after a failed retry falsely labels stale content as complete
+    // and can leave edited financial fields attached to no current OCR run.
+    setResult(null);
+    setDraft(null);
     setOcrRunId(null);
     setConfirmedRevision(null);
     knownReviewRevision.current = 0;
