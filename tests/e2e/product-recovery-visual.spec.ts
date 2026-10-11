@@ -44,6 +44,16 @@ for (const theme of ["light", "dark"] as const) {
       for (const width of widths) {
         await page.setViewportSize({ width, height: width < 768 ? 900 : 1024 });
         await noOverflow(page, width);
+        if (route === "/" && width === 360) {
+          // A 7–9px legend may pass overflow and axe but is not readable
+          // in real mobile banking use. Test actual computed typography.
+          const month = page.locator('button[data-month-coverage] > span:nth-child(2)').first();
+          const partial = page.locator('button[data-month-coverage="partial"] > span:nth-child(3)').first();
+          await expect(month).toBeVisible();
+          await expect(partial).toBeVisible();
+          expect(await month.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(11);
+          expect(await partial.evaluate((node) => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(10);
+        }
         if (width >= 1100) {
           const nav = page.getByRole("navigation", { name: "Navegación principal" });
           await expect(nav).toHaveCSS("flex-direction", "column");
