@@ -1185,3 +1185,81 @@ test("REC-DOC-062 · asociaciones malformadas no se muestran ni permiten desasoc
   await expect(page.getByRole("button", { name: "Desasociar" })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-063 · búsqueda bancaria malformada no presenta cuentas ni asociar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/transactions*", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        rows: [{ id: transactionId, bankDate: "2026-09-02", amountCents: -5404,
+          concept: { effective: "Movimento sin cuenta" }, category: { effectiveId: null },
+          kind: { effective: "expense" } }],
+        totalCount: 1,
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByLabel("Buscar movimiento").fill("comunidad");
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/búsqueda de movimientos ha devuelto datos incompletos/i);
+  await expect(page.getByRole("button", { name: "Asociar", exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-064 · editar búsqueda oculta los resultados anteriores hasta consultar el nuevo concepto", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const field = page.getByLabel("Buscar movimiento");
+  await field.fill("comunidad");
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Asociar", exact: true })).toBeVisible();
+  await field.fill("seguro");
+  await expect(page.getByRole("button", { name: "Asociar", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Buscar", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Asociar", exact: true })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-065 · dos clics rápidos sobre una asociación generan un solo PATCH", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let attempts = 0;
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() === "PATCH" && route.request().postDataJSON()?.action === "associate") {
+      attempts += 1;
+      // Keep the first request in flight through another click in the same task.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Buscar sugerencias" }).click();
+  await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toBeVisible();
+  await page.getByRole("button", { name: "Confirmar sugerencia" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+    (element as HTMLButtonElement).click();
+  });
+  await expect.poll(() => writes.filter((write) => write.action === "associate").length).toBe(1);
+  expect(attempts).toBe(1);
+});
+
+test("REC-DOC-066 · una sugerencia anterior no se confirma con metadatos pendientes", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Buscar sugerencias" }).click();
+  const confirm = page.getByRole("button", { name: "Confirmar sugerencia" });
+  await expect(confirm).toBeEnabled();
+  await page.getByLabel("Importe (€)").fill("99,99");
+  await expect(confirm).toBeDisabled();
+  await expect(page.getByText(/Guarda los cambios del documento antes de confirmar una sugerencia/)).toBeVisible();
+  expect(writes).toEqual([]);
+});
