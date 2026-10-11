@@ -216,6 +216,11 @@ function reviewBody(value: unknown) {
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
+    // A request with two bank account IDs, cursors, years or modes must not
+    // silently use only the first value and certify the wrong financial view.
+    if ([...searchParams.keys()].some((key) => searchParams.getAll(key).length > 1)) {
+      throw new Error("invalid_transaction_query_duplicate");
+    }
     const mode = searchParams.get("mode");
     if (mode === "facets") {
       const result = await callPersistenceGateway("transaction.facets");
