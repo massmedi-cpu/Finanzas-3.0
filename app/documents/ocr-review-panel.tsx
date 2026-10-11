@@ -433,7 +433,9 @@ export function OcrReviewPanel({
       const interpretation = interpretDocumentOcrFinancially(parsed);
       setResult(parsed);
       setDraft(reviewDraft(interpretation));
-      actionFeedback.success(feedbackId, "Lectura OCR completada. Revisa el resultado antes de confirmar sus datos.");
+      actionFeedback.success(feedbackId, parsed.status === "empty"
+        ? "El análisis ha terminado sin texto legible. Comprueba el original o vuelve a intentarlo."
+        : "Lectura OCR completada. Revisa el resultado antes de confirmar sus datos.");
       await hydrateConfirmation(parsed, interpretation, generation, controller.signal);
     } catch (caught) {
       if (!isCurrent()) return;
@@ -709,8 +711,10 @@ export function OcrReviewPanel({
           <span>1</span><div><strong>Original</strong><small>Comprueba que el archivo se ve bien.</small></div>
           <button type="button" onClick={() => void openOriginal()} disabled={openingOriginal}>{openingOriginal ? "Abriendo…" : "Abrir"}</button>
         </li>
-        <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
-          <span>2</span><div><strong>Lectura</strong><small>{result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
+        <li className={`${ocrStyles.flowItem} ${result && result.status !== "empty" ? ocrStyles.done : ""}`}>
+          <span>2</span><div><strong>Lectura</strong><small>{result?.status === "empty"
+            ? "Sin texto legible. Comprueba el original."
+            : result ? "OCR completado." : "Ejecuta OCR cuando quieras."}</small></div>
         </li>
         <li className={`${ocrStyles.flowItem} ${result ? ocrStyles.done : ""}`}>
           <span>3</span><div><strong>Revisión</strong><small>{review ? review.nextActionLabel : "Compara la lectura y los campos con el original."}</small></div>
