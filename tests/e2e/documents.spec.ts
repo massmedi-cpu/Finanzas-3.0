@@ -1582,6 +1582,52 @@ test("REC-DOC-071 · dos envíos rápidos crean una sola subida privada", async 
   expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
 });
 
+test("REC-DOC-074 · finalize incierto impide una segunda subida privada automática", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signCalls = 0;
+  let finalizeCalls = 0;
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const action = route.request().postDataJSON()?.action;
+    if (action === "upload_sign") signCalls += 1;
+    if (action === "upload_finalize") {
+      finalizeCalls += 1;
+      if (finalizeCalls === 1) {
+        // The private PUT already finished. The 503 is not proof that
+        // persistence did not commit the document.
+        await route.fulfill({
+          status: 503, contentType: "application/json",
+          body: JSON.stringify({ error: "persistence_failed" }),
+        });
+        return;
+      }
+    }
+    return route.fallback();
+  });
+
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "pago-sin-confirmar.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 original privado"),
+  });
+  const submit = page.getByRole("button", { name: "Guardar original" });
+  await submit.click();
+  await expect(page.getByTestId("documents-alert")).toContainText("otro envío podría duplicarlo");
+  await expect(page.getByTestId("document-upload-unverified")).toContainText("Subida sin confirmar");
+  await expect(submit).toBeDisabled();
+  expect(signCalls).toBe(1);
+  expect(finalizeCalls).toBe(1);
+  await page.getByRole("button", { name: "He comprobado la lista; permitir nuevo envío" }).click();
+  await expect(submit).toBeEnabled();
+  await submit.click();
+  await expect(page.getByRole("heading", { name: "pago-sin-confirmar.pdf" })).toBeVisible();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(signCalls).toBe(2);
+  expect(finalizeCalls).toBe(2);
+  expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+});
+
 test("REC-DOC-072 · una nueva subida no descarta los metadatos pendientes de otro documento", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
