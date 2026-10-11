@@ -148,6 +148,9 @@ test("REC-OCR-057 · un OCR vacío informa que no se ha reconocido texto sin mar
   const panel = page.getByTestId("ocr-review-panel");
   await panel.getByRole("button", { name: "Analizar documento" }).click();
   await expect(panel.getByText("Sin texto legible. Comprueba el original.")).toBeVisible();
+  const stages = panel.getByRole("list", { name: "Proceso de revisión OCR" }).locator("li");
+  await expect(stages.nth(1)).not.toHaveClass(/done/);
+  await expect(stages.nth(2)).not.toHaveClass(/done/);
   await expect(panel.getByText("OCR completado.")).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Analizar documento" })).toHaveCount(0);
   await expect(panel.getByRole("button", { name: "Volver a analizar" })).toBeEnabled();
