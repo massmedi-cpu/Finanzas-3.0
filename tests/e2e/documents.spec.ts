@@ -145,6 +145,25 @@ test("document API rejects invalid inputs before persistence", async ({ request 
   await expect(invalidAssociation.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_document_association_method" });
 });
 
+test("REC-DOC-055 · parámetros duplicados o vacíos se rechazan antes de consultar documentos privados", async ({ request }) => {
+  const cases: Array<[string, string]> = [
+    ["/api/documents?scope=ordinary&scope=tests", "invalid_document_query_duplicate"],
+    ["/api/documents?limit=50&limit=100", "invalid_document_query_duplicate"],
+    ["/api/documents?unassociated=false&unassociated=true", "invalid_document_query_duplicate"],
+    ["/api/documents?id=" + documentId + "&id=" + unknownDocumentId, "invalid_document_query_duplicate"],
+    ["/api/documents?id=", "invalid_document_id"],
+    ["/api/documents?limit=", "invalid_document_limit"],
+    ["/api/documents?offset=%20", "invalid_document_offset"],
+    ["/api/documents?id=" + documentId + "&mode=candidates&days=", "invalid_document_candidate_days"],
+    ["/api/documents?id=" + documentId + "&mode=candidates&limit=08", "invalid_document_candidate_limit"],
+  ];
+  for (const [url, code] of cases) {
+    const response = await request.get(url);
+    expect(response.status(), url).toBe(400);
+    await expect(response.json()).resolves.toEqual({ error: "invalid_request", code });
+  }
+});
+
 test("document metadata validation accepts Spanish financial boundaries and rejects unsafe values", async ({ request }) => {
   const invalidDate = await request.patch("/api/documents", { data: { action: "metadata", id: unknownDocumentId, type: "invoice", documentDate: "2026-02-30", issuerName: "Proveedor", totalCents: 1234, notes: "" } });
   expect(invalidDate.status()).toBe(400);
@@ -1012,5 +1031,50 @@ test("REC-DOC-054 · una lista con identificadores no UUID no se presenta como d
   await page.goto("/documents");
   await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
   await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-DOC-056 · página vacía dentro de un total positivo no finge archivo vacío", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ contractVersion: 3, items: [], total: 1, limit: 50, offset: 0, principles }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByText("No hay documentos", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-057 · respuesta de otra página no sustituye el listado solicitado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3, items: [{ ...item }], total: 2, limit: 50, offset: 1, principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
