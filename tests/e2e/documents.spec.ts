@@ -1127,3 +1127,61 @@ test("REC-DOC-060 · bloqueo de emergentes se explica sin intentar una escritura
   await expect(page.getByTestId("documents-alert")).toContainText(/bloqueado la ventana del documento/i);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-061 · una sugerencia para otro documento no autoriza asociaciones bancarias", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (url.searchParams.get("mode") === "candidates") {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1, documentId: unknownDocumentId, ready: true, reason: null,
+          days: 7, amountToleranceCents: 200,
+          candidates: [{
+            transactionId, accountId: "95000000-0000-4000-8000-000000000095",
+            accountName: "Cuenta corriente", date: "2026-09-02", concept: "COMUNIDAD BLOQUE",
+            amountCents: -5404, confidence: 1,
+          }],
+          principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Buscar sugerencias" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/sugerencias no corresponden a este documento/i);
+  await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-062 · asociaciones malformadas no se muestran ni permiten desasociar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3, document: { ...item },
+          associations: [{ id: "asociacion-falsa", transactionId, accountId: item.id, method: "manual",
+            date: "2026-09-02", concept: "No verificado", accountName: "Cuenta", amountCents: -5404, confirmed: true }],
+          principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/servidor no ha devuelto el documento solicitado/i);
+  await expect(page.getByRole("button", { name: "Desasociar" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
