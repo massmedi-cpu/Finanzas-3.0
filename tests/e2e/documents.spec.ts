@@ -57,14 +57,14 @@ async function mockDocumentApi(
         extractor: "pdfjs-6.2.108-native-text",
         extractedAt: "2026-09-07T07:00:00.000Z",
         confidence: 1,
-        plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
+        plainText: ocrStatus === "empty" ? "" : "FACTURA DEMO\nTOTAL 54,04 EUR",
         warnings: ocrWarnings,
         principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
         pages: [{
           pageNumber: 1,
-          plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
-          layoutText: "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
-          lines: [
+          plainText: ocrStatus === "empty" ? "" : "FACTURA DEMO\nTOTAL 54,04 EUR",
+          layoutText: ocrStatus === "empty" ? "" : "FACTURA DEMO\n                                              TOTAL     54,04 EUR",
+          lines: ocrStatus === "empty" ? [] : [
             { id: "p1-l1", text: "FACTURA DEMO", confidence: 1, alignment: "center", words: [] },
             { id: "p1-l2", text: "TOTAL 54,04 EUR", confidence: 1, alignment: "right", words: [] },
           ],
@@ -139,6 +139,22 @@ async function mockDocumentApi(
   await page.route(signedUploadUrl, async (route) => route.fulfill({ status: 200, body: "ok" }));
   await page.route("**/api/transactions*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [{ id: transactionId, bankDate: "2026-09-02", amountCents: -5404, account: { id: "95000000-0000-4000-8000-000000000095", name: "Cuenta corriente" }, concept: { original: "COMUNIDAD BLOQUE", processed: "COMUNIDAD BLOQUE", effective: "COMUNIDAD BLOQUE" }, merchant: { effectiveName: null }, category: { effectiveName: null }, kind: { effective: "expense" } }], totalCount: 1, hasMore: false, nextCursor: null }) }));
 }
+
+test("REC-OCR-057 · un OCR vacío informa que no se ha reconocido texto sin marcar lectura completa", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], ["ocr_empty"], "empty");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(panel.getByText("Sin texto legible. Comprueba el original.")).toBeVisible();
+  await expect(panel.getByText("OCR completado.")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Analizar documento" })).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Volver a analizar" })).toBeEnabled();
+  const confirm = panel.getByRole("button", { name: "Confirmar revisión" });
+  if (await confirm.count()) await expect(confirm).toBeDisabled();
+  expect(writes).toHaveLength(0);
+});
 
 test("REC-OCR-056 · un PDF escaneado vacío no se etiqueta como texto nativo", () => {
   expect(resolvePdfOcrSource({ nativePageCount: 0, visualOcrPageCount: 0, visualOcrAttempted: 1 }))
