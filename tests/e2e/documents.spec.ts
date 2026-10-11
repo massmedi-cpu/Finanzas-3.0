@@ -20,6 +20,7 @@ async function mockDocumentApi(
   page: import("@playwright/test").Page,
   writes: Array<Record<string, unknown>>,
   ocrReads: string[] = [],
+  ocrWarnings: string[] = [],
 ) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
 
@@ -53,7 +54,7 @@ async function mockDocumentApi(
         extractedAt: "2026-09-07T07:00:00.000Z",
         confidence: 1,
         plainText: "FACTURA DEMO\nTOTAL 54,04 EUR",
-        warnings: [],
+        warnings: ocrWarnings,
         principles: { bankSource: "read_only", financialWrites: false, requiresHumanReview: true, preservesGeometry: true },
         pages: [{
           pageNumber: 1,
@@ -1290,5 +1291,32 @@ test("REC-DOC-067 · diferencias de importe inválidas no generan sugerencias co
   await page.getByRole("button", { name: "Buscar sugerencias" }).click();
   await expect(page.getByTestId("documents-alert")).toContainText(/sugerencias no corresponden a este documento/i);
   await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-OCR-043 · PDF con varias clases de advertencia se explica en español y no muestra códigos internos", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], [
+    "pdf_page_sparse_native_unverified:1",
+    "pdf_page_visual_ocr_empty:2",
+    "pdf_page_3:low_confidence",
+    "pdf_page_4:receipt_structure_incomplete",
+    "pdf_page_5:future_unrecognized_code",
+    "future_internal_ocr_code",
+  ]);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const warnings = panel.getByText("Revisar antes de usar").locator("..");
+  await expect(warnings).toContainText("La página 1 tenía texto digital parcial");
+  await expect(warnings).toContainText("La página 2 no ha proporcionado texto legible");
+  await expect(warnings).toContainText("Página 3: La confianza global es baja");
+  await expect(warnings).toContainText("Página 4: Hay filas de producto");
+  await expect(warnings).toContainText("Página 5: La lectura de esta página necesita comprobación manual");
+  await expect(warnings).toContainText("El lector ha comunicado un aviso no reconocido");
+  await expect(warnings).not.toContainText("pdf_page_");
+  await expect(warnings).not.toContainText("future_internal_ocr_code");
   expect(writes).toEqual([]);
 });
