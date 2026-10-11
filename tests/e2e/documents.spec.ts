@@ -21,6 +21,7 @@ async function mockDocumentApi(
   writes: Array<Record<string, unknown>>,
   ocrReads: string[] = [],
   ocrWarnings: string[] = [],
+  ocrStatus: "ready" | "needs_review" | "empty" = "ready",
 ) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
 
@@ -48,7 +49,7 @@ async function mockDocumentApi(
       body: JSON.stringify({
         contractVersion: 1,
         documentId,
-        status: "ready",
+        status: ocrStatus,
         source: "pdf_text",
         extractor: "pdfjs-6.2.108-native-text",
         extractedAt: "2026-09-07T07:00:00.000Z",
@@ -1318,5 +1319,21 @@ test("REC-OCR-043 · PDF con varias clases de advertencia se explica en español
   await expect(warnings).toContainText("El lector ha comunicado un aviso no reconocido");
   await expect(warnings).not.toContainText("pdf_page_");
   await expect(warnings).not.toContainText("future_internal_ocr_code");
+  expect(writes).toEqual([]);
+});
+
+
+test("REC-OCR-044 · lectura pendiente de revisión no muestra una confirmación de éxito engañosa", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], [], "needs_review");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await expect(panel.getByTestId("ocr-review-pending-notice")).toContainText(
+    "La lectura requiere revisión",
+  );
+  await expect(panel.getByText(/Lectura completada sin avisos técnicos/)).toHaveCount(0);
+  await expect(panel.getByText(/La lectura requiere revisión/)).toContainText(/original/);
   expect(writes).toEqual([]);
 });
