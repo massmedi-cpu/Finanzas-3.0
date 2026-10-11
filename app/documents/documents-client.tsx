@@ -1059,9 +1059,6 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // Never send an original invoice or ticket to an arbitrary URL returned
       // by a malformed/upstream response. Upload only to the configured,
       // private Supabase Storage bucket via its signed upload endpoint.
-      if (sign?.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256") {
-        throw new Error("document_upload_integrity_unsupported");
-      }
       if (sign?.bucket !== "financial-app-documents"
         || typeof sign.path !== "string" || !/^uploads[/][0-9a-f-]+[/][0-9a-f-]+[.](?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
         || typeof sign.signedUrl !== "string"
@@ -1078,6 +1075,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || uploadUrl.searchParams.get("token") !== sign.token
         || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
         throw new Error("document_upload_unsafe_url");
+      }
+      // Validate destination, token, requested filename, MIME and size FIRST.
+      // An unsafe signer must explain its specific failure even if it also
+      // lacks the new SHA-256 capability. Both gates precede any private PUT.
+      if (sign.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256") {
+        throw new Error("document_upload_integrity_unsupported");
       }
       attemptedPrivateUpload = {
         action: "upload_finalize", type: uploadType, originalFileName: file.name,
