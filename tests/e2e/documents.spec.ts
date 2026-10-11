@@ -1389,3 +1389,20 @@ test("REC-DOC-069 · última página parcial válida muestra el total exacto", a
   await expect(pagination.getByRole("button", { name: "Página anterior" })).toBeEnabled();
   expect(writes).toEqual([]);
 });
+
+
+test("REC-OCR-047 · el fallo de una página PDF indica incompletitud sin código técnico", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], ["pdf_page_visual_ocr_failed:2"], "needs_review");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const warnings = panel.getByText("Revisar antes de usar").locator("..");
+  await expect(warnings).toContainText("No se ha podido leer la página escaneada 2");
+  await expect(warnings).toContainText("Se conservan las demás páginas");
+  await expect(warnings).not.toContainText("pdf_page_visual_ocr_failed");
+  await expect(panel.getByTestId("ocr-review-pending-notice")).toContainText("La lectura requiere revisión");
+  await expect(panel.getByText("Lectura completada sin avisos técnicos")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
