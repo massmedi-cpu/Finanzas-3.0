@@ -25,6 +25,7 @@ function hasData(row: FinancialBarPoint) { return row.coverage !== "none" && row
 type FinancialBarChartProps = {
   rows: FinancialBarPoint[];
   maxValue: number;
+  hasObservedScale?: boolean;
   valuesVisible: boolean;
   formatMoney: (cents: number) => string;
   formatMonth: (date: string) => string;
@@ -34,6 +35,7 @@ type FinancialBarChartProps = {
 export function FinancialBarChart({
   rows,
   maxValue,
+  hasObservedScale = true,
   valuesVisible,
   formatMoney,
   formatMonth,
@@ -55,7 +57,9 @@ export function FinancialBarChart({
         <span><i className={styles.expenseDot} aria-hidden="true" />Gastos</span>
         <span>{valuesVisible ? "Toca un mes para ver las cifras exactas" : "Importes ocultos · proporciones protegidas"}</span>
         <span data-testid="financial-bar-scale-reference">
-          {valuesVisible ? `Escala máxima ${formatMoney(maxValue)}` : "Escala protegida por privacidad"}
+          {!valuesVisible ? "Escala protegida por privacidad" : hasObservedScale
+            ? `Escala máxima ${formatMoney(maxValue)}`
+            : "Escala sin cobertura bancaria observada"}
         </span>
       </div>
 
