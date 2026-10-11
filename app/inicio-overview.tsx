@@ -602,10 +602,6 @@ export default function InicioOverview() {
     () => data.monthly?.rows.filter((row) => consistency.currentMonthMatches || row.monthStart !== currentMonthStart).slice(-12) ?? [],
     [data.monthly, consistency.currentMonthMatches, currentMonthStart],
   );
-  const monthlyScale = useMemo(
-    () => Math.max(1, ...homeMonthlyRows.flatMap((row) => [Math.abs(row.incomeCents), Math.abs(row.expenseCents)])),
-    [homeMonthlyRows],
-  );
   const completedComparison = useMemo(() => homeAnalysis ? {
     current: {
       monthStart: homeAnalysis.period.dateFrom,
@@ -915,7 +911,6 @@ export default function InicioOverview() {
               rows={homeMonthlyRows}
               dateFrom={homeMonthlyRows[0]?.monthStart ?? trailingMonthStart(today, 12)}
               dateTo={today}
-              maxValue={monthlyScale}
               valuesVisible={revealAmounts}
               formatMoney={displayMoney}
               formatMonth={formatMonth}
