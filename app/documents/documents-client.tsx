@@ -491,6 +491,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const [notice, setNotice] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<DocumentType>("invoice");
   const [file, setFile] = useState<File | null>(null);
+  const [uploadUnverified, setUploadUnverified] = useState(false);
   const [editor, setEditor] = useState<MetadataEditor>({ type: "invoice", documentDate: "", issuerName: "", total: "", notes: "" });
   const [pendingExit, setPendingExit] = useState<PendingDocumentExit | null>(null);
   const hasActiveListFilters = Boolean(query.trim() || statusFilter || unassociatedOnly || scope !== "ordinary");
@@ -781,6 +782,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
     if (busy || uploadInFlight.current) return;
+    if (uploadUnverified) {
+      setError("La subida anterior podría haberse registrado. Comprueba la lista antes de permitir otro envío.");
+      return;
+    }
     if (!file) {
       setError("Selecciona un PDF, una imagen o haz una foto.");
       return;
@@ -793,6 +798,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setBusy("upload");
     setError(null);
     setNotice(null);
+    // Once the original reaches private Storage, a failed finalize response
+    // cannot prove whether the document record was created on the server.
+    let finalizeAttempted = false;
     try {
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
@@ -826,6 +834,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
       if (!upload.ok) throw new Error("document_upload_not_found");
 
+      finalizeAttempted = true;
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -842,6 +851,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || finalized.principles.suggestionsPersisted !== false) {
         throw new Error("document_upload_unverified");
       }
+      setUploadUnverified(false);
       setFile(null);
       for (const inputId of ["document-file", "document-camera"]) {
         const input = document.getElementById(inputId) as HTMLInputElement | null;
@@ -869,7 +879,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setNotice("Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
       }
     } catch (caught) {
-      setError(friendlyError(caught));
+      if (finalizeAttempted) {
+        setUploadUnverified(true);
+        setError("El original llegó al almacenamiento privado, pero no se ha confirmado su registro en Documentos. Consulta la lista antes de repetir: otro envío podría duplicarlo.");
+      } else {
+        setError(friendlyError(caught));
+      }
     } finally {
       uploadInFlight.current = false;
       setBusy(null);
@@ -1212,7 +1227,16 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
               <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "PDF, JPG, PNG o WebP"}</span>
             </label>
-            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload"}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
+            <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
+            {uploadUnverified ? (
+              <div role="status" data-testid="document-upload-unverified">
+                <p>Subida sin confirmar. Revisa el listado y comprueba si el original ya aparece; no lo envíes dos veces.</p>
+                <button className={styles.secondaryButton} type="button" disabled={busy === "upload"}
+                  onClick={() => { setUploadUnverified(false); setError(null); void loadList(); }}>
+                  He comprobado la lista; permitir nuevo envío
+                </button>
+              </div>
+            ) : null}
           </form>
         </section>
 
