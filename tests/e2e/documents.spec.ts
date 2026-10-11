@@ -129,6 +129,7 @@ async function mockDocumentApi(
     if (method === "POST" && body.action === "upload_finalize") {
       detail = {
         ...detail,
+        ...(body.expectedSha256 ? { uploadIntegrity: { sha256: body.expectedSha256, sizeBytes: signedSizeBytes, verified: true } } : {}),
         document: {
           ...detail.document, id: uploadedDocumentId, originalFileName: body.originalFileName,
           type: body.type, mimeType: body.mimeType, storageKey: body.path,
