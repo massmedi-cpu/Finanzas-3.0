@@ -153,6 +153,12 @@ function apiError(error: unknown) {
     );
   }
   if (error instanceof PersistenceGatewayError) {
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "drive_auto_detection_persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     return Response.json(
       { error: "drive_auto_detection_persistence_failed", code: error.code ?? null },
       { status: error.status >= 400 && error.status < 600 ? error.status : 503, headers: HEADERS },
