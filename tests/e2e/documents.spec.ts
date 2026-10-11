@@ -28,6 +28,7 @@ async function mockDocumentApi(
   ocrStatus: "ready" | "needs_review" | "empty" = "ready",
 ) {
   let detail = { contractVersion: 1, document: { ...item }, associations: [] as any[], principles };
+  let signedSizeBytes = 0;
 
   await page.route("**/api/documents/ocr-review*", async (route) => {
     await route.fulfill({
@@ -122,6 +123,7 @@ async function mockDocumentApi(
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     if (method === "POST" && body.action === "upload_sign") {
+      signedSizeBytes = body.sizeBytes;
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, originalFileName: body.originalFileName, mimeType: body.mimeType, sizeBytes: body.sizeBytes, maxFileBytes: 15728640 }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
@@ -129,7 +131,8 @@ async function mockDocumentApi(
         ...detail,
         document: {
           ...detail.document, id: uploadedDocumentId, originalFileName: body.originalFileName,
-          type: body.type, mimeType: body.mimeType, storageKey: body.path, status: "imported",
+          type: body.type, mimeType: body.mimeType, storageKey: body.path,
+          sizeBytes: signedSizeBytes, status: "imported",
         },
         associations: [],
       };
@@ -2115,6 +2118,120 @@ test("REC-DOC-091 · una subida confirmada elimina el journal antes de recargar"
   await page.reload();
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
   expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(1);
+});
+
+test("REC-DOC-092 · un finalize con tamaño distinto no confirma el original ni permite otro envío", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let mismatched = true;
+  let signs = 0;
+  let finalizes = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signs += 1;
+    if (body.action === "upload_finalize") {
+      finalizes += 1;
+      if (mismatched) {
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            contractVersion: 1, principles, associations: [],
+            document: {
+              ...item, id: uploadedDocumentId, storageKey: body.path,
+              originalFileName: body.originalFileName,
+              type: body.type, mimeType: body.mimeType,
+              sizeBytes: 1,
+            },
+          }),
+        });
+        return;
+      }
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  const content = Buffer.from("%PDF-1.4 DOCUMENTO-REAL");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "factura-corrupta.pdf", mimeType: "application/pdf", buffer: content,
+  });
+  const save = page.getByRole("button", { name: "Guardar original" });
+  await save.click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(save).toBeDisabled();
+  expect(signs).toBe(1);
+  expect(finalizes).toBe(1);
+  const journal = await page.evaluate(() =>
+    sessionStorage.getItem("financial-app:documents:pending-private-upload:v1"));
+  expect(JSON.parse(journal!)).toMatchObject({
+    originalFileName: "factura-corrupta.pdf", sizeBytes: content.length,
+  });
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueada");
+  expect(signs).toBe(1);
+  expect(finalizes).toBe(2);
+  mismatched = false;
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "factura-corrupta.pdf" })).toBeVisible();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  expect(signs).toBe(1);
+  expect(finalizes).toBe(3);
+});
+
+test("REC-DOC-093 · el tamaño del original sigue verificándose tras recargar con PUT incierto", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  let wrongSize = true;
+  let puts = 0;
+  let signCalls = 0;
+  let finalizes = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 503, body: "fallo intermitente" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signCalls += 1;
+    if (body.action === "upload_finalize") {
+      finalizes += 1;
+      if (wrongSize) {
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            contractVersion: 1, principles, associations: [],
+            document: {
+              ...item, id: uploadedDocumentId, storageKey: body.path,
+              originalFileName: body.originalFileName,
+              type: body.type, mimeType: body.mimeType,
+              sizeBytes: 2,
+            },
+          }),
+        });
+        return;
+      }
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "original-interrumpido.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 RESTAURADO"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no ha confirmado");
+  expect(signCalls).toBe(1);
+  expect(puts).toBe(1);
+  expect(finalizes).toBe(1);
+  wrongSize = false;
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "original-interrumpido.pdf" })).toBeVisible();
+  expect(finalizes).toBe(2);
+  expect(puts).toBe(1);
+  expect(signCalls).toBe(1);
 });
 
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
