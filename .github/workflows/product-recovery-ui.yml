@@ -7,7 +7,9 @@ on:
       - 'app/**'
       - 'src/design/**'
       - 'src/domain/document-ocr-financial-interpretation.ts'
+      - 'src/application/document-drive-inventory.ts'
       - 'scripts/test-ocr-amount-label-selection.mjs'
+      - 'scripts/test-document-drive-inventory.mjs'
       - 'scripts/verify-recovery-visual-suite-gate.mjs'
       - 'tests/e2e/**'
       - 'playwright*.ts'
@@ -40,6 +42,8 @@ jobs:
           npx playwright install --with-deps chromium
       - name: Certify OCR labelled amounts against synthetic independent expected values
         run: node scripts/test-ocr-amount-label-selection.mjs
+      - name: Certify read-only Drive inventory completeness and duplicate safety
+        run: node scripts/test-document-drive-inventory.mjs
       - name: Certify PDF scanned-page Node rasterization
         run: node scripts/test-pdf-render-smoke.mjs
       - name: Certify OCR rotation fallback efficiency
