@@ -198,6 +198,7 @@ type Association = {
 };
 
 type DocumentDetail = {
+  contentDuplicate?: boolean;
   uploadIntegrity?: { sha256: string; sizeBytes: number; verified: boolean };
   contractVersion: 1 | 2 | 3;
   document: Omit<DocumentItem, "associationCount"> & {
@@ -285,12 +286,16 @@ function validatedDocumentList(payload: unknown): DocumentList {
 // HTTP response for an unrelated document cannot release an upload lock.
 function validatedFinalizedUpload(payload: unknown, pending: PendingFinalize): DocumentDetail {
   const data = payload as DocumentDetail | null;
+  const canonicalDuplicate = data?.contentDuplicate === true && pending.expectedSha256 !== null;
   if (!data || ![1, 2, 3].includes(data.contractVersion)
     || !data.document || typeof data.document.id !== "string" || !DOCUMENT_UUID.test(data.document.id)
     || data.document.storageProvider !== "supabase"
     || data.document.storageKey !== pending.path
-    || data.document.originalFileName !== pending.originalFileName
-    || data.document.type !== pending.type || data.document.mimeType !== pending.mimeType
+    || (!canonicalDuplicate && (data.document.originalFileName !== pending.originalFileName
+      || data.document.type !== pending.type))
+    || (canonicalDuplicate && (!data.document.originalFileName?.trim()
+      || !["ticket", "invoice", "other"].includes(data.document.type)))
+    || data.document.mimeType !== pending.mimeType
     || (pending.sizeBytes !== null && data.document.sizeBytes !== pending.sizeBytes)
     || (pending.expectedSha256 !== null && (
       data.uploadIntegrity?.verified !== true
@@ -1063,7 +1068,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       } else {
         selectedIdRef.current = confirmed.document.id;
         setSelectedId(confirmed.document.id);
-        setNotice("Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. El OCR sólo se ejecutará si lo solicitas.");
+        setNotice(confirmed.contentDuplicate
+          ? "Archivo idéntico ya registrado desde otro dispositivo. Se reutiliza el original existente, sin modificarlo."
+          : "Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. El OCR sólo se ejecutará si lo solicitas.");
       }
     } catch {
       setUploadUnverified(true);
@@ -1138,8 +1145,49 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ action: "upload_sign", type: uploadType, originalFileName: file.name, mimeType: file.type, sizeBytes: file.size }),
+        body: JSON.stringify({
+          action: "upload_sign", type: uploadType, originalFileName: file.name,
+          mimeType: file.type, sizeBytes: file.size, expectedSha256,
+        }),
       }));
+
+      // A content-identical original may already be registered by ANOTHER
+      // device. The server reports the canonical document instead of signing
+      // another upload; never send a second copy or rewrite its metadata.
+      if (sign?.alreadyRegistered === true) {
+        if (sign.contentAddressVersion !== 1 || sign.hashVerificationVersion !== 1
+          || sign.hashAlgorithm !== "sha256" || sign.expectedSha256 !== expectedSha256
+          || sign.mimeType !== file.type || sign.sizeBytes !== file.size
+          || typeof sign.documentId !== "string" || !DOCUMENT_UUID.test(sign.documentId)
+          || typeof sign.path !== "string"
+          || !/^uploads\/[0-9a-f-]+\/[0-9a-f-]+\.(?:pdf|jpg|jpeg|png|webp)$/i.test(sign.path)
+          || !["ticket", "invoice", "other"].includes(sign.type)
+          || typeof sign.originalFileName !== "string" || !sign.originalFileName.trim()) {
+          throw new Error("document_upload_unverified");
+        }
+        const id = sign.documentId;
+        setFile(null);
+        for (const inputId of ["document-file", "document-camera"]) {
+          const input = document.getElementById(inputId) as HTMLInputElement | null;
+          if (input) input.value = "";
+        }
+        setScope("ordinary");
+        setStatusFilter("");
+        setUnassociatedOnly(false);
+        setQuery("");
+        setDebouncedQuery("");
+        setOffset(0);
+        await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+        if (metadataDirtyRef.current) {
+          setPendingExit({ type: "document", id });
+          setNotice("Este archivo ya existe. No se ha enviado otra copia; resuelve los cambios pendientes antes de abrirlo.");
+        } else {
+          selectedIdRef.current = id;
+          setSelectedId(id);
+          setNotice("Este archivo ya estaba guardado. Hemos abierto el original existente, sin crear una copia.");
+        }
+        return;
+      }
 
       // Never send an original invoice or ticket to an arbitrary URL returned
       // by a malformed/upstream response. Upload only to the configured,
@@ -1164,7 +1212,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       // Validate destination, token, requested filename, MIME and size FIRST.
       // An unsafe signer must explain its specific failure even if it also
       // lacks the new SHA-256 capability. Both gates precede any private PUT.
-      if (sign.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256") {
+      if (sign.hashVerificationVersion !== 1 || sign.hashAlgorithm !== "sha256"
+        || sign.contentAddressVersion !== 1) {
         throw new Error("document_upload_integrity_unsupported");
       }
       attemptedPrivateUpload = {
@@ -1187,8 +1236,11 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       writePrivateUploadJournal(attemptedPrivateUpload);
       privatePutAttempted = true;
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
-      if (!upload.ok) throw new Error("document_upload_unverified");
-      attemptedPrivateUpload.storagePutConfirmed = true;
+      // A 409 can mean another device won the same content-addressed PUT.
+      // It is NOT proof of success: only a full server SHA-256 finalize can
+      // confirm that the existing private object contains these same bytes.
+      if (!upload.ok && upload.status !== 409) throw new Error("document_upload_unverified");
+      attemptedPrivateUpload.storagePutConfirmed = upload.ok;
       writePrivateUploadJournal(attemptedPrivateUpload);
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
@@ -1200,7 +1252,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           expectedSizeBytes: attemptedPrivateUpload.sizeBytes, expectedSha256: attemptedPrivateUpload.expectedSha256,
         }),
       }));
-      const id = validatedFinalizedUpload(finalized, attemptedPrivateUpload).document.id;
+      const confirmedUpload = validatedFinalizedUpload(finalized, attemptedPrivateUpload);
+      const id = confirmedUpload.document.id;
       clearPrivateUploadJournal(attemptedPrivateUpload);
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
@@ -1222,13 +1275,17 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         // Uploading another file must never discard an unrelated unsaved
         // metadata draft. Let the existing save/discard dialog arbitrate.
         setPendingExit({ type: "document", id });
-        setNotice("Original guardado. Antes de abrirlo, decide qué hacer con los metadatos pendientes del documento anterior.");
+        setNotice(confirmedUpload.contentDuplicate
+          ? "Archivo idéntico ya registrado. No hemos generado otra copia; resuelve los cambios pendientes antes de abrirlo."
+          : "Original guardado. Antes de abrirlo, decide qué hacer con los metadatos pendientes del documento anterior.");
       } else {
         // selectDocument() rejects while busy === "upload": advance directly
         // after verification and let the detail effect fetch the new original.
         selectedIdRef.current = id;
         setSelectedId(id);
-        setNotice("Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
+        setNotice(confirmedUpload.contentDuplicate
+          ? "Archivo idéntico ya registrado. Hemos recuperado el original, sin sobrescribir datos ni crear otra copia."
+          : "Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
       }
     } catch (caught) {
       if (privatePutAttempted && attemptedPrivateUpload) {
