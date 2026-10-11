@@ -510,7 +510,7 @@ function mergeMonetaryRefinement(baseWords: OcrWord[], numericWords: OcrWord[]) 
 
 async function recognizeMonetaryColumns(
   worker: Worker,
-  bytes: Uint8Array,
+  bytes: Buffer,
   metadata: OcrImageMetadata,
   isolation: DocumentIsolation,
   baseWords: OcrWord[],
@@ -561,7 +561,7 @@ async function recognizeMonetaryColumns(
 
 async function recognizeCandidate(
   worker: Worker,
-  bytes: Uint8Array,
+  bytes: Buffer,
   metadata: OcrImageMetadata,
   rotationRadians: number,
   autoRotate: boolean,
@@ -586,7 +586,7 @@ async function recognizeCandidate(
 
 async function refineBackgroundContamination(
   worker: Worker,
-  bytes: Uint8Array,
+  bytes: Buffer,
   metadata: OcrImageMetadata,
   candidate: RecognitionCandidate,
 ) {
