@@ -545,22 +545,44 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       }
       let data = first;
       if (unassociatedOnly && first.contractVersion < 3) {
-        const all = [...first.items];
+        // Legacy responses do not filter unassociated documents server-side.
+        // Always inventory from offset zero: starting at the requested page
+        // silently skipped earlier records and duplicated later ones.
         const parsed = new URL(url, window.location.origin);
-        while (all.length < first.total) {
-          if (all.length >= 10_000) throw new Error("document_filter_limit");
-          parsed.searchParams.set("limit", "100");
+        parsed.searchParams.set("limit", "100");
+        parsed.searchParams.set("offset", "0");
+        const base = validatedDocumentList(await getDocumentJson(parsed.toString()));
+        if (base.contractVersion !== first.contractVersion
+          || base.total !== first.total || base.offset !== 0 || base.limit !== 100
+          || base.total > 10_000) {
+          throw new Error("document_filter_incomplete");
+        }
+        const all = [...base.items];
+        const ids = new Set(all.map((item) => item.id));
+        while (all.length < base.total) {
           parsed.searchParams.set("offset", String(all.length));
           const next = validatedDocumentList(await getDocumentJson(parsed.toString()));
-          if (next.offset !== all.length || next.limit !== 100) throw new Error("document_filter_incomplete");
-          if (!next.items.length) throw new Error("document_filter_incomplete");
+          if (next.contractVersion !== base.contractVersion
+            || next.total !== base.total || next.offset !== all.length || next.limit !== 100
+            || !next.items.length || next.items.some((item) => ids.has(item.id))) {
+            throw new Error("document_filter_incomplete");
+          }
+          for (const item of next.items) ids.add(item.id);
           all.push(...next.items);
         }
         const filtered = all.filter((item) => item.status !== "archived" && item.associationCount === 0);
-        data = { ...first, items: filtered, total: filtered.length, offset: 0, limit: filtered.length };
+        // Keep the requested page and its 50-row limit. Returning the entire
+        // archive as a single page defeated navigation and mobile rendering.
+        data = {
+          ...first,
+          items: filtered.slice(first.offset, first.offset + first.limit),
+          total: filtered.length,
+          offset: first.offset,
+          limit: first.limit,
+        };
       }
       if (sequence !== listSequence.current) return;
-      if (data.contractVersion === 3 && data.offset > 0 && data.items.length === 0) {
+      if (data.offset > 0 && data.items.length === 0) {
         setOffset(0);
         return;
       }
