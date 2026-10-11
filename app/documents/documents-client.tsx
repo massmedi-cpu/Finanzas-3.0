@@ -761,7 +761,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       try { uploadUrl = new URL(sign.signedUrl); }
       catch { throw new Error("document_upload_unsafe_url"); }
       if (uploadUrl.protocol !== "https:" || uploadUrl.origin !== SUPABASE_ORIGIN
-        || !uploadUrl.pathname.startsWith("/storage/v1/object/upload/sign/financial-app-documents/")
+        || uploadUrl.pathname !== `/storage/v1/object/upload/sign/financial-app-documents/${sign.path}`
         || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
         throw new Error("document_upload_unsafe_url");
       }
