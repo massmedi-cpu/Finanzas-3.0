@@ -184,6 +184,49 @@ type CandidateResponse = {
   principles: { bankSource: "read_only"; requiresConfirmation: true; suggestionsPersisted: false };
 };
 
+
+const DOCUMENT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function validAssociation(value: unknown): value is Association {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Partial<Association>;
+  return typeof row.id === "string" && DOCUMENT_UUID.test(row.id)
+    && typeof row.transactionId === "string" && DOCUMENT_UUID.test(row.transactionId)
+    && typeof row.accountId === "string" && DOCUMENT_UUID.test(row.accountId)
+    && (row.method === "manual" || row.method === "suggested")
+    && typeof row.confirmed === "boolean"
+    && typeof row.date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(row.date)
+    && typeof row.concept === "string" && typeof row.accountName === "string"
+    && Number.isSafeInteger(row.amountCents);
+}
+
+function validatedCandidateResponse(payload: unknown, documentId: string): CandidateResponse {
+  if (!payload || typeof payload !== "object" || Array.isArray(payload)) throw new Error("document_suggestions_invalid");
+  const data = payload as Partial<CandidateResponse>;
+  if (data.contractVersion !== 1 || data.documentId !== documentId || typeof data.ready !== "boolean"
+    || !Array.isArray(data.candidates) || data.candidates.length > 20
+    || !data.principles || data.principles.bankSource !== "read_only"
+    || data.principles.requiresConfirmation !== true || data.principles.suggestionsPersisted !== false) {
+    throw new Error("document_suggestions_invalid");
+  }
+  const seen = new Set<string>();
+  for (const candidate of data.candidates) {
+    if (!candidate || typeof candidate !== "object"
+      || typeof candidate.transactionId !== "string" || !DOCUMENT_UUID.test(candidate.transactionId)
+      || seen.has(candidate.transactionId)
+      || typeof candidate.accountId !== "string" || !DOCUMENT_UUID.test(candidate.accountId)
+      || !Number.isSafeInteger(candidate.amountCents)
+      || typeof candidate.concept !== "string" || typeof candidate.accountName !== "string"
+      || typeof candidate.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
+      || typeof candidate.confidence !== "number" || !Number.isFinite(candidate.confidence)
+      || candidate.confidence < 0 || candidate.confidence > 1) {
+      throw new Error("document_suggestions_invalid");
+    }
+    seen.add(candidate.transactionId);
+  }
+  return data as CandidateResponse;
+}
+
 type TransactionRow = {
   id: string;
   bankDate: string;
@@ -317,6 +360,7 @@ function friendlyError(error: unknown) {
     document_open_blocked: "El navegador ha bloqueado la ventana del documento. Permite ventanas emergentes para Financial App y vuelve a pulsar Abrir.",
     document_open_failed: "No se ha podido abrir el original. Reintenta desde la ficha del documento.",
     document_open_unsafe_url: "Se ha rechazado un enlace de archivo no seguro. El original no se ha abierto.",
+    document_suggestions_invalid: "Las sugerencias no corresponden a este documento o no cumplen los requisitos de seguridad. No se ha asociado ningún movimiento.",
     invalid_document_size: "El archivo debe ocupar entre 1 byte y 15 MB.",
     unsupported_document_mime_type: "Formato no admitido. Usa PDF, JPG, PNG o WebP.",
     invalid_document_date: "La fecha del documento no es válida.",
@@ -508,6 +552,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
       if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)
         || ![1, 2, 3].includes(data.contractVersion)
+        || !data.associations.every(validAssociation)
         || !data.principles || data.principles.bankSource !== "read_only"
         || data.principles.getHasSideEffects !== false
         || data.principles.suggestionsPersisted !== false
@@ -842,7 +887,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setBusy("candidates");
     setError(null);
     try {
-      const data = await readJson(await fetch(`/api/documents?id=${encodeURIComponent(detail.document.id)}&mode=candidates&days=7&limit=8`, { cache: "no-store" })) as CandidateResponse;
+      const documentId = detail.document.id;
+      const data = validatedCandidateResponse(
+        await readJson(await fetch(`/api/documents?id=${encodeURIComponent(documentId)}&mode=candidates&days=7&limit=8`, { cache: "no-store" })),
+        documentId,
+      );
+      if (selectedIdRef.current !== documentId) return;
       setCandidates(data);
       if (!data.ready) setNotice("Añade fecha e importe al documento para poder sugerir movimientos.");
     } catch (caught) { setError(friendlyError(caught)); }
