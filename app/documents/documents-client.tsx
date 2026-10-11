@@ -1254,7 +1254,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
                 <p>Añade el primero con cámara, galería/archivo o Drive; podrás analizarlo después desde su panel OCR.</p>
               </div>
             )}
-            {!listLoadFailed && currentList?.contractVersion === 3 && currentList.total > 0 ? (
+            {!listLoadFailed && currentList && currentList.total > 0
+              && (currentList.contractVersion === 3 || unassociatedOnly) ? (
               <nav className={styles.pagination} aria-label="Paginación documental">
                 <span aria-live="polite">Mostrando {currentList.offset + 1}–{Math.min(currentList.offset + currentList.items.length, currentList.total)} de {currentList.total}</span>
                 <button type="button" className={styles.secondaryButton} disabled={listPending || busy !== null || currentList.offset === 0}
