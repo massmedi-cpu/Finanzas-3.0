@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { createHash } from "node:crypto";
+import { POST as postDocumentAction } from "../../app/api/documents/route";
 import { SUPABASE_ORIGIN } from "../../src/infrastructure/auth/supabase-auth";
 import { parseDocumentQueryInteger } from "../../src/application/document-query-integer";
 import { resolvePdfOcrSource } from "../../src/infrastructure/ocr/pdf-source-provenance";
@@ -129,11 +131,11 @@ async function mockDocumentApi(
     if (method === "POST" && body.action === "upload_finalize") {
       detail = {
         ...detail,
-        ...(body.expectedSha256 ? { uploadIntegrity: { sha256: body.expectedSha256, sizeBytes: signedSizeBytes, verified: true } } : {}),
+        ...(body.expectedSha256 ? { uploadIntegrity: { sha256: body.expectedSha256, sizeBytes: body.expectedSizeBytes ?? signedSizeBytes, verified: true } } : {}),
         document: {
           ...detail.document, id: uploadedDocumentId, originalFileName: body.originalFileName,
           type: body.type, mimeType: body.mimeType, storageKey: body.path,
-          sizeBytes: signedSizeBytes, status: "imported",
+          sizeBytes: body.expectedSizeBytes ?? signedSizeBytes, status: "imported",
         },
         associations: [],
       };
