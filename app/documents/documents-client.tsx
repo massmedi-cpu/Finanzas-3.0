@@ -822,20 +822,24 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [actionFeedback, busy, error]);
 
   useEffect(() => {
-    if (!metadataDirty) return;
-
+    // React can unmount during a private PUT or a pending finalize when a
+    // navigation starts. Session metadata then survives, but the original File
+    // and signed URL do not. Prevent SPA navigation DURING the write; warn
+    // on full page unload with either a write or unresolved journal.
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (bypassUnloadOnceRef.current || !metadataDirtyRef.current) return;
+      const recoveryPresent = readPrivateUploadJournal().present;
+      if (bypassUnloadOnceRef.current && !uploadInFlight.current && !recoveryPresent) return;
+      if (!metadataDirtyRef.current && !uploadInFlight.current && !recoveryPresent) return;
       event.preventDefault();
       event.returnValue = "";
     };
     const protectInternalNavigation = (event: MouseEvent) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      if (!metadataDirtyRef.current && !uploadInFlight.current) return;
       const target = event.target;
       if (!(target instanceof Element)) return;
       const anchor = target.closest("a[href]");
       if (!(anchor instanceof HTMLAnchorElement) || anchor.target === "_blank" || anchor.hasAttribute("download")) return;
-
       const destination = new URL(anchor.href, window.location.href);
       if (destination.origin !== window.location.origin) return;
       const current = new URL(window.location.href);
@@ -843,6 +847,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
       event.preventDefault();
       event.stopPropagation();
+      if (uploadInFlight.current) {
+        setError("Hay un envío de documento en curso. Termina o recupera esa misma subida antes de cambiar de página; así no se pierde el original ni se crea una copia.");
+        return;
+      }
       exitReturnFocusRef.current = anchor;
       setPendingExit({ type: "navigation", href: destination.href });
     };
@@ -853,7 +861,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       window.removeEventListener("beforeunload", beforeUnload);
       document.removeEventListener("click", protectInternalNavigation, true);
     };
-  }, [metadataDirty]);
+  }, []);
 
   const selectDocument = (id: string) => {
     if (id === selectedIdRef.current || busy) return;
