@@ -105,9 +105,10 @@ function writePrivateUploadJournal(pending: PendingPrivateUpload) {
       expectedSha256: pending.expectedSha256,
       storagePutConfirmed: pending.storagePutConfirmed,
     });
-    // Write shared durable storage FIRST; a failure prevents the PUT.
+    // New uploads have exactly ONE durable handle shared across tabs.
+    // Duplicating it in sessionStorage would resurrect stale pending state
+    // after another tab successfully finalizes and clears localStorage.
     localStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, value);
-    sessionStorage.setItem(PENDING_PRIVATE_UPLOAD_KEY, value);
   } catch {
     throw new Error("document_upload_recovery_unavailable");
   }
