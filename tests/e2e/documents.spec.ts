@@ -2255,7 +2255,7 @@ test("REC-DOC-094 · impide abandonar Documentos durante una subida privada toda
   });
   await page.getByRole("button", { name: "Guardar original" }).click();
   await expect.poll(() => signed).toBe(1);
-  await page.getByRole("link", { name: /Inicio/ }).click();
+  await page.getByRole("link", { name: "← Inicio", exact: true }).click();
   await expect(page).toHaveURL(/\/documents/);
   await expect(page.getByTestId("documents-alert")).toContainText("Hay un envío de documento en curso");
   await expect(page.getByRole("alertdialog", { name: "Cambios sin guardar" })).toHaveCount(0);
