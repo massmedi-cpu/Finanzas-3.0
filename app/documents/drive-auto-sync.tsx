@@ -25,7 +25,7 @@ type StoredResult = {
   result: DriveSyncResult;
 };
 
-type Phase = "idle" | "syncing" | "ready" | "error";
+type Phase = "idle" | "syncing" | "ready" | "error" | "preview_readonly";
 
 const SESSION_KEY = "financial-app:document-drive-sync:10.0.72";
 const SESSION_TTL_MS = 2 * 60 * 1000;
@@ -124,6 +124,11 @@ export function DriveAutoSync() {
         cache: "no-store",
       });
       const body = await response.json().catch(() => null);
+      if (response.status === 409 && body && typeof body === "object"
+        && (body as { code?: unknown }).code === "preview_drive_sync_read_only") {
+        setPhase("preview_readonly");
+        return;
+      }
       if (!response.ok || !validDriveSyncResult(body)) throw new Error("drive_sync_failed");
 
       setResult(body);
@@ -166,15 +171,18 @@ export function DriveAutoSync() {
         {phase === "error" ? (
           <span>No se ha podido verificar Drive. El estado de los documentos debe comprobarse por separado; pulsa «Comprobar ahora» para reintentar.</span>
         ) : null}
+        {phase === "preview_readonly" ? (
+          <span>Vista previa de solo lectura: la importación automática de Drive está desactivada para proteger producción. Puedes consultar los documentos existentes si tu sesión lo permite.</span>
+        ) : null}
         {phase === "idle" ? <span>Preparando comprobación automática…</span> : null}
       </div>
       <button
         type="button"
         className={styles.action}
         onClick={() => void run(true)}
-        disabled={phase === "syncing"}
+        disabled={phase === "syncing" || phase === "preview_readonly"}
       >
-        {phase === "syncing" ? "Comprobando…" : "Comprobar ahora"}
+        {phase === "syncing" ? "Comprobando…" : phase === "preview_readonly" ? "Solo en producción" : "Comprobar ahora"}
       </button>
     </section>
   );
