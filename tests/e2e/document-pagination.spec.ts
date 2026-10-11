@@ -110,3 +110,43 @@ test("NAV-003 · inventario legado duplicado no se presenta como filtrado fiable
   await expect(page.getByText("La lista recibida está incompleta.", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: /Documento 121\.png/ })).toHaveCount(0);
 });
+
+
+test("NAV-004 · archivados sin asociar siguen visibles con API documental antigua", async ({ page }) => {
+  await page.route("**/api/**", route => route.fulfill({ status: 503, json: { error: "isolated_source_unavailable" } }));
+  const archived = legacyRows.slice(0, 65).map(item => ({ ...item, status: "archived", associationCount: 0 }));
+  await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+    const url = new URL(route.request().url());
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    await route.fulfill({ json: {
+      contractVersion: 2, total: archived.length, offset, limit,
+      items: archived.slice(offset, offset + limit), principles,
+    } });
+  });
+  await page.goto("/documents?unassociated=true&status=archived&offset=50");
+  const pagination = page.getByRole("navigation", { name: "Paginación documental" });
+  await expect(pagination).toContainText("Mostrando 51–65 de 65");
+  await expect(page.getByRole("button", { name: /Documento 51\.png/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Documento 65\.png/ })).toBeVisible();
+  await expect(pagination.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
+});
+
+test("NAV-005 · cambios concurrentes entre páginas antiguas invalidan un filtro incompleto", async ({ page }) => {
+  await page.route("**/api/**", route => route.fulfill({ status: 503, json: { error: "isolated_source_unavailable" } }));
+  await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+    const url = new URL(route.request().url());
+    const offset = Number(url.searchParams.get("offset") ?? 0);
+    const limit = Number(url.searchParams.get("limit") ?? 50);
+    const items = legacyRows.slice(offset, offset + limit).map(item => ({ ...item }));
+    if (offset === 100 && limit === 100) items[0].updatedAt = "2026-10-11T12:00:00Z";
+    await route.fulfill({ json: {
+      contractVersion: 2, total: legacyRows.length, offset, limit, items, principles,
+    } });
+  });
+  await page.goto("/documents?unassociated=true&offset=100");
+  await expect(page.getByTestId("documents-alert")).toContainText("La lista recibida está incompleta");
+  await expect(page.getByTestId("documents-list-error")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Paginación documental" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Documento 121\.png/ })).toHaveCount(0);
+});
