@@ -105,7 +105,7 @@ export async function mockRecoveryHome(page: Page, coverage: "none" | "partial" 
       return json({ contractVersion: 1, scope, asOfDate: asOf, dataThroughDate: latestMovement, generatedAt: asOf + "T06:00:00Z", requestedSources, failedSources: [], data });
     }
     if (url.pathname === "/api/source/google/sync") return json({ run: { id: "synthetic-run", status: "success", startedAt: asOf + "T06:00:00Z", finishedAt: asOf + "T06:00:05Z", rowsSeen: 12, rowsInserted: 0, rowsRevised: 0, rowsSkipped: 12, rowsFailed: 0, errorCode: null, errorMessage: null }, cursors: [] });
-    if (url.pathname === "/api/analysis/source-freshness") return json({ available: true, latestMovementDate: latestMovement, sync: null });
+    if (url.pathname === "/api/analysis/source-freshness") return json({ available: true, earliestMovementDate: null, latestMovementDate: latestMovement, sync: null });
     if (url.pathname.startsWith("/api/") && url.pathname !== "/api/build") return json({ error: "synthetic_ui_isolation" }, 503);
     return route.continue();
   });
