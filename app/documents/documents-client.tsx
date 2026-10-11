@@ -598,10 +598,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           limit: first.limit,
         };
       }
-      if (sequence !== listSequence.current) return;
+      if (sequence !== listSequence.current) return false;
       if (data.offset > 0 && data.items.length === 0) {
         setOffset(0);
-        return;
+        return false;
       }
       setList(data);
       setLoadedListKey(requestKey);
@@ -614,11 +614,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setSelectedId(null);
         setDetail(null);
       }
+      return true;
     } catch (caught) {
       if (sequence === listSequence.current) {
         setListLoadFailed(true);
         setError(friendlyError(caught));
       }
+      return false;
     } finally {
       if (sequence === listSequence.current) setLoadingList(false);
     }
@@ -764,7 +766,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   }, [loadList, loadDetail]);
 
   const refreshAfterOcrConfirmation = useCallback(async (id: string) => {
-    await Promise.all([loadList(listUrl, true), loadDetail(id, true, true)]);
+    const [listVerified, verifiedDetail] = await Promise.all([
+      loadList(listUrl, true), loadDetail(id, true, true),
+    ]);
+    // Both readers handle transport errors locally; their promises can
+    // resolve even when one failed. Never claim the whole document was
+    // synchronized merely because Promise.all completed.
+    if (listVerified !== true || verifiedDetail?.document.id !== id) {
+      throw new Error("document_post_confirmation_refresh_failed");
+    }
     setNotice("Revisión OCR confirmada y documento sincronizado.");
   }, [listUrl, loadList, loadDetail]);
 
