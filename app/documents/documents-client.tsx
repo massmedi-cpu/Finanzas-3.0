@@ -132,7 +132,10 @@ function validatedDocumentList(payload: unknown): DocumentList {
     || row.principles.suggestionsPersisted !== false
     || row.principles.associationsRequireConfirmation !== true
     || row.items.length > (row.limit ?? 0)
-    || row.items.length > (row.total ?? 0)) {
+    || row.items.length > (row.total ?? 0)
+    // An empty page is legitimate beyond the last item, not within it.
+    || (row.items.length === 0 && (row.offset ?? 0) < (row.total ?? 0))
+    || (row.items.length > 0 && (row.offset ?? 0) + row.items.length > (row.total ?? 0))) {
     throw new Error("document_list_invalid");
   }
   const ids = new Set<string>();
@@ -437,6 +440,12 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setError(null);
     try {
       const first = validatedDocumentList(await getDocumentJson(url));
+      // Do not replace this page with a structurally valid response to
+      // a different request, which could hide documents or move pagination.
+      if (first.offset !== Number(requested.searchParams.get("offset") ?? "0")
+        || first.limit !== Number(requested.searchParams.get("limit") ?? "50")) {
+        throw new Error("document_list_invalid");
+      }
       let data = first;
       if (unassociatedOnly && first.contractVersion < 3) {
         const all = [...first.items];
@@ -446,6 +455,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
           parsed.searchParams.set("limit", "100");
           parsed.searchParams.set("offset", String(all.length));
           const next = validatedDocumentList(await getDocumentJson(parsed.toString()));
+          if (next.offset !== all.length || next.limit !== 100) throw new Error("document_filter_incomplete");
           if (!next.items.length) throw new Error("document_filter_incomplete");
           all.push(...next.items);
         }
