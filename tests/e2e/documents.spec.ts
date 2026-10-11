@@ -1413,7 +1413,7 @@ test("REC-OCR-047 · el fallo de una página PDF indica incompletitud sin códig
   await expect(warnings).toContainText("No se ha podido leer la página escaneada 2");
   await expect(warnings).toContainText("Se conservan las demás páginas");
   await expect(warnings).not.toContainText("pdf_page_visual_ocr_failed");
-  await expect(panel.getByTestId("ocr-review-pending-notice")).toContainText("La lectura requiere revisión");
+  await expect(panel.getByText("Revisión necesaria", { exact: true })).toBeVisible();
   await expect(panel.getByText("Lectura completada sin avisos técnicos")).toHaveCount(0);
   expect(writes).toEqual([]);
 });
