@@ -32,6 +32,8 @@ assert.match(route, /automatic_incremental_read_only/);
 assert.match(route, /duplicateSafe:\s*true/);
 assert.match(route, /driveSource:\s*"read_only"/);
 assert.match(route, /document\.drive_batch/);
+assert.match(route, /process\.env\.VERCEL_ENV === "preview"/);
+assert.match(route, /preview_drive_sync_read_only/);
 
 assert.match(client, /useEffect/);
 assert.match(client, /\/api\/documents\/drive-sync/);
@@ -39,6 +41,8 @@ assert.match(client, /sessionStorage/);
 assert.match(client, /validDriveSyncResult/);
 assert.match(client, /La sincronización no está completa/);
 assert.match(client, /No se ha podido verificar Drive/);
+assert.match(client, /preview_drive_sync_read_only/);
+assert.match(client, /Solo en producción/);
 assert.match(client, /Comprobar ahora/);
 assert.match(page, /<DriveAutoSync \/>/);
 assert.match(page, /<DocumentsClient\s+initialStatusFilter=/);
