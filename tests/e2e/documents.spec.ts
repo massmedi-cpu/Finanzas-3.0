@@ -819,3 +819,53 @@ test("REC-DOC-046 · la carga sin sesión distingue 401 sin JSON de un archivo v
   await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-047 · HTTP 200 incompleto no puede simular un archivo documental vacío", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let wrongBody = true;
+  await page.route("**/api/documents?*", async (route) => {
+    if (route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("id") && wrongBody) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({ contractVersion: 3, items: [], total: 0, limit: 50, offset: 0 }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByText("No hay documentos", { exact: true })).toHaveCount(0);
+  wrongBody = false;
+  await page.getByRole("button", { name: "Reintentar lista" }).click();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toBeVisible();
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-048 · una lista que niega origen bancario de solo lectura no se muestra", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (route.request().method() === "GET" && !new URL(route.request().url()).searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3, items: [], total: 0, limit: 50, offset: 0,
+          principles: {
+            bankSource: "writable", ocrEnabled: true, getHasSideEffects: false,
+            suggestionsPersisted: false, associationsRequireConfirmation: true,
+          },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  expect(writes).toEqual([]);
+});
