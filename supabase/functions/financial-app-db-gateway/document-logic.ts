@@ -246,23 +246,13 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
   }
 
   if (action === "document.register") {
-    const type = documentType(payload.type);
-    const originalFileName = text(payload.originalFileName, "document_file_name", 500);
-    const mime = text(payload.mimeType, "document_mime_type", 200);
-    const provider = text(payload.storageProvider, "document_storage_provider", 32);
-    if (provider !== "supabase" && provider !== "google_drive") throw new Error("invalid_document_storage_provider");
-    // Every private Supabase upload MUST go through upload_finalize, which
-    // downloads its real bytes and verifies size/MIME/SHA-256. Never expose
-    // document.register as a shortcut around that integrity boundary.
-    if (provider === "supabase") return json({ error: "document_private_registration_requires_finalize" }, 403);
-    const storageKey = text(payload.storageKey, "document_storage_key", 1000);
-    const driveFileId = nullableText(payload.sourceDriveFileId, "document_drive_file_id", 300);
-    const sizeBytes = safeInteger(payload.sizeBytes, "document_size", true);
-    if (sizeBytes !== null && sizeBytes < 0) throw new Error("invalid_document_size");
-    const sourceModifiedAt = nullableText(payload.sourceModifiedAt, "document_source_modified_at", 80);
-    return documentQuery(() => sql`
-      select financial_app.register_document(${type},${originalFileName},${mime},${provider},${storageKey},${driveFileId},${sizeBytes}::bigint,${sourceModifiedAt}::timestamptz) as result
-    `);
+    // This legacy generic write endpoint did not verify the bytes of a
+    // Supabase object OR validate that a claimed Google Drive file actually
+    // exists. Both source kinds have verified dedicated routes:
+    //   document.upload_finalize -> download + MIME + SHA-256
+    //   document.drive_batch      -> Next.js Drive read-only preflight
+    // Never allow a signed gateway request to bypass those entrypoints.
+    return json({ error: "document_registration_requires_verified_source" }, 403);
   }
 
   if (action === "document.update") {
