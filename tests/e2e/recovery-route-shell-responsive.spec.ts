@@ -88,3 +88,118 @@ test.describe("REC-VIS-004 · shell de navegación responsive", () => {
     });
   }
 });
+
+
+import {
+  parseHomeBankFreshness,
+  resolveHomeBankCoverage,
+} from "../../src/application/dashboard/home-bank-coverage";
+
+const completeHomeSync = {
+  status: "success", startedAt: "2026-10-11T09:00:00Z",
+  finishedAt: "2026-10-11T09:05:00Z",
+  rowsSeen: 5, rowsFailed: 0, rowsMissing: 0,
+  duplicatesDetected: 0, warningsCount: 0,
+};
+
+test("REC-HOME-020 · fechas retenidas no convierten en cero bancario una fuente no disponible", () => {
+  const retention = parseHomeBankFreshness({
+    available: false, earliestMovementDate: "2026-10-01",
+    latestMovementDate: "2026-10-11", sync: completeHomeSync,
+  });
+  expect(resolveHomeBankCoverage({
+    dateFrom: "2026-10-01", dateTo: "2026-10-11", freshness: retention,
+    activityLatestDate: "2026-10-11",
+  }).state).toBe("unknown");
+
+  expect(parseHomeBankFreshness({
+    available: true, earliestMovementDate: "2026-02-30",
+    latestMovementDate: "2026-10-11", sync: completeHomeSync,
+  })).toBeNull();
+  expect(resolveHomeBankCoverage({
+    dateFrom: "2026-10-01", dateTo: "2026-10-11", freshness: null,
+  }).state).toBe("unknown");
+});
+
+test("REC-HOME-021 · cobertura completa requiere inicio, final y sincronización verificables", () => {
+  const range = { dateFrom: "2026-10-01", dateTo: "2026-10-11" };
+  const full = parseHomeBankFreshness({
+    available: true, earliestMovementDate: "2026-10-01",
+    latestMovementDate: "2026-10-11", sync: completeHomeSync,
+  });
+  expect(resolveHomeBankCoverage({ ...range, freshness: full }).state).toBe("covered");
+  expect(resolveHomeBankCoverage({
+    ...range, freshness: full, activityLatestDate: "2026-10-10",
+  }).state).toBe("unknown");
+  const incomplete = parseHomeBankFreshness({
+    available: true, earliestMovementDate: null,
+    latestMovementDate: "2026-10-11", sync: completeHomeSync,
+  });
+  expect(resolveHomeBankCoverage({ ...range, freshness: incomplete }).state).toBe("partial");
+  const withoutSync = parseHomeBankFreshness({
+    available: true, earliestMovementDate: "2026-10-01",
+    latestMovementDate: "2026-10-11", sync: null,
+  });
+  expect(resolveHomeBankCoverage({ ...range, freshness: withoutSync }).state).toBe("partial");
+});
+
+for (const verifiedBank of [false, true]) {
+  test(`REC-HOME-022 · Inicio ${verifiedBank ? "muestra" : "oculta"} importes con fuente ${verifiedBank ? "verificada" : "no disponible"}`, async ({ page }) => {
+    const today = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit",
+    }).format(new Date());
+    const monthStart = today.slice(0, 7) + "-01";
+    const financial = {
+      period: {
+        dateFrom: monthStart, dateTo: today, incomeCents: 15000,
+        expenseCents: 5000, operatingNetCents: 10000,
+        savingsCents: 10000, savingsRateBps: 6667,
+        quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
+      },
+      balances: { asOfDate: today, activeBalanceCents: 0, accounts: [] },
+    };
+    const transactions = { totalCount: 1, rows: [{
+      id: "aa000000-0000-4000-8000-000000000001",
+      bankDate: today, amountCents: 5000,
+      account: { id: "aa000000-0000-4000-8000-000000000002", name: "Cuenta sintética" },
+      concept: { effective: "Movimiento de prueba" },
+      category: { effectiveId: null, effectiveName: null },
+      kind: { effective: "expense" }, duplicateState: "none", excludedFromAnalytics: false,
+    }] };
+    await page.route("**/api/**", route => route.fulfill({
+      status: 503, json: { error: "synthetic_backend_isolated" },
+    }));
+    await page.route("**/api/analysis/source-freshness", route => route.fulfill({
+      json: {
+        available: verifiedBank,
+        earliestMovementDate: monthStart, latestMovementDate: today,
+        sync: completeHomeSync,
+      },
+    }));
+    await page.route("**/api/dashboard?*", route => {
+      const scope = new URL(route.request().url()).searchParams.get("scope");
+      const data = {
+        financial: scope === "critical" ? financial : null,
+        monthly: null, budgets: null, forecast: null,
+        transactions: scope === "activity" ? transactions : null,
+      };
+      return route.fulfill({ json: {
+        contractVersion: 1, scope, asOfDate: today,
+        dataThroughDate: scope === "activity" ? today : null,
+        generatedAt: new Date().toISOString(),
+        requestedSources: scope === "critical" ? ["financial"] : scope === "activity" ? ["transactions"] : ["monthly", "budgets", "forecast"],
+        failedSources: scope === "secondary" ? ["monthly", "budgets", "forecast"] : [],
+        data,
+      } });
+    });
+    await page.goto("/");
+    const card = page.locator('section[aria-label="Resumen financiero principal"] article').nth(1);
+    if (verifiedBank) {
+      await expect(card.locator("strong")).toContainText("100,00");
+    } else {
+      await expect(card).toContainText("Fuente bancaria no disponible");
+      await expect(card.locator("strong")).toHaveText("—");
+      await expect(card).not.toContainText("100,00");
+    }
+  });
+}
