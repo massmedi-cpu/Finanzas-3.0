@@ -33,7 +33,7 @@ test("REC-DOC-112 · gateway validates private Storage before immutable database
   const source = readFileSync(join(
     process.cwd(), "supabase/functions/financial-app-db-gateway/document-logic.ts",
   ), "utf8");
-  const bypass = source.indexOf('if (provider === "supabase")');
+  const bypass = source.indexOf('if (action === "document.register")');
   const handler = source.indexOf('if (action === "document.upload_finalize")');
   const downloaded = source.indexOf(".download(path)", handler);
   const digest = source.indexOf('crypto.subtle.digest("SHA-256", bytes)', handler);
@@ -45,6 +45,8 @@ test("REC-DOC-112 · gateway validates private Storage before immutable database
 
   expect(bypass).toBeGreaterThanOrEqual(0);
   expect(bypass).toBeLessThan(handler);
+  expect(source.slice(bypass, handler)).toContain("document_registration_requires_verified_source");
+  expect(source.slice(bypass, handler)).not.toContain("financial_app.register_document(");
   expect(downloaded).toBeGreaterThan(handler);
   expect(digest).toBeGreaterThan(downloaded);
   expect(transaction).toBeGreaterThan(digest);
