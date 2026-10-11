@@ -639,7 +639,6 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
     // on this page means figures outside its product rows are not items.
     if (headerPages.has(item.pageNumber) && !tableOpen) continue;
     const text = item.line.text.trim();
-    const normalized = normalizeToken(text);
     if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
     const moneyMatches = exactFinancialAmountMatches(text).map((match) => match[0]);
     if (!moneyMatches.length) continue;
