@@ -1,5 +1,6 @@
 import { createClient } from "supabase-js";
 import { documentBytesMatchMimeType } from "../../../src/domain/document-content-signature.ts";
+import { matchesPrivateDocumentReplay } from "../../../src/domain/private-document-replay.ts";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -250,6 +251,10 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const mime = text(payload.mimeType, "document_mime_type", 200);
     const provider = text(payload.storageProvider, "document_storage_provider", 32);
     if (provider !== "supabase" && provider !== "google_drive") throw new Error("invalid_document_storage_provider");
+    // Every private Supabase upload MUST go through upload_finalize, which
+    // downloads its real bytes and verifies size/MIME/SHA-256. Never expose
+    // document.register as a shortcut around that integrity boundary.
+    if (provider === "supabase") return json({ error: "document_private_registration_requires_finalize" }, 403);
     const storageKey = text(payload.storageKey, "document_storage_key", 1000);
     const driveFileId = nullableText(payload.sourceDriveFileId, "document_drive_file_id", 300);
     const sizeBytes = safeInteger(payload.sizeBytes, "document_size", true);
@@ -382,15 +387,46 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     }
 
     try {
-      const rows = await sql`
-        select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
-      `;
-      const result = rows[0]?.result ?? null;
-      if (!result || typeof result !== "object" || Array.isArray(result)) return json(result);
-      // The client must confirm the SAME path and this server-side digest
+      // A retry against the SAME private path must not silently overwrite an
+      // already classified/associated original. Serialize concurrent finalizes
+      // across devices at the database boundary, not just via browser locks.
+      // This advisory lock is transaction-scoped and scoped to the workspace
+      // and private Storage path; it releases on commit, rollback or failure.
+      const result = await sql.begin(async (tx: any) => {
+        await tx`select pg_catalog.pg_advisory_xact_lock(pg_catalog.hashtextextended(${workspaceId + ":" + path}, 0::bigint))`;
+        const registered = await tx`
+          select id, type, original_file_name, mime_type, size_bytes
+            from financial_app.documents
+           where workspace_id=${workspaceId}::uuid
+             and storage_provider='supabase' and storage_key=${path}
+           for update
+        `;
+        if (registered.length) {
+          const old = registered[0];
+          if (!matchesPrivateDocumentReplay({
+            type: old.type, originalFileName: old.original_file_name,
+            mimeType: old.mime_type, sizeBytes: old.size_bytes === null ? null : Number(old.size_bytes),
+          }, { type, originalFileName, mimeType: mime, sizeBytes: actualSize })) {
+            // An HTTP 200 may only certify exactly the SAME registered file
+            // and classification. A mismatch is not a reason to mutate it.
+            return { conflict: true, result: null };
+          }
+          const unchanged = await tx`select financial_app.document_detail(${old.id}::uuid) as result`;
+          return { conflict: false, result: unchanged[0]?.result ?? null };
+        }
+        const inserted = await tx`
+          select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
+        `;
+        return { conflict: false, result: inserted[0]?.result ?? null };
+      });
+      if (result.conflict) return json({ error: "document_upload_replay_conflict" }, 409);
+      if (!result.result || typeof result.result !== "object" || Array.isArray(result.result)) {
+        return json({ error: "document_upload_registration_unverified" }, 503);
+      }
+      // The client must confirm the SAME path and server-side digest
       // attestation, not trust a generic HTTP 200 with plausible metadata.
       return json({
-        ...result,
+        ...result.result,
         ...(expectedSha256 === null ? {} : {
           uploadIntegrity: { sha256: expectedSha256, sizeBytes: actualSize, verified: true },
         }),
