@@ -221,6 +221,7 @@ for (const bankingState of ["available", "unavailable", "conflict"] as const) {
       await expect(bankHealth).toContainText("Datos bancarios actualizados");
       await expect(page.getByText("El balance del mes está en negativo")).toBeVisible();
       await expect(evolution.locator('button[data-month-coverage="covered"]')).toHaveCount(1);
+      await expect(page.getByTestId("financial-bar-scale-reference")).toContainText("Escala máxima");
     } else {
       await expect(card).toContainText(bankUnavailable
         ? "Fuente bancaria no disponible" : "Fechas bancarias discordantes");
@@ -232,6 +233,8 @@ for (const bankingState of ["available", "unavailable", "conflict"] as const) {
       await expect(page.getByText("El balance del mes está en negativo")).toHaveCount(0);
       await expect(evolution.locator('button[data-month-coverage="unknown"]')).toHaveCount(1);
       await expect(evolution.getByRole("button", { name: /sin cobertura bancaria confirmada/ })).toHaveCount(1);
+      // The largest unverified monetary figure is not a chart scale.
+      await expect(page.getByTestId("financial-bar-scale-reference")).toHaveText("Escala sin cobertura bancaria observada");
       if (!bankUnavailable) {
         await expect(page.getByText("La fecha bancaria no coincide con los movimientos")).toBeVisible();
         await expect(page.getByRole("region", { name: "Resumen inteligente" })).not.toContainText("Datos hasta");
