@@ -276,6 +276,24 @@ test("document metadata validation accepts Spanish financial boundaries and reje
   await expect(invalidTotal.json()).resolves.toEqual({ error: "invalid_request", code: "invalid_document_total" });
 });
 
+test("REC-DOC-078 · los metadatos no convierten objetos ni números en notas persistidas", async ({ request }) => {
+  for (const notes of [{ internal: "payload" }, ["nota"], 12345, false]) {
+    const response = await request.patch("/api/documents", { data: {
+      action: "metadata",
+      id: documentId,
+      type: "invoice",
+      documentDate: "2026-09-02",
+      issuerName: "Proveedor",
+      totalCents: 5404,
+      notes,
+    } });
+    expect(response.status()).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "invalid_request", code: "invalid_document_notes",
+    });
+  }
+});
+
 test("Documentos renders responsive F11 review semantics without automatic OCR", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   const ocrReads: string[] = [];
