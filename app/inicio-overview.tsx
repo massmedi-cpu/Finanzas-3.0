@@ -7,8 +7,12 @@ import type { HomeAnalysisSummary } from "../src/application/dashboard/home-anal
 import {
   periodComparisonIsReliable,
   periodHasObservedData,
-  resolvePeriodCoverage,
 } from "../src/application/data-coverage";
+import {
+  parseHomeBankFreshness,
+  resolveHomeBankCoverage,
+  type HomeBankFreshness,
+} from "../src/application/dashboard/home-bank-coverage";
 import {
   hasSourceSyncIncidents,
   normalizeSourceSyncIncidents,
@@ -339,7 +343,7 @@ async function readJson<T>(url: string, timeoutMs = 8_000): Promise<T> {
   try {
     const response = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!response.ok) throw new Error(`request_failed_${response.status}`);
-    return response.json() as Promise<T>;
+    return await response.json() as T;
   } finally {
     window.clearTimeout(timer);
   }
@@ -366,6 +370,7 @@ export default function InicioOverview() {
   const [data, setData] = useState<DashboardData>(emptyData);
   const [syncStatus, setSyncStatus] = useState<SyncStatus | null>(null);
   const [dataThroughDate, setDataThroughDate] = useState<string | null>(null);
+  const [sourceFreshness, setSourceFreshness] = useState<HomeBankFreshness | null>(null);
   const [independentSources, setIndependentSources] = useState<DashboardSource[]>([]);
   const [primaryLoading, setPrimaryLoading] = useState(true);
   const [activityLoading, setActivityLoading] = useState(true);
@@ -440,6 +445,16 @@ export default function InicioOverview() {
     }
   }, [commit, loadSource, isFresh]);
 
+  const loadBankFreshness = useCallback(async (generation: number) => {
+    try {
+      const payload = await readJson<unknown>("/api/analysis/source-freshness", 7_000);
+      const next = parseHomeBankFreshness(payload);
+      if (isFresh(generation)) setSourceFreshness(next);
+    } catch {
+      if (isFresh(generation)) setSourceFreshness(null);
+    }
+  }, [isFresh]);
+
   const loadSyncStatus = useCallback(async (generation: number) => {
     try {
       const status = await readJson<SyncStatus>("/api/source/google/sync", 5_000);
@@ -468,8 +483,10 @@ export default function InicioOverview() {
     setActivityLoading(true);
     setSecondaryLoading(true);
     setDataThroughDate(null);
+    setSourceFreshness(null);
     setIndependentSources([]);
 
+    const bankFreshnessPromise = loadBankFreshness(generation);
     const statusPromise = loadSyncStatus(generation);
     const analysisPromise = loadHomeAnalysis(generation);
     const activityPromise = loadScope("activity", ["transactions"], generation)
@@ -479,8 +496,8 @@ export default function InicioOverview() {
 
     await loadScope("critical", ["financial"], generation);
     if (isFresh(generation)) setPrimaryLoading(false);
-    await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise]);
-  }, [loadHomeAnalysis, loadScope, loadSyncStatus, isFresh]);
+    await Promise.all([activityPromise, secondaryPromise, statusPromise, analysisPromise, bankFreshnessPromise]);
+  }, [loadBankFreshness, loadHomeAnalysis, loadScope, loadSyncStatus, isFresh]);
 
   useEffect(() => {
     void refreshDashboard();
@@ -525,11 +542,12 @@ export default function InicioOverview() {
   });
   const budget = consistency.budgetMonthMatches && consistency.budgetActualMatches ? data.budgets : null;
   const forecast = consistency.forecastOpeningBalanceMatches ? data.forecast : null;
-  const latestDataDate = dataThroughDate ?? transactions?.rows?.[0]?.bankDate ?? null;
-  const currentPeriodCoverage = resolvePeriodCoverage({
+  const latestDataDate = sourceFreshness?.available ? sourceFreshness.latestMovementDate : null;
+  const currentPeriodCoverage = resolveHomeBankCoverage({
     dateFrom: currentMonthStart,
     dateTo: today,
-    latestMovementDate: latestDataDate,
+    freshness: sourceFreshness,
+    activityLatestDate: dataThroughDate,
   });
   const currentPeriodObserved = periodHasObservedData(currentPeriodCoverage);
   const currentCoverageLabel = currentPeriodCoverage.state === "covered"
@@ -538,7 +556,9 @@ export default function InicioOverview() {
       ? `Importes parciales · cobertura observada hasta ${formatDate(currentPeriodCoverage.throughDate)}`
       : currentPeriodCoverage.state === "none"
         ? `Sin cobertura bancaria confirmada este mes · último movimiento ${formatDate(currentPeriodCoverage.latestMovementDate)}`
-        : "Cobertura bancaria pendiente de confirmar";
+        : sourceFreshness?.available === false
+          ? "Fuente bancaria no disponible · importes sin verificar"
+          : "Cobertura bancaria pendiente de confirmar";
   const syncRun = syncStatus?.run ?? null;
   const syncFailed = syncRun?.status === "failed";
   const syncSucceeded = syncRun?.status === "success";
@@ -579,12 +599,13 @@ export default function InicioOverview() {
       operatingNetCents: homeAnalysis.netComparison.currentNetCents,
     },
     delta: homeAnalysis.netComparison.deltaCents,
-    coverage: resolvePeriodCoverage({
+    coverage: resolveHomeBankCoverage({
       dateFrom: homeAnalysis.period.dateFrom,
       dateTo: homeAnalysis.period.dateTo,
-      latestMovementDate: latestDataDate,
+      freshness: sourceFreshness,
+      activityLatestDate: dataThroughDate,
     }),
-  } : null, [homeAnalysis, latestDataDate]);
+  } : null, [homeAnalysis, sourceFreshness, dataThroughDate]);
   const recentExpenseAverage = homeAnalysis?.expenseAverage3m ?? null;
 
   const topBudgetCategories = useMemo(() => {
