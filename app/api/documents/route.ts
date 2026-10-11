@@ -277,7 +277,7 @@ export async function PATCH(request: Request) {
         documentDate: nullableDate(row.documentDate, "invalid_document_date"),
         issuerName: nullableText(row.issuerName, "invalid_document_issuer", 300),
         totalCents: integer(row.totalCents, "invalid_document_total", -Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, true),
-        notes: row.notes === null || row.notes === undefined ? "" : text(String(row.notes), "invalid_document_notes", 2000, true),
+        notes: row.notes === null || row.notes === undefined ? "" : text(row.notes, "invalid_document_notes", 2000, true),
       };
       const result = await callPersistenceGateway("document.update", payload);
       return Response.json(result, { headers: HEADERS });
