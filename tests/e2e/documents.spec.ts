@@ -2628,7 +2628,7 @@ test("REC-DOC-109 · una respuesta tardía no puede borrar la referencia de OTRO
   await page.goto("/documents");
   await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
-  await expect(page.getByTestId("documents-alert")).toContainText("no se ha podido confirmar");
+  await expect(page.getByTestId("documents-alert")).toContainText("aún no ha confirmado el archivo");
   const stillStored = await page.evaluate(key => localStorage.getItem(key), durableUploadKey);
   expect(JSON.parse(stillStored!).path).toBe(replacementPath);
   expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
