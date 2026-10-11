@@ -374,6 +374,7 @@ export default function InicioOverview() {
   const [sourceFreshness, setSourceFreshness] = useState<HomeBankFreshness | null>(null);
   const [independentSources, setIndependentSources] = useState<DashboardSource[]>([]);
   const [primaryLoading, setPrimaryLoading] = useState(true);
+  const [workspaceSessionMissing, setWorkspaceSessionMissing] = useState(false);
   const [activityLoading, setActivityLoading] = useState(true);
   const [secondaryLoading, setSecondaryLoading] = useState(true);
   const [failed, setFailed] = useState<DashboardSource[]>([]);
@@ -449,6 +450,7 @@ export default function InicioOverview() {
       const sessionRequired = error instanceof Error
         && /^(?:request_failed_401|request_failed_403)$/.test(error.message);
       if (sessionRequired) {
+        setWorkspaceSessionMissing(true);
         sources.forEach((source) => commit(generation, source, null, true));
         return;
       }
@@ -491,6 +493,7 @@ export default function InicioOverview() {
   const refreshDashboard = useCallback(async () => {
     const generation = ++generationRef.current;
     setPrimaryLoading(true);
+    setWorkspaceSessionMissing(false);
     setActivityLoading(true);
     setSecondaryLoading(true);
     setDataThroughDate(null);
@@ -749,14 +752,16 @@ export default function InicioOverview() {
       </header>
 
       <section
-        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : syncHasWarnings || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
+        className={`${styles.sourceHealth} ${syncFailed ? styles.sourceError : workspaceSessionMissing || syncHasWarnings || bankUnavailable || bankProvenanceConflict ? styles.sourceWarning : certifiedSync ? styles.sourceOk : ""}`}
         aria-label="Estado de los datos bancarios"
       >
         <div className={styles.sourceText}>
           <span className={styles.healthDot} aria-hidden="true" />
           <div>
             <strong>
-              {syncing
+              {workspaceSessionMissing
+                ? "Sesión necesaria para consultar tus finanzas"
+                : syncing
                 ? "Actualizando datos…"
                 : syncFailed
                   ? "La última actualización falló"
@@ -771,7 +776,9 @@ export default function InicioOverview() {
                         : "Cobertura bancaria sin verificar"}
             </strong>
             <p>
-              {bankProvenanceConflict
+              {workspaceSessionMissing
+                ? "La sesión de acceso no está disponible o ha caducado. Vuelve a iniciar sesión para consultar tus datos. No se han alterado tus movimientos."
+                : bankProvenanceConflict
                 ? "La fuente y el resumen de movimientos indican distintas fechas de actualización. No se certifican las cifras afectadas."
                 : bankUnavailable
                   ? "No se pueden verificar los importes ni la cobertura con fechas o sincronizaciones anteriores."
@@ -788,9 +795,13 @@ export default function InicioOverview() {
           </div>
         </div>
         <div className={styles.sourceActions}>
-          <button type="button" className={styles.primaryAction} onClick={() => void runSync()} disabled={syncing}>
-            {syncing ? "Actualizando…" : syncFailed ? "Reintentar actualización" : "Actualizar datos"}
-          </button>
+          {workspaceSessionMissing ? (
+            <Link prefetch={false} className={styles.primaryAction} href="/login">Iniciar sesión</Link>
+          ) : (
+            <button type="button" className={styles.primaryAction} onClick={() => void runSync()} disabled={syncing}>
+              {syncing ? "Actualizando…" : syncFailed ? "Reintentar actualización" : "Actualizar datos"}
+            </button>
+          )}
           <Link prefetch={false} className={styles.secondaryAction} href="/configuration/source">Ver fuente</Link>
         </div>
       </section>
