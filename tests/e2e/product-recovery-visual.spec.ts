@@ -134,7 +134,7 @@ for (const theme of ["light", "dark"] as const) {
       const stageBox = await firstStage.boundingBox();
       expect(stageBox?.width ?? 0).toBeGreaterThanOrEqual(170);
       const actualColumns = await flow.evaluate((node) =>
-        getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+        getComputedStyle(node).gridTemplateColumns.split(/\s+/).filter(Boolean).length);
       expect(actualColumns).toBe(width === 360 ? 1 : 2);
       await noOverflow(page, width);
       const a11y = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
