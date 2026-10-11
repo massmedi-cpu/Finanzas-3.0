@@ -1263,3 +1263,32 @@ test("REC-DOC-066 · una sugerencia anterior no se confirma con metadatos pendie
   await expect(page.getByText(/Guarda los cambios del documento antes de confirmar una sugerencia/)).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-067 · diferencias de importe inválidas no generan sugerencias confirmables", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    if (new URL(route.request().url()).searchParams.get("mode") !== "candidates") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1, documentId, ready: true, reason: null,
+        days: 7, amountToleranceCents: 200,
+        candidates: [{
+          transactionId, accountId: "95000000-0000-4000-8000-000000000095",
+          accountName: "Cuenta corriente", date: "2026-09-02", concept: "GASTO SIN RESPALDO",
+          amountCents: -5404, amountDifferenceCents: "0", dayDifference: 0,
+          confidence: 1, effectiveKind: "expense", categoryId: null, merchantId: null,
+        }],
+        principles: { bankSource: "read_only", requiresConfirmation: true, suggestionsPersisted: false },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  await page.getByRole("button", { name: "Buscar sugerencias" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/sugerencias no corresponden a este documento/i);
+  await expect(page.getByRole("button", { name: "Confirmar sugerencia" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
