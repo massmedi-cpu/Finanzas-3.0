@@ -645,16 +645,30 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
     const lastMoney = moneyMatches.at(-1) ?? null;
     const totalCents = lastMoney ? parseMoneyCents(lastMoney) : null;
     const firstMoneyIndex = lastMoney ? text.lastIndexOf(lastMoney) : -1;
-    const description = firstMoneyIndex > 0 ? text.slice(0, firstMoneyIndex).replace(/\s+/g, " ").trim() : "";
+    const beforeTotal = firstMoneyIndex > 0 ? text.slice(0, firstMoneyIndex).replace(/\s+/g, " ").trim() : "";
+    const unitRaw = moneyMatches.length >= 2 ? moneyMatches[moneyMatches.length - 2] : null;
+    const unitPriceCents = unitRaw ? parseMoneyCents(unitRaw) : null;
+    // In a confirmed product table, price/quantity each have their own
+    // fields. Do not repeat them in the product description shown to users.
+    const withoutUnit = tableOpen && unitRaw && beforeTotal.endsWith(unitRaw)
+      ? beforeTotal.slice(0, -unitRaw.length).trim()
+      : beforeTotal;
+    const quantityMatch = tableOpen ? /^\s*(\d{1,3})\s+(?=\p{L})/u.exec(withoutUnit) : null;
+    const quantity = quantityMatch ? Number(quantityMatch[1]) : null;
+    const description = quantityMatch ? withoutUnit.slice(quantityMatch[0].length).trim() : withoutUnit;
     if ((description.match(/\p{L}/gu) ?? []).length < 2 || totalCents === null) continue;
     const confidence = item.line.confidence;
+    // A confident character recognition is not proof that price x quantity
+    // equals the line total. Keep discordant rows editable, but doubtful.
+    const arithmeticConflict = tableOpen && quantity !== null && unitPriceCents !== null
+      && Math.abs(quantity * unitPriceCents - totalCents) > 1;
     result.push({
       description,
-      quantity: tableOpen && /^\s*(\d{1,3})\s+\p{L}/u.test(text) ? Number(/^\s*(\d{1,3})\s+\p{L}/u.exec(text)![1]) : null,
-      unitPriceCents: moneyMatches.length >= 2 ? parseMoneyCents(moneyMatches[moneyMatches.length - 2]) : null,
+      quantity,
+      unitPriceCents,
       totalCents,
       confidence,
-      trust: trustFor(confidence, true),
+      trust: arithmeticConflict ? "doubtful" : trustFor(confidence, true),
       evidence: [evidenceOf(item)],
     });
   }
