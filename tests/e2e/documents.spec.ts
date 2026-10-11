@@ -139,6 +139,17 @@ async function mockDocumentApi(
   await page.route("**/api/transactions*", async (route) => route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ rows: [{ id: transactionId, bankDate: "2026-09-02", amountCents: -5404, account: { id: "95000000-0000-4000-8000-000000000095", name: "Cuenta corriente" }, concept: { original: "COMUNIDAD BLOQUE", processed: "COMUNIDAD BLOQUE", effective: "COMUNIDAD BLOQUE" }, merchant: { effectiveName: null }, category: { effectiveName: null }, kind: { effective: "expense" } }], totalCount: 1, hasMore: false, nextCursor: null }) }));
 }
 
+test("REC-OCR-055 · el OCR rechaza dos identificadores antes de tocar persistencia", async ({ request }) => {
+  for (const method of ["GET", "POST"] as const) {
+    const url = `/api/documents/ocr?id=${documentId}&id=${unknownDocumentId}`;
+    const response = method === "GET" ? await request.get(url) : await request.post(url);
+    expect(response.status()).toBe(400);
+    await expect(response.json()).resolves.toEqual({
+      error: "ocr_failed", code: "invalid_ocr_document_id",
+    });
+  }
+});
+
 test("document API rejects invalid inputs before persistence", async ({ request }) => {
   const invalidLimit = await request.get("/api/documents?limit=101");
   expect(invalidLimit.status()).toBe(400);
