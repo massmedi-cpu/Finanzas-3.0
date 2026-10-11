@@ -102,11 +102,21 @@ let worker;
 try {
   worker = await createWorker("spa", 1, workerOptions);
   await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_LINE });
-  const response = await worker.recognize(png, { rotateRadians: 0 }, { text: true });
+  // The same encoded image buffer must remain usable across successive
+  // worker.recognize calls. The production provider now copies incoming bytes
+  // once instead of allocating a full second copy on each OCR pass.
+  const reusablePng = Buffer.from(png);
+  const pristinePng = Buffer.from(reusablePng);
+  const response = await worker.recognize(reusablePng, { rotateRadians: 0 }, { text: true });
   const text = String(response.data?.text ?? "").replace(/\s+/g, " ").trim();
   assert.match(text, /TOTAL/i, "real local Tesseract model detects total label");
   assert.match(text, /23[,.]45/, "real OCR keeps euro decimal digits in source text");
-  console.log("PASS · local Spanish Tesseract OCR recognized TOTAL 23,45 from generated PNG");
+  const secondPass = await worker.recognize(reusablePng, { rotateRadians: 0 }, { text: true });
+  const secondText = String(secondPass.data?.text ?? "").replace(/\s+/g, " ").trim();
+  assert.match(secondText, /TOTAL/i, "reusing a buffer keeps the financial label");
+  assert.match(secondText, /23[,.]45/, "reusing a buffer preserves the exact amount");
+  assert.deepEqual(reusablePng, pristinePng, "worker OCR must not mutate the input byte snapshot");
+  console.log("PASS · one reusable encoded image buffer survives multiple real Tesseract passes");
   const pdfResult = await worker.recognize(renderedScan, { rotateRadians: 0 }, { text: true });
   const scannedText = String(pdfResult.data?.text ?? "").replace(/\s+/g, " ").trim();
   assert.match(scannedText, /TOTAL/i, "Spanish OCR detects label through scanned PDF");
