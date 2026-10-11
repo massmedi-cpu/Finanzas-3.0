@@ -8,6 +8,8 @@ on:
       - chat/retry-bank-freshness-status-20261010
       - chat/postgres-financial-10k50k-lab-20261010
     paths:
+      - 'supabase/migrations/**'
+      - 'supabase/tests/ap1_private_document_original_immutable.sql'
       - 'supabase/tests/financial_performance_50k_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_seed_disposable.sql'
       - 'supabase/tests/financial_persistence_ap1_ap2_readback_disposable.sql'
