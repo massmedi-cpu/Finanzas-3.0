@@ -136,6 +136,30 @@ function responseHeaders(scope: DashboardScope, durationMs: number) {
   };
 }
 
+const NON_RETRIABLE_SESSION_FAILURES = new Set([
+  "workspace_context_required",
+  "workspace_user_invalid",
+  "workspace_access_denied",
+  "workspace_membership_ambiguous",
+  "workspace_membership_invalid",
+]);
+
+/**
+ * Aggregated missing-session errors must not fan out into five independent
+ * requests from Inicio. Partial gateway failures are a different problem:
+ * the existing targeted legacy fallback must continue working for them.
+ */
+export function dashboardRequiresWorkspaceSession(
+  results: readonly PromiseSettledResult<unknown>[],
+): boolean {
+  return results.length > 0 && results.every((item) =>
+    item.status === "rejected"
+    && item.reason instanceof PersistenceGatewayError
+    && (item.reason.status === 401 || item.reason.status === 403)
+    && NON_RETRIABLE_SESSION_FAILURES.has(item.reason.code ?? ""),
+  );
+}
+
 function latestBankDate(data: Record<DashboardSource, unknown | null>) {
   const transactions = data.transactions as { rows?: Array<{ bankDate?: unknown }> } | null;
   const bankDate = transactions?.rows?.[0]?.bankDate;
@@ -172,10 +196,12 @@ export async function GET(request: Request) {
 
     const durationMs = performance.now() - startedAt;
     const allRequestedFailed = failedSources.length === requestedSources.length;
+    const loginRequired = dashboardRequiresWorkspaceSession(results);
 
     return Response.json(
       {
         contractVersion: 1,
+        ...(loginRequired ? { error: "workspace_session_required", code: "workspace_session_required" } : {}),
         scope,
         asOfDate: today,
         dataThroughDate: latestBankDate(data),
@@ -185,7 +211,7 @@ export async function GET(request: Request) {
         data,
       },
       {
-        status: allRequestedFailed ? 503 : 200,
+        status: loginRequired ? 403 : allRequestedFailed ? 503 : 200,
         headers: responseHeaders(scope, durationMs),
       },
     );
