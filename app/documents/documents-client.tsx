@@ -139,7 +139,7 @@ function validatedDocumentList(payload: unknown): DocumentList {
   for (const raw of row.items) {
     if (!raw || typeof raw !== "object") throw new Error("document_list_invalid");
     const item = raw as Partial<DocumentItem>;
-    if (typeof item.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(item.id)
+    if (typeof item.id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id)
       || ids.has(item.id)
       || !["ticket", "invoice", "other"].includes(item.type ?? "")
       || !["imported", "pending_review", "confirmed", "archived"].includes(item.status ?? "")
@@ -492,7 +492,17 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     try {
       const data = await getDocumentJson(`/api/documents?id=${encodeURIComponent(id)}`) as DocumentDetail;
       if (sequence !== detailSequence.current || selectedIdRef.current !== id) return null;
-      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)) {
+      if (!data?.document || data.document.id !== id || !Array.isArray(data.associations)
+        || ![1, 2, 3].includes(data.contractVersion)
+        || !data.principles || data.principles.bankSource !== "read_only"
+        || data.principles.getHasSideEffects !== false
+        || data.principles.suggestionsPersisted !== false
+        || data.principles.associationsRequireConfirmation !== true
+        || !["ticket", "invoice", "other"].includes(data.document.type)
+        || !["imported", "pending_review", "confirmed", "archived"].includes(data.document.status)
+        || (data.document.totalCents !== null && !Number.isSafeInteger(data.document.totalCents))
+        || typeof data.document.originalFileName !== "string"
+        || !data.document.originalFileName.trim()) {
         throw new Error("document_detail_mismatch");
       }
       setDetail(data);
