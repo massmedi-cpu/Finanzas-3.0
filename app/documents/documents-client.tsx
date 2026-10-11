@@ -786,6 +786,27 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setNotice("Revisión OCR confirmada y documento sincronizado.");
   }, [listUrl, loadList, loadDetail]);
 
+  async function verifyUncertainUpload() {
+    if (!uploadUnverified || loadingList || busy) return;
+    // A previous finalize may have committed. Require a successful readback
+    // of the ordinary archive before allowing any repeated private upload.
+    const verified = await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
+    if (verified !== true) {
+      setUploadUnverified(true);
+      setError("No se ha podido consultar el archivo de documentos. El nuevo envío sigue bloqueado para evitar duplicados; reintenta la comprobación.");
+      return;
+    }
+    setScope("ordinary");
+    setStatusFilter("");
+    setUnassociatedOnly(false);
+    setQuery("");
+    setDebouncedQuery("");
+    setOffset(0);
+    setUploadUnverified(false);
+    setError(null);
+    setNotice("Lista recargada. Comprueba si el documento figura antes de volver a enviarlo.");
+  }
+
   async function uploadDocument(event: FormEvent) {
     event.preventDefault();
     if (busy || uploadInFlight.current) return;
@@ -1238,9 +1259,9 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             {uploadUnverified ? (
               <div role="status" data-testid="document-upload-unverified">
                 <p>Subida sin confirmar. Revisa el listado y comprueba si el original ya aparece; no lo envíes dos veces.</p>
-                <button className={styles.secondaryButton} type="button" disabled={busy === "upload"}
-                  onClick={() => { setUploadUnverified(false); setError(null); void loadList(); }}>
-                  He comprobado la lista; permitir nuevo envío
+                <button className={styles.secondaryButton} type="button" disabled={busy === "upload" || loadingList}
+                  onClick={() => void verifyUncertainUpload()}>
+                  {loadingList ? "Comprobando lista…" : "Comprobar lista antes de permitir otro envío"}
                 </button>
               </div>
             ) : null}
