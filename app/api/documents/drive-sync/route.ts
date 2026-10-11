@@ -166,6 +166,15 @@ function apiError(error: unknown) {
 }
 
 export async function POST() {
+  // The canonical gateway deliberately blocks Preview writes to production.
+  // Refuse before contacting Drive or the persistence gateway; reporting the
+  // barrier as an ordinary sync error would invite unsafe retries.
+  if (process.env.VERCEL_ENV === "preview") {
+    return Response.json(
+      { error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" },
+      { status: 409, headers: HEADERS },
+    );
+  }
   try {
     const readers = googleReaders();
     const existingPromise = existingDriveDocuments();
