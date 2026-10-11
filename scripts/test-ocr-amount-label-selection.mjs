@@ -550,8 +550,8 @@ try {
   assert.equal(receiptWithTaxTable.totalCents.trust, "reliable",
     "tax table grand totals are not contradictory final payments");
   assert.deepEqual(receiptWithTaxTable.lines.map((row) => [row.description, row.quantity, row.unitPriceCents, row.totalCents]), [
-    ["6 PRODUCTO ALIMENTARIO 0,80", 6, 80, 480],
-    ["2 ARTICULO HOGAR 6,00", 2, 600, 1200],
+    ["PRODUCTO ALIMENTARIO", 6, 80, 480],
+    ["ARTICULO HOGAR", 2, 600, 1200],
   ], "only bounded purchase rows count as products, never VAT/payment rows");
   assert.equal(receiptWithTaxTable.taxLines.filter((row) =>
     row.baseCents !== null && row.taxCents !== null).length, 2,
@@ -562,6 +562,16 @@ try {
     "tax base derived by addition requires manual review");
   assert.equal(receiptWithTaxTable.taxesCents.trust, "doubtful",
     "tax quota derived by addition requires manual review");
+  const inconsistentProduct = interpret([
+    "Descripción P. Unit Importe",
+    "2 ARTICULO HOGAR 6,00 13,00",
+    "TOTAL 13,00",
+  ]).lines[0];
+  assert.ok(inconsistentProduct);
+  assert.equal(inconsistentProduct.trust, "doubtful",
+    "price x quantity conflicting with line total must not be auto-certified");
+  assert.equal(inconsistentProduct.quantity, 2);
+  assert.equal(inconsistentProduct.totalCents, 1300);
   console.log("PASS · tax-table summary excluded from purchase total; line-item quantities preserved");
 } catch (error) {
   failures++;
