@@ -6,7 +6,9 @@ const unknownDocumentId = "91000000-0000-4000-8000-000000000091";
 const unknownTransactionId = "92000000-0000-4000-8000-000000000092";
 const documentId = "93000000-0000-4000-8000-000000000093";
 const transactionId = "94000000-0000-4000-8000-000000000094";
-const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/test-upload`;
+const uploadedDocumentId = "98000000-0000-4000-8000-000000000097";
+const signedUploadPath = "uploads/97000000-0000-4000-8000-000000000097/" + uploadedDocumentId + ".pdf";
+const signedUploadUrl = `${SUPABASE_ORIGIN}/storage/v1/object/upload/sign/financial-app-documents/${signedUploadPath}`;
 
 const principles = { bankSource: "read_only", ocrEnabled: false, getHasSideEffects: false, suggestionsPersisted: false, associationsRequireConfirmation: true };
 const item = {
@@ -118,9 +120,17 @@ async function mockDocumentApi(
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     if (method === "POST" && body.action === "upload_sign") {
-      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: "uploads/97000000-0000-4000-8000-000000000097.pdf", token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return;
+      await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ bucket: "financial-app-documents", path: signedUploadPath, token: "token", signedUrl: signedUploadUrl, maxFileBytes: 15728640 }) }); return;
     }
     if (method === "POST" && body.action === "upload_finalize") {
+      detail = {
+        ...detail,
+        document: {
+          ...detail.document, id: uploadedDocumentId, originalFileName: body.originalFileName,
+          type: body.type, mimeType: body.mimeType, status: "imported",
+        },
+        associations: [],
+      };
       await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(detail) }); return;
     }
     await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: "unsupported" }) });
@@ -702,7 +712,8 @@ test("Documentos uploads through private signed storage and leaves OCR for expli
   await page.getByRole("button", { name: "Guardar original" }).click();
   await expect.poll(() => writes.some((write) => write.action === "upload_sign")).toBe(true);
   await expect.poll(() => writes.some((write) => write.action === "upload_finalize")).toBe(true);
-  await expect(page.getByRole("status").filter({ hasText: "sólo se ejecutará si lo solicitas" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "nueva-factura.pdf" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "sólo se ejecutará" })).toBeVisible();
 });
 
 test("protected preview preserves phase 9 document persistence contract across later phases", async ({ request }) => {
