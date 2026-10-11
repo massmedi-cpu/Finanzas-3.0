@@ -512,6 +512,59 @@ test("REC-OCR-035 · doble confirmación rápida no duplica revisiones persistid
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-053 · guardar revisión no anuncia lista sincronizada cuando la relectura falla", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let confirmedOnServer = false;
+  let listingFailures = 0;
+  await page.route("**/api/documents/ocr-review*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback();
+    const submitted = route.request().postDataJSON() as Record<string, unknown>;
+    confirmedOnServer = true;
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 2, revision: 1,
+        documentId: submitted.documentId, ocrRunId: submitted.ocrRunId,
+        rawEvidenceImmutable: true, bankSource: "read_only",
+        financialWrites: false, requiresHumanReview: true,
+        reviewedValues: {
+          type: submitted.type, documentDate: submitted.documentDate,
+          taxBaseCents: submitted.taxBaseCents, taxesCents: submitted.taxesCents,
+          totalCents: submitted.totalCents,
+        },
+      }),
+    });
+  });
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (confirmedOnServer && route.request().method() === "GET" && !url.searchParams.has("id")) {
+      listingFailures += 1;
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  const confirm = panel.getByRole("button", { name: "Confirmar revisión" });
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+
+  await expect(panel.getByText("Guardada como revisión 1.")).toBeVisible();
+  await expect(panel.getByRole("alert")).toContainText("La revisión se ha guardado, pero no se pudo actualizar el listado");
+  await expect(page.getByText("Revisión OCR confirmada y documento sincronizado.")).toHaveCount(0);
+  expect(confirmedOnServer).toBe(true);
+  expect(listingFailures).toBeGreaterThan(0);
+  expect(writes).toHaveLength(0);
+});
+
 test("REC-OCR-039 · revisión con identificador o importes cambiados no se considera guardada", async ({ page }) => {
   const corruptions = [
     "wrong-document", "wrong-ocr-run", "wrong-total", "source-write",
