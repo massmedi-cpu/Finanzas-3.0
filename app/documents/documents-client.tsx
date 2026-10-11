@@ -135,7 +135,12 @@ function validatedDocumentList(payload: unknown): DocumentList {
     || row.items.length > (row.total ?? 0)
     // An empty page is legitimate beyond the last item, not within it.
     || (row.items.length === 0 && (row.offset ?? 0) < (row.total ?? 0))
-    || (row.items.length > 0 && (row.offset ?? 0) + row.items.length > (row.total ?? 0))) {
+    || (row.items.length > 0 && (row.offset ?? 0) + row.items.length > (row.total ?? 0))
+    // If more documents exist, every non-final page must contain 'limit'
+    // entries. A silently truncated page would otherwise cause the next
+    // offset to skip records and make the archive appear complete.
+    || ((row.offset ?? 0) + row.items.length < (row.total ?? 0)
+      && row.items.length !== row.limit)) {
     throw new Error("document_list_invalid");
   }
   const ids = new Set<string>();
