@@ -1419,6 +1419,24 @@ test("REC-OCR-047 · el fallo de una página PDF indica incompletitud sin códig
 });
 
 
+
+test("REC-OCR-050 · la extracción digital fallida explica la recuperación visual en español", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes, [], ["pdf_page_native_text_failed:2"], "needs_review");
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByRole("button", { name: "Analizar documento" }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  const warnings = panel.getByText("Revisar antes de usar").locator("..");
+  await expect(warnings).toContainText("No se pudo extraer el texto digital de la página 2");
+  await expect(warnings).toContainText("OCR visual");
+  await expect(warnings).not.toContainText("pdf_page_native_text_failed");
+  await expect(panel.getByText("Revisión necesaria", { exact: true })).toBeVisible();
+  await expect(panel.getByText("Lectura completada sin avisos técnicos")).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+
 test("REC-DOC-070 · una firma de subida hacia un dominio ajeno bloquea el envío del original", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
