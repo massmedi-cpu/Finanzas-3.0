@@ -2459,7 +2459,7 @@ test("REC-DOC-099 · otra pestaña detecta la subida pendiente sin firmar un seg
   await second.close();
 });
 
-test("REC-DOC-104 · la pestaña abierta refleja la recuperación privada iniciada y resuelta en otra pestaña", async ({ page }) => {
+test("REC-DOC-105 · la pestaña abierta refleja la recuperación privada iniciada y resuelta en otra pestaña", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
   // The observer is already mounted before the owner starts its upload.
@@ -2494,6 +2494,74 @@ test("REC-DOC-104 · la pestaña abierta refleja la recuperación privada inicia
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
   await expect(page.getByLabel("Galería o archivo")).toBeEnabled();
   await owner.close();
+});
+
+test("REC-DOC-106 · dos pestañas simultáneas solo permiten UNA firma mientras no existe journal", async ({ page }) => {
+  const writesFirst: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writesFirst);
+  const second = await page.context().newPage();
+  const writesSecond: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(second, writesSecond);
+  let resolveSign: (() => void) | undefined;
+  const holdSignature = new Promise<void>(resolve => { resolveSign = resolve; });
+  let firstSignRequests = 0;
+  await page.route("**/api/documents", async route => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action === "upload_sign") {
+      firstSignRequests += 1;
+      await holdSignature;
+    }
+    return route.fallback();
+  });
+  await Promise.all([page.goto("/documents"), second.goto("/documents")]);
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "simultaneo-a.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 simultaneous A"),
+  });
+  await second.getByLabel("Galería o archivo").setInputFiles({
+    name: "simultaneo-b.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 simultaneous B"),
+  });
+  // The first tab has the lock and awaits upload_sign. No journal exists yet.
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect.poll(() => firstSignRequests).toBe(1);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+  await second.getByRole("button", { name: "Guardar original" }).click();
+  await expect(second.getByTestId("documents-alert")).toContainText("Otra pestaña está gestionando un documento");
+  expect(writesSecond.filter(write => write.action === "upload_sign")).toHaveLength(0);
+  expect(writesSecond.filter(write => write.action === "upload_finalize")).toHaveLength(0);
+  // The original owner proceeds without replacing its path. The second must
+  // react to the durable journal and cannot enqueue a different private PUT.
+  resolveSign?.();
+  await expect(page.getByRole("heading", { name: "simultaneo-a.pdf" })).toBeVisible();
+  expect(firstSignRequests).toBe(1);
+  expect(writesFirst.filter(write => write.action === "upload_finalize")).toHaveLength(1);
+  expect(writesSecond.filter(write => write.action === "upload_sign")).toHaveLength(0);
+  await second.close();
+});
+
+test("REC-DOC-107 · sin Web Locks no se firma ni sube un documento privado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let privatePuts = 0;
+  await page.route(signedUploadUrl, async route => {
+    privatePuts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "locks", { configurable: true, value: undefined });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "sin-lock-seguro.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 no Web Locks"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no dispone del bloqueo seguro entre pestañas");
+  expect(writes.filter(write => write.action === "upload_sign")).toHaveLength(0);
+  expect(writes.filter(write => write.action === "upload_finalize")).toHaveLength(0);
+  expect(privatePuts).toBe(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
 });
 
 test("REC-DOC-100 · si localStorage rechaza persistencia no se inicia un PUT privado", async ({ page }) => {
