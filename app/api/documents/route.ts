@@ -12,6 +12,7 @@ import {
   callPersistenceGateway,
   PersistenceGatewayError,
 } from "../../../src/infrastructure/persistence/vercel-supabase-gateway";
+import { parseDocumentQueryInteger as optionalQueryInteger } from "../../../src/application/document-query-integer";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -46,14 +47,6 @@ function nullableText(value: unknown, code: string, max: number) {
 function uuid(value: unknown, code: string) {
   if (typeof value !== "string" || !UUID.test(value)) throw new Error(code);
   return value;
-}
-
-function optionalQueryInteger(raw: string | null, code: string, fallback: number, min: number, max: number) {
-  if (raw === null) return fallback;
-  // Number("") and Number(" ") silently become zero. Document queries must
-  // use an unambiguous, canonical non-negative integer.
-  if (!/^(0|[1-9]\\d*)$/.test(raw)) throw new Error(code);
-  return integer(Number(raw), code, min, max);
 }
 
 function nullableDate(value: unknown, code: string) {
