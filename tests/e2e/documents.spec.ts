@@ -1969,7 +1969,7 @@ test("REC-DOC-086 · recargar tras finalize 503 conserva la ruta sin guardar tok
   });
   await page.getByRole("button", { name: "Guardar original" }).click();
   await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
-  const journal = await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey);
+  const journal = await page.evaluate(key => localStorage.getItem(key), pendingPrivateUploadKey);
   expect(journal).toBeTruthy();
   expect(JSON.parse(journal!)).toMatchObject({
     version: 1, action: "upload_finalize",
@@ -1984,7 +1984,7 @@ test("REC-DOC-086 · recargar tras finalize 503 conserva la ruta sin guardar tok
   await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
   await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByRole("heading", { name: "contrato-solo-en-memoria.pdf" })).toBeVisible();
-  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
   expect(signatures).toBe(1);
   expect(finalizes).toBe(2);
   expect(puts).toBe(1);
@@ -2016,13 +2016,13 @@ test("REC-DOC-087 · PUT incierto tras recarga consulta solo la ruta existente s
   await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
   await page.reload();
   await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
-  expect((await page.evaluate(key => JSON.parse(sessionStorage.getItem(key)!), pendingPrivateUploadKey)).storagePutConfirmed).toBe(false);
+  expect((await page.evaluate(key => JSON.parse(localStorage.getItem(key)!), pendingPrivateUploadKey)).storagePutConfirmed).toBe(false);
   await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByRole("heading", { name: "archivo-almacenado-sin-respuesta.pdf" })).toBeVisible();
   expect(signs).toBe(1);
   expect(puts).toBe(1);
   expect(finalize).toBe(1);
-  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
 });
 
 test("REC-DOC-088 · PUT no encontrado tras recarga mantiene bloqueo hasta constatar el mismo objeto", async ({ page }) => {
@@ -2059,7 +2059,7 @@ test("REC-DOC-088 · PUT no encontrado tras recarga mantiene bloqueo hasta const
   await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByTestId("documents-alert")).toContainText("aún no ha confirmado");
   await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
-  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).not.toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), pendingPrivateUploadKey)).not.toBeNull();
   missing = false;
   await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
   await expect(page.getByRole("heading", { name: "factura-pendiente-servidor.pdf" })).toBeVisible();
@@ -2117,7 +2117,7 @@ test("REC-DOC-091 · una subida confirmada elimina el journal antes de recargar"
   });
   await page.getByRole("button", { name: "Guardar original" }).click();
   await expect(page.getByRole("heading", { name: "original-validado.pdf" })).toBeVisible();
-  expect(await page.evaluate(key => sessionStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
+  expect(await page.evaluate(key => localStorage.getItem(key), pendingPrivateUploadKey)).toBeNull();
   await page.reload();
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
   expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(1);
@@ -2165,7 +2165,7 @@ test("REC-DOC-092 · un finalize con tamaño distinto no confirma el original ni
   expect(signs).toBe(1);
   expect(finalizes).toBe(1);
   const journal = await page.evaluate(() =>
-    sessionStorage.getItem("financial-app:documents:pending-private-upload:v1"));
+    localStorage.getItem("financial-app:documents:pending-private-upload:v1"));
   expect(JSON.parse(journal!)).toMatchObject({
     originalFileName: "factura-corrupta.pdf", sizeBytes: content.length,
   });
@@ -2564,6 +2564,40 @@ test("REC-DOC-103 · gateway antiguo sin SHA-256 se bloquea ANTES de enviar un s
   expect(signCalls).toBe(1);
   expect(puts).toBe(0);
   expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+});
+
+test("REC-DOC-104 · otra pestaña que confirmó el original no deja revivir un journal antiguo", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  let finalizesInFirst = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize"
+      && ++finalizesInFirst === 1) {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "confirmado-desde-otra-pestana.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 entre-pestanas"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  expect(await page.evaluate(key => sessionStorage.getItem(key), durableUploadKey)).toBeNull();
+  const second = await page.context().newPage();
+  await mockDocumentApi(second, []);
+  await second.goto("/documents");
+  await expect(second.getByTestId("document-upload-unverified")).toBeVisible();
+  await second.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(second.getByRole("heading", { name: "confirmado-desde-otra-pestana.pdf" })).toBeVisible();
+  expect(await second.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+  await second.close();
+  await page.reload();
+  await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeVisible();
   expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
 });
 
