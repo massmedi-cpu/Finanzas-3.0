@@ -151,9 +151,9 @@ for (const verifiedBank of [false, true]) {
     const monthStart = today.slice(0, 7) + "-01";
     const financial = {
       period: {
-        dateFrom: monthStart, dateTo: today, incomeCents: 15000,
-        expenseCents: 5000, operatingNetCents: 10000,
-        savingsCents: 10000, savingsRateBps: 6667,
+        dateFrom: monthStart, dateTo: today, incomeCents: 5000,
+        expenseCents: 15000, operatingNetCents: -10000,
+        savingsCents: -10000, savingsRateBps: null,
         quality: { suspectedDuplicateRows: 0, signMismatchRows: 0 },
       },
       balances: { asOfDate: today, activeBalanceCents: 0, accounts: [] },
@@ -169,6 +169,16 @@ for (const verifiedBank of [false, true]) {
     await page.route("**/api/**", route => route.fulfill({
       status: 503, json: { error: "synthetic_backend_isolated" },
     }));
+    await page.route("**/api/source/google/sync", route => route.fulfill({ json: {
+      run: {
+        id: "aa000000-0000-4000-8000-000000000003",
+        ...completeHomeSync,
+        rowsInserted: 5, rowsRevised: 0, rowsSkipped: 0,
+        rowsMissing: 0, rowsFailed: 0, duplicatesDetected: 0,
+        warningsCount: 0, errorCode: null, errorMessage: null,
+      },
+      cursors: [],
+    } }));
     await page.route("**/api/analysis/source-freshness", route => route.fulfill({
       json: {
         available: verifiedBank,
@@ -194,12 +204,18 @@ for (const verifiedBank of [false, true]) {
     });
     await page.goto("/");
     const card = page.locator('section[aria-label="Resumen financiero principal"] article').nth(1);
+    const bankHealth = page.getByRole("region", { name: "Estado de los datos bancarios" });
     if (verifiedBank) {
-      await expect(card.locator("strong")).toContainText("100,00");
+      await expect(card.locator("strong")).toContainText("-100,00");
+      await expect(bankHealth).toContainText("Datos bancarios actualizados");
+      await expect(page.getByText("El balance del mes está en negativo")).toBeVisible();
     } else {
       await expect(card).toContainText("Fuente bancaria no disponible");
       await expect(card.locator("strong")).toHaveText("—");
-      await expect(card).not.toContainText("100,00");
+      await expect(card).not.toContainText("-100,00");
+      await expect(bankHealth).toContainText("Fuente bancaria no disponible");
+      await expect(bankHealth).not.toContainText("Datos bancarios actualizados");
+      await expect(page.getByText("El balance del mes está en negativo")).toHaveCount(0);
     }
   });
 }
