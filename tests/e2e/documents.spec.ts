@@ -1337,3 +1337,55 @@ test("REC-OCR-044 · lectura pendiente de revisión no muestra una confirmación
   await expect(panel.getByText(/La lectura requiere revisión/)).toContainText(/original/);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-068 · página documental no final recortada no permite saltar documentos", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3, items: [{ ...item }], total: 53,
+          limit: 50, offset: 0, principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "Paginación documental" })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-069 · última página parcial válida muestra el total exacto", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 3, items: [{ ...item }], total: 51,
+          limit: 50, offset: 50, principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents?offset=50");
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toBeVisible();
+  const pagination = page.getByRole("navigation", { name: "Paginación documental" });
+  await expect(pagination).toContainText("Mostrando 51–51 de 51");
+  await expect(pagination.getByRole("button", { name: "Página siguiente" })).toBeDisabled();
+  await expect(pagination.getByRole("button", { name: "Página anterior" })).toBeEnabled();
+  expect(writes).toEqual([]);
+});
