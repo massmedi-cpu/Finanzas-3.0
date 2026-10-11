@@ -102,20 +102,30 @@ const WARNING_LABELS: Record<string, string> = {
 };
 
 function warningLabel(warning: string) {
-  if (WARNING_LABELS[warning]) return WARNING_LABELS[warning];
-  if (warning.startsWith("pdf_page_requires_visual_ocr:")) {
-    const page = warning.split(":")[1];
-    return `La página ${page} parece escaneada y necesita OCR visual.`;
+  if (Object.prototype.hasOwnProperty.call(WARNING_LABELS, warning)) return WARNING_LABELS[warning];
+  // Native/PDF.js errors and Tesseract warnings use different page suffix
+  // conventions. Never surface the raw machine code as a user-facing sentence.
+  const explicitPage = /^(pdf_page_requires_visual_ocr|pdf_page_sparse_native_recovered|pdf_page_sparse_native_unverified|pdf_page_visual_ocr_empty):([1-9]\\d*)$/.exec(warning);
+  if (explicitPage) {
+    const page = Number(explicitPage[2]);
+    if (page >= 1 && page <= 16) {
+      if (explicitPage[1] === "pdf_page_requires_visual_ocr") return `La página ${page} parece escaneada y necesita lectura visual. Revisa el resultado.`;
+      if (explicitPage[1] === "pdf_page_sparse_native_recovered") return `La página ${page} tenía texto digital incompleto; se ha recuperado contenido mediante OCR visual. Contrástalo con el original.`;
+      if (explicitPage[1] === "pdf_page_sparse_native_unverified") return `La página ${page} tenía texto digital parcial y el OCR visual no lo completó. No des por íntegra la factura.`;
+      return `La página ${page} no ha proporcionado texto legible con OCR visual. Comprueba el original, el contraste y el encuadre.`;
+    }
   }
-  if (warning.startsWith("pdf_page_sparse_native_recovered:")) {
-    const page = warning.split(":")[1];
-    return `La página ${page} contenía muy poco texto digital; se recuperó más información mediante OCR visual. Contrasta el resultado con el original.`;
+  const nestedPage = /^pdf_page_([1-9]\\d*):([a-z][a-z0-9_]*)$/.exec(warning);
+  if (nestedPage) {
+    const page = Number(nestedPage[1]);
+    if (page >= 1 && page <= 16) {
+      const reason = Object.prototype.hasOwnProperty.call(WARNING_LABELS, nestedPage[2])
+        ? WARNING_LABELS[nestedPage[2]]
+        : "La lectura de esta página necesita comprobación manual con el original.";
+      return `Página ${page}: ${reason}`;
+    }
   }
-  if (warning.startsWith("pdf_page_sparse_native_unverified:")) {
-    const page = warning.split(":")[1];
-    return `La página ${page} solo tenía texto digital parcial y la lectura visual no lo completó. No se debe dar por íntegra la factura sin revisar el original.`;
-  }
-  return warning.replaceAll("_", " ");
+  return "El lector ha comunicado un aviso no reconocido. Comprueba los datos con el documento original antes de confirmarlos.";
 }
 
 function confidenceLabel(value: number | null) {
