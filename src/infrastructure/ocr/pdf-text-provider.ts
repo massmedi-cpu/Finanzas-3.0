@@ -1,5 +1,6 @@
 import type { DocumentOcrProvider } from "../../application/document-ocr-service";
-import type { OcrSource, OcrWord } from "../../domain/document-ocr";
+import type { OcrWord } from "../../domain/document-ocr";
+import { resolvePdfOcrSource } from "./pdf-source-provenance";
 import { TesseractImageOcrProvider } from "./tesseract-image-provider";
 import { pdfNativeTextNeedsVisualOcr } from "./pdf-native-coverage";
 import { pdfRasterScale } from "./pdf-render-geometry";
@@ -213,9 +214,7 @@ export class PdfTextOcrProvider implements DocumentOcrProvider {
       // A fully scanned PDF whose visual OCR produced no words is NOT a PDF
       // with usable native text. Preserve that distinction when displaying
       // diagnostics; the page warnings still require human review.
-      let source: OcrSource = "pdf_text";
-      if (visualOcrPageCount && nativePageCount) source = "hybrid";
-      else if (visualOcrPageCount || (visualOcrAttempted > 0 && nativePageCount === 0)) source = "pdf_ocr";
+      const source = resolvePdfOcrSource({ nativePageCount, visualOcrPageCount, visualOcrAttempted });
 
       return {
         source,
