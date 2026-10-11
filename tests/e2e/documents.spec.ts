@@ -920,3 +920,25 @@ test("REC-DOC-050 · Drive rechaza un éxito incompleto y recupera sin alterar d
   await expect(banner).toContainText(/Carpeta comprobada. No hay documentos nuevos/i);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-051 · Preview informa que Drive es solo lectura y no ofrece reintentos de escritura", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let attempts = 0;
+  await page.route("**/api/documents/drive-sync", async (route) => {
+    attempts += 1;
+    await route.fulfill({
+      status: 409, contentType: "application/json",
+      body: JSON.stringify({ error: "preview_drive_sync_read_only", code: "preview_drive_sync_read_only" }),
+    });
+  });
+  await page.goto("/documents");
+  const banner = page.getByTestId("drive-auto-sync");
+  await expect(banner).toContainText(/Vista previa de solo lectura/i);
+  await expect(banner).toContainText(/proteger producción/i);
+  await expect(banner.getByRole("button", { name: "Solo en producción" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /factura-demo\.pdf/i })).toBeVisible();
+  expect(attempts).toBe(1);
+  expect(writes).toEqual([]);
+});
