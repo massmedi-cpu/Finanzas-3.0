@@ -360,3 +360,47 @@ test("REC-OCR-018 · domiciliada is a payment method only with credible source c
     }
   }
 });
+
+test("REC-OCR-105 · FECHA/HORA de ticket confirma fecha y hora con evidencia", () => {
+  const observed = interpretDocumentOcrFinancially(result([
+    line("datetime", "FECHA/HORA: 11/10/2026 19:35", 0.97, 0.12),
+    line("total", "TOTAL 7,90 €", 0.96, 0.85),
+  ]));
+  expect(observed.date.value).toBe("2026-10-11");
+  expect(observed.date.trust).toBe("reliable");
+  expect(observed.time.value).toBe("19:35");
+  expect(observed.time.trust).toBe("reliable");
+  expect(observed.date.evidence[0]?.lineId).toBe("datetime");
+  expect(observed.time.evidence[0]?.lineId).toBe("datetime");
+});
+
+test("REC-OCR-106 · FECHA Y HORA acepta el formato de puntos sin alterar la fecha", () => {
+  const observed = interpretDocumentOcrFinancially(result([
+    line("datetime", "Fecha y hora: 11.10.2026 08:05", 0.93, 0.12),
+  ]));
+  expect(observed.date.value).toBe("2026-10-11");
+  expect(observed.date.trust).toBe("reliable");
+  expect(observed.time.value).toBe("08:05");
+  expect(observed.time.trust).toBe("reliable");
+});
+
+test("REC-OCR-107 · vencimiento en la misma línea no oculta una emisión explícita", () => {
+  const observed = interpretDocumentOcrFinancially(result([
+    line("datetime", "Fecha de emisión: 11/10/2026 15:20 · Vencimiento: 24/10/2026", 0.96, 0.12),
+  ]));
+  expect(observed.date.value).toBe("2026-10-11");
+  expect(observed.date.trust).toBe("reliable");
+  expect(observed.time.value).toBe("15:20");
+  expect(observed.time.trust).toBe("reliable");
+});
+
+test("REC-OCR-108 · vencimiento y horarios no inventan compra ni hora de emisión", () => {
+  const observed = interpretDocumentOcrFinancially(result([
+    line("expiry", "Fecha de vencimiento: 24/10/2026 16:00", 0.99, 0.12),
+    line("hours", "Horario apertura: 09:00 a 22:00", 0.99, 0.17),
+  ]));
+  expect(observed.date.value).toBeNull();
+  expect(observed.date.trust).toBe("not_detected");
+  expect(observed.time.value).toBeNull();
+  expect(observed.time.trust).toBe("not_detected");
+});
