@@ -371,7 +371,7 @@ test("REC-OCR-052 · un nuevo intento OCR fallido no muestra el resultado anteri
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
   let attempts = 0;
-  await page.route(/\\/api\\/documents\\/ocr(?:\\?.*)?$/, async (route) => {
+  await page.route(/\/api\/documents\/ocr(?:\?.*)?$/, async (route) => {
     attempts += 1;
     if (attempts === 2) {
       await route.fulfill({
