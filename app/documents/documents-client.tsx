@@ -22,6 +22,11 @@ type DocumentType = "ticket" | "invoice" | "other";
 type DocumentStatus = "imported" | "pending_review" | "confirmed" | "archived";
 type DocumentScope = "ordinary" | "tests" | "all";
 type PendingFinalize = { action: "upload_finalize"; type: DocumentType; originalFileName: string; mimeType: string; path: string };
+type PendingPrivateUpload = PendingFinalize & {
+  signedUrl: string;
+  file: File;
+  storagePutConfirmed: boolean;
+};
 type StorageProvider = "supabase" | "google_drive";
 type MetadataEditor = {
   type: DocumentType;
@@ -525,7 +530,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const uploadInFlight = useRef(false);
   // A failed response does not prove finalize failed. Preserve the original
   // signed object path; repeating finalize is idempotent on (provider, key).
-  const unverifiedFinalizeRef = useRef<PendingFinalize | null>(null);
+  const unverifiedFinalizeRef = useRef<PendingPrivateUpload | null>(null);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
   const selectedIdRef = useRef<string | null>(null);
@@ -823,10 +828,31 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setError(null);
     setNotice(null);
     try {
+      if (!pending.storagePutConfirmed) {
+        // A broken PUT response may have committed the bytes or not. Reuse
+        // only the already-validated, same-object signature and the same File.
+        // A conflict (object already present) is inconclusive, so in both
+        // cases the server's finalize readback must establish the truth.
+        try {
+          const form = new FormData();
+          form.append("cacheControl", "3600");
+          form.append("", pending.file);
+          const put = await fetch(pending.signedUrl, {
+            method: "PUT", headers: { "x-upsert": "false" }, body: form,
+          });
+          if (put.ok) pending.storagePutConfirmed = true;
+        } catch {
+          // Do not infer that the private object is missing from a network error.
+        }
+      }
       const result = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(pending),
+        body: JSON.stringify({
+          action: pending.action, type: pending.type,
+          originalFileName: pending.originalFileName,
+          mimeType: pending.mimeType, path: pending.path,
+        }),
       }));
       const confirmed = validatedFinalizedUpload(result, pending);
       unverifiedFinalizeRef.current = null;
@@ -845,15 +871,15 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
       await loadList("/api/documents?limit=50&offset=0&scope=ordinary");
       if (metadataDirtyRef.current) {
         setPendingExit({ type: "document", id: confirmed.document.id });
-        setNotice("Se ha confirmado el registro del original anterior sin subirlo otra vez. Resuelve los cambios pendientes antes de abrir su ficha.");
+        setNotice("El registro se ha confirmado sobre la misma ruta privada, sin crear una copia nueva. Resuelve los cambios pendientes antes de abrir su ficha.");
       } else {
         selectedIdRef.current = confirmed.document.id;
         setSelectedId(confirmed.document.id);
-        setNotice("Registro del original confirmado sin repetir la subida privada. El OCR sólo se ejecutará si lo solicitas.");
+        setNotice("Registro del original confirmado en la misma ruta privada, sin crear una copia nueva. El OCR sólo se ejecutará si lo solicitas.");
       }
     } catch {
       setUploadUnverified(true);
-      setError("No se ha podido confirmar el registro del mismo original. Sigue bloqueado para evitar duplicados; reintenta la comprobación sin volver a subir el archivo.");
+      setError("No se ha podido confirmar la misma ruta privada. Sigue bloqueada para evitar copias duplicadas; puedes reintentar su recuperación sin crear otro archivo.");
     } finally {
       uploadInFlight.current = false;
       setBusy(null);
@@ -864,7 +890,7 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     event.preventDefault();
     if (busy || uploadInFlight.current) return;
     if (uploadUnverified) {
-      setError("La subida anterior podría haberse registrado. Comprueba la lista antes de permitir otro envío.");
+      setError("La subida anterior no está confirmada. Recupera primero esa misma ruta privada antes de intentar otra.");
       return;
     }
     if (!file) {
@@ -881,8 +907,8 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
     setNotice(null);
     // Once the original reaches private Storage, a failed finalize response
     // cannot prove whether the document record was created on the server.
-    let finalizeAttempted = false;
-    let attemptedFinalize: PendingFinalize | null = null;
+    let privatePutAttempted = false;
+    let attemptedPrivateUpload: PendingPrivateUpload | null = null;
     try {
       const sign = await readJson(await fetch("/api/documents", {
         method: "POST",
@@ -910,20 +936,30 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         || uploadUrl.username || uploadUrl.password || uploadUrl.hash) {
         throw new Error("document_upload_unsafe_url");
       }
+      attemptedPrivateUpload = {
+        action: "upload_finalize", type: uploadType, originalFileName: file.name,
+        mimeType: file.type, path: sign.path, signedUrl: uploadUrl.href,
+        file, storagePutConfirmed: false,
+      };
       const body = new FormData();
       body.append("cacheControl", "3600");
       body.append("", file);
+      // Set BEFORE fetch: a network interruption does not establish that the
+      // object was not created. Subsequent recovery always uses this path.
+      privatePutAttempted = true;
       const upload = await fetch(uploadUrl.href, { method: "PUT", headers: { "x-upsert": "false" }, body });
-      if (!upload.ok) throw new Error("document_upload_not_found");
-
-      attemptedFinalize = { action: "upload_finalize", type: uploadType, originalFileName: file.name, mimeType: file.type, path: sign.path };
-      finalizeAttempted = true;
+      if (!upload.ok) throw new Error("document_upload_unverified");
+      attemptedPrivateUpload.storagePutConfirmed = true;
       const finalized = await readJson(await fetch("/api/documents", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify(attemptedFinalize),
+        body: JSON.stringify({
+          action: attemptedPrivateUpload.action, type: attemptedPrivateUpload.type,
+          originalFileName: attemptedPrivateUpload.originalFileName,
+          mimeType: attemptedPrivateUpload.mimeType, path: attemptedPrivateUpload.path,
+        }),
       }));
-      const id = validatedFinalizedUpload(finalized, attemptedFinalize).document.id;
+      const id = validatedFinalizedUpload(finalized, attemptedPrivateUpload).document.id;
       unverifiedFinalizeRef.current = null;
       setUploadUnverified(false);
       setFile(null);
@@ -953,10 +989,10 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
         setNotice("Original guardado de forma privada. Abriendo su ficha. El OCR sólo se ejecutará si lo solicitas desde su panel de revisión.");
       }
     } catch (caught) {
-      if (finalizeAttempted && attemptedFinalize) {
-        unverifiedFinalizeRef.current = attemptedFinalize;
+      if (privatePutAttempted && attemptedPrivateUpload) {
+        unverifiedFinalizeRef.current = attemptedPrivateUpload;
         setUploadUnverified(true);
-        setError("El original llegó al almacenamiento privado, pero no se ha confirmado su registro. Reintenta el registro del mismo original sin subirlo de nuevo.");
+        setError("No se ha podido confirmar si el archivo llegó o quedó registrado. Reintenta la misma ruta privada, sin crear un envío nuevo.");
       } else {
         setError(friendlyError(caught));
       }
@@ -1295,20 +1331,20 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
               </select>
             </label>
             <label className={styles.fileField}>Cámara
-              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy === "upload"} />
+              <input id="document-camera" type="file" accept="image/*" capture="environment" onChange={onFile} disabled={busy !== null || uploadUnverified} />
               <span>Hacer foto con la cámara trasera</span>
             </label>
             <label className={styles.fileField}>Galería o archivo
-              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy === "upload"} />
+              <input id="document-file" type="file" accept={ACCEPT} onChange={onFile} disabled={busy !== null || uploadUnverified} />
               <span>{file ? `${file.name} · ${formatBytes(file.size)}` : "PDF, JPG, PNG o WebP"}</span>
             </label>
             <button className={styles.primaryButton} type="submit" disabled={!file || busy === "upload" || uploadUnverified}>{busy === "upload" ? "Guardando…" : "Guardar original"}</button>
             {uploadUnverified ? (
               <div role="status" data-testid="document-upload-unverified">
-                <p>Subida sin confirmar. No vuelvas a enviarla: puedes completar o comprobar su registro usando el mismo original privado, sin crear otra subida.</p>
+                <p>Subida sin confirmar. Recupera el mismo archivo y su ruta privada; no selecciones ni envíes una copia nueva.</p>
                 <button className={styles.secondaryButton} type="button" disabled={busy !== null}
                   onClick={() => void verifyUncertainUpload()}>
-                  {busy === "upload-verify" ? "Verificando registro…" : "Reintentar registro del mismo original"}
+                  {busy === "upload-verify" ? "Recuperando subida…" : "Recuperar el mismo original"}
                 </button>
               </div>
             ) : null}
