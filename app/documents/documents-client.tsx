@@ -322,6 +322,7 @@ function friendlyError(error: unknown) {
     authentication_required: "Tu sesión necesita renovarse. Inicia sesión y pulsa Reintentar lista; no se ha modificado ningún documento.",
     authentication_unavailable: "El acceso seguro no está disponible temporalmente. Conservamos los datos sin cambios; reintenta más tarde.",
     oidc_unavailable: "No se ha podido verificar la identidad segura del servidor. Documentos no se ha modificado; reintenta más tarde.",
+    gateway_identity_unavailable: "El servidor no ha podido acreditar su identidad ante el archivo financiero. No es un problema de tu contraseña; no se han alterado documentos. Reintenta más tarde.",
     persistence_failed: "No ha sido posible consultar el archivo documental por un problema de persistencia. No se han borrado documentos; pulsa Reintentar lista.",
     document_service_unavailable: "El servicio documental no responde en este momento. No se ha modificado ningún documento; vuelve a intentarlo.",
     document_rate_limited: "Se han alcanzado demasiadas consultas documentales. Espera un momento antes de pulsar Reintentar lista.",
