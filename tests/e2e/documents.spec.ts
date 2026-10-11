@@ -129,7 +129,7 @@ async function mockDocumentApi(
         ...detail,
         document: {
           ...detail.document, id: uploadedDocumentId, originalFileName: body.originalFileName,
-          type: body.type, mimeType: body.mimeType, status: "imported",
+          type: body.type, mimeType: body.mimeType, storageKey: body.path, status: "imported",
         },
         associations: [],
       };
@@ -1689,30 +1689,37 @@ test("REC-DOC-071 · dos envíos rápidos crean una sola subida privada", async 
   expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
 });
 
-test("REC-DOC-074 · finalize incierto impide una segunda subida privada automática", async ({ page }) => {
+test("REC-DOC-080 · finalize incierto reintenta la MISMA ruta firmada sin crear otra subida", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
   let signCalls = 0;
   let finalizeCalls = 0;
-  await page.route("**/api/documents", async (route) => {
+  let finalizedPath = "";
+  let privateUploads = 0;
+  page.on("request", request => {
+    if (request.url().includes("/storage/v1/object/upload/sign/") && request.method() === "PUT") {
+      privateUploads += 1;
+    }
+  });
+  await page.route("**/api/documents", async route => {
     if (route.request().method() !== "POST") return route.fallback();
-    const action = route.request().postDataJSON()?.action;
-    if (action === "upload_sign") signCalls += 1;
-    if (action === "upload_finalize") {
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signCalls += 1;
+    if (body.action === "upload_finalize") {
       finalizeCalls += 1;
       if (finalizeCalls === 1) {
-        // The private PUT already finished. The 503 is not proof that
-        // persistence did not commit the document.
+        finalizedPath = body.path;
+        // The first result is uncertain: do not infer absence of a DB row.
         await route.fulfill({
           status: 503, contentType: "application/json",
           body: JSON.stringify({ error: "persistence_failed" }),
         });
         return;
       }
+      expect(body.path).toBe(finalizedPath);
     }
     return route.fallback();
   });
-
   await page.goto("/documents");
   await page.getByLabel("Galería o archivo").setInputFiles({
     name: "pago-sin-confirmar.pdf", mimeType: "application/pdf",
@@ -1720,41 +1727,33 @@ test("REC-DOC-074 · finalize incierto impide una segunda subida privada automá
   });
   const submit = page.getByRole("button", { name: "Guardar original" });
   await submit.click();
-  await expect(page.getByTestId("documents-alert")).toContainText("otro envío podría duplicarlo");
   await expect(page.getByTestId("document-upload-unverified")).toContainText("Subida sin confirmar");
   await expect(submit).toBeDisabled();
   expect(signCalls).toBe(1);
   expect(finalizeCalls).toBe(1);
-  await page.getByRole("button", { name: "Comprobar lista antes de permitir otro envío" }).click();
-  await expect(submit).toBeEnabled();
-  await submit.click();
+  expect(privateUploads).toBe(1);
+  await page.getByRole("button", { name: "Reintentar registro del mismo original" }).click();
   await expect(page.getByRole("heading", { name: "pago-sin-confirmar.pdf" })).toBeVisible();
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
-  expect(signCalls).toBe(2);
+  expect(signCalls).toBe(1);
   expect(finalizeCalls).toBe(2);
-  expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+  expect(privateUploads).toBe(1);
+  expect(writes.filter(row => row.action === "upload_finalize")).toHaveLength(1);
 });
 
-test("REC-DOC-079 · no desbloquea una subida incierta si no puede releer el archivo", async ({ page }) => {
+test("REC-DOC-081 · un error repetido al reintentar registro mantiene el bloqueo seguro", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
-  let failedList = false;
-  let signCalls = 0;
   let finalizeCalls = 0;
+  let signCalls = 0;
+  let failFinalize = true;
   await page.route("**/api/documents", async route => {
     if (route.request().method() !== "POST") return route.fallback();
-    const action = route.request().postDataJSON()?.action;
-    if (action === "upload_sign") signCalls += 1;
-    if (action !== "upload_finalize") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signCalls += 1;
+    if (body.action !== "upload_finalize") return route.fallback();
     finalizeCalls += 1;
-    await route.fulfill({
-      status: 503, contentType: "application/json",
-      body: JSON.stringify({ error: "persistence_failed" }),
-    });
-  });
-  await page.route("**/api/documents?*", async route => {
-    if (failedList && route.request().method() === "GET"
-      && !new URL(route.request().url()).searchParams.has("id")) {
+    if (failFinalize) {
       await route.fulfill({
         status: 503, contentType: "application/json",
         body: JSON.stringify({ error: "persistence_failed" }),
@@ -1763,7 +1762,6 @@ test("REC-DOC-079 · no desbloquea una subida incierta si no puede releer el arc
     }
     return route.fallback();
   });
-
   await page.goto("/documents");
   await page.getByLabel("Galería o archivo").setInputFiles({
     name: "original-sin-confirmar.pdf", mimeType: "application/pdf",
@@ -1771,22 +1769,60 @@ test("REC-DOC-079 · no desbloquea una subida incierta si no puede releer el arc
   });
   const submit = page.getByRole("button", { name: "Guardar original" });
   await submit.click();
-  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  const retry = page.getByRole("button", { name: "Reintentar registro del mismo original" });
+  await expect(retry).toBeVisible();
   await expect(submit).toBeDisabled();
-  failedList = true;
-  const check = page.getByRole("button", { name: "Comprobar lista antes de permitir otro envío" });
-  await check.click();
-  await expect(page.getByTestId("documents-alert"))
-    .toContainText("El nuevo envío sigue bloqueado para evitar duplicados");
+  await retry.click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueado para evitar duplicados");
   await expect(submit).toBeDisabled();
   expect(signCalls).toBe(1);
-  expect(finalizeCalls).toBe(1);
-  failedList = false;
-  await check.click();
+  expect(finalizeCalls).toBe(2);
+  failFinalize = false;
+  await retry.click();
   await expect(page.getByTestId("document-upload-unverified")).toHaveCount(0);
-  await expect(submit).toBeEnabled();
+  await expect(page.getByRole("heading", { name: "original-sin-confirmar.pdf" })).toBeVisible();
   expect(signCalls).toBe(1);
-  expect(finalizeCalls).toBe(1);
+  expect(finalizeCalls).toBe(3);
+  expect(writes.filter(row => row.action === "upload_finalize")).toHaveLength(1);
+});
+
+test("REC-DOC-082 · un finalize de otro objeto no elimina el bloqueo por un HTTP 200", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let finalizeCalls = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST"
+      || route.request().postDataJSON()?.action !== "upload_finalize") {
+      return route.fallback();
+    }
+    finalizeCalls += 1;
+    if (finalizeCalls === 1) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "persistence_failed" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1, principles,
+        document: { ...item, id: uploadedDocumentId, storageKey: "uploads/other-workspace/another.pdf" },
+        associations: [],
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "original-privado.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 otro objeto"),
+  });
+  const submit = page.getByRole("button", { name: "Guardar original" });
+  await submit.click();
+  await page.getByRole("button", { name: "Reintentar registro del mismo original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("Sigue bloqueado para evitar duplicados");
+  await expect(submit).toBeDisabled();
+  expect(finalizeCalls).toBe(2);
   expect(writes.filter(row => row.action === "upload_finalize")).toHaveLength(0);
 });
 
