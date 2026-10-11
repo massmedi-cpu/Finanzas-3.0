@@ -766,6 +766,11 @@ test("AUD-E2E-DOC-001 · un error de guardado mantiene el borrador y la elecció
   const unsaved = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
   await unsaved.getByRole("button", { name: "Guardar y continuar" }).click();
   await expect(unsaved).toBeVisible();
+  // A 503 after a PATCH cannot establish whether the server applied it.
+  // Never reassure users that no document was changed or invite a blind retry.
+  const uncertainty = page.getByTestId("documents-alert");
+  await expect(uncertainty).toContainText("comprueba el detalle antes de repetir");
+  await expect(uncertainty).not.toContainText("No se ha modificado ningún documento");
   await expect(page.getByTestId("document-metadata-dirty")).toBeVisible();
   await unsaved.getByRole("button", { name: "Seguir editando" }).click();
   await expect(page.getByLabel("Emisor")).toHaveValue("BORRADOR AUDITORÍA NO GUARDAR");
