@@ -421,7 +421,9 @@ async function documentBytes(detail: DocumentDetail) {
 async function executeOcr(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
-  if (!id || !UUID.test(id)) throw new OcrApiError("invalid_ocr_document_id", 400);
+  if (!id || !UUID.test(id) || searchParams.getAll("id").length !== 1) {
+    throw new OcrApiError("invalid_ocr_document_id", 400);
+  }
   if ([...searchParams.keys()].some((key) => key !== "id")) throw new OcrApiError("invalid_ocr_query", 400);
 
   const detail = await callPersistenceGateway<DocumentDetail>("document.detail", { id });
