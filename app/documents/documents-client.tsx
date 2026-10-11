@@ -643,13 +643,32 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
   const unverifiedFinalizeRef = useRef<PendingPrivateUpload | null>(null);
 
   useEffect(() => {
-    const recovery = readPrivateUploadJournal();
-    if (!recovery.present) return;
-    unverifiedFinalizeRef.current = recovery.pending;
-    setUploadUnverified(true);
-    setNotice(recovery.pending
-      ? "Hay un envío privado sin confirmar en este navegador. Puedes recuperar la misma ruta aunque hayas cerrado la pestaña."
-      : "La referencia de recuperación no es legible. Se bloquean nuevos envíos para proteger tus documentos.");
+    const syncExternalPending = () => {
+      // A storage event is delivered to OTHER tabs, not to the initiating tab.
+      // Never replace the active tab's in-memory File or signed upload token.
+      if (uploadInFlight.current) return;
+      const recovery = readPrivateUploadJournal();
+      unverifiedFinalizeRef.current = recovery.pending;
+      setUploadUnverified(recovery.present);
+      if (recovery.present) {
+        setNotice(recovery.pending
+          ? "Hay un envío privado sin confirmar en este navegador. Puedes recuperar la misma ruta aunque hayas cerrado la pestaña."
+          : "La referencia de recuperación no es legible. Se bloquean nuevos envíos para proteger tus documentos.");
+      } else {
+        // Another tab verified the original; do not leave this one blocked
+        // against a stale recovery reference.
+        setNotice((previous) => previous?.startsWith("Hay un envío privado sin confirmar")
+          || previous?.startsWith("La referencia de recuperación no es legible") ? null : previous);
+      }
+    };
+    syncExternalPending();
+    const handleStorage = (event: StorageEvent) => {
+      if (event.storageArea === localStorage && event.key === PENDING_PRIVATE_UPLOAD_KEY) {
+        syncExternalPending();
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+    return () => window.removeEventListener("storage", handleStorage);
   }, []);
   const associationMutationInFlight = useRef(false);
   const manualSearchSequence = useRef(0);
