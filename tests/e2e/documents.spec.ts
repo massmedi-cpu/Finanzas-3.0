@@ -869,3 +869,54 @@ test("REC-DOC-048 · una lista que niega origen bancario de solo lectura no se m
   await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-049 · Drive con fallos o pendientes nunca comunica que está al día", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents/drive-sync", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1, source: "google_drive", mode: "automatic_incremental_read_only",
+        scanned: 5, detectedChanges: 3, unchanged: 2,
+        imported: 1, failed: 1, pending: 1, skippedUnsupported: 0, skippedInvalid: 0,
+        truncated: true, completedAt: "2026-10-11T07:00:00.000Z",
+        principles: { bankSource: "read_only", driveSource: "read_only", duplicateSafe: true, nonBlocking: true },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  const banner = page.getByTestId("drive-auto-sync");
+  await expect(banner).toContainText(/documento no pudo validarse/i);
+  await expect(banner).toContainText(/cambio pendiente/i);
+  await expect(banner).toContainText(/exploración de Drive está incompleta/i);
+  await expect(banner).not.toContainText("Drive al día");
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-050 · Drive rechaza un éxito incompleto y recupera sin alterar documentos", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let malformed = true;
+  await page.route("**/api/documents/drive-sync", async (route) => {
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify(malformed ? { imported: 0 } : {
+        contractVersion: 1, source: "google_drive", mode: "automatic_incremental_read_only",
+        scanned: 2, detectedChanges: 0, unchanged: 2,
+        imported: 0, failed: 0, pending: 0, skippedUnsupported: 0, skippedInvalid: 0,
+        truncated: false, completedAt: "2026-10-11T07:00:00.000Z",
+        principles: { bankSource: "read_only", driveSource: "read_only", duplicateSafe: true, nonBlocking: true },
+      }),
+    });
+  });
+  await page.goto("/documents");
+  const banner = page.getByTestId("drive-auto-sync");
+  await expect(banner).toContainText(/No se ha podido verificar Drive/i);
+  await expect(banner).not.toContainText(/funcionando con normalidad/i);
+  malformed = false;
+  await banner.getByRole("button", { name: "Comprobar ahora" }).click();
+  await expect(banner).toContainText(/Carpeta comprobada. No hay documentos nuevos/i);
+  expect(writes).toEqual([]);
+});
