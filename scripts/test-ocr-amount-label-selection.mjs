@@ -534,29 +534,29 @@ try {
 // product quantities are reconstructed only inside the proven product table.
 const receiptWithTaxTable = interpret([
   "Descripción P. Unit Importe",
-  "6 PRODUCTO ALIMENTARIO 0,80 4,80",
-  "2 ARTICULO HOGAR 6,00 12,00",
-  "TOTAL (€) 29,18",
-  "TARJETA BANCARIA 29,18",
+  "3 PAN ARTESANO 2,00 6,00",
+  "2 HIGIENE HOGAR 4,50 9,00",
+  "TOTAL (€) 15,00",
+  "TARJETA BANCARIA 15,00",
   "IVA BASE IMPONIBLE (€) CUOTA (€)",
-  "10% 13,81 1,38",
-  "21% 11,56 2,43",
-  "TOTAL 25,37 3,81",
-  "IMPORTE COBRADO 29,18",
+  "10% 5,00 0,50",
+  "21% 7,85 1,65",
+  "TOTAL 12,85 2,15",
+  "IMPORTE COBRADO 15,00",
 ]);
 try {
-  assert.equal(receiptWithTaxTable.totalCents.value, 2918,
+  assert.equal(receiptWithTaxTable.totalCents.value, 1500,
     "receipt purchase total must not become the tax base subtotal");
   assert.equal(receiptWithTaxTable.totalCents.trust, "reliable",
     "tax table grand totals are not contradictory final payments");
   assert.deepEqual(receiptWithTaxTable.lines.map((row) => [row.description, row.quantity, row.unitPriceCents, row.totalCents]), [
-    ["PRODUCTO ALIMENTARIO", 6, 80, 480],
-    ["ARTICULO HOGAR", 2, 600, 1200],
+    ["PAN ARTESANO", 3, 200, 600],
+    ["HIGIENE HOGAR", 2, 450, 900],
   ], "only bounded purchase rows count as products, never VAT/payment rows");
   assert.equal(receiptWithTaxTable.taxLines.filter((row) =>
     row.baseCents !== null && row.taxCents !== null).length, 2,
-    "real VAT table rows remain available for manual review");
-  assert.deepEqual([receiptWithTaxTable.taxBaseCents.value, receiptWithTaxTable.taxesCents.value], [2537, 381],
+    "VAT table rows remain available for manual review");
+  assert.deepEqual([receiptWithTaxTable.taxBaseCents.value, receiptWithTaxTable.taxesCents.value], [1285, 215],
     "only arithmetically reconciled tax rows can provide an aggregate");
   assert.equal(receiptWithTaxTable.taxBaseCents.trust, "doubtful",
     "tax base derived by addition requires manual review");
@@ -564,14 +564,14 @@ try {
     "tax quota derived by addition requires manual review");
   const inconsistentProduct = interpret([
     "Descripción P. Unit Importe",
-    "2 ARTICULO HOGAR 6,00 13,00",
-    "TOTAL 13,00",
+    "2 HIGIENE HOGAR 4,50 10,00",
+    "TOTAL 10,00",
   ]).lines[0];
   assert.ok(inconsistentProduct);
   assert.equal(inconsistentProduct.trust, "doubtful",
     "price x quantity conflicting with line total must not be auto-certified");
   assert.equal(inconsistentProduct.quantity, 2);
-  assert.equal(inconsistentProduct.totalCents, 1300);
+  assert.equal(inconsistentProduct.totalCents, 1000);
   console.log("PASS · tax-table summary excluded from purchase total; line-item quantities preserved");
 } catch (error) {
   failures++;
@@ -580,8 +580,8 @@ try {
 
 // A conflicting TOTAL outside any VAT table still needs user review.
 try {
-  const conflictingTotals = interpret(["TOTAL (€) 29,18", "TOTAL 25,37 3,81"]);
-  assert.equal(conflictingTotals.totalCents.value, 2918);
+  const conflictingTotals = interpret(["TOTAL (€) 15,00", "TOTAL 12,85 2,15"]);
+  assert.equal(conflictingTotals.totalCents.value, 1500);
   assert.equal(conflictingTotals.totalCents.trust, "doubtful",
     "do not suppress real competing totals merely because there are two numbers");
   console.log("PASS · unqualified competing totals remain doubtful");
@@ -590,20 +590,18 @@ try {
   console.error("FAIL · unqualified competing totals", error.message);
 }
 
-
 // A one-cent discrepancy in the VAT table must not be silently repaired.
-// The document total remains grounded in its explicit payment label.
 try {
   const mismatch = interpret([
     "Descripción P. Unit Importe",
-    "1 PRODUCTO 29,18",
-    "TOTAL (€) 29,18",
+    "1 PRODUCTO 15,00",
+    "TOTAL (€) 15,00",
     "IVA BASE IMPONIBLE (€) CUOTA (€)",
-    "10% 13,81 1,38",
-    "21% 11,56 2,44",
-    "TOTAL 25,37 3,82",
+    "10% 5,00 0,50",
+    "21% 7,85 1,66",
+    "TOTAL 12,85 2,16",
   ]);
-  assert.equal(mismatch.totalCents.value, 2918);
+  assert.equal(mismatch.totalCents.value, 1500);
   assert.equal(mismatch.taxBaseCents.value, null, "do not infer a tax base from inconsistent table");
   assert.equal(mismatch.taxesCents.value, null, "do not invent a balancing tax amount");
   console.log("PASS · inconsistent VAT table never auto-balances to the purchase amount");
