@@ -556,6 +556,12 @@ try {
   assert.equal(receiptWithTaxTable.taxLines.filter((row) =>
     row.baseCents !== null && row.taxCents !== null).length, 2,
     "real VAT table rows remain available for manual review");
+  assert.deepEqual([receiptWithTaxTable.taxBaseCents.value, receiptWithTaxTable.taxesCents.value], [2537, 381],
+    "only arithmetically reconciled tax rows can provide an aggregate");
+  assert.equal(receiptWithTaxTable.taxBaseCents.trust, "doubtful",
+    "tax base derived by addition requires manual review");
+  assert.equal(receiptWithTaxTable.taxesCents.trust, "doubtful",
+    "tax quota derived by addition requires manual review");
   console.log("PASS · tax-table summary excluded from purchase total; line-item quantities preserved");
 } catch (error) {
   failures++;
@@ -574,5 +580,27 @@ try {
   console.error("FAIL · unqualified competing totals", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 4 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 4} PASS`);
+
+// A one-cent discrepancy in the VAT table must not be silently repaired.
+// The document total remains grounded in its explicit payment label.
+try {
+  const mismatch = interpret([
+    "Descripción P. Unit Importe",
+    "1 PRODUCTO 29,18",
+    "TOTAL (€) 29,18",
+    "IVA BASE IMPONIBLE (€) CUOTA (€)",
+    "10% 13,81 1,38",
+    "21% 11,56 2,44",
+    "TOTAL 25,37 3,82",
+  ]);
+  assert.equal(mismatch.totalCents.value, 2918);
+  assert.equal(mismatch.taxBaseCents.value, null, "do not infer a tax base from inconsistent table");
+  assert.equal(mismatch.taxesCents.value, null, "do not invent a balancing tax amount");
+  console.log("PASS · inconsistent VAT table never auto-balances to the purchase amount");
+} catch (error) {
+  failures++;
+  console.error("FAIL · inconsistent VAT table sum", error.message);
+}
+
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 5 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 5} PASS`);
 if (failures) process.exitCode = 1;
