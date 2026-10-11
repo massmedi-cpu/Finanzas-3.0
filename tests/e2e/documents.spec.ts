@@ -1628,6 +1628,49 @@ test("REC-DOC-074 · finalize incierto impide una segunda subida privada automá
   expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
 });
 
+test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let finalized = false;
+  let legacyReadsAfterUpload = 0;
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() !== "GET" || url.searchParams.get("limit") !== "100") {
+      return route.fallback();
+    }
+    if (finalized) legacyReadsAfterUpload += 1;
+    // A version-1 gateway needs an explicit 100-item inventory only when
+    // the actual requested URL still includes unassociated=true.
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        contractVersion: 1, items: [item], total: 1,
+        limit: 100, offset: 0, principles,
+      }),
+    });
+  });
+  await page.route("**/api/documents", async (route) => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize") {
+      finalized = true;
+    }
+    return route.fallback();
+  });
+
+  await page.goto("/documents?unassociated=true&status=archived");
+  await expect(page.getByRole("button", { name: /factura-demo.pdf/i })).toBeVisible();
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "nuevo-original.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 new safe sample"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByRole("heading", { name: "nuevo-original.pdf" })).toBeVisible();
+  await expect(page).not.toHaveURL(/unassociated=true|status=archived/);
+  expect(finalized).toBe(true);
+  expect(legacyReadsAfterUpload).toBe(0);
+  expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+});
+
 test("REC-DOC-072 · una nueva subida no descarta los metadatos pendientes de otro documento", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
