@@ -2234,6 +2234,73 @@ test("REC-DOC-093 · el tamaño del original sigue verificándose tras recargar 
   expect(signCalls).toBe(1);
 });
 
+test("REC-DOC-094 · impide abandonar Documentos durante una subida privada todavía activa", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signed = 0;
+  let resolveSigning: (() => void) | undefined;
+  const signingGate = new Promise<void>(resolve => { resolveSigning = resolve; });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_sign") {
+      signed += 1;
+      await signingGate;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "no-perder-archivo.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 documento protegido"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect.poll(() => signed).toBe(1);
+  await page.getByRole("link", { name: /Inicio/ }).click();
+  await expect(page).toHaveURL(/\/documents/);
+  await expect(page.getByTestId("documents-alert")).toContainText("Hay un envío de documento en curso");
+  await expect(page.getByRole("alertdialog", { name: "Cambios sin guardar" })).toHaveCount(0);
+  resolveSigning?.();
+  await expect(page.getByRole("heading", { name: "no-perder-archivo.pdf" })).toBeVisible();
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(1);
+});
+
+test("REC-DOC-095 · aviso antes de salir existe durante un registro incierto, pero desaparece tras verificar", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let finalizes = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize"
+      && ++finalizes === 1) {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "registro-por-verificar.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 original"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  const before = await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(before).toBe(true);
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "registro-por-verificar.pdf" })).toBeVisible();
+  const after = await page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  });
+  expect(after).toBe(false);
+  expect(finalizes).toBe(2);
+});
+
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
