@@ -46,17 +46,21 @@ test.describe("Financial App 10.0.72 · Axioma §51 Drive automático", () => {
           skippedInvalid: 0,
           truncated: false,
           completedAt: "2026-10-04T08:00:00.000Z",
+          principles: {
+            bankSource: "read_only", driveSource: "read_only",
+            duplicateSafe: true, nonBlocking: true,
+          },
         }),
       });
     });
 
     await page.goto("/documents");
-    await expect(page.getByTestId("drive-auto-sync")).toContainText("Drive al día");
+    await expect(page.getByTestId("drive-auto-sync")).toContainText("Carpeta comprobada. No hay documentos nuevos");
     await expect(page.getByRole("button", { name: "Comprobar ahora" })).toBeEnabled();
     await expect.poll(() => syncCalls).toBe(1);
 
     await page.reload();
-    await expect(page.getByTestId("drive-auto-sync")).toContainText("Drive al día");
+    await expect(page.getByTestId("drive-auto-sync")).toContainText("Carpeta comprobada. No hay documentos nuevos");
     await expect.poll(() => syncCalls).toBe(1);
 
     await page.getByRole("button", { name: "Comprobar ahora" }).click();
@@ -76,7 +80,8 @@ test.describe("Financial App 10.0.72 · Axioma §51 Drive automático", () => {
     });
 
     await page.goto("/documents");
-    await expect(page.getByTestId("drive-auto-sync")).toContainText("Documentos sigue funcionando con normalidad");
+    await expect(page.getByTestId("drive-auto-sync")).toContainText("No se ha podido verificar Drive");
+    await expect(page.getByTestId("documents-filtered-empty")).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Comprobar ahora" })).toBeEnabled();
     await page.waitForTimeout(500);
     expect(syncCalls).toBe(1);
