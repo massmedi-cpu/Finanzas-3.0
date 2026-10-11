@@ -324,8 +324,26 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
         if (old.mime_type !== mime || Number(old.size_bytes) !== sizeBytes) {
           return json({ error: "document_upload_content_address_conflict" }, 409);
         }
-        // The stored object was already registered under this deterministic
-        // private path. Reuse the canonical original, never sign a second PUT.
+        // A 122-bit content-derived UUID is a lookup hint, not full-proof
+        // identity. Verify ALL 256 hash bits against private Storage before
+        // claiming that an existing registration represents these bytes.
+        // This also fails closed if the previously registered blob vanished.
+        const supabase = storageClient();
+        const candidate = await supabase.storage.from(BUCKET).download(path);
+        if (candidate.error || !candidate.data) {
+          return json({ error: "document_upload_registered_content_unavailable" }, 503);
+        }
+        const bytes = new Uint8Array(await candidate.data.arrayBuffer());
+        if (bytes.byteLength !== sizeBytes || !documentBytesMatchMimeType(bytes, mime)) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+        const actualSha256 = Array.from(digest, byte => byte.toString(16).padStart(2, "0")).join("");
+        if (actualSha256 !== contentSha256) {
+          return json({ error: "document_upload_content_address_conflict" }, 409);
+        }
+        // The stored object is confirmed byte-for-byte. Reuse the original
+        // without signing a second write or modifying reviewed metadata.
         return json({
           alreadyRegistered: true,
           documentId: old.id,
