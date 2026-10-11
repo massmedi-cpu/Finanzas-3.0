@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { periodHasObservedData, resolvePeriodCoverage } from "../src/application/data-coverage";
+import { periodHasObservedData } from "../src/application/data-coverage";
+import { resolveHomeBankCoverage, type HomeBankFreshness } from "../src/application/dashboard/home-bank-coverage";
 import { FinancialBarChart, monthlyTransactionsHref, type FinancialBarPoint } from "../src/design/financial-bar-chart";
 import styles from "./inicio-overview.module.css";
 
@@ -142,6 +143,8 @@ export default function HomeEvolution({
   partialMonthStart,
   refreshKey,
   latestMovementDate,
+  sourceFreshness,
+  activityLatestDate,
 }: {
   rows: FinancialBarPoint[];
   dateFrom: string;
@@ -153,18 +156,29 @@ export default function HomeEvolution({
   partialMonthStart?: string | null;
   refreshKey: number;
   latestMovementDate: string | null;
+  sourceFreshness: HomeBankFreshness | null;
+  activityLatestDate: string | null;
 }) {
   const coveredRows = useMemo(() => rows.map((row) => {
     const monthEnd = new Date(`${row.monthStart}T12:00:00Z`);
     monthEnd.setUTCMonth(monthEnd.getUTCMonth() + 1, 0);
-    const coverage = resolvePeriodCoverage({ dateFrom: row.monthStart, dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo, latestMovementDate });
+    const coverage = resolveHomeBankCoverage({
+      dateFrom: row.monthStart,
+      dateTo: monthEnd.toISOString().slice(0, 10) < dateTo ? monthEnd.toISOString().slice(0, 10) : dateTo,
+      freshness: sourceFreshness,
+      activityLatestDate,
+    });
     // A non-zero monthly financial aggregate proves that amounts were imported
     // for this month even when the legacy freshness endpoint only exposes an
     // upper date bound. It DOES NOT prove that the month is complete.
     // Conversely, an all-zero row is never evidence of an observed zero.
     const hasRecordedAmount = row.incomeCents !== 0 || row.expenseCents !== 0 || row.operatingNetCents !== 0;
-    return { ...row, coverage: coverage.state === "unknown" && hasRecordedAmount ? "partial" as const : coverage.state };
-  }), [dateTo, latestMovementDate, rows]);
+    // A real non-zero monthly aggregate may justify PARTIAL observation only
+    // when the bank itself is available. A retained figure from an unavailable
+    // bank must not become a trustworthy bar merely because it is non-zero.
+    return { ...row, coverage: coverage.state === "unknown" && sourceFreshness?.available === true && hasRecordedAmount
+      ? "partial" as const : coverage.state };
+  }), [dateTo, activityLatestDate, rows, sourceFreshness]);
   // Scale only from observable bars. Values from an unobserved month must not
   // compress every real month into an unreadable strip.
   const observedScale = useMemo(() => {
@@ -275,6 +289,9 @@ export default function HomeEvolution({
         <button type="button" aria-pressed={mode === "net"} onClick={() => setMode("net")}>Flujo neto</button>
       </div>
 
+      {sourceFreshness?.available === false && mode !== "balance" ? (
+        <p className={styles.helper} role="status">La fuente bancaria no está disponible. No se pueden verificar los importes de la evolución; revisa la fuente antes de interpretarlos.</p>
+      ) : null}
       {mode === "income_expense" ? (
         <>
           <FinancialBarChart
