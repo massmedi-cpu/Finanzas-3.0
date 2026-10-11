@@ -16,6 +16,7 @@ const MIME_EXTENSIONS = new Map([
 ]);
 const BUCKET = "financial-app-documents";
 const MAX_FILE_BYTES = 15 * 1024 * 1024;
+const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -321,6 +322,17 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
     const originalFileName = text(payload.originalFileName, "document_file_name", 500);
     const mime = mimeType(payload.mimeType);
     const path = text(payload.path, "document_storage_key", 1000);
+    // Legacy signed objects may predate digest-aware recovery. New clients
+    // provide BOTH size and SHA-256; neither may silently override bytes read
+    // from the private server-owned Storage object.
+    const expectedSize = safeInteger(payload.expectedSizeBytes, "document_expected_size", true);
+    if (expectedSize !== null && (expectedSize <= 0 || expectedSize > MAX_FILE_BYTES)) {
+      throw new Error("invalid_document_expected_size");
+    }
+    const expectedSha256 = nullableText(payload.expectedSha256, "document_expected_sha256", 64);
+    if (expectedSha256 !== null && !SHA256_HEX.test(expectedSha256)) {
+      throw new Error("invalid_document_expected_sha256");
+    }
     const workspaceId = await currentWorkspaceId(sql);
     const pathMatch = path.match(STORAGE_PATH);
     if (!pathMatch || pathMatch[1].toLowerCase() !== workspaceId.toLowerCase()) throw new Error("invalid_document_storage_key");
@@ -351,14 +363,41 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
       await removeRejectedUpload(supabase, path);
       return json({ error: "document_upload_size_mismatch" }, 409);
     }
+    // Do NOT delete on client-declared expectation mismatches: the existing
+    // object can be genuine despite a stale/corrupt browser journal. Retrying
+    // the same private path with the right evidence must remain possible.
+    if (expectedSize !== null && expectedSize !== actualSize) {
+      return json({ error: "document_upload_expected_size_mismatch" }, 409);
+    }
+    if (expectedSha256 !== null) {
+      const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
+      const actualSha256 = Array.from(digest, (byte) => byte.toString(16).padStart(2, "0")).join("");
+      if (actualSha256 !== expectedSha256) {
+        return json({ error: "document_upload_hash_mismatch" }, 409);
+      }
+    }
     if (!documentBytesMatchMimeType(bytes, mime)) {
       await removeRejectedUpload(supabase, path);
       return json({ error: "document_upload_content_mismatch" }, 409);
     }
 
-    return documentQuery(() => sql`
-      select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
-    `);
+    try {
+      const rows = await sql`
+        select financial_app.register_document(${type},${originalFileName},${mime},'supabase',${path},null,${actualSize}::bigint,${stored.updated_at ?? new Date().toISOString()}::timestamptz) as result
+      `;
+      const result = rows[0]?.result ?? null;
+      if (!result || typeof result !== "object" || Array.isArray(result)) return json(result);
+      // The client must confirm the SAME path and this server-side digest
+      // attestation, not trust a generic HTTP 200 with plausible metadata.
+      return json({
+        ...result,
+        ...(expectedSha256 === null ? {} : {
+          uploadIntegrity: { sha256: expectedSha256, sizeBytes: actualSize, verified: true },
+        }),
+      });
+    } catch (error) {
+      return databaseError(error);
+    }
   }
 
   if (action === "document.open") {
