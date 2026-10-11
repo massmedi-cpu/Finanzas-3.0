@@ -581,7 +581,14 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
             return !original || original.id !== item.id
               || original.status !== item.status
               || original.associationCount !== item.associationCount
-              || original.updatedAt !== item.updatedAt;
+              || original.updatedAt !== item.updatedAt
+              || original.type !== item.type
+              || original.totalCents !== item.totalCents
+              || original.documentDate !== item.documentDate
+              || original.issuerName !== item.issuerName
+              || original.originalFileName !== item.originalFileName
+              || original.storageProvider !== item.storageProvider
+              || original.isTest !== item.isTest;
           })) {
           throw new Error("document_filter_incomplete");
         }
