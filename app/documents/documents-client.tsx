@@ -263,9 +263,9 @@ function validatedTransactionSearch(value: unknown): TransactionSearch {
       || !row.account || typeof row.account.id !== "string" || !DOCUMENT_UUID.test(row.account.id)
       || typeof row.account.name !== "string"
       || !row.concept || typeof row.concept.effective !== "string"
-      || !row.category || (row.category.effectiveId !== null
+      || !row.category || (row.category.effectiveId != null
         && (typeof row.category.effectiveId !== "string" || !DOCUMENT_UUID.test(row.category.effectiveId)))
-      || (row.category.effectiveName !== null && typeof row.category.effectiveName !== "string")
+      || (row.category.effectiveName != null && typeof row.category.effectiveName !== "string")
       || !row.kind || typeof row.kind.effective !== "string") {
       throw new Error("document_transactions_invalid");
     }
