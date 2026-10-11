@@ -680,6 +680,38 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     skipTaxTableFooter: true,
   });
   const warnings: string[] = [];
+  const taxLines = extractTaxLines(located);
+  // Derive sums from an explicitly identified tax table ONLY if every tax
+  // rate reconciles with its row and all rows reconcile to the printed total.
+  // Derived sums are never automatic OCR facts: they remain "doubtful".
+  if (taxBaseCents.value === null && taxesCents.value === null
+    && totalCents.value !== null && totalCents.trust === "reliable") {
+    const tableRows = taxLines.filter((row) => {
+      const header = row.evidence[0];
+      return row.evidence.length === 2 && header !== undefined
+        && /\bbase\s+imponible\b/.test(normalizeToken(header.rawText))
+        && /\bcuota\b/.test(normalizeToken(header.rawText));
+    });
+    const headers = new Set(tableRows.map((row) =>
+      row.evidence[0].pageNumber + ":" + row.evidence[0].lineId));
+    const valid = tableRows.length > 0 && headers.size === 1
+      && tableRows.every((row) => row.ratePercent !== null && row.baseCents !== null
+        && row.taxCents !== null && Number.isSafeInteger(row.baseCents)
+        && Number.isSafeInteger(row.taxCents)
+        && Math.abs(Math.round(row.baseCents * row.ratePercent / 100) - row.taxCents) <= 1);
+    if (valid) {
+      const base = tableRows.reduce((sum, row) => sum + (row.baseCents ?? 0), 0);
+      const taxes = tableRows.reduce((sum, row) => sum + (row.taxCents ?? 0), 0);
+      if (Number.isSafeInteger(base) && Number.isSafeInteger(taxes)
+        && Math.abs(base + taxes - totalCents.value) <= 1) {
+        const evidence = tableRows.flatMap((row) => row.evidence);
+        const confidence = tableRows.reduce<number | null>((minimum, row) =>
+          row.confidence === null ? minimum : minimum === null ? row.confidence : Math.min(minimum, row.confidence), null);
+        taxBaseCents = { value: base, rawValue: null, confidence, trust: "doubtful", evidence };
+        taxesCents = { value: taxes, rawValue: null, confidence, trust: "doubtful", evidence };
+      }
+    }
+  }
 
   if (taxBaseCents.value !== null && taxesCents.value !== null && totalCents.value !== null) {
     const delta = Math.abs(taxBaseCents.value + taxesCents.value - totalCents.value);
@@ -707,7 +739,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     taxesCents,
     totalCents,
     paymentMethod: extractPaymentMethod(located),
-    taxLines: extractTaxLines(located),
+    taxLines,
     lines: extractLineItems(located),
     warnings: [...new Set(warnings)],
   };
