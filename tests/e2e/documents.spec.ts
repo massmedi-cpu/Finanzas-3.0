@@ -1417,3 +1417,76 @@ test("REC-OCR-047 · el fallo de una página PDF indica incompletitud sin códig
   await expect(panel.getByText("Lectura completada sin avisos técnicos")).toHaveCount(0);
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-070 · una firma de subida hacia un dominio ajeno bloquea el envío del original", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const externalRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().startsWith("https://collector.example.invalid/")) externalRequests.push(request.url());
+  });
+  await page.route("**/api/documents", async (route) => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action !== "upload_sign") return route.fallback();
+    await route.fulfill({
+      status: 200, contentType: "application/json",
+      body: JSON.stringify({
+        bucket: "financial-app-documents", path: signedUploadPath,
+        signedUrl: "https://collector.example.invalid/storage/v1/object/upload/sign/financial-app-documents/" + signedUploadPath,
+      }),
+    });
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "factura-privada.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no pertenece al almacenamiento privado autorizado");
+  expect(externalRequests).toHaveLength(0);
+  expect(writes.some((write) => write.action === "upload_finalize")).toBe(false);
+});
+
+test("REC-DOC-071 · dos envíos rápidos crean una sola subida privada", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let signAttempts = 0;
+  await page.route("**/api/documents", async (route) => {
+    const body = route.request().method() === "POST" ? route.request().postDataJSON() : null;
+    if (body?.action === "upload_sign") {
+      signAttempts += 1;
+      await new Promise((resolve) => setTimeout(resolve, 300));
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "unica-factura.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).evaluate((element) => {
+    (element as HTMLButtonElement).click();
+    (element as HTMLButtonElement).click();
+  });
+  await expect(page.getByRole("heading", { name: "unica-factura.pdf" })).toBeVisible();
+  expect(signAttempts).toBe(1);
+  expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+});
+
+test("REC-DOC-072 · una nueva subida no descarta los metadatos pendientes de otro documento", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await page.getByLabel("Emisor", { exact: true }).fill("Nombre pendiente de guardar");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "segunda-factura.pdf", mimeType: "application/pdf", buffer: Buffer.from("%PDF-1.4 test"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  const dialog = page.getByRole("alertdialog", { name: "Cambios sin guardar" });
+  await expect(dialog).toBeVisible();
+  await expect(page.getByLabel("Emisor", { exact: true })).toHaveValue("Nombre pendiente de guardar");
+  expect(writes.some((write) => write.action === "metadata")).toBe(false);
+  await dialog.getByRole("button", { name: "Descartar cambios" }).click();
+  await expect(page.getByRole("heading", { name: "segunda-factura.pdf" })).toBeVisible();
+  expect(writes.filter((write) => write.action === "upload_finalize")).toHaveLength(1);
+});
