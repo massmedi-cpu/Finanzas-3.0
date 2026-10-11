@@ -609,6 +609,13 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
 
 function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   const result: OcrDocumentLineItem[] = [];
+  // Compute product-table page membership only once; long multi-page bills
+  // must not scan all OCR lines again for each potential product.
+  const headerPages = new Set(lines.filter((item) => {
+    const text = normalizeToken(item.line.text);
+    return /^(?:descripcion|concepto|articulos?|productos?)\b/.test(text)
+      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(text);
+  }).map((item) => item.pageNumber));
   // A receipt header explicitly scopes product rows. Stop before totals,
   // payment methods and tax tables instead of manufacturing purchases from
   // legal paragraphs or VAT summary rows elsewhere in the document.
@@ -630,10 +637,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
     }
     // Retain unstructured candidates for human review, but a table header
     // on this page means figures outside its product rows are not items.
-    const hasProductHeader = lines.some((line) => line.pageNumber === item.pageNumber
-      && /^(?:descripcion|concepto|articulos?|productos?)\b/.test(normalizeToken(line.line.text))
-      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(normalizeToken(line.line.text)));
-    if (hasProductHeader && !tableOpen) continue;
+    if (headerPages.has(item.pageNumber) && !tableOpen) continue;
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
