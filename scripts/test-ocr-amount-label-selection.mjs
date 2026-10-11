@@ -528,5 +528,51 @@ try {
   console.error("FAIL · three decimal weight does not become unit price", error.message);
 }
 
-console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 2} PASS`);
+
+// Sanitized structure inspired by receipt layout, not a private source fixture.
+// Its tax table subtotal must NOT compete with the real payment total, and
+// product quantities are reconstructed only inside the proven product table.
+const receiptWithTaxTable = interpret([
+  "Descripción P. Unit Importe",
+  "6 PRODUCTO ALIMENTARIO 0,80 4,80",
+  "2 ARTICULO HOGAR 6,00 12,00",
+  "TOTAL (€) 29,18",
+  "TARJETA BANCARIA 29,18",
+  "IVA BASE IMPONIBLE (€) CUOTA (€)",
+  "10% 13,81 1,38",
+  "21% 11,56 2,43",
+  "TOTAL 25,37 3,81",
+  "IMPORTE COBRADO 29,18",
+]);
+try {
+  assert.equal(receiptWithTaxTable.totalCents.value, 2918,
+    "receipt purchase total must not become the tax base subtotal");
+  assert.equal(receiptWithTaxTable.totalCents.trust, "reliable",
+    "tax table grand totals are not contradictory final payments");
+  assert.deepEqual(receiptWithTaxTable.lines.map((row) => [row.description, row.quantity, row.unitPriceCents, row.totalCents]), [
+    ["6 PRODUCTO ALIMENTARIO 0,80", 6, 80, 480],
+    ["2 ARTICULO HOGAR 6,00", 2, 600, 1200],
+  ], "only bounded purchase rows count as products, never VAT/payment rows");
+  assert.equal(receiptWithTaxTable.taxLines.filter((row) =>
+    row.baseCents !== null && row.taxCents !== null).length, 2,
+    "real VAT table rows remain available for manual review");
+  console.log("PASS · tax-table summary excluded from purchase total; line-item quantities preserved");
+} catch (error) {
+  failures++;
+  console.error("FAIL · tax-table summary vs final payment and product rows", error.message);
+}
+
+// A conflicting TOTAL outside any VAT table still needs user review.
+try {
+  const conflictingTotals = interpret(["TOTAL (€) 29,18", "TOTAL 25,37 3,81"]);
+  assert.equal(conflictingTotals.totalCents.value, 2918);
+  assert.equal(conflictingTotals.totalCents.trust, "doubtful",
+    "do not suppress real competing totals merely because there are two numbers");
+  console.log("PASS · unqualified competing totals remain doubtful");
+} catch (error) {
+  failures++;
+  console.error("FAIL · unqualified competing totals", error.message);
+}
+
+console.log(`OCR label selection, synthetic interpretation only: ${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 4 - failures}/${cases.length + taxLineCases.length + taxTableCases.length + dottedTaxCases.length + 4} PASS`);
 if (failures) process.exitCode = 1;
