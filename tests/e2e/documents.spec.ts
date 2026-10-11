@@ -367,6 +367,38 @@ test("Documentos runs OCR only after explicit action and never writes financial 
   expect(writes).toHaveLength(0);
 });
 
+test("REC-OCR-052 · un nuevo intento OCR fallido no muestra el resultado anterior como lectura actual", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let attempts = 0;
+  await page.route(/\\/api\\/documents\\/ocr(?:\\?.*)?$/, async (route) => {
+    attempts += 1;
+    if (attempts === 2) {
+      await route.fulfill({
+        status: 503, contentType: "application/json",
+        body: JSON.stringify({ error: "ocr_worker_timeout" }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo.pdf/i }).click();
+  const panel = page.getByTestId("ocr-review-panel");
+  await panel.getByRole("button", { name: "Analizar documento" }).click();
+  await expect(panel.getByText("FACTURA DEMO")).toBeVisible();
+  await expect(panel.getByText("OCR completado.")).toBeVisible();
+
+  await panel.getByRole("button", { name: "Volver a analizar" }).click();
+  await expect(panel.getByRole("alert")).toContainText("no ha podido iniciarse a tiempo");
+  await expect(panel.getByText("FACTURA DEMO")).toHaveCount(0);
+  await expect(panel.getByText("OCR completado.")).toHaveCount(0);
+  await expect(panel.getByTestId("ocr-confirmation-form")).toHaveCount(0);
+  await expect(panel.getByRole("button", { name: "Analizar documento" })).toBeEnabled();
+  expect(attempts).toBe(2);
+  expect(writes).toHaveLength(0);
+});
+
 test("REC-OCR-033 · rechaza una lectura OCR recibida para otro documento sin exponer su contenido", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
