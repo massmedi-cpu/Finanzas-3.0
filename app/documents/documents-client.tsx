@@ -219,7 +219,12 @@ function validatedCandidateResponse(payload: unknown, documentId: string): Candi
       || typeof candidate.concept !== "string" || typeof candidate.accountName !== "string"
       || typeof candidate.date !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(candidate.date)
       || typeof candidate.confidence !== "number" || !Number.isFinite(candidate.confidence)
-      || candidate.confidence < 0 || candidate.confidence > 1) {
+      || candidate.confidence < 0 || candidate.confidence > 1
+      || !Number.isSafeInteger(candidate.amountDifferenceCents)
+      || !Number.isSafeInteger(candidate.dayDifference)
+      || typeof candidate.effectiveKind !== "string"
+      || (candidate.categoryId != null && (typeof candidate.categoryId !== "string" || !DOCUMENT_UUID.test(candidate.categoryId)))
+      || (candidate.merchantId != null && (typeof candidate.merchantId !== "string" || !DOCUMENT_UUID.test(candidate.merchantId)))) {
       throw new Error("document_suggestions_invalid");
     }
     seen.add(candidate.transactionId);
@@ -978,12 +983,13 @@ export function DocumentsClient({ initialStatusFilter = "", initialUnassociatedF
 
   async function searchTransactions(event: FormEvent) {
     event.preventDefault();
+    if (busy) return;
     const term = manualQuery.trim();
     const documentId = selectedIdRef.current;
     const sequence = ++manualSearchSequence.current;
     setTransactions(null);
     setTransactionResultQuery(null);
-    if (!term || !documentId || busy) return;
+    if (!term || !documentId) return;
     setBusy("manual-search");
     setError(null);
     try {
