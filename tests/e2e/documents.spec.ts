@@ -1433,7 +1433,9 @@ test("REC-DOC-070 · una firma de subida hacia un dominio ajeno bloquea el enví
       status: 200, contentType: "application/json",
       body: JSON.stringify({
         bucket: "financial-app-documents", path: signedUploadPath,
-        signedUrl: "https://collector.example.invalid/storage/v1/object/upload/sign/financial-app-documents/" + signedUploadPath,
+        token: "token", signedUrl: "https://collector.example.invalid/storage/v1/object/upload/sign/financial-app-documents/" + signedUploadPath + "?token=token",
+        originalFileName: body.originalFileName, mimeType: body.mimeType,
+        sizeBytes: body.sizeBytes, maxFileBytes: 15728640,
       }),
     });
   });
