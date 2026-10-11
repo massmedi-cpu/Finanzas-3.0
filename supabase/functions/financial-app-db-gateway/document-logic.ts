@@ -314,7 +314,7 @@ export async function handleDocumentLogicAction(input: { action: unknown; payloa
       console.error("document-storage-sign", error?.name ?? "unknown");
       return json({ error: "document_upload_sign_failed" }, 503);
     }
-    return json({ bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl, originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES });
+    return json({ bucket: BUCKET, path, token: data.token, signedUrl: data.signedUrl, originalFileName, mimeType: mime, sizeBytes, maxFileBytes: MAX_FILE_BYTES, hashVerificationVersion: 1, hashAlgorithm: "sha256" });
   }
 
   if (action === "document.upload_finalize") {
