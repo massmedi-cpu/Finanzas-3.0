@@ -105,7 +105,7 @@ function warningLabel(warning: string) {
   if (Object.prototype.hasOwnProperty.call(WARNING_LABELS, warning)) return WARNING_LABELS[warning];
   // Native/PDF.js errors and Tesseract warnings use different page suffix
   // conventions. Never surface the raw machine code as a user-facing sentence.
-  const explicitPage = /^(pdf_page_requires_visual_ocr|pdf_page_sparse_native_recovered|pdf_page_sparse_native_unverified|pdf_page_visual_ocr_empty):([1-9]\\d*)$/.exec(warning);
+  const explicitPage = /^(pdf_page_requires_visual_ocr|pdf_page_sparse_native_recovered|pdf_page_sparse_native_unverified|pdf_page_visual_ocr_empty):([1-9]\d*)$/.exec(warning);
   if (explicitPage) {
     const page = Number(explicitPage[2]);
     if (page >= 1 && page <= 16) {
@@ -115,7 +115,7 @@ function warningLabel(warning: string) {
       return `La página ${page} no ha proporcionado texto legible con OCR visual. Comprueba el original, el contraste y el encuadre.`;
     }
   }
-  const nestedPage = /^pdf_page_([1-9]\\d*):([a-z][a-z0-9_]*)$/.exec(warning);
+  const nestedPage = /^pdf_page_([1-9]\d*):([a-z][a-z0-9_]*)$/.exec(warning);
   if (nestedPage) {
     const page = Number(nestedPage[1]);
     if (page >= 1 && page <= 16) {
