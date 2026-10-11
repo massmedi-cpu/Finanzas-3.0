@@ -389,7 +389,7 @@ async function readJson(response: Response) {
 
 function friendlyError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") {
-    return "La consulta documental ha superado el tiempo de espera. No se ha modificado ningún dato; puedes reintentar.";
+    return "La solicitud documental ha superado el tiempo de espera. Si intentabas guardar o asociar, el resultado podría haberse aplicado: comprueba el detalle antes de repetir la operación.";
   }
   const code = error instanceof Error ? error.message : "request_failed";
   const labels: Record<string, string> = {
@@ -414,14 +414,14 @@ function friendlyError(error: unknown) {
     document_upload_mime_mismatch: "El archivo subido no coincide con el tipo declarado.",
     document_suggestion_not_current: "La sugerencia ya no coincide con los datos actuales. Vuelve a buscar candidatos.",
     document_suggestion_metadata_required: "Añade fecha e importe para generar sugerencias.",
-    authentication_required: "Tu sesión necesita renovarse. Inicia sesión y pulsa Reintentar lista; no se ha modificado ningún documento.",
-    authentication_unavailable: "El acceso seguro no está disponible temporalmente. Conservamos los datos sin cambios; reintenta más tarde.",
-    oidc_unavailable: "No se ha podido verificar la identidad segura del servidor. Documentos no se ha modificado; reintenta más tarde.",
-    gateway_identity_unavailable: "El servidor no ha podido acreditar su identidad ante el archivo financiero. No es un problema de tu contraseña; no se han alterado documentos. Reintenta más tarde.",
-    persistence_failed: "No ha sido posible consultar el archivo documental por un problema de persistencia. No se han borrado documentos; pulsa Reintentar lista.",
-    document_service_unavailable: "El servicio documental no responde en este momento. No se ha modificado ningún documento; vuelve a intentarlo.",
+    authentication_required: "Tu sesión necesita renovarse. Inicia sesión y pulsa Reintentar lista. Si acababas de guardar algún cambio, comprueba su estado antes de repetirlo.",
+    authentication_unavailable: "El acceso seguro no está disponible temporalmente. Si habías iniciado un guardado, consulta su estado antes de repetirlo.",
+    oidc_unavailable: "No se ha podido verificar la identidad segura del servidor. No se confirma el resultado de ninguna operación; comprueba el estado antes de repetir un cambio.",
+    gateway_identity_unavailable: "El servidor no ha podido acreditar su identidad ante el archivo financiero. No es un problema de tu contraseña; verifica el estado antes de repetir cualquier operación.",
+    persistence_failed: "No se ha podido confirmar la operación documental por un problema de persistencia. Si estabas guardando cambios, comprueba el detalle antes de repetir; también puedes pulsar Reintentar lista.",
+    document_service_unavailable: "El servicio documental no responde en este momento. Si estabas guardando cambios, comprueba primero su estado antes de volver a intentarlo.",
     document_rate_limited: "Se han alcanzado demasiadas consultas documentales. Espera un momento antes de pulsar Reintentar lista.",
-    document_request_failed: "No se ha podido completar la consulta documental. Comprueba tu conexión y pulsa Reintentar lista.",
+    document_request_failed: "No se ha podido confirmar la operación documental. Comprueba tu conexión y el estado del documento antes de repetir un cambio; puedes pulsar Reintentar lista.",
     document_filter_limit: "La búsqueda abarca demasiados documentos. Reduce los filtros antes de volver a cargarla.",
     document_filter_incomplete: "La lista recibida está incompleta. No mostramos un resultado parcial como si fuera el definitivo; reintenta la carga.",
     document_list_invalid: "El servidor ha devuelto una lista documental incompleta o incompatible. No se mostrará como si estuviera vacía; reintenta la consulta.",
