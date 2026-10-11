@@ -2304,6 +2304,228 @@ test("REC-DOC-095 · aviso antes de salir existe durante un registro incierto, p
   expect(finalizes).toBe(2);
 });
 
+
+const durableUploadKey = "financial-app:documents:pending-private-upload:v1";
+
+test("REC-DOC-096 · SHA-256 de bytes reales viaja hasta finalize y la constancia excluye secretos", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  const original = Buffer.from("%PDF-1.4 ORIGINAL-CHECKSUM-CONTROLADO");
+  const expectedHash = createHash("sha256").update(original).digest("hex");
+  let finalizes = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    if (route.request().postDataJSON()?.action === "upload_finalize" && ++finalizes === 1) {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "factura-huella-real.pdf", mimeType: "application/pdf", buffer: original,
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  const journal = await page.evaluate(key => localStorage.getItem(key), durableUploadKey);
+  expect(journal).toBeTruthy();
+  expect(JSON.parse(journal!)).toMatchObject({
+    expectedSha256: expectedHash, sizeBytes: original.length,
+    originalFileName: "factura-huella-real.pdf",
+  });
+  expect(journal).not.toContain("signedUrl");
+  expect(journal).not.toContain("token");
+  expect(journal).not.toContain("ORIGINAL-CHECKSUM-CONTROLADO");
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "factura-huella-real.pdf" })).toBeVisible();
+  expect(writes.filter(w => w.action === "upload_finalize")).toMatchObject([{
+    expectedSha256: expectedHash, expectedSizeBytes: original.length,
+    path: signedUploadPath,
+  }]);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+  expect(finalizes).toBe(2);
+});
+
+test("REC-DOC-097 · HTTP 200 con atestación criptográfica de otro original no desbloquea la subida", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  let forged = true;
+  let signed = 0;
+  let finalizes = 0;
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() !== "POST") return route.fallback();
+    const body = route.request().postDataJSON();
+    if (body.action === "upload_sign") signed += 1;
+    if (body.action === "upload_finalize") {
+      finalizes += 1;
+      if (forged) {
+        await route.fulfill({
+          status: 200, contentType: "application/json",
+          body: JSON.stringify({
+            contractVersion: 1, principles, associations: [],
+            document: { ...item, id: uploadedDocumentId, storageKey: body.path,
+              originalFileName: body.originalFileName, type: body.type, mimeType: body.mimeType,
+              sizeBytes: body.expectedSizeBytes },
+            uploadIntegrity: { sha256: "0".repeat(64), sizeBytes: body.expectedSizeBytes, verified: true },
+          }),
+        });
+        return;
+      }
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "otro-original.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 evidencia"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  expect(signed).toBe(1);
+  expect(finalizes).toBe(1);
+  forged = false;
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "otro-original.pdf" })).toBeVisible();
+  expect(signed).toBe(1);
+  expect(finalizes).toBe(2);
+});
+
+test("REC-DOC-098 · cerrar pestaña conserva ruta/huella recuperables en otra pestaña del navegador", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  let finalizes = 0;
+  let puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1;
+    await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize"
+      && ++finalizes === 1) {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "documento-tras-cierre.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 CONTINUIDAD-DURADERA"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeTruthy();
+  await page.close();
+  const reopened = await page.context().newPage();
+  const newWrites: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(reopened, newWrites);
+  await reopened.goto("/documents");
+  await expect(reopened.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(reopened.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  await reopened.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(reopened.getByRole("heading", { name: "documento-tras-cierre.pdf" })).toBeVisible();
+  expect(newWrites.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  expect(newWrites.filter(w => w.action === "upload_finalize")).toHaveLength(1);
+  expect(puts).toBe(1);
+  expect(await reopened.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+  await reopened.close();
+});
+
+test("REC-DOC-099 · otra pestaña detecta la subida pendiente sin firmar un segundo objeto", async ({ page }) => {
+  await mockDocumentApi(page, []);
+  await page.route("**/api/documents", async route => {
+    if (route.request().method() === "POST"
+      && route.request().postDataJSON()?.action === "upload_finalize") {
+      await route.fulfill({ status: 503, json: { error: "persistence_failed" } });
+      return;
+    }
+    return route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "copia-en-otra-pestana.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 no duplicar"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  const second = await page.context().newPage();
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(second, writes);
+  await second.goto("/documents");
+  await expect(second.getByTestId("document-upload-unverified")).toBeVisible();
+  await expect(second.getByLabel("Galería o archivo")).toBeDisabled();
+  await expect(second.getByRole("button", { name: "Guardar original" })).toBeDisabled();
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  await second.close();
+});
+
+test("REC-DOC-100 · si localStorage rechaza persistencia no se inicia un PUT privado", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  let puts = 0;
+  await page.route(signedUploadUrl, async route => {
+    puts += 1; await route.fulfill({ status: 200, body: "ok" });
+  });
+  await page.addInitScript(key => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function(name, value) {
+      if (name === key && this === localStorage) throw new DOMException("No persistence", "QuotaExceededError");
+      return original.call(this, name, value);
+    };
+  }, durableUploadKey);
+  await page.goto("/documents");
+  await page.getByLabel("Galería o archivo").setInputFiles({
+    name: "sin-recuperacion-duradera.pdf", mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4 prueba"),
+  });
+  await page.getByRole("button", { name: "Guardar original" }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText("no permite guardar de forma segura");
+  expect(puts).toBe(0);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(0);
+});
+
+test("REC-DOC-101 · journal antiguo de sesión migra sin token y recupera exactamente la ruta previa", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.addInitScript(({key,path}) => sessionStorage.setItem(key, JSON.stringify({
+    version: 1, action: "upload_finalize", type: "invoice",
+    originalFileName: "documento-version-antigua.pdf",
+    mimeType: "application/pdf", path, storagePutConfirmed: true,
+  })), {key: durableUploadKey, path: signedUploadPath});
+  await page.goto("/documents");
+  await expect(page.getByTestId("document-upload-unverified")).toBeVisible();
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeTruthy();
+  await page.getByRole("button", { name: "Recuperar el mismo original" }).click();
+  await expect(page.getByRole("heading", { name: "documento-version-antigua.pdf" })).toBeVisible();
+  expect(writes.filter(w => w.action === "upload_sign")).toHaveLength(0);
+  expect(writes.filter(w => w.action === "upload_finalize")).toHaveLength(1);
+  expect(await page.evaluate(key => localStorage.getItem(key), durableUploadKey)).toBeNull();
+});
+
+test("REC-DOC-102 · API rechaza tamaños y huellas incorrectas antes de contactar el gateway", async () => {
+  const base = {
+    action: "upload_finalize", type: "invoice",
+    originalFileName: "archivo.pdf", mimeType: "application/pdf",
+    path: signedUploadPath,
+  };
+  const invalid = [
+    { expectedSha256: "bad" },
+    { expectedSha256: "A".repeat(64) },
+    { expectedSizeBytes: 0 },
+    { expectedSizeBytes: 16 * 1024 * 1024 },
+  ];
+  for (const fields of invalid) {
+    const response = await postDocumentAction(new Request("https://test.local/api/documents", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...base, ...fields }),
+    }));
+    expect(response.status).toBe(400);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    const payload = await response.json();
+    expect(payload.error).toBe("invalid_request");
+  }
+});
+
 test("REC-DOC-075 · subir tras filtrar no reconstruye el archivo legacy con filtros antiguos", async ({ page }) => {
   const writes: Array<Record<string, unknown>> = [];
   await mockDocumentApi(page, writes);
