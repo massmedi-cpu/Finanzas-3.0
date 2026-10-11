@@ -176,7 +176,13 @@ export default function HomeEvolution({
     // A real non-zero monthly aggregate may justify PARTIAL observation only
     // when the bank itself is available. A retained figure from an unavailable
     // bank must not become a trustworthy bar merely because it is non-zero.
-    return { ...row, coverage: coverage.state === "unknown" && sourceFreshness?.available === true && hasRecordedAmount
+    const sourceMatchesActivity = !activityLatestDate
+      || activityLatestDate === sourceFreshness?.latestMovementDate;
+    // A nonzero total is never grounds for displaying a partial month when
+    // independent banking sources disagree on the latest observed date.
+    // That is a provenance conflict, not a recoverable historic gap.
+    return { ...row, coverage: coverage.state === "unknown"
+      && sourceFreshness?.available === true && sourceMatchesActivity && hasRecordedAmount
       ? "partial" as const : coverage.state };
   }), [dateTo, activityLatestDate, rows, sourceFreshness]);
   // Scale only from observable bars. Values from an unobserved month must not
