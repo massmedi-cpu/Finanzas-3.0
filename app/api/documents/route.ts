@@ -116,6 +116,14 @@ function apiError(error: unknown) {
     return Response.json({ error: "drive_reader_unavailable", code: error.code }, { status: 503, headers: HEADERS });
   }
   if (error instanceof PersistenceGatewayError) {
+    // "unauthorized" at this gateway means Vercel OIDC verification failed;
+    // it is not evidence that the user's interactive session expired.
+    if (error.status === 401 && error.code === "unauthorized") {
+      return Response.json(
+        { error: "persistence_failed", code: "gateway_identity_unavailable" },
+        { status: 503, headers: HEADERS },
+      );
+    }
     if (error.status === 404) return Response.json({ error: "not_found", code: error.code ?? null }, { status: 404, headers: HEADERS });
     if (error.status === 409) return Response.json({ error: "conflict", code: error.code ?? null }, { status: 409, headers: HEADERS });
     if (error.status === 400) return Response.json({ error: "invalid_request", code: error.code ?? null }, { status: 400, headers: HEADERS });
