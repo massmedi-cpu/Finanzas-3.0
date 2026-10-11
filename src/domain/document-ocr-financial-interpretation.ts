@@ -181,14 +181,36 @@ function valueAfterLabel(text: string) {
   return tokens.length > 1 ? tokens.slice(1).join(" ").trim() : null;
 }
 
+// A tax table ends with "TOTAL [tax bases] [tax quotas]". That subtotal is
+// not another invoice total, even though the heading spells TOTAL. Only
+// discount a row when the source proves a same-page tax-table context.
+function isTaxTableFooter(lines: LocatedLine[], index: number) {
+  const item = lines[index];
+  const text = normalizeToken(item.line.text);
+  if (!/^total\s+/.test(text) || exactFinancialAmountMatches(item.line.text).length !== 2) return false;
+  for (let back = 1; back <= 6 && back <= index; back += 1) {
+    const header = lines[index - back];
+    if (header.pageNumber !== item.pageNumber) break;
+    const normalized = normalizeToken(header.line.text);
+    if (TAX_ACRONYM.test(normalized)
+      && /\bbase\s+imponible\b/.test(normalized)
+      && /\bcuota\b/.test(normalized)) {
+      return lines.slice(index - back + 1, index).some((row) =>
+        row.pageNumber === item.pageNumber && /^\s*\d{1,2}(?:[,.]\d{1,2})?\s*%/.test(row.line.text));
+    }
+  }
+  return false;
+}
+
 function extractMoneyField(
   lines: LocatedLine[],
   labels: RegExp[],
-  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean } = {},
+  options: { exclude?: RegExp; prefer?: RegExp; adjacentAmount?: boolean; ownLabelOnly?: boolean; skipTaxTableFooter?: boolean } = {},
 ) {
   const candidates = lines.flatMap((item, index) => {
     const normalized = normalizeToken(item.line.text);
     if (!labels.some((label) => label.test(normalized)) || options.exclude?.test(normalized)) return [];
+    if (options.skipTaxTableFooter && isTaxTableFooter(lines, index)) return [];
 
     // Do not treat the last number in a whole OCR row as its labelled amount.
     // Receipts can place TOTAL, cash received and CHANGE on the same row.
@@ -587,7 +609,31 @@ function extractTaxLines(lines: LocatedLine[]): OcrTaxLine[] {
 
 function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
   const result: OcrDocumentLineItem[] = [];
+  // A receipt header explicitly scopes product rows. Stop before totals,
+  // payment methods and tax tables instead of manufacturing purchases from
+  // legal paragraphs or VAT summary rows elsewhere in the document.
+  let tablePage = -1;
+  let tableOpen = false;
   for (const item of lines) {
+    const normalized = normalizeToken(item.line.text);
+    if (tablePage !== item.pageNumber) {
+      tablePage = item.pageNumber;
+      tableOpen = false;
+    }
+    if (/^(?:descripcion|concepto|articulos?|productos?)\b/.test(normalized)
+      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(normalized)) {
+      tableOpen = true;
+      continue;
+    }
+    if (tableOpen && /^(?:total|subtotal|base\s+imponible|efectivo|tarjeta|forma\s+de\s+pago)\b/.test(normalized)) {
+      tableOpen = false;
+    }
+    // Retain unstructured candidates for human review, but a table header
+    // on this page means figures outside its product rows are not items.
+    const hasProductHeader = lines.some((line) => line.pageNumber === item.pageNumber
+      && /^(?:descripcion|concepto|articulos?|productos?)\b/.test(normalizeToken(line.line.text))
+      && /\b(?:importe|total|precio|p\.?\s*unit)\b/.test(normalizeToken(line.line.text)));
+    if (hasProductHeader && !tableOpen) continue;
     const text = item.line.text.trim();
     const normalized = normalizeToken(text);
     if (!text || /\b(total|subtotal|base|impuesto|cambio|efectivo|tarjeta|a pagar)\b/.test(normalized) || TAX_ACRONYM.test(normalized)) continue;
@@ -601,7 +647,7 @@ function extractLineItems(lines: LocatedLine[]): OcrDocumentLineItem[] {
     const confidence = item.line.confidence;
     result.push({
       description,
-      quantity: null,
+      quantity: tableOpen && /^\s*(\d{1,3})\s+\p{L}/u.test(text) ? Number(/^\s*(\d{1,3})\s+\p{L}/u.exec(text)![1]) : null,
       unitPriceCents: moneyMatches.length >= 2 ? parseMoneyCents(moneyMatches[moneyMatches.length - 2]) : null,
       totalCents,
       confidence,
@@ -628,6 +674,7 @@ export function interpretDocumentOcrFinancially(result: DocumentOcrResult): Docu
     exclude: /\btotal\s+(?:de\s+)?(?:descuentos?|impuestos?|iva|ahorro|unidades|articulos|productos)\b/,
     prefer: /\b(?:total\s+a\s+pagar|total\s+importe\s+factura|importe\s+total|importe(?:\s+de\s+la)?\s+factura|a\s+pagar|total\s+factura|total\s+final)\b/,
     adjacentAmount: true,
+    skipTaxTableFooter: true,
   });
   const warnings: string[] = [];
 
