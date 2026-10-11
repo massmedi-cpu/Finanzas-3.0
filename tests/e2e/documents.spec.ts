@@ -965,3 +965,52 @@ test("REC-DOC-052 · un rechazo OIDC del gateway no se presenta como sesión de 
   await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
   expect(writes).toEqual([]);
 });
+
+
+test("REC-DOC-053 · detalle que niega banco de solo lectura nunca abre un editor de cambios", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && url.searchParams.get("id") === documentId) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1, document: { ...item }, associations: [],
+          principles: { ...principles, bankSource: "writable" },
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await page.getByRole("button", { name: /factura-demo\.pdf/i }).click();
+  await expect(page.getByTestId("documents-alert")).toContainText(/servidor no ha devuelto el documento solicitado/i);
+  await expect(page.getByLabel("Emisor", { exact: true })).toHaveCount(0);
+  expect(writes).toEqual([]);
+});
+
+test("REC-DOC-054 · una lista con identificadores no UUID no se presenta como documento válido", async ({ page }) => {
+  const writes: Array<Record<string, unknown>> = [];
+  await mockDocumentApi(page, writes);
+  await page.route("**/api/documents?*", async (route) => {
+    const url = new URL(route.request().url());
+    if (route.request().method() === "GET" && !url.searchParams.has("id")) {
+      await route.fulfill({
+        status: 200, contentType: "application/json",
+        body: JSON.stringify({
+          contractVersion: 1,
+          items: [{ ...item, id: "93000000----------------------------" }],
+          total: 1, limit: 50, offset: 0, principles,
+        }),
+      });
+      return;
+    }
+    await route.fallback();
+  });
+  await page.goto("/documents");
+  await expect(page.getByTestId("documents-alert")).toContainText(/lista documental incompleta o incompatible/i);
+  await expect(page.getByText("No se ha podido cargar la lista")).toBeVisible();
+  expect(writes).toEqual([]);
+});
