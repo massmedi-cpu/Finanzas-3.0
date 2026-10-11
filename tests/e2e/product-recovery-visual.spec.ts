@@ -125,6 +125,17 @@ for (const theme of ["light", "dark"] as const) {
       await page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ }).click();
       await expect(page.getByRole("heading", { name: items[0].originalFileName })).toBeVisible();
       await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+      const flow = page.getByRole("list", { name: "Proceso de revisión OCR" });
+      const firstStage = flow.locator("li").first();
+      await expect(firstStage).toBeVisible();
+      // Desktop's split detail panel is only about 500px even at a
+      // 1366px viewport: four tiny columns passed no-overflow/axe while
+      // splitting words into 2-3 characters. Require readable card widths.
+      const stageBox = await firstStage.boundingBox();
+      expect(stageBox?.width ?? 0).toBeGreaterThanOrEqual(170);
+      const actualColumns = await flow.evaluate((node) =>
+        getComputedStyle(node).gridTemplateColumns.split(/\\s+/).filter(Boolean).length);
+      expect(actualColumns).toBe(width === 360 ? 1 : 2);
       await noOverflow(page, width);
       const a11y = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
       expect(a11y.violations.map(v => ({
