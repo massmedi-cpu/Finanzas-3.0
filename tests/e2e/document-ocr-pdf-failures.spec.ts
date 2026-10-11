@@ -103,3 +103,91 @@ test("REC-OCR-046 · PDF con solo imagen y motor fallido no inventa contenido", 
   expect(result.warnings).toContain("no_text_detected");
   expect(result.principles.financialWrites).toBe(false);
 });
+
+
+type PdfNativePage = { getTextContent(): Promise<{ items: unknown[] }> };
+
+class NativeTextFailsOnSecondPage extends PdfTextOcrProvider {
+  protected override async readNativeItems(page: PdfNativePage, pageNumber: number) {
+    if (pageNumber === 2) throw new Error("synthetic_native_pdf_text_stream_failure");
+    return super.readNativeItems(page, pageNumber);
+  }
+}
+
+async function makeThreePageNativePdf(page: import("@playwright/test").Page) {
+  const section = (number: number) => [
+    '<section class="sheet"><h1>FACTURA NATIVA PAGINA ' + number + '</h1>',
+    '<p>Factura con emisor identificado, fecha exacta, periodo facturado y número de referencia verificable.</p>',
+    '<p>Servicios prestados, condiciones, productos, descripción detallada del concepto y desglose completo.</p>',
+    '<p>SUBTOTAL 45,00 EUR · IVA 9,45 EUR · TOTAL 54,45 EUR.</p></section>',
+  ].join("");
+  await page.setContent([
+    '<!doctype html><html><head><style>',
+    '@page { size:A4; margin:0 } html,body { margin:0; padding:0; font-family:Arial,sans-serif }',
+    '.sheet { width:210mm; height:297mm; box-sizing:border-box; padding:18mm; break-after:page; overflow:hidden }',
+    '.sheet:last-child { break-after:auto } h1 { font-size:25px } p { font-size:19px; line-height:1.4 }',
+    '</style></head><body>', section(1), section(2), section(3), '</body></html>',
+  ].join(""));
+  return new Uint8Array(await page.pdf({ format: "A4", printBackground: true, preferCSSPageSize: true }));
+}
+
+test("REC-OCR-048 · un fallo del texto nativo usa OCR visual y conserva otras páginas", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "PDF.js native-text fault injection runs once");
+  test.setTimeout(120_000);
+  const pdf = await makeThreePageNativePdf(page);
+  let attempts = 0;
+  const result = await runDocumentOcr({
+    documentId, bytes: pdf, mimeType: "application/pdf",
+    originalFileName: "tres-paginas-texto-danado.pdf",
+    provider: new NativeTextFailsOnSecondPage({
+      async extract() {
+        attempts += 1;
+        // Synthetic extractor isolates PDF recovery; this is not a claim
+        // about visual recognition accuracy on a genuine invoice.
+        return {
+          source: "image_ocr" as const, extractor: "synthetic-page-recovery",
+          pages: [{ pageNumber: 1, words: [{
+            text: "TOTAL 54,45 EUR", confidence: 0.91,
+            box: { x: 0.1, y: 0.2, width: 0.4, height: 0.06 },
+          }] }],
+          warnings: [],
+        };
+      },
+    }),
+  });
+  expect(attempts).toBe(1);
+  expect(result.pages.map((entry) => entry.pageNumber)).toEqual([1, 2, 3]);
+  expect(result.pages[0].plainText).toContain("FACTURA NATIVA PAGINA 1");
+  expect(result.pages[1].plainText).toContain("TOTAL 54,45 EUR");
+  expect(result.pages[2].plainText).toContain("FACTURA NATIVA PAGINA 3");
+  expect(result.source).toBe("hybrid");
+  expect(result.warnings).toContain("pdf_page_native_text_failed:2");
+  expect(result.status).toBe("needs_review");
+  expect(result.principles.financialWrites).toBe(false);
+});
+
+test("REC-OCR-049 · doble fallo nativo y visual no borra las páginas sanas", async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== "chromium-desktop", "PDF.js native-text fault injection runs once");
+  test.setTimeout(120_000);
+  const pdf = await makeThreePageNativePdf(page);
+  let attempts = 0;
+  const result = await runDocumentOcr({
+    documentId, bytes: pdf, mimeType: "application/pdf",
+    originalFileName: "tres-paginas-ilegible.pdf",
+    provider: new NativeTextFailsOnSecondPage({
+      async extract() {
+        attempts += 1;
+        throw new Error("synthetic_visual_engine_failure");
+      },
+    }),
+  });
+  expect(attempts).toBe(1);
+  expect(result.pages.map((entry) => entry.pageNumber)).toEqual([1, 2, 3]);
+  expect(result.pages[0].plainText).toContain("FACTURA NATIVA PAGINA 1");
+  expect(result.pages[1].plainText).toBe("");
+  expect(result.pages[2].plainText).toContain("FACTURA NATIVA PAGINA 3");
+  expect(result.warnings).toContain("pdf_page_native_text_failed:2");
+  expect(result.warnings).toContain("pdf_page_visual_ocr_failed:2");
+  expect(result.status).toBe("needs_review");
+  expect(result.principles.financialWrites).toBe(false);
+});
