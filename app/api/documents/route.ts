@@ -201,7 +201,14 @@ export async function POST(request: Request) {
         originalFileName: text(row.originalFileName, "invalid_document_file_name", 500),
         mimeType: mimeValue(row.mimeType),
         sizeBytes: integer(row.sizeBytes, "invalid_document_size", 1, 15 * 1024 * 1024),
+        // Optional only for an older client; new clients include the digest
+        // so different devices receive the same signed private object path.
+        expectedSha256: row.expectedSha256 === null || row.expectedSha256 === undefined
+          ? null : text(row.expectedSha256, "invalid_document_content_sha256", 64),
       };
+      if (payload.expectedSha256 !== null && !/^[0-9a-f]{64}$/.test(payload.expectedSha256)) {
+        throw new Error("invalid_document_content_sha256");
+      }
       const result = await callPersistenceGateway("document.upload_sign", payload);
       return Response.json(result, { headers: HEADERS });
     }
