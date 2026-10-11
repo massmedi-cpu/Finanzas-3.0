@@ -439,10 +439,20 @@ export default function InicioOverview() {
           await loadSource(source, generation);
         }
       }));
-    } catch {
-      if (isFresh(generation)) {
-        await Promise.all(sources.map((source) => loadSource(source, generation)));
+    } catch (error) {
+      if (!isFresh(generation)) return;
+      // A missing/expired workspace session is terminal for every source in
+      // this scope. Retrying them individually would multiply failing auth
+      // requests, slow Inicio and misrepresent an authentication issue as
+      // five unrelated source outages. Real network/partial errors still use
+      // the existing per-source fallback.
+      const sessionRequired = error instanceof Error
+        && /^(?:request_failed_401|request_failed_403)$/.test(error.message);
+      if (sessionRequired) {
+        sources.forEach((source) => commit(generation, source, null, true));
+        return;
       }
+      await Promise.all(sources.map((source) => loadSource(source, generation)));
     }
   }, [commit, loadSource, isFresh]);
 
