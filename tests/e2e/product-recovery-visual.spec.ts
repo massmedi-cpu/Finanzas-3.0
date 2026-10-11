@@ -71,6 +71,70 @@ for (const theme of ["light", "dark"] as const) {
   }
 }
 
+// The route-wide matrix already certifies empty/unavailable surfaces. This
+// second pass actually populates the document workspace, so text density,
+// long names, detail controls and contrast cannot hide behind empty states.
+for (const theme of ["light", "dark"] as const) {
+  for (const width of [360, 1366]) {
+    test(`REC-UI-DOC · documentos poblados ${theme} ${width}px`, async ({ page }, info) => {
+      const principles = {
+        bankSource: "read_only", ocrEnabled: false,
+        getHasSideEffects: false, suggestionsPersisted: false,
+        associationsRequireConfirmation: true,
+      };
+      const items = Array.from({ length: 12 }, (_, index) => ({
+        id: `a0d30000-0000-4000-8000-${String(index + 1).padStart(12, "0")}`,
+        originalFileName: index === 0
+          ? "Factura detallada de suministros de septiembre 2026 — referencia extensa.pdf"
+          : `Recibo servicio ${String(index + 1).padStart(2, "0")}.pdf`,
+        type: index % 3 === 0 ? "invoice" : index % 3 === 1 ? "ticket" : "other",
+        status: index % 4 === 0 ? "pending_review" : index % 4 === 1 ? "confirmed" : index % 4 === 2 ? "imported" : "archived",
+        mimeType: "application/pdf",
+        notes: "", associationCount: 0, documentDate: "2026-09-12",
+        totalCents: 2500 + index * 1237, issuerName: "Comercio de prueba",
+        storageProvider: "supabase", createdAt: "2026-09-12T10:00:00Z",
+        updatedAt: "2026-09-12T10:00:00Z", sizeBytes: 123456,
+        sourceModifiedAt: null, sourceDriveFileId: null,
+      }));
+      await page.route("**/api/**", route =>
+        route.fulfill({ status: 503, json: { error: "isolated_source_unavailable" } }));
+      await page.route(/\/api\/documents(?:\?.*)?$/, async route => {
+        const url = new URL(route.request().url());
+        const requested = url.searchParams.get("id");
+        if (requested) {
+          const document = items.find(item => item.id === requested);
+          if (!document) return route.fulfill({ status: 404, json: { error: "not_found" } });
+          return route.fulfill({
+            json: { contractVersion: 3, document, associations: [], principles },
+          });
+        }
+        const limit = Number(url.searchParams.get("limit") ?? 50);
+        const offset = Number(url.searchParams.get("offset") ?? 0);
+        return route.fulfill({ json: {
+          contractVersion: 3, items: items.slice(offset, offset + limit),
+          total: items.length, limit, offset, testCount: 0, principles,
+        } });
+      });
+      await page.emulateMedia({ colorScheme: theme, reducedMotion: "reduce" });
+      await page.setViewportSize({ width, height: 920 });
+      await page.goto("/documents");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(page.getByRole("heading", { name: "Documentos", level: 1 })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "12 documentos" })).toBeVisible();
+      await expect(page.getByText(items[0].originalFileName).first()).toBeVisible();
+      await page.getByRole("button", { name: /Factura detallada de suministros de septiembre 2026/ }).click();
+      await expect(page.getByRole("heading", { name: items[0].originalFileName })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Revisar con OCR" })).toBeVisible();
+      await noOverflow(page, width);
+      const a11y = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+      expect(a11y.violations.map(v => ({
+        id: v.id, nodes: v.nodes.map(n => ({ target: n.target, failureSummary: n.failureSummary })),
+      }))).toEqual([]);
+      await page.screenshot({ path: info.outputPath(`populated-documents-${theme}-${width}.png`), fullPage: true });
+    });
+  }
+}
+
 for (const width of [360, 820, 1366]) {
   test(`REC-UI · buscador abierto y teclado a ${width}px`, async ({ page }) => {
     await mockRecoveryHome(page);
