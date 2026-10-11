@@ -346,14 +346,17 @@ function extractDate(lines: LocatedLine[]) {
   // Billing dates, contract expiry and legal conditions are not evidence of
   // a receipt purchase or invoice issue date.
   const unrelated = /\b(?:nacimiento|vencimiento|caducidad|vigencia|registro|periodo|hasta|desde|legal)\b/;
-  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
+  const directLabel = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
   const explicitWritten = /\b(?:emitid[oa]\s+el|fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?\s*[:\-]?)\s*\d{1,2}\s+de\s+(?:enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|setiembre|octubre|noviembre|diciembre)\s+de\s+\d{4}\b/;
   const embeddedNumericIssueDate = /\bemitid[oa]\s+el\s+\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\b/;
   let unlabelled: OcrInterpretedField<string> | null = null;
 
   for (const item of lines) {
     const normalized = normalizeToken(item.line.text);
-    if (unrelated.test(normalized)) continue;
+    // A separately printed expiry or billing-period date must not erase an
+    // explicitly labelled issue/purchase timestamp on the SAME OCR line.
+    if (unrelated.test(normalized) && !directLabel.test(normalized)
+      && !embeddedNumericIssueDate.test(normalized) && !explicitWritten.test(normalized)) continue;
     // Match the date FOLLOWING its issue label, not an unrelated number
     // earlier on the same invoice row (e.g. order date before "emitida el").
     const labelledWritten = normalized.match(explicitWritten)?.[0].match(writtenPattern) ?? null;
@@ -384,14 +387,18 @@ function extractTime(lines: LocatedLine[]) {
   const pattern = /\b([01]?\d|2[0-3]):([0-5]\d)(?::([0-5]\d))?\b/;
   const unrelated = /\b(?:horario|apertura|cierre|atencion\s+al\s+publico|laborables|oficinas)\b/;
   const explicitTime = /^(?:hora(?:\s+(?:de\s+)?(?:compra|emision|ticket))?|fecha\s+y\s+hora)\s*[:\-]\s*\d{1,2}:\d{2}\b/;
+  // Receipt printers frequently put date and time on one line, labelled
+  // FECHA/HORA or FECHA Y HORA. Prefer that timestamp, not opening hours.
+  const issueTimestamp = /^(?:fecha(?:\s+de\s+(?:emision|expedicion|compra|factura))?|fecha\s*(?:\/|y)\s*hora|emitid[oa]\s+el)\s*[:\-]?\s*\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}\s+(?:a\s+las\s+)?\d{1,2}:\d{2}\b/;
   let unknown: OcrInterpretedField<string> | null = null;
   for (const item of lines) {
     const match = item.line.text.match(pattern);
     if (!match) continue;
     const normalized = normalizeToken(item.line.text);
-    if (unrelated.test(normalized)) continue;
+    if (unrelated.test(normalized) && !issueTimestamp.test(normalized)
+      && !explicitTime.test(normalized)) continue;
     const candidate = fieldFrom(item, match[0], `${match[1].padStart(2, "0")}:${match[2]}`);
-    if (explicitTime.test(normalized)) return candidate;
+    if (explicitTime.test(normalized) || issueTimestamp.test(normalized)) return candidate;
     unknown ??= fieldRequiringReview(candidate);
   }
   return unknown ?? emptyField<string>();
